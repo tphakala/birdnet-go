@@ -41,14 +41,10 @@ vi.mock('$lib/stores/toast', () => ({
 vi.mock('$lib/i18n', () => ({
   t: createI18nMock({
     'settings.main.sections.userInterface.interface.title': 'Interface Settings',
-    'settings.main.sections.userInterface.interface.description':
-      'Choose your preferred language and interface version',
+    'settings.main.sections.userInterface.interface.description': 'Choose your preferred language',
     'settings.main.sections.userInterface.interface.locale.label': 'Language',
     'settings.main.sections.userInterface.interface.locale.helpText':
       'Select your preferred language',
-    'settings.main.sections.userInterface.interface.newUI.label': 'Use New User Interface',
-    'settings.main.sections.userInterface.interface.newUI.helpText':
-      'Enable redirect from old HTMX UI to new Svelte UI',
     'settings.main.sections.userInterface.dashboard.title': 'Dashboard Display',
     'settings.main.sections.userInterface.dashboard.description':
       'Configure how information is displayed on the dashboard',
@@ -245,7 +241,6 @@ describe('UserInterfaceSettingsPage', () => {
           },
           summaryLimit: 100,
           locale: 'en',
-          newUI: false,
         },
       },
     };
@@ -284,9 +279,6 @@ describe('UserInterfaceSettingsPage', () => {
       await waitFor(() => {
         // Language selector
         expect(screen.getByLabelText('Language')).toBeInTheDocument();
-
-        // New UI checkbox
-        expect(screen.getByLabelText('Use New User Interface')).toBeInTheDocument();
       });
     });
 
@@ -326,31 +318,6 @@ describe('UserInterfaceSettingsPage', () => {
       await waitFor(() => {
         // Language label is rendered (SelectDropdown uses custom button-based UI)
         expect(screen.getByText('Language')).toBeInTheDocument();
-
-        // New UI checkbox uses standard label
-        expect(screen.getByLabelText('Use New User Interface')).toBeInTheDocument();
-      });
-    });
-
-    it('updates newUI setting when checkbox is toggled', async () => {
-      testFactory.render();
-
-      await waitFor(() => {
-        const checkbox = screen.getByLabelText('Use New User Interface') as HTMLInputElement;
-        expect(checkbox).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Use New User Interface') as HTMLInputElement;
-      expect(checkbox.checked).toBe(false);
-
-      // Toggle checkbox
-      checkbox.click();
-
-      await waitFor(() => {
-        const store = get(settingsStore);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((store.formData as any)?.realtime?.dashboard?.newUI).toBe(true);
       });
     });
   });
@@ -485,7 +452,7 @@ describe('UserInterfaceSettingsPage', () => {
       // Mock to return true for interface settings
       mockHasSettingsChanged.mockImplementation((_original, current) => {
         // Check if this is the interface settings comparison
-        if (current?.locale !== undefined || current?.newUI !== undefined) {
+        if (current?.locale !== undefined) {
           return true;
         }
         return false;
@@ -606,7 +573,6 @@ describe('UserInterfaceSettingsPage', () => {
       await waitFor(() => {
         // Check interface form controls are disabled
         expect(screen.getByLabelText('Language')).toBeDisabled();
-        expect(screen.getByLabelText('Use New User Interface')).toBeDisabled();
       });
     });
 
@@ -637,7 +603,6 @@ describe('UserInterfaceSettingsPage', () => {
       await waitFor(() => {
         // Check interface form controls are disabled
         expect(screen.getByLabelText('Language')).toBeDisabled();
-        expect(screen.getByLabelText('Use New User Interface')).toBeDisabled();
       });
 
       // Switch to Dashboard tab
@@ -689,10 +654,6 @@ describe('UserInterfaceSettingsPage', () => {
       testFactory.render();
 
       await waitFor(() => {
-        // Check default value on Interface tab - checkbox uses standard label
-        const newUICheckbox = screen.getByLabelText('Use New User Interface') as HTMLInputElement;
-        expect(newUICheckbox.checked).toBe(false);
-
         // Language selector is rendered (uses custom SelectDropdown)
         expect(screen.getByText('Language')).toBeInTheDocument();
       });
@@ -808,7 +769,6 @@ describe('UserInterfaceSettingsPage', () => {
         expect(dashboard?.summaryLimit).toBe(100);
         expect(dashboard?.thumbnails?.summary).toBe(true);
         expect(dashboard?.thumbnails?.recent).toBe(true);
-        expect(dashboard?.newUI).toBe(false);
         expect(dashboard?.locale).toBe('en');
 
         // Language selector is rendered (SelectDropdown uses custom button-based UI)

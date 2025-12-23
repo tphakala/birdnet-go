@@ -1069,15 +1069,10 @@
           },
           "interface": {
             "title": "Configurações de interface",
-            "description": "Escolha seu idioma e versão de interface preferidos",
+            "description": "Escolha seu idioma preferido",
             "locale": {
               "label": "Idioma de exibição",
-              "helpText": "Selecione o idioma para a interface do usuário",
-              "requiresModernUI": "A seleção de idioma está disponível apenas ao usar a interface moderna."
-            },
-            "newUI": {
-              "label": "Usar interface moderna",
-              "helpText": "Ativa a nova interface baseada em Svelte com desempenho e recursos aprimorados. Quando desativada, usa a interface HTMX clássica."
+              "helpText": "Selecione o idioma para a interface do usuário"
             }
           },
           "dashboard": {
@@ -1101,10 +1096,6 @@
             "summaryLimit": {
               "label": "Número máximo de espécies na tabela de resumo diário",
               "helpText": "Número máximo de espécies mostradas na tabela de resumo diário (valor entre 10 e 1000)"
-            },
-            "newUI": {
-              "label": "Usar nova interface do usuário",
-              "helpText": "Ativar redirecionamento da interface HTMX antiga para a nova interface Svelte"
             },
             "thumbnails": {
               "title": "Exibição de miniaturas",

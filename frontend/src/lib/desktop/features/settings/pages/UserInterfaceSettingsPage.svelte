@@ -1,25 +1,24 @@
 <!--
   User Interface Settings Page Component
-  
+
   Purpose: Configure all user interface related settings including language,
   dashboard display options, thumbnails, and UI preferences.
-  
+
   Features:
   - Language selection for the user interface
-  - Dashboard configuration (summary limits, new UI toggle)
+  - Dashboard configuration (summary limits)
   - Thumbnail display settings for different views
   - Image provider selection and fallback policies
-  
+
   Props: None - This is a page component that uses global settings stores
-  
+
   Performance Optimizations:
-  - Cached CSRF token with $derived to avoid repeated DOM queries
   - Reactive computed properties for change detection
   - Async API loading for non-critical data
 -->
 <script lang="ts">
-  import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -53,10 +52,8 @@
           fallbackPolicy: 'all',
         },
         summaryLimit: 100,
-        newUI: false,
       }),
       locale: $dashboardSettings?.locale ?? (getLocale() as string),
-      newUI: $dashboardSettings?.newUI ?? false,
       spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,
     },
   });
@@ -96,11 +93,9 @@
     hasSettingsChanged(
       {
         locale: store.originalData.realtime?.dashboard?.locale,
-        newUI: store.originalData.realtime?.dashboard?.newUI,
       },
       {
         locale: store.formData.realtime?.dashboard?.locale,
-        newUI: store.formData.realtime?.dashboard?.newUI,
       }
     )
   );
@@ -236,75 +231,37 @@
     defaultOpen={true}
     originalData={{
       locale: store.originalData.realtime?.dashboard?.locale,
-      newUI: store.originalData.realtime?.dashboard?.newUI,
     }}
     currentData={{
       locale: store.formData.realtime?.dashboard?.locale,
-      newUI: store.formData.realtime?.dashboard?.newUI,
     }}
   >
-    <div class="space-y-4">
-      <!-- Modern UI Toggle - Primary setting -->
-      <Checkbox
-        checked={settings.dashboard.newUI}
-        label={t('settings.main.sections.userInterface.interface.newUI.label')}
-        helpText={t('settings.main.sections.userInterface.interface.newUI.helpText')}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+      <SelectDropdown
+        options={uiLocales}
+        value={settings.dashboard.locale}
+        label={t('settings.main.sections.userInterface.interface.locale.label')}
+        helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
         disabled={store.isLoading || store.isSaving}
-        onchange={value => updateDashboardSetting('newUI', value)}
-      />
-
-      <!-- Language Settings - Dependent on Modern UI -->
-      <fieldset
-        disabled={!settings.dashboard.newUI || store.isLoading || store.isSaving}
-        class="contents"
-        aria-describedby="locale-section-status"
+        variant="select"
+        groupBy={false}
+        onChange={value => updateUILocale(value as string)}
       >
-        <span id="locale-section-status" class="sr-only">
-          {settings.dashboard.newUI
-            ? t('settings.main.sections.userInterface.interface.locale.label')
-            : t('settings.main.sections.userInterface.interface.locale.requiresModernUI')}
-        </span>
-        <div
-          class="space-y-4 transition-opacity duration-200"
-          class:opacity-50={!settings.dashboard.newUI}
-        >
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <SelectDropdown
-              options={uiLocales}
-              value={settings.dashboard.locale}
-              label={t('settings.main.sections.userInterface.interface.locale.label')}
-              helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
-              disabled={!settings.dashboard.newUI || store.isLoading || store.isSaving}
-              variant="select"
-              groupBy={false}
-              onChange={value => updateUILocale(value as string)}
-            >
-              {#snippet renderOption(option)}
-                {@const localeOption = option as LocaleOption}
-                <div class="flex items-center gap-2">
-                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                  <span>{localeOption.label}</span>
-                </div>
-              {/snippet}
-              {#snippet renderSelected(options)}
-                {@const localeOption = options[0] as LocaleOption}
-                <span class="flex items-center gap-2">
-                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                  <span>{localeOption.label}</span>
-                </span>
-              {/snippet}
-            </SelectDropdown>
+        {#snippet renderOption(option)}
+          {@const localeOption = option as LocaleOption}
+          <div class="flex items-center gap-2">
+            <FlagIcon locale={localeOption.localeCode} className="size-4" />
+            <span>{localeOption.label}</span>
           </div>
-
-          {#if !settings.dashboard.newUI}
-            <SettingsNote>
-              <span>
-                {t('settings.main.sections.userInterface.interface.locale.requiresModernUI')}
-              </span>
-            </SettingsNote>
-          {/if}
-        </div>
-      </fieldset>
+        {/snippet}
+        {#snippet renderSelected(options)}
+          {@const localeOption = options[0] as LocaleOption}
+          <span class="flex items-center gap-2">
+            <FlagIcon locale={localeOption.localeCode} className="size-4" />
+            <span>{localeOption.label}</span>
+          </span>
+        {/snippet}
+      </SelectDropdown>
     </div>
   </SettingsSection>
 {/snippet}

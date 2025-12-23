@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
-import type { BirdNetSettings, RealtimeSettings, SettingsFormData, Dashboard } from './settings';
+import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 
 // Mock the settings API
@@ -228,115 +228,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     expect(birdnetData).not.toHaveProperty('dynamicThreshold');
     expect(state.formData.realtime?.dynamicThreshold).toBeDefined();
-  });
-});
-
-describe('Dashboard Settings - New UI Field', () => {
-  beforeEach(() => {
-    // Reset store to initial state with dashboard settings
-    settingsStore.set({
-      formData: {
-        main: { name: 'TestNode' },
-        birdnet: {
-          modelPath: '',
-          labelPath: '',
-          sensitivity: 1.0,
-          threshold: 0.8,
-          overlap: 0.0,
-          locale: 'en',
-          threads: 4,
-          latitude: 40.7128,
-          longitude: -74.006,
-          rangeFilter: {
-            threshold: 0.03,
-            speciesCount: null,
-            species: [],
-          },
-        },
-        realtime: {
-          dashboard: {
-            thumbnails: {
-              summary: true,
-              recent: true,
-              imageProvider: 'wikimedia',
-              fallbackPolicy: 'all',
-            },
-            summaryLimit: 100,
-            newUI: false, // New UI field
-          },
-        },
-      },
-      originalData: {} as SettingsFormData,
-      isLoading: false,
-      isSaving: false,
-      activeSection: 'main',
-      error: null,
-    });
-  });
-
-  it('should have newUI field in dashboard settings', () => {
-    const state = get(settingsStore);
-    const dashboard = state.formData.realtime?.dashboard as Dashboard | undefined;
-
-    expect(dashboard).toBeDefined();
-    expect(dashboard?.newUI).toBeDefined();
-    expect(dashboard?.newUI).toBe(false);
-  });
-
-  it('should update newUI setting correctly', () => {
-    // Enable new UI
-    settingsActions.updateSection('realtime', {
-      dashboard: {
-        thumbnails: {
-          summary: true,
-          recent: true,
-          imageProvider: 'wikimedia',
-          fallbackPolicy: 'all',
-        },
-        summaryLimit: 100,
-        newUI: true, // Enable new UI
-      },
-    });
-
-    const state = get(settingsStore);
-    const dashboard = state.formData.realtime?.dashboard as Dashboard | undefined;
-
-    expect(dashboard?.newUI).toBe(true);
-  });
-
-  it('should preserve other dashboard settings when updating newUI', () => {
-    const initialState = get(settingsStore);
-    const initialDashboard = initialState.formData.realtime?.dashboard as Dashboard | undefined;
-
-    // Update only newUI
-    settingsActions.updateSection('realtime', {
-      dashboard: {
-        ...(initialDashboard ?? {
-          thumbnails: {
-            summary: true,
-            recent: true,
-            imageProvider: 'wikimedia',
-            fallbackPolicy: 'all',
-          },
-          summaryLimit: 100,
-          newUI: false,
-        }),
-        newUI: true,
-      },
-    });
-
-    const updatedState = get(settingsStore);
-    const updatedDashboard = updatedState.formData.realtime?.dashboard as Dashboard | undefined;
-
-    // Verify newUI was updated
-    expect(updatedDashboard?.newUI).toBe(true);
-
-    // Verify other settings were preserved
-    expect(updatedDashboard?.summaryLimit).toBe(100);
-    expect(updatedDashboard?.thumbnails.summary).toBe(true);
-    expect(updatedDashboard?.thumbnails.recent).toBe(true);
-    expect(updatedDashboard?.thumbnails.imageProvider).toBe('wikimedia');
-    expect(updatedDashboard?.thumbnails.fallbackPolicy).toBe('all');
   });
 });
 

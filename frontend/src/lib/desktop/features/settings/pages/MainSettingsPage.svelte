@@ -173,10 +173,8 @@
           fallbackPolicy: 'all',
         },
         summaryLimit: 100,
-        newUI: false,
       }),
       locale: $dashboardSettings?.locale ?? (getLocale() as string),
-      newUI: $dashboardSettings?.newUI ?? false,
       spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,
     },
     weather: $realtimeSettings?.weather || weatherDefaults,
@@ -209,14 +207,12 @@
       hasSettingsChanged(
         {
           locale: store.originalData.realtime?.dashboard?.locale,
-          newUI: store.originalData.realtime?.dashboard?.newUI,
           summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
           thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
           spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
         },
         {
           locale: store.formData.realtime?.dashboard?.locale,
-          newUI: store.formData.realtime?.dashboard?.newUI,
           summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
           thumbnails: store.formData.realtime?.dashboard?.thumbnails,
           spectrogram: store.formData.realtime?.dashboard?.spectrogram,
@@ -1517,74 +1513,42 @@
       description={t('settings.main.sections.interface.description')}
       originalData={{
         locale: store.originalData.realtime?.dashboard?.locale,
-        newUI: store.originalData.realtime?.dashboard?.newUI,
         summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
       }}
       currentData={{
         locale: store.formData.realtime?.dashboard?.locale,
-        newUI: store.formData.realtime?.dashboard?.newUI,
         summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
       }}
     >
       <div class="space-y-6">
-        <!-- Modern UI Toggle -->
-        <Checkbox
-          checked={settings.dashboard.newUI}
-          label={t('settings.main.sections.userInterface.interface.newUI.label')}
-          helpText={t('settings.main.sections.userInterface.interface.newUI.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateDashboardSetting('newUI', value)}
-        />
-
-        <!-- Language Settings - Dependent on Modern UI -->
-        <fieldset
-          disabled={!settings.dashboard.newUI || store.isLoading || store.isSaving}
-          class="contents"
-          aria-describedby="locale-section-status"
-        >
-          <span id="locale-section-status" class="sr-only">
-            {settings.dashboard.newUI
-              ? t('settings.main.sections.userInterface.interface.locale.label')
-              : t('settings.main.sections.userInterface.interface.locale.requiresModernUI')}
-          </span>
-          <div class="transition-opacity duration-200" class:opacity-50={!settings.dashboard.newUI}>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-              <SelectDropdown
-                options={uiLocales}
-                value={settings.dashboard.locale}
-                label={t('settings.main.sections.userInterface.interface.locale.label')}
-                helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
-                disabled={!settings.dashboard.newUI || store.isLoading || store.isSaving}
-                variant="select"
-                groupBy={false}
-                onChange={value => updateUILocale(value as string)}
-              >
-                {#snippet renderOption(option)}
-                  {@const localeOption = option as LocaleOption}
-                  <div class="flex items-center gap-2">
-                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                    <span>{localeOption.label}</span>
-                  </div>
-                {/snippet}
-                {#snippet renderSelected(options)}
-                  {@const localeOption = options[0] as LocaleOption}
-                  <span class="flex items-center gap-2">
-                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                    <span>{localeOption.label}</span>
-                  </span>
-                {/snippet}
-              </SelectDropdown>
-            </div>
-
-            {#if !settings.dashboard.newUI}
-              <SettingsNote>
-                <span>
-                  {t('settings.main.sections.userInterface.interface.locale.requiresModernUI')}
-                </span>
-              </SettingsNote>
-            {/if}
-          </div>
-        </fieldset>
+        <!-- Language Settings -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <SelectDropdown
+            options={uiLocales}
+            value={settings.dashboard.locale}
+            label={t('settings.main.sections.userInterface.interface.locale.label')}
+            helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            variant="select"
+            groupBy={false}
+            onChange={value => updateUILocale(value as string)}
+          >
+            {#snippet renderOption(option)}
+              {@const localeOption = option as LocaleOption}
+              <div class="flex items-center gap-2">
+                <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                <span>{localeOption.label}</span>
+              </div>
+            {/snippet}
+            {#snippet renderSelected(options)}
+              {@const localeOption = options[0] as LocaleOption}
+              <span class="flex items-center gap-2">
+                <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                <span>{localeOption.label}</span>
+              </span>
+            {/snippet}
+          </SelectDropdown>
+        </div>
 
         <!-- Summary Limit -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">

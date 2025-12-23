@@ -408,7 +408,6 @@ export interface Dashboard {
   thumbnails: Thumbnails;
   summaryLimit: number;
   locale?: string; // UI locale setting
-  newUI?: boolean; // Enable redirect from old HTMX UI to new Svelte UI
   spectrogram?: SpectrogramPreRender; // Spectrogram pre-rendering settings
 }
 
@@ -721,7 +720,6 @@ function createEmptySettings(): SettingsFormData {
           fallbackPolicy: 'all',
         },
         summaryLimit: 100,
-        newUI: false,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
       },
     },

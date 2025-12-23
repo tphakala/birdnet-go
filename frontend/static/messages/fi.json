@@ -1058,15 +1058,10 @@
           "description": "Mukauta käyttöliittymää",
           "interface": {
             "title": "Käyttöliittymän asetukset",
-            "description": "Valitse haluamasi kieli ja käyttöliittymäversio",
+            "description": "Valitse haluamasi kieli",
             "locale": {
               "label": "Näyttökieli",
-              "helpText": "Valitse käyttöliittymän kieli",
-              "requiresModernUI": "Kielen valinta on saatavilla vain modernia käyttöliittymää käytettäessä."
-            },
-            "newUI": {
-              "label": "Käytä modernia käyttöliittymää",
-              "helpText": "Ottaa käyttöön uuden Svelte-pohjaisen käyttöliittymän, jossa on parempi suorituskyky ja ominaisuudet. Kun poistettu käytöstä, käytetään klassista HTMX-käyttöliittymää."
+              "helpText": "Valitse käyttöliittymän kieli"
             }
           },
           "language": {
@@ -1098,10 +1093,6 @@
             "summaryLimit": {
               "label": "Lajien enimmäismäärä päivittäisessä yhteenvetotaulukossa",
               "helpText": "Päivittäisessä yhteenvetotaulukossa näytettävien lajien enimmäismäärä (arvo välillä 10-1000)"
-            },
-            "newUI": {
-              "label": "Käytä uutta käyttöliittymää",
-              "helpText": "Ota käyttöön uudelleenohjaus vanhasta HTMX-käyttöliittymästä uuteen Svelte-käyttöliittymään"
             },
             "thumbnails": {
               "title": "Pikkukuvien näyttö",

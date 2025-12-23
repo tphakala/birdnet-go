@@ -1058,15 +1058,10 @@
           "description": "Pas de gebruikers beleving aan",
           "interface": {
             "title": "Presentatie instellingen",
-            "description": "Kies de weergave taal en de presentatie versie",
+            "description": "Kies de weergave taal",
             "locale": {
               "label": "Weergave taal",
-              "helpText": "Selecteer de taal voor de presentatie",
-              "requiresModernUI": "Taalselectie is alleen beschikbaar bij gebruik van de moderne interface."
-            },
-            "newUI": {
-              "label": "Gebruik de moderne versie",
-              "helpText": "Aktiveer voor de nieuwe Svelte-gebaseerde presentatie met verbeterde prestaties en mogelijkheden. Wanneer niet aktief, gebruik de verouderde HTMX presentatie."
+              "helpText": "Selecteer de taal voor de presentatie"
             }
           },
           "language": {
@@ -1098,10 +1093,6 @@
             "summaryLimit": {
               "label": "Maximum aantal soorten in de Dagelijks overzicht tabel",
               "helpText": "Maximum aantal soorten dat wordt getoond in de Dagelijks overzicht tabel (waarde tussen 10 en 1000)"
-            },
-            "newUI": {
-              "label": "Gebruik de nieuwe presentatie",
-              "helpText": "Aktiveer de omleiding van de verouderde HTMX UI naar de nieuwe Svelte UI"
             },
             "thumbnails": {
               "title": "Afbeelding weergave",
