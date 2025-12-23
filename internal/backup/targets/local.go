@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
 // Constants for file operations - use shared constants from common.go
@@ -34,27 +35,41 @@ var windowsReservedNames = map[string]bool{
 	"LPT5": true, "LPT6": true, "LPT7": true, "LPT8": true, "LPT9": true,
 }
 
-// atomicWriteFile writes data to a temporary file and then renames it to the target path
-func atomicWriteFile(targetPath, tempPattern string, perm os.FileMode, write func(*os.File) error) error {
-	// Create temporary file in the same directory as the target
-	dir := filepath.Dir(targetPath)
-	tempFile, err := os.CreateTemp(dir, tempPattern)
+// LocalTarget implements the backup.Target interface for local filesystem storage
+type LocalTarget struct {
+	path   string
+	debug  bool
+	logger *slog.Logger
+	sfs    *securefs.SecureFS // OS-level sandboxed filesystem (Go 1.24+)
+}
+
+// LocalTargetConfig holds configuration for the local filesystem target
+type LocalTargetConfig struct {
+	Path  string
+	Debug bool
+}
+
+// atomicWriteSecure writes data to a temporary file and renames it atomically using securefs.
+// The relativePath should be relative to the LocalTarget's backup directory.
+func (t *LocalTarget) atomicWriteSecure(relativePath string, perm os.FileMode, write func(*os.File) error) error {
+	// Generate unique temp file name
+	tempName := fmt.Sprintf(".tmp-%d-%s", time.Now().UnixNano(), filepath.Base(relativePath))
+
+	// Create temp file using securefs (sandboxed to backup directory)
+	tempFile, err := t.sfs.OpenFile(tempName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	tempPath := tempFile.Name()
 
-	// Ensure the temporary file is removed in case of failure
+	// Track success for cleanup
 	success := false
 	defer func() {
 		if !success {
 			if err := tempFile.Close(); err != nil {
-				// Log but don't return error since we're in cleanup
-				fmt.Printf("local: failed to close temp file: %v\n", err)
+				t.logger.Debug("local: failed to close temp file", "error", err)
 			}
-			if err := os.Remove(tempPath); err != nil {
-				// Log but don't return error since we're in cleanup
-				fmt.Printf("local: failed to remove temp file: %v\n", err)
+			if err := t.sfs.Remove(tempName); err != nil {
+				t.logger.Debug("local: failed to remove temp file", "error", err)
 			}
 		}
 	}()
@@ -79,26 +94,15 @@ func atomicWriteFile(targetPath, tempPattern string, perm os.FileMode, write fun
 		return fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	// Perform atomic rename
-	if err := os.Rename(tempPath, targetPath); err != nil {
+	// Perform atomic rename using OS rename (both files are in same directory)
+	tempFullPath := filepath.Join(t.path, tempName)
+	targetFullPath := filepath.Join(t.path, relativePath)
+	if err := os.Rename(tempFullPath, targetFullPath); err != nil {
 		return fmt.Errorf("failed to rename temporary file: %w", err)
 	}
 
 	success = true
 	return nil
-}
-
-// LocalTarget implements the backup.Target interface for local filesystem storage
-type LocalTarget struct {
-	path   string
-	debug  bool
-	logger *slog.Logger
-}
-
-// LocalTargetConfig holds configuration for the local filesystem target
-type LocalTargetConfig struct {
-	Path  string
-	Debug bool
 }
 
 // isTransientError determines if an error is likely transient
@@ -282,10 +286,22 @@ func NewLocalTarget(config LocalTargetConfig, logger *slog.Logger) (*LocalTarget
 			Build()
 	}
 
+	// Create OS-level sandboxed filesystem using Go 1.24's os.Root
+	sfs, err := securefs.New(absPath)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_secure_filesystem").
+			Context("path", absPath).
+			Build()
+	}
+
 	return &LocalTarget{
 		path:   absPath,
 		debug:  config.Debug,
 		logger: logger,
+		sfs:    sfs,
 	}, nil
 }
 
@@ -365,19 +381,23 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 			Build()
 	}
 
-	// Copy the backup file with retries and atomic operations
-	dstPath := filepath.Join(t.path, filepath.Base(sourcePath))
+	// Copy the backup file with retries and atomic operations using securefs
+	destFileName := filepath.Base(sourcePath)
 	err = t.withRetry(func() error {
-		return atomicWriteFile(dstPath, "backup-*.tmp", PermFile, func(tempFile *os.File) error {
-			// Open source file with secure path validation
-			secureOp := backup.NewSecureFileOp("backup")
-			srcFile, cleanSourcePath, err := secureOp.SecureOpen(sourcePath)
+		return t.atomicWriteSecure(destFileName, PermFile, func(tempFile *os.File) error {
+			// Open source file (from trusted internal backup manager temp directory)
+			srcFile, err := os.Open(sourcePath) //nolint:gosec // G304 - sourcePath is a trusted internal temp path from backup manager
 			if err != nil {
-				return err
+				return errors.New(err).
+					Component("backup").
+					Category(errors.CategoryFileIO).
+					Context("operation", "open_source_file").
+					Context("source_path", sourcePath).
+					Build()
 			}
 			defer func() {
 				if err := srcFile.Close(); err != nil {
-					t.logger.Info(fmt.Sprintf("local: failed to close source file %s: %v", cleanSourcePath, err))
+					t.logger.Debug("local: failed to close source file", "path", sourcePath, "error", err)
 				}
 			}()
 
@@ -402,7 +422,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 						Category(errors.CategoryFileIO).
 						Context("operation", "copy_backup_file").
 						Context("source_path", sourcePath).
-						Context("dest_path", dstPath).
+						Context("dest_file", destFileName).
 						Build()
 				}
 			}
@@ -415,10 +435,10 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 		return err
 	}
 
-	// Store metadata with retries and atomic operations
-	metadataPath := dstPath + ".meta"
+	// Store metadata with retries and atomic operations using securefs
+	metadataFileName := destFileName + ".meta"
 	err = t.withRetry(func() error {
-		return atomicWriteFile(metadataPath, "metadata-*.tmp", PermFile, func(tempFile *os.File) error {
+		return t.atomicWriteSecure(metadataFileName, PermFile, func(tempFile *os.File) error {
 			_, err := tempFile.Write(metadataBytes)
 			return err
 		})
@@ -428,7 +448,8 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 		return err
 	}
 
-	// Verify the backup
+	// Verify the backup (construct full path for verification)
+	dstPath := filepath.Join(t.path, destFileName)
 	if err := t.verifyBackup(ctx, dstPath, srcInfo.Size()); err != nil {
 		return err
 	}
@@ -482,7 +503,8 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		t.logger.Info("🔄 Listing backups in local target")
 	}
 
-	entries, err := os.ReadDir(t.path)
+	// Use securefs for directory listing (sandboxed to backup path)
+	entries, err := t.sfs.ReadDir(".")
 	if err != nil {
 		return nil, errors.New(err).
 			Component("backup").
@@ -500,20 +522,17 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 
 		// Get the backup file name by removing .meta suffix
 		backupName := strings.TrimSuffix(entry.Name(), ".meta")
-		backupPath := filepath.Join(t.path, backupName)
 
-		// Check if the corresponding backup file exists
-		if _, err := os.Stat(backupPath); err != nil {
+		// Check if the corresponding backup file exists (using securefs)
+		if _, err := t.sfs.Stat(backupName); err != nil {
 			if t.debug {
 				t.logger.Info(fmt.Sprintf("⚠️ Skipping orphaned metadata file %s: backup file not found", entry.Name()))
 			}
 			continue
 		}
 
-		// Read metadata file with secure path validation
-		metadataPath := filepath.Join(t.path, entry.Name())
-		secureOp := backup.NewSecureFileOp("backup")
-		metadataFile, cleanMetadataPath, err := secureOp.SecureOpen(metadataPath)
+		// Read metadata file using securefs (sandboxed access)
+		metadataFile, err := t.sfs.Open(entry.Name())
 		if err != nil {
 			t.logger.Info(fmt.Sprintf("⚠️ Skipping backup %s: %v", backupName, err))
 			continue
@@ -523,13 +542,13 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&metadata); err != nil {
 			if err := metadataFile.Close(); err != nil {
-				t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", cleanMetadataPath, err))
+				t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", entry.Name(), err))
 			}
 			t.logger.Info(fmt.Sprintf("⚠️ Invalid metadata in backup %s: %v", backupName, err))
 			continue
 		}
 		if err := metadataFile.Close(); err != nil {
-			t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", cleanMetadataPath, err))
+			t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", entry.Name(), err))
 		}
 
 		backupInfo := backup.BackupInfo{
@@ -553,29 +572,26 @@ func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 		t.logger.Info(fmt.Sprintf("🔄 Deleting backup %s from local target", backupID))
 	}
 
-	// Delete both the backup file and its metadata
-	backupPath := filepath.Join(t.path, backupID)
-	metadataPath := backupPath + ".meta"
+	// Delete both the backup file and its metadata using securefs (sandboxed)
+	metadataName := backupID + ".meta"
 
 	// Delete backup file
-	if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
+	if err := t.sfs.Remove(backupID); err != nil && !os.IsNotExist(err) {
 		return errors.New(err).
 			Component("backup").
 			Category(errors.CategoryFileIO).
 			Context("operation", "delete_backup_file").
 			Context("backup_id", backupID).
-			Context("path", backupPath).
 			Build()
 	}
 
 	// Delete metadata file
-	if err := os.Remove(metadataPath); err != nil && !os.IsNotExist(err) {
+	if err := t.sfs.Remove(metadataName); err != nil && !os.IsNotExist(err) {
 		return errors.New(err).
 			Component("backup").
 			Category(errors.CategoryFileIO).
 			Context("operation", "delete_metadata_file").
 			Context("backup_id", backupID).
-			Context("path", metadataPath).
 			Build()
 	}
 
@@ -627,18 +643,22 @@ func (t *LocalTarget) Validate() error {
 			Build()
 	}
 
-	// Check if path is writable with secure path validation
-	tmpFile := filepath.Join(t.path, "write_test")
-	secureOp := backup.NewSecureFileOp("backup")
-	f, cleanTmpFile, err := secureOp.SecureCreate(tmpFile)
+	// Check if path is writable using securefs (sandboxed)
+	testFileName := ".write_test"
+	f, err := t.sfs.OpenFile(testFileName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, PermFile)
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_writability").
+			Context("path", t.path).
+			Build()
 	}
 	if err := f.Close(); err != nil {
-		t.logger.Info(fmt.Sprintf("local: failed to close test file %s: %v", cleanTmpFile, err))
+		t.logger.Debug("local: failed to close test file", "error", err)
 	}
-	if err := os.Remove(cleanTmpFile); err != nil {
-		t.logger.Info(fmt.Sprintf("local: failed to remove test file: %v", err))
+	if err := t.sfs.Remove(testFileName); err != nil {
+		t.logger.Debug("local: failed to remove test file", "error", err)
 	}
 
 	// Check available disk space

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/mattn/go-sqlite3"
-	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -418,15 +417,19 @@ func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlit
 
 // copyBackupToWriter copies the temporary backup file to the writer
 func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
-	// Open backup file with secure path validation
-	secureOp := backup.NewSecureFileOp("backup")
-	backupFile, cleanTempPath, err := secureOp.SecureOpen(tempPath)
+	// Open backup file (internal temp path created by backup manager)
+	backupFile, err := os.Open(tempPath) //nolint:gosec // G304 - tempPath is an internal temp path from backup manager
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "open_backup_file").
+			Context("temp_path", tempPath).
+			Build()
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			slog.Debug("Failed to close backup file", "path", cleanTempPath, "error", err)
+			slog.Debug("Failed to close backup file", "path", tempPath, "error", err)
 		}
 	}()
 
@@ -597,15 +600,19 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 		return err
 	}
 
-	// Open the temporary backup file for reading with secure path validation
-	secureOp := backup.NewSecureFileOp("backup")
-	backupFile, cleanTempPath, err := secureOp.SecureOpen(tempPath)
+	// Open the temporary backup file for reading (internal temp path created by backup manager)
+	backupFile, err := os.Open(tempPath) //nolint:gosec // G304 - tempPath is an internal temp path from backup manager
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "open_backup_file_for_reading").
+			Context("temp_path", tempPath).
+			Build()
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			slog.Debug("Failed to close backup file for reading", "path", cleanTempPath, "error", err)
+			slog.Debug("Failed to close backup file for reading", "path", tempPath, "error", err)
 		}
 	}()
 

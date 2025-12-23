@@ -255,7 +255,11 @@ func (t *GDriveTarget) getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, er
 		return nil, backup.NewError(backup.ErrValidation, "gdrive: unable to read authorization code", err)
 	}
 
-	tok, err := config.Exchange(context.TODO(), authCode)
+	// Use a context with timeout for the token exchange
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.Timeout)
+	defer cancel()
+
+	tok, err := config.Exchange(ctx, authCode)
 	if err != nil {
 		return nil, backup.NewError(backup.ErrValidation, "gdrive: unable to retrieve token from web", err)
 	}
@@ -545,15 +549,19 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 			Parents: []string{folderId},
 		}
 
-		// Open source file with secure path validation
-		secureOp := backup.NewSecureFileOp("backup")
-		file, cleanSourcePath, err := secureOp.SecureOpen(sourcePath)
+		// Open source file (from trusted internal backup manager temp directory)
+		file, err := os.Open(sourcePath) //nolint:gosec // G304 - sourcePath is a trusted internal temp path from backup manager
 		if err != nil {
-			return err
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "open_source_file").
+				Context("source_path", sourcePath).
+				Build()
 		}
 		defer func() {
 			if err := file.Close(); err != nil {
-				t.logger.Info(fmt.Sprintf("gdrive: failed to close file %s: %v", cleanSourcePath, err))
+				t.logger.Info(fmt.Sprintf("gdrive: failed to close file %s: %v", sourcePath, err))
 			}
 		}()
 
