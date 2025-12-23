@@ -280,7 +280,7 @@ func (t *GDriveTarget) tokenFromFile() (*oauth2.Token, error) {
 
 // saveToken saves a token to a file
 func (t *GDriveTarget) saveToken(token *oauth2.Token) error {
-	f, err := os.OpenFile(t.config.TokenFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(t.config.TokenFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, PermFile)
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "gdrive: unable to cache oauth token", err)
 	}
@@ -348,23 +348,23 @@ func (t *GDriveTarget) isAPIError(err error) (bool, error) {
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.Code {
-		case 401:
+		case HTTPUnauthorized:
 			// Token expired or invalid, try to refresh
 			if refreshErr := t.refreshTokenIfNeeded(context.Background()); refreshErr != nil {
 				return true, backup.NewError(backup.ErrSecurity, "gdrive: authentication failed and refresh failed", refreshErr)
 			}
 			// Token refreshed, caller should retry the operation
 			return true, backup.NewError(backup.ErrSecurity, "gdrive: token refreshed, please retry", nil)
-		case 403:
+		case HTTPForbidden:
 			if strings.Contains(apiErr.Message, "Rate Limit") {
 				return true, backup.NewError(backup.ErrIO, "gdrive: rate limit exceeded", err)
 			}
 			return true, backup.NewError(backup.ErrSecurity, "gdrive: permission denied", err)
-		case 404:
+		case HTTPNotFound:
 			return true, backup.NewError(backup.ErrNotFound, "gdrive: resource not found", err)
-		case 429:
+		case HTTPTooManyRequests:
 			return true, backup.NewError(backup.ErrIO, "gdrive: too many requests", err)
-		case 500, 502, 503, 504:
+		case HTTPInternalError, HTTPBadGateway, HTTPServiceUnavail, HTTPGatewayTimeout:
 			return true, backup.NewError(backup.ErrIO, "gdrive: server error", err)
 		default:
 			return true, backup.NewError(backup.ErrIO, fmt.Sprintf("gdrive: API error %d", apiErr.Code), err)
@@ -774,7 +774,7 @@ func (t *GDriveTarget) Validate() error {
 		}
 
 		if t.config.Debug {
-			t.logger.Info(fmt.Sprintf("💾 GDrive: Available space: %.2f GB", float64(quota.available)/(1024*1024*1024)))
+			t.logger.Info(fmt.Sprintf("💾 GDrive: Available space: %.2f GB", float64(quota.available)/backup.GB))
 		}
 
 		return nil

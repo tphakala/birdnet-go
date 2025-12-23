@@ -245,12 +245,12 @@ func (s *SecureFileOp) SecureFileCopy(srcPath, dstPath string) (cleanSrcPath, cl
 }
 
 // DefaultDirectoryPermissions returns secure default permissions for directories
-// Uses 0o750 for better security while maintaining functionality
+// Uses PermBackupDir for better security while maintaining functionality
 func DefaultDirectoryPermissions() os.FileMode {
-	return 0o750
+	return PermBackupDir
 }
 
 // DefaultFilePermissions returns secure default permissions for files
 func DefaultFilePermissions() os.FileMode {
-	return 0o640
+	return PermBackupFile
 }

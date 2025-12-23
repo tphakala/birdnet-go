@@ -20,6 +20,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// Linux-specific errno constants for media error detection
+const (
+	// errNoMedium is the Linux ENOMEDIUM errno value (no medium found in device)
+	// This is used to detect SD card or removable media errors
+	errNoMedium syscall.Errno = 0x7B
+)
+
 // SQLiteSource implements the backup.Source interface for SQLite databases
 type SQLiteSource struct {
 	config *conf.Settings
@@ -203,7 +210,7 @@ func isMediaError(err error) bool {
 				// Linux-specific error detection
 				if runtime.GOOS == "linux" {
 					// ENOMEDIUM is Linux-specific
-					if errno == 0x7B { // ENOMEDIUM constant
+					if errno == errNoMedium {
 						return true
 					}
 				}

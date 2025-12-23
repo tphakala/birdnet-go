@@ -19,15 +19,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// Constants for file operations
+// Constants for file operations - use shared constants from common.go
+// Local-specific constants only
 const (
-	maxBackupSize    = 10 * 1024 * 1024 * 1024 // 10GB
-	dirPermissions   = 0o700                   // rwx------ (owner only)
-	filePermissions  = 0o600                   // rw------- (owner only)
-	maxPathLength    = 255                     // Maximum path length
-	copyBufferSize   = 32 * 1024               // 32KB buffer for file copies
-	maxRetries       = 3                       // Maximum number of retries for transient errors
-	baseBackoffDelay = 100 * time.Millisecond  // Base delay for exponential backoff
+	localBaseBackoffDelay = 100 * time.Millisecond // Base delay for exponential backoff
 )
 
 // Windows-specific reserved names
@@ -107,32 +102,20 @@ type LocalTargetConfig struct {
 }
 
 // isTransientError determines if an error is likely transient
+// Delegates to the shared implementation in common.go
 func isTransientError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for specific error types that might be transient
-	if os.IsTimeout(err) {
-		return true
-	}
-
-	// Check error strings for common transient issues
-	errStr := err.Error()
-	return strings.Contains(errStr, "resource temporarily unavailable") ||
-		strings.Contains(errStr, "connection reset") ||
-		strings.Contains(errStr, "broken pipe")
+	return IsTransientError(err)
 }
 
 // backoffDuration calculates exponential backoff duration
 func backoffDuration(attempt int) time.Duration {
-	return baseBackoffDelay * time.Duration(1<<uint(attempt)) // #nosec G115 -- attempt is bounded by retry logic, safe conversion
+	return localBaseBackoffDelay * time.Duration(1<<uint(attempt)) // #nosec G115 -- attempt is bounded by retry logic, safe conversion
 }
 
 // withRetry executes an operation with retry logic for transient errors
 func (t *LocalTarget) withRetry(op func() error) error {
 	var lastErr error
-	for i := range maxRetries {
+	for i := range DefaultMaxRetries {
 		if err := op(); err == nil {
 			return nil
 		} else if !isTransientError(err) {
@@ -140,7 +123,7 @@ func (t *LocalTarget) withRetry(op func() error) error {
 		} else {
 			lastErr = err
 			if t.debug {
-				t.logger.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, maxRetries))
+				t.logger.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, DefaultMaxRetries))
 			}
 		}
 		time.Sleep(backoffDuration(i))
@@ -149,13 +132,13 @@ func (t *LocalTarget) withRetry(op func() error) error {
 		Component("backup").
 		Category(errors.CategoryFileIO).
 		Context("operation", "retry_operation").
-		Context("max_retries", maxRetries).
+		Context("max_retries", DefaultMaxRetries).
 		Build()
 }
 
 // copyFile performs an optimized file copy operation
 func copyFile(dst, src *os.File) error {
-	buf := make([]byte, copyBufferSize)
+	buf := make([]byte, CopyBufferSize)
 	_, err := io.CopyBuffer(dst, src, buf)
 	return err
 }
@@ -171,13 +154,13 @@ func validatePath(path string) error {
 	}
 
 	// Check path length
-	if len(path) > maxPathLength {
-		return errors.Newf("path length exceeds maximum allowed (%d characters)", maxPathLength).
+	if len(path) > MaxComponentLength {
+		return errors.Newf("path length exceeds maximum allowed (%d characters)", MaxComponentLength).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_path").
 			Context("path_length", len(path)).
-			Context("max_length", maxPathLength).
+			Context("max_length", MaxComponentLength).
 			Build()
 	}
 
@@ -279,7 +262,7 @@ func NewLocalTarget(config LocalTargetConfig, logger *slog.Logger) (*LocalTarget
 	}
 
 	// Create backup directory if it doesn't exist with restrictive permissions
-	if err := os.MkdirAll(absPath, dirPermissions); err != nil {
+	if err := os.MkdirAll(absPath, PermDir); err != nil {
 		return nil, errors.New(err).
 			Component("backup").
 			Category(errors.CategoryFileIO).
@@ -289,13 +272,13 @@ func NewLocalTarget(config LocalTargetConfig, logger *slog.Logger) (*LocalTarget
 	}
 
 	// Ensure directory has correct permissions even if it already existed
-	if err := os.Chmod(absPath, dirPermissions); err != nil {
+	if err := os.Chmod(absPath, PermDir); err != nil {
 		return nil, errors.New(err).
 			Component("backup").
 			Category(errors.CategoryFileIO).
 			Context("operation", "set_directory_permissions").
 			Context("path", absPath).
-			Context("permissions", fmt.Sprintf("%o", dirPermissions)).
+			Context("permissions", fmt.Sprintf("%o", PermDir)).
 			Build()
 	}
 
@@ -339,13 +322,13 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	// Check file size limit
-	if srcInfo.Size() > maxBackupSize {
-		return errors.Newf("backup file too large: %d bytes (max %d bytes)", srcInfo.Size(), maxBackupSize).
+	if srcInfo.Size() > MaxBackupSizeBytes {
+		return errors.Newf("backup file too large: %d bytes (max %d bytes)", srcInfo.Size(), MaxBackupSizeBytes).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_file_size").
 			Context("file_size", srcInfo.Size()).
-			Context("max_size", maxBackupSize).
+			Context("max_size", MaxBackupSizeBytes).
 			Build()
 	}
 
@@ -361,7 +344,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	// Ensure we have enough space (file size + 10% buffer)
-	requiredSpace := uint64(float64(srcInfo.Size()) * 1.1)
+	requiredSpace := uint64(float64(srcInfo.Size()) * backup.SpaceBufferMultiplier)
 	if availableBytes < requiredSpace {
 		return errors.Newf("insufficient disk space: need %d bytes, have %d bytes", requiredSpace, availableBytes).
 			Component("backup").
@@ -385,7 +368,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	// Copy the backup file with retries and atomic operations
 	dstPath := filepath.Join(t.path, filepath.Base(sourcePath))
 	err = t.withRetry(func() error {
-		return atomicWriteFile(dstPath, "backup-*.tmp", filePermissions, func(tempFile *os.File) error {
+		return atomicWriteFile(dstPath, "backup-*.tmp", PermFile, func(tempFile *os.File) error {
 			// Open source file with secure path validation
 			secureOp := backup.NewSecureFileOp("backup")
 			srcFile, cleanSourcePath, err := secureOp.SecureOpen(sourcePath)
@@ -435,7 +418,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	// Store metadata with retries and atomic operations
 	metadataPath := dstPath + ".meta"
 	err = t.withRetry(func() error {
-		return atomicWriteFile(metadataPath, "metadata-*.tmp", filePermissions, func(tempFile *os.File) error {
+		return atomicWriteFile(metadataPath, "metadata-*.tmp", PermFile, func(tempFile *os.File) error {
 			_, err := tempFile.Write(metadataBytes)
 			return err
 		})
@@ -670,7 +653,7 @@ func (t *LocalTarget) Validate() error {
 	}
 
 	// Convert available bytes to gigabytes
-	availableGB := float64(availableBytes) / (1024 * 1024 * 1024)
+	availableGB := float64(availableBytes) / backup.GB
 
 	// Ensure at least 1GB free space is available
 	if availableGB < 1.0 {

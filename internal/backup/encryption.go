@@ -63,7 +63,7 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 		}
 
 		// Generate a new key if the file doesn't exist
-		key := make([]byte, 32) // 256 bits
+		key := make([]byte, AES256KeySize)
 		if _, err := rand.Read(key); err != nil {
 			return nil, errors.New(err).
 				Component("backup").
@@ -76,7 +76,7 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 		keyHex := hex.EncodeToString(key)
 
 		// Create the config directory if it doesn't exist
-		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(keyPath), PermConfigDir); err != nil {
 			return nil, errors.New(err).
 				Component("backup").
 				Category(errors.CategoryFileIO).
@@ -86,7 +86,7 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 		}
 
 		// Write the key to the file with secure permissions
-		if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
+		if err := os.WriteFile(keyPath, []byte(keyHex), PermSecureFile); err != nil {
 			return nil, errors.New(err).
 				Component("backup").
 				Category(errors.CategoryFileIO).
@@ -110,8 +110,8 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 	}
 
 	// Validate key length
-	if len(key) != 32 {
-		return nil, errors.Newf("invalid encryption key length: expected 32 bytes, got %d", len(key)).
+	if len(key) != AES256KeySize {
+		return nil, errors.Newf("invalid encryption key length: expected %d bytes, got %d", AES256KeySize, len(key)).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_encryption_key").
@@ -205,7 +205,7 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 	start := time.Now()
 
 	// Generate a new 256-bit key
-	key := make([]byte, 32)
+	key := make([]byte, AES256KeySize)
 	if _, err := rand.Read(key); err != nil {
 		return "", errors.New(err).
 			Component("backup").
@@ -224,7 +224,7 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 	}
 
 	// Create the config directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(keyPath), PermConfigDir); err != nil {
 		return "", errors.New(err).
 			Component("backup").
 			Category(errors.CategoryFileIO).
@@ -234,7 +234,7 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 	}
 
 	// Write the key to file with secure permissions
-	if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
+	if err := os.WriteFile(keyPath, []byte(keyHex), PermSecureFile); err != nil {
 		return "", errors.New(err).
 			Component("backup").
 			Category(errors.CategoryFileIO).
@@ -274,8 +274,8 @@ func (m *Manager) ValidateEncryption() error {
 	}
 
 	// Validate key length
-	if len(key) != 32 {
-		return errors.Newf("invalid encryption key length: expected 32 bytes, got %d", len(key)).
+	if len(key) != AES256KeySize {
+		return errors.Newf("invalid encryption key length: expected %d bytes, got %d", AES256KeySize, len(key)).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_encryption_key_length").
@@ -324,8 +324,8 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 
 	// Parse the key file content
 	lines := strings.Split(string(content), "\n")
-	if len(lines) < 3 {
-		return errors.Newf("invalid key file format: expected at least 3 lines, got %d", len(lines)).
+	if len(lines) < KeyFileMinLines {
+		return errors.Newf("invalid key file format: expected at least %d lines, got %d", KeyFileMinLines, len(lines)).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "import_encryption_key").
@@ -333,12 +333,12 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	}
 
 	// Verify the header
-	if !strings.HasPrefix(lines[0], "BirdNET-Go Backup Encryption Key") {
-		return errors.Newf("invalid key file format: missing 'BirdNET-Go Backup Encryption Key' header").
+	if !strings.HasPrefix(lines[0], KeyFileHeader) {
+		return errors.Newf("invalid key file format: missing '%s' header", KeyFileHeader).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "import_encryption_key").
-			Context("expected_header", "BirdNET-Go Backup Encryption Key").
+			Context("expected_header", KeyFileHeader).
 			Build()
 	}
 
@@ -380,7 +380,7 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	start = time.Now()
 
 	// Create the config directory if it doesn't exist
-	err = os.MkdirAll(filepath.Dir(keyPath), 0o700)
+	err = os.MkdirAll(filepath.Dir(keyPath), PermConfigDir)
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -391,7 +391,7 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	}
 
 	// Write the key to file with secure permissions
-	err = os.WriteFile(keyPath, []byte(key), 0o600)
+	err = os.WriteFile(keyPath, []byte(key), PermSecureFile)
 	if err != nil {
 		return errors.New(err).
 			Component("backup").

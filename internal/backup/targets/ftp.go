@@ -18,14 +18,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/backup"
 )
 
+// FTP-specific constants (shared constants imported from common.go)
 const (
-	defaultFTPPort        = 21
-	defaultTimeout        = 30 * time.Second
-	defaultMaxConnections = 5
-	defaultMaxRetries     = 3
-	metadataVersion       = 1
-	tempFilePrefix        = "tmp-"
-	metadataFileExt       = ".meta"
+	ftpMetadataVersion = 1
+	ftpTempFilePrefix  = "tmp-"
+	ftpMetadataFileExt = ".meta"
 )
 
 // FTPTarget implements the backup.Target interface for FTP storage
@@ -67,17 +64,17 @@ func NewFTPTarget(config *FTPTargetConfig, logger *slog.Logger) (*FTPTarget, err
 
 	// Set defaults for optional fields
 	if config.Port == 0 {
-		config.Port = defaultFTPPort
+		config.Port = DefaultFTPPort
 	}
 	if config.Timeout == 0 {
-		config.Timeout = defaultTimeout
+		config.Timeout = DefaultTimeout
 	}
 	config.BasePath = strings.TrimRight(config.BasePath, "/")
 	if config.MaxConns == 0 {
-		config.MaxConns = defaultMaxConnections
+		config.MaxConns = DefaultMaxConns
 	}
 	if config.MaxRetries == 0 {
-		config.MaxRetries = defaultMaxRetries
+		config.MaxRetries = DefaultMaxRetries
 	}
 	if config.RetryBackoff == 0 {
 		config.RetryBackoff = time.Second
@@ -184,23 +181,15 @@ func (t *FTPTarget) isConnectionAlive(conn *ftp.ServerConn) bool {
 }
 
 // isTransientError checks if an error is likely temporary
+// Delegates to the shared implementation in common.go
 func (t *FTPTarget) isTransientError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return strings.Contains(errStr, "connection reset") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "temporary") ||
-		strings.Contains(errStr, "broken pipe") ||
-		strings.Contains(errStr, "connection refused") ||
-		strings.Contains(errStr, "no route to host")
+	return IsTransientError(err)
 }
 
 // withRetry executes an operation with retry logic
 func (t *FTPTarget) withRetry(ctx context.Context, op func(*ftp.ServerConn) error) error {
 	var lastErr error
-	for i := 0; i < t.config.MaxRetries; i++ {
+	for attempt := range t.config.MaxRetries {
 		select {
 		case <-ctx.Done():
 			return backup.NewError(backup.ErrCanceled, "ftp: operation canceled", ctx.Err())
@@ -213,12 +202,11 @@ func (t *FTPTarget) withRetry(ctx context.Context, op func(*ftp.ServerConn) erro
 			if !t.isTransientError(err) {
 				return err
 			}
-			time.Sleep(t.config.RetryBackoff * time.Duration(i+1))
+			time.Sleep(t.config.RetryBackoff * time.Duration(attempt+1))
 			continue
 		}
 
-		err = op(conn)
-		if err == nil {
+		if err = op(conn); err == nil {
 			t.returnConnection(conn)
 			return nil
 		}
@@ -231,9 +219,9 @@ func (t *FTPTarget) withRetry(ctx context.Context, op func(*ftp.ServerConn) erro
 		}
 
 		if t.config.Debug {
-			t.logger.Info(fmt.Sprintf("FTP: Retrying operation after error: %v (attempt %d/%d)", err, i+1, t.config.MaxRetries))
+			t.logger.Info(fmt.Sprintf("FTP: Retrying operation after error: %v (attempt %d/%d)", err, attempt+1, t.config.MaxRetries))
 		}
-		time.Sleep(t.config.RetryBackoff * time.Duration(i+1))
+		time.Sleep(t.config.RetryBackoff * time.Duration(attempt+1))
 	}
 
 	return backup.NewError(backup.ErrIO, "ftp: operation failed after retries", lastErr)
@@ -390,35 +378,16 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 			return err
 		}
 
-		// Store metadata file
-		metadataPath := backupPath + metadataFileExt
-		tempMetadataFile, err := os.CreateTemp("", "ftp-metadata-*")
+		// Store metadata file using shared helper
+		metadataPath := backupPath + ftpMetadataFileExt
+		tempResult, err := WriteTempFile(metadataBytes, "ftp-metadata")
 		if err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to create temporary metadata file", err)
+			return err
 		}
-		defer func() {
-			if err := os.Remove(tempMetadataFile.Name()); err != nil {
-				t.logger.Info(fmt.Sprintf("ftp: failed to remove temp metadata file: %v", err))
-			}
-		}()
-		defer func() {
-			if err := tempMetadataFile.Close(); err != nil {
-				t.logger.Info(fmt.Sprintf("ftp: failed to close temp metadata file: %v", err))
-			}
-		}()
-
-		if _, err := tempMetadataFile.Write(metadataBytes); err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to write metadata", err)
-		}
-		if err := tempMetadataFile.Sync(); err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to sync metadata file", err)
-		}
-		if err := tempMetadataFile.Close(); err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to close metadata file", err)
-		}
+		defer tempResult.Cleanup()
 
 		// Upload metadata file atomically
-		if err := t.atomicUpload(ctx, conn, tempMetadataFile.Name(), metadataPath); err != nil {
+		if err := t.atomicUpload(ctx, conn, tempResult.Path, metadataPath); err != nil {
 			return backup.NewError(backup.ErrIO, "ftp: failed to store metadata", err)
 		}
 
@@ -449,7 +418,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		for _, entry := range entries {
 			if entry.Type == ftp.EntryTypeFile && !strings.HasPrefix(entry.Name, "ftp-upload-") {
 				// Skip metadata files
-				if strings.HasSuffix(entry.Name, metadataFileExt) {
+				if strings.HasSuffix(entry.Name, ftpMetadataFileExt) {
 					continue
 				}
 

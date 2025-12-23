@@ -498,7 +498,7 @@ func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 	hdr := &tar.Header{
 		Name:    "config.yml", // Standard name within the archive
 		Size:    int64(len(yamlBytes)),
-		Mode:    0o644, // Read-only permissions
+		Mode:    int64(PermArchiveFile), // Read-only permissions
 		ModTime: metadata.Timestamp,
 	}
 
@@ -735,8 +735,8 @@ func (m *Manager) addMetadataToArchive(ctx context.Context, tw *tar.Writer, meta
 	hdr := &tar.Header{
 		Name:    "metadata.json",
 		Size:    int64(len(jsonData)),
-		Mode:    0o644,              // Read-only
-		ModTime: metadata.Timestamp, // Use backup timestamp
+		Mode:    int64(PermArchiveFile), // Read-only
+		ModTime: metadata.Timestamp,     // Use backup timestamp
 	}
 
 	// Write header
@@ -772,7 +772,7 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 	// Create TAR header for the backup data
 	hdr := &tar.Header{
 		Name:    backupFilename,
-		Mode:    0o644, // Standard file permissions
+		Mode:    int64(PermArchiveFile), // Standard file permissions
 		ModTime: metadata.Timestamp,
 		// Size is unknown for streaming, tar writer handles this.
 	}
@@ -844,7 +844,7 @@ func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath strin
 	}
 
 	// Write encrypted data to destination file
-	err = os.WriteFile(destPath, ciphertext, 0o600) // Secure permissions
+	err = os.WriteFile(destPath, ciphertext, PermSecureFile) // Secure permissions
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -882,13 +882,13 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 	// Convert to duration
 	switch unit {
 	case "d":
-		hours := num * 24
+		hours := num * HoursPerDay
 		return time.Duration(hours) * time.Hour, nil
 	case "m":
-		hours := num * 30 * 24 // approximate
+		hours := num * DaysPerMonth * HoursPerDay // approximate
 		return time.Duration(hours) * time.Hour, nil
 	case "y":
-		hours := num * 365 * 24 // approximate
+		hours := num * DaysPerYear * HoursPerDay // approximate
 		return time.Duration(hours) * time.Hour, nil
 	default:
 		return 0, errors.Newf("invalid retention age unit: %s", unit).
@@ -1312,7 +1312,7 @@ func (m *Manager) getBackupTimeout() time.Duration {
 	if m.config.OperationTimeouts.Backup > 0 {
 		return m.config.OperationTimeouts.Backup
 	}
-	return 2 * time.Hour // Default
+	return DefaultBackupTimeout
 }
 
 // getStoreTimeout returns the configured timeout for storing a backup in a single target.
@@ -1320,7 +1320,7 @@ func (m *Manager) getStoreTimeout() time.Duration {
 	if m.config.OperationTimeouts.Store > 0 {
 		return m.config.OperationTimeouts.Store
 	}
-	return 30 * time.Minute // Default
+	return DefaultStoreTimeout
 }
 
 // getCleanupTimeout returns the configured timeout for the cleanup process.
@@ -1336,7 +1336,7 @@ func (m *Manager) getDeleteTimeout() time.Duration {
 	if m.config.OperationTimeouts.Delete > 0 {
 		return m.config.OperationTimeouts.Delete
 	}
-	return 5 * time.Minute // Default
+	return DefaultDeleteTimeout
 }
 
 // getOperationTimeout returns a general timeout for operations like ListBackups.
@@ -1346,7 +1346,7 @@ func (m *Manager) getOperationTimeout() time.Duration {
 		return m.config.OperationTimeouts.Backup
 	}
 	m.logger.Warn("Operation timeout not configured, using default")
-	return 15 * time.Minute // Default
+	return DefaultOperationTimeout
 }
 
 // cleanupTempDirectories removes the specified temporary directories.
