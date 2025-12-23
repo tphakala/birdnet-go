@@ -619,7 +619,7 @@
         bind:this={dropdownRef}
         role="menu"
         aria-label="Audio Source Selection"
-        class="absolute right-0 top-full mt-2 min-w-[18rem] max-w-[calc(100vw-1rem)] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col z-50"
+        class="audio-dropdown absolute top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col z-50"
       >
         <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b border-base-300">
@@ -739,3 +739,25 @@
     {/if}
   </div>
 </div>
+
+<style>
+  /* Mobile: fixed positioning centered horizontally to prevent overflow */
+  .audio-dropdown {
+    position: fixed;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    top: 4rem; /* Below header */
+  }
+
+  /* Desktop (sm+): absolute positioning aligned to button */
+  @media (min-width: 640px) {
+    .audio-dropdown {
+      position: absolute;
+      left: auto;
+      right: 0;
+      transform: none;
+      top: 100%;
+    }
+  }
+</style>

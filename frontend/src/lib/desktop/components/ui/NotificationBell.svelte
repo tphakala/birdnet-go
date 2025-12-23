@@ -493,7 +493,7 @@
       bind:this={dropdownRef}
       id="notification-dropdown"
       role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
-      class="absolute right-0 top-full mt-2 min-w-md max-w-[calc(100vw-1rem)] max-h-128 bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
+      class="notification-dropdown absolute top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-128 bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
       style:z-index={1010}
     >
       <!-- Header -->
@@ -633,5 +633,25 @@
 
   .animate-wiggle {
     animation: wiggle 0.3s ease-in-out 2;
+  }
+
+  /* Mobile: fixed positioning centered horizontally to prevent overflow */
+  .notification-dropdown {
+    position: fixed;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    top: 4rem; /* Below header */
+  }
+
+  /* Desktop (sm+): absolute positioning aligned to bell icon */
+  @media (min-width: 640px) {
+    .notification-dropdown {
+      position: absolute;
+      left: auto;
+      right: 0;
+      transform: none;
+      top: 100%;
+    }
   }
 </style>
