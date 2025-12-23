@@ -2540,8 +2540,8 @@
 
     <!-- Database Statistics Section -->
     <SettingsSection
-      title="Database Statistics"
-      description="Runtime information about your database"
+      title={t('settings.main.sections.database.stats.title')}
+      description={t('settings.main.sections.database.stats.description')}
     >
       <div class="space-y-4">
         {#if databaseStats.loading}
@@ -2551,21 +2551,23 @@
             aria-live="polite"
           >
             <span class="loading loading-spinner loading-sm"></span>
-            <span>Loading database statistics...</span>
+            <span>{t('settings.main.sections.database.stats.loading')}</span>
           </div>
         {:else if databaseStats.error}
           <div class="alert alert-error" role="alert">
             <XCircle class="size-5" />
             <span>{databaseStats.error}</span>
             <button type="button" class="btn btn-sm btn-ghost" onclick={() => loadDatabaseStats()}>
-              Retry
+              {t('settings.main.sections.database.stats.retry')}
             </button>
           </div>
         {:else if databaseStats.data}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <!-- Database Type -->
             <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">Type</div>
+              <div class="stat-title text-xs">
+                {t('settings.main.sections.database.stats.type')}
+              </div>
               <div class="stat-value text-lg flex items-center gap-2">
                 <DatabaseIcon database={databaseStats.data.type} className="size-5" />
                 <span class="capitalize">{databaseStats.data.type}</span>
@@ -2574,17 +2576,19 @@
 
             <!-- Connection Status -->
             <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">Status</div>
+              <div class="stat-title text-xs">
+                {t('settings.main.sections.database.stats.status')}
+              </div>
               <div class="stat-value text-lg">
                 {#if databaseStats.data.connected}
                   <span class="text-success flex items-center gap-2">
                     <span class="badge badge-success badge-xs"></span>
-                    Connected
+                    {t('settings.main.sections.database.stats.connected')}
                   </span>
                 {:else}
                   <span class="text-error flex items-center gap-2">
                     <span class="badge badge-error badge-xs"></span>
-                    Disconnected
+                    {t('settings.main.sections.database.stats.disconnected')}
                   </span>
                 {/if}
               </div>
@@ -2592,7 +2596,9 @@
 
             <!-- Database Size -->
             <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">Size</div>
+              <div class="stat-title text-xs">
+                {t('settings.main.sections.database.stats.size')}
+              </div>
               <div class="stat-value text-lg">
                 {formatBytes(databaseStats.data.size_bytes)}
               </div>
@@ -2600,7 +2606,9 @@
 
             <!-- Total Detections -->
             <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">Total Detections</div>
+              <div class="stat-title text-xs">
+                {t('settings.main.sections.database.stats.totalDetections')}
+              </div>
               <div class="stat-value text-lg">
                 {databaseStats.data.total_detections.toLocaleString()}
               </div>
@@ -2609,7 +2617,9 @@
 
           <!-- Location/Path -->
           <div class="bg-base-200 rounded-box p-4">
-            <div class="text-xs text-base-content/60 mb-1">Location</div>
+            <div class="text-xs text-base-content/60 mb-1">
+              {t('settings.main.sections.database.stats.location')}
+            </div>
             <div class="font-mono text-sm break-all">{databaseStats.data.location}</div>
           </div>
 
@@ -2622,11 +2632,13 @@
               disabled={databaseStats.loading}
             >
               <RefreshCw class={cn('size-4', databaseStats.loading && 'animate-spin')} />
-              Refresh
+              {t('settings.main.sections.database.stats.refresh')}
             </button>
           </div>
         {:else}
-          <div class="text-base-content/60">No database statistics available.</div>
+          <div class="text-base-content/60">
+            {t('settings.main.sections.database.stats.noData')}
+          </div>
         {/if}
       </div>
     </SettingsSection>

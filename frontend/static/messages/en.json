@@ -1040,6 +1040,21 @@
               "placeholder": "Enter MySQL database name",
               "helpText": "MySQL database name"
             }
+          },
+          "stats": {
+            "title": "Database Statistics",
+            "description": "Runtime information about your database",
+            "loading": "Loading database statistics...",
+            "retry": "Retry",
+            "refresh": "Refresh",
+            "noData": "No database statistics available.",
+            "type": "Type",
+            "status": "Status",
+            "size": "Size",
+            "totalDetections": "Total Detections",
+            "location": "Location",
+            "connected": "Connected",
+            "disconnected": "Disconnected"
           }
         },
         "interface": {

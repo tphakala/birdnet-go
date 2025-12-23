@@ -1028,6 +1028,21 @@
             },
             "title": "MySQL-Konfiguration",
             "description": "Verbindungseinstellungen für MySQL-Datenbankserver konfigurieren"
+          },
+          "stats": {
+            "title": "Datenbankstatistiken",
+            "description": "Laufzeitinformationen über Ihre Datenbank",
+            "loading": "Datenbankstatistiken werden geladen...",
+            "retry": "Wiederholen",
+            "refresh": "Aktualisieren",
+            "noData": "Keine Datenbankstatistiken verfügbar.",
+            "type": "Typ",
+            "status": "Status",
+            "size": "Größe",
+            "totalDetections": "Erkennungen gesamt",
+            "location": "Speicherort",
+            "connected": "Verbunden",
+            "disconnected": "Getrennt"
           }
         },
         "interface": {
