@@ -61,13 +61,12 @@
     try {
       const desiredLockState = detection.locked ? !lockDetection : lockDetection;
 
-      await fetchWithCSRF('/api/v2/detections/review', {
+      await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: detection.id,
           verified: reviewStatus,
           lock_detection: desiredLockState,
           ignore_species: ignoreSpecies ? detection.commonName : null,
