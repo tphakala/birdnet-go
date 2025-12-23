@@ -169,18 +169,15 @@ func (e *RsyncError) Error() string {
 	return fmt.Sprintf("%s failed: %v", e.Op, e.Err)
 }
 
-// rsyncExtraInvalidChars contains additional characters that could be used for command injection
-const rsyncExtraInvalidChars = "$()[]{}!&;#`"
-
 // sanitizePath performs security checks and sanitization on a path.
-// Uses shared ValidatePathWithOpts with extra command injection protection.
+// Uses shared ValidatePathWithOpts which already includes command injection protection
+// via InvalidPathChars constant (contains $, (), [], {}, !, &, ;, #, ` etc.)
 func (t *RsyncTarget) sanitizePath(pathToCheck string) (string, error) {
 	return ValidatePathWithOpts(pathToCheck, PathValidationOpts{
 		AllowHidden:    false,
 		AllowAbsolute:  false,
-		ConvertToSlash: true,                  // rsync uses Unix-style paths
-		InvalidChars:   rsyncExtraInvalidChars, // Extra command injection protection
-		ReturnCleaned:  true,                  // Return the cleaned path
+		ConvertToSlash: true, // rsync uses Unix-style paths
+		ReturnCleaned:  true, // Return the cleaned path
 	})
 }
 

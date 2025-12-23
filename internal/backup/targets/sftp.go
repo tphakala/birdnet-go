@@ -504,9 +504,13 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 
 	// Create a pipe for streaming with context cancellation
 	pr, pw := io.Pipe()
-	errChan := make(chan error, ErrChanBufferSize)
 
-	go func() {
+	// Use WaitGroup.Go (Go 1.25) to properly wait for both goroutines
+	var wg sync.WaitGroup
+	var copyErr, uploadErr error
+
+	// Goroutine 1: Copy from local file to pipe writer
+	wg.Go(func() {
 		defer func() {
 			if err := pw.Close(); err != nil {
 				if t.config.Debug {
@@ -514,35 +518,48 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 				}
 			}
 		}()
-		_, err := io.Copy(pw, file)
-		errChan <- err
-	}()
-
-	// Copy data with context cancellation support
-	go func() {
-		_, err := io.Copy(dstFile, pr)
-		if err != nil {
-			errChan <- err
+		_, copyErr = io.Copy(pw, file)
+		if copyErr != nil {
+			// Signal reader to stop on error
+			pr.CloseWithError(copyErr)
 		}
+	})
+
+	// Goroutine 2: Copy from pipe reader to remote file
+	wg.Go(func() {
+		_, uploadErr = io.Copy(dstFile, pr)
+	})
+
+	// Wait for both goroutines to complete with context cancellation support
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
 	}()
 
-	// Wait for completion or cancellation
 	select {
 	case <-ctx.Done():
-		if err := pr.Close(); err != nil {
-			if t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close pipe reader", "error", err)
-			}
-		}
+		// Cancel by closing both ends of the pipe
+		pr.CloseWithError(ctx.Err())
+		pw.CloseWithError(ctx.Err())
+		<-done // Wait for goroutines to finish after cancellation
 		return errors.New(ctx.Err()).
 			Component("backup").
 			Category(errors.CategorySystem).
 			Context("operation", "upload_file").
 			Context("error_type", "cancelled").
 			Build()
-	case err := <-errChan:
-		if err != nil {
-			return errors.New(err).
+	case <-done:
+		// Both goroutines completed, check for errors
+		if copyErr != nil {
+			return errors.New(copyErr).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "copy_to_pipe").
+				Build()
+		}
+		if uploadErr != nil {
+			return errors.New(uploadErr).
 				Component("backup").
 				Category(errors.CategoryNetwork).
 				Context("operation", "upload_file").

@@ -638,9 +638,14 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 			Context("archive_path", archivePath).
 			Build()
 	}
+
+	// Track close state to prevent double-close (explicit close + defer)
+	var archiveClosed, tarClosed bool
 	defer func() {
-		if err := archiveFile.Close(); err != nil {
-			m.logger.Warn("Failed to close archive file", "archive_path", archivePath, "error", err)
+		if !archiveClosed {
+			if err := archiveFile.Close(); err != nil {
+				m.logger.Warn("Failed to close archive file", "archive_path", archivePath, "error", err)
+			}
 		}
 	}()
 
@@ -657,8 +662,10 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 
 	tarWriter := tar.NewWriter(fileWriter)
 	defer func() {
-		if err := tarWriter.Close(); err != nil {
-			m.logger.Warn("Failed to close tar writer", "archive_path", archivePath, "error", err)
+		if !tarClosed {
+			if err := tarWriter.Close(); err != nil {
+				m.logger.Warn("Failed to close tar writer", "archive_path", archivePath, "error", err)
+			}
 		}
 	}()
 
@@ -684,6 +691,7 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	}
 
 	// Ensure everything is written (Close writers)
+	// Explicit closes with error handling; defers handle cleanup on early returns
 	if err := tarWriter.Close(); err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -691,6 +699,8 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 			Context("operation", "close_tar_writer").
 			Build()
 	}
+	tarClosed = true // Prevent double-close in defer
+
 	if closer, ok := fileWriter.(io.Closer); ok && closer != archiveFile { // Don't double-close archiveFile
 		if err := closer.Close(); err != nil {
 			return errors.New(err).
@@ -707,6 +717,7 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 			Context("operation", "close_archive_file").
 			Build()
 	}
+	archiveClosed = true // Prevent double-close in defer
 
 	// Update metadata size *before* potential encryption
 	info, err := os.Stat(archivePath)

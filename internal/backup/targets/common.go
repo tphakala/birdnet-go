@@ -57,9 +57,6 @@ const (
 
 	// Parsing constants
 	MinLsOutputFields = 8 // Minimum fields in ls -l output for parsing
-
-	// Channel buffer sizes
-	ErrChanBufferSize = 2 // Buffer size for error channels in concurrent operations
 )
 
 // transientErrorPatterns contains substrings that indicate a transient/retriable error

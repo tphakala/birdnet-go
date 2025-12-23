@@ -94,10 +94,8 @@ func (t *LocalTarget) atomicWriteSecure(relativePath string, perm os.FileMode, w
 		return fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	// Perform atomic rename using OS rename (both files are in same directory)
-	tempFullPath := filepath.Join(t.path, tempName)
-	targetFullPath := filepath.Join(t.path, relativePath)
-	if err := os.Rename(tempFullPath, targetFullPath); err != nil {
+	// Perform atomic rename within the securefs sandbox (Go 1.25+)
+	if err := t.sfs.Rename(tempName, relativePath); err != nil {
 		return fmt.Errorf("failed to rename temporary file: %w", err)
 	}
 
