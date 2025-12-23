@@ -53,6 +53,7 @@ Responsive Breakpoints:
   import { XCircle, ChevronLeft, ChevronRight, Sunrise, Sunset, Star } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+  import AnimatedCounter from './AnimatedCounter.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
   import { LRUCache } from '$lib/utils/LRUCache';
@@ -66,6 +67,43 @@ Responsive Breakpoints:
     skeleton: 0, // 0ms - show skeleton immediately to reserve space
     spinner: 650, // 650ms - show spinner if still loading
   });
+
+  // Heatmap scaling configuration
+  // MAX_HEAT_COUNT: detection count at which maximum intensity (9) is reached
+  // INTENSITY_LEVELS: number of color intensity levels (1-9, plus 0 for empty)
+  const HEATMAP_CONFIG = {
+    MAX_HEAT_COUNT: 50,
+    INTENSITY_LEVELS: 9,
+  } as const;
+
+  // Consolidated configuration for magic numbers
+  const CONFIG = {
+    CACHE: {
+      SUN_TIMES_MAX_ENTRIES: 30, // Max days of sun times to cache
+      URL_MAX_ENTRIES: 500, // Max URLs to cache for memoization
+    },
+    DAYLIGHT: {
+      DAWN_DUSK_HOURS_OFFSET: 2, // Hours before sunrise / after sunset for pre-dawn/dusk
+      MIDDAY_INTENSITY_THRESHOLD: 0.3, // Distance from midday for "mid-day" classification
+      DAY_INTENSITY_THRESHOLD: 0.7, // Distance from midday for "day" classification
+      DEEP_NIGHT_END: 4, // Hour when deep night ends (0-4)
+      DEEP_NIGHT_START: 21, // Hour when deep night starts (21-23)
+      NIGHT_MORNING: 5, // Morning twilight hour
+      NIGHT_EVENING: 20, // Evening twilight hour
+    },
+    QUERY: {
+      DEFAULT_NUM_RESULTS: 25, // Default number of results for detection queries
+    },
+    SKELETON: {
+      SPECIES_COUNT: 8, // Number of skeleton rows to show during loading
+    },
+    SPECIES_COLUMN: {
+      BASE_WIDTH: 4, // rem - thumbnail (2) + gap (0.5) + padding (1) + buffer (0.5)
+      CHAR_WIDTH: 0.52, // rem per character for text-sm font
+      MIN_WIDTH: 9, // rem - minimum column width
+      MAX_WIDTH: 22, // rem - maximum column width (prevents excessive width)
+    },
+  } as const;
 
   interface SunTimes {
     sunrise: string; // ISO date string
@@ -118,6 +156,7 @@ Responsive Breakpoints:
     error?: string | null;
     selectedDate: string;
     showThumbnails?: boolean;
+    speciesLimit?: number;
     onPreviousDay: () => void;
     onNextDay: () => void;
     onGoToToday: () => void;
@@ -130,6 +169,7 @@ Responsive Breakpoints:
     error = null,
     selectedDate,
     showThumbnails = true,
+    speciesLimit = 0,
     onPreviousDay,
     onNextDay,
     onGoToToday,
@@ -144,7 +184,9 @@ Responsive Breakpoints:
   let sunTimes = $state<SunTimes | null>(null);
 
   // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
-  const sunTimesCache = $state.raw(new LRUCache<string, SunTimes>(30)); // Max 30 days of sun times
+  const sunTimesCache = $state.raw(
+    new LRUCache<string, SunTimes>(CONFIG.CACHE.SUN_TIMES_MAX_ENTRIES)
+  );
 
   // Optimize loading state management with proper dependency tracking
   $effect(() => {
@@ -230,6 +272,10 @@ Responsive Breakpoints:
   // Get daylight class for an hour based on its position relative to sunrise/sunset
   // Returns: 'deep-night', 'night', 'pre-dawn', 'sunrise', 'early-day', 'day', 'mid-day', 'late-day', 'sunset', 'dusk', 'evening'
   const getDaylightClass = (hour: number): string => {
+    const { DAWN_DUSK_HOURS_OFFSET, MIDDAY_INTENSITY_THRESHOLD, DAY_INTENSITY_THRESHOLD } =
+      CONFIG.DAYLIGHT;
+    const { DEEP_NIGHT_END, DEEP_NIGHT_START, NIGHT_MORNING, NIGHT_EVENING } = CONFIG.DAYLIGHT;
+
     // Use pre-computed derived values for performance
     if (sunriseHour === null || sunsetHour === null) return 'night';
 
@@ -238,11 +284,11 @@ Responsive Breakpoints:
     // Sunset hour - special gradient
     if (hour === sunsetHour) return 'sunset';
 
-    // Pre-dawn (1-2 hours before sunrise)
-    if (hour >= sunriseHour - 2 && hour < sunriseHour) return 'pre-dawn';
+    // Pre-dawn (hours before sunrise)
+    if (hour >= sunriseHour - DAWN_DUSK_HOURS_OFFSET && hour < sunriseHour) return 'pre-dawn';
 
-    // Dusk (1-2 hours after sunset)
-    if (hour > sunsetHour && hour <= sunsetHour + 2) return 'dusk';
+    // Dusk (hours after sunset)
+    if (hour > sunsetHour && hour <= sunsetHour + DAWN_DUSK_HOURS_OFFSET) return 'dusk';
 
     // Daylight hours
     if (hour > sunriseHour && hour < sunsetHour) {
@@ -251,15 +297,15 @@ Responsive Breakpoints:
       const daylightDuration = (sunsetHour - sunriseHour) / 2;
 
       // Categorize daylight intensity
-      if (distanceFromMidday < daylightDuration * 0.3) return 'mid-day';
-      if (distanceFromMidday < daylightDuration * 0.7) return 'day';
+      if (distanceFromMidday < daylightDuration * MIDDAY_INTENSITY_THRESHOLD) return 'mid-day';
+      if (distanceFromMidday < daylightDuration * DAY_INTENSITY_THRESHOLD) return 'day';
       return hour < midday ? 'early-day' : 'late-day';
     }
 
     // Night hours - vary by distance from midnight
-    if (hour >= 0 && hour <= 4) return 'deep-night';
-    if (hour >= 21 && hour <= 23) return 'deep-night';
-    if (hour === 5 || hour === 20) return 'night';
+    if (hour >= 0 && hour <= DEEP_NIGHT_END) return 'deep-night';
+    if (hour >= DEEP_NIGHT_START && hour <= 23) return 'deep-night';
+    if (hour === NIGHT_MORNING || hour === NIGHT_EVENING) return 'night';
     return 'evening';
   };
 
@@ -300,22 +346,22 @@ Responsive Breakpoints:
 
   /**
    * Calculate heatmap intensity using simple fixed-range scaling.
-   * Maps detection counts 1-100 evenly across intensity levels 1-9.
+   * Maps detection counts evenly across intensity levels 1-9 based on HEATMAP_CONFIG.
    * - 0 detections → intensity 0 (empty cell)
-   * - 1-11 detections → intensity 1
-   * - 12-22 detections → intensity 2
+   * - 1-6 detections → intensity 1
+   * - 7-12 detections → intensity 2
    * - ...
-   * - 89-99 detections → intensity 8
-   * - 100+ detections → intensity 9
+   * - 45-50 detections → intensity 9
+   * - 50+ detections → intensity 9
    *
    * @param count - The detection count for this cell
    * @returns Intensity value from 0-9
    */
   const getHeatmapIntensity = (count: number): number => {
     if (count <= 0) return 0;
-    // Simple linear mapping: 1-100 spread across 1-9
-    // Each step covers ~11 detections (100/9 ≈ 11.1)
-    return Math.min(9, Math.max(1, Math.ceil(count / 11)));
+    const { MAX_HEAT_COUNT, INTENSITY_LEVELS } = HEATMAP_CONFIG;
+    const stepSize = MAX_HEAT_COUNT / INTENSITY_LEVELS;
+    return Math.min(INTENSITY_LEVELS, Math.max(1, Math.ceil(count / stepSize)));
   };
 
   // Static column metadata - use $state.raw() for performance (no deep reactivity needed)
@@ -408,7 +454,7 @@ Responsive Breakpoints:
   });
 
   // Phase 4: Optimized URL building with memoization for 90%+ performance improvement
-  const urlCache = $state.raw(new LRUCache<string, string>(500)); // Max 500 URLs cached - use $state.raw
+  const urlCache = $state.raw(new LRUCache<string, string>(CONFIG.CACHE.URL_MAX_ENTRIES));
   const urlBuilders = $state<URLBuilders>({
     // Default functions to prevent undefined errors during initial render
     species: () => '#',
@@ -429,7 +475,7 @@ Responsive Breakpoints:
           queryType: 'species',
           species: species.common_name,
           date: selectedDate,
-          numResults: '25',
+          numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
           offset: '0',
         });
         urlCache.set(cacheKey, `/ui/detections?${params.toString()}`);
@@ -450,7 +496,7 @@ Responsive Breakpoints:
           date: selectedDate,
           hour: hour.toString(),
           duration: duration.toString(),
-          numResults: '25',
+          numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
           offset: '0',
         });
         urlCache.set(cacheKey, `/ui/detections?${params.toString()}`);
@@ -466,7 +512,7 @@ Responsive Breakpoints:
           date: selectedDate,
           hour: hour.toString(),
           duration: duration.toString(),
-          numResults: '25',
+          numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
           offset: '0',
         });
         urlCache.set(cacheKey, `/ui/detections?${params.toString()}`);
@@ -488,12 +534,13 @@ Responsive Breakpoints:
 
   // Optimized data sorting using $derived.by for better performance
   // Two-tier sorting: primary by count, secondary by latest detection time
+  // Also applies speciesLimit to cap the number of displayed species
   const sortedData = $derived.by(() => {
     // Early return for empty data
     if (data.length === 0) return [];
 
     // Use spread + sort with stable ordering
-    return [...data].sort((a: DailySpeciesSummary, b: DailySpeciesSummary) => {
+    const sorted = [...data].sort((a: DailySpeciesSummary, b: DailySpeciesSummary) => {
       // Primary sort: by detection count (descending)
       if (b.count !== a.count) {
         return b.count - a.count;
@@ -502,6 +549,37 @@ Responsive Breakpoints:
       // This ensures stable ordering when counts are equal
       return (b.latest_heard ?? '').localeCompare(a.latest_heard ?? '');
     });
+
+    // Apply species limit after sorting to ensure top N species are shown
+    if (speciesLimit > 0 && sorted.length > speciesLimit) {
+      return sorted.slice(0, speciesLimit);
+    }
+
+    return sorted;
+  });
+
+  // Calculate dynamic species column width based on longest name
+  // This ensures all rows align properly regardless of name length
+  // Uses CONFIG.SPECIES_COLUMN constants for easy adjustment
+  const speciesColumnWidth = $derived.by(() => {
+    const { BASE_WIDTH, CHAR_WIDTH, MIN_WIDTH, MAX_WIDTH } = CONFIG.SPECIES_COLUMN;
+
+    if (data.length === 0) return `${MIN_WIDTH}rem`;
+
+    // Find the longest species name
+    const longestName = data.reduce(
+      (longest, item) => (item.common_name.length > longest.length ? item.common_name : longest),
+      ''
+    );
+    const maxLength = longestName.length;
+
+    // Calculate width: base (thumbnail + gap + icons) + character width estimate
+    const calculatedWidth = BASE_WIDTH + maxLength * CHAR_WIDTH;
+
+    // Clamp between min and max
+    const finalWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
+
+    return `${finalWidth}rem`;
   });
 </script>
 
@@ -571,9 +649,13 @@ Responsive Breakpoints:
 
 <!-- Progressive loading implementation -->
 {#if loadingPhase === 'skeleton'}
-  <SkeletonDailySummary {showThumbnails} speciesCount={8} />
+  <SkeletonDailySummary {showThumbnails} speciesCount={CONFIG.SKELETON.SPECIES_COUNT} />
 {:else if loadingPhase === 'spinner'}
-  <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
+  <SkeletonDailySummary
+    {showThumbnails}
+    showSpinner={showDelayedIndicator}
+    speciesCount={CONFIG.SKELETON.SPECIES_COUNT}
+  />
 {:else if loadingPhase === 'error'}
   <section
     class="daily-summary-card card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
@@ -612,7 +694,10 @@ Responsive Breakpoints:
     <!-- Grid Content -->
     <div class="p-6 pt-8">
       <div class="overflow-x-auto overflow-y-visible">
-        <div class="daily-summary-grid min-w-[900px]">
+        <div
+          class="daily-summary-grid min-w-[900px]"
+          style:--species-col-width={speciesColumnWidth}
+        >
           <!-- Daylight visualization row -->
           <div class="flex mb-1">
             <div class="species-label-col shrink-0 flex items-center">
@@ -729,7 +814,7 @@ Responsive Breakpoints:
           </div>
 
           <!-- Species rows -->
-          <div class="space-y-0">
+          <div class="flex flex-col" style:gap="var(--grid-gap)">
             {#each sortedData as item (item.scientific_name)}
               <div
                 class="flex items-center species-row"
@@ -757,10 +842,10 @@ Responsive Breakpoints:
                   {/if}
                   <a
                     href={urlBuilders.species(item)}
-                    class="text-sm hover:text-primary cursor-pointer font-medium min-w-0 leading-tight flex items-center gap-1 truncate"
+                    class="text-sm hover:text-primary cursor-pointer font-medium leading-tight flex items-center gap-1 overflow-hidden"
                     title={item.common_name}
                   >
-                    <span class="truncate">{item.common_name}</span>
+                    <span class="truncate flex-1">{item.common_name}</span>
                     {#if item.is_new_species}
                       <span
                         class="text-warning inline-block shrink-0"
@@ -807,7 +892,7 @@ Responsive Breakpoints:
                             hour: hour.toString().padStart(2, '0'),
                           })}
                         >
-                          {count}
+                          <AnimatedCounter value={count} />
                         </a>
                       {/if}
                     </div>
@@ -833,7 +918,7 @@ Responsive Breakpoints:
                             endHour: (hour + 2).toString().padStart(2, '0'),
                           })}
                         >
-                          {count}
+                          <AnimatedCounter value={count} />
                         </a>
                       {/if}
                     </div>
@@ -859,7 +944,7 @@ Responsive Breakpoints:
                             endHour: (hour + 6).toString().padStart(2, '0'),
                           })}
                         >
-                          {count}
+                          <AnimatedCounter value={count} />
                         </a>
                       {/if}
                     </div>
@@ -910,6 +995,11 @@ Responsive Breakpoints:
     --grid-cell-radius: 4px;
     --grid-gap: 4px; /* Gap between grid cells */
 
+    /* Species column width fallbacks (actual width is set dynamically via JS)
+       These are fallbacks only - the dynamic width is set via style:--species-col-width */
+    --species-col-min-width: 9rem; /* Fallback, matches CONFIG.SPECIES_COLUMN.MIN_WIDTH */
+    --species-col-max-width: 16rem; /* Fallback, matches CONFIG.SPECIES_COLUMN.MAX_WIDTH */
+
     /* Light theme heatmap colors */
     --heatmap-color-0: #f0f9fc;
     --heatmap-color-1: #e0f3f8;
@@ -932,9 +1022,9 @@ Responsive Breakpoints:
      CSS Grid Layout Styles
      ======================================================================== */
 
-  /* Species label column - fixed width like mockup */
+  /* Species label column - fixed width calculated from longest species name */
   .species-label-col {
-    width: 10rem; /* w-40 equivalent */
+    width: var(--species-col-width, var(--species-col-min-width));
   }
 
   /* CSS Grid for hour columns - equal columns using minmax(0, 1fr) */
@@ -969,8 +1059,9 @@ Responsive Breakpoints:
     text-decoration: none;
   }
 
-  /* Species row hover effect */
+  /* Species row - consistent height */
   .species-row {
+    min-height: 2rem;
     border-radius: var(--grid-cell-radius);
     transition: background-color 0.15s ease;
   }
@@ -1240,7 +1331,7 @@ Responsive Breakpoints:
   :global(.species-column) {
     width: auto;
     min-width: 0;
-    max-width: 100px;
+    max-width: var(--species-col-max-width, 18rem);
     padding: 0 0.75rem 0 0.5rem !important;
   }
 
@@ -1248,8 +1339,8 @@ Responsive Breakpoints:
     display: flex;
     align-items: center;
     justify-content: center;
-    width: var(--grid-cell-height);
-    height: var(--grid-cell-height);
+    width: 2rem; /* w-8 - match thumbnail width */
+    height: 1.75rem; /* h-7 - match thumbnail height */
     border-radius: 0.375rem;
     font-size: 0.625rem;
     font-weight: 700;

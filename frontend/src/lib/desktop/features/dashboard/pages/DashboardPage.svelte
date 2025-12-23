@@ -64,6 +64,11 @@ Performance Optimizations:
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
   const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
+  // Species limit buffer constants for SSE updates
+  // BUFFER_TRIGGER: When array exceeds limit + this, trigger cleanup
+  // BUFFER_TARGET: After cleanup, keep limit + this many species to avoid frequent re-sorting
+  const SPECIES_LIMIT_BUFFER_TRIGGER = 10;
+  const SPECIES_LIMIT_BUFFER_TARGET = 5;
 
   // SSE Detection Data Type
   type SSEDetectionData = {
@@ -329,12 +334,11 @@ Performance Optimizations:
         throw new Error(t('dashboard.errors.configFetch', { status: response.statusText }));
       }
       const config = await response.json();
-      // API returns uppercase field names (e.g., "Summary" not "summary")
-      showThumbnails = config.Thumbnails?.Summary ?? true;
-      // Extract summaryLimit from config (lowercase in JSON response)
+      // API returns lowercase field names matching Go JSON tags
+      showThumbnails = config.thumbnails?.summary ?? true;
       summaryLimit = config.summaryLimit ?? 30;
       logger.debug('Dashboard config loaded:', {
-        Summary: config.Thumbnails?.Summary,
+        thumbnails: config.thumbnails,
         showThumbnails,
         summaryLimit,
       });
@@ -813,7 +817,7 @@ Performance Optimizations:
     const existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
 
     if (existingIndex >= 0) {
-      // Incremental update for existing species - minimize object creation
+      // Update existing species - DailySummaryCard's sortedData handles reordering
       const existing = safeArrayAccess(dailySummary, existingIndex);
       if (!existing) return;
       const updated = { ...existing };
@@ -829,34 +833,15 @@ Performance Optimizations:
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
 
-      // Optimized position update using $derived.by pattern
-      const currentPosition = existingIndex;
-      const newPosition = dailySummary.findIndex(
-        (species, i) => i < currentPosition && species.count < updated.count
+      // Update in place - sorting is handled by DailySummaryCard's sortedData derived value
+      dailySummary = [
+        ...dailySummary.slice(0, existingIndex),
+        updated,
+        ...dailySummary.slice(existingIndex + 1),
+      ];
+      logger.debug(
+        `Updated species: ${detection.commonName} (count: ${updated.count}, hour: ${hour})`
       );
-
-      if (newPosition !== -1) {
-        // Species needs to move up - rebuild array with minimal changes
-        dailySummary = [
-          ...dailySummary.slice(0, newPosition),
-          updated,
-          ...dailySummary.slice(newPosition, currentPosition),
-          ...dailySummary.slice(currentPosition + 1),
-        ];
-        logger.debug(
-          `Moved species up: ${detection.commonName} from position ${currentPosition} to ${newPosition} (count: ${updated.count})`
-        );
-      } else {
-        // Species stays in same position - just update in place
-        dailySummary = [
-          ...dailySummary.slice(0, currentPosition),
-          updated,
-          ...dailySummary.slice(currentPosition + 1),
-        ];
-        logger.debug(
-          `Updated species in place: ${detection.commonName} at position ${currentPosition} (count: ${updated.count})`
-        );
-      }
 
       // Update cache incrementally instead of invalidating
       updateDailySummaryCacheEntry(selectedDate, dailySummary);
@@ -888,7 +873,7 @@ Performance Optimizations:
         `count-${detection.speciesCode}`
       );
     } else {
-      // Add new species with optimized insertion
+      // Add new species - sorting is handled by DailySummaryCard's sortedData derived value
       const newSpecies: DailySpeciesSummary = {
         scientific_name: detection.scientificName,
         common_name: detection.commonName,
@@ -906,28 +891,20 @@ Performance Optimizations:
         newSpecies.hourly_counts.splice(hour, 1, 1);
       }
 
-      // Find insertion position with early termination for performance
-      const insertPosition = dailySummary.findIndex(s => s.count < newSpecies.count);
-      if (insertPosition === -1) {
-        // Add to end if it has the lowest count
-        dailySummary = [...dailySummary, newSpecies];
-      } else {
-        // Insert at the correct position
-        dailySummary = [
-          ...dailySummary.slice(0, insertPosition),
-          newSpecies,
-          ...dailySummary.slice(insertPosition),
-        ];
-      }
+      // Add to array - DailySummaryCard's sortedData will sort by count
+      dailySummary = [...dailySummary, newSpecies];
 
       // Enforce species count limit to prevent grid from growing indefinitely
-      if (summaryLimit > 0 && dailySummary.length > summaryLimit) {
-        dailySummary = dailySummary.slice(0, summaryLimit);
+      // Note: This is a safety limit before sorting; DailySummaryCard applies final limit after sorting
+      if (summaryLimit > 0 && dailySummary.length > summaryLimit + SPECIES_LIMIT_BUFFER_TRIGGER) {
+        // Keep a buffer above the limit to allow for proper sorting in DailySummaryCard
+        // Sort by count here to remove truly lowest-count species
+        dailySummary = [...dailySummary]
+          .sort((a, b) => b.count - a.count)
+          .slice(0, summaryLimit + SPECIES_LIMIT_BUFFER_TARGET);
       }
 
-      logger.debug(
-        `Added new species: ${detection.commonName} (count: 1, hour: ${hour}) at position ${insertPosition === -1 ? dailySummary.length - 1 : insertPosition}`
-      );
+      logger.debug(`Added new species: ${detection.commonName} (count: 1, hour: ${hour})`);
 
       // Update cache incrementally with new species included
       updateDailySummaryCacheEntry(selectedDate, dailySummary);
@@ -1148,6 +1125,7 @@ Performance Optimizations:
     error={summaryError}
     {selectedDate}
     {showThumbnails}
+    speciesLimit={summaryLimit}
     onPreviousDay={previousDay}
     onNextDay={nextDay}
     onGoToToday={goToToday}
