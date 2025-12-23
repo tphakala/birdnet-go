@@ -320,7 +320,7 @@
 
   // Database stats interface and state
   interface DatabaseStats {
-    type: string;
+    type: DatabaseType;
     size_bytes: number;
     total_detections: number;
     connected: boolean;
@@ -2567,10 +2567,7 @@
             <div class="stat bg-base-200 rounded-box p-4">
               <div class="stat-title text-xs">Type</div>
               <div class="stat-value text-lg flex items-center gap-2">
-                <DatabaseIcon
-                  database={databaseStats.data.type as DatabaseType}
-                  className="size-5"
-                />
+                <DatabaseIcon database={databaseStats.data.type} className="size-5" />
                 <span class="capitalize">{databaseStats.data.type}</span>
               </div>
             </div>

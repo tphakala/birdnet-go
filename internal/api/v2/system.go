@@ -1322,6 +1322,9 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 
 	// Get database stats from the datastore
 	stats, err := c.DS.GetDatabaseStats()
+
+	// Handle errors first
+	isPartialStats := false
 	if err != nil {
 		// If the database is not connected, log as warning and return partial stats with 200 OK
 		if errors.Is(err, datastore.ErrDBNotConnected) {
@@ -1330,6 +1333,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP(),
 			)
+			isPartialStats = true
 			// Continue to return partial stats below
 		} else {
 			c.logErrorIfEnabled("Failed to get database stats",
@@ -1341,14 +1345,33 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		}
 	}
 
-	c.logInfoIfEnabled("Database statistics retrieved successfully",
-		"type", stats.Type,
-		"size_bytes", stats.SizeBytes,
-		"total_detections", stats.TotalDetections,
-		"connected", stats.Connected,
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
-	)
+	// Guard against nil stats (defensive - future implementations might return nil)
+	if stats == nil {
+		c.logErrorIfEnabled("GetDatabaseStats returned nil stats",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, fmt.Errorf("database stats unavailable"), "Failed to retrieve database statistics", http.StatusInternalServerError)
+	}
+
+	// Log with appropriate message based on whether stats are partial or complete
+	if isPartialStats {
+		c.logInfoIfEnabled("Database statistics retrieved (partial)",
+			"type", stats.Type,
+			"connected", stats.Connected,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	} else {
+		c.logInfoIfEnabled("Database statistics retrieved successfully",
+			"type", stats.Type,
+			"size_bytes", stats.SizeBytes,
+			"total_detections", stats.TotalDetections,
+			"connected", stats.Connected,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
 
 	return ctx.JSON(http.StatusOK, stats)
 }
