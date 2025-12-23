@@ -53,11 +53,10 @@ ARG TARGETPLATFORM
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Build assets and compile BirdNET-Go (non-embedded build)
+# Note: frontend-build (including Tailwind) is handled as a dependency of noembed_* tasks
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     task check-tensorflow && \
-    task download-assets && \
-    task generate-tailwindcss && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
     BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
