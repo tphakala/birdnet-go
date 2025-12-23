@@ -6,6 +6,7 @@
   import Sidebar from './DesktopSidebar.svelte';
   import { auth as authStore } from '$lib/stores/auth';
   import { csrf as csrfStore } from '$lib/stores/csrf';
+  import { sidebar } from '$lib/stores/sidebar';
   import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
 
   interface Props {
@@ -30,6 +31,9 @@
 
   // Drawer state
   let drawerOpen = $state(false);
+
+  // Get sidebar collapsed state for dynamic grid layout ($ prefix auto-subscribes to store)
+  let isCollapsed = $derived($sidebar);
 
   // Initialize stores on mount
   onMount(() => {
@@ -82,7 +86,13 @@
   }
 </script>
 
-<div class={cn('drawer lg:drawer-open min-h-screen bg-base-200', className)}>
+<div
+  class={cn(
+    'drawer lg:drawer-open min-h-screen bg-base-200 transition-all duration-200',
+    isCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded',
+    className
+  )}
+>
   <input id="my-drawer" type="checkbox" class="drawer-toggle" bind:checked={drawerOpen} />
 
   <div class="drawer-content">
@@ -166,12 +176,24 @@
   @media (min-width: 1024px) {
     :global(.drawer.lg\:drawer-open) {
       grid-template-columns: 256px 1fr;
+      transition: grid-template-columns 0.2s ease-in-out;
+    }
+
+    :global(.drawer.lg\:drawer-open.sidebar-collapsed) {
+      grid-template-columns: 64px 1fr;
     }
 
     :global(.drawer.lg\:drawer-open .drawer-side) {
       display: block;
       position: sticky;
       width: 256px;
+      transition: width 0.2s ease-in-out;
+      overflow: visible;
+    }
+
+    :global(.drawer.lg\:drawer-open.sidebar-collapsed .drawer-side) {
+      width: 64px;
+      overflow: visible;
     }
 
     :global(.drawer.lg\:drawer-open .drawer-content) {
