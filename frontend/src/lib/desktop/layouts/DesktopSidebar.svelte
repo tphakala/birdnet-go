@@ -257,7 +257,7 @@ Performance Optimizations:
 
   <nav
     class={cn(
-      'flex flex-col h-dvh bg-base-100 border-r border-base-200/50 transition-all duration-200 ease-in-out',
+      'relative z-10 flex flex-col h-dvh bg-base-100 border-r border-base-200/50 transition-all duration-200 ease-in-out',
       isCollapsed ? 'w-16' : 'w-64'
     )}
   >
