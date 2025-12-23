@@ -1218,6 +1218,63 @@ func (_c *MockInterface_GetDailyEvents_Call) RunAndReturn(run func(string) (data
 	return _c
 }
 
+// GetDatabaseStats provides a mock function with no fields
+func (_m *MockInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDatabaseStats")
+	}
+
+	var r0 *datastore.DatabaseStats
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (*datastore.DatabaseStats, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() *datastore.DatabaseStats); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*datastore.DatabaseStats)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetDatabaseStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDatabaseStats'
+type MockInterface_GetDatabaseStats_Call struct {
+	*mock.Call
+}
+
+// GetDatabaseStats is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetDatabaseStats() *MockInterface_GetDatabaseStats_Call {
+	return &MockInterface_GetDatabaseStats_Call{Call: _e.mock.On("GetDatabaseStats")}
+}
+
+func (_c *MockInterface_GetDatabaseStats_Call) Run(run func()) *MockInterface_GetDatabaseStats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetDatabaseStats_Call) Return(_a0 *datastore.DatabaseStats, _a1 error) *MockInterface_GetDatabaseStats_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetDatabaseStats_Call) RunAndReturn(run func() (*datastore.DatabaseStats, error)) *MockInterface_GetDatabaseStats_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetDetectionTrends provides a mock function with given fields: ctx, period, limit
 func (_m *MockInterface) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
 	ret := _m.Called(ctx, period, limit)

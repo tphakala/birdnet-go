@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -25,6 +26,7 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -298,6 +300,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/jobs", c.GetJobQueueStats)
 	protectedGroup.GET("/processes", c.GetProcessInfo)
 	protectedGroup.GET("/temperature/cpu", c.GetSystemCPUTemperature)
+	protectedGroup.GET("/database/stats", c.GetDatabaseStats)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
@@ -1299,4 +1302,76 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 
 	// Return the equalizer filter configuration
 	return ctx.JSON(http.StatusOK, conf.EqFilterConfig)
+}
+
+// GetDatabaseStats handles GET /api/v2/system/database/stats
+func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
+	c.logInfoIfEnabled("Getting database statistics",
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
+
+	// Check if datastore is available
+	if c.DS == nil {
+		c.logErrorIfEnabled("Datastore not available",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, fmt.Errorf("datastore not available"), "Database not configured", http.StatusServiceUnavailable)
+	}
+
+	// Get database stats from the datastore
+	stats, err := c.DS.GetDatabaseStats()
+
+	// Handle errors first
+	isPartialStats := false
+	if err != nil {
+		// If the database is not connected, log as warning and return partial stats with 200 OK
+		if errors.Is(err, datastore.ErrDBNotConnected) {
+			c.logWarnIfEnabled("Database not connected, returning partial stats",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+			isPartialStats = true
+			// Continue to return partial stats below
+		} else {
+			c.logErrorIfEnabled("Failed to get database stats",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+			return c.HandleError(ctx, err, "Failed to retrieve database statistics", http.StatusInternalServerError)
+		}
+	}
+
+	// Guard against nil stats (defensive - future implementations might return nil)
+	if stats == nil {
+		c.logErrorIfEnabled("GetDatabaseStats returned nil stats",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, fmt.Errorf("database stats unavailable"), "Failed to retrieve database statistics", http.StatusInternalServerError)
+	}
+
+	// Log with appropriate message based on whether stats are partial or complete
+	if isPartialStats {
+		c.logInfoIfEnabled("Database statistics retrieved (partial)",
+			"type", stats.Type,
+			"connected", stats.Connected,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	} else {
+		c.logInfoIfEnabled("Database statistics retrieved successfully",
+			"type", stats.Type,
+			"size_bytes", stats.SizeBytes,
+			"total_detections", stats.TotalDetections,
+			"connected", stats.Connected,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, stats)
 }

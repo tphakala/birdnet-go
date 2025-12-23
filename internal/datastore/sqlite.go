@@ -495,3 +495,47 @@ func (s *SQLiteStore) CheckpointWAL() error {
 	log.Println("✅ SQLite WAL checkpoint completed successfully")
 	return nil
 }
+
+// GetDatabaseStats returns basic runtime statistics about the SQLite database.
+// Returns partial stats with ErrDBNotConnected if the database is unreachable.
+// The Connected field in the returned stats indicates if the DB is reachable.
+func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
+	// Defensive guard for nil Settings (e.g., in custom test setups)
+	location := ""
+	if s.Settings != nil {
+		location = s.Settings.Output.SQLite.Path
+	}
+
+	stats := &DatabaseStats{
+		Type:      DialectSQLite,
+		Connected: false,
+		Location:  location,
+	}
+
+	// Check connection - return partial stats with error if unavailable
+	if s.DB == nil {
+		return stats, ErrDBNotConnected
+	}
+
+	sqlDB, err := s.DB.DB()
+	if err != nil {
+		return stats, ErrDBNotConnected
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		return stats, ErrDBNotConnected
+	}
+	stats.Connected = true
+
+	// Get database size (ignore errors, size stays 0)
+	if size, sizeErr := s.getDatabaseSize(); sizeErr == nil {
+		stats.SizeBytes = size
+	}
+
+	// Get total detections (ignore errors, count stays 0)
+	if count, countErr := s.getTableRowCount("notes"); countErr == nil {
+		stats.TotalDetections = count
+	}
+
+	return stats, nil
+}

@@ -1028,6 +1028,21 @@
               "placeholder": "Syötä MySQL-tietokannan nimi",
               "helpText": "MySQL-tietokannan nimi"
             }
+          },
+          "stats": {
+            "title": "Tietokantatilastot",
+            "description": "Ajonaikaiset tiedot tietokannastasi",
+            "loading": "Ladataan tietokantatilastoja...",
+            "retry": "Yritä uudelleen",
+            "refresh": "Päivitä",
+            "noData": "Tietokantatilastoja ei saatavilla.",
+            "type": "Tyyppi",
+            "status": "Tila",
+            "size": "Koko",
+            "totalDetections": "Havaintoja yhteensä",
+            "location": "Sijainti",
+            "connected": "Yhdistetty",
+            "disconnected": "Ei yhteyttä"
           }
         },
         "interface": {

@@ -63,6 +63,8 @@ var (
 	ErrImageCacheNotFound = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
 	// ErrNotificationHistoryNotFound indicates no notification history record exists for the given species and type.
 	ErrNotificationHistoryNotFound = errors.Newf("notification history not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	// ErrDBNotConnected indicates the database is not connected, but partial stats may be available.
+	ErrDBNotConnected = errors.Newf("database not connected").Component("datastore").Category(errors.CategorySystem).Build()
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
@@ -152,6 +154,17 @@ type Interface interface {
 	GetNotificationHistory(scientificName string, notificationType string) (*NotificationHistory, error)
 	GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error)
 	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
+	// Database stats method for runtime statistics
+	GetDatabaseStats() (*DatabaseStats, error)
+}
+
+// DatabaseStats contains basic runtime statistics about the database
+type DatabaseStats struct {
+	Type            string `json:"type"`             // "sqlite" or "mysql"
+	SizeBytes       int64  `json:"size_bytes"`       // Database size in bytes
+	TotalDetections int64  `json:"total_detections"` // Total number of detection records
+	Connected       bool   `json:"connected"`        // Whether database is connected
+	Location        string `json:"location"`         // File path for SQLite, host:port/database for MySQL
 }
 
 // DataStore implements StoreInterface using a GORM database.

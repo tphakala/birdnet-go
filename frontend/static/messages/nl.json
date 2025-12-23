@@ -1028,6 +1028,21 @@
             },
             "title": "MySQL-configuratie",
             "description": "Configureer verbindingsinstellingen voor MySQL databaseserver"
+          },
+          "stats": {
+            "title": "Databasestatistieken",
+            "description": "Runtime-informatie over uw database",
+            "loading": "Databasestatistieken laden...",
+            "retry": "Opnieuw proberen",
+            "refresh": "Vernieuwen",
+            "noData": "Geen databasestatistieken beschikbaar.",
+            "type": "Type",
+            "status": "Status",
+            "size": "Grootte",
+            "totalDetections": "Totaal detecties",
+            "location": "Locatie",
+            "connected": "Verbonden",
+            "disconnected": "Niet verbonden"
           }
         },
         "interface": {

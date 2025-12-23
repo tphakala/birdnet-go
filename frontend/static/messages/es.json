@@ -1028,6 +1028,21 @@
             },
             "title": "Configuración de MySQL",
             "description": "Configure los ajustes de conexión para el servidor de base de datos MySQL"
+          },
+          "stats": {
+            "title": "Estadísticas de base de datos",
+            "description": "Información de tiempo de ejecución sobre su base de datos",
+            "loading": "Cargando estadísticas de base de datos...",
+            "retry": "Reintentar",
+            "refresh": "Actualizar",
+            "noData": "No hay estadísticas de base de datos disponibles.",
+            "type": "Tipo",
+            "status": "Estado",
+            "size": "Tamaño",
+            "totalDetections": "Detecciones totales",
+            "location": "Ubicación",
+            "connected": "Conectado",
+            "disconnected": "Desconectado"
           }
         },
         "interface": {

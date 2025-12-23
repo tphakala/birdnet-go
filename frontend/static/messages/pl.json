@@ -1040,6 +1040,21 @@
               "placeholder": "Wprowadź nazwę bazy danych MySQL",
               "helpText": "Nazwa bazy danych MySQL"
             }
+          },
+          "stats": {
+            "title": "Statystyki bazy danych",
+            "description": "Informacje o stanie bazy danych",
+            "loading": "Ładowanie statystyk bazy danych...",
+            "retry": "Ponów",
+            "refresh": "Odśwież",
+            "noData": "Brak dostępnych statystyk bazy danych.",
+            "type": "Typ",
+            "status": "Status",
+            "size": "Rozmiar",
+            "totalDetections": "Wykrycia łącznie",
+            "location": "Lokalizacja",
+            "connected": "Połączono",
+            "disconnected": "Rozłączono"
           }
         },
         "interface": {

@@ -227,4 +227,49 @@ func (m *MySQLStore) UpdateNote(id string, updates map[string]any) error {
 	return m.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
 
-// Save stores a note and its associated results as a single transaction in the database.
+// GetDatabaseStats returns basic runtime statistics about the MySQL database.
+// Returns partial stats with ErrDBNotConnected if the database is unreachable.
+// The Connected field in the returned stats indicates if the DB is reachable.
+func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
+	// Defensive guard for nil Settings (e.g., in custom test setups)
+	location := ""
+	if m.Settings != nil {
+		location = fmt.Sprintf("%s:%s/%s",
+			m.Settings.Output.MySQL.Host,
+			m.Settings.Output.MySQL.Port,
+			m.Settings.Output.MySQL.Database)
+	}
+
+	stats := &DatabaseStats{
+		Type:      DialectMySQL,
+		Connected: false,
+		Location:  location,
+	}
+
+	// Check connection - return partial stats with error if unavailable
+	if m.DB == nil {
+		return stats, ErrDBNotConnected
+	}
+
+	sqlDB, err := m.DB.DB()
+	if err != nil {
+		return stats, ErrDBNotConnected
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		return stats, ErrDBNotConnected
+	}
+	stats.Connected = true
+
+	// Get database size (ignore errors, size stays 0)
+	if size, sizeErr := m.getDatabaseSize(); sizeErr == nil {
+		stats.SizeBytes = size
+	}
+
+	// Get total detections (ignore errors, count stays 0)
+	if count, countErr := m.getTableRowCount("notes"); countErr == nil {
+		stats.TotalDetections = count
+	}
+
+	return stats, nil
+}
