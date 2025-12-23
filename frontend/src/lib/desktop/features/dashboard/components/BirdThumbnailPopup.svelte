@@ -158,12 +158,12 @@
 </script>
 
 <!-- Trigger thumbnail with popup -->
-<div class="relative inline-block">
+<div class="relative flex">
   <!-- Trigger thumbnail -->
   <a
     href={detectionUrl}
     bind:this={triggerElement}
-    class="inline-block {className} relative"
+    class="flex {className} relative"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
     onmousemove={handleMouseMove}
