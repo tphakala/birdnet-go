@@ -111,7 +111,7 @@ func DefaultRetryConfig() RetryConfig {
 }
 
 // WithRetry executes an operation with retry logic for transient errors.
-// The operation is retried up to MaxRetries times with exponential backoff.
+// The operation is retried up to MaxRetries times with linear backoff.
 // This is a shared implementation to avoid duplication across target types.
 func WithRetry(ctx context.Context, cfg RetryConfig, op func() error) error {
 	var lastErr error
@@ -135,7 +135,7 @@ func WithRetry(ctx context.Context, cfg RetryConfig, op func() error) error {
 			}
 		}
 
-		// Exponential backoff: backoff * (attempt + 1)
+		// Linear backoff: backoff * (attempt + 1) gives 1x, 2x, 3x delays
 		time.Sleep(cfg.Backoff * time.Duration(attempt+1))
 	}
 

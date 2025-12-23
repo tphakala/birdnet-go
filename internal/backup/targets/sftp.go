@@ -849,6 +849,10 @@ func knownHostsCallback(knownHostsFile string) (ssh.HostKeyCallback, error) {
 				Context("operation", "create_known_hosts_file").
 				Build()
 		}
+		// Warn user that SSH connections will fail until host keys are added
+		slog.Warn("Created empty known_hosts file - SSH connections will fail until host keys are added",
+			"path", knownHostsFile,
+			"hint", "Run 'ssh-keyscan <hostname> >> "+knownHostsFile+"' to add host keys")
 	}
 
 	callback, err := knownhosts.New(knownHostsFile)

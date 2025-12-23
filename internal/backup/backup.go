@@ -901,6 +901,9 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 	case "d":
 		hours := num * HoursPerDay
 		return time.Duration(hours) * time.Hour, nil
+	case "w":
+		hours := num * DaysPerWeek * HoursPerDay
+		return time.Duration(hours) * time.Hour, nil
 	case "m":
 		hours := num * DaysPerMonth * HoursPerDay // approximate
 		return time.Duration(hours) * time.Hour, nil
@@ -908,7 +911,7 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 		hours := num * DaysPerYear * HoursPerDay // approximate
 		return time.Duration(hours) * time.Hour, nil
 	default:
-		return 0, errors.Newf("invalid retention age unit: %s", unit).
+		return 0, errors.Newf("invalid retention age unit: %s (valid: d, w, m, y)", unit).
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "parse_retention_age").

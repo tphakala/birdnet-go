@@ -58,6 +58,9 @@ const (
 	// HoursPerDay is the number of hours in a day
 	HoursPerDay = 24
 
+	// DaysPerWeek is the number of days in a week
+	DaysPerWeek = 7
+
 	// DaysPerMonth is the approximate number of days in a month
 	DaysPerMonth = 30
 
