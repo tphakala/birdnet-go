@@ -5,6 +5,7 @@ Purpose:
 - Primary navigation menu for the desktop interface
 - Handles authentication state display (login/logout)
 - Manages route navigation with special behaviors for specific routes
+- Collapsible to icons-only mode with localStorage persistence
 
 Features:
 - Hierarchical navigation with collapsible sections
@@ -13,11 +14,15 @@ Features:
 - Authentication integration with login/logout functionality
 - Responsive drawer behavior for smaller screens
 - Version display with GitHub repository link
+- Collapsible sidebar with smooth transitions (desktop only)
+- Flyout submenus for nested navigation when collapsed
+- Tooltips for menu items when collapsed
 
 Special Behaviors:
 - Dashboard Link: When clicking the dashboard navigation link (home or "Dashboard" menu item),
   automatically resets the date persistence to show current date. This ensures users always
   see today's data when explicitly navigating to the dashboard.
+- Collapse Toggle: Only visible on desktop (≥1024px). State persists in localStorage.
 
 Props:
 - securityEnabled?: boolean - Whether security/auth is enabled
@@ -36,6 +41,7 @@ Performance Optimizations:
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
+  import { sidebar } from '$lib/stores/sidebar';
   import {
     LayoutDashboard,
     BarChart3,
@@ -46,10 +52,16 @@ Performance Optimizations:
     LogOut,
     LogIn,
     ChevronDown,
+    ChevronsLeft,
+    ChevronsRight,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
+  import LogoBadge from '$lib/components/LogoBadge.svelte';
+
+  // Logo display option: 'badge' for stylized badge, 'image' for bird image
+  const LOGO_STYLE: 'badge' | 'image' = 'badge';
 
   interface Props {
     securityEnabled?: boolean;
@@ -79,6 +91,46 @@ Performance Optimizations:
   let showLoginModal = $state(false);
   let analyticsExpanded = $state(false);
   let settingsExpanded = $state(false);
+
+  // Flyout state for collapsed mode
+  let analyticsFlyoutOpen = $state(false);
+  let settingsFlyoutOpen = $state(false);
+
+  // Flyout position (for fixed positioning to escape overflow container)
+  let analyticsFlyoutPosition = $state({ top: 0, left: 0 });
+  let settingsFlyoutPosition = $state({ top: 0, left: 0 });
+
+  // Button refs for position calculation
+  let analyticsButtonRef = $state<HTMLButtonElement | null>(null);
+  let settingsButtonRef = $state<HTMLButtonElement | null>(null);
+
+  // Toggle flyout with position calculation
+  function toggleAnalyticsFlyout() {
+    if (!analyticsFlyoutOpen && analyticsButtonRef) {
+      const rect = analyticsButtonRef.getBoundingClientRect();
+      analyticsFlyoutPosition = {
+        top: rect.top,
+        left: rect.right + 8, // 8px gap (ml-2)
+      };
+    }
+    analyticsFlyoutOpen = !analyticsFlyoutOpen;
+    settingsFlyoutOpen = false;
+  }
+
+  function toggleSettingsFlyout() {
+    if (!settingsFlyoutOpen && settingsButtonRef) {
+      const rect = settingsButtonRef.getBoundingClientRect();
+      settingsFlyoutPosition = {
+        top: rect.top,
+        left: rect.right + 8, // 8px gap (ml-2)
+      };
+    }
+    settingsFlyoutOpen = !settingsFlyoutOpen;
+    analyticsFlyoutOpen = false;
+  }
+
+  // Get collapsed state from store (using $ prefix for auto-subscription)
+  let isCollapsed = $derived($sidebar);
 
   // Get actual route from window.location for accurate highlighting
   // Falls back to currentRoute prop if window is not available
@@ -110,11 +162,22 @@ Performance Optimizations:
     settingsSupport: actualRoute === '/ui/settings/support',
   }));
 
-  // Auto-expand sections when route matches
+  // Auto-expand sections when route matches (only when not collapsed)
   $effect(() => {
-    if (routeCache.analytics) analyticsExpanded = true;
-    if (routeCache.settings) settingsExpanded = true;
+    if (!isCollapsed) {
+      if (routeCache.analytics) analyticsExpanded = true;
+      if (routeCache.settings) settingsExpanded = true;
+    }
   });
+
+  // Close flyouts when clicking outside
+  function handleClickOutside(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.flyout-container')) {
+      analyticsFlyoutOpen = false;
+      settingsFlyoutOpen = false;
+    }
+  }
 
   // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations
   let navigationUrls = $derived({
@@ -139,6 +202,9 @@ Performance Optimizations:
     if (url === navigationUrls.dashboard) {
       resetDateToToday();
     }
+    // Close flyouts on navigation
+    analyticsFlyoutOpen = false;
+    settingsFlyoutOpen = false;
     if (onNavigate) {
       onNavigate(url);
     } else {
@@ -154,247 +220,572 @@ Performance Optimizations:
     showLoginModal = true;
   }
 
+  function toggleSidebar() {
+    sidebar.toggle();
+  }
+
+  // Close expanded sections when sidebar collapses
+  $effect(() => {
+    if ($sidebar) {
+      // Sidebar is now collapsed - close expanded sections
+      analyticsExpanded = false;
+      settingsExpanded = false;
+    }
+  });
+
   // Shared styles for menu items - inspired by modern sidebar designs
   const menuItemBase =
     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
   const menuItemDefault = 'text-base-content/80 hover:text-base-content hover:menu-hover';
   const menuItemActive = 'menu-item-active';
+
+  // Collapsed menu item styles
+  let menuItemCollapsed = $derived(isCollapsed ? 'justify-center px-0' : '');
 </script>
 
-<aside class={cn('drawer-side z-10', className)} aria-label={t('navigation.mainNavigation')}>
+<svelte:window onclick={handleClickOutside} />
+
+<aside
+  class={cn(
+    'drawer-side z-10 transition-all duration-200 ease-in-out overflow-visible',
+    isCollapsed ? 'lg:w-16' : 'lg:w-64',
+    className
+  )}
+  aria-label={t('navigation.mainNavigation')}
+>
   <label for="my-drawer" class="drawer-overlay" aria-label={t('navigation.closeSidebar')}></label>
 
-  <nav class="flex flex-col h-dvh w-64 bg-base-100 border-r border-base-200/50">
+  <nav
+    class={cn(
+      'flex flex-col h-dvh bg-base-100 border-r border-base-200/50 transition-all duration-200 ease-in-out',
+      isCollapsed ? 'w-16' : 'w-64'
+    )}
+  >
     <!-- Logo Header -->
-    <div class="flex-none px-4 py-5 border-b border-base-200/50">
-      <button
-        onclick={() => navigate(navigationUrls.dashboard)}
-        class="flex items-center gap-3 group"
-        aria-label="BirdNET-Go Home"
-      >
-        <img
-          src="/assets/images/logo.png"
-          alt="BirdNET-Go Logo"
-          class="h-9 w-9 rounded-lg shadow-sm"
-        />
-        <span class="text-xl font-bold tracking-tight text-base-content">BirdNET-Go</span>
-      </button>
+    <div
+      class={cn(
+        'flex-none py-5 border-b border-base-200/50 relative',
+        isCollapsed ? 'px-2' : 'px-4'
+      )}
+    >
+      <div class={cn('flex items-center', isCollapsed ? 'justify-center' : 'justify-between')}>
+        <button
+          onclick={() => navigate(navigationUrls.dashboard)}
+          class={cn('flex items-center gap-3 group', isCollapsed && 'justify-center')}
+          aria-label="BirdNET-Go Home"
+        >
+          {#if LOGO_STYLE === 'badge'}
+            <LogoBadge size="md" variant="ocean" />
+          {:else}
+            <!-- Original bird image logo - change LOGO_STYLE to 'image' to use -->
+            <img
+              src="/assets/images/logo.png"
+              alt="BirdNET-Go Logo"
+              class="h-9 w-9 rounded-lg shadow-sm shrink-0"
+            />
+          {/if}
+          {#if !isCollapsed}
+            <span class="text-xl font-bold tracking-tight text-base-content">BirdNET-Go</span>
+          {/if}
+        </button>
+        <!-- Collapse toggle - desktop only -->
+        {#if !isCollapsed}
+          <button
+            onclick={toggleSidebar}
+            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-base-content/60 hover:text-base-content hover:bg-base-content/10 transition-colors duration-150"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+          >
+            <ChevronsLeft class="size-4" />
+          </button>
+        {/if}
+      </div>
+      <!-- Expand toggle when collapsed - positioned below logo -->
+      {#if isCollapsed}
+        <button
+          onclick={toggleSidebar}
+          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-base-content/60 hover:text-base-content hover:bg-base-content/10 transition-colors duration-150"
+          aria-label="Expand sidebar"
+          title="Expand sidebar"
+        >
+          <ChevronsRight class="size-4" />
+        </button>
+      {/if}
     </div>
 
     <!-- Navigation Menu -->
-    <div class="flex-1 overflow-y-auto px-3 py-4">
+    <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
       <div class="flex flex-col gap-1" role="navigation">
         <!-- Dashboard -->
-        <button
-          onclick={() => navigate(navigationUrls.dashboard)}
-          class={cn(menuItemBase, routeCache.dashboard ? menuItemActive : menuItemDefault)}
-          role="menuitem"
-          aria-current={routeCache.dashboard ? 'page' : undefined}
-        >
-          <LayoutDashboard class="size-5 shrink-0" />
-          <span>{t('navigation.dashboard')}</span>
-        </button>
-
-        <!-- Analytics (Collapsible) -->
-        <div class="flex flex-col">
+        <div class="relative group">
           <button
-            onclick={() => (analyticsExpanded = !analyticsExpanded)}
+            onclick={() => navigate(navigationUrls.dashboard)}
             class={cn(
               menuItemBase,
-              routeCache.analytics ? 'text-primary' : 'text-base-content/80',
-              'hover:text-base-content hover:menu-hover'
+              menuItemCollapsed,
+              routeCache.dashboard ? menuItemActive : menuItemDefault
             )}
-            aria-expanded={analyticsExpanded}
+            role="menuitem"
+            aria-current={routeCache.dashboard ? 'page' : undefined}
           >
-            <BarChart3 class="size-5 shrink-0" />
-            <span class="flex-1">{t('navigation.analytics')}</span>
-            <ChevronDown
-              class={cn('size-4 shrink-0 transition-transform duration-200', {
-                'rotate-180': analyticsExpanded,
-              })}
-            />
+            <LayoutDashboard class="size-5 shrink-0" />
+            {#if !isCollapsed}
+              <span>{t('navigation.dashboard')}</span>
+            {/if}
           </button>
-
-          {#if analyticsExpanded}
+          <!-- Tooltip for collapsed state -->
+          {#if isCollapsed}
             <div
-              class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
-              style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+              class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
             >
-              <button
-                onclick={() => navigate(navigationUrls.analytics)}
-                class={cn(
-                  'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                  routeCache.analyticsExact
-                    ? 'menu-subitem-active'
-                    : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                )}
-              >
-                {t('analytics.title')}
-              </button>
-              <button
-                onclick={() => navigate(navigationUrls.analyticsSpecies)}
-                class={cn(
-                  'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                  routeCache.analyticsSpecies
-                    ? 'menu-subitem-active'
-                    : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                )}
-              >
-                {t('analytics.species.title')}
-              </button>
+              {t('navigation.dashboard')}
             </div>
           {/if}
         </div>
 
+        <!-- Analytics (Collapsible) -->
+        <div class="flex flex-col relative flyout-container">
+          {#if isCollapsed}
+            <!-- Collapsed: Icon with flyout -->
+            <div class="relative group">
+              <button
+                bind:this={analyticsButtonRef}
+                onclick={toggleAnalyticsFlyout}
+                class={cn(
+                  menuItemBase,
+                  menuItemCollapsed,
+                  routeCache.analytics ? 'text-primary' : 'text-base-content/80',
+                  'hover:text-base-content hover:menu-hover'
+                )}
+                aria-expanded={analyticsFlyoutOpen}
+              >
+                <BarChart3 class="size-5 shrink-0" />
+              </button>
+              <!-- Tooltip when flyout is closed -->
+              {#if !analyticsFlyoutOpen}
+                <div
+                  class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
+                >
+                  {t('navigation.analytics')}
+                </div>
+              {/if}
+            </div>
+            <!-- Flyout submenu (fixed positioning to escape overflow container) -->
+            {#if analyticsFlyoutOpen}
+              <div
+                class="fixed bg-base-100 border border-base-200 rounded-lg shadow-xl min-w-48 z-[100]"
+                style:top="{analyticsFlyoutPosition.top}px"
+                style:left="{analyticsFlyoutPosition.left}px"
+              >
+                <div
+                  class="px-3 py-2 border-b border-base-200 font-medium text-sm text-base-content"
+                >
+                  {t('navigation.analytics')}
+                </div>
+                <div class="p-1">
+                  <button
+                    onclick={() => navigate(navigationUrls.analytics)}
+                    class={cn(
+                      'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.analyticsExact
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('analytics.title')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.analyticsSpecies)}
+                    class={cn(
+                      'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.analyticsSpecies
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('analytics.species.title')}
+                  </button>
+                </div>
+              </div>
+            {/if}
+          {:else}
+            <!-- Expanded: Regular collapsible -->
+            <button
+              onclick={() => (analyticsExpanded = !analyticsExpanded)}
+              class={cn(
+                menuItemBase,
+                routeCache.analytics ? 'text-primary' : 'text-base-content/80',
+                'hover:text-base-content hover:menu-hover'
+              )}
+              aria-expanded={analyticsExpanded}
+            >
+              <BarChart3 class="size-5 shrink-0" />
+              <span class="flex-1">{t('navigation.analytics')}</span>
+              <ChevronDown
+                class={cn('size-4 shrink-0 transition-transform duration-200', {
+                  'rotate-180': analyticsExpanded,
+                })}
+              />
+            </button>
+
+            {#if analyticsExpanded}
+              <div
+                class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
+                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+              >
+                <button
+                  onclick={() => navigate(navigationUrls.analytics)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.analyticsExact
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('analytics.title')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.analyticsSpecies)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.analyticsSpecies
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('analytics.species.title')}
+                </button>
+              </div>
+            {/if}
+          {/if}
+        </div>
+
         <!-- Search -->
-        <button
-          onclick={() => navigate(navigationUrls.search)}
-          class={cn(menuItemBase, routeCache.search ? menuItemActive : menuItemDefault)}
-          role="menuitem"
-        >
-          <Search class="size-5 shrink-0" />
-          <span>{t('navigation.search')}</span>
-        </button>
+        <div class="relative group">
+          <button
+            onclick={() => navigate(navigationUrls.search)}
+            class={cn(
+              menuItemBase,
+              menuItemCollapsed,
+              routeCache.search ? menuItemActive : menuItemDefault
+            )}
+            role="menuitem"
+          >
+            <Search class="size-5 shrink-0" />
+            {#if !isCollapsed}
+              <span>{t('navigation.search')}</span>
+            {/if}
+          </button>
+          {#if isCollapsed}
+            <div
+              class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
+            >
+              {t('navigation.search')}
+            </div>
+          {/if}
+        </div>
 
         <!-- About -->
-        <button
-          onclick={() => navigate(navigationUrls.about)}
-          class={cn(menuItemBase, routeCache.about ? menuItemActive : menuItemDefault)}
-          role="menuitem"
-        >
-          <Info class="size-5 shrink-0" />
-          <span>{t('navigation.about')}</span>
-        </button>
+        <div class="relative group">
+          <button
+            onclick={() => navigate(navigationUrls.about)}
+            class={cn(
+              menuItemBase,
+              menuItemCollapsed,
+              routeCache.about ? menuItemActive : menuItemDefault
+            )}
+            role="menuitem"
+          >
+            <Info class="size-5 shrink-0" />
+            {#if !isCollapsed}
+              <span>{t('navigation.about')}</span>
+            {/if}
+          </button>
+          {#if isCollapsed}
+            <div
+              class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
+            >
+              {t('navigation.about')}
+            </div>
+          {/if}
+        </div>
 
         {#if !securityEnabled || accessAllowed}
           <!-- Divider -->
           <div class="my-2 border-t border-base-200/50"></div>
 
           <!-- System -->
-          <button
-            onclick={() => navigate(navigationUrls.system)}
-            class={cn(menuItemBase, routeCache.system ? menuItemActive : menuItemDefault)}
-            role="menuitem"
-            aria-current={routeCache.system ? 'page' : undefined}
-          >
-            <Cpu class="size-5 shrink-0" />
-            <span>{t('navigation.system')}</span>
-          </button>
-
-          <!-- Settings (Collapsible) -->
-          <div class="flex flex-col">
+          <div class="relative group">
             <button
-              onclick={() => (settingsExpanded = !settingsExpanded)}
+              onclick={() => navigate(navigationUrls.system)}
               class={cn(
                 menuItemBase,
-                routeCache.settings ? 'text-primary' : 'text-base-content/80',
-                'hover:text-base-content hover:menu-hover'
+                menuItemCollapsed,
+                routeCache.system ? menuItemActive : menuItemDefault
               )}
-              aria-expanded={settingsExpanded}
+              role="menuitem"
+              aria-current={routeCache.system ? 'page' : undefined}
             >
-              <Settings class="size-5 shrink-0" />
-              <span class="flex-1">{t('navigation.settings')}</span>
-              <ChevronDown
-                class={cn('size-4 shrink-0 transition-transform duration-200', {
-                  'rotate-180': settingsExpanded,
-                })}
-              />
+              <Cpu class="size-5 shrink-0" />
+              {#if !isCollapsed}
+                <span>{t('navigation.system')}</span>
+              {/if}
             </button>
-
-            {#if settingsExpanded}
+            {#if isCollapsed}
               <div
-                class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
-                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+                class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
               >
-                <button
-                  onclick={() => navigate(navigationUrls.settingsMain)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsMain
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.node')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsAudio)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsAudio
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.audio')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsSpecies)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsSpecies
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.species')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsFilters)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsFilters
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.filters')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsNotifications)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsNotifications
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.notifications')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsIntegrations)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsIntegrations
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.integration')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsSecurity)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsSecurity
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.security')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.settingsSupport)}
-                  class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.settingsSupport
-                      ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
-                  )}
-                >
-                  {t('settings.sections.support')}
-                </button>
+                {t('navigation.system')}
               </div>
+            {/if}
+          </div>
+
+          <!-- Settings (Collapsible) -->
+          <div class="flex flex-col relative flyout-container">
+            {#if isCollapsed}
+              <!-- Collapsed: Icon with flyout -->
+              <div class="relative group">
+                <button
+                  bind:this={settingsButtonRef}
+                  onclick={toggleSettingsFlyout}
+                  class={cn(
+                    menuItemBase,
+                    menuItemCollapsed,
+                    routeCache.settings ? 'text-primary' : 'text-base-content/80',
+                    'hover:text-base-content hover:menu-hover'
+                  )}
+                  aria-expanded={settingsFlyoutOpen}
+                >
+                  <Settings class="size-5 shrink-0" />
+                </button>
+                <!-- Tooltip when flyout is closed -->
+                {#if !settingsFlyoutOpen}
+                  <div
+                    class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
+                  >
+                    {t('navigation.settings')}
+                  </div>
+                {/if}
+              </div>
+              <!-- Flyout submenu (fixed positioning to escape overflow container) -->
+              {#if settingsFlyoutOpen}
+                <div
+                  class="fixed bg-base-100 border border-base-200 rounded-lg shadow-xl min-w-48 z-[100]"
+                  style:top="{settingsFlyoutPosition.top}px"
+                  style:left="{settingsFlyoutPosition.left}px"
+                >
+                  <div
+                    class="px-3 py-2 border-b border-base-200 font-medium text-sm text-base-content"
+                  >
+                    {t('navigation.settings')}
+                  </div>
+                  <div class="p-1 max-h-80 overflow-y-auto">
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsMain)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsMain
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.node')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsAudio)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsAudio
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.audio')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsSpecies)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsSpecies
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.species')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsFilters)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsFilters
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.filters')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsNotifications)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsNotifications
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.notifications')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsIntegrations)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsIntegrations
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.integration')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsSecurity)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsSecurity
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.security')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsSupport)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsSupport
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.support')}
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            {:else}
+              <!-- Expanded: Regular collapsible -->
+              <button
+                onclick={() => (settingsExpanded = !settingsExpanded)}
+                class={cn(
+                  menuItemBase,
+                  routeCache.settings ? 'text-primary' : 'text-base-content/80',
+                  'hover:text-base-content hover:menu-hover'
+                )}
+                aria-expanded={settingsExpanded}
+              >
+                <Settings class="size-5 shrink-0" />
+                <span class="flex-1">{t('navigation.settings')}</span>
+                <ChevronDown
+                  class={cn('size-4 shrink-0 transition-transform duration-200', {
+                    'rotate-180': settingsExpanded,
+                  })}
+                />
+              </button>
+
+              {#if settingsExpanded}
+                <div
+                  class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
+                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+                >
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsMain)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsMain
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.node')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsAudio)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsAudio
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.audio')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsSpecies)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsSpecies
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.species')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsFilters)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsFilters
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.filters')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsNotifications)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsNotifications
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.notifications')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsIntegrations)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsIntegrations
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.integration')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsSecurity)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsSecurity
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.security')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsSupport)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsSupport
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.support')}
+                  </button>
+                </div>
+              {/if}
             {/if}
           </div>
         {/if}
@@ -402,41 +793,71 @@ Performance Optimizations:
     </div>
 
     <!-- Footer -->
-    <div class="flex-none px-3 py-4 border-t border-base-200/50">
+    <div class={cn('flex-none py-4 border-t border-base-200/50', isCollapsed ? 'px-2' : 'px-3')}>
       {#if securityEnabled}
         {#if accessAllowed}
-          <button
-            onclick={handleLogout}
-            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150"
-            aria-label={t('auth.logout')}
-          >
-            <LogOut class="size-4" />
-            <span>{t('auth.logout')}</span>
-          </button>
+          <div class="relative group">
+            <button
+              onclick={handleLogout}
+              class={cn(
+                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150',
+                isCollapsed && 'justify-center'
+              )}
+              aria-label={t('auth.logout')}
+            >
+              <LogOut class="size-4" />
+              {#if !isCollapsed}
+                <span>{t('auth.logout')}</span>
+              {/if}
+            </button>
+            {#if isCollapsed}
+              <div
+                class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
+              >
+                {t('auth.logout')}
+              </div>
+            {/if}
+          </div>
         {:else}
-          <button
-            onclick={handleLogin}
-            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150"
-            aria-label={t('auth.openLoginModal')}
-          >
-            <LogIn class="size-4" />
-            <span>{t('auth.login')}</span>
-          </button>
+          <div class="relative group">
+            <button
+              onclick={handleLogin}
+              class={cn(
+                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150',
+                isCollapsed && 'justify-center'
+              )}
+              aria-label={t('auth.openLoginModal')}
+            >
+              <LogIn class="size-4" />
+              {#if !isCollapsed}
+                <span>{t('auth.login')}</span>
+              {/if}
+            </button>
+            {#if isCollapsed}
+              <div
+                class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
+              >
+                {t('auth.login')}
+              </div>
+            {/if}
+          </div>
         {/if}
       {/if}
 
       <!-- Version -->
-      <div class="mt-3 text-center">
-        <a
-          href="https://github.com/tphakala/birdnet-go"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-xs text-base-content/60 hover:text-base-content/80 transition-colors duration-150"
-          aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
-        >
-          {version}
-        </a>
-      </div>
+      {#if !isCollapsed}
+        <div class="mt-3 text-center">
+          <a
+            href="https://github.com/tphakala/birdnet-go"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-base-content/60 hover:text-base-content/80 transition-colors duration-150"
+            aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
+          >
+            {version}
+          </a>
+        </div>
+      {/if}
     </div>
   </nav>
 </aside>
