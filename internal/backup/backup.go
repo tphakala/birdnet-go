@@ -498,7 +498,7 @@ func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 	hdr := &tar.Header{
 		Name:    "config.yml", // Standard name within the archive
 		Size:    int64(len(yamlBytes)),
-		Mode:    0o644, // Read-only permissions
+		Mode:    int64(PermArchiveFile), // Read-only permissions
 		ModTime: metadata.Timestamp,
 	}
 
@@ -545,14 +545,12 @@ func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, 
 	m.logger.Info("Storing backup archive in targets", "backup_id", metadata.ID, "targets_count", len(targetsToStore))
 
 	for _, target := range targetsToStore {
-		wg.Add(1)
-		go func(t Target) {
-			defer wg.Done()
-			targetName := t.Name()
+		wg.Go(func() {
+			targetName := target.Name()
 			startTargetTime := time.Now()
 			m.logger.Info("Storing backup in target", "backup_id", metadata.ID, "target_name", targetName)
 
-			if err := t.Store(storeCtx, archivePath, metadata); err != nil {
+			if err := target.Store(storeCtx, archivePath, metadata); err != nil {
 				wrappedErr := fmt.Errorf("target %s: %w", targetName, err)
 				m.logger.Error("Failed to store backup in target", "backup_id", metadata.ID, "target_name", targetName, "error", err)
 				errChan <- wrappedErr
@@ -574,7 +572,7 @@ func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, 
 					}
 				}
 			}
-		}(target)
+		})
 	}
 
 	wg.Wait()
@@ -630,15 +628,24 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	m.logger.Debug("Creating archive", "archive_path", archivePath, "backup_id", metadata.ID)
 	start := time.Now()
 
-	// Create the archive file with secure path validation
-	secureOp := NewSecureFileOp("backup")
-	archiveFile, cleanPath, err := secureOp.SecureCreate(archivePath)
+	// Create the archive file (internal temp path from backup manager)
+	archiveFile, err := os.Create(archivePath) //nolint:gosec // G304 - archivePath is an internal temp path from backup manager
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_archive").
+			Context("archive_path", archivePath).
+			Build()
 	}
+
+	// Track close state to prevent double-close (explicit close + defer)
+	var archiveClosed, tarClosed bool
 	defer func() {
-		if err := archiveFile.Close(); err != nil {
-			m.logger.Warn("Failed to close archive file", "archive_path", cleanPath, "error", err)
+		if !archiveClosed {
+			if err := archiveFile.Close(); err != nil {
+				m.logger.Warn("Failed to close archive file", "archive_path", archivePath, "error", err)
+			}
 		}
 	}()
 
@@ -655,8 +662,10 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 
 	tarWriter := tar.NewWriter(fileWriter)
 	defer func() {
-		if err := tarWriter.Close(); err != nil {
-			m.logger.Warn("Failed to close tar writer", "archive_path", archivePath, "error", err)
+		if !tarClosed {
+			if err := tarWriter.Close(); err != nil {
+				m.logger.Warn("Failed to close tar writer", "archive_path", archivePath, "error", err)
+			}
 		}
 	}()
 
@@ -682,6 +691,7 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	}
 
 	// Ensure everything is written (Close writers)
+	// Explicit closes with error handling; defers handle cleanup on early returns
 	if err := tarWriter.Close(); err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -689,6 +699,8 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 			Context("operation", "close_tar_writer").
 			Build()
 	}
+	tarClosed = true // Prevent double-close in defer
+
 	if closer, ok := fileWriter.(io.Closer); ok && closer != archiveFile { // Don't double-close archiveFile
 		if err := closer.Close(); err != nil {
 			return errors.New(err).
@@ -705,6 +717,7 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 			Context("operation", "close_archive_file").
 			Build()
 	}
+	archiveClosed = true // Prevent double-close in defer
 
 	// Update metadata size *before* potential encryption
 	info, err := os.Stat(archivePath)
@@ -735,8 +748,8 @@ func (m *Manager) addMetadataToArchive(ctx context.Context, tw *tar.Writer, meta
 	hdr := &tar.Header{
 		Name:    "metadata.json",
 		Size:    int64(len(jsonData)),
-		Mode:    0o644,              // Read-only
-		ModTime: metadata.Timestamp, // Use backup timestamp
+		Mode:    int64(PermArchiveFile), // Read-only
+		ModTime: metadata.Timestamp,     // Use backup timestamp
 	}
 
 	// Write header
@@ -772,7 +785,7 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 	// Create TAR header for the backup data
 	hdr := &tar.Header{
 		Name:    backupFilename,
-		Mode:    0o644, // Standard file permissions
+		Mode:    int64(PermArchiveFile), // Standard file permissions
 		ModTime: metadata.Timestamp,
 		// Size is unknown for streaming, tar writer handles this.
 	}
@@ -819,17 +832,21 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 // Renamed from encryptAndWriteArchive for clarity.
 func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath string) error {
 	start := time.Now()
-	
+
 	// Read the entire source file (archive) into memory.
 	// Consider streaming encryption for very large files if memory becomes an issue.
-	// Read source file with secure path validation
-	secureOp := NewSecureFileOp("backup")
-	plaintext, cleanSourcePath, err := secureOp.SecureReadFile(sourcePath)
+	// Read source file (internal temp archive path from backup manager)
+	plaintext, err := os.ReadFile(sourcePath) //nolint:gosec // G304 - sourcePath is an internal temp path from backup manager
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_archive_for_encryption").
+			Context("source_path", sourcePath).
+			Build()
 	}
-	
-	m.logger.Debug("Encrypting archive", "source", cleanSourcePath, "destination", destPath)
+
+	m.logger.Debug("Encrypting archive", "source", sourcePath, "destination", destPath)
 
 	// Get encryption key
 	key, err := m.GetEncryptionKey() // Assumes GetEncryptionKey is implemented in encryption.go
@@ -844,7 +861,7 @@ func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath strin
 	}
 
 	// Write encrypted data to destination file
-	err = os.WriteFile(destPath, ciphertext, 0o600) // Secure permissions
+	err = os.WriteFile(destPath, ciphertext, PermSecureFile) // Secure permissions
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -882,13 +899,13 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 	// Convert to duration
 	switch unit {
 	case "d":
-		hours := num * 24
+		hours := num * HoursPerDay
 		return time.Duration(hours) * time.Hour, nil
 	case "m":
-		hours := num * 30 * 24 // approximate
+		hours := num * DaysPerMonth * HoursPerDay // approximate
 		return time.Duration(hours) * time.Hour, nil
 	case "y":
-		hours := num * 365 * 24 // approximate
+		hours := num * DaysPerYear * HoursPerDay // approximate
 		return time.Duration(hours) * time.Hour, nil
 	default:
 		return 0, errors.Newf("invalid retention age unit: %s", unit).
@@ -1153,14 +1170,12 @@ func (m *Manager) cleanupOldBackups(ctx context.Context) error {
 		retentionPolicy := m.config.Retention
 
 		for sourceType, backups := range sourceMap {
-			wg.Add(1)
-			go func(tn string, st string, t Target, backups []BackupInfo, policy conf.BackupRetention) {
-				defer wg.Done()
-				if err := m.enforceRetentionPolicy(ctx, t, backups, policy); err != nil {
-					m.logger.Error("Failed to enforce retention policy", "target_name", tn, "source_type", st, "error", err)
-					errChan <- fmt.Errorf("target %s, source %s: %w", tn, st, err)
+			wg.Go(func() {
+				if err := m.enforceRetentionPolicy(ctx, target, backups, retentionPolicy); err != nil {
+					m.logger.Error("Failed to enforce retention policy", "target_name", targetName, "source_type", sourceType, "error", err)
+					errChan <- fmt.Errorf("target %s, source %s: %w", targetName, sourceType, err)
 				}
-			}(targetName, sourceType, target, backups, retentionPolicy)
+			})
 		}
 	}
 
@@ -1203,14 +1218,12 @@ func (m *Manager) ListBackups(ctx context.Context) ([]BackupInfo, error) {
 	m.logger.Info("Listing backups from all targets", "target_count", len(m.targets))
 
 	for _, target := range m.targets {
-		wg.Add(1)
-		go func(t Target) {
-			defer wg.Done()
-			targetName := t.Name()
+		wg.Go(func() {
+			targetName := target.Name()
 			startTargetTime := time.Now()
 			m.logger.Debug("Listing backups from target", "target_name", targetName)
 
-			backups, err := t.List(listCtx)
+			backups, err := target.List(listCtx)
 			if err != nil {
 				wrappedErr := fmt.Errorf("target %s: %w", targetName, err)
 				m.logger.Error("Failed to list backups from target", "target_name", targetName, "error", err)
@@ -1232,7 +1245,7 @@ func (m *Manager) ListBackups(ctx context.Context) ([]BackupInfo, error) {
 				"target_name", targetName,
 				"backup_count", len(backups),
 				"duration_ms", time.Since(startTargetTime).Milliseconds())
-		}(target)
+		})
 	}
 
 	wg.Wait()
@@ -1312,7 +1325,7 @@ func (m *Manager) getBackupTimeout() time.Duration {
 	if m.config.OperationTimeouts.Backup > 0 {
 		return m.config.OperationTimeouts.Backup
 	}
-	return 2 * time.Hour // Default
+	return DefaultBackupTimeout
 }
 
 // getStoreTimeout returns the configured timeout for storing a backup in a single target.
@@ -1320,7 +1333,7 @@ func (m *Manager) getStoreTimeout() time.Duration {
 	if m.config.OperationTimeouts.Store > 0 {
 		return m.config.OperationTimeouts.Store
 	}
-	return 30 * time.Minute // Default
+	return DefaultStoreTimeout
 }
 
 // getCleanupTimeout returns the configured timeout for the cleanup process.
@@ -1336,7 +1349,7 @@ func (m *Manager) getDeleteTimeout() time.Duration {
 	if m.config.OperationTimeouts.Delete > 0 {
 		return m.config.OperationTimeouts.Delete
 	}
-	return 5 * time.Minute // Default
+	return DefaultDeleteTimeout
 }
 
 // getOperationTimeout returns a general timeout for operations like ListBackups.
@@ -1346,7 +1359,7 @@ func (m *Manager) getOperationTimeout() time.Duration {
 		return m.config.OperationTimeouts.Backup
 	}
 	m.logger.Warn("Operation timeout not configured, using default")
-	return 15 * time.Minute // Default
+	return DefaultOperationTimeout
 }
 
 // cleanupTempDirectories removes the specified temporary directories.

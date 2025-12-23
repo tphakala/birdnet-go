@@ -364,6 +364,25 @@ func (sfs *SecureFS) Remove(path string) error {
 	return sfs.root.Remove(relPath)
 }
 
+// Rename renames (moves) oldpath to newpath within the sandbox.
+// Both paths must be relative to the SecureFS base directory.
+// This uses os.Root.Rename (Go 1.25+) to maintain the security boundary.
+func (sfs *SecureFS) Rename(oldpath, newpath string) error {
+	// Get relative paths for os.Root operations
+	oldRelPath, err := sfs.RelativePath(oldpath)
+	if err != nil {
+		return err
+	}
+
+	newRelPath, err := sfs.RelativePath(newpath)
+	if err != nil {
+		return err
+	}
+
+	// Use os.Root.Rename to safely rename within the sandbox
+	return sfs.root.Rename(oldRelPath, newRelPath)
+}
+
 // OpenFile opens a file with path validation
 func (sfs *SecureFS) OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
 	// Get relative path for os.Root operations

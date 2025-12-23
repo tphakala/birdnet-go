@@ -255,7 +255,11 @@ func (t *GDriveTarget) getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, er
 		return nil, backup.NewError(backup.ErrValidation, "gdrive: unable to read authorization code", err)
 	}
 
-	tok, err := config.Exchange(context.TODO(), authCode)
+	// Use a context with timeout for the token exchange
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.Timeout)
+	defer cancel()
+
+	tok, err := config.Exchange(ctx, authCode)
 	if err != nil {
 		return nil, backup.NewError(backup.ErrValidation, "gdrive: unable to retrieve token from web", err)
 	}
@@ -280,7 +284,7 @@ func (t *GDriveTarget) tokenFromFile() (*oauth2.Token, error) {
 
 // saveToken saves a token to a file
 func (t *GDriveTarget) saveToken(token *oauth2.Token) error {
-	f, err := os.OpenFile(t.config.TokenFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(t.config.TokenFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, PermFile)
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "gdrive: unable to cache oauth token", err)
 	}
@@ -348,23 +352,23 @@ func (t *GDriveTarget) isAPIError(err error) (bool, error) {
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.Code {
-		case 401:
+		case HTTPUnauthorized:
 			// Token expired or invalid, try to refresh
 			if refreshErr := t.refreshTokenIfNeeded(context.Background()); refreshErr != nil {
 				return true, backup.NewError(backup.ErrSecurity, "gdrive: authentication failed and refresh failed", refreshErr)
 			}
 			// Token refreshed, caller should retry the operation
 			return true, backup.NewError(backup.ErrSecurity, "gdrive: token refreshed, please retry", nil)
-		case 403:
+		case HTTPForbidden:
 			if strings.Contains(apiErr.Message, "Rate Limit") {
 				return true, backup.NewError(backup.ErrIO, "gdrive: rate limit exceeded", err)
 			}
 			return true, backup.NewError(backup.ErrSecurity, "gdrive: permission denied", err)
-		case 404:
+		case HTTPNotFound:
 			return true, backup.NewError(backup.ErrNotFound, "gdrive: resource not found", err)
-		case 429:
+		case HTTPTooManyRequests:
 			return true, backup.NewError(backup.ErrIO, "gdrive: too many requests", err)
-		case 500, 502, 503, 504:
+		case HTTPInternalError, HTTPBadGateway, HTTPServiceUnavail, HTTPGatewayTimeout:
 			return true, backup.NewError(backup.ErrIO, "gdrive: server error", err)
 		default:
 			return true, backup.NewError(backup.ErrIO, fmt.Sprintf("gdrive: API error %d", apiErr.Code), err)
@@ -545,15 +549,19 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 			Parents: []string{folderId},
 		}
 
-		// Open source file with secure path validation
-		secureOp := backup.NewSecureFileOp("backup")
-		file, cleanSourcePath, err := secureOp.SecureOpen(sourcePath)
+		// Open source file (from trusted internal backup manager temp directory)
+		file, err := os.Open(sourcePath) //nolint:gosec // G304 - sourcePath is a trusted internal temp path from backup manager
 		if err != nil {
-			return err
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "open_source_file").
+				Context("source_path", sourcePath).
+				Build()
 		}
 		defer func() {
 			if err := file.Close(); err != nil {
-				t.logger.Info(fmt.Sprintf("gdrive: failed to close file %s: %v", cleanSourcePath, err))
+				t.logger.Info(fmt.Sprintf("gdrive: failed to close file %s: %v", sourcePath, err))
 			}
 		}()
 
@@ -774,7 +782,7 @@ func (t *GDriveTarget) Validate() error {
 		}
 
 		if t.config.Debug {
-			t.logger.Info(fmt.Sprintf("💾 GDrive: Available space: %.2f GB", float64(quota.available)/(1024*1024*1024)))
+			t.logger.Info(fmt.Sprintf("💾 GDrive: Available space: %.2f GB", float64(quota.available)/backup.GB))
 		}
 
 		return nil
