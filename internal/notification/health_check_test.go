@@ -1,3 +1,4 @@
+//nolint:dupl // Table-driven tests have similar structures
 package notification
 
 import (

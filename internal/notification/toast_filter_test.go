@@ -131,7 +131,7 @@ func TestToastNotificationsStillBroadcast(t *testing.T) {
 		assert.True(t, exists, "Broadcast notification should have isToast metadata")
 		assert.True(t, isToast.(bool), "Broadcast notification should be marked as toast")
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Toast notification was not broadcast")
+		require.Fail(t, "Toast notification was not broadcast")
 	}
 
 	// But it should not appear in lists

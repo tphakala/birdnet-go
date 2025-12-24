@@ -140,7 +140,7 @@ func verifyBroadcastedNotification(t *testing.T, notifCh <-chan *Notification, o
 		require.True(t, ok && value, "broadcast notification should include metadata")
 
 	case <-time.After(100 * time.Millisecond):
-		t.Error("should have received notification within timeout")
+		require.Fail(t, "should have received notification within timeout")
 	}
 }
 

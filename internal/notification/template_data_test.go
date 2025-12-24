@@ -6,22 +6,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // setEnv is a test helper that sets an environment variable and fails the test if it errors
 func setEnv(t *testing.T, key, value string) {
 	t.Helper()
-	if err := os.Setenv(key, value); err != nil {
-		t.Fatalf("Failed to set environment variable %s: %v", key, err)
-	}
+	err := os.Setenv(key, value)
+	require.NoError(t, err, "Failed to set environment variable %s", key)
 }
 
 // unsetEnv is a test helper that unsets an environment variable and fails the test if it errors
 func unsetEnv(t *testing.T, key string) {
 	t.Helper()
-	if err := os.Unsetenv(key); err != nil {
-		t.Fatalf("Failed to unset environment variable %s: %v", key, err)
-	}
+	err := os.Unsetenv(key)
+	require.NoError(t, err, "Failed to unset environment variable %s", key)
 }
 
 func TestBuildBaseURL(t *testing.T) {

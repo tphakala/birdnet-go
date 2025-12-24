@@ -1,4 +1,4 @@
-//nolint:gocognit // Table-driven tests have expected complexity
+//nolint:gocognit,dupl // Table-driven tests have expected complexity and similar structures
 package notification
 
 import (
@@ -98,7 +98,7 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 		assert.Equal(t, "Hello", n.Title)
 		assert.Equal(t, "World", n.Message)
 	case <-time.After(1 * time.Second):
-		t.Fatal("timeout waiting for provider to receive notification")
+		require.Fail(t, "timeout waiting for provider to receive notification")
 	}
 }
 

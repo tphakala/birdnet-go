@@ -213,12 +213,10 @@ func TestToast_ToNotification_WithoutOptionalFields(t *testing.T) {
 	assert.Empty(t, notif.Component, "component should be empty when not set")
 
 	// Duration should not be in metadata if not set
-	if _, exists := notif.Metadata["duration"]; exists && toast.Duration == 0 {
-		t.Error("should not include zero duration in metadata")
-	}
+	_, durationExists := notif.Metadata["duration"]
+	assert.False(t, durationExists && toast.Duration == 0, "should not include zero duration in metadata")
 
 	// Action should not be in metadata if not set
-	if _, exists := notif.Metadata["action"]; exists && toast.Action == nil {
-		t.Error("should not include nil action in metadata")
-	}
+	_, actionExists := notif.Metadata["action"]
+	assert.False(t, actionExists && toast.Action == nil, "should not include nil action in metadata")
 }

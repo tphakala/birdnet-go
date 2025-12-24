@@ -54,11 +54,13 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 	assertCircuitState(t, cb, StateOpen)
 
 	// Subsequent calls should fail immediately with circuit breaker error
+	functionCalled := false
 	err = cb.Call(context.Background(), func(_ context.Context) error {
-		t.Error("function should not be called when circuit is open")
+		functionCalled = true
 		return nil
 	})
 	require.ErrorIs(t, err, ErrCircuitBreakerOpen)
+	assert.False(t, functionCalled, "function should not be called when circuit is open")
 }
 
 func TestCircuitBreaker_TransitionToHalfOpen(t *testing.T) {
@@ -295,10 +297,12 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	}
 	close(errChan)
 
-	// Check for errors
+	// Check for errors - collect any that occurred
+	concurrentErrors := make([]error, 0, numCalls)
 	for err := range errChan {
-		t.Errorf("concurrent call failed: %v", err)
+		concurrentErrors = append(concurrentErrors, err)
 	}
+	assert.Empty(t, concurrentErrors, "concurrent calls should not fail")
 
 	assertCircuitState(t, cb, StateClosed)
 }

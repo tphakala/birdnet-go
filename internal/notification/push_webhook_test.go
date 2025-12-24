@@ -21,23 +21,13 @@ func TestNewWebhookProvider(t *testing.T) {
 			{URL: "https://example.com/webhook", Method: "POST"},
 		}
 		provider, err := NewWebhookProvider("test-webhook", true, endpoints, nil, "")
-		if err != nil {
-			t.Fatalf("failed to create provider: %v", err)
-		}
+		require.NoError(t, err, "failed to create provider")
 
-		if provider.GetName() != "test-webhook" {
-			t.Errorf("expected name 'test-webhook', got %q", provider.GetName())
-		}
-		if !provider.IsEnabled() {
-			t.Error("expected provider to be enabled")
-		}
+		assert.Equal(t, "test-webhook", provider.GetName())
+		assert.True(t, provider.IsEnabled(), "expected provider to be enabled")
 		// Should support all types by default
-		if !provider.SupportsType(TypeError) {
-			t.Error("expected to support 'error' type")
-		}
-		if !provider.SupportsType(TypeDetection) {
-			t.Error("expected to support 'detection' type")
-		}
+		assert.True(t, provider.SupportsType(TypeError), "expected to support 'error' type")
+		assert.True(t, provider.SupportsType(TypeDetection), "expected to support 'detection' type")
 	})
 
 	t.Run("with custom types", func(t *testing.T) {
@@ -45,19 +35,11 @@ func TestNewWebhookProvider(t *testing.T) {
 			{URL: "https://example.com/webhook", Method: "POST"},
 		}
 		provider, err := NewWebhookProvider("test", true, endpoints, []string{"error", "warning"}, "")
-		if err != nil {
-			t.Fatalf("failed to create provider: %v", err)
-		}
+		require.NoError(t, err, "failed to create provider")
 
-		if !provider.SupportsType(TypeError) {
-			t.Error("expected to support 'error' type")
-		}
-		if !provider.SupportsType(TypeWarning) {
-			t.Error("expected to support 'warning' type")
-		}
-		if provider.SupportsType(TypeDetection) {
-			t.Error("expected NOT to support 'detection' type")
-		}
+		assert.True(t, provider.SupportsType(TypeError), "expected to support 'error' type")
+		assert.True(t, provider.SupportsType(TypeWarning), "expected to support 'warning' type")
+		assert.False(t, provider.SupportsType(TypeDetection), "expected NOT to support 'detection' type")
 	})
 
 	t.Run("with custom template", func(t *testing.T) {
@@ -66,13 +48,9 @@ func TestNewWebhookProvider(t *testing.T) {
 		}
 		template := `{"event": "{{.Type}}", "title": "{{.Title}}"}`
 		provider, err := NewWebhookProvider("test", true, endpoints, nil, template)
-		if err != nil {
-			t.Fatalf("failed to create provider: %v", err)
-		}
+		require.NoError(t, err, "failed to create provider")
 
-		if provider.template == nil {
-			t.Error("expected template to be parsed")
-		}
+		assert.NotNil(t, provider.template, "expected template to be parsed")
 	})
 
 	t.Run("invalid template", func(t *testing.T) {
@@ -81,9 +59,7 @@ func TestNewWebhookProvider(t *testing.T) {
 		}
 		template := `{{.InvalidField`
 		_, err := NewWebhookProvider("test", true, endpoints, nil, template)
-		if err == nil {
-			t.Error("expected error for invalid template")
-		}
+		require.Error(t, err, "expected error for invalid template")
 	})
 }
 
@@ -94,26 +70,20 @@ func TestWebhookProvider_ValidateConfig(t *testing.T) {
 		}
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, "")
 		err := provider.ValidateConfig()
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 	})
 
 	t.Run("disabled provider", func(t *testing.T) {
 		endpoints := []WebhookEndpoint{}
 		provider, _ := NewWebhookProvider("test", false, endpoints, nil, "")
 		err := provider.ValidateConfig()
-		if err != nil {
-			t.Errorf("disabled provider should not validate, got %v", err)
-		}
+		require.NoError(t, err, "disabled provider should not validate")
 	})
 
 	t.Run("no endpoints", func(t *testing.T) {
 		provider, _ := NewWebhookProvider("test", true, []WebhookEndpoint{}, nil, "")
 		err := provider.ValidateConfig()
-		if err == nil {
-			t.Error("expected error for no endpoints")
-		}
+		require.Error(t, err, "expected error for no endpoints")
 	})
 
 	t.Run("empty URL", func(t *testing.T) {
@@ -122,9 +92,7 @@ func TestWebhookProvider_ValidateConfig(t *testing.T) {
 		}
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, "")
 		err := provider.ValidateConfig()
-		if err == nil {
-			t.Error("expected error for empty URL")
-		}
+		require.Error(t, err, "expected error for empty URL")
 	})
 
 	t.Run("invalid URL scheme", func(t *testing.T) {
@@ -133,9 +101,7 @@ func TestWebhookProvider_ValidateConfig(t *testing.T) {
 		}
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, "")
 		err := provider.ValidateConfig()
-		if err == nil {
-			t.Error("expected error for invalid URL scheme")
-		}
+		require.Error(t, err, "expected error for invalid URL scheme")
 	})
 
 	t.Run("invalid HTTP method", func(t *testing.T) {
@@ -144,9 +110,7 @@ func TestWebhookProvider_ValidateConfig(t *testing.T) {
 		}
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, "")
 		err := provider.ValidateConfig()
-		if err == nil {
-			t.Error("expected error for invalid HTTP method")
-		}
+		require.Error(t, err, "expected error for invalid HTTP method")
 	})
 
 	t.Run("default method to POST", func(t *testing.T) {
@@ -155,12 +119,8 @@ func TestWebhookProvider_ValidateConfig(t *testing.T) {
 		}
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, "")
 		err := provider.ValidateConfig()
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-		if provider.endpoints[0].Method != "POST" {
-			t.Errorf("expected default method POST, got %s", provider.endpoints[0].Method)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "POST", provider.endpoints[0].Method, "expected default method POST")
 	})
 }
 
@@ -225,16 +185,13 @@ func TestWebhookProvider_ValidateAuth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateResolvedWebhookAuth(&tt.auth)
-			if tt.wantErr && err == nil {
-				t.Error("expected error but got none")
-			}
-			if !tt.wantErr && err != nil {
-				t.Errorf("expected no error, got %v", err)
-			}
-			if tt.wantErr && err != nil && tt.errorMsg != "" {
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
+			if tt.wantErr {
+				require.Error(t, err, "expected error but got none")
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -243,13 +200,11 @@ func TestWebhookProvider_ValidateAuth(t *testing.T) {
 func TestWebhookProvider_Send(t *testing.T) {
 	t.Run("successful send", func(t *testing.T) {
 		receivedPayload := ""
+		receivedMethod := ""
+		receivedContentType := ""
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != "POST" {
-				t.Errorf("expected POST, got %s", r.Method)
-			}
-			if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-				t.Errorf("expected Content-Type application/json, got %q", ct)
-			}
+			receivedMethod = r.Method
+			receivedContentType = r.Header.Get("Content-Type")
 			body, _ := io.ReadAll(r.Body)
 			receivedPayload = string(body)
 			w.WriteHeader(http.StatusOK)
@@ -271,25 +226,18 @@ func TestWebhookProvider_Send(t *testing.T) {
 		}
 
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		if receivedPayload == "" {
-			t.Error("expected to receive payload")
-		}
+		assert.Equal(t, "POST", receivedMethod)
+		assert.Equal(t, "application/json", receivedContentType)
+		require.NotEmpty(t, receivedPayload, "expected to receive payload")
 
 		// Verify payload structure
 		var payload WebhookPayload
-		if err := json.Unmarshal([]byte(receivedPayload), &payload); err != nil {
-			t.Fatalf("failed to unmarshal payload: %v", err)
-		}
-		if payload.ID != "test-123" {
-			t.Errorf("expected ID 'test-123', got %q", payload.ID)
-		}
-		if payload.Type != "error" {
-			t.Errorf("expected type 'error', got %q", payload.Type)
-		}
+		err = json.Unmarshal([]byte(receivedPayload), &payload)
+		require.NoError(t, err, "failed to unmarshal payload")
+		assert.Equal(t, "test-123", payload.ID)
+		assert.Equal(t, "error", payload.Type)
 	})
 
 	t.Run("custom headers", func(t *testing.T) {
@@ -315,16 +263,10 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		if receivedHeaders.Get("X-Custom-Header") != "custom-value" {
-			t.Errorf("expected X-Custom-Header 'custom-value', got %q", receivedHeaders.Get("X-Custom-Header"))
-		}
-		if receivedHeaders.Get("X-Another") != "test" {
-			t.Errorf("expected X-Another 'test', got %q", receivedHeaders.Get("X-Another"))
-		}
+		assert.Equal(t, "custom-value", receivedHeaders.Get("X-Custom-Header"))
+		assert.Equal(t, "test", receivedHeaders.Get("X-Another"))
 	})
 
 	t.Run("bearer authentication", func(t *testing.T) {
@@ -350,14 +292,9 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		expected := "Bearer secret-token-123"
-		if receivedAuth != expected {
-			t.Errorf("expected Authorization %q, got %q", expected, receivedAuth)
-		}
+		assert.Equal(t, "Bearer secret-token-123", receivedAuth)
 	})
 
 	t.Run("basic authentication", func(t *testing.T) {
@@ -384,13 +321,9 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		if !strings.HasPrefix(receivedAuth, "Basic ") {
-			t.Errorf("expected Basic auth, got %q", receivedAuth)
-		}
+		assert.True(t, strings.HasPrefix(receivedAuth, "Basic "), "expected Basic auth, got %q", receivedAuth)
 	})
 
 	t.Run("custom header authentication", func(t *testing.T) {
@@ -417,13 +350,9 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
-		if receivedValue != "api-key-123" {
-			t.Errorf("expected X-API-Key 'api-key-123', got %q", receivedValue)
-		}
+		assert.Equal(t, "api-key-123", receivedValue)
 	})
 
 	t.Run("server error response", func(t *testing.T) {
@@ -441,12 +370,8 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err == nil {
-			t.Error("expected error for server error response")
-		}
-		if !strings.Contains(err.Error(), "500") {
-			t.Errorf("expected error to contain status code, got %v", err)
-		}
+		require.Error(t, err, "expected error for server error response")
+		assert.Contains(t, err.Error(), "500", "expected error to contain status code")
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
@@ -467,9 +392,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(ctx, notif)
-		if err == nil {
-			t.Error("expected error for cancelled context")
-		}
+		require.Error(t, err, "expected error for cancelled context")
 	})
 
 	t.Run("endpoint timeout", func(t *testing.T) {
@@ -491,9 +414,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err == nil {
-			t.Error("expected timeout error")
-		}
+		require.Error(t, err, "expected timeout error")
 	})
 
 	t.Run("failover to second endpoint", func(t *testing.T) {
@@ -520,13 +441,9 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 		notif := &Notification{ID: "test", Type: TypeError}
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error with failover, got %v", err)
-		}
+		require.NoError(t, err, "expected no error with failover")
 
-		if !server2Called {
-			t.Error("expected second endpoint to be called after first failed")
-		}
+		assert.True(t, server2Called, "expected second endpoint to be called after first failed")
 	})
 
 	t.Run("custom template", func(t *testing.T) {
@@ -552,14 +469,10 @@ func TestWebhookProvider_Send(t *testing.T) {
 		}
 
 		err := provider.Send(context.Background(), notif)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, err)
 
 		expected := `{"event":"error","msg":"Test Error"}`
-		if receivedPayload != expected {
-			t.Errorf("expected payload %q, got %q", expected, receivedPayload)
-		}
+		assert.Equal(t, expected, receivedPayload)
 	})
 }
 

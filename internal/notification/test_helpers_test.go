@@ -295,7 +295,7 @@ func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool
 		}
 		<-ticker.C
 	}
-	t.Fatalf("condition not met within %v: %s", timeout, msg)
+	require.Fail(t, msg, "condition not met within %v", timeout)
 }
 
 // =============================================================================
