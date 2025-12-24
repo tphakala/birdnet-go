@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -57,9 +58,7 @@ func TestDataStoreMetricsThreadSafety(t *testing.T) {
 	wg.Wait()
 
 	// Verify the DataStore is in a consistent state
-	if ds.metrics == nil {
-		t.Error("metrics field should not be nil after operations")
-	}
+	assert.NotNil(t, ds.metrics, "metrics field should not be nil after operations")
 }
 
 // TestDataStoreMetricsAccessThreadSafety tests that metrics field reads are thread-safe

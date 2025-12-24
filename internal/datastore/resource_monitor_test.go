@@ -3,9 +3,10 @@ package datastore
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -32,9 +33,7 @@ func TestValidateStartupDiskSpace(t *testing.T) {
 				t.Helper()
 				// Use current directory
 				cwd, err := os.Getwd()
-				if err != nil {
-					t.Fatalf("Failed to get current directory: %v", err)
-				}
+				require.NoError(t, err, "Failed to get current directory")
 				return filepath.Join(cwd, "test.db")
 			},
 			wantErr: false,
@@ -57,36 +56,28 @@ func TestValidateStartupDiskSpace(t *testing.T) {
 			err := ValidateStartupDiskSpace(dbPath)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("ValidateStartupDiskSpace() expected error, got nil")
-					return
-				}
+				require.Error(t, err, "ValidateStartupDiskSpace() expected error, got nil")
 
 				// Check error message contains expected substring
-				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
-					t.Errorf("ValidateStartupDiskSpace() error = %v, want error containing %q", err, tt.errContains)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains,
+						"ValidateStartupDiskSpace() error should contain expected substring")
 				}
 
 				// Verify it's a structured error
 				var enhancedErr *errors.EnhancedError
-				if !errors.As(err, &enhancedErr) {
-					t.Error("ValidateStartupDiskSpace() should return EnhancedError")
-					return
-				}
+				require.True(t, errors.As(err, &enhancedErr),
+					"ValidateStartupDiskSpace() should return EnhancedError")
 
 				// Verify error has critical priority
-				if enhancedErr.GetPriority() != errors.PriorityCritical {
-					t.Errorf("ValidateStartupDiskSpace() error priority = %v, want %v",
-						enhancedErr.GetPriority(), errors.PriorityCritical)
-				}
+				assert.Equal(t, errors.PriorityCritical, enhancedErr.GetPriority(),
+					"ValidateStartupDiskSpace() error priority mismatch")
 
 				// Verify error has correct category
-				if enhancedErr.GetCategory() != string(errors.CategorySystem) {
-					t.Errorf("ValidateStartupDiskSpace() error category = %v, want %v",
-						enhancedErr.GetCategory(), errors.CategorySystem)
-				}
-			} else if err != nil {
-				t.Errorf("ValidateStartupDiskSpace() unexpected error = %v", err)
+				assert.Equal(t, string(errors.CategorySystem), enhancedErr.GetCategory(),
+					"ValidateStartupDiskSpace() error category mismatch")
+			} else {
+				assert.NoError(t, err, "ValidateStartupDiskSpace() unexpected error")
 			}
 		})
 	}
@@ -97,36 +88,22 @@ func TestValidateStartupDiskSpace_ErrorStructure(t *testing.T) {
 	dbPath := "/nonexistent/path/to/test.db"
 
 	err := ValidateStartupDiskSpace(dbPath)
-	if err == nil {
-		t.Fatal("Expected error for nonexistent path")
-	}
+	require.Error(t, err, "Expected error for nonexistent path")
 
 	// Verify it's a structured error
 	var enhancedErr *errors.EnhancedError
-	if !errors.As(err, &enhancedErr) {
-		t.Fatal("Expected EnhancedError")
-	}
+	require.True(t, errors.As(err, &enhancedErr), "Expected EnhancedError")
 
 	// Verify error metadata
-	if enhancedErr.GetComponent() != "datastore" {
-		t.Errorf("Error component = %v, want 'datastore'", enhancedErr.GetComponent())
-	}
-
-	if enhancedErr.GetCategory() != string(errors.CategorySystem) {
-		t.Errorf("Error category = %v, want %v", enhancedErr.GetCategory(), errors.CategorySystem)
-	}
-
-	if enhancedErr.GetPriority() != errors.PriorityCritical {
-		t.Errorf("Error priority = %v, want %v", enhancedErr.GetPriority(), errors.PriorityCritical)
-	}
+	assert.Equal(t, "datastore", enhancedErr.GetComponent(), "Error component mismatch")
+	assert.Equal(t, string(errors.CategorySystem), enhancedErr.GetCategory(), "Error category mismatch")
+	assert.Equal(t, errors.PriorityCritical, enhancedErr.GetPriority(), "Error priority mismatch")
 
 	// Verify error context fields
 	ctx := enhancedErr.GetContext()
 	expectedFields := []string{"operation", "path"}
 	for _, field := range expectedFields {
-		if _, ok := ctx[field]; !ok {
-			t.Errorf("Error context missing field %q", field)
-		}
+		assert.Contains(t, ctx, field, "Error context missing field %q", field)
 	}
 }
 
@@ -137,9 +114,8 @@ func TestValidateStartupDiskSpace_InsufficientSpace_ErrorFormat(t *testing.T) {
 
 	// Verify the constant has the expected value of 1GB (1024MB)
 	const expectedMinDiskSpace = 1024
-	if MinDiskSpaceStartup != expectedMinDiskSpace {
-		t.Errorf("MinDiskSpaceStartup = %v, want %v (1GB)", MinDiskSpaceStartup, expectedMinDiskSpace)
-	}
+	assert.Equal(t, expectedMinDiskSpace, MinDiskSpaceStartup,
+		"MinDiskSpaceStartup should be 1GB (1024MB)")
 
 	// Note: Testing actual insufficient space scenario is environment-dependent
 	// In a real insufficient space scenario, the error should contain:

@@ -3,6 +3,9 @@ package events
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewResourceEvent(t *testing.T) {
@@ -59,45 +62,30 @@ func TestNewResourceEvent(t *testing.T) {
 			after := time.Now()
 
 			// Verify interface implementation
-			if event == nil {
-				t.Fatal("NewResourceEvent returned nil")
-			}
+			require.NotNil(t, event, "NewResourceEvent returned nil")
 
 			// Check resource type
-			if got := event.GetResourceType(); got != tt.resourceType {
-				t.Errorf("GetResourceType() = %v, want %v", got, tt.resourceType)
-			}
+			assert.Equal(t, tt.resourceType, event.GetResourceType())
 
 			// Check current value
-			if got := event.GetCurrentValue(); got != tt.currentValue {
-				t.Errorf("GetCurrentValue() = %v, want %v", got, tt.currentValue)
-			}
+			assert.InDelta(t, tt.currentValue, event.GetCurrentValue(), 0.001)
 
 			// Check threshold
-			if got := event.GetThreshold(); got != tt.threshold {
-				t.Errorf("GetThreshold() = %v, want %v", got, tt.threshold)
-			}
+			assert.InDelta(t, tt.threshold, event.GetThreshold(), 0.001)
 
 			// Check severity
-			if got := event.GetSeverity(); got != tt.severity {
-				t.Errorf("GetSeverity() = %v, want %v", got, tt.severity)
-			}
+			assert.Equal(t, tt.severity, event.GetSeverity())
 
 			// Check timestamp is reasonable
 			timestamp := event.GetTimestamp()
-			if timestamp.Before(before) || timestamp.After(after) {
-				t.Errorf("GetTimestamp() = %v, want between %v and %v", timestamp, before, after)
-			}
+			assert.False(t, timestamp.Before(before) || timestamp.After(after),
+				"GetTimestamp() = %v, want between %v and %v", timestamp, before, after)
 
 			// Check metadata is initialized
-			if metadata := event.GetMetadata(); metadata == nil {
-				t.Error("GetMetadata() returned nil, want initialized map")
-			}
+			assert.NotNil(t, event.GetMetadata(), "GetMetadata() returned nil, want initialized map")
 
 			// Check message
-			if got := event.GetMessage(); got != tt.wantMessage {
-				t.Errorf("GetMessage() = %v, want %v", got, tt.wantMessage)
-			}
+			assert.Equal(t, tt.wantMessage, event.GetMessage())
 		})
 	}
 }
@@ -121,22 +109,20 @@ func TestNewResourceEventWithMetadata(t *testing.T) {
 
 	// Verify metadata is preserved
 	gotMetadata := event.GetMetadata()
-	if gotMetadata == nil {
-		t.Fatal("GetMetadata() returned nil")
-	}
+	require.NotNil(t, gotMetadata, "GetMetadata() returned nil")
 
 	// Check each metadata field
-	if host, ok := gotMetadata["host"].(string); !ok || host != "server01" {
-		t.Errorf("metadata[host] = %v, want server01", gotMetadata["host"])
-	}
+	host, ok := gotMetadata["host"].(string)
+	require.True(t, ok, "host should be a string")
+	assert.Equal(t, "server01", host)
 
-	if location, ok := gotMetadata["location"].(string); !ok || location != "/var/log" {
-		t.Errorf("metadata[location] = %v, want /var/log", gotMetadata["location"])
-	}
+	location, ok := gotMetadata["location"].(string)
+	require.True(t, ok, "location should be a string")
+	assert.Equal(t, "/var/log", location)
 
-	if pid, ok := gotMetadata["pid"].(int); !ok || pid != 12345 {
-		t.Errorf("metadata[pid] = %v, want 12345", gotMetadata["pid"])
-	}
+	pid, ok := gotMetadata["pid"].(int)
+	require.True(t, ok, "pid should be an int")
+	assert.Equal(t, 12345, pid)
 }
 
 func TestResourceEventMessage(t *testing.T) {
@@ -181,14 +167,11 @@ func TestResourceEventMessage(t *testing.T) {
 			event := NewResourceEvent(tt.resourceType, 50.0, 40.0, tt.severity)
 			message := event.GetMessage()
 
-			if message == "" {
-				t.Error("GetMessage() returned empty string")
-			}
+			assert.NotEmpty(t, message, "GetMessage() returned empty string")
 
 			// Check message starts with expected prefix
-			if !hasPrefix(message, tt.wantPrefix) {
-				t.Errorf("GetMessage() = %v, want prefix %v", message, tt.wantPrefix)
-			}
+			assert.True(t, hasPrefix(message, tt.wantPrefix),
+				"GetMessage() = %v, want prefix %v", message, tt.wantPrefix)
 		})
 	}
 }

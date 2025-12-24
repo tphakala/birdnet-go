@@ -49,9 +49,8 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Save tokens
-	if err := server.saveTokens(ctx); err != nil {
-		t.Fatalf("Failed to save tokens: %v", err)
-	}
+	err := server.saveTokens(ctx)
+	require.NoError(t, err, "Failed to save tokens")
 
 	// Create a new server instance to load tokens
 	newServer := &OAuth2Server{
@@ -62,9 +61,8 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Load tokens
-	if err := newServer.loadTokens(ctx); err != nil {
-		t.Fatalf("Failed to load tokens: %v", err)
-	}
+	err = newServer.loadTokens(ctx)
+	require.NoError(t, err, "Failed to load tokens")
 
 	// Verify only valid tokens were loaded
 	require.NoError(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
@@ -72,21 +70,15 @@ func TestTokenPersistence(t *testing.T) {
 
 	// Check token file contents directly
 	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json")) //nolint:gosec // test file path from t.TempDir()
-	if err != nil {
-		t.Fatalf("Failed to read tokens file: %v", err)
-	}
+	require.NoError(t, err, "Failed to read tokens file")
 
 	var savedTokens map[string]AccessToken
 	err = json.Unmarshal(data, &savedTokens)
-	if err != nil {
-		t.Fatalf("Failed to parse tokens file: %v", err)
-	}
+	require.NoError(t, err, "Failed to parse tokens file")
 
 	// Verify file permissions
 	info, err := os.Stat(filepath.Join(tempDir, "tokens.json"))
-	if err != nil {
-		t.Fatalf("Failed to stat tokens file: %v", err)
-	}
+	require.NoError(t, err, "Failed to stat tokens file")
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Tokens file should have 0600 permissions")
 }
 
@@ -125,9 +117,7 @@ func TestFilesystemStore(t *testing.T) {
 	// Verify the sessions directory was created with correct permissions
 	sessionsDir := filepath.Join(tempDir, "sessions")
 	info, err := os.Stat(sessionsDir)
-	if err != nil {
-		t.Fatalf("Failed to stat sessions directory: %v", err)
-	}
+	require.NoError(t, err, "Failed to stat sessions directory")
 	assert.True(t, info.IsDir(), "Sessions path should be a directory")
 	assert.Equal(t, os.FileMode(DirPermissions), info.Mode().Perm(), "Sessions directory should have secure permissions")
 }
@@ -257,9 +247,8 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 
 	// Create a corrupted tokens file
 	tokensFile := filepath.Join(tempDir, "tokens.json")
-	if err := os.WriteFile(tokensFile, []byte("this is not valid json"), 0o600); err != nil {
-		t.Fatalf("Failed to write corrupted tokens file: %v", err)
-	}
+	err := os.WriteFile(tokensFile, []byte("this is not valid json"), 0o600)
+	require.NoError(t, err, "Failed to write corrupted tokens file")
 
 	server := &OAuth2Server{
 		Settings: &conf.Settings{},
@@ -274,7 +263,7 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err := server.loadTokens(ctx)
+	err = server.loadTokens(ctx)
 	require.Error(t, err, "Loading corrupted file should return error")
 	// Check for a more specific part of the error
 	assert.Contains(t, err.Error(), "failed to unmarshal token data", "Error message should indicate unmarshal failure")
@@ -291,16 +280,14 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 
 	// Create a token file path in a subdirectory that we'll make unwritable
 	unwritableDir := filepath.Join(tempDir, "unwritable")
-	if err := os.Mkdir(unwritableDir, DirPermissions); err != nil {
-		t.Fatalf("Failed to create unwritable directory: %v", err)
-	}
+	err := os.Mkdir(unwritableDir, DirPermissions)
+	require.NoError(t, err, "Failed to create unwritable directory")
 
 	tokensFile := filepath.Join(unwritableDir, "tokens.json")
 
 	// Make the directory read-only
-	if err := os.Chmod(unwritableDir, 0o500); err != nil { //nolint:gosec // intentionally restrictive for test
-		t.Fatalf("Failed to make directory unwritable: %v", err)
-	}
+	err = os.Chmod(unwritableDir, 0o500) //nolint:gosec // intentionally restrictive for test
+	require.NoError(t, err, "Failed to make directory unwritable")
 	defer func() {
 		_ = os.Chmod(unwritableDir, DirPermissions) //nolint:gosec // restore permissions for cleanup
 	}()
@@ -318,7 +305,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err := server.saveTokens(ctx)
+	err = server.saveTokens(ctx)
 	require.Error(t, err, "Saving tokens to unwritable directory should return error")
 	// Check for a more specific part of the error related to file writing/renaming
 	assert.Contains(t, err.Error(), "failed to write tokens to temp file", "Error message should indicate temp file write failure or rename failure")
