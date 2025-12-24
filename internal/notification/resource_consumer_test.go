@@ -229,7 +229,10 @@ func TestResourceEventWorker_NilEvent(t *testing.T) {
 
 	// Create a test notification service
 	service := NewService(DefaultServiceConfig())
+	defer service.Stop()
+
 	worker, _ := NewResourceEventWorker(service, nil)
+	defer worker.Stop()
 
 	// Process nil event should not panic
 	err := worker.ProcessResourceEvent(nil)

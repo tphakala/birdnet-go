@@ -79,7 +79,7 @@ func TestBroadcastMetadataRace(t *testing.T) {
 						_, _ = k, v
 					}
 
-				case <-time.After(100 * time.Millisecond):
+				case <-time.After(500 * time.Millisecond):
 					// Timeout - notification not received
 				}
 			})
@@ -170,7 +170,7 @@ func TestBroadcastMetadataRaceWithWorkerPattern(t *testing.T) {
 						_, _ = k, v
 					}
 
-				case <-time.After(50 * time.Millisecond):
+				case <-time.After(500 * time.Millisecond):
 					// Timeout
 				}
 			})
