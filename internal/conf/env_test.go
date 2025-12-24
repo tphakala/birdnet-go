@@ -728,3 +728,133 @@ func TestEnvironmentVariableValidationPreservesDefaults(t *testing.T) {
 		})
 	}
 }
+
+// Test constants for BaseURL validation.
+const (
+	validHTTPSURL       = "https://birdnet.example.com"
+	validHTTPURL        = "http://localhost:8080"
+	validURLWithPort    = "https://birdnet.example.com:5500"
+	validURLWithPath    = "https://birdnet.example.com/app"
+	invalidURLNoScheme  = "birdnet.example.com"
+	invalidURLBadScheme = "ftp://birdnet.example.com"
+	invalidURLNoHost    = "https://"
+	invalidURLEmpty     = ""
+)
+
+func TestValidateEnvBaseURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+		errMsg  string
+	}{
+		// Valid URLs
+		{"valid HTTPS URL", validHTTPSURL, false, ""},
+		{"valid HTTP URL", validHTTPURL, false, ""},
+		{"valid URL with custom port", validURLWithPort, false, ""},
+		{"valid URL with path", validURLWithPath, false, ""},
+		{"valid URL with trailing slash", "https://birdnet.example.com/", false, ""},
+		{"valid localhost", "http://localhost", false, ""},
+		{"valid IP address", "http://192.168.1.100:8080", false, ""},
+		{"valid IPv6 address", "https://[::1]:8080", false, ""},
+
+		// Whitespace handling
+		{"valid with leading space", " https://birdnet.example.com", false, ""},
+		{"valid with trailing space", "https://birdnet.example.com ", false, ""},
+		{"valid with surrounding spaces", "  https://birdnet.example.com  ", false, ""},
+		{"valid with tab", "\thttps://birdnet.example.com\t", false, ""},
+
+		// Invalid URLs - missing scheme
+		{"missing scheme", invalidURLNoScheme, true, "must include scheme"},
+		{"missing scheme with port", "birdnet.example.com:8080", true, "must be http or https"}, // Go parses "birdnet.example.com" as scheme
+
+		// Invalid URLs - wrong scheme
+		{"ftp scheme", invalidURLBadScheme, true, "must be http or https"},
+		{"file scheme", "file:///etc/passwd", true, "must be http or https"},
+		{"ws scheme", "ws://birdnet.example.com", true, "must be http or https"},
+		{"wss scheme", "wss://birdnet.example.com", true, "must be http or https"},
+
+		// Invalid URLs - missing hostname
+		{"missing host", invalidURLNoHost, true, "must include a valid hostname"},
+		{"scheme only", "https://", true, "must include a valid hostname"},
+		{"scheme with slash", "http:///path", true, "must include a valid hostname"},
+		{"port without hostname", "http://:8080", true, "must include a valid hostname"},
+		{"port without hostname https", "https://:443", true, "must include a valid hostname"},
+
+		// Invalid URLs - empty or malformed
+		{"empty string", invalidURLEmpty, true, "must not be empty"},
+		{"whitespace only", "   ", true, "must not be empty"},
+		{"tab only", "\t", true, "must not be empty"},
+		{"newline only", "\n", true, "must not be empty"},
+
+		// Edge cases
+		{"URL with query string", "https://birdnet.example.com?foo=bar", false, ""},
+		{"URL with fragment", "https://birdnet.example.com#section", false, ""},
+		{"URL with userinfo", "https://user:pass@birdnet.example.com", false, ""},
+		{"URL with all components", "https://user:pass@birdnet.example.com:8080/path?q=1#frag", false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateEnvBaseURL(tt.value)
+			if tt.wantErr {
+				require.Error(t, err, "Expected error for value: %q", tt.value)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg,
+						"Error message should contain %q for value: %q", tt.errMsg, tt.value)
+				}
+			} else {
+				assert.NoError(t, err, "Expected no error for value: %q", tt.value)
+			}
+		})
+	}
+}
+
+func TestValidateEnvBaseURL_Integration(t *testing.T) {
+	// Test integration with configureEnvironmentVariables
+
+	t.Run("valid BIRDNET_URL sets config", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_URL", validURLWithPort)
+
+		err := configureEnvironmentVariables()
+		require.NoError(t, err)
+
+		actual := viper.GetString(ConfigKeyBaseURL)
+		// Should have trailing slash trimmed by canonicalization
+		assert.Equal(t, validURLWithPort, actual)
+	})
+
+	t.Run("BIRDNET_URL with trailing slash is trimmed", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_URL", "https://birdnet.example.com/")
+
+		err := configureEnvironmentVariables()
+		require.NoError(t, err)
+
+		actual := viper.GetString(ConfigKeyBaseURL)
+		assert.Equal(t, "https://birdnet.example.com", actual, "Trailing slash should be trimmed")
+	})
+
+	t.Run("invalid BIRDNET_URL returns error", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_URL", invalidURLNoScheme)
+
+		err := configureEnvironmentVariables()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "BIRDNET_URL")
+	})
+
+	t.Run("BIRDNET_URL with invalid scheme returns error", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_URL", invalidURLBadScheme)
+
+		err := configureEnvironmentVariables()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be http or https")
+	})
+}

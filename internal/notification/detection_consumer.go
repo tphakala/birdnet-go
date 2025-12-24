@@ -147,7 +147,7 @@ func (c *DetectionNotificationConsumer) createTemplateData(event events.Detectio
 		return NewTemplateData(event, "http://localhost", true)
 	}
 
-	baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
+	baseURL := settings.Security.GetBaseURL(settings.WebServer.Port)
 	return NewTemplateData(event, baseURL, settings.Main.TimeAs24h)
 }
 

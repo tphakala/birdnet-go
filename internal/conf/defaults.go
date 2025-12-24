@@ -292,6 +292,7 @@ func setDefaultConfig() {
 
 	// Security configuration
 	viper.SetDefault("security.debug", false)
+	viper.SetDefault("security.baseurl", "")
 	viper.SetDefault("security.host", "")
 	viper.SetDefault("security.autotls", false)
 	viper.SetDefault("security.redirecttohttps", false)

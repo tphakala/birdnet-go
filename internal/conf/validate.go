@@ -462,10 +462,10 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 
 // validateSecuritySettings validates the security-specific settings
 func validateSecuritySettings(settings *Security) error {
-	// Check if any OAuth provider is enabled (OAuth providers require host for redirect URLs)
+	// Check if any OAuth provider is enabled (OAuth providers require host or baseUrl for redirect URLs)
 	// Note: BasicAuth doesn't require host as it doesn't use OAuth redirects
-	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" {
-		return errors.New(fmt.Errorf("security.host must be set when using OAuth authentication providers (Google or GitHub)")).
+	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" && settings.BaseURL == "" {
+		return errors.New(fmt.Errorf("security.host or security.baseUrl must be set when using OAuth authentication providers (Google or GitHub)")).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-oauth-host").
 			Context("google_enabled", settings.GoogleAuth.Enabled).
@@ -475,9 +475,10 @@ func validateSecuritySettings(settings *Security) error {
 
 	// AutoTLS validation
 	if settings.AutoTLS {
-		// Host is required for AutoTLS
-		if settings.Host == "" {
-			return errors.New(fmt.Errorf("security.host must be set when AutoTLS is enabled")).
+		// Host is required for AutoTLS (can be extracted from BaseURL)
+		hostname := settings.GetHostnameForCertificates()
+		if hostname == "" {
+			return errors.New(fmt.Errorf("security.host (or hostname in security.baseUrl) must be set when AutoTLS is enabled")).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-autotls-host").
 				Build()

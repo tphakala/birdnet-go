@@ -1,11 +1,46 @@
 package conf
 
 import (
+	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// TestSecurity_GetBaseURL tests the GetBaseURL helper method
-// This test is written in advance (TDD) for the future BaseURL feature
+// Test constants for Security helper methods.
+const (
+	// Test hostnames and domains
+	testHostExample     = "birdnet.example.com"
+	testHostIgnored     = "ignored.example.com"
+	testHostDifferent   = "different.example.com"
+	testHostSubdomain   = "my.birdnet.home.arpa"
+	testHostLocalhost   = "localhost"
+	testHostIP          = "192.168.1.100"
+	testHostIPv6        = "2001:db8::1"
+	testHostIPv6Bracket = "[2001:db8::1]"
+
+	// Test ports
+	testPortCustom = "8080"
+	testPort5500   = "5500"
+
+	// Test URLs
+	testURLHTTPS            = "https://birdnet.example.com:5500"
+	testURLHTTPSNoPort      = "https://birdnet.example.com"
+	testURLHTTPNoPort       = "http://birdnet.example.com"
+	testURLHTTPWithPort     = "http://birdnet.example.com:8080"
+	testURLHTTPLocalhost    = "http://localhost:8080"
+	testURLTrailingSlash    = "https://birdnet.example.com/"
+	testURLWithSubdomain    = "https://my.birdnet.home.arpa:8080"
+	testURLWithIP           = "http://192.168.1.100:8080"
+	testURLWithIPv6         = "https://[2001:db8::1]:8080"
+	testURLInvalid          = "not-a-valid-url"
+	testURLDifferent        = "https://different.example.com:5500"
+
+	// Test iteration counts for concurrent tests
+	numConcurrentGoroutines = 100
+)
+
+// TestSecurity_GetBaseURL tests the GetBaseURL helper method.
 func TestSecurity_GetBaseURL(t *testing.T) {
 	t.Parallel()
 
@@ -18,62 +53,62 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 		{
 			name: "BaseURL set - should use BaseURL as-is",
 			security: Security{
-				BaseURL: "https://birdnet.example.com:5500",
-				Host:    "ignored.example.com",
+				BaseURL: testURLHTTPS,
+				Host:    testHostIgnored,
 				AutoTLS: false,
 			},
-			port: "8080",
-			want: "https://birdnet.example.com:5500",
+			port: testPortCustom,
+			want: testURLHTTPS,
 		},
 		{
 			name: "BaseURL with trailing slash - should trim slash",
 			security: Security{
-				BaseURL: "https://birdnet.example.com/",
+				BaseURL: testURLTrailingSlash,
 				Host:    "",
 				AutoTLS: false,
 			},
-			port: "8080",
-			want: "https://birdnet.example.com",
+			port: testPortCustom,
+			want: testURLHTTPSNoPort,
 		},
 		{
 			name: "BaseURL empty, Host set with AutoTLS - should construct HTTPS URL",
 			security: Security{
 				BaseURL: "",
-				Host:    "birdnet.example.com",
+				Host:    testHostExample,
 				AutoTLS: true,
 			},
-			port: "443",
-			want: "https://birdnet.example.com",
+			port: DefaultHTTPSPort,
+			want: testURLHTTPSNoPort,
 		},
 		{
 			name: "BaseURL empty, Host set without AutoTLS - should construct HTTP URL",
 			security: Security{
 				BaseURL: "",
-				Host:    "birdnet.example.com",
+				Host:    testHostExample,
 				AutoTLS: false,
 			},
-			port: "8080",
-			want: "http://birdnet.example.com:8080",
+			port: testPortCustom,
+			want: testURLHTTPWithPort,
 		},
 		{
 			name: "BaseURL empty, Host set with default HTTP port - should omit port",
 			security: Security{
 				BaseURL: "",
-				Host:    "birdnet.example.com",
+				Host:    testHostExample,
 				AutoTLS: false,
 			},
-			port: "80",
-			want: "http://birdnet.example.com",
+			port: DefaultHTTPPort,
+			want: testURLHTTPNoPort,
 		},
 		{
 			name: "BaseURL empty, Host set with default HTTPS port - should omit port",
 			security: Security{
 				BaseURL: "",
-				Host:    "birdnet.example.com",
+				Host:    testHostExample,
 				AutoTLS: true,
 			},
-			port: "443",
-			want: "https://birdnet.example.com",
+			port: DefaultHTTPSPort,
+			want: testURLHTTPSNoPort,
 		},
 		{
 			name: "BaseURL empty, Host empty - should return empty string",
@@ -82,18 +117,18 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 				Host:    "",
 				AutoTLS: false,
 			},
-			port: "8080",
+			port: testPortCustom,
 			want: "",
 		},
 		{
 			name: "BaseURL with HTTP scheme explicitly set",
 			security: Security{
-				BaseURL: "http://localhost:8080",
+				BaseURL: testURLHTTPLocalhost,
 				Host:    "",
 				AutoTLS: true, // AutoTLS ignored when BaseURL is set
 			},
-			port: "443",
-			want: "http://localhost:8080",
+			port: DefaultHTTPSPort,
+			want: testURLHTTPLocalhost,
 		},
 	}
 
@@ -101,21 +136,13 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Note: This method doesn't exist yet - this is TDD
-			// Uncomment when implementing:
-			// got := tt.security.GetBaseURL(tt.port)
-			// if got != tt.want {
-			// 	t.Errorf("Security.GetBaseURL() = %v, want %v", got, tt.want)
-			// }
-
-			// For now, skip the test
-			t.Skip("Waiting for GetBaseURL() implementation")
+			got := tt.security.GetBaseURL(tt.port)
+			assert.Equal(t, tt.want, got, "Security.GetBaseURL(%q)", tt.port)
 		})
 	}
 }
 
-// TestSecurity_GetHostnameForCertificates tests hostname extraction for AutoTLS
-// This test is written in advance (TDD) for the future BaseURL feature
+// TestSecurity_GetHostnameForCertificates tests hostname extraction for AutoTLS.
 func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 	t.Parallel()
 
@@ -127,50 +154,50 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 		{
 			name: "Host set - should return Host",
 			security: Security{
-				Host:    "birdnet.example.com",
-				BaseURL: "https://different.example.com:5500",
+				Host:    testHostExample,
+				BaseURL: testURLDifferent,
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "Host empty, BaseURL set without port - should extract hostname",
 			security: Security{
 				Host:    "",
-				BaseURL: "https://birdnet.example.com",
+				BaseURL: testURLHTTPSNoPort,
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "Host empty, BaseURL set with port - should extract hostname without port",
 			security: Security{
 				Host:    "",
-				BaseURL: "https://birdnet.example.com:5500",
+				BaseURL: testURLHTTPS,
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "Host empty, BaseURL with subdomain - should extract full hostname",
 			security: Security{
 				Host:    "",
-				BaseURL: "https://my.birdnet.home.arpa:8080",
+				BaseURL: testURLWithSubdomain,
 			},
-			want: "my.birdnet.home.arpa",
+			want: testHostSubdomain,
 		},
 		{
 			name: "Host empty, BaseURL set with IP and port - should extract IP without port",
 			security: Security{
 				Host:    "",
-				BaseURL: "http://192.168.1.100:8080",
+				BaseURL: testURLWithIP,
 			},
-			want: "192.168.1.100",
+			want: testHostIP,
 		},
 		{
 			name: "Host empty, BaseURL set with IPv6 - should extract IPv6 address",
 			security: Security{
 				Host:    "",
-				BaseURL: "https://[2001:db8::1]:8080",
+				BaseURL: testURLWithIPv6,
 			},
-			want: "2001:db8::1",
+			want: testHostIPv6,
 		},
 		{
 			name: "Host empty, BaseURL empty - should return empty string",
@@ -184,7 +211,7 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 			name: "Host empty, BaseURL invalid - should return empty string",
 			security: Security{
 				Host:    "",
-				BaseURL: "not-a-valid-url",
+				BaseURL: testURLInvalid,
 			},
 			want: "",
 		},
@@ -194,21 +221,13 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Note: This method doesn't exist yet - this is TDD
-			// Uncomment when implementing:
-			// got := tt.security.GetHostnameForCertificates()
-			// if got != tt.want {
-			// 	t.Errorf("Security.GetHostnameForCertificates() = %v, want %v", got, tt.want)
-			// }
-
-			// For now, skip the test
-			t.Skip("Waiting for GetHostnameForCertificates() implementation")
+			got := tt.security.GetHostnameForCertificates()
+			assert.Equal(t, tt.want, got, "Security.GetHostnameForCertificates()")
 		})
 	}
 }
 
-// TestSecurity_GetExternalHost tests external host extraction for backward compatibility
-// This test is written in advance (TDD) for the future BaseURL feature
+// TestSecurity_GetExternalHost tests external host extraction for backward compatibility.
 func TestSecurity_GetExternalHost(t *testing.T) {
 	t.Parallel()
 
@@ -220,42 +239,42 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 		{
 			name: "BaseURL set with port - should return host:port",
 			security: Security{
-				BaseURL: "https://birdnet.example.com:5500",
-				Host:    "ignored.example.com",
+				BaseURL: testURLHTTPS,
+				Host:    testHostIgnored,
 			},
-			want: "birdnet.example.com:5500",
+			want: testHostExample + ":" + testPort5500,
 		},
 		{
 			name: "BaseURL set without explicit port (HTTPS) - should return just hostname",
 			security: Security{
-				BaseURL: "https://birdnet.example.com",
+				BaseURL: testURLHTTPSNoPort,
 				Host:    "",
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "BaseURL set without explicit port (HTTP) - should return just hostname",
 			security: Security{
-				BaseURL: "http://birdnet.example.com",
+				BaseURL: testURLHTTPNoPort,
 				Host:    "",
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "BaseURL empty, Host set - should return Host",
 			security: Security{
 				BaseURL: "",
-				Host:    "birdnet.example.com",
+				Host:    testHostExample,
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "BaseURL invalid, Host set - should fallback to Host",
 			security: Security{
-				BaseURL: "invalid-url",
-				Host:    "birdnet.example.com",
+				BaseURL: testURLInvalid,
+				Host:    testHostExample,
 			},
-			want: "birdnet.example.com",
+			want: testHostExample,
 		},
 		{
 			name: "Both empty - should return empty string",
@@ -271,15 +290,129 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Note: This method doesn't exist yet - this is TDD
-			// Uncomment when implementing:
-			// got := tt.security.GetExternalHost()
-			// if got != tt.want {
-			// 	t.Errorf("Security.GetExternalHost() = %v, want %v", got, tt.want)
-			// }
-
-			// For now, skip the test
-			t.Skip("Waiting for GetExternalHost() implementation")
+			got := tt.security.GetExternalHost()
+			assert.Equal(t, tt.want, got, "Security.GetExternalHost()")
 		})
+	}
+}
+
+// TestSecurity_GetBaseURL_PortConstants verifies port constant usage.
+func TestSecurity_GetBaseURL_PortConstants(t *testing.T) {
+	t.Parallel()
+
+	// Verify the constants are correctly defined
+	assert.Equal(t, "80", DefaultHTTPPort, "DefaultHTTPPort should be 80")
+	assert.Equal(t, "443", DefaultHTTPSPort, "DefaultHTTPSPort should be 443")
+	assert.Equal(t, "http", SchemeHTTP, "SchemeHTTP should be http")
+	assert.Equal(t, "https", SchemeHTTPS, "SchemeHTTPS should be https")
+}
+
+// TestSecurity_GetBaseURL_WhitespaceHandling tests whitespace handling in BaseURL.
+func TestSecurity_GetBaseURL_WhitespaceHandling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{"leading space", " https://example.com", "https://example.com"},
+		{"trailing space", "https://example.com ", "https://example.com"},
+		{"both spaces", " https://example.com ", "https://example.com"},
+		{"tab characters", "\thttps://example.com\t", "https://example.com"},
+		{"newline", "https://example.com\n", "https://example.com"},
+		{"mixed whitespace", " \t https://example.com \n ", "https://example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := Security{BaseURL: tt.baseURL}
+			got := s.GetBaseURL(testPortCustom)
+			assert.Equal(t, tt.want, got, "Whitespace should be trimmed from BaseURL")
+		})
+	}
+}
+
+// TestSecurity_GetBaseURL_ConcurrentAccess verifies thread-safety of GetBaseURL.
+// Uses Go 1.25 WaitGroup.Go() for cleaner goroutine management.
+func TestSecurity_GetBaseURL_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	security := Security{
+		BaseURL: testURLHTTPS,
+		Host:    testHostExample,
+		AutoTLS: true,
+	}
+
+	var wg sync.WaitGroup
+	results := make([]string, numConcurrentGoroutines)
+
+	// Launch multiple goroutines that all call GetBaseURL concurrently
+	for i := range numConcurrentGoroutines {
+		wg.Go(func() {
+			results[i] = security.GetBaseURL(testPortCustom)
+		})
+	}
+
+	wg.Wait()
+
+	// All results should be identical (thread-safe reads)
+	for i, result := range results {
+		assert.Equal(t, testURLHTTPS, result, "Goroutine %d returned unexpected result", i)
+	}
+}
+
+// TestSecurity_GetHostnameForCertificates_ConcurrentAccess verifies thread-safety.
+func TestSecurity_GetHostnameForCertificates_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	security := Security{
+		Host:    testHostExample,
+		BaseURL: testURLDifferent,
+	}
+
+	var wg sync.WaitGroup
+	results := make([]string, numConcurrentGoroutines)
+
+	for i := range numConcurrentGoroutines {
+		wg.Go(func() {
+			results[i] = security.GetHostnameForCertificates()
+		})
+	}
+
+	wg.Wait()
+
+	// All results should be the Host value (priority 1)
+	for i, result := range results {
+		assert.Equal(t, testHostExample, result, "Goroutine %d returned unexpected result", i)
+	}
+}
+
+// TestSecurity_GetExternalHost_ConcurrentAccess verifies thread-safety.
+func TestSecurity_GetExternalHost_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	security := Security{
+		BaseURL: testURLHTTPS,
+		Host:    testHostIgnored,
+	}
+
+	var wg sync.WaitGroup
+	expectedHost := testHostExample + ":" + testPort5500
+	results := make([]string, numConcurrentGoroutines)
+
+	for i := range numConcurrentGoroutines {
+		wg.Go(func() {
+			results[i] = security.GetExternalHost()
+		})
+	}
+
+	wg.Wait()
+
+	// All results should be extracted from BaseURL
+	for i, result := range results {
+		assert.Equal(t, expectedHost, result, "Goroutine %d returned unexpected result", i)
 	}
 }

@@ -2318,6 +2318,9 @@
       }
     },
     "security": {
+      "baseUrlLabel": "Basis-URL",
+      "baseUrlHelp": "Vollständige externe URL für Reverse-Proxy-Setups. Wenn gesetzt, wird diese URL unverändert für Benachrichtigungen und OAuth-Weiterleitungen verwendet, wobei Host- und AutoTLS-Einstellungen ignoriert werden.",
+      "baseUrlValidation": "Bitte geben Sie eine gültige URL ein, die mit http:// oder https:// beginnt und einen Hostnamen enthält",
       "hostLabel": "Host-Adresse",
       "allowSubnetBypassLabel": "Zugriff aus Subnetz zur Umgehung der Authentifizierung erlauben",
       "allowedSubnetsLabel": "Erlaubte Subnetze",
@@ -2379,6 +2382,7 @@
         "disabled": "Subnet bypass is disabled"
       },
       "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
         "host": "Zum Beispiel localhost:8080 oder example.domain.com",
         "allowedUsers": "Geben Sie eine oder mehrere erlaubte Benutzer-E-Mails ein",
         "subnet": "Geben Sie ein CIDR-Subnetz ein (z.B. 192.168.1.0/24)"

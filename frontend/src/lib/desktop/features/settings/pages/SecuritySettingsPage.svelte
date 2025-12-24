@@ -45,6 +45,7 @@
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
     $securitySettings || {
+      baseUrl: '',
       host: '',
       autoTls: false,
       basicAuth: {
@@ -77,10 +78,12 @@
   let serverConfigHasChanges = $derived(
     hasSettingsChanged(
       {
+        baseUrl: store.originalData.security?.baseUrl,
         host: store.originalData.security?.host,
         autoTls: store.originalData.security?.autoTls,
       },
       {
+        baseUrl: store.formData.security?.baseUrl,
         host: store.formData.security?.host,
         autoTls: store.formData.security?.autoTls,
       }
@@ -129,6 +132,13 @@
   let githubRedirectURI = $derived(`${currentHost}/auth/github/callback`);
 
   // Server Configuration update handlers
+  function updateBaseUrl(baseUrl: string) {
+    settingsActions.updateSection('security', {
+      ...settings,
+      baseUrl: baseUrl,
+    });
+  }
+
   function updateAutoTLSEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
       ...settings,
@@ -274,15 +284,31 @@
       title={t('settings.security.serverConfiguration.title')}
       description={t('settings.security.serverConfiguration.description')}
       originalData={{
+        baseUrl: store.originalData.security?.baseUrl,
         host: store.originalData.security?.host,
         autoTls: store.originalData.security?.autoTls,
       }}
       currentData={{
+        baseUrl: store.formData.security?.baseUrl,
         host: store.formData.security?.host,
         autoTls: store.formData.security?.autoTls,
       }}
     >
     <div class="space-y-4">
+      <!-- Base URL (for reverse proxy setups) -->
+      <TextInput
+        id="base-url"
+        type="url"
+        value={settings.baseUrl}
+        label={t('settings.security.baseUrlLabel')}
+        placeholder={t('settings.security.placeholders.baseUrl')}
+        helpText={t('settings.security.baseUrlHelp')}
+        pattern="^https?://[^/:]+.*$"
+        validationMessage={t('settings.security.baseUrlValidation')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={updateBaseUrl}
+      />
+
       <!-- Host Address -->
       <TextInput
         id="host-address"

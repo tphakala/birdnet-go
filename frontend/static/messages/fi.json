@@ -2318,6 +2318,9 @@
       }
     },
     "security": {
+      "baseUrlLabel": "Perus-URL",
+      "baseUrlHelp": "Täydellinen ulkoinen URL käänteiselle välityspalvelimelle. Kun asetettu, tätä URL-osoitetta käytetään sellaisenaan ilmoituksiin ja OAuth-uudelleenohjauksiin, ohittaen isäntä- ja AutoTLS-asetukset.",
+      "baseUrlValidation": "Anna kelvollinen URL, joka alkaa http:// tai https:// ja sisältää isäntänimen",
       "hostLabel": "Isäntäosoite",
       "allowSubnetBypassLabel": "Salli aliverkon käyttää ohitustunnistautumista",
       "allowedSubnetsLabel": "Sallitut aliverkot",
@@ -2379,6 +2382,7 @@
         "disabled": "Aliverkon ohitus on poistettu käytöstä"
       },
       "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
         "host": "Esimerkiksi localhost:8080 tai example.domain.com",
         "allowedUsers": "Syötä yksi tai useampi sallittu käyttäjän sähköposti",
         "subnet": "Syötä CIDR-aliverkko (esim. 192.168.1.0/24)"
