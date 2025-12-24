@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -24,14 +25,12 @@ func createDummyFilesForTLSTest(t *testing.T, testName, tempDir string) {
 	switch testName {
 	case "Non-existent client key":
 		certPath := filepath.Join(tempDir, "client.crt")
-		if err := os.WriteFile(certPath, []byte("dummy cert"), 0o600); err != nil {
-			t.Fatalf("Failed to create dummy cert file: %v", err)
-		}
+		err := os.WriteFile(certPath, []byte("dummy cert"), 0o600)
+		require.NoError(t, err, "Failed to create dummy cert file")
 	case "Non-existent client certificate":
 		keyPath := filepath.Join(tempDir, "client.key")
-		if err := os.WriteFile(keyPath, []byte("dummy key"), 0o600); err != nil {
-			t.Fatalf("Failed to create dummy key file: %v", err)
-		}
+		err := os.WriteFile(keyPath, []byte("dummy key"), 0o600)
+		require.NoError(t, err, "Failed to create dummy key file")
 	}
 }
 
@@ -53,18 +52,14 @@ func runTLSFileExistenceTest(t *testing.T, tc *tlsFileTestCase, tempDir string, 
 	}
 
 	client, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
 	err = client.Connect(ctx)
-	if err == nil {
-		t.Fatal("Expected connection to fail due to missing certificate files")
-	}
+	require.Error(t, err, "Expected connection to fail due to missing certificate files")
 
 	assert.Contains(t, err.Error(), tc.expectedError)
 }
@@ -82,9 +77,7 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 	tempDir := t.TempDir()
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	tests := []tlsFileTestCase{
 		{

@@ -3,8 +3,10 @@ package secrets
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExpandString(t *testing.T) {
@@ -100,12 +102,11 @@ func TestExpandString(t *testing.T) {
 			}
 
 			got, err := ExpandString(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ExpandString() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("ExpandString() = %q, want %q", got, tt.want)
+			if tt.wantErr {
+				require.Error(t, err, "expected error")
+			} else {
+				require.NoError(t, err, "unexpected error")
+				assert.Equal(t, tt.want, got, "unexpected result")
 			}
 		})
 	}
@@ -126,9 +127,8 @@ func TestReadFile(t *testing.T) {
 			name: "valid secret file",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "valid_secret")
-				if err := os.WriteFile(path, []byte("my-secret-token"), 0o400); err != nil {
-					t.Fatal(err)
-				}
+				err := os.WriteFile(path, []byte("my-secret-token"), 0o400)
+				require.NoError(t, err)
 				return path
 			},
 			wantContent: "my-secret-token",
@@ -138,9 +138,8 @@ func TestReadFile(t *testing.T) {
 			name: "secret with trailing newline",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "secret_with_newline")
-				if err := os.WriteFile(path, []byte("secret123\n"), 0o400); err != nil {
-					t.Fatal(err)
-				}
+				err := os.WriteFile(path, []byte("secret123\n"), 0o400)
+				require.NoError(t, err)
 				return path
 			},
 			wantContent: "secret123",
@@ -150,9 +149,8 @@ func TestReadFile(t *testing.T) {
 			name: "secret with whitespace preserved",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "secret_whitespace")
-				if err := os.WriteFile(path, []byte("  token  \n\n"), 0o400); err != nil {
-					t.Fatal(err)
-				}
+				err := os.WriteFile(path, []byte("  token  \n\n"), 0o400)
+				require.NoError(t, err)
 				return path
 			},
 			wantContent: "  token  ", // Leading/trailing spaces preserved, only newlines trimmed
@@ -162,9 +160,8 @@ func TestReadFile(t *testing.T) {
 			name: "permissive permissions warning",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "permissive_secret")
-				if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
-					t.Fatal(err)
-				}
+				err := os.WriteFile(path, []byte("secret"), 0o600)
+				require.NoError(t, err)
 				return path
 			},
 			wantContent: "secret",
@@ -190,9 +187,8 @@ func TestReadFile(t *testing.T) {
 			name: "empty secret file",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "empty_secret")
-				if err := os.WriteFile(path, []byte(""), 0o400); err != nil {
-					t.Fatal(err)
-				}
+				err := os.WriteFile(path, []byte(""), 0o400)
+				require.NoError(t, err)
 				return path
 			},
 			wantErr:     true,
@@ -202,9 +198,8 @@ func TestReadFile(t *testing.T) {
 			name: "directory instead of file",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "directory_secret")
-				if err := os.Mkdir(path, 0o750); err != nil {
-					t.Fatal(err)
-				}
+				err := os.Mkdir(path, 0o750)
+				require.NoError(t, err)
 				return path
 			},
 			wantErr:     true,
@@ -217,19 +212,14 @@ func TestReadFile(t *testing.T) {
 			path := tt.setup()
 			got, err := ReadFile(path)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ReadFile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && tt.errContains != "" {
-				if !strings.Contains(err.Error(), tt.errContains) {
-					t.Errorf("ReadFile() error = %v, want error containing %q", err, tt.errContains)
+			if tt.wantErr {
+				require.Error(t, err, "expected error")
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, "error should contain expected string")
 				}
-			}
-
-			if !tt.wantErr && got != tt.wantContent {
-				t.Errorf("ReadFile() = %q, want %q", got, tt.wantContent)
+			} else {
+				require.NoError(t, err, "unexpected error")
+				assert.Equal(t, tt.wantContent, got, "unexpected content")
 			}
 		})
 	}
@@ -238,9 +228,8 @@ func TestReadFile(t *testing.T) {
 func TestResolve(t *testing.T) {
 	tmpDir := t.TempDir()
 	secretFile := filepath.Join(tmpDir, "secret")
-	if err := os.WriteFile(secretFile, []byte("file-secret\n"), 0o400); err != nil {
-		t.Fatal(err)
-	}
+	err := os.WriteFile(secretFile, []byte("file-secret\n"), 0o400)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name     string
@@ -301,12 +290,11 @@ func TestResolve(t *testing.T) {
 			}
 
 			got, err := Resolve(tt.filePath, tt.value)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Resolve() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("Resolve() = %q, want %q", got, tt.want)
+			if tt.wantErr {
+				require.Error(t, err, "expected error")
+			} else {
+				require.NoError(t, err, "unexpected error")
+				assert.Equal(t, tt.want, got, "unexpected result")
 			}
 		})
 	}
@@ -353,12 +341,11 @@ func TestMustResolve(t *testing.T) {
 			}
 
 			got, err := MustResolve(tt.fieldName, tt.filePath, tt.value)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("MustResolve() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("MustResolve() = %q, want %q", got, tt.want)
+			if tt.wantErr {
+				require.Error(t, err, "expected error")
+			} else {
+				require.NoError(t, err, "unexpected error")
+				assert.Equal(t, tt.want, got, "unexpected result")
 			}
 		})
 	}

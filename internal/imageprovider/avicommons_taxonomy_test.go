@@ -3,6 +3,9 @@ package imageprovider
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -41,24 +44,16 @@ func TestAvicommonsTaxonomy2022Alignment(t *testing.T) {
 
 	// Create the Avicommons provider using the embedded data
 	provider, err := NewAviCommonsProvider(os.DirFS("."), false)
-	if err != nil {
-		t.Fatalf("Failed to create AviCommons provider: %v", err)
-	}
+	require.NoError(t, err, "failed to create AviCommons provider")
 
 	for _, tc := range testCases {
 		t.Run(tc.commonName, func(t *testing.T) {
 			image, err := provider.Fetch(tc.scientificName)
-			if err != nil {
-				t.Errorf("Failed to find image for %s (%s): %v\n%s",
-					tc.scientificName, tc.commonName, err, tc.description)
-				return
-			}
+			require.NoError(t, err, "failed to find image for %s (%s): %s",
+				tc.scientificName, tc.commonName, tc.description)
 
-			if image.URL == "" {
-				t.Errorf("Empty URL returned for %s (%s)\n%s",
-					tc.scientificName, tc.commonName, tc.description)
-				return
-			}
+			assert.NotEmpty(t, image.URL, "empty URL returned for %s (%s): %s",
+				tc.scientificName, tc.commonName, tc.description)
 
 			t.Logf("Found image for %s: %s", tc.scientificName, image.URL)
 		})
@@ -69,18 +64,14 @@ func TestAvicommonsTaxonomy2022Alignment(t *testing.T) {
 // and is from the 2022 taxonomy version.
 func TestAvicommonsDataFileVersion(t *testing.T) {
 	provider, err := NewAviCommonsProvider(os.DirFS("."), false)
-	if err != nil {
-		t.Fatalf("Failed to create AviCommons provider: %v", err)
-	}
+	require.NoError(t, err, "failed to create AviCommons provider")
 
 	// The 2022 version should have ~9000+ species entries
 	// This is a sanity check that we have a valid data file
 	actualSpecies := len(provider.data)
 
-	if actualSpecies < minExpected2022Species {
-		t.Errorf("Expected at least %d species in Avicommons data, got %d",
-			minExpected2022Species, actualSpecies)
-	}
+	assert.GreaterOrEqual(t, actualSpecies, minExpected2022Species,
+		"expected at least %d species in Avicommons data", minExpected2022Species)
 
 	t.Logf("Avicommons data contains %d species entries", actualSpecies)
 }
