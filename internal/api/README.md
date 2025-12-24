@@ -10,35 +10,46 @@ internal/api/
 ├── server.go              - Main HTTP server (Echo framework wrapper)
 ├── spa.go                 - Single Page Application handler
 ├── static.go              - Static file server for frontend assets
+├── auth/                  - Authentication service package
+│   ├── adapter.go         - Adapter for security package (OAuth2Server)
+│   ├── authmethod_string.go - Auto-generated AuthMethod stringer
+│   ├── middleware.go      - Authentication middleware enforcer
+│   └── service.go         - Authentication service interface & AuthMethod enum
 ├── middleware/            - HTTP middleware
-│   ├── compression.go     - Gzip compression middleware
-│   ├── logging.go         - Request logging middleware
-│   └── security.go        - CORS, secure headers, body limit
+│   ├── compression.go     - Gzip compression middleware (SSE-aware)
+│   ├── csrf.go            - CSRF token validation middleware
+│   ├── logging.go         - Structured request logging middleware
+│   └── security.go        - CORS, HSTS, secure headers middleware
 ├── templates/             - HTML templates
 │   └── spa.html           - SPA shell template with CSRF token
 └── v2/                    - API v2 handlers and routes
     ├── api.go             - API controller and route initialization
     ├── analytics.go       - Analytics and statistics endpoints
-    ├── auth.go            - Authentication endpoints and handlers
-    ├── auth/              - Authentication service package
-    │   ├── adapter.go     - Adapter for security package
-    │   ├── middleware.go  - Authentication middleware
-    │   └── service.go     - Authentication service interface
-    ├── control.go         - System control actions (restart, reload)
-    ├── detections.go      - Bird detection data endpoints
-    ├── integrations.go    - External service integrations (MQTT, BirdWeather)
-    ├── media.go           - Media (images, audio, spectrograms)
-    ├── notifications.go   - Push notification management
+    ├── audio_hls.go       - HLS audio streaming endpoints
+    ├── audio_level.go     - Real-time audio level SSE streaming
+    ├── auth.go            - Authentication endpoints (login, logout, status)
+    ├── constants.go       - API-wide constants
+    ├── control.go         - System control actions (restart, reload, rebuild)
+    ├── debug.go           - Debug/testing endpoints
+    ├── detections.go      - Bird detection CRUD endpoints
+    ├── dynamic_thresholds.go - Dynamic detection threshold logic
+    ├── filesystem.go      - Secure filesystem browsing endpoint
+    ├── integrations.go    - External service integrations (MQTT, BirdWeather, Weather)
+    ├── media.go           - Media serving (audio, spectrograms, species images)
+    ├── notifications.go   - Notification management & SSE stream
     ├── range.go           - Range filter management and testing
-    ├── search.go          - Detection search functionality
-    ├── settings.go        - Application settings management
-    ├── settings_audio.go  - Audio settings hot reload
+    ├── search.go          - Detection search with filtering
+    ├── settings.go        - Application settings management & hot reload
+    ├── settings_audio.go  - Audio settings hot reload logic
     ├── species.go         - Species information endpoints
+    ├── species_taxonomy.go - Species taxonomy data endpoints
     ├── sse.go             - Server-Sent Events broadcaster
-    ├── streams.go         - Real-time audio/detection streaming
-    ├── support.go         - Support bundle generation
-    ├── system.go          - System information and monitoring
-    └── weather.go         - Weather data related to detections
+    ├── streams_health.go  - RTSP stream health monitoring
+    ├── support.go         - Support diagnostic bundle generation
+    ├── system.go          - System information and resource monitoring
+    ├── toast_helpers.go   - Toast notification helpers
+    ├── utils.go           - Utility functions
+    └── weather.go         - Weather data endpoints
 ```
 
 ## Architecture Overview
@@ -113,7 +124,7 @@ Currently, the package implements version 2 (`v2`) of the API with all endpoints
 
 ## Authentication
 
-The API implements a comprehensive, service-based authentication system managed by the `internal/api/v2/auth` sub-package. This package decouples authentication logic from API handlers and supports multiple authentication methods.
+The API implements a comprehensive, service-based authentication system managed by the `internal/api/auth` package. This package decouples authentication logic from API handlers and supports multiple authentication methods.
 
 Key components of the `auth` package:
 
@@ -133,9 +144,9 @@ Key components of the `auth` package:
 
 Protected endpoints use this auth middleware. The system handles browser clients (redirecting to login) and API clients (returning 401 JSON errors) appropriately.
 
-### Authentication Service Interface (Deprecated - See `auth/service.go`)
+### Authentication Service Interface
 
-The authentication service interface provides these key operations:
+The authentication service interface in `auth/service.go` provides these key operations:
 
 ```go
 // Service defines the interface for API service implementations.
@@ -170,9 +181,9 @@ type Service interface {
 }
 ```
 
-### Auth Middleware Implementation (Deprecated - See `auth/middleware.go`)
+### Auth Middleware Implementation
 
-The middleware follows this decision flow:
+The middleware in `auth/middleware.go` follows this decision flow:
 
 1. Checks for Bearer token and validates if present
 2. Falls back to session authentication for browser clients
@@ -193,6 +204,7 @@ The middleware follows this decision flow:
 
 - Statistics on detections by species, time, and confidence
 - Trends and patterns in detection data
+- Species taxonomy and classification data
 
 ### System Control
 
@@ -207,6 +219,8 @@ The middleware follows this decision flow:
 - `GET /api/v2/system/disks` - Retrieves information about disk partitions and usage
 - `GET /api/v2/system/jobs` - Retrieves statistics about the analysis job queue
 - `GET /api/v2/system/processes` - Retrieves information about running processes (application and children by default, or all with `?all=true`)
+- `GET /api/v2/system/temperature` - Retrieves system temperature sensors (CPU, GPU, etc.)
+- `GET /api/v2/system/audio-devices` - Lists available audio input devices
 
 ### Settings Management
 
@@ -227,9 +241,11 @@ The middleware follows this decision flow:
 
 ### Real-time Data Streaming
 
-- WebSocket connections for live detection updates
-- Event-based notification system
 - Server-Sent Events (SSE) for real-time detection streaming
+- Audio level SSE streaming for visualization
+- Stream health SSE for monitoring RTSP sources
+- Notification SSE for real-time alerts
+- HLS audio streaming for live audio playback
 - Structured detection data with species images and metadata
 
 ### Range Filter Management
@@ -444,6 +460,106 @@ eventSource.onerror = function (event) {
 - Heartbeat messages are sent every 30 seconds to maintain connections
 - Event frequency is controlled by the same event tracker used for other actions
 
+### HLS Audio Streaming API Endpoints
+
+The API provides HTTP Live Streaming (HLS) for real-time audio from configured sources:
+
+1. **Start Stream**:
+   - `POST /api/v2/streams/hls/start` - Starts an HLS stream for a specified audio source
+   - Request body includes `sourceUrl` (RTSP URL) and optional parameters
+   - Returns stream ID and playlist URL
+
+2. **Stop Stream**:
+   - `POST /api/v2/streams/hls/stop` - Stops an active HLS stream
+   - Request body includes `streamId`
+
+3. **Get Playlist**:
+   - `GET /api/v2/streams/hls/:streamId/playlist.m3u8` - Returns the HLS playlist for a stream
+   - Standard HLS format compatible with video.js and other players
+
+4. **Get Segment**:
+   - `GET /api/v2/streams/hls/:streamId/:segment` - Returns individual HLS segments
+
+5. **Heartbeat**:
+   - `POST /api/v2/streams/hls/heartbeat` - Keep stream alive (prevents auto-shutdown)
+
+**Features:**
+
+- FFmpeg-based transcoding for broad compatibility
+- Automatic stream cleanup on client disconnect
+- Configurable segment duration and playlist length
+
+### RTSP Stream Health Monitoring API Endpoints
+
+The API provides comprehensive health monitoring for RTSP audio streams:
+
+1. **Stream Health Summary**:
+   - `GET /api/v2/streams/health` - Returns health status for all configured streams
+   - Includes connection status, error counts, and last activity timestamps
+
+2. **Individual Stream Health**:
+   - `GET /api/v2/streams/health/:name` - Returns detailed health for a specific stream
+   - Includes error history, circuit breaker status, and recovery attempts
+
+3. **Stream Health SSE**:
+   - `GET /api/v2/streams/health/stream` - Real-time health updates via SSE
+   - Broadcasts status changes as they occur
+
+**Health Status Types:**
+
+- `healthy` - Stream is connected and receiving data
+- `degraded` - Stream has intermittent issues but is recovering
+- `unhealthy` - Stream is disconnected or has persistent errors
+- `unknown` - Stream status cannot be determined
+
+### Audio Level Streaming API Endpoints
+
+Real-time audio level monitoring via Server-Sent Events:
+
+1. **Audio Level Stream**:
+   - `GET /api/v2/streams/audio-level` - Opens an SSE connection for real-time audio levels
+   - Returns normalized audio levels (0.0-1.0) for visualization
+   - Includes peak detection and RMS values
+
+**Features:**
+
+- Connection limits to prevent resource exhaustion
+- Anonymized client tracking
+- Automatic cleanup on disconnect
+
+### Filesystem Browsing API Endpoints
+
+Secure filesystem browsing for configuration and file selection:
+
+1. **Browse Directory**:
+   - `GET /api/v2/filesystem/browse?path={path}` - Lists directory contents
+   - Returns files and subdirectories with metadata
+   - Protected endpoint requiring authentication
+
+**Security:**
+
+- Path traversal protection via SecureFS
+- Restricted to allowed directories only
+- Validates paths against configured roots
+
+### Debug API Endpoints
+
+Debug endpoints for testing and development (protected):
+
+1. **Trigger Test Notification**:
+   - `POST /api/v2/debug/notification` - Sends a test notification
+
+2. **Trigger Test Error**:
+   - `POST /api/v2/debug/error` - Triggers a test error for error handling verification
+
+3. **Debug Status**:
+   - `GET /api/v2/debug/status` - Returns debug mode status and configuration
+
+**Notes:**
+
+- All debug endpoints require authentication
+- Only available when debug mode is enabled
+
 ### Middleware Implementation
 
 The `internal/api/middleware/` package provides HTTP middleware used by the server:
@@ -456,8 +572,9 @@ The `internal/api/middleware/` package provides HTTP middleware used by the serv
 | BodyLimit | `security.go` | Request body size limits |
 | Gzip | `compression.go` | Response compression (auto-skips SSE) |
 | SecureHeaders | `security.go` | Security headers (HSTS, X-Frame-Options) |
+| CSRF | `csrf.go` | CSRF token validation for state-changing operations |
 
-The v2 API adds its own authentication middleware from `v2/auth/middleware.go`.
+The API uses authentication middleware from `auth/middleware.go` which handles Bearer token and session-based authentication.
 
 ### Handler Implementation
 
@@ -879,11 +996,25 @@ When working with the API code, be mindful of these important considerations:
 
 ## Testing
 
-Each module has corresponding test files (`*_test.go`) for unit testing. Run tests with:
+Each module has comprehensive test coverage with various test file patterns. Run tests with:
 
 ```bash
+go test -v ./internal/api/...
 go test -v ./internal/api/v2/...
+go test -v ./internal/api/auth/...
 ```
+
+### Test File Categories
+
+| Pattern | Purpose |
+|---------|---------|
+| `*_test.go` | Standard unit tests for each handler/feature |
+| `*_integration_test.go` | Integration tests combining multiple components |
+| `*_edge_test.go` | Edge case and boundary condition tests |
+| `*_concurrent_test.go` | Concurrency and race condition tests |
+| `*_malformed_test.go` | Malformed input validation tests |
+| `*_malicious_test.go` | Security and attack scenario tests |
+| `*_extreme_test.go` | Extreme value and stress tests |
 
 ### Testing Best Practices
 
@@ -892,6 +1023,7 @@ go test -v ./internal/api/v2/...
 3. **Validate Response Structures**: Ensure JSON responses match expected formats
 4. **Test Middleware Behavior**: Verify auth middleware correctly allows/denies requests
 5. **Use Table-Driven Tests**: For testing multiple input scenarios
+6. **Race Detection**: Run tests with `-race` flag during development
 
 ## Security Considerations
 
