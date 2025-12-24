@@ -3,6 +3,7 @@ package conf
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,6 +37,9 @@ const (
 	ConfigKeyRangeFilterThreshold = "birdnet.rangefilter.threshold"
 	ConfigKeyRangeFilterModelPath = "birdnet.rangefilter.modelpath"
 	ConfigKeyRangeFilterDebug     = "birdnet.rangefilter.debug"
+
+	// Security Configuration
+	ConfigKeyBaseURL = "security.baseurl"
 )
 
 // Environment variable names that map to configuration keys.
@@ -60,6 +64,9 @@ const (
 	EnvVarRangeFilterThreshold = "BIRDNET_RANGEFILTER_THRESHOLD"
 	EnvVarRangeFilterModelPath = "BIRDNET_RANGEFILTER_MODELPATH"
 	EnvVarRangeFilterDebug     = "BIRDNET_RANGEFILTER_DEBUG"
+
+	// Security Configuration
+	EnvVarBaseURL = "BIRDNET_URL"
 )
 
 // Validation constraint constants for environment variable ranges.
@@ -116,6 +123,9 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyRangeFilterThreshold, EnvVarRangeFilterThreshold, validateEnvRangeFilterThreshold},
 		{ConfigKeyRangeFilterModelPath, EnvVarRangeFilterModelPath, validateEnvPath},
 		{ConfigKeyRangeFilterDebug, EnvVarRangeFilterDebug, validateEnvBool},
+
+		// Security Configuration
+		{ConfigKeyBaseURL, EnvVarBaseURL, validateEnvBaseURL},
 	}
 }
 
@@ -281,22 +291,50 @@ func validateEnvRangeFilterThreshold(value string) error {
 func validateEnvPath(value string) error {
 	// Trim leading/trailing whitespace first
 	value = strings.TrimSpace(value)
-	
+
 	// Explicitly reject empty input
 	if value == "" {
 		return fmt.Errorf("path must not be empty")
 	}
-	
+
 	// Clean the path to normalize it
 	cleanedPath := filepath.Clean(value)
-	
+
 	// Require absolute paths for security
 	if !filepath.IsAbs(cleanedPath) {
 		return fmt.Errorf("path must be absolute, got relative path: %s", cleanedPath)
 	}
-	
+
 	// filepath.Clean already handles path traversal, so no need for additional checks
 	// Only return fatal errors - let caller handle existence warnings
+	return nil
+}
+
+// validateEnvBaseURL validates the BIRDNET_URL environment variable
+// The URL must include a scheme (http or https) and a host
+func validateEnvBaseURL(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("URL must not be empty")
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	if parsed.Scheme == "" {
+		return fmt.Errorf("URL must include scheme (http:// or https://)")
+	}
+
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("URL scheme must be http or https, got: %s", parsed.Scheme)
+	}
+
+	if parsed.Host == "" {
+		return fmt.Errorf("URL must include host")
+	}
+
 	return nil
 }
 
@@ -333,6 +371,10 @@ func canonicalizeValue(configKey, envValue string) {
 	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath:
 		// Regular string values - just trim whitespace
 		viper.Set(configKey, trimmed)
+
+	case ConfigKeyBaseURL:
+		// Trim whitespace and trailing slash for consistent URL format
+		viper.Set(configKey, strings.TrimSuffix(trimmed, "/"))
 	}
 }
 

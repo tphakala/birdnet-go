@@ -101,15 +101,10 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Note: This method doesn't exist yet - this is TDD
-			// Uncomment when implementing:
-			// got := tt.security.GetBaseURL(tt.port)
-			// if got != tt.want {
-			// 	t.Errorf("Security.GetBaseURL() = %v, want %v", got, tt.want)
-			// }
-
-			// For now, skip the test
-			t.Skip("Waiting for GetBaseURL() implementation")
+			got := tt.security.GetBaseURL(tt.port)
+			if got != tt.want {
+				t.Errorf("Security.GetBaseURL() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -194,15 +189,10 @@ func TestSecurity_GetHostnameForCertificates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Note: This method doesn't exist yet - this is TDD
-			// Uncomment when implementing:
-			// got := tt.security.GetHostnameForCertificates()
-			// if got != tt.want {
-			// 	t.Errorf("Security.GetHostnameForCertificates() = %v, want %v", got, tt.want)
-			// }
-
-			// For now, skip the test
-			t.Skip("Waiting for GetHostnameForCertificates() implementation")
+			got := tt.security.GetHostnameForCertificates()
+			if got != tt.want {
+				t.Errorf("Security.GetHostnameForCertificates() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -271,15 +261,10 @@ func TestSecurity_GetExternalHost(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Note: This method doesn't exist yet - this is TDD
-			// Uncomment when implementing:
-			// got := tt.security.GetExternalHost()
-			// if got != tt.want {
-			// 	t.Errorf("Security.GetExternalHost() = %v, want %v", got, tt.want)
-			// }
-
-			// For now, skip the test
-			t.Skip("Waiting for GetExternalHost() implementation")
+			got := tt.security.GetExternalHost()
+			if got != tt.want {
+				t.Errorf("Security.GetExternalHost() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

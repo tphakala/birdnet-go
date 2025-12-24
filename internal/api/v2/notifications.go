@@ -654,7 +654,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	service := notification.GetService()
 
 	// Build base URL for links
-	baseURL := notification.BuildBaseURL(c.Settings.Security.Host, c.Settings.WebServer.Port, c.Settings.Security.AutoTLS)
+	baseURL := c.Settings.Security.GetBaseURL(c.Settings.WebServer.Port)
 
 	// Format detection time according to user's time format preference
 	now := time.Now()

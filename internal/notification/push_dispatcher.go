@@ -160,12 +160,12 @@ func registerProvidersWithHealthChecker(pd *pushDispatcher) {
 // warnIfLocalhostWithExternalWebhooks logs a warning if localhost URLs are used with external webhooks.
 // See: https://github.com/tphakala/birdnet-go/issues/1457
 func warnIfLocalhostWithExternalWebhooks(pd *pushDispatcher, settings *conf.Settings) {
-	baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
+	baseURL := settings.Security.GetBaseURL(settings.WebServer.Port)
 	if containsLocalhost(baseURL) && hasExternalWebhooks(pd.providers) {
 		pd.log.Info("detection URLs use localhost with external webhooks",
 			"base_url", baseURL,
 			"note", "External services may not access these URLs",
-			"fix", "Set security.host in config or BIRDNET_HOST environment variable")
+			"fix", "Set security.baseUrl, security.host, or BIRDNET_URL environment variable")
 	}
 }
 
