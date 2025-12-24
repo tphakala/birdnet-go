@@ -188,13 +188,6 @@ webserver:
     rotationday: 0        # day of the week for weekly rotation, 0 = Sunday
 
 security:
-  # baseUrl: Complete external URL for reverse proxy setups.
-  # When set, this URL is used as-is for notifications and OAuth redirects,
-  # ignoring host and autotls settings.
-  # Can also be set via BIRDNET_URL environment variable.
-  # Example: "https://birdnet.example.com:5500"
-  # baseurl: ""
-
   # host is used for:
   # - AutoTLS certificate generation (when autotls: true)
   # - OAuth redirect URLs (when using social authentication)

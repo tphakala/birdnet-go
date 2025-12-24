@@ -351,9 +351,8 @@ func TestSecurity_GetBaseURL_ConcurrentAccess(t *testing.T) {
 
 	// Launch multiple goroutines that all call GetBaseURL concurrently
 	for i := range numConcurrentGoroutines {
-		idx := i
 		wg.Go(func() {
-			results[idx] = security.GetBaseURL(testPortCustom)
+			results[i] = security.GetBaseURL(testPortCustom)
 		})
 	}
 
@@ -378,9 +377,8 @@ func TestSecurity_GetHostnameForCertificates_ConcurrentAccess(t *testing.T) {
 	results := make([]string, numConcurrentGoroutines)
 
 	for i := range numConcurrentGoroutines {
-		idx := i
 		wg.Go(func() {
-			results[idx] = security.GetHostnameForCertificates()
+			results[i] = security.GetHostnameForCertificates()
 		})
 	}
 
@@ -406,9 +404,8 @@ func TestSecurity_GetExternalHost_ConcurrentAccess(t *testing.T) {
 	results := make([]string, numConcurrentGoroutines)
 
 	for i := range numConcurrentGoroutines {
-		idx := i
 		wg.Go(func() {
-			results[idx] = security.GetExternalHost()
+			results[i] = security.GetExternalHost()
 		})
 	}
 
