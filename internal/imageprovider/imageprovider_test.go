@@ -470,8 +470,9 @@ func TestCreateDefaultCache(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "CreateDefaultCache() error")
 	require.NotNil(t, cache, "CreateDefaultCache() returned nil cache")
-	closeErr := cache.Close()
-	assert.NoError(t, closeErr, "Failed to close cache")
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 }
 
 // TestBirdImageEstimateSize tests the BirdImage size estimation
@@ -532,7 +533,7 @@ func setupFailingCacheTest(t *testing.T, failGetCache, failSaveCache, failGetAll
 	cache.SetImageProvider(mockProvider)
 
 	t.Cleanup(func() {
-		require.NoError(t, cache.Close(), "Failed to close cache")
+		assert.NoError(t, cache.Close(), "Failed to close cache")
 	})
 
 	return cache
