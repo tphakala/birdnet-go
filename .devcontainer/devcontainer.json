@@ -26,6 +26,8 @@
 	"remoteUser": "dev-user",
 	"updateRemoteUserUID": true,
 	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
+	// Uncomment if using devcontainer-cli-port-forwarder
+	// "initializeCommand": "python3 .devcontainer/devcontainer-cli-port-forwarder/forwarder.py verbose &",
 	"customizations": {
 		"vscode": {
 			"extensions": [

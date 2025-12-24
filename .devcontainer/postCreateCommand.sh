@@ -10,7 +10,7 @@ sudo apt-get update -q
 sudo apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
 
 # Install development tools (git is already included)
-sudo apt-get install -y nano vim curl wget git dialog build-essential fish
+sudo apt-get install -y nano vim curl wget git dialog build-essential fish socat
 
 # Clone TensorFlow source for compilation (headers needed for CGO)
 echo "Setting up TensorFlow source..."
