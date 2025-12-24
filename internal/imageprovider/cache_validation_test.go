@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -134,14 +133,10 @@ func TestNegativeCaching(t *testing.T) {
 
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
 
 	// Test repeated requests for non-existent species
@@ -153,9 +148,7 @@ func TestNegativeCaching(t *testing.T) {
 		// Make 5 requests for non-existent species
 		for range 5 {
 			_, err := cache.Get("Imaginary species")
-			if !errors.Is(err, imageprovider.ErrImageNotFound) {
-				t.Errorf("Expected ErrImageNotFound, got %v", err)
-			}
+			require.ErrorIs(t, err, imageprovider.ErrImageNotFound, "Expected ErrImageNotFound")
 		}
 
 		// With negative caching implemented, only first request should hit API
@@ -163,9 +156,7 @@ func TestNegativeCaching(t *testing.T) {
 		t.Logf("API calls for non-existent species: %d (with negative caching)", apiCalls)
 
 		// Verify negative caching is working
-		if apiCalls != 1 {
-			t.Errorf("Expected 1 API call with negative caching, got %d", apiCalls)
-		}
+		assert.Equal(t, int64(1), apiCalls, "Expected 1 API call with negative caching")
 	})
 }
 
@@ -187,26 +178,21 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	// Pre-populate with stale entry
 	staleTime := time.Now().Add(-15 * 24 * time.Hour)
 	species := "Turdus merula"
-	if err := mockStore.SaveImageCache(&datastore.ImageCache{
+	err = mockStore.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   "wikimedia",
 		URL:            "http://example.com/old.jpg",
 		CachedAt:       staleTime,
-	}); err != nil {
-		t.Fatalf("Failed to save stale cache entry: %v", err)
-	}
+	})
+	require.NoError(t, err, "Failed to save stale cache entry")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
 
 	// Wait for background refresh to potentially start
@@ -217,27 +203,19 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	img, err := cache.Get(species)
 	duration := time.Since(start)
 
-	if err != nil {
-		t.Fatalf("Failed to get image: %v", err)
-	}
+	require.NoError(t, err, "Failed to get image")
 
 	// Should return quickly (not wait for background refresh)
-	if duration > 10*time.Millisecond {
-		t.Errorf("User request took too long: %v, expected < 10ms", duration)
-	}
+	assert.LessOrEqual(t, duration, 10*time.Millisecond, "User request took too long, expected < 10ms")
 
 	// Should have returned stale data
-	if img.URL != "http://example.com/old.jpg" {
-		t.Errorf("Expected stale URL, got %s", img.URL)
-	}
+	assert.Equal(t, "http://example.com/old.jpg", img.URL, "Expected stale URL")
 
 	// Wait for background refresh to complete
 	time.Sleep(200 * time.Millisecond)
 
 	// Check that background refresh happened
-	if mockProvider.getBackgroundFetchCount() == 0 {
-		t.Error("Expected background refresh to occur")
-	}
+	assert.Positive(t, mockProvider.getBackgroundFetchCount(), "Expected background refresh to occur")
 
 	t.Logf("User fetches: %d, Background fetches: %d",
 		mockProvider.getUserFetchCount(), mockProvider.getBackgroundFetchCount())
@@ -252,14 +230,10 @@ func TestCacheMetrics(t *testing.T) {
 
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
 
 	// Track metrics before and after operations
@@ -269,17 +243,13 @@ func TestCacheMetrics(t *testing.T) {
 	// First fetch each species
 	for _, s := range species {
 		_, err := cache.Get(s)
-		if err != nil {
-			t.Errorf("Failed to get %s: %v", s, err)
-		}
+		require.NoError(t, err, "Failed to get %s", s)
 	}
 
 	// Fetch again (should be cache hits)
 	for _, s := range species {
 		_, err := cache.Get(s)
-		if err != nil {
-			t.Errorf("Failed to get %s: %v", s, err)
-		}
+		require.NoError(t, err, "Failed to get %s", s)
 	}
 
 	// Log the results

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -73,14 +75,10 @@ func testMosquittoTLSConnection(t *testing.T) {
 	}
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	client, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
 	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
@@ -88,13 +86,9 @@ func testMosquittoTLSConnection(t *testing.T) {
 
 	// Test connection
 	err = client.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Failed to connect to Mosquitto TLS broker: %v", err) //nolint:misspell // Mosquitto is the correct name of the MQTT broker
-	}
+	require.NoError(t, err, "Failed to connect to Mosquitto TLS broker") //nolint:misspell // Mosquitto is the correct name of the MQTT broker
 
-	if !client.IsConnected() {
-		t.Fatal("Client reports not connected after successful connection")
-	}
+	require.True(t, client.IsConnected(), "Client reports not connected after successful connection")
 
 	// Test publishing
 	testMessage := "Hello from TLS test - Mosquitto" //nolint:misspell // Mosquitto is the correct name of the MQTT broker
@@ -124,14 +118,10 @@ func testHiveMQTLSConnection(t *testing.T) {
 	}
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	client, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
 	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
@@ -144,12 +134,10 @@ func testHiveMQTLSConnection(t *testing.T) {
 		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "refused") {
 			t.Skipf("HiveMQ broker appears to be unavailable: %v", err)
 		}
-		t.Fatalf("Failed to connect to HiveMQ TLS broker: %v", err)
+		require.NoError(t, err, "Failed to connect to HiveMQ TLS broker")
 	}
 
-	if !client.IsConnected() {
-		t.Fatal("Client reports not connected after successful connection")
-	}
+	require.True(t, client.IsConnected(), "Client reports not connected after successful connection")
 
 	// Test publishing
 	testMessage := "Hello from TLS test - HiveMQ"
@@ -180,14 +168,10 @@ func testSelfSignedCertificate(t *testing.T) {
 	}
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	client, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
 	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
@@ -195,13 +179,9 @@ func testSelfSignedCertificate(t *testing.T) {
 
 	// Test connection - should succeed with InsecureSkipVerify
 	err = client.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Failed to connect with InsecureSkipVerify=true: %v", err)
-	}
+	require.NoError(t, err, "Failed to connect with InsecureSkipVerify=true")
 
-	if !client.IsConnected() {
-		t.Fatal("Client reports not connected after successful connection")
-	}
+	require.True(t, client.IsConnected(), "Client reports not connected after successful connection")
 
 	t.Log("Successfully connected with InsecureSkipVerify enabled")
 
@@ -210,15 +190,11 @@ func testSelfSignedCertificate(t *testing.T) {
 
 	settings.Realtime.MQTT.TLS.InsecureSkipVerify = false
 	client2, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create second MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create second MQTT client")
 	defer client2.Disconnect()
 
 	err = client2.Connect(ctx)
-	if err == nil {
-		t.Fatal("Expected connection to fail with expired certificate, but it succeeded")
-	}
+	require.Error(t, err, "Expected connection to fail with expired certificate, but it succeeded")
 
 	// Verify the error is certificate-related
 	if !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "x509") {
@@ -257,15 +233,11 @@ func testTLSAutoDetection(t *testing.T) {
 			}
 
 			metrics, err := observability.NewMetrics()
-			if err != nil {
-				t.Fatalf("Failed to create metrics: %v", err)
-			}
+			require.NoError(t, err, "Failed to create metrics")
 
 			// Create client - this should auto-detect TLS
 			_, err = NewClient(settings, metrics)
-			if err != nil {
-				t.Fatalf("Failed to create MQTT client: %v", err)
-			}
+			require.NoError(t, err, "Failed to create MQTT client")
 
 			// The auto-detection logic is tested by the successful connections
 			// in other tests. We verify it works by successfully connecting
@@ -298,7 +270,7 @@ func collectTLSTestResults(t *testing.T, resultChan <-chan TestResult, testDone 
 			trackTLSStageResult(&result, stageResults)
 
 		case <-timeout:
-			t.Fatal("Test timed out waiting for results")
+			require.Fail(t, "Test timed out waiting for results")
 			return stageResults
 
 		case <-testDone:
@@ -329,12 +301,10 @@ func trackTLSStageResult(result *TestResult, stageResults map[string]bool) {
 func verifyTLSStageResults(t *testing.T, stageResults map[string]bool) {
 	t.Helper()
 	for _, stage := range tlsConnectionTestStages {
-		if _, ok := stageResults[stage]; !ok {
-			t.Errorf("Stage %s was not tested", stage)
-		}
+		assert.Contains(t, stageResults, stage, "Stage %s was not tested", stage)
 	}
-	if success, ok := stageResults["TCP Connection"]; ok && !success {
-		t.Error("TCP/TLS connection stage failed")
+	if success, ok := stageResults["TCP Connection"]; ok {
+		assert.True(t, success, "TCP/TLS connection stage failed")
 	}
 }
 
@@ -355,14 +325,10 @@ func testTLSConnectionTest(t *testing.T) {
 	}
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	client, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
 	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
@@ -397,27 +363,19 @@ func runTLSConfigValidationTest(t *testing.T, tlsSettings conf.MQTTTLSSettings, 
 	}
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	client, err := NewClient(settings, metrics)
-	if err != nil {
-		t.Fatalf("Failed to create MQTT client: %v", err)
-	}
+	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
 	ctx, cancel := context.WithTimeout(context.Background(), tlsConfigValidationTimeout)
 	defer cancel()
 
 	err = client.Connect(ctx)
-	if err == nil {
-		t.Fatalf("Expected connection to fail with error containing: %s", expectedError)
-	}
+	require.Error(t, err, "Expected connection to fail with error containing: %s", expectedError)
 
-	if !strings.Contains(err.Error(), expectedError) {
-		t.Errorf("Expected error containing %q, got: %v", expectedError, err)
-	}
+	assert.Contains(t, err.Error(), expectedError, "Error message mismatch")
 }
 
 // TestTLSConfigValidation tests validation of TLS configuration options
@@ -461,15 +419,13 @@ func benchmarkMQTTConnection(b *testing.B, settings *conf.Settings, metrics *obs
 
 	for b.Loop() {
 		client, err := NewClient(settings, metrics)
-		if err != nil {
-			b.Fatalf("Failed to create client: %v", err)
-		}
+		require.NoError(b, err, "Failed to create client")
 
 		ctx, cancel := context.WithTimeout(context.Background(), benchmarkConnectionTimeout)
 		err = client.Connect(ctx)
 		if err != nil {
 			cancel()
-			b.Fatalf("Failed to connect: %v", err)
+			require.NoError(b, err, "Failed to connect")
 		}
 
 		cancel()
@@ -486,9 +442,7 @@ func BenchmarkTLSConnection(b *testing.B) {
 	}
 
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		b.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(b, err, "Failed to create metrics")
 
 	b.Run("TLS_Connection", func(b *testing.B) {
 		settings := &conf.Settings{

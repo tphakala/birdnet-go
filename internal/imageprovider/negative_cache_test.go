@@ -111,22 +111,16 @@ func TestNegativeCachePersistence(t *testing.T) {
 
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache1, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache1.SetImageProvider(mockProvider)
 
 	// Get a not-found species
 	species := "Persisticus negative"
 	_, err = cache1.Get(species)
-	if !errors.Is(err, imageprovider.ErrImageNotFound) {
-		t.Errorf("Expected ErrImageNotFound, got %v", err)
-	}
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound, "Expected ErrImageNotFound")
 
 	// Verify it was saved to DB
 	dbEntries := mockStore.GetAllTestEntries()
@@ -139,24 +133,18 @@ func TestNegativeCachePersistence(t *testing.T) {
 		}
 	}
 
-	if !foundNegative {
-		t.Error("Negative cache entry was not saved to DB")
-	}
+	assert.True(t, foundNegative, "Negative cache entry was not saved to DB")
 
 	// Create new cache instance (simulating restart)
 	cache2, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create second cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create second cache")
 	cache2.SetImageProvider(mockProvider)
 
 	mockProvider.resetCounters()
 
 	// Request same species - should load negative entry from DB if not expired
 	_, err = cache2.Get(species)
-	if !errors.Is(err, imageprovider.ErrImageNotFound) {
-		t.Errorf("Expected ErrImageNotFound from cached negative entry, got %v", err)
-	}
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound, "Expected ErrImageNotFound from cached negative entry")
 
 	// Check API calls - if negative cache was loaded from DB, should be 0
 	// (Unless the 15-minute TTL expired, which is unlikely in test)

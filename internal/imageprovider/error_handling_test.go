@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -21,7 +22,7 @@ func verifyEnhancedError(t *testing.T, err error, expectCategory errors.ErrorCat
 			return // Accept sentinel error as valid
 		}
 		// Any other non-enhanced error is a test failure
-		t.Errorf("Expected enhanced error or ErrImageNotFound, got: %v", err)
+		require.Fail(t, "Expected enhanced error or ErrImageNotFound", "got: %v", err)
 		return
 	}
 
@@ -100,11 +101,9 @@ func TestErrorContextData(t *testing.T) {
 	mockStore := newMockStore()
 	metrics, _ := observability.NewMetrics()
 	cache, _ := imageprovider.CreateDefaultCache(metrics, mockStore)
-	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 	cache.SetImageProvider(mockProvider)
 
 	_, err := cache.Get("Turdus merula")

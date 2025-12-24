@@ -449,46 +449,30 @@ func TestBirdImageCacheError(t *testing.T) {
 	mockProvider := &mockImageProvider{shouldFail: true}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create default cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
 	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
+		closeErr := cache.Close()
+		assert.NoError(t, closeErr, "Failed to close cache")
 	}()
 
 	_, err = cache.Get("Turdus merula")
-	if err == nil {
-		t.Error("BirdImageCache.Get() error = nil, want error")
-	}
+	assert.Error(t, err, "BirdImageCache.Get() error = nil, want error")
 }
 
 // TestCreateDefaultCache tests creating a default cache
 func TestCreateDefaultCache(t *testing.T) {
 	t.Parallel()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 	mockStore := newMockStore()
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("CreateDefaultCache() error = %v", err)
-	}
-	if cache == nil {
-		t.Error("CreateDefaultCache() returned nil cache")
-	}
-	if cache != nil {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
-	}
+	require.NoError(t, err, "CreateDefaultCache() error")
+	require.NotNil(t, cache, "CreateDefaultCache() returned nil cache")
+	closeErr := cache.Close()
+	assert.NoError(t, closeErr, "Failed to close cache")
 }
 
 // TestBirdImageEstimateSize tests the BirdImage size estimation
@@ -504,9 +488,7 @@ func TestBirdImageEstimateSize(t *testing.T) {
 	}
 
 	size := img.EstimateSize()
-	if size <= 0 {
-		t.Errorf("BirdImage.EstimateSize() = %d, want > 0", size)
-	}
+	assert.Positive(t, size, "BirdImage.EstimateSize() should be > 0")
 }
 
 // TestBirdImageCacheMemoryUsage tests the cache memory usage calculation
@@ -514,36 +496,25 @@ func TestBirdImageCacheMemoryUsage(t *testing.T) {
 	t.Parallel()
 	mockProvider := &mockImageProvider{}
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 	mockStore := newMockStore()
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create default cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
 	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
+		closeErr := cache.Close()
+		assert.NoError(t, closeErr, "Failed to close cache")
 	}()
 
 	// Add some entries to the cache
 	_, err = cache.Get("Turdus merula")
-	if err != nil {
-		t.Fatalf("Failed to get 'Turdus merula': %v", err)
-	}
+	require.NoError(t, err, "Failed to get 'Turdus merula'")
 
 	_, err = cache.Get("Parus major")
-	if err != nil {
-		t.Fatalf("Failed to get 'Parus major': %v", err)
-	}
+	require.NoError(t, err, "Failed to get 'Parus major'")
 
 	usage := cache.MemoryUsage()
-	if usage <= 0 {
-		t.Errorf("BirdImageCache.MemoryUsage() = %d, want > 0", usage)
-	}
+	assert.Positive(t, usage, "BirdImageCache.MemoryUsage() should be > 0")
 }
 
 // setupFailingCacheTest creates a cache with a failing store for testing database failure scenarios.
@@ -599,35 +570,24 @@ func TestBirdImageCacheNilStore(t *testing.T) {
 	t.Parallel()
 	mockProvider := &mockImageProvider{}
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	// Create cache with nil store
 	cache, err := imageprovider.CreateDefaultCache(metrics, nil)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
 	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
+		closeErr := cache.Close()
+		assert.NoError(t, closeErr, "Failed to close cache")
 	}()
 
 	// Try to get an image
 	got, err := cache.Get("Turdus merula")
-	if err != nil {
-		t.Errorf("BirdImageCache.Get() error = %v", err)
-	}
-	if got.URL == "" {
-		t.Error("BirdImageCache.Get() returned empty URL")
-	}
+	require.NoError(t, err, "BirdImageCache.Get() error")
+	assert.NotEmpty(t, got.URL, "BirdImageCache.Get() returned empty URL")
 
 	// Verify that the provider was called
-	if mockProvider.fetchCounter != 1 {
-		t.Errorf("Provider fetch count = %d, want 1", mockProvider.fetchCounter)
-	}
+	assert.Equal(t, 1, mockProvider.fetchCounter, "Provider fetch count should be 1")
 }
 
 // TestBirdImageCacheRefresh tests the cache refresh functionality
@@ -638,9 +598,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	// Create a cache entry that's older than TTL
 	oldEntry := &datastore.ImageCache{
@@ -655,9 +613,8 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	}
 	t.Logf("Created old entry: CachedAt=%v", oldEntry.CachedAt)
 
-	if err := mockStore.SaveImageCache(oldEntry); err != nil {
-		t.Fatalf("Failed to save old cache entry: %v", err)
-	}
+	err = mockStore.SaveImageCache(oldEntry)
+	require.NoError(t, err, "Failed to save old cache entry")
 
 	// Enable debug mode for the cache
 	settings := conf.Setting()
@@ -665,9 +622,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 
 	// Create cache with default settings
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create default cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create default cache")
 
 	// Set our mock provider
 	cache.SetImageProvider(mockProvider)
@@ -678,29 +633,22 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 
 	// Check if the entry was refreshed
 	refreshed, err := mockStore.GetImageCache(datastore.ImageCacheQuery{ScientificName: "Turdus merula", ProviderName: "wikimedia"})
-	if err != nil {
-		t.Fatalf("Failed to get refreshed cache entry: %v", err)
-	}
-	if refreshed == nil {
-		t.Fatal("Refreshed image cache entry is nil")
-	}
+	require.NoError(t, err, "Failed to get refreshed cache entry")
+	require.NotNil(t, refreshed, "Refreshed image cache entry is nil")
 
 	// Check timestamp was updated
-	if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
-		t.Errorf("Expected CachedAt to be updated after refresh. Old: %v, New: %v",
-			oldEntry.CachedAt, refreshed.CachedAt)
-	}
+	assert.False(t, refreshed.CachedAt.Equal(oldEntry.CachedAt),
+		"Expected CachedAt to be updated after refresh. Old: %v, New: %v",
+		oldEntry.CachedAt, refreshed.CachedAt)
 
 	// Check URL was changed
-	if refreshed.URL == oldEntry.URL {
-		t.Errorf("Expected URL to be different after refresh. Old: %s, New: %s",
-			oldEntry.URL, refreshed.URL)
-	}
+	assert.NotEqual(t, oldEntry.URL, refreshed.URL,
+		"Expected URL to be different after refresh. Old: %s, New: %s",
+		oldEntry.URL, refreshed.URL)
 
 	// Clean up
-	if err := cache.Close(); err != nil {
-		t.Errorf("Failed to close cache: %v", err)
-	}
+	closeErr := cache.Close()
+	assert.NoError(t, closeErr, "Failed to close cache")
 }
 
 // TestConcurrentInitialization tests that concurrent requests for the same species
@@ -713,19 +661,14 @@ func TestConcurrentInitialization(t *testing.T) {
 	}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create default cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
 	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
+		closeErr := cache.Close()
+		assert.NoError(t, closeErr, "Failed to close cache")
 	}()
 
 	// Number of concurrent requests
@@ -760,13 +703,11 @@ func TestConcurrentInitialization(t *testing.T) {
 
 	// Check for errors
 	for err := range errs {
-		t.Errorf("Concurrent request error: %v", err)
+		require.NoError(t, err, "Concurrent request error")
 	}
 
 	// Verify that only one fetch occurred
-	if mockProvider.fetchCounter != 1 {
-		t.Errorf("Expected 1 fetch, got %d fetches", mockProvider.fetchCounter)
-	}
+	assert.Equal(t, 1, mockProvider.fetchCounter, "Expected 1 fetch")
 
 	// Verify that all requests got the same URL
 	var firstURL string
@@ -774,15 +715,13 @@ func TestConcurrentInitialization(t *testing.T) {
 	for url := range results {
 		if urlCount == 0 {
 			firstURL = url
-		} else if url != firstURL {
-			t.Errorf("Got different URLs: first=%s, other=%s", firstURL, url)
+		} else {
+			assert.Equal(t, firstURL, url, "Got different URLs")
 		}
 		urlCount++
 	}
 
-	if urlCount != numRequests {
-		t.Errorf("Expected %d successful results, got %d", numRequests, urlCount)
-	}
+	assert.Equal(t, numRequests, urlCount, "Expected all results to succeed")
 }
 
 // TestInitializationTimeout tests that requests don't wait forever if initialization fails
@@ -794,19 +733,14 @@ func TestInitializationTimeout(t *testing.T) {
 	}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create default cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
 	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
+		closeErr := cache.Close()
+		assert.NoError(t, closeErr, "Failed to close cache")
 	}()
 
 	// Start a long-running fetch in the background
@@ -820,9 +754,7 @@ func TestInitializationTimeout(t *testing.T) {
 	// Try to get the same species - should effectively wait for the ongoing fetch
 	start := time.Now()
 	_, err = cache.Get("Turdus merula") // Second Get call
-	if err != nil {
-		t.Fatalf("Second cache.Get failed: %v", err)
-	}
+	require.NoError(t, err, "Second cache.Get failed")
 	duration := time.Since(start)
 
 	// The first Get call (in background) initiates one fetch.
@@ -839,17 +771,14 @@ func TestInitializationTimeout(t *testing.T) {
 	// Max expected duration can be a bit more than fetch delay for overhead.
 	maxExpectedDuration := mockProvider.fetchDelay + (1 * time.Second)
 
-	if duration < minExpectedWait || duration > maxExpectedDuration {
-		t.Errorf("Second Get call duration outside expected range: %v, expected between %v and %v",
-			duration, minExpectedWait, maxExpectedDuration)
-	}
+	assert.True(t, duration >= minExpectedWait && duration <= maxExpectedDuration,
+		"Second Get call duration outside expected range: %v, expected between %v and %v",
+		duration, minExpectedWait, maxExpectedDuration)
 
 	// The fetch counter should be 1, due to the initial background fetch.
 	// The second Get call should not trigger a new fetch if it waits for the first.
 	expectedFetches := 1 // Changed from 3
-	if mockProvider.fetchCounter != expectedFetches {
-		t.Errorf("Expected %d fetches, got %d fetches", expectedFetches, mockProvider.fetchCounter)
-	}
+	assert.Equal(t, expectedFetches, mockProvider.fetchCounter, "Expected %d fetches", expectedFetches)
 }
 
 // TestInitializationFailure tests that initialization failure is handled gracefully
@@ -861,37 +790,26 @@ func TestInitializationFailure(t *testing.T) {
 	}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create default cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
 	defer func() {
-		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
-		}
+		closeErr := cache.Close()
+		assert.NoError(t, closeErr, "Failed to close cache")
 	}()
 
 	// Try to get an image - should fail but not leave initialization flag set
 	_, err = cache.Get("Turdus merula")
-	if err == nil {
-		t.Error("Expected error from failed fetch")
-	}
+	require.Error(t, err, "Expected error from failed fetch")
 
 	// Try again immediately - should attempt a new fetch
 	_, err = cache.Get("Turdus merula")
-	if err == nil {
-		t.Error("Expected error from second fetch")
-	}
+	require.Error(t, err, "Expected error from second fetch")
 
 	// Verify that we attempted both fetches
-	if mockProvider.fetchCounter != 2 {
-		t.Errorf("Expected 2 fetches, got %d fetches", mockProvider.fetchCounter)
-	}
+	assert.Equal(t, 2, mockProvider.fetchCounter, "Expected 2 fetches")
 }
 
 // TestUserRequestsNotRateLimited tests that user requests are not subject to rate limiting
@@ -906,14 +824,12 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 	// Create a mock store
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
 	defer func() {
 		if err := cache.Close(); err != nil {
-			t.Errorf("Failed to close cache: %v", err)
+			assert.NoError(t, err, "Failed to close cache")
 		}
 	}()
 
@@ -943,9 +859,7 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 	// If rate limiting was applied (2 req/s), 10 requests would take at least 5 seconds
 	// Without rate limiting, it should complete much faster (allowing for actual API latency)
 	// Increase timeout to 4 seconds to account for network variability
-	if duration > 4*time.Second {
-		t.Errorf("User requests appear to be rate limited. Duration: %v, expected < 4s", duration)
-	}
+	assert.LessOrEqual(t, duration, 4*time.Second, "User requests appear to be rate limited. Duration: %v, expected < 4s", duration)
 
 	t.Logf("10 user requests completed in %v (no rate limiting, threshold: 4s)", duration)
 }
