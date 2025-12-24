@@ -3,12 +3,13 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -29,18 +30,11 @@ func TestMockTransport(t *testing.T) {
 
 		transport.SendEvent(event)
 
-		if count := transport.GetEventCount(); count != 1 {
-			t.Errorf("Expected 1 event, got %d", count)
-		}
+		assert.Equal(t, 1, transport.GetEventCount(), "Expected 1 event")
 
 		captured := transport.GetLastEvent()
-		if captured == nil {
-			t.Fatal("Expected event to be captured")
-		}
-
-		if captured.Message != "test event" {
-			t.Errorf("Expected message 'test event', got %s", captured.Message)
-		}
+		require.NotNil(t, captured, "Expected event to be captured")
+		assert.Equal(t, "test event", captured.Message, "Expected message 'test event'")
 	})
 
 	t.Run("Clear removes all events", func(t *testing.T) {
@@ -53,15 +47,11 @@ func TestMockTransport(t *testing.T) {
 			})
 		}
 
-		if count := transport.GetEventCount(); count != 5 {
-			t.Errorf("Expected 5 events, got %d", count)
-		}
+		assert.Equal(t, 5, transport.GetEventCount(), "Expected 5 events")
 
 		transport.Clear()
 
-		if count := transport.GetEventCount(); count != 0 {
-			t.Errorf("Expected 0 events after clear, got %d", count)
-		}
+		assert.Zero(t, transport.GetEventCount(), "Expected 0 events after clear")
 	})
 
 	t.Run("SetDisabled prevents event capture", func(t *testing.T) {
@@ -71,9 +61,7 @@ func TestMockTransport(t *testing.T) {
 
 		transport.SendEvent(&sentry.Event{Message: "should not be captured"})
 
-		if count := transport.GetEventCount(); count != 0 {
-			t.Errorf("Expected 0 events when disabled, got %d", count)
-		}
+		assert.Zero(t, transport.GetEventCount(), "Expected 0 events when disabled")
 	})
 
 	t.Run("FindEventByMessage locates events", func(t *testing.T) {
@@ -86,16 +74,11 @@ func TestMockTransport(t *testing.T) {
 		}
 
 		found := transport.FindEventByMessage("second")
-		if found == nil {
-			t.Error("Expected to find event with message 'second'")
-		} else if found.Message != "second" {
-			t.Errorf("Found wrong event: %s", found.Message)
-		}
+		require.NotNil(t, found, "Expected to find event with message 'second'")
+		assert.Equal(t, "second", found.Message, "Found wrong event")
 
 		notFound := transport.FindEventByMessage("fourth")
-		if notFound != nil {
-			t.Error("Should not find non-existent event")
-		}
+		assert.Nil(t, notFound, "Should not find non-existent event")
 	})
 
 	t.Run("WaitForEventCount with timeout", func(t *testing.T) {
@@ -106,14 +89,10 @@ func TestMockTransport(t *testing.T) {
 		transport.SendEvent(&sentry.Event{Message: "event1"})
 		transport.SendEvent(&sentry.Event{Message: "event2"})
 
-		if !transport.WaitForEventCount(2, 100*time.Millisecond) {
-			t.Error("Expected WaitForEventCount to succeed immediately")
-		}
+		assert.True(t, transport.WaitForEventCount(2, 100*time.Millisecond), "Expected WaitForEventCount to succeed immediately")
 
 		// Test timeout
-		if transport.WaitForEventCount(5, 50*time.Millisecond) {
-			t.Error("Expected WaitForEventCount to timeout")
-		}
+		assert.False(t, transport.WaitForEventCount(5, 50*time.Millisecond), "Expected WaitForEventCount to timeout")
 	})
 
 	t.Run("FlushWithContext respects cancellation", func(t *testing.T) {
@@ -125,17 +104,13 @@ func TestMockTransport(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		if transport.FlushWithContext(ctx) {
-			t.Error("Expected flush to fail with cancelled context")
-		}
+		assert.False(t, transport.FlushWithContext(ctx), "Expected flush to fail with cancelled context")
 
 		// Test with timeout
 		ctx, cancel = context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
-		if !transport.FlushWithContext(ctx) {
-			t.Error("Expected flush to succeed within timeout")
-		}
+		assert.True(t, transport.FlushWithContext(ctx), "Expected flush to succeed within timeout")
 	})
 }
 
@@ -178,12 +153,12 @@ func TestURLAnonymization(t *testing.T) {
 			t.Parallel()
 			scrubbed := privacy.ScrubMessage(tt.input)
 
-			if tt.notContains != "" && strings.Contains(scrubbed, tt.notContains) {
-				t.Errorf("Scrubbed message should not contain %q, got: %s", tt.notContains, scrubbed)
+			if tt.notContains != "" {
+				assert.NotContains(t, scrubbed, tt.notContains, "Scrubbed message should not contain sensitive data")
 			}
 
-			if tt.contains != "" && !strings.Contains(scrubbed, tt.contains) {
-				t.Errorf("Scrubbed message should contain %q, got: %s", tt.contains, scrubbed)
+			if tt.contains != "" {
+				assert.Contains(t, scrubbed, tt.contains, "Scrubbed message should contain expected pattern")
 			}
 		})
 	}
@@ -226,31 +201,20 @@ func TestEventSummaries(t *testing.T) {
 	}
 
 	summaries := transport.GetEventSummaries()
-	if len(summaries) != len(events) {
-		t.Fatalf("Expected %d summaries, got %d", len(events), len(summaries))
-	}
+	require.Len(t, summaries, len(events), "Expected summaries for all events")
 
 	// Verify first summary
 	s := summaries[0]
-	if s.Message != "Info event" {
-		t.Errorf("Expected message 'Info event', got %s", s.Message)
-	}
-	if s.Level != "info" {
-		t.Errorf("Expected level 'info', got %s", s.Level)
-	}
-	if s.Tags["component"] != "test" {
-		t.Errorf("Expected tag component='test', got %s", s.Tags["component"])
-	}
+	assert.Equal(t, "Info event", s.Message, "Expected message 'Info event'")
+	assert.Equal(t, "info", s.Level, "Expected level 'info'")
+	assert.Equal(t, "test", s.Tags["component"], "Expected tag component='test'")
+
 	count := s.Extra["count"]
 	switch v := count.(type) {
 	case float64:
-		if v != 42 {
-			t.Errorf("Expected extra count=42, got %v", v)
-		}
+		assert.InDelta(t, float64(42), v, 0.001, "Expected extra count=42")
 	case int:
-		if v != 42 {
-			t.Errorf("Expected extra count=42, got %v", v)
-		}
+		assert.Equal(t, 42, v, "Expected extra count=42")
 	default:
 		t.Errorf("Expected extra count to be numeric, got %T: %v", count, count)
 	}
@@ -293,7 +257,5 @@ func TestConcurrentAccess(t *testing.T) {
 
 	// Verify all events were captured
 	expectedCount := numGoroutines * eventsPerGoroutine
-	if count := transport.GetEventCount(); count != expectedCount {
-		t.Errorf("Expected %d events, got %d", expectedCount, count)
-	}
+	assert.Equal(t, expectedCount, transport.GetEventCount(), "Expected all events to be captured")
 }

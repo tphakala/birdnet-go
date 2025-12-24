@@ -2,6 +2,9 @@ package spectrogram
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSizeToPixels(t *testing.T) {
@@ -58,12 +61,11 @@ func TestSizeToPixels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotWidth, err := SizeToPixels(tt.size)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SizeToPixels() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if gotWidth != tt.wantWidth {
-				t.Errorf("SizeToPixels() = %v, want %v", gotWidth, tt.wantWidth)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantWidth, gotWidth)
 			}
 		})
 	}
@@ -123,12 +125,11 @@ func TestPixelsToSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotSize, err := PixelsToSize(tt.width)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("PixelsToSize() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if gotSize != tt.wantSize {
-				t.Errorf("PixelsToSize() = %v, want %v", gotSize, tt.wantSize)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantSize, gotSize)
 			}
 		})
 	}
@@ -138,23 +139,16 @@ func TestGetValidSizes(t *testing.T) {
 	sizes := GetValidSizes()
 
 	// Check that we have exactly 4 sizes
-	if len(sizes) != 4 {
-		t.Errorf("GetValidSizes() returned %d sizes, want 4", len(sizes))
-	}
+	assert.Len(t, sizes, 4)
 
 	// Check that sizes are sorted
 	expected := []string{"lg", "md", "sm", "xl"}
-	for i, size := range sizes {
-		if size != expected[i] {
-			t.Errorf("GetValidSizes()[%d] = %v, want %v", i, size, expected[i])
-		}
-	}
+	assert.Equal(t, expected, sizes)
 
 	// Check that all sizes are valid
 	for _, size := range sizes {
-		if _, err := SizeToPixels(size); err != nil {
-			t.Errorf("GetValidSizes() returned invalid size %v", size)
-		}
+		_, err := SizeToPixels(size)
+		assert.NoError(t, err, "GetValidSizes() returned invalid size %v", size)
 	}
 }
 
@@ -206,12 +200,11 @@ func TestBuildSpectrogramPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := BuildSpectrogramPath(tt.clipPath)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("BuildSpectrogramPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("BuildSpectrogramPath() = %v, want %v", got, tt.want)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
 			}
 		})
 	}
@@ -303,12 +296,11 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := BuildSpectrogramPathWithParams(tt.audioPath, tt.width, tt.raw)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("BuildSpectrogramPathWithParams() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("BuildSpectrogramPathWithParams() = %v, want %v", got, tt.want)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
 			}
 		})
 	}
@@ -319,19 +311,11 @@ func TestSizeToPixelsRoundTrip(t *testing.T) {
 	sizes := GetValidSizes()
 	for _, size := range sizes {
 		width, err := SizeToPixels(size)
-		if err != nil {
-			t.Errorf("SizeToPixels(%v) failed: %v", size, err)
-			continue
-		}
+		require.NoError(t, err, "SizeToPixels(%v) failed", size)
 
 		gotSize, err := PixelsToSize(width)
-		if err != nil {
-			t.Errorf("PixelsToSize(%v) failed: %v", width, err)
-			continue
-		}
+		require.NoError(t, err, "PixelsToSize(%v) failed", width)
 
-		if gotSize != size {
-			t.Errorf("Round trip failed: %v -> %v -> %v", size, width, gotSize)
-		}
+		assert.Equal(t, size, gotSize, "Round trip failed: %v -> %v -> %v", size, width, gotSize)
 	}
 }

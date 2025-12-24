@@ -1,16 +1,13 @@
 package spectrogram
 
 import (
-	"context"
-	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/securefs"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Note: TestPreRenderer_SizeToPixels and TestPreRenderer_BuildSpectrogramPath
@@ -18,173 +15,77 @@ import (
 
 // TestPreRenderer_Submit_FileAlreadyExists tests early file existence check
 func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
-	// Create temp directory
-	tempDir := t.TempDir()
+	pr, env := createMinimalPreRenderer(t, 10)
 
 	// Use a clip path relative to temp dir (this is how it works in production)
-	clipPath := filepath.Join(tempDir, "test.wav")
-	spectrogramPath := filepath.Join(tempDir, "test.png")
+	clipPath := filepath.Join(env.TempDir, "test.wav")
+	spectrogramPath := filepath.Join(env.TempDir, "test.png")
 
 	// Create the spectrogram file (simulating it already exists)
-	if err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o600); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Create PreRenderer
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-
-	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	pr := &PreRenderer{
-		settings: settings,
-		sfs:      sfs,
-		logger:   slog.Default(),
-		ctx:      ctx,
-		cancel:   cancel,
-		jobs:     make(chan *Job, 10),
-	}
+	err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o600)
+	require.NoError(t, err, "Failed to create test file")
 
 	// Submit job for file that already exists
-	job := &Job{
-		PCMData:   []byte{0, 1, 2, 3},
-		ClipPath:  clipPath,
-		NoteID:    1,
-		Timestamp: time.Now(),
-	}
+	job := createTestJob(clipPath, 1)
 
 	// Should return nil (not queued, but not an error)
 	err = pr.Submit(job)
-	if err != nil {
-		t.Errorf("Submit() unexpected error for existing file: %v", err)
-	}
+	require.NoError(t, err, "Submit() unexpected error for existing file")
 
 	// Verify job was not queued
 	select {
 	case <-pr.jobs:
-		t.Error("Submit() queued job for existing file, expected to skip")
+		assert.Fail(t, "Submit() queued job for existing file, expected to skip")
 	default:
 		// Expected: job not queued
 	}
 
 	// Verify stats show skipped
 	stats := pr.GetStats()
-	if stats.Skipped != 1 {
-		t.Errorf("Submit() skipped count = %d, want 1", stats.Skipped)
-	}
+	assert.Equal(t, int64(1), stats.Skipped, "Submit() skipped count")
 }
 
 // TestPreRenderer_Submit_Success tests successful job submission
 func TestPreRenderer_Submit_Success(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	pr, env := createMinimalPreRenderer(t, 10)
 
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-
-	pr := &PreRenderer{
-		settings: settings,
-		logger:   slog.Default(),
-		ctx:      ctx,
-		cancel:   cancel,
-		jobs:     make(chan *Job, 10),
-	}
-
-	job := &Job{
-		PCMData:   []byte{0, 1, 2, 3},
-		ClipPath:  filepath.Join(tempDir, "nonexistent.wav"),
-		NoteID:    1,
-		Timestamp: time.Now(),
-	}
+	job := createTestJob(filepath.Join(env.TempDir, "nonexistent.wav"), 1)
 
 	err := pr.Submit(job)
-	if err != nil {
-		t.Errorf("Submit() unexpected error: %v", err)
-	}
+	require.NoError(t, err, "Submit() unexpected error")
 
 	// Verify job was queued
 	select {
 	case queuedJob := <-pr.jobs:
-		if queuedJob.NoteID != job.NoteID {
-			t.Errorf("Submit() queued wrong job, got NoteID %d, want %d", queuedJob.NoteID, job.NoteID)
-		}
+		assert.Equal(t, job.NoteID, queuedJob.NoteID, "Submit() queued wrong job")
 	case <-time.After(100 * time.Millisecond):
-		t.Error("Submit() did not queue job within timeout")
+		assert.Fail(t, "Submit() did not queue job within timeout")
 	}
 
 	// Verify stats
 	stats := pr.GetStats()
-	if stats.Queued != 1 {
-		t.Errorf("Submit() queued count = %d, want 1", stats.Queued)
-	}
+	assert.Equal(t, int64(1), stats.Queued, "Submit() queued count")
 }
 
 // TestPreRenderer_Submit_QueueFull tests queue overflow behavior
 func TestPreRenderer_Submit_QueueFull(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-
-	// Create PreRenderer with very small queue
-	pr := &PreRenderer{
-		settings: settings,
-		logger:   slog.Default(),
-		ctx:      ctx,
-		cancel:   cancel,
-		jobs:     make(chan *Job, 1), // Only 1 slot
-	}
+	// Create PreRenderer with very small queue (1 slot)
+	pr, env := createMinimalPreRenderer(t, 1)
 
 	// Fill the queue
-	job1 := &Job{
-		PCMData:   []byte{0},
-		ClipPath:  filepath.Join(tempDir, "test1.wav"),
-		NoteID:    1,
-		Timestamp: time.Now(),
-	}
+	job1 := createTestJob(filepath.Join(env.TempDir, "test1.wav"), 1)
 	_ = pr.Submit(job1)
 
 	// Try to submit when full
-	job2 := &Job{
-		PCMData:   []byte{1},
-		ClipPath:  filepath.Join(tempDir, "test2.wav"),
-		NoteID:    2,
-		Timestamp: time.Now(),
-	}
+	job2 := createTestJob(filepath.Join(env.TempDir, "test2.wav"), 2)
 	err := pr.Submit(job2)
-	if err == nil || !errors.Is(err, ErrQueueFull) {
-		t.Errorf("Submit() expected ErrQueueFull, got %v", err)
-	}
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrQueueFull, "Submit() expected ErrQueueFull")
 }
 
 // TestPreRenderer_GracefulShutdown tests shutdown with timeout
 func TestPreRenderer_GracefulShutdown(t *testing.T) {
-	ctx := t.Context()
-
-	// Create minimal settings
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.SoxPath = "/usr/bin/sox" // Will fail but that's ok for shutdown test
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Dashboard.Spectrogram.Enabled = true
-	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
-	settings.Realtime.Dashboard.Spectrogram.Raw = true
-
-	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
-
-	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr, _ := createTestPreRenderer(t, nil)
 	pr.Start()
 
 	// Stop and verify graceful shutdown (Start launches workers, Stop cancels and waits)
@@ -196,71 +97,33 @@ func TestPreRenderer_GracefulShutdown(t *testing.T) {
 
 // TestPreRenderer_Stats tests statistics tracking
 func TestPreRenderer_Stats(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-
-	pr := &PreRenderer{
-		settings: settings,
-		logger:   slog.Default(),
-		ctx:      ctx,
-		cancel:   cancel,
-		jobs:     make(chan *Job, 10),
-	}
+	pr, env := createMinimalPreRenderer(t, 10)
 
 	// Initial stats should be zero
 	stats := pr.GetStats()
-	if stats.Queued != 0 || stats.Completed != 0 || stats.Failed != 0 || stats.Skipped != 0 {
-		t.Errorf("Initial stats not zero: %+v", stats)
-	}
+	assert.Equal(t, int64(0), stats.Queued, "Initial Queued stat")
+	assert.Equal(t, int64(0), stats.Completed, "Initial Completed stat")
+	assert.Equal(t, int64(0), stats.Failed, "Initial Failed stat")
+	assert.Equal(t, int64(0), stats.Skipped, "Initial Skipped stat")
 
 	// Queue a job
-	job := &Job{
-		PCMData:   []byte{0},
-		ClipPath:  filepath.Join(tempDir, "test.wav"),
-		NoteID:    1,
-		Timestamp: time.Now(),
-	}
+	job := createTestJob(filepath.Join(env.TempDir, "test.wav"), 1)
 	_ = pr.Submit(job)
 
 	// Stats should show queued
 	stats = pr.GetStats()
-	if stats.Queued != 1 {
-		t.Errorf("Stats queued = %d, want 1", stats.Queued)
-	}
+	assert.Equal(t, int64(1), stats.Queued, "Stats queued after submit")
 }
 
 // TestPreRenderer_Submit_AfterStop tests submit after stop (panic guard)
 func TestPreRenderer_Submit_AfterStop(t *testing.T) {
-	ctx := t.Context()
-
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
-
-	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
-
-	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr, env := createTestPreRenderer(t, nil)
 	pr.Start()
 	pr.Stop() // Closes channel and cancels context
 
-	job := &Job{
-		PCMData:   []byte{0},
-		ClipPath:  filepath.Join(tempDir, "test.wav"),
-		NoteID:    1,
-		Timestamp: time.Now(),
-	}
+	job := createTestJob(filepath.Join(env.TempDir, "test.wav"), 1)
 
 	// Submit after Stop should return error due to cancelled context
-	err = pr.Submit(job)
-	if err == nil {
-		t.Fatal("Expected error after Stop(), got nil")
-	}
+	err := pr.Submit(job)
+	assert.Error(t, err, "Expected error after Stop()")
 }

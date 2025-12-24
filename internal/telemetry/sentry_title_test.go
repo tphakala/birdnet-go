@@ -2,8 +2,9 @@ package telemetry
 
 import (
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseErrorType(t *testing.T) {
@@ -97,9 +98,7 @@ func TestParseErrorType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseErrorType(tt.errMsg)
-			if result != tt.expected {
-				t.Errorf("parseErrorType(%q) = %q, want %q", tt.errMsg, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "parseErrorType(%q) should return expected value", tt.errMsg)
 		})
 	}
 }
@@ -160,9 +159,7 @@ func TestTitleCaseComponent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := titleCaseComponent(tt.component)
-			if result != tt.expected {
-				t.Errorf("titleCaseComponent(%q) = %q, want %q", tt.component, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "titleCaseComponent(%q) should return expected value", tt.component)
 		})
 	}
 }
@@ -221,10 +218,7 @@ func TestGenerateErrorTitle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := generateErrorTitle(tt.err.Error(), tt.component)
-			if result != tt.expected {
-				t.Errorf("generateErrorTitle(errMsg=%q, component=%q) = %q, want %q",
-					tt.err.Error(), tt.component, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "generateErrorTitle should return expected value")
 		})
 	}
 }
@@ -260,10 +254,7 @@ func TestGenerateErrorTitleRealWorldExamples(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := generateErrorTitle(tt.err.Error(), tt.component)
-			if result != tt.expected {
-				t.Errorf("generateErrorTitle(errMsg=%q, component=%q) = %q, want %q",
-					tt.err.Error(), tt.component, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "generateErrorTitle should return expected value")
 		})
 	}
 }
@@ -305,9 +296,7 @@ func TestParseErrorTypeWithCaseInsensitivity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseErrorType(tt.errMsg)
-			if result != tt.expected {
-				t.Errorf("parseErrorType(%q) = %q, want %q", tt.errMsg, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "parseErrorType should handle case insensitivity")
 		})
 	}
 }
@@ -344,9 +333,7 @@ timeout exceeded`,
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseErrorType(tt.errMsg)
-			if result != tt.expected {
-				t.Errorf("parseErrorType(%q) = %q, want %q", tt.errMsg, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "parseErrorType should handle newlines correctly")
 		})
 	}
 }
@@ -392,9 +379,7 @@ func TestGenerateErrorTitlePrivacy(t *testing.T) {
 
 			// Verify expected patterns are in the title
 			for _, pattern := range tt.shouldContain {
-				if !strings.Contains(result, pattern) {
-					t.Errorf("Title should contain %q, got: %q", pattern, result)
-				}
+				assert.Contains(t, result, pattern, "Title should contain %q", pattern)
 			}
 
 			// The actual PII scrubbing is done by privacy.ScrubMessage() before this function
@@ -430,13 +415,10 @@ func TestCaptureErrorDocumentedFlow(t *testing.T) {
 		t.Logf("Step 3: Generated title: %s", title)
 
 		// Verify no PII in title
-		if strings.Contains(title, "secret.com") || strings.Contains(title, "user@") {
-			t.Fatal("CRITICAL: PII leaked into title!")
-		}
+		assert.NotContains(t, title, "secret.com", "CRITICAL: PII should not leak into title")
+		assert.NotContains(t, title, "user@", "CRITICAL: PII should not leak into title")
 
 		// Verify title is still useful
-		if !strings.Contains(title, "Network:") {
-			t.Error("Title should contain formatted component")
-		}
+		assert.Contains(t, title, "Network:", "Title should contain formatted component")
 	})
 }

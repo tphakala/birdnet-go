@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkRepeatedStatOperationsWithoutCache simulates the real-world scenario
@@ -186,7 +189,7 @@ func BenchmarkCacheOverhead(b *testing.B) {
 	for b.Loop() {
 		// This should hit cache every time
 		_, _ = cache.GetValidatePath(testPath, func(path string) (string, error) {
-			b.Fatal("Should not be called - should use cache")
+			require.Fail(b, "Should not be called - should use cache")
 			return "", nil
 		})
 	}
@@ -291,22 +294,16 @@ func TestCacheHitRate(t *testing.T) {
 
 	// First call should invoke the compute function
 	_, _ = cache.GetValidatePath(testPath, computeFunc)
-	if callCount != 1 {
-		t.Errorf("Expected 1 call, got %d", callCount)
-	}
+	assert.Equal(t, 1, callCount, "Expected 1 call")
 
 	// Subsequent calls should use cache
 	for range 10 {
 		_, _ = cache.GetValidatePath(testPath, computeFunc)
 	}
 
-	if callCount != 1 {
-		t.Errorf("Expected still 1 call after cache hits, got %d", callCount)
-	}
+	assert.Equal(t, 1, callCount, "Expected still 1 call after cache hits")
 
 	// Test stats
 	stats := cache.GetCacheStats()
-	if stats.ValidateTotal != 1 {
-		t.Errorf("Expected 1 cache entry, got %d", stats.ValidateTotal)
-	}
+	assert.Equal(t, 1, stats.ValidateTotal, "Expected 1 cache entry")
 }

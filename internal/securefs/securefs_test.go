@@ -1,12 +1,12 @@
 package securefs
 
 import (
-	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test constant for test file name.
@@ -23,15 +23,12 @@ func setupSecureFS(t *testing.T) (sfs *SecureFS, tempDir string) {
 	t.Logf("Creating test directory: %s", tempDir)
 
 	// Explicitly verify the temp directory exists
-	if _, err := os.Stat(tempDir); err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
+	_, err := os.Stat(tempDir)
+	require.NoError(t, err, "Failed to create temp directory")
 
 	// Create SecureFS with the temp directory
-	sfs, err := New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	sfs, err = New(tempDir)
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	return sfs, tempDir
 }
@@ -42,9 +39,8 @@ func TestSecureFSWriteFile(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	testFile := filepath.Join(tempDir, "test.txt")
-	if err := sfs.WriteFile(testFile, []byte("test data"), 0o600); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
+	err := sfs.WriteFile(testFile, []byte("test data"), 0o600)
+	require.NoError(t, err, "WriteFile failed")
 }
 
 func TestSecureFSExists(t *testing.T) {
@@ -56,12 +52,8 @@ func TestSecureFSExists(t *testing.T) {
 	_ = sfs.WriteFile(testFile, []byte("test"), 0o600)
 
 	exists, err := sfs.Exists(testFile)
-	if err != nil {
-		t.Fatalf("Exists check failed: %v", err)
-	}
-	if !exists {
-		t.Fatal("file should exist")
-	}
+	require.NoError(t, err, "Exists check failed")
+	assert.True(t, exists, "file should exist")
 }
 
 func TestSecureFSReadFile(t *testing.T) {
@@ -74,12 +66,8 @@ func TestSecureFSReadFile(t *testing.T) {
 	_ = sfs.WriteFile(testFile, testData, 0o600)
 
 	data, err := sfs.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("ReadFile failed: %v", err)
-	}
-	if !bytes.Equal(data, testData) {
-		t.Fatalf("got %q, want %q", string(data), string(testData))
-	}
+	require.NoError(t, err, "ReadFile failed")
+	assert.Equal(t, testData, data)
 }
 
 // TestReadFileWithSizeLimit verifies that ReadFile respects the configured max file size
@@ -94,17 +82,12 @@ func TestReadFileWithSizeLimit(t *testing.T) {
 	// Test 1: File within limit should be read successfully
 	smallFile := filepath.Join(tempDir, "small.txt")
 	smallContent := []byte("small content")
-	if err := sfs.WriteFile(smallFile, smallContent, 0o600); err != nil {
-		t.Fatalf("Failed to write small file: %v", err)
-	}
+	err := sfs.WriteFile(smallFile, smallContent, 0o600)
+	require.NoError(t, err, "Failed to write small file")
 
 	data, err := sfs.ReadFile(smallFile)
-	if err != nil {
-		t.Errorf("ReadFile should succeed for file within limit: %v", err)
-	}
-	if !bytes.Equal(data, smallContent) {
-		t.Errorf("Content mismatch: expected %q, got %q", smallContent, data)
-	}
+	require.NoError(t, err, "ReadFile should succeed for file within limit")
+	assert.Equal(t, smallContent, data, "Content mismatch")
 
 	// Test 2: File exceeding limit should return an error
 	largeFile := filepath.Join(tempDir, "large.txt")
@@ -112,14 +95,11 @@ func TestReadFileWithSizeLimit(t *testing.T) {
 	for i := range largeContent {
 		largeContent[i] = 'x'
 	}
-	if err := sfs.WriteFile(largeFile, largeContent, 0o600); err != nil {
-		t.Fatalf("Failed to write large file: %v", err)
-	}
+	err = sfs.WriteFile(largeFile, largeContent, 0o600)
+	require.NoError(t, err, "Failed to write large file")
 
 	_, err = sfs.ReadFile(largeFile)
-	if err == nil {
-		t.Error("ReadFile should have returned an error for file exceeding size limit")
-	}
+	assert.Error(t, err, "ReadFile should have returned an error for file exceeding size limit")
 }
 
 // TestReadFileSizeLimitZeroMeansUnlimited verifies that size limit of 0 means unlimited
@@ -137,17 +117,12 @@ func TestReadFileSizeLimitZeroMeansUnlimited(t *testing.T) {
 	for i := range content {
 		content[i] = byte('a' + i%26)
 	}
-	if err := sfs.WriteFile(testFile, content, 0o600); err != nil {
-		t.Fatalf("Failed to write file: %v", err)
-	}
+	err := sfs.WriteFile(testFile, content, 0o600)
+	require.NoError(t, err, "Failed to write file")
 
 	data, err := sfs.ReadFile(testFile)
-	if err != nil {
-		t.Errorf("ReadFile with 0 (unlimited) size limit should succeed: %v", err)
-	}
-	if len(data) != len(content) {
-		t.Errorf("Content length mismatch: expected %d, got %d", len(content), len(data))
-	}
+	require.NoError(t, err, "ReadFile with 0 (unlimited) size limit should succeed")
+	assert.Len(t, data, len(content), "Content length mismatch")
 }
 
 func TestSecureFSReadFileNonExistent(t *testing.T) {
@@ -156,9 +131,7 @@ func TestSecureFSReadFileNonExistent(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	_, err := sfs.ReadFile(filepath.Join(tempDir, "nonexistent.txt"))
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("expected os.ErrNotExist, got %v", err)
-	}
+	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestSecureFSStat(t *testing.T) {
@@ -171,12 +144,8 @@ func TestSecureFSStat(t *testing.T) {
 	_ = sfs.WriteFile(testFile, testData, 0o600)
 
 	info, err := sfs.Stat(testFile)
-	if err != nil {
-		t.Fatalf("Stat failed: %v", err)
-	}
-	if info.Size() != int64(len(testData)) {
-		t.Fatalf("got size %d, want %d", info.Size(), len(testData))
-	}
+	require.NoError(t, err, "Stat failed")
+	assert.Equal(t, int64(len(testData)), info.Size())
 }
 
 func TestSecureFSOpenFile(t *testing.T) {
@@ -188,9 +157,7 @@ func TestSecureFSOpenFile(t *testing.T) {
 	_ = sfs.WriteFile(testFile, []byte("test"), 0o600)
 
 	file, err := sfs.OpenFile(testFile, os.O_RDONLY, 0)
-	if err != nil {
-		t.Fatalf("OpenFile failed: %v", err)
-	}
+	require.NoError(t, err, "OpenFile failed")
 	_ = file.Close()
 }
 
@@ -202,16 +169,12 @@ func TestSecureFSRemove(t *testing.T) {
 	testFile := filepath.Join(tempDir, "test.txt")
 	_ = sfs.WriteFile(testFile, []byte("test"), 0o600)
 
-	if err := sfs.Remove(testFile); err != nil {
-		t.Fatalf("Remove failed: %v", err)
-	}
+	err := sfs.Remove(testFile)
+	require.NoError(t, err, "Remove failed")
+
 	exists, err := sfs.Exists(testFile)
-	if err != nil {
-		t.Fatalf("Exists check failed: %v", err)
-	}
-	if exists {
-		t.Fatal("file should not exist after removal")
-	}
+	require.NoError(t, err, "Exists check failed")
+	assert.False(t, exists, "file should not exist after removal")
 }
 
 func TestSecureFSDirectoryOperations(t *testing.T) {
@@ -226,37 +189,26 @@ func TestSecureFSDirectoryOperations(t *testing.T) {
 	// Test MkdirAll
 	testDir := filepath.Join(tempDir, "subdir", "nested")
 	err := sfs.MkdirAll(testDir, 0o750)
-	if err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
+	require.NoError(t, err, "MkdirAll failed")
+
 	exists, err := sfs.Exists(testDir)
-	if err != nil {
-		t.Fatalf("Exists check failed with error: %v", err)
-	}
-	if !exists {
-		t.Fatal("MkdirAll failed: directory should exist")
-	}
+	require.NoError(t, err, "Exists check failed")
+	assert.True(t, exists, "directory should exist after MkdirAll")
 
 	// Test file in nested directory
 	nestedFile := filepath.Join(testDir, "nested.txt")
 	nestedData := []byte("nested file data")
 	err = sfs.WriteFile(nestedFile, nestedData, 0o600)
-	if err != nil {
-		t.Fatalf("WriteFile in nested dir failed: %v", err)
-	}
+	require.NoError(t, err, "WriteFile in nested dir failed")
 
 	// Test RemoveAll
 	err = sfs.RemoveAll(filepath.Join(tempDir, "subdir"))
-	if err != nil {
-		t.Fatalf("RemoveAll failed: %v", err)
-	}
+	require.NoError(t, err, "RemoveAll failed")
+
 	exists, err = sfs.Exists(testDir)
-	if err != nil {
-		t.Fatalf("Exists check failed with error: %v", err)
-	}
-	if exists {
-		t.Fatal("RemoveAll failed: directory should not exist")
-	}
+	require.NoError(t, err, "Exists check failed")
+	assert.False(t, exists, "directory should not exist after RemoveAll")
+
 }
 
 func TestSecureFSPathTraversalPrevention(t *testing.T) {
@@ -271,30 +223,18 @@ func TestSecureFSPathTraversalPrevention(t *testing.T) {
 	// Test path traversal prevention
 	traversalPath := filepath.Join(tempDir, "..", "outside.txt")
 	_, err := sfs.RelativePath(traversalPath)
-	if err == nil {
-		t.Fatal("relativePath should have failed on traversal path")
-	}
-	if !strings.Contains(err.Error(), "security error") {
-		t.Errorf("Expected security error message, got: %v", err)
-	}
+	require.Error(t, err, "relativePath should have failed on traversal path")
+	assert.Contains(t, err.Error(), "security error")
 
 	// Attempt to write outside the sandbox
 	err = sfs.WriteFile(traversalPath, []byte("should fail"), 0o600)
-	if err == nil {
-		t.Fatal("WriteFile should have failed for path outside sandbox")
-	}
-	if !strings.Contains(err.Error(), "security error") {
-		t.Errorf("Expected security error message, got: %v", err)
-	}
+	require.Error(t, err, "WriteFile should have failed for path outside sandbox")
+	assert.Contains(t, err.Error(), "security error")
 
 	// Attempt to read outside the sandbox
 	_, err = sfs.ReadFile(traversalPath)
-	if err == nil {
-		t.Fatal("ReadFile should have failed for path outside sandbox")
-	}
-	if !strings.Contains(err.Error(), "security error") {
-		t.Errorf("Expected security error message, got: %v", err)
-	}
+	require.Error(t, err, "ReadFile should have failed for path outside sandbox")
+	assert.Contains(t, err.Error(), "security error")
 }
 
 func TestIsPathWithinBaseValid(t *testing.T) {
@@ -303,12 +243,8 @@ func TestIsPathWithinBaseValid(t *testing.T) {
 
 	validPath := filepath.Join(tempDir, "file.txt")
 	isWithin, err := IsPathWithinBase(tempDir, validPath)
-	if err != nil {
-		t.Fatalf("IsPathWithinBase failed: %v", err)
-	}
-	if !isWithin {
-		t.Fatal("valid path should be within base")
-	}
+	require.NoError(t, err, "IsPathWithinBase failed")
+	assert.True(t, isWithin, "valid path should be within base")
 }
 
 func TestIsPathWithinBaseInvalid(t *testing.T) {
@@ -317,12 +253,8 @@ func TestIsPathWithinBaseInvalid(t *testing.T) {
 
 	invalidPath := filepath.Join(tempDir, "..", "outside.txt")
 	isWithin, err := IsPathWithinBase(tempDir, invalidPath)
-	if err != nil {
-		t.Fatalf("IsPathWithinBase failed: %v", err)
-	}
-	if isWithin {
-		t.Fatal("traversal path should not be within base")
-	}
+	require.NoError(t, err, "IsPathWithinBase failed")
+	assert.False(t, isWithin, "traversal path should not be within base")
 }
 
 func TestIsPathWithinBaseSamePath(t *testing.T) {
@@ -330,12 +262,8 @@ func TestIsPathWithinBaseSamePath(t *testing.T) {
 	_, tempDir := setupSecureFS(t)
 
 	isWithin, err := IsPathWithinBase(tempDir, tempDir)
-	if err != nil {
-		t.Fatalf("IsPathWithinBase failed: %v", err)
-	}
-	if !isWithin {
-		t.Fatal("same path should be within base")
-	}
+	require.NoError(t, err, "IsPathWithinBase failed")
+	assert.True(t, isWithin, "same path should be within base")
 }
 
 func TestIsPathWithinBaseSymlinkEscape(t *testing.T) {
@@ -353,9 +281,7 @@ func TestIsPathWithinBaseSymlinkEscape(t *testing.T) {
 
 	escapePath := filepath.Join(symlinkPath, "secret.txt")
 	isWithin, _ := IsPathWithinBase(tempDir, escapePath)
-	if isWithin {
-		t.Error("failed to detect symlink escape")
-	}
+	assert.False(t, isWithin, "should detect symlink escape")
 }
 
 // setupSymlinkTest creates the directory structure for symlink escape testing
@@ -363,20 +289,17 @@ func setupSymlinkTest(t *testing.T, tempDir string) (outsideDir, symlinkPath str
 	t.Helper()
 
 	insideDir := filepath.Join(tempDir, "inside")
-	if err := os.Mkdir(insideDir, 0o750); err != nil {
-		t.Fatalf("Failed to create test directory: %v", err)
-	}
+	err := os.Mkdir(insideDir, 0o750)
+	require.NoError(t, err, "Failed to create test directory")
 
 	outsideDir = filepath.Join(os.TempDir(), "securefs_test_outside")
-	if err := os.MkdirAll(outsideDir, 0o750); err != nil {
-		t.Fatalf("Failed to create outside test directory: %v", err)
-	}
+	err = os.MkdirAll(outsideDir, 0o750)
+	require.NoError(t, err, "Failed to create outside test directory")
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
 
 	outsideFile := filepath.Join(outsideDir, "secret.txt")
-	if err := os.WriteFile(outsideFile, []byte("secret data"), 0o600); err != nil {
-		t.Fatalf("Failed to create outside test file: %v", err)
-	}
+	err = os.WriteFile(outsideFile, []byte("secret data"), 0o600)
+	require.NoError(t, err, "Failed to create outside test file")
 
 	symlinkPath = filepath.Join(insideDir, "symlink_escape")
 	if err := os.Symlink(outsideDir, symlinkPath); err != nil {
@@ -395,20 +318,13 @@ func TestIsPathValidWithinBase(t *testing.T) {
 	// Test with valid path
 	validPath := filepath.Join(tempDir, "valid.txt")
 	err := IsPathValidWithinBase(tempDir, validPath)
-	if err != nil {
-		t.Fatalf("IsPathValidWithinBase failed for valid path: %v", err)
-	}
+	require.NoError(t, err, "IsPathValidWithinBase failed for valid path")
 
 	// Test with invalid path
 	invalidPath := filepath.Join(tempDir, "..", "outside.txt")
 	err = IsPathValidWithinBase(tempDir, invalidPath)
-	if err == nil {
-		t.Fatal("IsPathValidWithinBase should have failed for invalid path")
-	}
-	// Verify the error type or message
-	if !strings.Contains(err.Error(), "security error") {
-		t.Errorf("Expected security error message, got: %v", err)
-	}
+	require.Error(t, err, "IsPathValidWithinBase should have failed for invalid path")
+	assert.Contains(t, err.Error(), "security error")
 }
 
 // TestReadlinkWithinSandbox verifies that Readlink works for symlinks within the sandbox
@@ -419,25 +335,18 @@ func TestReadlinkWithinSandbox(t *testing.T) {
 
 	// Create a target file within the sandbox
 	targetFile := filepath.Join(tempDir, "target.txt")
-	if err := os.WriteFile(targetFile, []byte("target content"), 0o600); err != nil {
-		t.Fatalf("Failed to create target file: %v", err)
-	}
+	err := os.WriteFile(targetFile, []byte("target content"), 0o600)
+	require.NoError(t, err, "Failed to create target file")
 
 	// Create a symlink pointing to the target (using relative path)
 	symlinkPath := filepath.Join(tempDir, "link.txt")
-	if err := os.Symlink("target.txt", symlinkPath); err != nil {
-		t.Fatalf("Failed to create symlink: %v", err)
-	}
+	err = os.Symlink("target.txt", symlinkPath)
+	require.NoError(t, err, "Failed to create symlink")
 
 	// Test Readlink - should return the relative target
 	target, err := sfs.Readlink(symlinkPath)
-	if err != nil {
-		t.Fatalf("Readlink failed for valid symlink within sandbox: %v", err)
-	}
-
-	if target != "target.txt" {
-		t.Errorf("Expected target 'target.txt', got '%s'", target)
-	}
+	require.NoError(t, err, "Readlink failed for valid symlink within sandbox")
+	assert.Equal(t, "target.txt", target)
 }
 
 // TestReadlinkReturnsTargetString verifies that Readlink returns the symlink target
@@ -451,31 +360,21 @@ func TestReadlinkReturnsTargetString(t *testing.T) {
 
 	// Test 1: Symlink with absolute target - Readlink should return the target string
 	absSymlink := filepath.Join(tempDir, "abs_link.txt")
-	if err := os.Symlink("/etc/passwd", absSymlink); err != nil {
-		t.Fatalf("Failed to create absolute symlink: %v", err)
-	}
+	err := os.Symlink("/etc/passwd", absSymlink)
+	require.NoError(t, err, "Failed to create absolute symlink")
 
 	target, err := sfs.Readlink(absSymlink)
-	if err != nil {
-		t.Errorf("Readlink should return target string, got error: %v", err)
-	}
-	if target != "/etc/passwd" {
-		t.Errorf("Expected target '/etc/passwd', got '%s'", target)
-	}
+	require.NoError(t, err, "Readlink should return target string")
+	assert.Equal(t, "/etc/passwd", target)
 
 	// Test 2: Symlink with relative escaping target - Readlink should return the target string
 	relEscapeSymlink := filepath.Join(tempDir, "rel_escape.txt")
-	if err := os.Symlink("../../etc/passwd", relEscapeSymlink); err != nil {
-		t.Fatalf("Failed to create relative escaping symlink: %v", err)
-	}
+	err = os.Symlink("../../etc/passwd", relEscapeSymlink)
+	require.NoError(t, err, "Failed to create relative escaping symlink")
 
 	target, err = sfs.Readlink(relEscapeSymlink)
-	if err != nil {
-		t.Errorf("Readlink should return target string, got error: %v", err)
-	}
-	if target != "../../etc/passwd" {
-		t.Errorf("Expected target '../../etc/passwd', got '%s'", target)
-	}
+	require.NoError(t, err, "Readlink should return target string")
+	assert.Equal(t, "../../etc/passwd", target)
 }
 
 // TestReadDir verifies the ReadDir function
@@ -491,13 +390,8 @@ func TestReadDir(t *testing.T) {
 
 	// Read directory
 	entries, err := sfs.ReadDir(tempDir)
-	if err != nil {
-		t.Fatalf("ReadDir failed: %v", err)
-	}
-
-	if len(entries) != 3 {
-		t.Errorf("Expected 3 entries, got %d", len(entries))
-	}
+	require.NoError(t, err, "ReadDir failed")
+	assert.Len(t, entries, 3, "Expected 3 entries")
 
 	// Verify entry names
 	names := make(map[string]bool)
@@ -505,9 +399,9 @@ func TestReadDir(t *testing.T) {
 		names[entry.Name()] = true
 	}
 
-	if !names["file1.txt"] || !names["file2.txt"] || !names["subdir"] {
-		t.Errorf("Missing expected entries: %v", names)
-	}
+	assert.True(t, names["file1.txt"], "Missing file1.txt")
+	assert.True(t, names["file2.txt"], "Missing file2.txt")
+	assert.True(t, names["subdir"], "Missing subdir")
 }
 
 // TestParentPath verifies the ParentPath function
@@ -518,29 +412,20 @@ func TestParentPath(t *testing.T) {
 
 	// Create a nested directory
 	nested := filepath.Join(tempDir, "a", "b", "c")
-	if err := sfs.MkdirAll(nested, 0o750); err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
+	err := sfs.MkdirAll(nested, 0o750)
+	require.NoError(t, err, "MkdirAll failed")
 
 	// Test ParentPath
 	parent, err := sfs.ParentPath(nested)
-	if err != nil {
-		t.Fatalf("ParentPath failed: %v", err)
-	}
+	require.NoError(t, err, "ParentPath failed")
 
 	expected := filepath.Join(tempDir, "a", "b")
-	if parent != expected {
-		t.Errorf("Expected '%s', got '%s'", expected, parent)
-	}
+	assert.Equal(t, expected, parent)
 
 	// Test root returns empty
 	rootParent, err := sfs.ParentPath(tempDir)
-	if err != nil {
-		t.Fatalf("ParentPath for root failed: %v", err)
-	}
-	if rootParent != "" {
-		t.Errorf("Expected empty string for root parent, got '%s'", rootParent)
-	}
+	require.NoError(t, err, "ParentPath for root failed")
+	assert.Empty(t, rootParent, "Expected empty string for root parent")
 }
 
 // TestLstat verifies the Lstat function
@@ -551,23 +436,14 @@ func TestLstat(t *testing.T) {
 
 	// Create a file
 	testFile := filepath.Join(tempDir, "test.txt")
-	if err := sfs.WriteFile(testFile, []byte("test content"), 0o600); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
+	err := sfs.WriteFile(testFile, []byte("test content"), 0o600)
+	require.NoError(t, err, "WriteFile failed")
 
 	// Lstat should work for regular files
 	info, err := sfs.Lstat(testFile)
-	if err != nil {
-		t.Fatalf("Lstat failed: %v", err)
-	}
-
-	if info.Name() != testFileName {
-		t.Errorf("Expected name '%s', got '%s'", testFileName, info.Name())
-	}
-
-	if info.Mode()&os.ModeSymlink != 0 {
-		t.Error("Regular file should not have symlink mode")
-	}
+	require.NoError(t, err, "Lstat failed")
+	assert.Equal(t, testFileName, info.Name())
+	assert.Equal(t, os.FileMode(0), info.Mode()&os.ModeSymlink, "Regular file should not have symlink mode")
 }
 
 // TestStatRel verifies the StatRel function
@@ -577,25 +453,17 @@ func TestStatRel(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	// Create a file
-	if err := sfs.WriteFile(filepath.Join(tempDir, "test.txt"), []byte("content"), 0o600); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
+	err := sfs.WriteFile(filepath.Join(tempDir, "test.txt"), []byte("content"), 0o600)
+	require.NoError(t, err, "WriteFile failed")
 
 	// StatRel with relative path
 	info, err := sfs.StatRel("test.txt")
-	if err != nil {
-		t.Fatalf("StatRel failed: %v", err)
-	}
-
-	if info.Name() != testFileName {
-		t.Errorf("Expected name '%s', got '%s'", testFileName, info.Name())
-	}
+	require.NoError(t, err, "StatRel failed")
+	assert.Equal(t, testFileName, info.Name())
 
 	// StatRel with traversal should fail
 	_, err = sfs.StatRel("../outside.txt")
-	if err == nil {
-		t.Error("StatRel should fail for path traversal attempt")
-	}
+	assert.Error(t, err, "StatRel should fail for path traversal attempt")
 }
 
 // TestCacheUtilities verifies cache utility functions
@@ -612,17 +480,13 @@ func TestCacheUtilities(t *testing.T) {
 	// Test GetCacheStats
 	stats := sfs.GetCacheStats()
 	// Just verify it doesn't panic and returns something
-	if stats.AbsPathTotal < 0 {
-		t.Error("Invalid cache stats")
-	}
+	assert.GreaterOrEqual(t, stats.AbsPathTotal, 0, "Invalid cache stats")
 
 	// Test ClearExpiredCache doesn't panic
 	sfs.ClearExpiredCache()
 
 	// Test BaseDir
-	if sfs.BaseDir() != tempDir {
-		t.Errorf("Expected BaseDir '%s', got '%s'", tempDir, sfs.BaseDir())
-	}
+	assert.Equal(t, tempDir, sfs.BaseDir())
 }
 
 // TestExistsNoErr verifies ExistsNoErr convenience function
@@ -636,19 +500,13 @@ func TestExistsNoErr(t *testing.T) {
 	_ = sfs.WriteFile(testFile, []byte("content"), 0o600)
 
 	// Should return true for existing file
-	if !sfs.ExistsNoErr(testFile) {
-		t.Error("ExistsNoErr should return true for existing file")
-	}
+	assert.True(t, sfs.ExistsNoErr(testFile), "ExistsNoErr should return true for existing file")
 
 	// Should return false for non-existent file
-	if sfs.ExistsNoErr(filepath.Join(tempDir, "nonexistent.txt")) {
-		t.Error("ExistsNoErr should return false for non-existent file")
-	}
+	assert.False(t, sfs.ExistsNoErr(filepath.Join(tempDir, "nonexistent.txt")), "ExistsNoErr should return false for non-existent file")
 
 	// Should return false for invalid path (traversal)
-	if sfs.ExistsNoErr(filepath.Join(tempDir, "..", "outside.txt")) {
-		t.Error("ExistsNoErr should return false for path traversal")
-	}
+	assert.False(t, sfs.ExistsNoErr(filepath.Join(tempDir, "..", "outside.txt")), "ExistsNoErr should return false for path traversal")
 }
 
 // TestGetMaxReadFileSize verifies the getter method
@@ -658,15 +516,11 @@ func TestGetMaxReadFileSize(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	// Default should be 0
-	if sfs.GetMaxReadFileSize() != 0 {
-		t.Errorf("Expected default 0, got %d", sfs.GetMaxReadFileSize())
-	}
+	assert.Equal(t, int64(0), sfs.GetMaxReadFileSize(), "Expected default 0")
 
 	// Set and verify
 	sfs.SetMaxReadFileSize(1024)
-	if sfs.GetMaxReadFileSize() != 1024 {
-		t.Errorf("Expected 1024, got %d", sfs.GetMaxReadFileSize())
-	}
+	assert.Equal(t, int64(1024), sfs.GetMaxReadFileSize())
 }
 
 // TestFollowingEscapingSymlinkFails verifies that while Readlink returns the target,
@@ -678,23 +532,16 @@ func TestFollowingEscapingSymlinkFails(t *testing.T) {
 
 	// Create a symlink with a relative path that would escape the sandbox
 	symlinkPath := filepath.Join(tempDir, "escape.txt")
-	if err := os.Symlink("../../etc/passwd", symlinkPath); err != nil {
-		t.Fatalf("Failed to create symlink: %v", err)
-	}
+	err := os.Symlink("../../etc/passwd", symlinkPath)
+	require.NoError(t, err, "Failed to create symlink")
 
 	// Readlink should succeed (returns the target string)
 	target, err := sfs.Readlink(symlinkPath)
-	if err != nil {
-		t.Fatalf("Readlink failed: %v", err)
-	}
-	if target != "../../etc/passwd" {
-		t.Errorf("Expected target '../../etc/passwd', got '%s'", target)
-	}
+	require.NoError(t, err, "Readlink failed")
+	assert.Equal(t, "../../etc/passwd", target)
 
 	// But trying to Open the symlink should fail because it escapes the sandbox
 	// The security is enforced when following the link, not when reading its target
 	_, err = sfs.Open(symlinkPath)
-	if err == nil {
-		t.Error("Open should have failed for symlink escaping sandbox")
-	}
+	assert.Error(t, err, "Open should have failed for symlink escaping sandbox")
 }

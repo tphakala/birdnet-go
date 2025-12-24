@@ -5,6 +5,9 @@ import (
 	"io/fs"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test constants for path resolution testing.
@@ -26,21 +29,13 @@ func TestGetSymlinkResolutionDoesNotCacheErrors(t *testing.T) {
 
 	// First call - returns error
 	_, err := pc.GetSymlinkResolution("test/path", compute)
-	if err == nil {
-		t.Fatal("expected error on first call")
-	}
+	require.Error(t, err, "expected error on first call")
 
 	// Second call - should retry (not return cached error)
 	resolved, err := pc.GetSymlinkResolution("test/path", compute)
-	if err != nil {
-		t.Errorf("expected success on second call, got error: %v", err)
-	}
-	if resolved != testResolvedPath {
-		t.Errorf("expected '%s', got '%s'", testResolvedPath, resolved)
-	}
-	if callCount != 2 {
-		t.Errorf("expected compute to be called twice, was called %d times", callCount)
-	}
+	require.NoError(t, err, "expected success on second call")
+	assert.Equal(t, testResolvedPath, resolved)
+	assert.Equal(t, 2, callCount, "expected compute to be called twice")
 }
 
 // TestGetStatDoesNotCacheErrors verifies stat errors are not cached
@@ -59,21 +54,14 @@ func TestGetStatDoesNotCacheErrors(t *testing.T) {
 
 	// First call - returns error
 	_, err := pc.GetStat("test/path", compute)
-	if err == nil {
-		t.Fatal("expected error on first call")
-	}
+	require.Error(t, err, "expected error on first call")
 
 	// Second call - should retry (not return cached error)
 	info, err := pc.GetStat("test/path", compute)
-	if err != nil {
-		t.Errorf("expected success on second call, got error: %v", err)
-	}
-	if info == nil || info.Name() != "test.txt" {
-		t.Errorf("expected valid FileInfo with name 'test.txt'")
-	}
-	if callCount != 2 {
-		t.Errorf("expected compute to be called twice, was called %d times", callCount)
-	}
+	require.NoError(t, err, "expected success on second call")
+	require.NotNil(t, info, "expected valid FileInfo")
+	assert.Equal(t, "test.txt", info.Name())
+	assert.Equal(t, 2, callCount, "expected compute to be called twice")
 }
 
 // TestGetAbsPathDoesNotCacheErrors verifies absolute path errors are not cached
@@ -92,21 +80,13 @@ func TestGetAbsPathDoesNotCacheErrors(t *testing.T) {
 
 	// First call - returns error
 	_, err := pc.GetAbsPath("test/path", compute)
-	if err == nil {
-		t.Fatal("expected error on first call")
-	}
+	require.Error(t, err, "expected error on first call")
 
 	// Second call - should retry
 	result, err := pc.GetAbsPath("test/path", compute)
-	if err != nil {
-		t.Errorf("expected success on second call, got error: %v", err)
-	}
-	if result != "/absolute/path" {
-		t.Errorf("expected '/absolute/path', got '%s'", result)
-	}
-	if callCount != 2 {
-		t.Errorf("expected compute to be called twice, was called %d times", callCount)
-	}
+	require.NoError(t, err, "expected success on second call")
+	assert.Equal(t, "/absolute/path", result)
+	assert.Equal(t, 2, callCount, "expected compute to be called twice")
 }
 
 // TestGetValidatePathDoesNotCacheErrors verifies path validation errors are not cached
@@ -125,21 +105,13 @@ func TestGetValidatePathDoesNotCacheErrors(t *testing.T) {
 
 	// First call - returns error
 	_, err := pc.GetValidatePath("test/path", compute)
-	if err == nil {
-		t.Fatal("expected error on first call")
-	}
+	require.Error(t, err, "expected error on first call")
 
 	// Second call - should retry
 	result, err := pc.GetValidatePath("test/path", compute)
-	if err != nil {
-		t.Errorf("expected success on second call, got error: %v", err)
-	}
-	if result != "valid/path" {
-		t.Errorf("expected 'valid/path', got '%s'", result)
-	}
-	if callCount != 2 {
-		t.Errorf("expected compute to be called twice, was called %d times", callCount)
-	}
+	require.NoError(t, err, "expected success on second call")
+	assert.Equal(t, "valid/path", result)
+	assert.Equal(t, 2, callCount, "expected compute to be called twice")
 }
 
 // TestGetWithinBaseDoesNotCacheErrors verifies within-base check errors are not cached
@@ -158,21 +130,13 @@ func TestGetWithinBaseDoesNotCacheErrors(t *testing.T) {
 
 	// First call - returns error
 	_, err := pc.GetWithinBase("test/key", compute)
-	if err == nil {
-		t.Fatal("expected error on first call")
-	}
+	require.Error(t, err, "expected error on first call")
 
 	// Second call - should retry
 	result, err := pc.GetWithinBase("test/key", compute)
-	if err != nil {
-		t.Errorf("expected success on second call, got error: %v", err)
-	}
-	if !result {
-		t.Error("expected true, got false")
-	}
-	if callCount != 2 {
-		t.Errorf("expected compute to be called twice, was called %d times", callCount)
-	}
+	require.NoError(t, err, "expected success on second call")
+	assert.True(t, result)
+	assert.Equal(t, 2, callCount, "expected compute to be called twice")
 }
 
 // TestSuccessResultsCached verifies that successful results ARE cached
@@ -188,22 +152,14 @@ func TestSuccessResultsCached(t *testing.T) {
 
 		// First call
 		resolved1, err := pc.GetSymlinkResolution("test/path", compute)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.NoError(t, err)
 
 		// Second call - should return cached result
 		resolved2, err := pc.GetSymlinkResolution("test/path", compute)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.NoError(t, err)
 
-		if resolved1 != resolved2 {
-			t.Errorf("results don't match: %s vs %s", resolved1, resolved2)
-		}
-		if callCount != 1 {
-			t.Errorf("expected compute to be called once (cached), was called %d times", callCount)
-		}
+		assert.Equal(t, resolved1, resolved2, "results should match")
+		assert.Equal(t, 1, callCount, "expected compute to be called once (cached)")
 	})
 }
 
@@ -222,24 +178,18 @@ func TestCacheEntryExpiration(t *testing.T) {
 
 		// First call
 		_, _ = pc.GetSymlinkResolution("test/path", compute)
-		if callCount != 1 {
-			t.Errorf("expected 1 call, got %d", callCount)
-		}
+		assert.Equal(t, 1, callCount, "expected 1 call")
 
 		// Second call - should be cached
 		_, _ = pc.GetSymlinkResolution("test/path", compute)
-		if callCount != 1 {
-			t.Errorf("expected 1 call (cached), got %d", callCount)
-		}
+		assert.Equal(t, 1, callCount, "expected 1 call (cached)")
 
 		// Wait for expiration
 		time.Sleep(20 * time.Millisecond)
 
 		// Third call - cache should be expired
 		_, _ = pc.GetSymlinkResolution("test/path", compute)
-		if callCount != 2 {
-			t.Errorf("expected 2 calls (expired), got %d", callCount)
-		}
+		assert.Equal(t, 2, callCount, "expected 2 calls (expired)")
 	})
 }
 

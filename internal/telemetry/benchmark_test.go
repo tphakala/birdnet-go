@@ -66,8 +66,6 @@ func BenchmarkTelemetryEnabled(b *testing.B) {
 	config, cleanup := InitForTesting(b)
 	defer cleanup()
 
-	InitializeErrorIntegration()
-
 	b.Run("CaptureError", func(b *testing.B) {
 		err := fmt.Errorf("benchmark error")
 		b.ReportAllocs()

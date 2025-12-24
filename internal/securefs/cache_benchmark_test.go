@@ -4,6 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkValidateRelativePathWithoutCache benchmarks path validation without caching
@@ -132,37 +135,27 @@ func TestCacheExpiration(t *testing.T) {
 	result1, err1 := cache.GetValidatePath(testPath, func(path string) (string, error) {
 		return filepath.Clean(path), nil
 	})
-	if err1 != nil {
-		t.Fatal(err1)
-	}
-	
+	require.NoError(t, err1)
+
 	// Second call should use cache
 	result2, err2 := cache.GetValidatePath(testPath, func(path string) (string, error) {
-		t.Fatal("Should not be called - should use cache")
+		require.Fail(t, "Should not be called - should use cache")
 		return "", nil
 	})
-	if err2 != nil {
-		t.Fatal(err2)
-	}
-	
-	if result1 != result2 {
-		t.Errorf("Expected cached result %s, got %s", result1, result2)
-	}
-	
+	require.NoError(t, err2)
+
+	assert.Equal(t, result1, result2, "Expected cached result to match")
+
 	// Wait for expiration
 	time.Sleep(150 * time.Millisecond)
-	
+
 	// Third call should recompute after expiration
 	result3, err3 := cache.GetValidatePath(testPath, func(path string) (string, error) {
 		return filepath.Clean(path), nil
 	})
-	if err3 != nil {
-		t.Fatal(err3)
-	}
-	
-	if result1 != result3 {
-		t.Errorf("Expected recomputed result %s, got %s", result1, result3)
-	}
+	require.NoError(t, err3)
+
+	assert.Equal(t, result1, result3, "Expected recomputed result to match")
 }
 
 // TestCacheStats tests that cache statistics are collected correctly
@@ -178,7 +171,5 @@ func TestCacheStats(t *testing.T) {
 	}
 	
 	stats := cache.GetCacheStats()
-	if stats.ValidateTotal != 3 {
-		t.Errorf("Expected 3 validate cache entries, got %d", stats.ValidateTotal)
-	}
+	assert.Equal(t, 3, stats.ValidateTotal, "Expected 3 validate cache entries")
 }

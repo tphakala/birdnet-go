@@ -5,12 +5,17 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitManager_ConcurrentInitialization(t *testing.T) {
 	t.Parallel()
 
-	// This test verifies thread-safe initialization under concurrent access
+	// This test verifies thread-safe initialization under concurrent access.
+	// Note: Uses singleton manager which tests actual production behavior.
+	// State may persist from previous tests, which is acceptable for concurrency testing.
 	manager := GetInitManager()
 
 	// Launch multiple goroutines trying to initialize components
@@ -23,18 +28,14 @@ func TestInitManager_ConcurrentInitialization(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			err := manager.InitializeErrorIntegrationSafe()
-			if err != nil {
-				t.Errorf("Error integration initialization failed: %v", err)
-			}
+			assert.NoError(t, err, "Error integration initialization should succeed")
 		}()
 	}
 	wg.Wait()
 
 	// Verify it was only initialized once
 	state := manager.GetComponentState("error_integration")
-	if state != InitStateCompleted {
-		t.Errorf("Expected error_integration state to be completed, got %s", state)
-	}
+	assert.Equal(t, InitStateCompleted, state, "Expected error_integration state to be completed")
 }
 
 func TestInitManager_StateTransitions(t *testing.T) {
@@ -50,21 +51,18 @@ func TestInitManager_StateTransitions(t *testing.T) {
 
 	for _, comp := range components {
 		// Initial state should be not started
-		if state := manager.GetComponentState(comp); state != InitStateNotStarted {
-			t.Errorf("Expected %s initial state to be not_started, got %s", comp, state)
-		}
+		state := manager.GetComponentState(comp)
+		assert.Equal(t, InitStateNotStarted, state, "Expected %s initial state to be not_started", comp)
 	}
 
 	// Simulate state changes
 	manager.errorIntegration.Store(int32(InitStateInProgress))
-	if state := manager.GetComponentState("error_integration"); state != InitStateInProgress {
-		t.Errorf("Expected error_integration state to be in_progress, got %s", state)
-	}
+	state := manager.GetComponentState("error_integration")
+	assert.Equal(t, InitStateInProgress, state, "Expected error_integration state to be in_progress")
 
 	manager.errorIntegration.Store(int32(InitStateCompleted))
-	if state := manager.GetComponentState("error_integration"); state != InitStateCompleted {
-		t.Errorf("Expected error_integration state to be completed, got %s", state)
-	}
+	state = manager.GetComponentState("error_integration")
+	assert.Equal(t, InitStateCompleted, state, "Expected error_integration state to be completed")
 }
 
 func TestInitManager_WaitForComponent(t *testing.T) {
@@ -77,20 +75,16 @@ func TestInitManager_WaitForComponent(t *testing.T) {
 	// Test immediate success
 	manager.errorIntegration.Store(int32(InitStateCompleted))
 	err := manager.WaitForComponent("error_integration", InitStateCompleted, 100*time.Millisecond)
-	if err != nil {
-		t.Errorf("WaitForComponent failed for completed component: %v", err)
-	}
+	require.NoError(t, err, "WaitForComponent should succeed for completed component")
 
 	// Test timeout
 	err = manager.WaitForComponent("sentry", InitStateCompleted, 50*time.Millisecond)
-	if err == nil {
-		t.Error("Expected timeout error, got nil")
-	}
+	require.Error(t, err, "Expected timeout error")
 
 	// Test state change during wait using channel synchronization
 	ready := make(chan struct{})
 	stateSet := make(chan struct{})
-	
+
 	go func() {
 		<-ready
 		manager.eventBus.Store(int32(InitStateCompleted))
@@ -102,18 +96,16 @@ func TestInitManager_WaitForComponent(t *testing.T) {
 	go func() {
 		waitErr <- manager.WaitForComponent("event_bus", InitStateCompleted, 100*time.Millisecond)
 	}()
-	
+
 	// Signal to set the state
 	close(ready)
-	
+
 	// Wait for state to be set
 	<-stateSet
-	
+
 	// Get the result
 	err = <-waitErr
-	if err != nil {
-		t.Errorf("WaitForComponent failed when state changed: %v", err)
-	}
+	assert.NoError(t, err, "WaitForComponent should succeed when state changes")
 }
 
 func TestInitManager_HealthCheck(t *testing.T) {
@@ -133,27 +125,13 @@ func TestInitManager_HealthCheck(t *testing.T) {
 	health := manager.HealthCheck()
 
 	// Check overall health (should be false due to failed component)
-	if health.Healthy {
-		t.Error("Expected overall health to be false")
-	}
+	assert.False(t, health.Healthy, "Expected overall health to be false")
 
 	// Check individual component health
-	if health.Components["error_integration"].Healthy != true {
-		t.Error("Expected error_integration to be healthy")
-	}
-
-	if health.Components["sentry"].Healthy != false {
-		t.Error("Expected sentry to be unhealthy")
-	}
-
-	if health.Components["sentry"].Error == "" {
-		t.Error("Expected sentry to have error message")
-	}
-
-	if health.Components["event_bus"].State != InitStateInProgress {
-		t.Errorf("Expected event_bus state to be in_progress, got %s", 
-			health.Components["event_bus"].State)
-	}
+	assert.True(t, health.Components["error_integration"].Healthy, "Expected error_integration to be healthy")
+	assert.False(t, health.Components["sentry"].Healthy, "Expected sentry to be unhealthy")
+	assert.NotEmpty(t, health.Components["sentry"].Error, "Expected sentry to have error message")
+	assert.Equal(t, InitStateInProgress, health.Components["event_bus"].State, "Expected event_bus state to be in_progress")
 }
 
 func TestInitManager_Shutdown(t *testing.T) {
@@ -173,18 +151,14 @@ func TestInitManager_Shutdown(t *testing.T) {
 	defer cancel()
 
 	err := manager.Shutdown(ctx)
-	if err != nil {
-		t.Errorf("Shutdown failed: %v", err)
-	}
+	require.NoError(t, err, "Shutdown should succeed")
 
 	// Verify states were reset
-	if state := manager.GetComponentState("worker"); state != InitStateNotStarted {
-		t.Errorf("Expected worker state to be not_started after shutdown, got %s", state)
-	}
+	state := manager.GetComponentState("worker")
+	assert.Equal(t, InitStateNotStarted, state, "Expected worker state to be not_started after shutdown")
 
-	if state := manager.GetComponentState("event_bus"); state != InitStateNotStarted {
-		t.Errorf("Expected event_bus state to be not_started after shutdown, got %s", state)
-	}
+	state = manager.GetComponentState("event_bus")
+	assert.Equal(t, InitStateNotStarted, state, "Expected event_bus state to be not_started after shutdown")
 }
 
 // Test concurrent access to health checks
@@ -192,7 +166,7 @@ func TestInitManager_ConcurrentHealthChecks(t *testing.T) {
 	t.Parallel()
 
 	manager := GetInitManager()
-	
+
 	// Set up some initial state
 	manager.errorIntegration.Store(int32(InitStateCompleted))
 	manager.sentryClient.Store(int32(InitStateInProgress))
@@ -205,15 +179,15 @@ func TestInitManager_ConcurrentHealthChecks(t *testing.T) {
 	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			
+
 			// Perform multiple operations
 			for j := range 10 {
 				health := manager.HealthCheck()
 				_ = health.Healthy
-				
+
 				state := manager.GetComponentState("error_integration")
 				_ = state.String()
-				
+
 				// Simulate state changes
 				if j%3 == 0 {
 					manager.eventBus.Store(int32(InitStateInProgress))

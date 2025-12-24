@@ -5,6 +5,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExtractTraceID_TypedContextKeys(t *testing.T) {
@@ -46,9 +49,7 @@ func TestExtractTraceID_TypedContextKeys(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := extractTraceID(tt.ctx)
-			if result != tt.expected {
-				t.Errorf("extractTraceID() = %q, want %q", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "extractTraceID() should return expected value")
 		})
 	}
 }
@@ -62,27 +63,18 @@ func TestExtractTraceID_NoCollisionWithStringKeys(t *testing.T) {
 	ctx := context.WithValue(context.Background(), "trace-id", "should-not-match")
 
 	result := extractTraceID(ctx)
-	if result != "" {
-		t.Errorf("extractTraceID() should not match plain string key, got %q", result)
-	}
+	assert.Empty(t, result, "extractTraceID() should not match plain string key")
 }
 
 func TestSentryDSN_ValidFormat(t *testing.T) {
 	t.Parallel()
 
 	// Verify the DSN constant exists and has valid format
-	if sentryDSN == "" {
-		t.Error("sentryDSN should not be empty")
-	}
+	assert.NotEmpty(t, sentryDSN, "sentryDSN should not be empty")
 
 	// Verify it's a valid Sentry DSN format (https://<key>@<host>/<project>)
-	if !strings.HasPrefix(sentryDSN, "https://") {
-		t.Errorf("sentryDSN should start with https://, got %s", sentryDSN)
-	}
-
-	if !strings.Contains(sentryDSN, "@") {
-		t.Error("sentryDSN should contain @ symbol")
-	}
+	assert.True(t, strings.HasPrefix(sentryDSN, "https://"), "sentryDSN should start with https://, got %s", sentryDSN)
+	assert.Contains(t, sentryDSN, "@", "sentryDSN should contain @ symbol")
 
 	// Note: .sentry.io check assumes cloud Sentry; self-hosted endpoints
 	// would not have this domain. Log a warning instead of failing.
@@ -98,9 +90,7 @@ func TestIsTelemetryEnabled_InTestMode(t *testing.T) {
 	EnableTestMode()
 	defer DisableTestMode()
 
-	if !IsTelemetryEnabled() {
-		t.Error("IsTelemetryEnabled() should return true in test mode")
-	}
+	assert.True(t, IsTelemetryEnabled(), "IsTelemetryEnabled() should return true in test mode")
 }
 
 func TestFlushWithContext_Success(t *testing.T) {
@@ -108,9 +98,7 @@ func TestFlushWithContext_Success(t *testing.T) {
 
 	ctx := context.Background()
 	err := flushWithContext(ctx, "test_operation")
-	if err != nil {
-		t.Errorf("flushWithContext should succeed with valid context, got: %v", err)
-	}
+	assert.NoError(t, err, "flushWithContext should succeed with valid context")
 }
 
 func TestFlushWithContext_CancelledContext(t *testing.T) {
@@ -120,9 +108,7 @@ func TestFlushWithContext_CancelledContext(t *testing.T) {
 	cancel() // Cancel immediately
 
 	err := flushWithContext(ctx, "test_operation")
-	if err == nil {
-		t.Error("flushWithContext should return error for cancelled context")
-	}
+	assert.Error(t, err, "flushWithContext should return error for cancelled context")
 }
 
 func TestGetGlobalInitCoordinator_ThreadSafe(t *testing.T) {
@@ -167,14 +153,11 @@ func TestInitCoordinator_OnceInitialization(t *testing.T) {
 	// Collect all results
 	var first *InitCoordinator
 	for coord := range coordinators {
-		if coord == nil {
-			t.Error("InitializeCoordinatorOnce returned nil")
-			continue
-		}
+		require.NotNil(t, coord, "InitializeCoordinatorOnce returned nil")
 		if first == nil {
 			first = coord
-		} else if coord != first {
-			t.Error("InitializeCoordinatorOnce returned different instances")
+		} else {
+			assert.Same(t, first, coord, "InitializeCoordinatorOnce should return the same instance")
 		}
 	}
 }

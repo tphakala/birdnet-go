@@ -7,6 +7,9 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFIFOPath(t *testing.T) {
@@ -16,11 +19,10 @@ func TestFIFOPath(t *testing.T) {
 
 	if runtime.GOOS == osWindows {
 		expectedPrefix := `\\.\pipe\`
-		if len(fifoPath) < len(expectedPrefix) || fifoPath[:len(expectedPrefix)] != expectedPrefix {
-			t.Errorf("Expected Windows named pipe path to start with %s, got %s", expectedPrefix, fifoPath)
-		}
-	} else if fifoPath != path {
-		t.Errorf("Expected Unix path to be unchanged, got %s, want %s", fifoPath, path)
+		require.GreaterOrEqual(t, len(fifoPath), len(expectedPrefix), "Windows pipe path too short")
+		assert.Equal(t, expectedPrefix, fifoPath[:len(expectedPrefix)], "Windows named pipe should start with prefix")
+	} else {
+		assert.Equal(t, path, fifoPath, "Unix path should be unchanged")
 	}
 
 	// Test with Windows-style path
@@ -28,9 +30,8 @@ func TestFIFOPath(t *testing.T) {
 	winFifoPath := GetFIFOPath(winPath)
 	if runtime.GOOS == osWindows {
 		expectedPrefix := `\\.\pipe\`
-		if len(winFifoPath) < len(expectedPrefix) || winFifoPath[:len(expectedPrefix)] != expectedPrefix {
-			t.Errorf("Expected Windows pipe name to start with %s, got %s", expectedPrefix, winFifoPath)
-		}
+		require.GreaterOrEqual(t, len(winFifoPath), len(expectedPrefix), "Windows pipe path too short")
+		assert.Equal(t, expectedPrefix, winFifoPath[:len(expectedPrefix)], "Windows pipe name should start with prefix")
 	}
 }
 
@@ -41,9 +42,7 @@ func TestFIFOOperations(t *testing.T) {
 
 	tempDir := t.TempDir()
 	sfs, err := New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	fifoPath := filepath.Join(tempDir, "test.fifo")
@@ -54,9 +53,8 @@ func TestFIFOOperations(t *testing.T) {
 
 	t.Run("PathValidation", func(t *testing.T) {
 		invalidPath := filepath.Join(tempDir, "..", "outside.fifo")
-		if err := sfs.CreateFIFO(invalidPath); err == nil {
-			t.Fatal("CreateFIFO should have failed for path outside sandbox")
-		}
+		err := sfs.CreateFIFO(invalidPath)
+		require.Error(t, err, "CreateFIFO should have failed for path outside sandbox")
 	})
 
 	t.Run("CreateFIFO", func(t *testing.T) {
@@ -67,15 +65,11 @@ func TestFIFOOperations(t *testing.T) {
 func testFIFOPipeName(t *testing.T, sfs *SecureFS) {
 	t.Helper()
 
-	if sfs.GetPipeName() != "" {
-		t.Errorf("Expected empty pipe name initially, got %s", sfs.GetPipeName())
-	}
+	assert.Empty(t, sfs.GetPipeName(), "Expected empty pipe name initially")
 
 	expectedPipeName := "test-pipe-name"
 	sfs.SetPipeName(expectedPipeName)
-	if sfs.GetPipeName() != expectedPipeName {
-		t.Errorf("Expected pipe name %s, got %s", expectedPipeName, sfs.GetPipeName())
-	}
+	assert.Equal(t, expectedPipeName, sfs.GetPipeName())
 }
 
 func testFIFOCreation(t *testing.T, sfs *SecureFS, fifoPath string) {
@@ -98,12 +92,8 @@ func testFIFOCreation(t *testing.T, sfs *SecureFS, fifoPath string) {
 	}
 
 	exists, err := sfs.Exists(fifoPath)
-	if err != nil {
-		t.Fatalf("Exists check failed: %v", err)
-	}
-	if !exists {
-		t.Fatal("FIFO should exist after creation")
-	}
+	require.NoError(t, err, "Exists check failed")
+	assert.True(t, exists, "FIFO should exist after creation")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
