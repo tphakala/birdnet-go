@@ -1,4 +1,4 @@
-//nolint:gocognit // Table-driven tests have expected complexity
+//nolint:gocognit,dupl // Table-driven tests have expected complexity and similar structures
 package notification
 
 import (
@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"golang.org/x/sync/semaphore"
 )
@@ -39,26 +41,38 @@ func (f *fakeProvider) Send(ctx context.Context, n *Notification) error {
 	return nil
 }
 
-func TestPushDispatcher_ForwardsNotification(t *testing.T) {
-	// Ensure no global service initialized
-	// Create isolated service for test
-	svc := NewService(DefaultServiceConfig())
-	if err := SetServiceForTesting(svc); err != nil {
-		svc = GetService()
-		if svc == nil {
-			t.Fatalf("failed to attach to notification service: %v", err)
+// newFakeProvider creates a fake provider for testing.
+func newFakeProvider(name string, enabled bool, types ...Type) *fakeProvider {
+	typeMap := make(map[Type]bool)
+	for _, t := range types {
+		typeMap[t] = true
+	}
+	if len(types) == 0 {
+		typeMap = map[Type]bool{
+			TypeError: true, TypeInfo: true, TypeWarning: true,
+			TypeDetection: true, TypeSystem: true,
 		}
 	}
+	return &fakeProvider{
+		name:    name,
+		enabled: enabled,
+		types:   typeMap,
+		recvCh:  make(chan *Notification, 10),
+	}
+}
 
-	// Setup fake provider that accepts all types
-	fp := &fakeProvider{
-		name:    "fake",
-		enabled: true,
-		types:   map[Type]bool{TypeError: true, TypeInfo: true, TypeWarning: true, TypeDetection: true, TypeSystem: true},
-		recvCh:  make(chan *Notification, 1),
+func TestPushDispatcher_ForwardsNotification(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(DefaultServiceConfig())
+	err := SetServiceForTesting(svc)
+	if err != nil {
+		svc = GetService()
+		require.NotNil(t, svc, "failed to attach to notification service")
 	}
 
-	// Build dispatcher with fake provider
+	fp := newFakeProvider("fake", true)
+
 	d := &pushDispatcher{
 		providers:      []enhancedProvider{{prov: fp, circuitBreaker: nil, filter: conf.PushFilterConfig{}, name: fp.name}},
 		log:            getFileLogger(false),
@@ -68,32 +82,29 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 		defaultTimeout: 200 * time.Millisecond,
 	}
 
-	if err := d.start(); err != nil {
-		t.Fatalf("failed to start dispatcher: %v", err)
-	}
+	err = d.start()
+	require.NoError(t, err, "failed to start dispatcher")
 	defer func() {
 		if d.cancel != nil {
 			d.cancel()
 		}
 	}()
 
-	// Create a notification and expect provider to receive it
-	_, err := svc.Create(TypeInfo, PriorityLow, "Hello", "World")
-	if err != nil {
-		t.Fatalf("create notification failed: %v", err)
-	}
+	_, err = svc.Create(TypeInfo, PriorityLow, "Hello", "World")
+	require.NoError(t, err, "create notification failed")
 
 	select {
 	case n := <-fp.recvCh:
-		if n.Title != "Hello" || n.Message != "World" {
-			t.Fatalf("received wrong notification: %+v", n)
-		}
+		assert.Equal(t, "Hello", n.Title)
+		assert.Equal(t, "World", n.Message)
 	case <-time.After(1 * time.Second):
-		t.Fatalf("timeout waiting for provider to receive notification")
+		require.Fail(t, "timeout waiting for provider to receive notification")
 	}
 }
 
 func TestMatchesProviderFilter_ConfidenceOperators(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		condition  string
@@ -135,12 +146,13 @@ func TestMatchesProviderFilter_ConfidenceOperators(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{
 				MetadataFilters: map[string]any{
 					"confidence": tt.condition,
 				},
 			}
-
 			notif := &Notification{
 				Metadata: map[string]any{
 					"confidence": tt.confidence,
@@ -148,15 +160,15 @@ func TestMatchesProviderFilter_ConfidenceOperators(t *testing.T) {
 			}
 
 			result := MatchesProviderFilter(filter, notif, nil, "test-provider")
-			if result != tt.expected {
-				t.Errorf("condition %q with confidence %v: expected %v, got %v",
-					tt.condition, tt.confidence, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result,
+				"condition %q with confidence %v", tt.condition, tt.confidence)
 		})
 	}
 }
 
 func TestMatchesProviderFilter_ConfidenceErrorCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		condition any
@@ -180,25 +192,24 @@ func TestMatchesProviderFilter_ConfidenceErrorCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{
 				MetadataFilters: map[string]any{
 					"confidence": tt.condition,
 				},
 			}
-
-			notif := &Notification{
-				Metadata: tt.metadata,
-			}
+			notif := &Notification{Metadata: tt.metadata}
 
 			result := MatchesProviderFilter(filter, notif, nil, "test-provider")
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
 func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		confidence any
@@ -214,12 +225,13 @@ func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{
 				MetadataFilters: map[string]any{
 					"confidence": ">0.8",
 				},
 			}
-
 			notif := &Notification{
 				Metadata: map[string]any{
 					"confidence": tt.confidence,
@@ -227,26 +239,22 @@ func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
 			}
 
 			result := MatchesProviderFilter(filter, notif, nil, "test-provider")
-			if result != tt.expected {
-				t.Errorf("confidence type %T with value %v: expected %v, got %v",
-					tt.confidence, tt.confidence, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result,
+				"confidence type %T with value %v", tt.confidence, tt.confidence)
 		})
 	}
 }
 
-// TestPushDispatcher_ConcurrencyLimit verifies that semaphore limits concurrent dispatches
-// and drops notifications when queue is full (due to TryAcquire timeout).
 func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
+	t.Parallel()
+
 	svc := NewService(DefaultServiceConfig())
-	if err := SetServiceForTesting(svc); err != nil {
+	err := SetServiceForTesting(svc)
+	if err != nil {
 		svc = GetService()
-		if svc == nil {
-			t.Fatalf("failed to attach to notification service: %v", err)
-		}
+		require.NotNil(t, svc, "failed to attach to notification service")
 	}
 
-	// Create slow provider that takes 50ms per dispatch
 	slowProvider := &fakeProvider{
 		name:      "slow",
 		enabled:   true,
@@ -255,7 +263,6 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 		sendDelay: 50 * time.Millisecond,
 	}
 
-	// Build dispatcher with limited concurrency (3 concurrent jobs)
 	d := &pushDispatcher{
 		providers:      []enhancedProvider{{prov: slowProvider, circuitBreaker: nil, filter: conf.PushFilterConfig{}, name: slowProvider.name}},
 		log:            getFileLogger(false),
@@ -263,28 +270,23 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 		maxRetries:     0,
 		retryDelay:     10 * time.Millisecond,
 		defaultTimeout: 5 * time.Second,
-		concurrencySem: semaphore.NewWeighted(3), // Limit to 3 concurrent
+		concurrencySem: semaphore.NewWeighted(3),
 	}
 
-	if err := d.start(); err != nil {
-		t.Fatalf("failed to start dispatcher: %v", err)
-	}
+	err = d.start()
+	require.NoError(t, err, "failed to start dispatcher")
 	defer func() {
 		if d.cancel != nil {
 			d.cancel()
 		}
 	}()
 
-	// Send 5 notifications with some spacing to allow queue processing
 	for range 5 {
 		_, err := svc.Create(TypeInfo, PriorityLow, "Test", "Message")
-		if err != nil {
-			t.Fatalf("create notification failed: %v", err)
-		}
-		time.Sleep(10 * time.Millisecond) // Small delay between sends
+		require.NoError(t, err, "create notification failed")
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Wait for dispatches to complete (should get at least some notifications)
 	timeout := time.After(2 * time.Second)
 	received := 0
 	for {
@@ -292,23 +294,20 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 		case <-slowProvider.recvCh:
 			received++
 			if received == 5 {
-				// Got all notifications
 				return
 			}
 		case <-timeout:
-			// With TryAcquire timeout, some notifications may be dropped under load
-			// We should receive at least the number that fit in the semaphore
-			if received < 3 {
-				t.Fatalf("timeout: only received %d notifications, expected at least 3", received)
-			}
+			assert.GreaterOrEqual(t, received, 3,
+				"expected at least 3 notifications, got %d", received)
 			t.Logf("Received %d/5 notifications (some dropped due to queue full)", received)
 			return
 		}
 	}
 }
 
-// TestPushDispatcher_ExponentialBackoff verifies exponential backoff with jitter.
 func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		attempts    int
@@ -322,44 +321,41 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 			attempts:    1,
 			baseDelay:   1 * time.Second,
 			maxDelay:    30 * time.Second,
-			expectedMin: 1 * time.Second,                      // base - 25% jitter
-			expectedMax: 1*time.Second + 250*time.Millisecond, // base + 25% jitter
+			expectedMin: 1 * time.Second,
+			expectedMax: 1*time.Second + 250*time.Millisecond,
 		},
 		{
 			name:        "second_retry",
 			attempts:    2,
 			baseDelay:   1 * time.Second,
 			maxDelay:    30 * time.Second,
-			expectedMin: 1500 * time.Millisecond, // 2s - 25%
-			expectedMax: 2500 * time.Millisecond, // 2s + 25%
+			expectedMin: 1500 * time.Millisecond,
+			expectedMax: 2500 * time.Millisecond,
 		},
 		{
 			name:        "third_retry",
 			attempts:    3,
 			baseDelay:   1 * time.Second,
 			maxDelay:    30 * time.Second,
-			expectedMin: 3 * time.Second, // 4s - 25%
-			expectedMax: 5 * time.Second, // 4s + 25%
+			expectedMin: 3 * time.Second,
+			expectedMax: 5 * time.Second,
 		},
 		{
 			name:        "capped_at_max",
 			attempts:    10,
 			baseDelay:   1 * time.Second,
 			maxDelay:    5 * time.Second,
-			expectedMin: 3750 * time.Millisecond, // 5s - 25%
-			expectedMax: 5 * time.Second,         // capped at maxDelay
+			expectedMin: 3750 * time.Millisecond,
+			expectedMax: 5 * time.Second,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Calculate delay multiple times to verify jitter distribution
+			t.Parallel()
+
 			delays := make([]time.Duration, 100)
 			for i := range 100 {
-				// We can't easily test the actual wait, but we can verify the calculation
-				// by inspecting the logic in waitForRetry
-
-				// Calculate exponential component
 				exponential := tt.baseDelay
 				if tt.attempts > 1 && tt.attempts < maxExponentialAttempts {
 					exponential = tt.baseDelay * (1 << (tt.attempts - 1))
@@ -368,7 +364,6 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 					exponential = tt.maxDelay
 				}
 
-				// Add jitter (mirrors production code for testing)
 				jitterRange := exponential * jitterPercent / 100
 				jitterMax := int64(jitterRange * 2)
 				var jitter time.Duration
@@ -377,23 +372,22 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 				}
 
 				delay := min(max(exponential+jitter, tt.baseDelay), tt.maxDelay)
-
 				delays[i] = delay
 			}
 
-			// Verify delays fall within expected range
 			for _, delay := range delays {
-				if delay < tt.expectedMin || delay > tt.expectedMax {
-					t.Errorf("delay %v outside expected range [%v, %v]",
-						delay, tt.expectedMin, tt.expectedMax)
-				}
+				assert.GreaterOrEqual(t, delay, tt.expectedMin,
+					"delay %v below expected minimum %v", delay, tt.expectedMin)
+				assert.LessOrEqual(t, delay, tt.expectedMax,
+					"delay %v above expected maximum %v", delay, tt.expectedMax)
 			}
 		})
 	}
 }
 
-// TestToFloat_TypeCoverage verifies toFloat handles all numeric types correctly.
 func TestToFloat_TypeCoverage(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    any
@@ -432,19 +426,20 @@ func TestToFloat_TypeCoverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result, ok := toFloat(tt.input)
-			if ok != tt.ok {
-				t.Errorf("expected ok=%v, got ok=%v", tt.ok, ok)
-			}
-			if ok && result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
+			assert.Equal(t, tt.ok, ok)
+			if ok {
+				assert.InDelta(t, tt.expected, result, 0.001)
 			}
 		})
 	}
 }
 
-// TestMatchesProviderFilterWithReason verifies enhanced filter returns correct reasons.
 func TestMatchesProviderFilterWithReason(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		filter         *conf.PushFilterConfig
@@ -522,31 +517,17 @@ func TestMatchesProviderFilterWithReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			match, reason := MatchesProviderFilterWithReason(tt.filter, tt.notification, nil, "test-provider")
-			if match != tt.expectedMatch {
-				t.Errorf("expected match=%v, got match=%v", tt.expectedMatch, match)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, match)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestParseConfidenceOperator tests the confidence operator parsing logic
-//
-// Modern Go 1.25 Test Patterns:
-// - Uses t.Attr() to emit structured test metadata (new in Go 1.25)
-// - Runs tests in parallel with t.Parallel() for better performance
-// - Uses table-driven tests for comprehensive coverage
-// - Tests pure functions with no side effects (ideal for parallel execution)
-//
-// Best Practices for LLMs:
-// - Pure functions (no state, no side effects) are always safe to run in parallel
-// - Use t.Attr() to categorize tests ("unit", "integration", "e2e")
-// - Table-driven tests provide excellent documentation of expected behavior
 func TestParseConfidenceOperator(t *testing.T) {
-	t.Parallel() // Safe: pure function with no shared state
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "parseConfidenceOperator")
 
@@ -577,7 +558,6 @@ func TestParseConfidenceOperator(t *testing.T) {
 		{name: "eq_single_with_spaces", condition: "= 0.8", expectedOp: "=", expectedVal: "0.8"},
 
 		// Edge cases
-		// NOTE: parseConfidenceOperator expects pre-trimmed input (checkConfidenceFilter calls TrimSpace first)
 		{name: "multiple_spaces_after_op", condition: ">=    0.8", expectedOp: ">=", expectedVal: "0.8"},
 		{name: "tabs_after_op", condition: ">=\t0.8", expectedOp: ">=", expectedVal: "0.8"},
 
@@ -590,31 +570,17 @@ func TestParseConfidenceOperator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			op, val := parseConfidenceOperator(tt.condition)
-			if op != tt.expectedOp {
-				t.Errorf("operator: expected %q, got %q", tt.expectedOp, op)
-			}
-			if val != tt.expectedVal {
-				t.Errorf("value: expected %q, got %q", tt.expectedVal, val)
-			}
+			assert.Equal(t, tt.expectedOp, op, "operator mismatch")
+			assert.Equal(t, tt.expectedVal, val, "value mismatch")
 		})
 	}
 }
 
-// TestCompareConfidence tests the confidence comparison logic
-//
-// Modern Go 1.25 Test Patterns:
-// - Parallel execution enabled for pure function testing
-// - Comprehensive edge case coverage (boundary values, invalid operators)
-// - Uses t.Attr() for test categorization
-//
-// Best Practices for LLMs:
-// - Test ALL operators: >, >=, <, <=, =, ==
-// - Test boundary conditions: 0.0, 1.0, negative, over 1.0
-// - Test invalid inputs: empty strings, unknown operators
-// - Pure functions are ideal candidates for parallel testing
 func TestCompareConfidence(t *testing.T) {
-	t.Parallel() // Safe: pure function with no side effects
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "compareConfidence")
 
@@ -667,58 +633,36 @@ func TestCompareConfidence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := compareConfidence(tt.confidence, tt.op, tt.threshold)
-			if result != tt.expected {
-				t.Errorf("compareConfidence(%v, %q, %v) = %v; want %v",
-					tt.confidence, tt.op, tt.threshold, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result,
+				"compareConfidence(%v, %q, %v)", tt.confidence, tt.op, tt.threshold)
 		})
 	}
 }
 
-// TestLogDebug tests the logDebug helper function
-//
-// Modern Go 1.25 Test Patterns:
-// - Tests helper functions that wrap logging
-// - Validates nil-safety (defensive programming)
-// - Uses subtests for logical grouping
-//
-// Best Practices for LLMs:
-// - ALWAYS test nil cases for functions accepting pointers
-// - Logging helpers should never panic
-// - Cannot run in parallel due to logger initialization side effects
 func TestLogDebug(t *testing.T) {
-	// NOT parallel: logger may have shared state
 	t.Attr("category", "unit")
 	t.Attr("function", "logDebug")
 
 	t.Run("nil_logger_no_panic", func(t *testing.T) {
-		// IMPORTANT: nil-safety is critical for defensive programming
-		// logDebug should gracefully handle nil logger
-		logDebug(nil, "test message", "key", "value")
+		// Should not panic with nil logger
+		assert.NotPanics(t, func() {
+			logDebug(nil, "test message", "key", "value")
+		})
 	})
 
 	t.Run("with_logger", func(t *testing.T) {
-		// Verify normal operation with actual logger
 		log := getFileLogger(false)
-		logDebug(log, "test message", "key", "value")
+		assert.NotPanics(t, func() {
+			logDebug(log, "test message", "key", "value")
+		})
 	})
 }
 
-// TestCheckTypeFilter tests the type filter validation
-//
-// Modern Go 1.25 Test Patterns:
-// - Tests refactored helper function extracted from complex function
-// - Parallel execution for independent test cases
-// - Returns named results (matches bool, reason string) - Go best practice
-//
-// Best Practices for LLMs:
-// - Test empty filter (should pass all)
-// - Test single and multiple values
-// - Test mismatches
-// - Named return values improve self-documentation
 func TestCheckTypeFilter(t *testing.T) {
-	t.Parallel() // Safe: no shared state, independent test cases
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "checkTypeFilter")
 
@@ -768,34 +712,20 @@ func TestCheckTypeFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{Types: tt.filterTypes}
 			notif := &Notification{Type: tt.notifType}
 
 			matches, reason := checkTypeFilter(filter, notif, nil, "test-provider")
-
-			if matches != tt.expectedMatch {
-				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, matches)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestCheckPriorityFilter tests the priority filter validation
-//
-// Modern Go 1.25 Test Patterns:
-// - Similar structure to checkTypeFilter (consistent API design)
-// - Parallel-safe testing
-// - Uses testify patterns seen in codebase
-//
-// Best Practices for LLMs:
-// - When refactoring, maintain consistency across similar functions
-// - Test all priority levels: low, medium, high, critical
-// - Verify empty filter behavior
 func TestCheckPriorityFilter(t *testing.T) {
-	t.Parallel() // Safe: no shared state
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "checkPriorityFilter")
 
@@ -838,34 +768,20 @@ func TestCheckPriorityFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{Priorities: tt.filterPriorities}
 			notif := &Notification{Priority: tt.notifPriority}
 
 			matches, reason := checkPriorityFilter(filter, notif, nil, "test-provider")
-
-			if matches != tt.expectedMatch {
-				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, matches)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestCheckComponentFilter tests the component filter validation
-//
-// Modern Go 1.25 Test Patterns:
-// - Third in the trilogy of simple filter functions
-// - Demonstrates refactoring pattern: extract similar logic into separate functions
-// - Parallel-safe, independent test execution
-//
-// Best Practices for LLMs:
-// - Component filtering uses string matching (exact match)
-// - Test empty strings as edge case
-// - Consistent with type/priority filter patterns
 func TestCheckComponentFilter(t *testing.T) {
-	t.Parallel() // Safe: no shared state
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "checkComponentFilter")
 
@@ -908,40 +824,20 @@ func TestCheckComponentFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{Components: tt.filterComponents}
 			notif := &Notification{Component: tt.notifComponent}
 
 			matches, reason := checkComponentFilter(filter, notif, nil, "test-provider")
-
-			if matches != tt.expectedMatch {
-				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, matches)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestCheckConfidenceFilter tests the confidence filter logic
-//
-// Modern Go 1.25 Test Patterns:
-// - Tests complex extracted function (original cognitive complexity was 94!)
-// - Comprehensive error path testing
-// - Parallel execution for all independent cases
-//
-// Best Practices for LLMs:
-// - When testing complex functions, categorize test cases:
-//   - Valid cases (happy path)
-//   - Invalid filter value
-//   - Invalid operators
-//   - Invalid thresholds
-//   - Missing/invalid metadata
-//
-// - Use descriptive test names that explain the scenario
-// - Group related tests with comments
 func TestCheckConfidenceFilter(t *testing.T) {
-	t.Parallel() // Safe: no shared state
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "checkConfidenceFilter")
 
@@ -1049,36 +945,19 @@ func TestCheckConfidenceFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			notif := &Notification{Metadata: tt.metadata}
 
 			matches, reason := checkConfidenceFilter(tt.filterVal, notif, nil, "test-provider")
-
-			if matches != tt.expectedMatch {
-				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, matches)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestCheckExactMetadataMatch tests exact metadata key-value matching
-//
-// Modern Go 1.25 Test Patterns:
-// - Tests type-agnostic comparison using fmt.Sprint()
-// - Covers multiple data types: string, int, float, bool
-// - Parallel-safe pure function
-//
-// Best Practices for LLMs:
-// - When functions compare any types, test ALL common types:
-//   - strings, integers, floats, booleans
-//
-// - Test type coercion (fmt.Sprint converts everything to string)
-// - Test missing keys and empty maps
-// - Document the comparison strategy in comments
 func TestCheckExactMetadataMatch(t *testing.T) {
-	t.Parallel() // Safe: pure function, no shared state
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "checkExactMetadataMatch")
 
@@ -1183,38 +1062,19 @@ func TestCheckExactMetadataMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			notif := &Notification{Metadata: tt.metadata}
 
 			matches, reason := checkExactMetadataMatch(tt.key, tt.expectedVal, notif, nil, "test-provider")
-
-			if matches != tt.expectedMatch {
-				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, matches)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestCheckMetadataFilters tests the metadata filter orchestration
-//
-// Modern Go 1.25 Test Patterns:
-// - Tests orchestration function that coordinates other filters
-// - Integration-style unit tests (calls checkConfidenceFilter + checkExactMetadataMatch)
-// - Parallel execution enabled
-//
-// Best Practices for LLMs:
-// - Orchestration functions should be tested for:
-//   - Empty inputs (no filters)
-//   - Single filter type (confidence OR exact)
-//   - Multiple filter types (confidence AND exact)
-//   - Partial success scenarios (one passes, one fails)
-//
-// - Test early-return behavior (first failure stops processing)
-// - This demonstrates how refactored code enables easier testing
 func TestCheckMetadataFilters(t *testing.T) {
-	t.Parallel() // Safe: orchestration function with no shared state
+	t.Parallel()
 	t.Attr("category", "unit")
 	t.Attr("function", "checkMetadataFilters")
 
@@ -1301,24 +1161,21 @@ func TestCheckMetadataFilters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter := &conf.PushFilterConfig{MetadataFilters: tt.filterMetadata}
 			notif := &Notification{Metadata: tt.notifMetadata}
 
 			matches, reason := checkMetadataFilters(filter, notif, nil, "test-provider")
-
-			if matches != tt.expectedMatch {
-				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
-			}
-			if reason != tt.expectedReason {
-				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
-			}
+			assert.Equal(t, tt.expectedMatch, matches)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }
 
-// TestContainsLocalhost verifies localhost detection in base URLs
 func TestContainsLocalhost(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		baseURL  string
@@ -1330,23 +1187,23 @@ func TestContainsLocalhost(t *testing.T) {
 		{"127.0.0.1", "http://127.0.0.1:8080", true},
 		{"127.0.0.1 no port", "http://127.0.0.1", true},
 		{"external domain", "https://example.com", false},
-		{"internal.local", "http://birdnet.local", false}, // Different function handles this
-		{"192.168.x.x", "http://192.168.1.1", false},      // Not localhost
+		{"internal.local", "http://birdnet.local", false},
+		{"192.168.x.x", "http://192.168.1.1", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := containsLocalhost(tt.baseURL)
-			if result != tt.expected {
-				t.Errorf("containsLocalhost(%q) = %v, expected %v", tt.baseURL, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// TestIsPrivateOrLocalURL verifies private/local network detection
 func TestIsPrivateOrLocalURL(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		urlStr   string
@@ -1384,35 +1241,35 @@ func TestIsPrivateOrLocalURL(t *testing.T) {
 		{".corp TLD", "http://intranet.corp", true},
 		{".private TLD", "http://api.private", true},
 
-		// Link-local addresses (169.254.0.0/16 and fe80::/10)
+		// Link-local addresses
 		{"ipv4 link-local", "http://169.254.10.20", true},
 		{"ipv4 link-local start", "http://169.254.0.1", true},
 		{"ipv4 link-local end", "http://169.254.255.254", true},
 		{"ipv6 link-local", "http://[fe80::1]", true},
 		{"ipv6 link-local with zone", "http://[fe80::1%25eth0]", true},
 
-		// CGNAT range (100.64.0.0/10, RFC 6598)
+		// CGNAT range (RFC 6598)
 		{"cgnat start", "http://100.64.0.1", true},
 		{"cgnat mid", "http://100.100.0.1", true},
 		{"cgnat end", "http://100.127.255.254", true},
 
-		// External/public addresses (should return false)
+		// External/public addresses
 		{"public IP", "http://8.8.8.8", false},
 		{"external domain", "https://api.external.com", false},
 		{"discord webhook", "https://discord.com/api/webhooks/xxx", false},
 		{"example.com", "https://example.com/webhook", false},
 
 		// Edge cases
-		{"invalid URL", "not-a-url", false}, // Invalid URLs treated as external (safe default)
+		{"invalid URL", "not-a-url", false},
 		{"empty string", "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := isPrivateOrLocalURL(tt.urlStr)
-			if result != tt.expected {
-				t.Errorf("isPrivateOrLocalURL(%q) = %v, expected %v", tt.urlStr, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

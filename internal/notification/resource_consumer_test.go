@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
 
@@ -91,11 +93,9 @@ func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 			// Create resource worker with short throttle for testing
 			workerConfig := DefaultResourceWorkerConfig()
 			workerConfig.AlertThrottle = 100 * time.Millisecond
-			
+
 			worker, err := NewResourceEventWorker(service, workerConfig)
-			if err != nil {
-				t.Fatalf("Failed to create resource worker: %v", err)
-			}
+			require.NoError(t, err, "Failed to create resource worker")
 
 			// For throttling tests, we need to simulate time passing
 			switch tt.name {
@@ -117,7 +117,7 @@ func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 					events.SeverityWarning,
 				)
 				_ = worker.ProcessResourceEvent(firstEvent)
-				
+
 				// Manually update the last alert time to simulate throttle expiry
 				worker.mu.Lock()
 				alertKey := fmt.Sprintf("%s|%s", events.ResourceCPU, events.SeverityWarning)
@@ -130,69 +130,48 @@ func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 
 			// Process the event
 			err = worker.ProcessResourceEvent(tt.event)
-			if err != nil {
-				t.Errorf("ProcessResourceEvent() error = %v", err)
-			}
+			require.NoError(t, err, "ProcessResourceEvent() error")
 
 			// Get notification count after processing
 			afterCount := getNotificationCount(t, service)
 
 			if tt.shouldThrottle {
 				// Should not create a new notification
-				if afterCount != beforeCount {
-					t.Errorf("Expected throttled event, but notification was created")
-				}
+				assert.Equal(t, beforeCount, afterCount, "Expected throttled event, but notification was created")
 			} else {
 				// Should create a new notification
-				if afterCount != beforeCount+1 {
-					t.Errorf("Expected new notification, got count before=%d, after=%d", 
-						beforeCount, afterCount)
-					return
-				}
+				assert.Equal(t, beforeCount+1, afterCount, "Expected new notification")
 
 				// Verify the latest notification
 				notifications, err := service.List(&FilterOptions{
 					Limit: 1,
 				})
-				if err != nil {
-					t.Fatalf("Failed to list notifications: %v", err)
-				}
-
-				if len(notifications) == 0 {
-					t.Fatal("No notifications found")
-				}
+				require.NoError(t, err, "Failed to list notifications")
+				require.NotEmpty(t, notifications, "No notifications found")
 
 				latest := notifications[0]
-				
+
 				// Check notification type
-				if latest.Type != tt.wantNotifType {
-					t.Errorf("Notification type = %v, want %v", latest.Type, tt.wantNotifType)
-				}
+				assert.Equal(t, tt.wantNotifType, latest.Type, "Notification type mismatch")
 
 				// Check priority
-				if latest.Priority != tt.wantPriority {
-					t.Errorf("Notification priority = %v, want %v", latest.Priority, tt.wantPriority)
-				}
+				assert.Equal(t, tt.wantPriority, latest.Priority, "Notification priority mismatch")
 
 				// Check component
-				if latest.Component != "system-monitor" {
-					t.Errorf("Notification component = %v, want system-monitor", latest.Component)
-				}
+				assert.Equal(t, "system-monitor", latest.Component, "Notification component mismatch")
 
 				// Check metadata
-				if latest.Metadata == nil {
-					t.Error("Notification metadata is nil")
-				} else {
-					// Verify resource type in metadata
-					if resType, ok := latest.Metadata["resource_type"].(string); !ok || resType != tt.event.GetResourceType() {
-						t.Errorf("Metadata resource_type = %v, want %v", resType, tt.event.GetResourceType())
-					}
+				require.NotNil(t, latest.Metadata, "Notification metadata is nil")
 
-					// Verify severity in metadata
-					if severity, ok := latest.Metadata["severity"].(string); !ok || severity != tt.event.GetSeverity() {
-						t.Errorf("Metadata severity = %v, want %v", severity, tt.event.GetSeverity())
-					}
-				}
+				// Verify resource type in metadata
+				resType, ok := latest.Metadata["resource_type"].(string)
+				require.True(t, ok, "resource_type should be a string")
+				assert.Equal(t, tt.event.GetResourceType(), resType, "Metadata resource_type mismatch")
+
+				// Verify severity in metadata
+				severity, ok := latest.Metadata["severity"].(string)
+				require.True(t, ok, "severity should be a string")
+				assert.Equal(t, tt.event.GetSeverity(), severity, "Metadata severity mismatch")
 			}
 		})
 	}
@@ -216,45 +195,33 @@ func TestResourceEventWorker_PerResourceThrottle(t *testing.T) {
 	}
 
 	worker, err := NewResourceEventWorker(service, config)
-	if err != nil {
-		t.Fatalf("Failed to create worker: %v", err)
-	}
+	require.NoError(t, err, "Failed to create worker")
 	defer worker.Stop()
 
 	// Test CPU with 1-minute throttle
 	cpuEvent := events.NewResourceEvent(events.ResourceCPU, 90.0, 80.0, events.SeverityWarning)
-	
+
 	// First event should go through
 	err = worker.ProcessResourceEvent(cpuEvent)
-	if err != nil {
-		t.Errorf("First CPU event failed: %v", err)
-	}
+	require.NoError(t, err, "First CPU event failed")
 
 	// Second event immediately should be throttled
 	err = worker.ProcessResourceEvent(cpuEvent)
-	if err != nil {
-		t.Errorf("Second CPU event failed: %v", err)
-	}
+	require.NoError(t, err, "Second CPU event failed")
 
 	// Check that only one notification was created
 	notifications, _ := service.List(nil)
-	if len(notifications) != 1 {
-		t.Errorf("Expected 1 notification, got %d", len(notifications))
-	}
+	assert.Len(t, notifications, 1, "Expected 1 notification")
 
 	// Test that memory uses default throttle (5 minutes)
 	memEvent := events.NewResourceEvent(events.ResourceMemory, 90.0, 80.0, events.SeverityWarning)
-	
+
 	// Should create notification (different resource type)
 	err = worker.ProcessResourceEvent(memEvent)
-	if err != nil {
-		t.Errorf("Memory event failed: %v", err)
-	}
+	require.NoError(t, err, "Memory event failed")
 
 	notifications, _ = service.List(nil)
-	if len(notifications) != 2 {
-		t.Errorf("Expected 2 notifications after memory alert, got %d", len(notifications))
-	}
+	assert.Len(t, notifications, 2, "Expected 2 notifications after memory alert")
 }
 
 func TestResourceEventWorker_NilEvent(t *testing.T) {
@@ -262,13 +229,14 @@ func TestResourceEventWorker_NilEvent(t *testing.T) {
 
 	// Create a test notification service
 	service := NewService(DefaultServiceConfig())
+	defer service.Stop()
+
 	worker, _ := NewResourceEventWorker(service, nil)
+	defer worker.Stop()
 
 	// Process nil event should not panic
 	err := worker.ProcessResourceEvent(nil)
-	if err != nil {
-		t.Errorf("ProcessResourceEvent(nil) error = %v, want nil", err)
-	}
+	require.NoError(t, err, "ProcessResourceEvent(nil) should not error")
 }
 
 func TestResourceEventWorker_InvalidService(t *testing.T) {
@@ -276,18 +244,14 @@ func TestResourceEventWorker_InvalidService(t *testing.T) {
 
 	// Try to create worker with nil service
 	_, err := NewResourceEventWorker(nil, nil)
-	if err == nil {
-		t.Error("NewResourceEventWorker(nil, nil) error = nil, want error")
-	}
+	require.Error(t, err, "NewResourceEventWorker(nil, nil) should error")
 }
 
 // Helper function to get notification count
 func getNotificationCount(t *testing.T, service *Service) int {
 	t.Helper()
-	
+
 	notifications, err := service.List(nil)
-	if err != nil {
-		t.Fatalf("Failed to list notifications: %v", err)
-	}
+	require.NoError(t, err, "Failed to list notifications")
 	return len(notifications)
 }

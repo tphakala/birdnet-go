@@ -4,11 +4,14 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test data constants
 const (
-	testValue1               = "value1"
+	testValue1              = "value1"
 	expectedRateLimitErrMsg = "rate limit exceeded"
 )
 
@@ -64,15 +67,11 @@ func testCreateWithMetadata(t *testing.T, service *Service) {
 
 	// Create with metadata
 	err := service.CreateWithMetadata(notif)
-	if err != nil {
-		t.Fatalf("CreateWithMetadata() error = %v, want nil", err)
-	}
+	require.NoError(t, err, "CreateWithMetadata() should succeed")
 
 	// Retrieve the notification to verify it was stored with metadata
 	storedNotif, err := service.Get(notif.ID)
-	if err != nil {
-		t.Fatalf("Get() error = %v, want nil", err)
-	}
+	require.NoError(t, err, "Get() should succeed")
 
 	verifyStoredNotificationFields(t, storedNotif)
 	verifyStoredNotificationMetadata(t, storedNotif)
@@ -82,46 +81,30 @@ func testCreateWithMetadata(t *testing.T, service *Service) {
 func verifyStoredNotificationFields(t *testing.T, stored *Notification) {
 	t.Helper()
 
-	if stored.Type != TypeInfo {
-		t.Errorf("stored notification type = %v, want %v", stored.Type, TypeInfo)
-	}
-
-	if stored.Priority != PriorityLow {
-		t.Errorf("stored notification priority = %v, want %v", stored.Priority, PriorityLow)
-	}
-
-	if stored.Title != "Test Title" {
-		t.Errorf("stored notification title = %v, want %v", stored.Title, "Test Title")
-	}
-
-	if stored.Message != "Test Message" {
-		t.Errorf("stored notification message = %v, want %v", stored.Message, "Test Message")
-	}
-
-	if stored.Component != "test-component" {
-		t.Errorf("stored notification component = %v, want %v", stored.Component, "test-component")
-	}
+	assert.Equal(t, TypeInfo, stored.Type)
+	assert.Equal(t, PriorityLow, stored.Priority)
+	assert.Equal(t, "Test Title", stored.Title)
+	assert.Equal(t, "Test Message", stored.Message)
+	assert.Equal(t, "test-component", stored.Component)
 }
 
 // verifyStoredNotificationMetadata verifies notification metadata
 func verifyStoredNotificationMetadata(t *testing.T, stored *Notification) {
 	t.Helper()
 
-	if stored.Metadata == nil {
-		t.Fatal("stored notification should have metadata")
-	}
+	require.NotNil(t, stored.Metadata, "stored notification should have metadata")
 
-	if value, ok := stored.Metadata["key1"].(string); !ok || value != testValue1 {
-		t.Errorf("metadata key1 = %v, want %v", value, testValue1)
-	}
+	value, ok := stored.Metadata["key1"].(string)
+	require.True(t, ok)
+	assert.Equal(t, testValue1, value)
 
-	if value, ok := stored.Metadata["key2"].(int); !ok || value != 42 {
-		t.Errorf("metadata key2 = %v, want %v", value, 42)
-	}
+	intValue, ok := stored.Metadata["key2"].(int)
+	require.True(t, ok)
+	assert.Equal(t, 42, intValue)
 
-	if value, ok := stored.Metadata["isToast"].(bool); !ok || !value {
-		t.Errorf("metadata isToast = %v, want %v", value, true)
-	}
+	boolValue, ok := stored.Metadata["isToast"].(bool)
+	require.True(t, ok)
+	assert.True(t, boolValue)
 }
 
 // testBroadcastWithMetadata tests broadcasting notifications with metadata
@@ -138,9 +121,7 @@ func testBroadcastWithMetadata(t *testing.T, service *Service) {
 
 	// Create with metadata
 	err := service.CreateWithMetadata(notif)
-	if err != nil {
-		t.Fatalf("CreateWithMetadata() error = %v, want nil", err)
-	}
+	require.NoError(t, err, "CreateWithMetadata() should succeed")
 
 	verifyBroadcastedNotification(t, notifCh, notif)
 }
@@ -151,21 +132,15 @@ func verifyBroadcastedNotification(t *testing.T, notifCh <-chan *Notification, o
 
 	select {
 	case receivedNotif := <-notifCh:
-		if receivedNotif.ID != original.ID {
-			t.Errorf("broadcast notification ID = %v, want %v", receivedNotif.ID, original.ID)
-		}
-
-		if receivedNotif.Title != "Broadcast Test" {
-			t.Errorf("broadcast notification title = %v, want %v", receivedNotif.Title, "Broadcast Test")
-		}
+		assert.Equal(t, original.ID, receivedNotif.ID)
+		assert.Equal(t, "Broadcast Test", receivedNotif.Title)
 
 		// Verify metadata is included in broadcast
-		if value, ok := receivedNotif.Metadata["broadcast"].(bool); !ok || !value {
-			t.Error("broadcast notification should include metadata")
-		}
+		value, ok := receivedNotif.Metadata["broadcast"].(bool)
+		require.True(t, ok && value, "broadcast notification should include metadata")
 
 	case <-time.After(100 * time.Millisecond):
-		t.Error("should have received notification within timeout")
+		require.Fail(t, "should have received notification within timeout")
 	}
 }
 
@@ -187,33 +162,22 @@ func testRateLimitingWithMetadata(t *testing.T) {
 	// First notification should succeed
 	notif1 := NewNotification(TypeInfo, PriorityLow, "First", "First notification")
 	err1 := strictService.CreateWithMetadata(notif1)
-	if err1 != nil {
-		t.Errorf("First CreateWithMetadata() should succeed, got error: %v", err1)
-	}
+	require.NoError(t, err1, "First CreateWithMetadata() should succeed")
 
 	// Second notification should be rate limited
 	notif2 := NewNotification(TypeInfo, PriorityLow, "Second", "Second notification")
 	err2 := strictService.CreateWithMetadata(notif2)
-	if err2 == nil {
-		t.Error("Second CreateWithMetadata() should be rate limited")
-	}
+	require.Error(t, err2, "Second CreateWithMetadata() should be rate limited")
 
-	// Error should indicate rate limit exceeded
-	if err2.Error() != expectedRateLimitErrMsg {
-		t.Errorf("Expected rate limit error, got: %v", err2)
-	}
+	assert.Equal(t, expectedRateLimitErrMsg, err2.Error())
 }
 
 // testNilNotificationHandling tests handling of nil notifications
 func testNilNotificationHandling(t *testing.T, service *Service) {
 	t.Helper()
 
-	// This test verifies the function doesn't panic with nil input
-	// In practice, this would be a programming error, but good to test robustness
 	err := service.CreateWithMetadata(nil)
-	if err == nil {
-		t.Error("CreateWithMetadata(nil) should return an error")
-	}
+	require.Error(t, err, "CreateWithMetadata(nil) should return an error")
 }
 
 // testExpirationPreservation tests preservation of notification expiration
@@ -226,21 +190,14 @@ func testExpirationPreservation(t *testing.T, service *Service) {
 	notif.ExpiresAt = &expiryTime
 
 	err := service.CreateWithMetadata(notif)
-	if err != nil {
-		t.Fatalf("CreateWithMetadata() error = %v, want nil", err)
-	}
+	require.NoError(t, err, "CreateWithMetadata() should succeed")
 
 	// Retrieve and verify expiration is preserved
 	storedNotif, err := service.Get(notif.ID)
-	if err != nil {
-		t.Fatalf("Get() error = %v, want nil", err)
-	}
+	require.NoError(t, err, "Get() should succeed")
 
-	if storedNotif.ExpiresAt == nil {
-		t.Error("stored notification should have expiration")
-	} else if !storedNotif.ExpiresAt.Equal(expiryTime) {
-		t.Errorf("stored expiration = %v, want %v", storedNotif.ExpiresAt, expiryTime)
-	}
+	require.NotNil(t, storedNotif.ExpiresAt, "stored notification should have expiration")
+	assert.True(t, storedNotif.ExpiresAt.Equal(expiryTime))
 }
 
 func TestService_CreateWithMetadata_ErrorHandling(t *testing.T) {
@@ -291,23 +248,17 @@ func TestService_CreateWithMetadata_WithFailingStore(t *testing.T) {
 	service := NewService(config)
 
 	// Replace store with failing mock
-	failingStore := &failingStore{
+	failStore := &failingStore{
 		InMemoryStore: service.store.(*InMemoryStore),
 		shouldFail:    true,
 	}
-	service.store = failingStore
+	service.store = failStore
 
 	notif := NewNotification(TypeInfo, PriorityLow, "Fail Test", "Test store failure")
 
 	err := service.CreateWithMetadata(notif)
-	if err == nil {
-		t.Error("CreateWithMetadata() should return error when store fails")
-	}
-
-	// Should be a wrapped error mentioning the store operation
-	if err.Error() == "" {
-		t.Error("Error should have a meaningful message")
-	}
+	require.Error(t, err, "CreateWithMetadata() should return error when store fails")
+	assert.NotEmpty(t, err.Error(), "Error should have a meaningful message")
 }
 
 // Benchmark for CreateWithMetadata performance

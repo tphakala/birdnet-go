@@ -1,8 +1,11 @@
-//nolint:gocognit // Table-driven tests have expected complexity
+//nolint:gocognit,dupl // Table-driven tests have expected complexity and similar structures
 package notification
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Expected value for redacted credentials in scrubContextMap output
@@ -112,9 +115,7 @@ func TestScrubContextMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubContextMap(tt.input)
-			if !tt.expected(result) {
-				t.Errorf("scrubContextMap() result did not meet expectations")
-			}
+			assert.True(t, tt.expected(result), "scrubContextMap() result did not meet expectations")
 		})
 	}
 }
@@ -126,35 +127,28 @@ func TestScrubPath(t *testing.T) {
 		name  string
 		input string
 	}{
-		{
-			name:  "empty path",
-			input: "",
-		},
-		{
-			name:  "absolute path",
-			input: "/home/user/documents/file.txt",
-		},
-		{
-			name:  "relative path",
-			input: "../config/settings.yaml",
-		},
-		{
-			name:  "Windows path",
-			input: "C:\\Users\\User\\Documents\\file.txt",
-		},
+		{name: "empty path", input: ""},
+		{name: "absolute path", input: "/home/user/documents/file.txt"},
+		{name: "relative path", input: "../config/settings.yaml"},
+		{name: "Windows path", input: "C:\\Users\\User\\Documents\\file.txt"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubPath(tt.input)
-			if tt.input != "" && result == tt.input {
-				t.Errorf("scrubPath() should have anonymized the path, but got: %s", result)
-			}
-			if tt.input == "" && result != "" {
-				t.Errorf("scrubPath() should return empty string for empty input, but got: %s", result)
-			}
+			assertScrubResult(t, tt.input, result, "path")
 		})
+	}
+}
+
+// assertScrubResult is a helper to verify scrubbing functions work correctly.
+func assertScrubResult(t *testing.T, input, result, itemType string) {
+	t.Helper()
+	if input != "" {
+		assert.NotEqual(t, input, result, "should have anonymized the %s", itemType)
+	} else {
+		assert.Empty(t, result, "should return empty string for empty input")
 	}
 }
 
@@ -187,10 +181,7 @@ func TestScrubNotificationContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubNotificationContent(tt.input)
-			// Result should be different from input (scrubbed)
-			if result == tt.input {
-				t.Errorf("scrubNotificationContent() should have scrubbed the content, but got: %s", result)
-			}
+			assert.NotEqual(t, tt.input, result, "should have scrubbed the content")
 		})
 	}
 }
@@ -202,34 +193,17 @@ func TestScrubIPAddress(t *testing.T) {
 		name  string
 		input string
 	}{
-		{
-			name:  "empty IP",
-			input: "",
-		},
-		{
-			name:  "IPv4 address",
-			input: "192.168.1.1",
-		},
-		{
-			name:  "IPv6 address",
-			input: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
-		},
-		{
-			name:  "Localhost",
-			input: "127.0.0.1",
-		},
+		{name: "empty IP", input: ""},
+		{name: "IPv4 address", input: "192.168.1.1"},
+		{name: "IPv6 address", input: "2001:0db8:85a3:0000:0000:8a2e:0370:7334"},
+		{name: "Localhost", input: "127.0.0.1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubIPAddress(tt.input)
-			if tt.input != "" && result == tt.input {
-				t.Errorf("scrubIPAddress() should have anonymized the IP, but got: %s", result)
-			}
-			if tt.input == "" && result != "" {
-				t.Errorf("scrubIPAddress() should return empty string for empty input, but got: %s", result)
-			}
+			assertScrubResult(t, tt.input, result, "IP address")
 		})
 	}
 }
@@ -290,19 +264,15 @@ func TestEnrichWithTemplateData(t *testing.T) {
 			t.Parallel()
 			result := EnrichWithTemplateData(tt.notification, tt.templateData)
 
-			if tt.wantNil && result != nil {
-				t.Errorf("EnrichWithTemplateData() expected nil, got %v", result)
+			if tt.wantNil {
+				assert.Nil(t, result)
 				return
 			}
 
-			if !tt.wantNil && result == nil {
-				t.Errorf("EnrichWithTemplateData() expected non-nil result")
-				return
-			}
+			require.NotNil(t, result)
 
 			// Verify metadata was added when both inputs are valid
-			if tt.notification != nil && tt.templateData != nil && result != nil {
-				// Verify all field values match expected template data
+			if tt.notification != nil && tt.templateData != nil {
 				expectedValues := map[string]any{
 					"bg_detection_id":       tt.templateData.DetectionID,
 					"bg_detection_path":     tt.templateData.DetectionPath,
@@ -318,13 +288,8 @@ func TestEnrichWithTemplateData(t *testing.T) {
 
 				for field, expectedValue := range expectedValues {
 					actualValue, exists := result.Metadata[field]
-					if !exists {
-						t.Errorf("EnrichWithTemplateData() missing expected field: %s", field)
-						continue
-					}
-					if actualValue != expectedValue {
-						t.Errorf("%s = %v, want %v", field, actualValue, expectedValue)
-					}
+					require.True(t, exists, "missing expected field: %s", field)
+					assert.Equal(t, expectedValue, actualValue, "field %s mismatch", field)
 				}
 			}
 		})
