@@ -4,7 +4,6 @@ package spectrogram
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,7 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -56,9 +58,7 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 	settings.Realtime.Dashboard.Spectrogram.Raw = true
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	// Create PreRenderer
 	ctx, cancel := context.WithCancel(context.Background())
@@ -83,9 +83,8 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 
 	// Create output directory
 	audioDir := filepath.Join(tempDir, "test")
-	if err := os.MkdirAll(audioDir, 0o755); err != nil {
-		t.Fatalf("Failed to create audio directory: %v", err)
-	}
+	err = os.MkdirAll(audioDir, 0o755)
+	require.NoError(t, err, "Failed to create audio directory")
 
 	// Submit job
 	clipPath := filepath.Join(audioDir, "test.wav")
@@ -96,9 +95,8 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	if err := pr.Submit(job); err != nil {
-		t.Fatalf("Failed to submit job: %v", err)
-	}
+	err = pr.Submit(job)
+	require.NoError(t, err, "Failed to submit job")
 
 	// Wait for processing with timeout
 	timeout := time.After(testShortTimeout)
@@ -111,37 +109,26 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 		select {
 		case <-timeout:
 			stats := pr.GetStats()
-			t.Fatalf("Timeout waiting for spectrogram generation. Stats: %+v", stats)
+			require.Fail(t, "Timeout waiting for spectrogram generation", "Stats: %+v", stats)
 		case <-ticker.C:
 			if _, err := os.Stat(spectrogramPath); err == nil {
 				// File exists, verify it's a valid PNG
 				f, err := os.Open(spectrogramPath)
-				if err != nil {
-					t.Fatalf("Failed to open spectrogram: %v", err)
-				}
+				require.NoError(t, err, "Failed to open spectrogram")
 				defer f.Close()
 
 				// Check PNG magic number (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
 				hdr := make([]byte, 8)
-				if _, err := io.ReadFull(f, hdr); err != nil {
-					t.Fatalf("Failed to read PNG header: %v", err)
-				}
+				_, err = io.ReadFull(f, hdr)
+				require.NoError(t, err, "Failed to read PNG header")
 
 				pngMagic := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
-				for i, b := range pngMagic {
-					if hdr[i] != b {
-						t.Fatalf("Invalid PNG magic number at byte %d: got 0x%02X, want 0x%02X", i, hdr[i], b)
-					}
-				}
+				assert.Equal(t, pngMagic, hdr, "Invalid PNG magic number")
 
 				// Verify stats
 				stats := pr.GetStats()
-				if stats.Completed != 1 {
-					t.Errorf("Expected 1 completed job, got %d", stats.Completed)
-				}
-				if stats.Failed != 0 {
-					t.Errorf("Expected 0 failed jobs, got %d", stats.Failed)
-				}
+				assert.Equal(t, int64(1), stats.Completed, "Expected 1 completed job")
+				assert.Equal(t, int64(0), stats.Failed, "Expected 0 failed jobs")
 
 				// Log file size
 				if fi, err := f.Stat(); err == nil {
@@ -177,9 +164,7 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 	settings.Realtime.Dashboard.Spectrogram.Raw = true
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	// Create PreRenderer
 	ctx, cancel := context.WithCancel(context.Background())
@@ -201,9 +186,8 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 
 	// Create output directory
 	audioDir := filepath.Join(tempDir, "concurrent")
-	if err := os.MkdirAll(audioDir, 0o755); err != nil {
-		t.Fatalf("Failed to create audio directory: %v", err)
-	}
+	err = os.MkdirAll(audioDir, 0o755)
+	require.NoError(t, err, "Failed to create audio directory")
 
 	// Submit multiple jobs concurrently
 	numJobs := 5
@@ -216,9 +200,8 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 			Timestamp: time.Now(),
 		}
 
-		if err := pr.Submit(job); err != nil {
-			t.Fatalf("Failed to submit job %d: %v", i, err)
-		}
+		err := pr.Submit(job)
+		require.NoError(t, err, "Failed to submit job %d", i)
 	}
 
 	// Wait for all jobs to complete
@@ -230,21 +213,18 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 		select {
 		case <-timeout:
 			stats := pr.GetStats()
-			t.Fatalf("Timeout waiting for concurrent jobs. Stats: %+v", stats)
+			require.Fail(t, "Timeout waiting for concurrent jobs", "Stats: %+v", stats)
 		case <-ticker.C:
 			stats := pr.GetStats()
 			if stats.Completed+stats.Skipped >= int64(numJobs) {
 				// All jobs processed
-				if stats.Failed > 0 {
-					t.Errorf("Some jobs failed: %d", stats.Failed)
-				}
+				assert.Equal(t, int64(0), stats.Failed, "Some jobs failed")
 
 				// Verify all spectrograms exist
 				for i := 0; i < numJobs; i++ {
 					spectrogramPath := filepath.Join(audioDir, fmt.Sprintf("test-%d.png", i))
-					if _, err := os.Stat(spectrogramPath); err != nil {
-						t.Errorf("Spectrogram %d not found: %v", i, err)
-					}
+					_, err := os.Stat(spectrogramPath)
+					assert.NoError(t, err, "Spectrogram %d not found", i)
 				}
 
 				t.Logf("Successfully processed %d concurrent jobs. Stats: %+v", numJobs, stats)
@@ -274,9 +254,7 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 	settings.Realtime.Dashboard.Spectrogram.Raw = true
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	// Create PreRenderer
 	ctx, cancel := context.WithCancel(context.Background())
@@ -290,9 +268,8 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 
 	// Create output directory
 	audioDir := filepath.Join(tempDir, "shutdown")
-	if err := os.MkdirAll(audioDir, 0o755); err != nil {
-		t.Fatalf("Failed to create audio directory: %v", err)
-	}
+	err = os.MkdirAll(audioDir, 0o755)
+	require.NoError(t, err, "Failed to create audio directory")
 
 	// Submit several jobs
 	numJobs := 10
@@ -320,7 +297,7 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 
 	// Some jobs may not have completed due to shutdown, but that's expected
 	if stats.Queued > 0 && stats.Completed+stats.Failed+stats.Skipped == 0 {
-		t.Error("No jobs were processed before shutdown")
+		assert.Fail(t, "No jobs were processed before shutdown")
 	}
 }
 
@@ -344,9 +321,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 	settings.Realtime.Dashboard.Spectrogram.Raw = true
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	// Create PreRenderer (queue size is 3)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -361,9 +336,8 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 
 	// Create output directory
 	audioDir := filepath.Join(tempDir, "overflow")
-	if err := os.MkdirAll(audioDir, 0o755); err != nil {
-		t.Fatalf("Failed to create audio directory: %v", err)
-	}
+	err = os.MkdirAll(audioDir, 0o755)
+	require.NoError(t, err, "Failed to create audio directory")
 
 	// Submit more jobs than queue size to trigger overflow
 	// Queue size is 3 (2 workers + 1 waiting), submit 20 jobs rapidly
@@ -384,7 +358,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 			if errors.Is(err, ErrQueueFull) {
 				queueFull++
 			} else {
-				t.Errorf("Unexpected error submitting job %d: %v", i, err)
+				assert.Fail(t, "Unexpected error submitting job", "job %d: %v", i, err)
 			}
 		} else {
 			submitted++
@@ -392,9 +366,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 	}
 
 	// Verify that some jobs were rejected due to queue overflow
-	if queueFull == 0 {
-		t.Error("Expected some jobs to be rejected due to queue overflow, but none were")
-	}
+	assert.Greater(t, queueFull, 0, "Expected some jobs to be rejected due to queue overflow")
 
 	t.Logf("Submitted %d jobs, %d rejected due to queue overflow", submitted, queueFull)
 
@@ -407,7 +379,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 		select {
 		case <-timeout:
 			stats := pr.GetStats()
-			t.Fatalf("Timeout waiting for queue to drain. Stats: %+v", stats)
+			require.Fail(t, "Timeout waiting for queue to drain", "Stats: %+v", stats)
 		case <-ticker.C:
 			stats := pr.GetStats()
 			// Queue is drained when all submitted jobs are processed
@@ -416,9 +388,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 					stats.Queued, stats.Completed, stats.Failed, stats.Skipped)
 
 				// Verify stats consistency
-				if stats.Queued != int64(submitted) {
-					t.Errorf("Expected queued count to be %d, got %d", submitted, stats.Queued)
-				}
+				assert.Equal(t, int64(submitted), stats.Queued, "Expected queued count")
 
 				return // Test passed
 			}

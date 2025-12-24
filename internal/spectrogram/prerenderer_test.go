@@ -2,13 +2,14 @@ package spectrogram
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
@@ -26,18 +27,15 @@ func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 	spectrogramPath := filepath.Join(tempDir, "test.png")
 
 	// Create the spectrogram file (simulating it already exists)
-	if err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o600); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
+	err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o600)
+	require.NoError(t, err, "Failed to create test file")
 
 	// Create PreRenderer
 	settings := &conf.Settings{}
 	settings.Realtime.Audio.Export.Path = tempDir
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -61,23 +59,19 @@ func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 
 	// Should return nil (not queued, but not an error)
 	err = pr.Submit(job)
-	if err != nil {
-		t.Errorf("Submit() unexpected error for existing file: %v", err)
-	}
+	require.NoError(t, err, "Submit() unexpected error for existing file")
 
 	// Verify job was not queued
 	select {
 	case <-pr.jobs:
-		t.Error("Submit() queued job for existing file, expected to skip")
+		assert.Fail(t, "Submit() queued job for existing file, expected to skip")
 	default:
 		// Expected: job not queued
 	}
 
 	// Verify stats show skipped
 	stats := pr.GetStats()
-	if stats.Skipped != 1 {
-		t.Errorf("Submit() skipped count = %d, want 1", stats.Skipped)
-	}
+	assert.Equal(t, int64(1), stats.Skipped, "Submit() skipped count")
 }
 
 // TestPreRenderer_Submit_Success tests successful job submission
@@ -105,25 +99,19 @@ func TestPreRenderer_Submit_Success(t *testing.T) {
 	}
 
 	err := pr.Submit(job)
-	if err != nil {
-		t.Errorf("Submit() unexpected error: %v", err)
-	}
+	require.NoError(t, err, "Submit() unexpected error")
 
 	// Verify job was queued
 	select {
 	case queuedJob := <-pr.jobs:
-		if queuedJob.NoteID != job.NoteID {
-			t.Errorf("Submit() queued wrong job, got NoteID %d, want %d", queuedJob.NoteID, job.NoteID)
-		}
+		assert.Equal(t, job.NoteID, queuedJob.NoteID, "Submit() queued wrong job")
 	case <-time.After(100 * time.Millisecond):
-		t.Error("Submit() did not queue job within timeout")
+		assert.Fail(t, "Submit() did not queue job within timeout")
 	}
 
 	// Verify stats
 	stats := pr.GetStats()
-	if stats.Queued != 1 {
-		t.Errorf("Submit() queued count = %d, want 1", stats.Queued)
-	}
+	assert.Equal(t, int64(1), stats.Queued, "Submit() queued count")
 }
 
 // TestPreRenderer_Submit_QueueFull tests queue overflow behavior
@@ -161,9 +149,8 @@ func TestPreRenderer_Submit_QueueFull(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 	err := pr.Submit(job2)
-	if err == nil || !errors.Is(err, ErrQueueFull) {
-		t.Errorf("Submit() expected ErrQueueFull, got %v", err)
-	}
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrQueueFull, "Submit() expected ErrQueueFull")
 }
 
 // TestPreRenderer_GracefulShutdown tests shutdown with timeout
@@ -180,9 +167,7 @@ func TestPreRenderer_GracefulShutdown(t *testing.T) {
 	settings.Realtime.Dashboard.Spectrogram.Raw = true
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
 	pr.Start()
@@ -213,9 +198,10 @@ func TestPreRenderer_Stats(t *testing.T) {
 
 	// Initial stats should be zero
 	stats := pr.GetStats()
-	if stats.Queued != 0 || stats.Completed != 0 || stats.Failed != 0 || stats.Skipped != 0 {
-		t.Errorf("Initial stats not zero: %+v", stats)
-	}
+	assert.Equal(t, int64(0), stats.Queued, "Initial Queued stat")
+	assert.Equal(t, int64(0), stats.Completed, "Initial Completed stat")
+	assert.Equal(t, int64(0), stats.Failed, "Initial Failed stat")
+	assert.Equal(t, int64(0), stats.Skipped, "Initial Skipped stat")
 
 	// Queue a job
 	job := &Job{
@@ -228,9 +214,7 @@ func TestPreRenderer_Stats(t *testing.T) {
 
 	// Stats should show queued
 	stats = pr.GetStats()
-	if stats.Queued != 1 {
-		t.Errorf("Stats queued = %d, want 1", stats.Queued)
-	}
+	assert.Equal(t, int64(1), stats.Queued, "Stats queued after submit")
 }
 
 // TestPreRenderer_Submit_AfterStop tests submit after stop (panic guard)
@@ -243,9 +227,7 @@ func TestPreRenderer_Submit_AfterStop(t *testing.T) {
 	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
 
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 
 	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
 	pr.Start()
@@ -260,7 +242,5 @@ func TestPreRenderer_Submit_AfterStop(t *testing.T) {
 
 	// Submit after Stop should return error due to cancelled context
 	err = pr.Submit(job)
-	if err == nil {
-		t.Fatal("Expected error after Stop(), got nil")
-	}
+	assert.Error(t, err, "Expected error after Stop()")
 }

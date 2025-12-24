@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -34,9 +35,7 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 		elapsed := time.Since(start)
 
 		// Build() should return immediately, not wait for telemetry
-		if elapsed > 5*time.Millisecond {
-			t.Errorf("error.Build() blocked for %v - telemetry is synchronous!", elapsed)
-		}
+		assert.Less(t, elapsed, 5*time.Millisecond, "error.Build() should not block on telemetry")
 
 		t.Logf("error.Build() took %v", elapsed)
 		_ = err // use the error to avoid compiler warnings
@@ -62,9 +61,7 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 		elapsed := time.Since(start)
 
 		// 100 errors should complete quickly even with slow telemetry
-		if elapsed > 50*time.Millisecond {
-			t.Errorf("Creating 100 errors took %v - error path is blocking!", elapsed)
-		}
+		assert.Less(t, elapsed, 50*time.Millisecond, "Creating 100 errors should not block on telemetry")
 
 		t.Logf("Created 100 errors in %v", elapsed)
 	})
@@ -158,4 +155,3 @@ func TestRecommendedAsyncPattern(t *testing.T) {
 		t.Log("4. This ensures error handling never blocks on telemetry")
 	})
 }
-

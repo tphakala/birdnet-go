@@ -2,11 +2,12 @@ package telemetry
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -34,10 +35,9 @@ func TestE2ECompleteFlow(t *testing.T) {
 
 		// Check actual event
 		event := config.MockTransport.GetLastEvent()
-		if event != nil {
-			t.Logf("Captured event message: %s", event.Message)
-			AssertEventTag(t, config.MockTransport, event.Message, "component", "test-component")
-		}
+		require.NotNil(t, event, "Expected event to be captured")
+		t.Logf("Captured event message: %s", event.Message)
+		AssertEventTag(t, config.MockTransport, event.Message, "component", "test-component")
 	})
 
 	t.Run("privacy scrubbing", func(t *testing.T) {
@@ -50,15 +50,10 @@ func TestE2ECompleteFlow(t *testing.T) {
 		AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
 
 		event := config.MockTransport.GetLastEvent()
-		if event != nil {
-			// Verify URL was scrubbed
-			if strings.Contains(event.Message, "api.example.com") {
-				t.Error("URL domain not anonymized")
-			}
-			if strings.Contains(event.Message, "user:pass") {
-				t.Error("Credentials not removed")
-			}
-		}
+		require.NotNil(t, event, "Expected event to be captured")
+		// Verify URL was scrubbed
+		assert.NotContains(t, event.Message, "api.example.com", "URL domain should be anonymized")
+		assert.NotContains(t, event.Message, "user:pass", "Credentials should be removed")
 	})
 
 	t.Run("concurrent reporting", func(t *testing.T) {

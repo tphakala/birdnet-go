@@ -2,11 +2,12 @@ package telemetry
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -38,14 +39,12 @@ func TestTelemetryIntegration(t *testing.T) {
 
 		// Check event details
 		event := config.MockTransport.GetLastEvent()
-		if event == nil {
-			t.Fatal("Expected event to be captured")
-		}
+		require.NotNil(t, event, "Expected event to be captured")
 
 		// Verify component tag
-		if tag, ok := event.Tags["component"]; !ok || tag != "test-component" {
-			t.Errorf("Expected component tag 'test-component', got %s", tag)
-		}
+		tag, ok := event.Tags["component"]
+		assert.True(t, ok, "Expected component tag to exist")
+		assert.Equal(t, "test-component", tag, "Expected component tag to be 'test-component'")
 	})
 
 	t.Run("message reporting with different levels", func(t *testing.T) {
@@ -62,9 +61,7 @@ func TestTelemetryIntegration(t *testing.T) {
 
 		// Verify levels
 		events := config.MockTransport.GetEvents()
-		if len(events) != 3 {
-			t.Fatalf("Expected 3 events, got %d", len(events))
-		}
+		require.Len(t, events, 3, "Expected 3 events")
 
 		expectedLevels := []sentry.Level{
 			sentry.LevelInfo,
@@ -73,10 +70,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		}
 
 		for i, event := range events {
-			if event.Level != expectedLevels[i] {
-				t.Errorf("Event %d: expected level %s, got %s",
-					i, expectedLevels[i], event.Level)
-			}
+			assert.Equal(t, expectedLevels[i], event.Level, "Event %d: expected level %s, got %s", i, expectedLevels[i], event.Level)
 		}
 	})
 
@@ -86,9 +80,7 @@ func TestTelemetryIntegration(t *testing.T) {
 
 		// Get attachment uploader
 		uploader := GetAttachmentUploader()
-		if uploader == nil {
-			t.Fatal("Expected attachment uploader to be available")
-		}
+		require.NotNil(t, uploader, "Expected attachment uploader to be available")
 
 		// The uploader should exist even if we can't use all its methods in test
 		// This verifies the initialization is working correctly
@@ -120,18 +112,11 @@ func TestTelemetryIntegration(t *testing.T) {
 
 		// Check that sensitive data was scrubbed
 		event := config.MockTransport.GetLastEvent()
-		if event == nil {
-			t.Fatal("Expected event to be captured")
-		}
+		require.NotNil(t, event, "Expected event to be captured")
 
 		// Verify URL was anonymized
-		if strings.Contains(event.Message, "api.example.com") {
-			t.Error("Sensitive URL was not anonymized")
-		}
-
-		if strings.Contains(event.Message, "user:pass") {
-			t.Error("Credentials were not removed")
-		}
+		assert.NotContains(t, event.Message, "api.example.com", "Sensitive URL should be anonymized")
+		assert.NotContains(t, event.Message, "user:pass", "Credentials should be removed")
 
 		// The error message should be scrubbed
 		t.Logf("Scrubbed message: %s", event.Message)
@@ -197,9 +182,7 @@ func TestTelemetryDisabled(t *testing.T) {
 
 	// Initialize with disabled telemetry
 	err := InitSentry(settings)
-	if err != nil {
-		t.Errorf("InitSentry should not error when disabled: %v", err)
-	}
+	require.NoError(t, err, "InitSentry should not error when disabled")
 
 	// Update the cached telemetry state
 	UpdateTelemetryEnabled()
@@ -209,9 +192,7 @@ func TestTelemetryDisabled(t *testing.T) {
 	CaptureError(testErr, "test")
 
 	// Verify nothing was sent
-	if transport.GetEventCount() > 0 {
-		t.Error("No events should be captured when telemetry is disabled")
-	}
+	assert.Zero(t, transport.GetEventCount(), "No events should be captured when telemetry is disabled")
 }
 
 // Helper function to test ReportError
@@ -229,4 +210,3 @@ func ReportError(err error) {
 func ReportMessage(message string, level sentry.Level, component string) {
 	CaptureMessage(message, level, component)
 }
-
