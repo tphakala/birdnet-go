@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,16 +24,20 @@ const (
 	testPort5500   = "5500"
 
 	// Test URLs
-	testURLHTTPS         = "https://birdnet.example.com:5500"
-	testURLHTTPSNoPort   = "https://birdnet.example.com"
-	testURLHTTPNoPort    = "http://birdnet.example.com"
-	testURLHTTPLocalhost = "http://localhost:8080"
-	testURLTrailingSlash = "https://birdnet.example.com/"
-	testURLWithSubdomain = "https://my.birdnet.home.arpa:8080"
-	testURLWithIP        = "http://192.168.1.100:8080"
-	testURLWithIPv6      = "https://[2001:db8::1]:8080"
-	testURLInvalid       = "not-a-valid-url"
-	testURLDifferent     = "https://different.example.com:5500"
+	testURLHTTPS            = "https://birdnet.example.com:5500"
+	testURLHTTPSNoPort      = "https://birdnet.example.com"
+	testURLHTTPNoPort       = "http://birdnet.example.com"
+	testURLHTTPWithPort     = "http://birdnet.example.com:8080"
+	testURLHTTPLocalhost    = "http://localhost:8080"
+	testURLTrailingSlash    = "https://birdnet.example.com/"
+	testURLWithSubdomain    = "https://my.birdnet.home.arpa:8080"
+	testURLWithIP           = "http://192.168.1.100:8080"
+	testURLWithIPv6         = "https://[2001:db8::1]:8080"
+	testURLInvalid          = "not-a-valid-url"
+	testURLDifferent        = "https://different.example.com:5500"
+
+	// Test iteration counts for concurrent tests
+	numConcurrentGoroutines = 100
 )
 
 // TestSecurity_GetBaseURL tests the GetBaseURL helper method.
@@ -83,7 +88,7 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 				AutoTLS: false,
 			},
 			port: testPortCustom,
-			want: "http://birdnet.example.com:8080",
+			want: testURLHTTPWithPort,
 		},
 		{
 			name: "BaseURL empty, Host set with default HTTP port - should omit port",
@@ -327,5 +332,90 @@ func TestSecurity_GetBaseURL_WhitespaceHandling(t *testing.T) {
 			got := s.GetBaseURL(testPortCustom)
 			assert.Equal(t, tt.want, got, "Whitespace should be trimmed from BaseURL")
 		})
+	}
+}
+
+// TestSecurity_GetBaseURL_ConcurrentAccess verifies thread-safety of GetBaseURL.
+// Uses Go 1.25 WaitGroup.Go() for cleaner goroutine management.
+func TestSecurity_GetBaseURL_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	security := Security{
+		BaseURL: testURLHTTPS,
+		Host:    testHostExample,
+		AutoTLS: true,
+	}
+
+	var wg sync.WaitGroup
+	results := make([]string, numConcurrentGoroutines)
+
+	// Launch multiple goroutines that all call GetBaseURL concurrently
+	for i := range numConcurrentGoroutines {
+		idx := i
+		wg.Go(func() {
+			results[idx] = security.GetBaseURL(testPortCustom)
+		})
+	}
+
+	wg.Wait()
+
+	// All results should be identical (thread-safe reads)
+	for i, result := range results {
+		assert.Equal(t, testURLHTTPS, result, "Goroutine %d returned unexpected result", i)
+	}
+}
+
+// TestSecurity_GetHostnameForCertificates_ConcurrentAccess verifies thread-safety.
+func TestSecurity_GetHostnameForCertificates_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	security := Security{
+		Host:    testHostExample,
+		BaseURL: testURLDifferent,
+	}
+
+	var wg sync.WaitGroup
+	results := make([]string, numConcurrentGoroutines)
+
+	for i := range numConcurrentGoroutines {
+		idx := i
+		wg.Go(func() {
+			results[idx] = security.GetHostnameForCertificates()
+		})
+	}
+
+	wg.Wait()
+
+	// All results should be the Host value (priority 1)
+	for i, result := range results {
+		assert.Equal(t, testHostExample, result, "Goroutine %d returned unexpected result", i)
+	}
+}
+
+// TestSecurity_GetExternalHost_ConcurrentAccess verifies thread-safety.
+func TestSecurity_GetExternalHost_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	security := Security{
+		BaseURL: testURLHTTPS,
+		Host:    testHostIgnored,
+	}
+
+	var wg sync.WaitGroup
+	expectedHost := testHostExample + ":" + testPort5500
+	results := make([]string, numConcurrentGoroutines)
+
+	for i := range numConcurrentGoroutines {
+		idx := i
+		wg.Go(func() {
+			results[idx] = security.GetExternalHost()
+		})
+	}
+
+	wg.Wait()
+
+	// All results should be extracted from BaseURL
+	for i, result := range results {
+		assert.Equal(t, expectedHost, result, "Goroutine %d returned unexpected result", i)
 	}
 }
