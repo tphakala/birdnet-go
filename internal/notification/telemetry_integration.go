@@ -3,6 +3,7 @@ package notification
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -149,6 +150,43 @@ func NewNoopTelemetryReporter() TelemetryReporter {
 	return &NoopTelemetryReporter{}
 }
 
+// isConnectionError checks if the error is a network/connection-level error
+// that indicates user configuration issues rather than code quality problems.
+// These include: connection refused, DNS failures, network unreachable, etc.
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := strings.ToLower(err.Error())
+
+	// Connection-level errors (service not running, wrong port, firewall)
+	connectionPatterns := []string{
+		"connection refused",
+		"connection reset",
+		"connection closed",
+		"no route to host",
+		"network is unreachable",
+		"network unreachable",
+		"host is down",
+		"no such host",        // DNS resolution failure
+		"lookup ",             // DNS lookup failure pattern
+		"dial tcp",            // General TCP dial failures
+		"dial udp",            // UDP dial failures
+		"i/o timeout",         // Network timeout at socket level
+		"broken pipe",         // Connection broken
+		"connection timed out", // TCP connection timeout
+	}
+
+	for _, pattern := range connectionPatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // WebhookRequestError reports a webhook HTTP request failure with privacy-safe context
 func (nt *NotificationTelemetry) WebhookRequestError(
 	providerName string,
@@ -170,11 +208,18 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		return
 	}
 
+	// Don't report connection-level errors - these are user configuration issues
+	// (service not running, wrong URL, DNS misconfiguration, firewall, etc.)
+	// not code quality problems that need telemetry alerts
+	if isConnectionError(err) {
+		return
+	}
+
 	// Determine severity based on error type
 	var level string
 	switch {
 	case isTimeout:
-		level = SeverityCritical // Timeouts are critical as they indicate network/provider issues
+		level = SeverityWarning // Timeouts often indicate user's network/service issues
 	case statusCode >= 400 && statusCode < 500:
 		level = SeverityWarning // Client errors likely config issues
 	default:

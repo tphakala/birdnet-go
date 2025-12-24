@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"testing/synctest"
@@ -578,7 +579,7 @@ func TestWebhookRequestError_NetworkTimeout(t *testing.T) {
 	event := reporter.capturedEvents[0]
 
 	assert.Contains(t, event.message, "timed out")
-	assert.Equal(t, "critical", event.level, "Timeouts should be critical level")
+	assert.Equal(t, "warning", event.level, "Timeouts should be warning level (often user network issues)")
 	assert.Equal(t, "notification", event.tags["component"])
 	assert.Equal(t, "webhook-primary", event.tags["provider"])
 	assert.Equal(t, "webhook", event.tags["provider_type"])
@@ -784,4 +785,154 @@ func TestWebhookRequestError_NilError(t *testing.T) {
 	assert.Equal(t, "Webhook request failed", event.message)
 	assert.Equal(t, "error", event.level)
 	assert.Equal(t, "500", event.tags["status_code"])
+}
+
+// TestIsConnectionError tests the connection error detection function
+func TestIsConnectionError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "connection refused",
+			err:      errors.New("dial tcp 192.168.1.100:443: connect: connection refused"),
+			expected: true,
+		},
+		{
+			name:     "connection reset",
+			err:      errors.New("read tcp: connection reset by peer"),
+			expected: true,
+		},
+		{
+			name:     "no route to host",
+			err:      errors.New("dial tcp 10.0.0.1:8080: connect: no route to host"),
+			expected: true,
+		},
+		{
+			name:     "network unreachable",
+			err:      errors.New("dial tcp: network is unreachable"),
+			expected: true,
+		},
+		{
+			name:     "DNS no such host",
+			err:      errors.New("dial tcp: lookup homeassistant.local: no such host"),
+			expected: true,
+		},
+		{
+			name:     "DNS lookup failure",
+			err:      errors.New("lookup myserver.local on 192.168.1.1:53: server misbehaving"),
+			expected: true,
+		},
+		{
+			name:     "i/o timeout",
+			err:      errors.New("dial tcp 192.168.1.100:443: i/o timeout"),
+			expected: true,
+		},
+		{
+			name:     "broken pipe",
+			err:      errors.New("write tcp: broken pipe"),
+			expected: true,
+		},
+		{
+			name:     "HTTP 500 error - not connection error",
+			err:      errors.New("server returned 500: internal server error"),
+			expected: false,
+		},
+		{
+			name:     "authentication error - not connection error",
+			err:      errors.New("401 unauthorized"),
+			expected: false,
+		},
+		{
+			name:     "generic error - not connection error",
+			err:      errors.New("something went wrong"),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isConnectionError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestWebhookRequestError_ConnectionErrorsNotReported tests that connection errors are filtered from telemetry
+func TestWebhookRequestError_ConnectionErrorsNotReported(t *testing.T) {
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	// Test connection refused - should NOT be reported
+	telemetry.WebhookRequestError(
+		"homeassistant",
+		errors.New("dial tcp 192.168.1.100:443: connect: connection refused"),
+		0, // no status code for connection errors
+		"https://homeassistant.local/api/webhook/xyz",
+		"POST",
+		"none",
+		false,
+		false,
+	)
+
+	// No events should be captured - connection errors are user config issues
+	assert.Empty(t, reporter.capturedEvents, "Connection refused errors should not be reported to telemetry")
+
+	// Test DNS error - should NOT be reported
+	telemetry.WebhookRequestError(
+		"homeassistant",
+		errors.New("dial tcp: lookup homeassistant.local: no such host"),
+		0,
+		"https://homeassistant.local/api/webhook/xyz",
+		"POST",
+		"none",
+		false,
+		false,
+	)
+
+	assert.Empty(t, reporter.capturedEvents, "DNS errors should not be reported to telemetry")
+
+	// Test network unreachable - should NOT be reported
+	telemetry.WebhookRequestError(
+		"homeassistant",
+		errors.New("dial tcp 10.0.0.1:443: network is unreachable"),
+		0,
+		"https://10.0.0.1/api/webhook/xyz",
+		"POST",
+		"none",
+		false,
+		false,
+	)
+
+	assert.Empty(t, reporter.capturedEvents, "Network unreachable errors should not be reported to telemetry")
+}
+
+// TestWebhookRequestError_ServerErrorsStillReported tests that non-connection errors are still reported
+func TestWebhookRequestError_ServerErrorsStillReported(t *testing.T) {
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	// Test HTTP 500 error - SHOULD be reported (server-side issue, potential code problem)
+	telemetry.WebhookRequestError(
+		"webhook-test",
+		errors.New("server returned 500: internal server error"),
+		500,
+		"https://example.com/webhook",
+		"POST",
+		"bearer",
+		false,
+		false,
+	)
+
+	// This should be captured
+	require.Len(t, reporter.capturedEvents, 1, "HTTP 500 errors should be reported to telemetry")
+	assert.Equal(t, "error", reporter.capturedEvents[0].level)
 }
