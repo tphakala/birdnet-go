@@ -776,10 +776,12 @@ func TestValidateEnvBaseURL(t *testing.T) {
 		{"ws scheme", "ws://birdnet.example.com", true, "must be http or https"},
 		{"wss scheme", "wss://birdnet.example.com", true, "must be http or https"},
 
-		// Invalid URLs - missing host
-		{"missing host", invalidURLNoHost, true, "must include host"},
-		{"scheme only", "https://", true, "must include host"},
-		{"scheme with slash", "http:///path", true, "must include host"},
+		// Invalid URLs - missing hostname
+		{"missing host", invalidURLNoHost, true, "must include a valid hostname"},
+		{"scheme only", "https://", true, "must include a valid hostname"},
+		{"scheme with slash", "http:///path", true, "must include a valid hostname"},
+		{"port without hostname", "http://:8080", true, "must include a valid hostname"},
+		{"port without hostname https", "https://:443", true, "must include a valid hostname"},
 
 		// Invalid URLs - empty or malformed
 		{"empty string", invalidURLEmpty, true, "must not be empty"},

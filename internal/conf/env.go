@@ -311,7 +311,7 @@ func validateEnvPath(value string) error {
 }
 
 // validateEnvBaseURL validates the BIRDNET_URL environment variable
-// The URL must include a scheme (http or https) and a host
+// The URL must include a scheme (http or https) and a valid hostname
 func validateEnvBaseURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -331,8 +331,8 @@ func validateEnvBaseURL(value string) error {
 		return fmt.Errorf("URL scheme must be http or https, got: %s", parsed.Scheme)
 	}
 
-	if parsed.Host == "" {
-		return fmt.Errorf("URL must include host")
+	if parsed.Hostname() == "" {
+		return fmt.Errorf("URL must include a valid hostname")
 	}
 
 	return nil
