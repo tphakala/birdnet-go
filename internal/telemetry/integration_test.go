@@ -19,9 +19,6 @@ func TestTelemetryIntegration(t *testing.T) {
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
-		// Initialize error integration
-		InitializeErrorIntegration()
-
 		// Create an error with context
 		originalErr := fmt.Errorf("connection failed")
 		err := errors.New(originalErr).

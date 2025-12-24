@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -207,5 +208,114 @@ func AssertEventTag(t *testing.T, transport *MockTransport, message, tagKey, exp
 	if value, ok := event.Tags[tagKey]; !ok || value != expectedValue {
 		t.Errorf("Expected tag %s=%s, got %s=%s", tagKey, expectedValue, tagKey, value)
 	}
+}
+
+// FakeTimeSource is a time source that returns a fixed time for testing
+type FakeTimeSource struct {
+	mu          sync.Mutex
+	currentTime time.Time
+}
+
+// NewFakeTimeSource creates a new FakeTimeSource starting at the given time
+func NewFakeTimeSource(t time.Time) *FakeTimeSource {
+	return &FakeTimeSource{currentTime: t}
+}
+
+// Now returns the current fake time
+func (f *FakeTimeSource) Now() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.currentTime
+}
+
+// Advance advances the fake time by the given duration
+func (f *FakeTimeSource) Advance(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.currentTime = f.currentTime.Add(d)
+}
+
+// mockSentryReporter is a no-op Sentry reporter for testing (doesn't spawn goroutines)
+type mockSentryReporter struct {
+	enabled bool
+}
+
+func (m *mockSentryReporter) ReportError(_ *errors.EnhancedError) {
+	// No-op: don't actually report to Sentry or spawn goroutines
+}
+
+func (m *mockSentryReporter) IsEnabled() bool {
+	return m.enabled
+}
+
+// NewMockSentryReporter creates a mock Sentry reporter for testing
+func NewMockSentryReporter(enabled bool) *mockSentryReporter {
+	return &mockSentryReporter{enabled: enabled}
+}
+
+// mockErrorEvent implements the ErrorEvent interface for testing
+type mockErrorEvent struct {
+	component string
+	category  string
+	message   string
+	context   map[string]any
+	timestamp time.Time
+	reported  bool
+	mu        sync.RWMutex
+}
+
+func (m *mockErrorEvent) GetComponent() string       { return m.component }
+func (m *mockErrorEvent) GetCategory() string        { return m.category }
+func (m *mockErrorEvent) GetContext() map[string]any { return m.context }
+func (m *mockErrorEvent) GetTimestamp() time.Time    { return m.timestamp }
+func (m *mockErrorEvent) GetError() error            { return errors.NewStd(m.message) }
+func (m *mockErrorEvent) GetMessage() string         { return m.message }
+func (m *mockErrorEvent) IsReported() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.reported
+}
+func (m *mockErrorEvent) MarkReported() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reported = true
+}
+
+// MockErrorEventOption is a functional option for customizing mockErrorEvent
+type MockErrorEventOption func(*mockErrorEvent)
+
+// WithCategory sets a custom category
+func WithCategory(category string) MockErrorEventOption {
+	return func(e *mockErrorEvent) { e.category = category }
+}
+
+// WithContext sets custom context
+func WithContext(ctx map[string]any) MockErrorEventOption {
+	return func(e *mockErrorEvent) { e.context = ctx }
+}
+
+// WithTimestamp sets a custom timestamp
+func WithTimestamp(ts time.Time) MockErrorEventOption {
+	return func(e *mockErrorEvent) { e.timestamp = ts }
+}
+
+// WithReported marks the event as already reported
+func WithReported() MockErrorEventOption {
+	return func(e *mockErrorEvent) { e.reported = true }
+}
+
+// NewMockErrorEvent creates a mockErrorEvent with sensible defaults.
+// Use functional options to customize.
+func NewMockErrorEvent(component, message string, opts ...MockErrorEventOption) *mockErrorEvent {
+	event := &mockErrorEvent{
+		component: component,
+		category:  string(errors.CategorySystem),
+		message:   message,
+		timestamp: time.Now(),
+	}
+	for _, opt := range opts {
+		opt(event)
+	}
+	return event
 }
 

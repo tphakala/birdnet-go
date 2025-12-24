@@ -17,9 +17,6 @@ func TestE2ECompleteFlow(t *testing.T) {
 	config, cleanup := InitForTesting(t)
 	defer cleanup()
 
-	// Initialize error integration
-	InitializeErrorIntegration()
-
 	t.Run("error to telemetry flow", func(t *testing.T) {
 		// Create enhanced error
 		enhancedErr := errors.New(fmt.Errorf("test error")).

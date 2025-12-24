@@ -20,9 +20,6 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 		// Make telemetry slow
 		config.MockTransport.SetDelay(100 * time.Millisecond)
 
-		// Initialize error integration
-		InitializeErrorIntegration()
-
 		// Measure how long Build() takes
 		start := time.Now()
 
@@ -91,9 +88,6 @@ func TestCurrentTelemetryIntegration(t *testing.T) {
 		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
-
-		// Initialize error integration
-		InitializeErrorIntegration()
 
 		// Add significant delay to telemetry
 		config.MockTransport.SetDelay(100 * time.Millisecond)

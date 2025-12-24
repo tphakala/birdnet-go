@@ -1,80 +1,15 @@
 package telemetry
 
 import (
-	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
-
-// FakeTimeSource is a time source that returns a fixed time for testing
-type FakeTimeSource struct {
-	mu          sync.Mutex
-	currentTime time.Time
-}
-
-func NewFakeTimeSource(t time.Time) *FakeTimeSource {
-	return &FakeTimeSource{currentTime: t}
-}
-
-func (f *FakeTimeSource) Now() time.Time {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.currentTime
-}
-
-func (f *FakeTimeSource) Advance(d time.Duration) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.currentTime = f.currentTime.Add(d)
-}
-
-// mockSentryReporter is a no-op Sentry reporter for testing (doesn't spawn goroutines)
-type mockSentryReporter struct {
-	enabled bool
-}
-
-func (m *mockSentryReporter) ReportError(ee *errors.EnhancedError) {
-	// No-op: don't actually report to Sentry or spawn goroutines
-}
-
-func (m *mockSentryReporter) IsEnabled() bool {
-	return m.enabled
-}
-
-// mockErrorEvent implements the ErrorEvent interface for testing
-type mockErrorEvent struct {
-	component string
-	category  string
-	message   string
-	context   map[string]any
-	timestamp time.Time
-	reported  bool
-	mu        sync.RWMutex
-}
-
-func (m *mockErrorEvent) GetComponent() string       { return m.component }
-func (m *mockErrorEvent) GetCategory() string        { return m.category }
-func (m *mockErrorEvent) GetContext() map[string]any { return m.context }
-func (m *mockErrorEvent) GetTimestamp() time.Time    { return m.timestamp }
-func (m *mockErrorEvent) GetError() error            { return errors.NewStd(m.message) }
-func (m *mockErrorEvent) GetMessage() string         { return m.message }
-func (m *mockErrorEvent) IsReported() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.reported
-}
-func (m *mockErrorEvent) MarkReported() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.reported = true
-}
 
 //nolint:gocognit // test requires multiple scenarios for comprehensive coverage
 func TestTelemetryWorker_ProcessEvent(t *testing.T) {
@@ -90,37 +25,21 @@ func TestTelemetryWorker_ProcessEvent(t *testing.T) {
 		expectReport bool
 	}{
 		{
-			name:    "enabled_worker_processes_event",
-			enabled: true,
-			event: &mockErrorEvent{
-				component: "test",
-				category:  string(errors.CategorySystem),
-				message:   "Test error",
-				timestamp: time.Now(),
-			},
+			name:         "enabled_worker_processes_event",
+			enabled:      true,
+			event:        NewMockErrorEvent("test", "Test error"),
 			expectReport: true,
 		},
 		{
-			name:    "disabled_worker_skips_event",
-			enabled: false,
-			event: &mockErrorEvent{
-				component: "test",
-				category:  string(errors.CategorySystem),
-				message:   "Test error",
-				timestamp: time.Now(),
-			},
+			name:         "disabled_worker_skips_event",
+			enabled:      false,
+			event:        NewMockErrorEvent("test", "Test error"),
 			expectReport: false,
 		},
 		{
-			name:    "already_reported_event_skipped",
-			enabled: true,
-			event: &mockErrorEvent{
-				component: "test",
-				category:  string(errors.CategorySystem),
-				message:   "Test error",
-				timestamp: time.Now(),
-				reported:  true,
-			},
+			name:         "already_reported_event_skipped",
+			enabled:      true,
+			event:        NewMockErrorEvent("test", "Test error", WithReported()),
 			expectReport: false,
 		},
 	}
@@ -171,19 +90,14 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	require.NoError(t, err, "Failed to create worker")
 
 	// Replace the Sentry reporter with a mock to prevent goroutine spawning
-	worker.sentryReporter = &mockSentryReporter{enabled: true}
+	worker.sentryReporter = NewMockSentryReporter(true)
 
 	// Inject the fake time source into the rate limiter
 	worker.rateLimiter.timeSource = fakeTime
 
 	// Process multiple events rapidly - all at the SAME fixed time
 	for range 5 {
-		event := &mockErrorEvent{
-			component: "test",
-			category:  string(errors.CategorySystem),
-			message:   "Test error",
-			timestamp: fakeTime.Now(),
-		}
+		event := NewMockErrorEvent("test", "Test error", WithTimestamp(fakeTime.Now()))
 		_ = worker.ProcessEvent(event)
 	}
 
@@ -200,12 +114,7 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	fakeTime.Advance(150 * time.Millisecond)
 
 	// Should be able to process more events now
-	event := &mockErrorEvent{
-		component: "test",
-		category:  string(errors.CategorySystem),
-		message:   "Test error after window",
-		timestamp: fakeTime.Now(),
-	}
+	event := NewMockErrorEvent("test", "Test error after window", WithTimestamp(fakeTime.Now()))
 	err = worker.ProcessEvent(event)
 	require.NoError(t, err, "ProcessEvent should succeed after rate limit window")
 
@@ -291,12 +200,7 @@ func TestTelemetryWorker_Sampling(t *testing.T) {
 	processedCount := 0
 
 	for _, comp := range components {
-		event := &mockErrorEvent{
-			component: comp,
-			category:  string(errors.CategorySystem),
-			message:   "Test error",
-			timestamp: time.Now(),
-		}
+		event := NewMockErrorEvent(comp, "Test error")
 
 		_ = worker.ProcessEvent(event)
 
@@ -339,12 +243,7 @@ func TestTelemetryWorker_BatchProcessing(t *testing.T) {
 	// Create batch of events
 	errorEvents := make([]events.ErrorEvent, 0, 5)
 	for range 5 {
-		errorEvents = append(errorEvents, &mockErrorEvent{
-			component: "test",
-			category:  string(errors.CategorySystem),
-			message:   "Batch test error",
-			timestamp: time.Now(),
-		})
+		errorEvents = append(errorEvents, NewMockErrorEvent("test", "Batch test error"))
 	}
 
 	// Process batch
@@ -366,19 +265,14 @@ func TestTelemetryWorker_ReportToSentry_WithContext(t *testing.T) {
 	require.NoError(t, err, "Failed to create worker")
 
 	// Replace with mock reporter to avoid actual Sentry calls
-	worker.sentryReporter = &mockSentryReporter{enabled: true}
+	worker.sentryReporter = NewMockSentryReporter(true)
 
 	// Create event with context - this should not panic even if ee.Context is nil
-	event := &mockErrorEvent{
-		component: "test",
-		category:  string(errors.CategorySystem),
-		message:   "Test error with context",
-		context: map[string]any{
+	event := NewMockErrorEvent("test", "Test error with context",
+		WithContext(map[string]any{
 			"key1": "value1",
 			"key2": 42,
-		},
-		timestamp: time.Now(),
-	}
+		}))
 
 	// This should not panic - the bug is that maps.Copy panics on nil destination
 	err = worker.reportToSentry(event)
@@ -396,16 +290,10 @@ func TestTelemetryWorker_ReportToSentry_NilContextSafe(t *testing.T) {
 	require.NoError(t, err, "Failed to create worker")
 
 	// Replace with mock reporter
-	worker.sentryReporter = &mockSentryReporter{enabled: true}
+	worker.sentryReporter = NewMockSentryReporter(true)
 
 	// Create event without context (nil)
-	event := &mockErrorEvent{
-		component: "test",
-		category:  string(errors.CategorySystem),
-		message:   "Test error without context",
-		context:   nil, // Explicitly nil
-		timestamp: time.Now(),
-	}
+	event := NewMockErrorEvent("test", "Test error without context")
 
 	// This should not panic
 	err = worker.reportToSentry(event)

@@ -12,8 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
 // testSoxPath is used in tests to set a Sox path that won't be called
@@ -21,19 +19,12 @@ const testSoxPath = "/usr/bin/sox"
 
 // TestNewGenerator tests generator creation
 func TestNewGenerator(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
-
-	logger := slog.Default()
-
-	gen := NewGenerator(settings, sfs, logger)
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 	require.NotNil(t, gen, "NewGenerator() returned nil")
-	assert.Equal(t, settings, gen.settings, "NewGenerator() did not set settings correctly")
-	assert.Equal(t, sfs, gen.sfs, "NewGenerator() did not set sfs correctly")
+	assert.Equal(t, env.Settings, gen.settings, "NewGenerator() did not set settings correctly")
+	assert.Equal(t, env.SFS, gen.sfs, "NewGenerator() did not set sfs correctly")
 	// Logger is intentionally wrapped with component context, so we can't check for equality
 	// Just verify it's not nil
 	assert.NotNil(t, gen.logger, "NewGenerator() did not set logger (logger is nil)")
@@ -41,18 +32,13 @@ func TestNewGenerator(t *testing.T) {
 
 // TestGenerator_EnsureOutputDirectory tests directory creation
 func TestGenerator_EnsureOutputDirectory(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
-
-	gen := NewGenerator(settings, sfs, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
 	// Test creating a nested directory
-	outputPath := filepath.Join(tempDir, "subdir", "test.png")
-	err = gen.ensureOutputDirectory(outputPath)
+	outputPath := filepath.Join(env.TempDir, "subdir", "test.png")
+	err := gen.ensureOutputDirectory(outputPath)
 	require.NoError(t, err, "ensureOutputDirectory() error")
 
 	// Verify directory was created
@@ -63,18 +49,13 @@ func TestGenerator_EnsureOutputDirectory(t *testing.T) {
 
 // TestGenerator_EnsureOutputDirectory_PathTraversal tests path validation
 func TestGenerator_EnsureOutputDirectory_PathTraversal(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
-
-	gen := NewGenerator(settings, sfs, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
 	// Test path traversal attempt
-	outputPath := filepath.Join(tempDir, "..", "escape", "test.png")
-	err = gen.ensureOutputDirectory(outputPath)
+	outputPath := filepath.Join(env.TempDir, "..", "escape", "test.png")
+	err := gen.ensureOutputDirectory(outputPath)
 	assert.Error(t, err, "ensureOutputDirectory() should reject path traversal")
 }
 
@@ -140,36 +121,26 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 // createTestGenerator creates a Generator with the specified FFmpeg settings for testing
 func createTestGenerator(t *testing.T, ffmpegMajor int, hasFfmpegVer bool) (gen *Generator, tempDir string) {
 	t.Helper()
-	tempDir = t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.Export.Length = 15 // Fallback duration
-	settings.Realtime.Audio.FfmpegMajor = ffmpegMajor
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15 // Fallback duration
+	env.Settings.Realtime.Audio.FfmpegMajor = ffmpegMajor
 	if hasFfmpegVer {
-		settings.Realtime.Audio.FfmpegVersion = "test"
+		env.Settings.Realtime.Audio.FfmpegVersion = "test"
 	}
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
-
-	return NewGenerator(settings, sfs, slog.Default()), tempDir
+	return NewGenerator(env.Settings, env.SFS, slog.Default()), env.TempDir
 }
 
 // TestGenerator_GetSoxArgs tests full Sox argument building for file input
 func TestGenerator_GetSoxArgs(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.Export.Length = 15
-	settings.Realtime.Audio.FfmpegMajor = 7 // Use FFmpeg 7.x to avoid -d parameter
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
+	env.Settings.Realtime.Audio.FfmpegMajor = 7 // Use FFmpeg 7.x to avoid -d parameter
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	args := gen.getSoxArgs(context.Background(), audioPath, outputPath, 800, false, SoxInputFile)
 
@@ -183,40 +154,30 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 
 // TestGenerator_GenerateFromPCM_MissingBinary tests error handling for missing Sox
 func TestGenerator_GenerateFromPCM_MissingBinary(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 	// Don't set SoxPath - simulate missing binary
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	outputPath := filepath.Join(tempDir, "test.png")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3}
 
-	err = gen.GenerateFromPCM(context.Background(), pcmData, outputPath, 400, false)
+	err := gen.GenerateFromPCM(context.Background(), pcmData, outputPath, 400, false)
 	assert.Error(t, err, "GenerateFromPCM() should error when Sox binary not configured")
 }
 
 // TestGenerator_GenerateFromFile_MissingBinaries tests error handling
 func TestGenerator_GenerateFromFile_MissingBinaries(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 	// Don't set SoxPath or FfmpegPath
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// Create a dummy audio file
-	err = os.WriteFile(audioPath, []byte("fake audio"), 0o600)
+	err := os.WriteFile(audioPath, []byte("fake audio"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
 	err = gen.GenerateFromFile(context.Background(), audioPath, outputPath, 400, false)
@@ -399,15 +360,10 @@ func TestComputeRemainingTimeout(t *testing.T) {
 
 // TestGenerateFromFile_Validation tests input validation for GenerateFromFile.
 func TestGenerateFromFile_Validation(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.SoxPath = testSoxPath // Will fail if called, but we're testing validation
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.SoxPath = testSoxPath // Will fail if called, but we're testing validation
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
-
-	gen := NewGenerator(settings, sfs, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
 	tests := []struct {
 		name       string
@@ -419,7 +375,7 @@ func TestGenerateFromFile_Validation(t *testing.T) {
 	}{
 		{
 			name:       "empty output path",
-			audioPath:  filepath.Join(tempDir, "test.wav"),
+			audioPath:  filepath.Join(env.TempDir, "test.wav"),
 			outputPath: "",
 			width:      400,
 			wantErr:    true,
@@ -427,7 +383,7 @@ func TestGenerateFromFile_Validation(t *testing.T) {
 		},
 		{
 			name:       "relative output path",
-			audioPath:  filepath.Join(tempDir, "test.wav"),
+			audioPath:  filepath.Join(env.TempDir, "test.wav"),
 			outputPath: "relative/path/test.png",
 			width:      400,
 			wantErr:    true,
@@ -435,16 +391,16 @@ func TestGenerateFromFile_Validation(t *testing.T) {
 		},
 		{
 			name:       "zero width",
-			audioPath:  filepath.Join(tempDir, "test.wav"),
-			outputPath: filepath.Join(tempDir, "test.png"),
+			audioPath:  filepath.Join(env.TempDir, "test.wav"),
+			outputPath: filepath.Join(env.TempDir, "test.png"),
 			width:      0,
 			wantErr:    true,
 			errContain: "width must be positive",
 		},
 		{
 			name:       "negative width",
-			audioPath:  filepath.Join(tempDir, "test.wav"),
-			outputPath: filepath.Join(tempDir, "test.png"),
+			audioPath:  filepath.Join(env.TempDir, "test.wav"),
+			outputPath: filepath.Join(env.TempDir, "test.png"),
 			width:      -100,
 			wantErr:    true,
 			errContain: "width must be positive",
@@ -467,15 +423,10 @@ func TestGenerateFromFile_Validation(t *testing.T) {
 
 // TestGenerateFromPCM_Validation tests input validation for GenerateFromPCM.
 func TestGenerateFromPCM_Validation(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.SoxPath = testSoxPath
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.SoxPath = testSoxPath
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
-
-	gen := NewGenerator(settings, sfs, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
 	tests := []struct {
 		name       string
@@ -504,7 +455,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 		{
 			name:       "zero width",
 			pcmData:    []byte{0, 1, 2, 3},
-			outputPath: filepath.Join(tempDir, "test.png"),
+			outputPath: filepath.Join(env.TempDir, "test.png"),
 			width:      0,
 			wantErr:    true,
 			errContain: "width must be positive",
@@ -512,7 +463,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 		{
 			name:       "negative width",
 			pcmData:    []byte{0, 1, 2, 3},
-			outputPath: filepath.Join(tempDir, "test.png"),
+			outputPath: filepath.Join(env.TempDir, "test.png"),
 			width:      -100,
 			wantErr:    true,
 			errContain: "width must be positive",
@@ -520,7 +471,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 		{
 			name:       "empty PCM data",
 			pcmData:    []byte{},
-			outputPath: filepath.Join(tempDir, "test.png"),
+			outputPath: filepath.Join(env.TempDir, "test.png"),
 			width:      400,
 			wantErr:    true,
 			errContain: "PCM data is empty",
@@ -528,7 +479,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 		{
 			name:       "nil PCM data",
 			pcmData:    nil,
-			outputPath: filepath.Join(tempDir, "test.png"),
+			outputPath: filepath.Join(env.TempDir, "test.png"),
 			width:      400,
 			wantErr:    true,
 			errContain: "PCM data is empty",
@@ -624,21 +575,16 @@ func TestGetCachedAudioDuration_TTLExpiration(t *testing.T) {
 
 // TestGenerateWithSoxDirect_MissingBinary tests error when Sox binary is not configured.
 func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 	// SoxPath intentionally not set
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// Create a dummy audio file
-	err = os.WriteFile(audioPath, []byte("fake audio"), 0o600)
+	err := os.WriteFile(audioPath, []byte("fake audio"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
 	err = gen.generateWithSoxDirect(context.Background(), audioPath, outputPath, 400, false)
@@ -648,10 +594,7 @@ func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
 
 // TestGenerateWithFFmpegSoxPipeline_MissingBinaries tests error handling for missing binaries.
 func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
-	tempDir := t.TempDir()
-
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	env := setupTestEnv(t)
 
 	tests := []struct {
 		name       string
@@ -675,15 +618,13 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			settings := &conf.Settings{}
-			settings.Realtime.Audio.Export.Path = tempDir
-			settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
-			settings.Realtime.Audio.SoxPath = tt.soxPath
+			env.Settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
+			env.Settings.Realtime.Audio.SoxPath = tt.soxPath
 
-			gen := NewGenerator(settings, sfs, slog.Default())
+			gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-			audioPath := filepath.Join(tempDir, "test.wav")
-			outputPath := filepath.Join(tempDir, "test.png")
+			audioPath := filepath.Join(env.TempDir, "test.wav")
+			outputPath := filepath.Join(env.TempDir, "test.png")
 
 			err := gen.generateWithFFmpegSoxPipeline(context.Background(), audioPath, outputPath, 400, false)
 			require.Error(t, err, "should error when binary not configured")
@@ -694,58 +635,43 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 
 // TestGenerateWithFFmpeg_MissingBinary tests error when FFmpeg binary is not configured.
 func TestGenerateWithFFmpeg_MissingBinary(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 	// FfmpegPath intentionally not set
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
-
-	err = gen.generateWithFFmpeg(context.Background(), audioPath, outputPath, 400, false)
+	err := gen.generateWithFFmpeg(context.Background(), audioPath, outputPath, 400, false)
 	require.Error(t, err, "should error when FFmpeg binary not configured")
 	assert.Contains(t, err.Error(), "ffmpeg binary not configured", "error should mention ffmpeg binary")
 }
 
 // TestGenerateWithSoxPCM_MissingBinary tests error when Sox binary is not configured.
 func TestGenerateWithSoxPCM_MissingBinary(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
+	env := setupTestEnv(t)
 	// SoxPath intentionally not set
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	outputPath := filepath.Join(tempDir, "test.png")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 
-	err = gen.generateWithSoxPCM(context.Background(), pcmData, outputPath, 400, false)
+	err := gen.generateWithSoxPCM(context.Background(), pcmData, outputPath, 400, false)
 	require.Error(t, err, "should error when Sox binary not configured")
 	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
 }
 
 // TestGetSoxArgs_FileInput tests getSoxArgs for file input type.
 func TestGetSoxArgs_FileInput(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.Export.Length = 15
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	args := gen.getSoxArgs(context.Background(), audioPath, outputPath, 800, false, SoxInputFile)
 
@@ -767,18 +693,13 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 
 // TestGetSoxSpectrogramArgs_RawFlag tests that raw flag is properly added.
 func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.Export.Length = 15
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// Test with raw=false
 	argsNoRaw := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, 400, false)
@@ -793,18 +714,13 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 
 // TestGetSoxSpectrogramArgs_DimensionCalculation tests width/height calculation.
 func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-	settings.Realtime.Audio.Export.Length = 15
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
 
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
 
-	gen := NewGenerator(settings, sfs, slog.Default())
-
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	testWidths := []int{400, 800, 1000, 1200}
 
@@ -852,22 +768,17 @@ func TestDefaultConstants(t *testing.T) {
 
 // TestNewGenerator_WithNilLogger tests generator creation with nil logger uses default.
 func TestNewGenerator_WithNilLogger(t *testing.T) {
-	tempDir := t.TempDir()
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Path = tempDir
-
-	sfs, err := securefs.New(tempDir)
-	require.NoError(t, err, "Failed to create SecureFS")
+	env := setupTestEnv(t)
 
 	// Should use default logger when nil is passed
-	gen := NewGenerator(settings, sfs, nil)
+	gen := NewGenerator(env.Settings, env.SFS, nil)
 	require.NotNil(t, gen, "generator should be created")
 	assert.NotNil(t, gen.logger, "logger should use default when passed nil")
 
 	// Verify calling methods doesn't panic (would panic if logger were nil)
 	// This validates that nil logger is handled safely
-	audioPath := filepath.Join(tempDir, "test.wav")
-	outputPath := filepath.Join(tempDir, "test.png")
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// getSoxSpectrogramArgs uses g.logger.Warn internally
 	args := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, 400, false)
