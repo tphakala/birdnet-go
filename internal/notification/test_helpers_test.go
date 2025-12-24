@@ -211,13 +211,18 @@ func (m *mockTestProvider) ValidateConfig() error {
 	return m.validateErr
 }
 
-func (m *mockTestProvider) Send(_ context.Context, n *Notification) error {
+func (m *mockTestProvider) Send(ctx context.Context, n *Notification) error {
 	m.mu.Lock()
 	m.sendCalled++
 	m.mu.Unlock()
 
+	// Respect context cancellation during delays
 	if m.sendDelay > 0 {
-		time.Sleep(m.sendDelay)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(m.sendDelay):
+		}
 	}
 
 	if m.sendErr != nil {
@@ -281,19 +286,11 @@ func runConcurrent(t *testing.T, n int, fn func(id int)) {
 }
 
 // waitForCondition waits for a condition to become true within a timeout.
+// Uses testify's require.Eventually for consistent polling behavior.
 func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool, msg string) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		<-ticker.C
-	}
-	require.Fail(t, msg, "condition not met within %v", timeout)
+	const pollInterval = 10 * time.Millisecond
+	require.Eventually(t, condition, timeout, pollInterval, msg)
 }
 
 // =============================================================================
