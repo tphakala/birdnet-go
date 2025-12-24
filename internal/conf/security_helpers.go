@@ -2,10 +2,21 @@
 package conf
 
 import (
-	"cmp"
 	"fmt"
 	"net/url"
 	"strings"
+)
+
+// URL scheme constants for URL construction.
+const (
+	SchemeHTTP  = "http"
+	SchemeHTTPS = "https"
+)
+
+// Default port constants for URL construction.
+const (
+	DefaultHTTPPort  = "80"
+	DefaultHTTPSPort = "443"
 )
 
 // GetBaseURL returns the base URL for notifications and OAuth redirects.
@@ -32,10 +43,13 @@ func (s *Security) GetBaseURL(port string) string {
 // buildURLFromHost constructs a URL from Host, port, and AutoTLS settings.
 // Default ports (80 for HTTP, 443 for HTTPS) are omitted for cleaner URLs.
 func (s *Security) buildURLFromHost(port string) string {
-	scheme := cmp.Or(map[bool]string{true: "https", false: "http"}[s.AutoTLS], "http")
+	scheme := SchemeHTTP
+	if s.AutoTLS {
+		scheme = SchemeHTTPS
+	}
 
 	// Omit default ports for cleaner URLs
-	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+	if (scheme == SchemeHTTPS && port == DefaultHTTPSPort) || (scheme == SchemeHTTP && port == DefaultHTTPPort) {
 		return fmt.Sprintf("%s://%s", scheme, s.Host)
 	}
 
@@ -65,10 +79,7 @@ func (s *Security) GetHostnameForCertificates() string {
 		return ""
 	}
 
-	// Extract hostname without port
-	hostname := parsed.Hostname()
-
-	return hostname
+	return parsed.Hostname()
 }
 
 // GetExternalHost returns the external host:port for backward compatibility.
