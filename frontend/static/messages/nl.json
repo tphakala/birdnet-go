@@ -2032,6 +2032,8 @@
       }
     },
     "security": {
+      "baseUrlLabel": "Basis URL",
+      "baseUrlHelp": "Volledige externe URL voor reverse proxy configuraties. Wanneer ingesteld, wordt deze URL ongewijzigd gebruikt voor meldingen en OAuth omleidingen, waarbij Host en AutoTLS instellingen worden genegeerd.",
       "hostLabel": "Host Adres",
       "allowSubnetBypassLabel": "Sta Toegang vanaf Subnet toe om Authenticatie te Omzeilen",
       "allowedSubnetsLabel": "Toegestane Subnets",
@@ -2093,6 +2095,7 @@
         "disabled": "Subnet bypass is disabled"
       },
       "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
         "host": "Bijvoorbeeld, localhost:8080 of example.domain.com",
         "allowedUsers": "Voer een of meer toegestane gebruikers emails in",
         "subnet": "Voer een CIDR subnet in (bijv. 192.168.1.0/24)"

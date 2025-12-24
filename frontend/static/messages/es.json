@@ -2318,6 +2318,8 @@
       }
     },
     "security": {
+      "baseUrlLabel": "URL base",
+      "baseUrlHelp": "URL externa completa para configuraciones de proxy inverso. Cuando se establece, esta URL se usa tal cual para notificaciones y redirecciones OAuth, ignorando la configuración de Host y AutoTLS.",
       "hostLabel": "Dirección del host",
       "allowSubnetBypassLabel": "Permitir acceso desde subred para omitir autenticación",
       "allowedSubnetsLabel": "Subredes permitidas",
@@ -2379,6 +2381,7 @@
         "disabled": "El bypass de subred está deshabilitado"
       },
       "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
         "host": "Por ejemplo, localhost:8080 o example.domain.com",
         "allowedUsers": "Ingresa uno o más correos de usuarios permitidos",
         "subnet": "Ingresa una subred CIDR (ej. 192.168.1.0/24)"

@@ -2371,6 +2371,8 @@
         "description": "Permitir acesso sem autenticação de redes confiáveis",
         "disabled": "Bypass de sub-rede está desativado"
       },
+      "baseUrlLabel": "URL Base",
+      "baseUrlHelp": "URL externa completa para configurações de proxy reverso. Quando definida, esta URL é usada como está para notificações e redirecionamentos OAuth, ignorando as configurações de Host e AutoTLS.",
       "hostLabel": "Endereço do host",
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
       "allowedSubnetsLabel": "Sub-redes permitidas",
@@ -2382,6 +2384,7 @@
       "basicAuthTitle": "Autenticação básica",
       "basicAuthDescription": "Acesso seguro com uma senha simples",
       "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
         "host": "Por exemplo, localhost:8080 ou example.domain.com",
         "allowedUsers": "Digite um ou mais e-mails de usuários permitidos",
         "subnet": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)"

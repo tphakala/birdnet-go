@@ -290,6 +290,7 @@ export interface WeatherSettings {
 }
 
 export interface SecuritySettings {
+  baseUrl: string;
   host: string;
   autoTls: boolean;
   basicAuth: {
@@ -725,6 +726,7 @@ function createEmptySettings(): SettingsFormData {
     },
     webServer: {},
     security: {
+      baseUrl: '',
       host: '',
       autoTls: false,
       basicAuth: {
