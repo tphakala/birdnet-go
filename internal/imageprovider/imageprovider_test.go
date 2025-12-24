@@ -453,10 +453,9 @@ func TestBirdImageCacheError(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
-	defer func() {
-		closeErr := cache.Close()
-		assert.NoError(t, closeErr, "Failed to close cache")
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	_, err = cache.Get("Turdus merula")
 	assert.Error(t, err, "BirdImageCache.Get() error = nil, want error")
@@ -501,10 +500,9 @@ func TestBirdImageCacheMemoryUsage(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
-	defer func() {
-		closeErr := cache.Close()
-		assert.NoError(t, closeErr, "Failed to close cache")
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Add some entries to the cache
 	_, err = cache.Get("Turdus merula")
@@ -576,10 +574,9 @@ func TestBirdImageCacheNilStore(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, nil)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
-	defer func() {
-		closeErr := cache.Close()
-		assert.NoError(t, closeErr, "Failed to close cache")
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Try to get an image
 	got, err := cache.Get("Turdus merula")
@@ -666,10 +663,9 @@ func TestConcurrentInitialization(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
-	defer func() {
-		closeErr := cache.Close()
-		assert.NoError(t, closeErr, "Failed to close cache")
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Number of concurrent requests
 	const numRequests = 10
@@ -738,10 +734,9 @@ func TestInitializationTimeout(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
-	defer func() {
-		closeErr := cache.Close()
-		assert.NoError(t, closeErr, "Failed to close cache")
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Start a long-running fetch in the background
 	go func() {
@@ -795,10 +790,9 @@ func TestInitializationFailure(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create default cache")
 	cache.SetImageProvider(mockProvider)
-	defer func() {
-		closeErr := cache.Close()
-		assert.NoError(t, closeErr, "Failed to close cache")
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Try to get an image - should fail but not leave initialization flag set
 	_, err = cache.Get("Turdus merula")
@@ -827,11 +821,9 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 	require.NoError(t, err, "Failed to create metrics")
 
 	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
-	defer func() {
-		if err := cache.Close(); err != nil {
-			assert.NoError(t, err, "Failed to close cache")
-		}
-	}()
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Test species that should exist in Wikipedia
 	testSpecies := []string{
