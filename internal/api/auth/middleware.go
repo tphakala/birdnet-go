@@ -223,25 +223,15 @@ func (m *Middleware) handleUnauthenticated(c echo.Context) error {
 // isBrowserRequest determines if the request is from a browser or an API client.
 func (m *Middleware) isBrowserRequest(c echo.Context) bool {
 	acceptHeader := c.Request().Header.Get("Accept")
-	isHXRequest := c.Request().Header.Get("HX-Request") == "true"
-	return strings.Contains(acceptHeader, "text/html") || isHXRequest
+	return strings.Contains(acceptHeader, "text/html")
 }
 
 // redirectToLogin handles browser requests by redirecting to the login page.
 func (m *Middleware) redirectToLogin(c echo.Context, path, ip string) error {
-	acceptHeader := c.Request().Header.Get("Accept")
-	isHXRequest := c.Request().Header.Get("HX-Request") == "true"
-
 	m.logInfo("Redirecting unauthenticated browser client to login page",
-		"path", path, "ip", ip, "accept_header", acceptHeader, "is_htmx", isHXRequest)
+		"path", path, "ip", ip)
 
 	finalLoginPath := m.buildLoginRedirectURL(c, ip)
-
-	if isHXRequest {
-		c.Response().Header().Set("HX-Redirect", finalLoginPath)
-		return c.String(http.StatusUnauthorized, "")
-	}
-
 	return c.Redirect(http.StatusFound, finalLoginPath)
 }
 

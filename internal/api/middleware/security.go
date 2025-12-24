@@ -74,9 +74,6 @@ func NewCORS(config SecurityConfig) echo.MiddlewareFunc {
 			echo.HeaderAuthorization,
 			"X-Requested-With",
 			"X-CSRF-Token",
-			"HX-Request",
-			"HX-Target",
-			"HX-Current-URL",
 		},
 		AllowCredentials: config.AllowCredentials,
 	})
