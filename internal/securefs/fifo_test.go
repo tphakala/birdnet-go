@@ -19,10 +19,8 @@ func TestFIFOPath(t *testing.T) {
 
 	if runtime.GOOS == osWindows {
 		expectedPrefix := `\\.\pipe\`
-		assert.GreaterOrEqual(t, len(fifoPath), len(expectedPrefix), "Windows pipe path too short")
-		if len(fifoPath) >= len(expectedPrefix) {
-			assert.Equal(t, expectedPrefix, fifoPath[:len(expectedPrefix)], "Windows named pipe should start with prefix")
-		}
+		require.GreaterOrEqual(t, len(fifoPath), len(expectedPrefix), "Windows pipe path too short")
+		assert.Equal(t, expectedPrefix, fifoPath[:len(expectedPrefix)], "Windows named pipe should start with prefix")
 	} else {
 		assert.Equal(t, path, fifoPath, "Unix path should be unchanged")
 	}
@@ -32,10 +30,8 @@ func TestFIFOPath(t *testing.T) {
 	winFifoPath := GetFIFOPath(winPath)
 	if runtime.GOOS == osWindows {
 		expectedPrefix := `\\.\pipe\`
-		assert.GreaterOrEqual(t, len(winFifoPath), len(expectedPrefix), "Windows pipe path too short")
-		if len(winFifoPath) >= len(expectedPrefix) {
-			assert.Equal(t, expectedPrefix, winFifoPath[:len(expectedPrefix)], "Windows pipe name should start with prefix")
-		}
+		require.GreaterOrEqual(t, len(winFifoPath), len(expectedPrefix), "Windows pipe path too short")
+		assert.Equal(t, expectedPrefix, winFifoPath[:len(expectedPrefix)], "Windows pipe name should start with prefix")
 	}
 }
 

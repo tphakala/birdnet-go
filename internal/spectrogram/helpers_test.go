@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -239,7 +240,7 @@ func createIntegrationPreRenderer(t *testing.T, soxPath, audioDirName string) *i
 	// Create audio output directory
 	audioDir := env.TempDir
 	if audioDirName != "" {
-		audioDir = env.TempDir + "/" + audioDirName
+		audioDir = filepath.Join(env.TempDir, audioDirName)
 		err := os.MkdirAll(audioDir, 0o750)
 		require.NoError(t, err, "Failed to create audio directory")
 	}

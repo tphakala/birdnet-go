@@ -13,7 +13,9 @@ import (
 func TestInitManager_ConcurrentInitialization(t *testing.T) {
 	t.Parallel()
 
-	// This test verifies thread-safe initialization under concurrent access
+	// This test verifies thread-safe initialization under concurrent access.
+	// Note: Uses singleton manager which tests actual production behavior.
+	// State may persist from previous tests, which is acceptable for concurrency testing.
 	manager := GetInitManager()
 
 	// Launch multiple goroutines trying to initialize components

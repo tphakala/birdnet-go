@@ -195,8 +195,11 @@ func TestTelemetryWorker_Sampling(t *testing.T) {
 	require.NoError(t, err, "Failed to create worker")
 
 	// Process many events with different components
-	// Some should be sampled, some should not
-	components := []string{"component1", "component2", "component3", "component4"}
+	// Use enough components to reduce probability of all being sampled
+	components := []string{
+		"component1", "component2", "component3", "component4",
+		"component5", "component6", "component7", "component8",
+	}
 	processedCount := 0
 
 	for _, comp := range components {
@@ -210,8 +213,8 @@ func TestTelemetryWorker_Sampling(t *testing.T) {
 		}
 	}
 
-	// With 50% sampling, we should have processed roughly half
-	// But due to deterministic hashing, it might not be exactly 50%
+	// With 50% sampling and 8 components, we expect roughly 4 to be sampled
+	// Due to deterministic hashing, it won't be exactly 50%
 	assert.NotZero(t, processedCount, "Expected some events to be sampled")
 	assert.NotEqual(t, len(components), processedCount, "Expected not all events to be sampled with 50% rate")
 }
