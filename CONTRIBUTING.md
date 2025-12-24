@@ -171,8 +171,22 @@ air realtime      # Realtime mode with hot reload
 1. Clone: `git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go`
 2. Open: `code .`
 3. Press `F1` → "Dev Containers: Reopen in Container"
-4. Wait ~5-10 minutes for setup
-5. Start: `air realtime`
+4. Wait ~5-10 minutes for setup (frontend will be built automatically)
+5. Start: `air realtime` or `task dev_server`
+
+**Alternative Workflow (Active Frontend Development):**
+
+If you're actively developing the frontend and need live updates:
+
+```bash
+# Terminal 1: Watch and rebuild frontend on changes
+task frontend-watch
+
+# Terminal 2: Run Go server with hot reload
+air realtime
+```
+
+**Note:** The devcontainer automatically builds the frontend during setup. If you need to rebuild manually, run `task frontend-build`.
 
 **Features:**
 

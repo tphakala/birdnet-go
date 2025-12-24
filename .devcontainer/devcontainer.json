@@ -26,6 +26,8 @@
 	"remoteUser": "dev-user",
 	"updateRemoteUserUID": true,
 	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
+	// Uncomment if using devcontainer-cli-port-forwarder
+	// "initializeCommand": "python3 .devcontainer/devcontainer-cli-port-forwarder/forwarder.py verbose &",
 	"customizations": {
 		"vscode": {
 			"extensions": [
@@ -169,7 +171,7 @@
 	},
 	"features": {
 		"ghcr.io/devcontainers/features/go:1": {
-			"version": "1.25.1"
+			"version": "1.25.3"
 		},
 		"ghcr.io/devcontainers/features/node:1": {
 			"version": "24",

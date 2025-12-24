@@ -10,7 +10,7 @@ sudo apt-get update -q
 sudo apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
 
 # Install development tools (git is already included)
-sudo apt-get install -y nano vim curl wget git dialog build-essential fish
+sudo apt-get install -y nano vim curl wget git dialog build-essential fish socat
 
 # Clone TensorFlow source for compilation (headers needed for CGO)
 echo "Setting up TensorFlow source..."
@@ -205,6 +205,10 @@ npm run typecheck || echo "Note: TypeScript check found issues (normal for initi
 
 cd ..
 
+# Build frontend for immediate use
+echo "Building frontend for development..."
+task frontend-build || echo "Warning: Frontend build failed, but you can rebuild with: task frontend-build"
+
 # Verify installations
 echo ""
 echo "=== Installation Summary ==="
@@ -251,15 +255,14 @@ echo "  - golangci-lint run        (before Go commits)"
 echo "  - task frontend-quality    (before frontend commits)"
 
 echo ""
-echo "✅ Development environment setup complete!"
-echo ""
 echo "=== Available Development Commands ==="
 echo "Development servers:"
-echo "  - task dev_server          (full development server with frontend build + live reload)"
-echo "  - air realtime             (Go live reload server with realtime analysis)"
+echo "  - air realtime             (start Go server - frontend already built!)"
+echo "  - task dev_server          (same as 'air realtime')"
 echo ""
-echo "Frontend development:"
-echo "  - task frontend-build      (build Svelte to static files for embedding)"
+echo "Frontend development (optional):"
+echo "  - task frontend-watch      (watch mode: auto-rebuilds frontend on changes)"
+echo "  - task frontend-build      (one-time rebuild if needed)"
 echo "  - task frontend-lint-fix   (auto-fix frontend linting issues)"
 echo "  - task frontend-test       (run frontend tests)"
 echo "  - task frontend-quality    (run comprehensive frontend quality checks)"
@@ -279,5 +282,11 @@ echo "Switch shells: click terminal dropdown or use 'Ctrl+Shift+\`' in VS Code"
 echo ""
 echo "💡 Use 'Ctrl+Shift+P' and search for 'Go: Install/Update Tools' in VS Code for additional Go tools"
 echo ""
-echo "🚀 Setup complete! Open a new terminal in VS Code to start developing:"
-echo "   Terminal → New Terminal (Ctrl+Shift+\`) or click '+' in terminal panel"
+echo "✅ Development environment setup complete!"
+echo ""
+echo "Quick Start:"
+echo "   1. Open a terminal: Ctrl+Shift+\` or Terminal → New Terminal"
+echo "   2. Start server: air realtime  (or: task dev_server)"
+echo "   3. Open browser: http://localhost:8080"
+echo ""
+echo "For active frontend development, use 'task frontend-watch' in a separate terminal"
