@@ -214,7 +214,7 @@ func (c *DetectionNotificationConsumer) buildDetectionNotification(event events.
 		WithMetadata("location", event.GetLocation()).
 		WithMetadata("is_new_species", true).
 		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
-		WithExpiry(24 * time.Hour)
+		WithExpiry(DefaultDetectionExpiry)
 
 	// Expose all TemplateData fields with bg_ prefix for use in provider templates
 	notification = EnrichWithTemplateData(notification, templateData)

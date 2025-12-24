@@ -522,8 +522,8 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	// Add jitter: ±25% of the delay to prevent thundering herd
 	// Use math/rand/v2 for thread-safe random generation (Go 1.22+)
 	// G404: Cryptographic randomness not needed for retry jitter - this is for load distribution only
-	jitterRange := exponential * jitterPercent / 100
-	jitterMax := int64(jitterRange * 2)
+	jitterRange := exponential * jitterPercent / JitterDivisor
+	jitterMax := int64(jitterRange * JitterMultiplier)
 	var jitter time.Duration
 	if jitterMax > 0 {
 		jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange //nolint:gosec // Non-cryptographic use for load distribution
@@ -1199,7 +1199,7 @@ func isCGNATAddress(ip net.IP) bool {
 	if ipv4 == nil {
 		return false
 	}
-	return ipv4[0] == 100 && (ipv4[1]&0xC0) == 64
+	return ipv4[0] == 100 && (ipv4[1]&SharedAddressMask) == 64
 }
 
 // hasInternalTLD checks if hostname has a common internal/private TLD.

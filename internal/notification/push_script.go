@@ -115,7 +115,7 @@ func (s *ScriptProvider) Send(ctx context.Context, n *Notification) error {
 		if errors.As(err, &exitErr) {
 			_ = exitErr // caller decides retry policy; we just return the error
 		}
-		return fmt.Errorf("script '%s' failed: %w, output: %s", s.name, err, truncate(string(out), 512))
+		return fmt.Errorf("script '%s' failed: %w, output: %s", s.name, err, truncate(string(out), DefaultScriptOutputTruncateLength))
 	}
 	return nil
 }

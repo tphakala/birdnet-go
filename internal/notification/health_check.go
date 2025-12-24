@@ -56,8 +56,8 @@ type HealthCheckConfig struct {
 func DefaultHealthCheckConfig() HealthCheckConfig {
 	return HealthCheckConfig{
 		Enabled:  true,
-		Interval: 60 * time.Second,
-		Timeout:  10 * time.Second,
+		Interval: DefaultHealthCheckInterval,
+		Timeout:  DefaultHealthCheckTimeout,
 	}
 }
 
