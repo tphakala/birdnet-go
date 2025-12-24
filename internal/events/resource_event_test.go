@@ -78,8 +78,8 @@ func TestNewResourceEvent(t *testing.T) {
 
 			// Check timestamp is reasonable
 			timestamp := event.GetTimestamp()
-			assert.False(t, timestamp.Before(before) || timestamp.After(after),
-				"GetTimestamp() = %v, want between %v and %v", timestamp, before, after)
+			assert.False(t, timestamp.Before(before), "timestamp should be after or at the same time as 'before'")
+			assert.False(t, timestamp.After(after), "timestamp should be before or at the same time as 'after'")
 
 			// Check metadata is initialized
 			assert.NotNil(t, event.GetMetadata(), "GetMetadata() returned nil, want initialized map")

@@ -66,7 +66,7 @@ func TestValidateStartupDiskSpace(t *testing.T) {
 
 				// Verify it's a structured error
 				var enhancedErr *errors.EnhancedError
-				require.True(t, errors.As(err, &enhancedErr),
+				require.ErrorAs(t, err, &enhancedErr,
 					"ValidateStartupDiskSpace() should return EnhancedError")
 
 				// Verify error has critical priority
@@ -92,7 +92,7 @@ func TestValidateStartupDiskSpace_ErrorStructure(t *testing.T) {
 
 	// Verify it's a structured error
 	var enhancedErr *errors.EnhancedError
-	require.True(t, errors.As(err, &enhancedErr), "Expected EnhancedError")
+	require.ErrorAs(t, err, &enhancedErr, "Expected EnhancedError")
 
 	// Verify error metadata
 	assert.Equal(t, "datastore", enhancedErr.GetComponent(), "Error component mismatch")
