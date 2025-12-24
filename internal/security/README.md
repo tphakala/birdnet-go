@@ -96,7 +96,6 @@ The application uses a dedicated `AuthMiddleware` to control access to protected
 4. **Response Type Handling**
    - Different responses are provided based on request type:
      - API requests receive JSON 401 responses with descriptive error messages
-     - HTMX requests receive `HX-Redirect` headers to the login page
      - Browser requests are redirected to the login page with a return URL
 
 ## Authentication Endpoints

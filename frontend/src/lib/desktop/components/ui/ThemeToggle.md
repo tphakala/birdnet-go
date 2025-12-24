@@ -1,6 +1,6 @@
 # ThemeToggle Component
 
-A Svelte 5 TypeScript component that provides a theme switcher between light and dark modes using DaisyUI's swap component.
+A Svelte 5 TypeScript component that provides a theme switcher between light and dark modes with animated toggle.
 
 ## Features
 
@@ -71,7 +71,7 @@ The component is designed to work seamlessly with the existing theme system:
 
 1. **Server-side compatibility**: The theme is applied immediately on mount to prevent flash
 2. **localStorage sync**: Uses the same 'theme' key as the existing system
-3. **DaisyUI integration**: Uses the same swap component and classes
+3. **Tailwind CSS dark mode**: Works with Tailwind's dark mode system
 
 ## Examples
 
@@ -135,9 +135,9 @@ The component is designed to work seamlessly with the existing theme system:
 
 ## Styling
 
-The component uses DaisyUI's swap component classes and can be customized:
+The component uses Tailwind CSS utility classes and can be customized:
 
-- Uses `btn-ghost` for minimal styling
+- Uses ghost-style button for minimal styling
 - Supports size modifiers via the `size` prop
 - Can be styled with custom classes via `className` prop
 
@@ -154,14 +154,11 @@ The component uses DaisyUI's swap component classes and can be customized:
 - CSS custom properties for theming
 - Media queries for system theme detection
 
-## Migration from Old System
+## Implementation Notes
 
-When migrating from the HTMX/Alpine.js version:
-
-1. The component maintains the same localStorage key ('theme')
-2. Uses the same data attributes on document root
-3. Visual appearance matches the original implementation
-4. No changes needed to existing CSS that depends on `[data-theme]`
+1. The component uses the localStorage key ('theme')
+2. Uses data attributes on document root for theme state
+3. No changes needed to existing CSS that depends on `[data-theme]`
 
 ## Performance Considerations
 

@@ -118,7 +118,7 @@ The component listens for:
 
 ## Styling
 
-The component uses DaisyUI classes and can be customized with:
+The component uses Tailwind CSS utility classes and can be customized with:
 
 - Custom `className` prop for container styling
 - CSS variables for theme integration

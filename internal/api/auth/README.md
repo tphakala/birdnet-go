@@ -32,7 +32,7 @@ The package aims to decouple authentication logic from the specific API route ha
       2.  Session-based authentication via `CheckAccess`.
     - Sets context values (`isAuthenticated`, `username`, `authMethod`) upon successful authentication.
     - Handles unauthenticated requests:
-      - Redirects browser clients (HTML `Accept` header or `HX-Request` header) to `/login` with a `redirect` query parameter. Handles HTMX redirects appropriately (`HX-Redirect` header).
+      - Redirects browser clients (HTML `Accept` header) to `/login` with a `redirect` query parameter.
       - Returns a `401 Unauthorized` JSON response for API clients.
 
 ## Authentication Flow

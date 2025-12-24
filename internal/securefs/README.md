@@ -91,7 +91,7 @@ type CacheStats struct {
 
 ## Root Cause Analysis
 
-The V2 JSON API was significantly slower than the HTMX API due to:
+The V2 JSON API had performance bottlenecks due to:
 
 1. **Multiple `filepath.Abs()` calls** - Expensive system calls
 2. **Symlink resolution loops** - `filepath.EvalSymlinks()` with recursive traversal
