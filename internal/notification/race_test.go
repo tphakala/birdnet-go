@@ -61,13 +61,10 @@ func TestBroadcastMetadataRace(t *testing.T) {
 			WithMetadata("initial", true)
 
 		// Start subscriber goroutines that will read from Metadata
-		for j, ch := range subscribers {
-			wg.Add(1)
-			go func(subscriberID int, notifCh <-chan *Notification) {
-				defer wg.Done()
-
+		for _, ch := range subscribers {
+			wg.Go(func() {
 				select {
-				case received := <-notifCh:
+				case received := <-ch:
 					if received == nil {
 						return
 					}
@@ -85,7 +82,7 @@ func TestBroadcastMetadataRace(t *testing.T) {
 				case <-time.After(100 * time.Millisecond):
 					// Timeout - notification not received
 				}
-			}(j, ch)
+			})
 		}
 
 		// Broadcast the notification via CreateWithMetadata
@@ -150,13 +147,10 @@ func TestBroadcastMetadataRaceWithWorkerPattern(t *testing.T) {
 	const iterations = 50
 	for range iterations {
 		// Start subscribers reading
-		for j, ch := range subscribers {
-			wg.Add(1)
-			go func(id int, notifCh <-chan *Notification) {
-				defer wg.Done()
-
+		for _, ch := range subscribers {
+			wg.Go(func() {
 				select {
-				case received := <-notifCh:
+				case received := <-ch:
 					if received == nil {
 						return
 					}
@@ -179,7 +173,7 @@ func TestBroadcastMetadataRaceWithWorkerPattern(t *testing.T) {
 				case <-time.After(50 * time.Millisecond):
 					// Timeout
 				}
-			}(j, ch)
+			})
 		}
 
 		// Simulate NotificationWorker.ProcessEvent pattern:
@@ -239,9 +233,8 @@ func TestCloneProvidesSafeAccess(t *testing.T) {
 
 	// Start readers - they read from their own clones (simulating SSE clients)
 	for i := range numReaders {
-		wg.Add(1)
-		go func(id int, clone *Notification) {
-			defer wg.Done()
+		clone := clones[i]
+		wg.Go(func() {
 			for j := range iterations {
 				// Read operations on clone - should be safe
 				_ = clone.Metadata["initial"]
@@ -253,7 +246,7 @@ func TestCloneProvidesSafeAccess(t *testing.T) {
 					_, _, _ = k, v, j
 				}
 			}
-		}(i, clones[i])
+		})
 	}
 
 	// Single writer modifies the original (simulating NotificationWorker.ProcessEvent)

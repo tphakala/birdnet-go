@@ -273,11 +273,9 @@ func runConcurrent(t *testing.T, n int, fn func(id int)) {
 	t.Helper()
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			fn(id)
-		}(i)
+		wg.Go(func() {
+			fn(i)
+		})
 	}
 	wg.Wait()
 }

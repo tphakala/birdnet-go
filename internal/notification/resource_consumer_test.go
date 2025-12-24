@@ -165,13 +165,13 @@ func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 
 				// Verify resource type in metadata
 				resType, ok := latest.Metadata["resource_type"].(string)
-				assert.True(t, ok && resType == tt.event.GetResourceType(),
-					"Metadata resource_type = %v, want %v", resType, tt.event.GetResourceType())
+				require.True(t, ok, "resource_type should be a string")
+				assert.Equal(t, tt.event.GetResourceType(), resType, "Metadata resource_type mismatch")
 
 				// Verify severity in metadata
 				severity, ok := latest.Metadata["severity"].(string)
-				assert.True(t, ok && severity == tt.event.GetSeverity(),
-					"Metadata severity = %v, want %v", severity, tt.event.GetSeverity())
+				require.True(t, ok, "severity should be a string")
+				assert.Equal(t, tt.event.GetSeverity(), severity, "Metadata severity mismatch")
 			}
 		})
 	}

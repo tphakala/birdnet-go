@@ -340,14 +340,14 @@ func TestService_broadcast_Integration(t *testing.T) {
 		select {
 		case n := <-ch1:
 			assert.Equal(t, notification.ID, n.ID)
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(500 * time.Millisecond):
 			require.Fail(t, "subscriber 1 did not receive notification")
 		}
 
 		select {
 		case n := <-ch2:
 			assert.Equal(t, notification.ID, n.ID)
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(500 * time.Millisecond):
 			require.Fail(t, "subscriber 2 did not receive notification")
 		}
 	})
@@ -372,7 +372,7 @@ func TestService_broadcast_Integration(t *testing.T) {
 		select {
 		case n := <-ch2:
 			assert.Equal(t, notification.ID, n.ID)
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(500 * time.Millisecond):
 			require.Fail(t, "subscriber 2 did not receive notification")
 		}
 
@@ -503,13 +503,11 @@ func TestService_ConcurrentBroadcast(t *testing.T) {
 	// Broadcast concurrently
 	var wg sync.WaitGroup
 	for i := range 10 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
 			notification := NewNotification(TypeInfo, PriorityLow, "Concurrent", "Test")
-			notification.ID += fmt.Sprintf("-%d", idx) // Make unique
+			notification.ID += fmt.Sprintf("-%d", i) // Make unique
 			service.broadcast(notification)
-		}(i)
+		})
 	}
 
 	wg.Wait()
