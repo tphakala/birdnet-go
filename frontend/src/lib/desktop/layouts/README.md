@@ -1,6 +1,6 @@
 # Layout Components
 
-This directory contains the main layout components for the BirdNET-Go Svelte UI, which runs at `/ui/` routes alongside the existing HTMX interface.
+This directory contains the main layout components for the BirdNET-Go Svelte 5 UI.
 
 ## Components
 
@@ -8,7 +8,7 @@ This directory contains the main layout components for the BirdNET-Go Svelte UI,
 
 The main layout wrapper that provides the overall application structure with:
 
-- DaisyUI drawer layout for responsive navigation
+- Responsive drawer layout for navigation
 - Header with search, notifications, audio level indicator, and theme toggle
 - Sidebar navigation with collapsible sections
 - Global loading indicator
@@ -98,7 +98,7 @@ Themes are managed through:
 
 - localStorage persistence
 - Immediate application on page load
-- Integration with DaisyUI's theme system
+- Tailwind CSS dark mode support
 - Theme toggle component in header
 
 ## Security Integration

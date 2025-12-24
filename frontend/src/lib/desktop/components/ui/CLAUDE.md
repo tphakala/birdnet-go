@@ -45,7 +45,7 @@ If you must create a new component:
 3. Include accessibility features
 4. Add entry to README.md with full documentation
 5. Create `.test.ts` file
-6. Use DaisyUI styling
+6. Use Tailwind CSS utility classes
 
 ### 5. Component Patterns
 

@@ -41,7 +41,7 @@ Uses v2 API endpoints:
 ## Dependencies
 
 - HLS.js library (loaded via script tag in main HTML)
-- DaisyUI/Tailwind CSS for styling
+- Tailwind CSS for styling
 - Browser support for EventSource API
 
 ## Implementation Notes

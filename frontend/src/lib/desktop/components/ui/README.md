@@ -6,7 +6,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 - **TypeScript First**: All components are built with TypeScript for type safety
 - **Svelte 5 Runes**: Modern reactive state management using `$state`, `$derived`, and `$bindable()`
-- **DaisyUI Integration**: Consistent styling with DaisyUI CSS framework
+- **Tailwind CSS v4.1**: Native utility-first styling without component library dependencies
 - **Accessibility**: ARIA attributes, semantic HTML, and keyboard navigation
 - **Snippet Composition**: Flexible content using Svelte 5 snippets
 - **Extensible**: All components accept additional HTML attributes
@@ -524,8 +524,8 @@ export function handleBirdImageError(e: Event): void;
 
 ### Styling Guidelines
 
-- Use DaisyUI classes when possible
-- Create component-specific styles in `<style>` blocks
+- Use Tailwind CSS utility classes
+- Create component-specific styles in `<style>` blocks when needed
 - Support `className` prop for customization
 - Follow responsive design principles
 

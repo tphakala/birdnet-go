@@ -155,21 +155,12 @@ The search box only appears on specified pages:
 
 ## Styling
 
-The component uses DaisyUI input classes and can be customized:
+The component uses Tailwind CSS utility classes and can be customized:
 
 - Rounded corners for modern appearance
 - Focus outline for accessibility
 - Loading spinner during search
 - Smooth opacity transitions
-
-## Migration from HTMX Version
-
-Key differences from the original implementation:
-
-1. **Debouncing**: Implemented in JavaScript instead of HTMX triggers
-2. **API Calls**: Placeholder for v2 API (currently uses callbacks)
-3. **Navigation**: Uses callbacks instead of HTMX navigation
-4. **State Management**: React-style state instead of server-side
 
 ## Future Enhancements
 

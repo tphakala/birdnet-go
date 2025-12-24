@@ -20,8 +20,7 @@ This document provides a comprehensive overview of BirdNET-Go's architecture, te
     - [Testing Framework](#testing-framework)
   - [Frontend Architecture](#frontend-architecture)
     - [UI Technology Stack](#ui-technology-stack)
-    - [Legacy UI (Deprecated)](#legacy-ui-deprecated)
-    - [Modern UI (Svelte 5)](#modern-ui-svelte-5)
+    - [Svelte 5 UI](#svelte-5-ui)
     - [Real-Time Communication](#real-time-communication)
     - [State Management](#state-management)
     - [Testing Strategy](#testing-strategy)
@@ -35,8 +34,7 @@ This document provides a comprehensive overview of BirdNET-Go's architecture, te
     - [Hardware Requirements](#hardware-requirements)
     - [Platform-Specific Features](#platform-specific-features)
   - [API Design](#api-design)
-    - [API v1 (Deprecated)](#api-v1-deprecated)
-    - [API v2 (Active Development)](#api-v2-active-development)
+    - [API v2 (Active)](#api-v2-active)
   - [Security Architecture](#security-architecture)
     - [Authentication](#authentication)
     - [Authorization](#authorization)
@@ -75,11 +73,10 @@ BirdNET-Go is a self-contained application for real-time bird sound identificati
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        User Interface                        │
-│  ┌──────────────────┐         ┌──────────────────────────┐ │
-│  │  Legacy UI       │         │  Modern UI (Svelte 5)    │ │
-│  │  HTMX + Alpine   │         │  TypeScript + Tailwind   │ │
-│  │  (Deprecated)    │         │  (Active Development)    │ │
-│  └──────────────────┘         └──────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │             Svelte 5 + TypeScript + Tailwind           │ │
+│  │                    (Active Development)                 │ │
+│  └────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼ (HTTP/SSE)
@@ -267,7 +264,7 @@ internal/api/
 5. **Authentication**: OAuth2-based auth for protected routes
 6. **Gzip**: Response compression
 7. **CacheControl**: Cache headers for assets and API responses
-8. **Vary**: HTMX-aware caching headers
+8. **SecureHeaders**: Security headers (HSTS, X-Frame-Options)
 
 **Server-Sent Events (SSE):**
 
@@ -1065,49 +1062,17 @@ go test -race ./...
 
 ### UI Technology Stack
 
-BirdNET-Go has two UI implementations:
+BirdNET-Go uses a modern Svelte 5 frontend:
 
-| Feature              | Legacy UI        | Modern UI             |
-| -------------------- | ---------------- | --------------------- |
-| **Status**           | Deprecated       | Active Development    |
-| **Technology**       | HTMX + Alpine.js | Svelte 5 + TypeScript |
-| **Styling**          | Tailwind CSS     | Tailwind CSS          |
-| **Components**       | DaisyUI          | DaisyUI               |
-| **State Management** | Alpine stores    | Svelte 5 Runes        |
-| **Build Tool**       | None (CDN)       | Vite                  |
-| **Testing**          | Manual           | Vitest + Playwright   |
+| Feature              | Technology            |
+| -------------------- | --------------------- |
+| **Framework**        | Svelte 5 + TypeScript |
+| **Styling**          | Tailwind CSS v4.1     |
+| **State Management** | Svelte 5 Runes        |
+| **Build Tool**       | Vite                  |
+| **Testing**          | Vitest + Playwright   |
 
-### Legacy UI (Deprecated)
-
-**⚠️ No new features should be added to the legacy UI.**
-
-**Technologies:**
-
-- **HTMX**: Dynamic HTML over the wire
-- **Alpine.js**: Lightweight reactive framework
-- **Tailwind CSS**: Utility-first CSS
-- **DaisyUI**: Component library
-
-**Structure:**
-
-```
-views/
-├── dashboard.html      # Legacy dashboard
-├── settings.html       # Legacy settings
-└── partials/           # Reusable components
-```
-
-**Why Deprecated:**
-
-- Limited interactivity for complex features
-- Difficult to test
-- Poor developer experience for modern features
-- No type safety
-- Growing maintenance burden
-
-### Modern UI (Svelte 5)
-
-**🚀 All new features must use the Svelte 5 UI.**
+### Svelte 5 UI
 
 **Core Technologies:**
 
@@ -1133,10 +1098,10 @@ views/
 - Comprehensive type definitions for all components
 - Better IDE support and refactoring
 
-**Tailwind CSS + DaisyUI:**
+**Tailwind CSS v4.1:**
 
+- Native CSS with Tailwind - no component library dependencies
 - Utility-first CSS framework
-- DaisyUI provides pre-built component classes
 - Custom theme configuration
 - Dark mode support
 - Responsive design utilities
@@ -1159,8 +1124,7 @@ frontend/
 │   │   │   │   ├── dashboard/    # Dashboard feature
 │   │   │   │   ├── settings/     # Settings management
 │   │   │   │   └── detections/   # Detection history
-│   │   │   ├── layouts/          # Page layouts
-│   │   │   └── views/            # Top-level views (DEPRECATED: HTMX-based UI, do not expand)
+│   │   │   └── layouts/          # Page layouts
 │   │   ├── utils/                # Utility functions
 │   │   │   ├── api.ts            # API client
 │   │   │   ├── cn.ts             # Class name utility
@@ -1258,15 +1222,16 @@ Svelte 5 uses "runes" for reactivity - a compile-time reactive system:
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
 
-  let { className = '' } = $props();
+  let { className = '', disabled = false } = $props();
 </script>
 
-<!-- Tailwind + DaisyUI + conditional classes -->
+<!-- Tailwind v4.1 with conditional classes -->
 <button class={cn(
-  'btn btn-primary',           // DaisyUI base
-  'rounded-lg shadow-md',      // Tailwind utilities
-  { 'btn-disabled': disabled }, // Conditional
-  className                     // User overrides
+  'px-4 py-2 bg-blue-600 text-white',  // Base styles
+  'rounded-lg shadow-md',               // Tailwind utilities
+  'hover:bg-blue-700 focus:ring-2',     // Interactive states
+  { 'opacity-50 cursor-not-allowed': disabled }, // Conditional
+  className                              // User overrides
 )}>
   Click me
 </button>
@@ -1733,11 +1698,9 @@ Air watches both Go and frontend files, rebuilding and restarting the server aut
 
 ## API Design
 
-### API v2 (Active Development)
+### API v2 (Active)
 
-**✅ All new API endpoints must be in API v2.**
-
-Located in: `internal/api/v2/`
+All API endpoints are in `internal/api/v2/`.
 
 **Design Principles:**
 
@@ -2205,7 +2168,6 @@ The API v2 middleware supports multiple authentication methods in priority order
 
 3. **Unauthenticated Response Handling**
    - Browser requests → redirect to `/login?redirect=<path>`
-   - HTMX requests → `HX-Redirect` header
    - API requests → JSON `401 Unauthorized`
 
 **Authentication Methods (v2):**
@@ -2553,7 +2515,6 @@ go tool pprof http://localhost:8080/debug/pprof/profile
 go tool pprof http://localhost:8080/debug/pprof/heap
 ```
 
-
 ### Documentation
 
 **Code Documentation:**
@@ -2573,6 +2534,5 @@ func Example() *Detection {
     }
 }
 ```
-
 
 For questions or contributions, see [CONTRIBUTING.md](CONTRIBUTING.md) or join our [Discord](https://discord.gg/gcSCFGUtsd).
