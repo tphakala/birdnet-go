@@ -123,7 +123,7 @@ func (t *Toast) ToNotification() *Notification {
 	}
 	
 	// Toasts are ephemeral - set short expiry
-	notif.WithExpiry(5 * time.Minute)
+	notif.WithExpiry(DefaultQuickExpiry)
 	
 	return notif
 }

@@ -30,8 +30,8 @@ type PushRateLimiterConfig struct {
 // These defaults prevent overwhelming external APIs while allowing reasonable notification rates.
 func DefaultPushRateLimiterConfig() PushRateLimiterConfig {
 	return PushRateLimiterConfig{
-		RequestsPerMinute: 60,  // 1 request per second average
-		BurstSize:         10,  // Allow bursts of up to 10 requests
+		RequestsPerMinute: DefaultRequestsPerMinute, // 1 request per second average
+		BurstSize:         DefaultBurstSize,         // Allow bursts of up to 10 requests
 	}
 }
 

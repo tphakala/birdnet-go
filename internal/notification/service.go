@@ -58,10 +58,10 @@ type ServiceConfig struct {
 // DefaultServiceConfig returns a default configuration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-		MaxNotifications:   1000,
-		CleanupInterval:    5 * time.Minute,
+		MaxNotifications:   DefaultMaxNotifications,
+		CleanupInterval:    DefaultCleanupInterval,
 		RateLimitWindow:    1 * time.Minute,
-		RateLimitMaxEvents: 100,
+		RateLimitMaxEvents: DefaultRateLimitMaxEvents,
 	}
 }
 
@@ -287,7 +287,7 @@ func (s *Service) Subscribe() (<-chan *Notification, context.Context) {
 
 	ctx, cancel := context.WithCancel(s.ctx)
 	sub := &Subscriber{
-		ch:     make(chan *Notification, 10),
+		ch:     make(chan *Notification, DefaultChannelBufferSize),
 		ctx:    ctx,
 		cancel: cancel,
 	}

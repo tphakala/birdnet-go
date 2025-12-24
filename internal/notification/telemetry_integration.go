@@ -48,8 +48,8 @@ type TelemetryConfig struct {
 // DefaultTelemetryConfig returns default telemetry configuration
 func DefaultTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
-		Enabled:                  true, // Controlled by global Sentry setting
-		RateLimitReportThreshold: 50.0, // Report when drop rate > 50%
+		Enabled:                  true,                            // Controlled by global Sentry setting
+		RateLimitReportThreshold: DefaultRateLimitReportThreshold, // Report when drop rate > 50%
 	}
 }
 

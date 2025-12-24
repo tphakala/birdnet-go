@@ -11,8 +11,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
-// Telemetry debouncing configuration
+// Circuit breaker configuration defaults
 const (
+	// DefaultMaxFailures is the default number of consecutive failures before opening the circuit.
+	// 5 provides quick failure detection without being overly sensitive to transient network issues.
+	DefaultMaxFailures = 5
+
+	// DefaultCircuitBreakerTimeout is the default time to wait before transitioning from Open to Half-Open.
+	// 30 seconds balances recovery testing with API protection.
+	DefaultCircuitBreakerTimeout = 30 * time.Second
+
 	// MinTelemetryReportInterval prevents telemetry spam during rapid state changes.
 	// State transitions closer than this interval will be logged but not reported.
 	MinTelemetryReportInterval = 30 * time.Second
@@ -71,14 +79,14 @@ type CircuitBreakerConfig struct {
 // DefaultCircuitBreakerConfig returns default circuit breaker configuration.
 func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 	return CircuitBreakerConfig{
-		// MaxFailures: 5 provides quick failure detection without being overly sensitive
+		// MaxFailures provides quick failure detection without being overly sensitive
 		// to transient network issues. Most services recover within 5 attempts.
-		MaxFailures: 5,
-		// Timeout: 30s balances recovery testing with API protection:
+		MaxFailures: DefaultMaxFailures,
+		// Timeout balances recovery testing with API protection:
 		// - Long enough for temporary network issues to resolve
 		// - Short enough to detect actual recovery promptly
 		// - Matches typical API timeout values (most APIs timeout at 20-60s)
-		Timeout: 30 * time.Second,
+		Timeout: DefaultCircuitBreakerTimeout,
 		// HalfOpenMaxRequests: 1 ensures conservative recovery testing
 		// Only one request is allowed to test if the service has recovered
 		HalfOpenMaxRequests: 1,

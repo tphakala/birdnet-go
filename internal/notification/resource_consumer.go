@@ -41,7 +41,7 @@ type ResourceWorkerConfig struct {
 // DefaultResourceWorkerConfig returns default configuration
 func DefaultResourceWorkerConfig() *ResourceWorkerConfig {
 	return &ResourceWorkerConfig{
-		AlertThrottle:     5 * time.Minute, // Don't spam alerts for same resource
+		AlertThrottle:     DefaultAlertThrottle, // Don't spam alerts for same resource
 		ResourceThrottles: make(map[string]time.Duration), // Empty by default, can be customized
 		Debug:             false,
 	}
@@ -73,7 +73,7 @@ func NewResourceEventWorker(service *Service, config *ResourceWorkerConfig) (*Re
 		lastAlertTime:     make(map[string]time.Time),
 		alertThrottle:     config.AlertThrottle,
 		resourceThrottles: resourceThrottles,
-		cleanupTicker:     time.NewTicker(5 * time.Minute), // Cleanup every 5 minutes
+		cleanupTicker:     time.NewTicker(DefaultCleanupInterval), // Cleanup every 5 minutes
 		stopCleanup:       make(chan struct{}),
 	}
 
@@ -238,18 +238,18 @@ func (w *ResourceEventWorker) determineResourceExpiry(event events.ResourceEvent
 	switch event.GetSeverity() {
 	case events.SeverityRecovery:
 		if isDisk {
-			return 30 * time.Minute
+			return DefaultAlertExpiry
 		}
-		return 5 * time.Minute
+		return DefaultQuickExpiry
 
 	case events.SeverityCritical:
 		if isDisk {
-			return 24 * time.Hour
+			return DefaultDetectionExpiry
 		}
-		return 30 * time.Minute
+		return DefaultAlertExpiry
 
 	default:
-		return 30 * time.Minute
+		return DefaultAlertExpiry
 	}
 }
 

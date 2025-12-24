@@ -62,11 +62,11 @@ type WorkerConfig struct {
 func DefaultWorkerConfig() *WorkerConfig {
 	return &WorkerConfig{
 		BatchingEnabled:   false, // Start with single event processing
-		BatchSize:         10,
-		BatchTimeout:      100 * time.Millisecond,
-		FailureThreshold:  5,
-		RecoveryTimeout:   30 * time.Second,
-		HalfOpenMaxEvents: 3,
+		BatchSize:         DefaultBatchSize,
+		BatchTimeout:      DefaultBatchTimeoutMs * time.Millisecond,
+		FailureThreshold:  DefaultFailureThreshold,
+		RecoveryTimeout:   DefaultRecoveryTimeoutSeconds * time.Second,
+		HalfOpenMaxEvents: DefaultHalfOpenMaxEvents,
 	}
 }
 
@@ -275,7 +275,7 @@ func (w *NotificationWorker) enrichNotificationWithContext(notification *Notific
 	}
 
 	if priority != PriorityCritical {
-		notification.WithExpiry(24 * time.Hour)
+		notification.WithExpiry(DefaultDetectionExpiry)
 	}
 }
 
@@ -415,14 +415,14 @@ func (w *NotificationWorker) buildAggregatedMessage(key eventKey, groupEvents []
 	uniqueMessages := make(map[string]bool)
 	for _, event := range groupEvents {
 		msg := event.GetMessage()
-		if len(uniqueMessages) >= 5 {
+		if len(uniqueMessages) >= DefaultMaxSummaryMessages {
 			messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors", len(groupEvents)-len(uniqueMessages)))
 			break
 		}
 		if !uniqueMessages[msg] {
 			uniqueMessages[msg] = true
 			messageBuilder.WriteString("\n• ")
-			messageBuilder.WriteString(w.truncateMessage(msg, 100))
+			messageBuilder.WriteString(w.truncateMessage(msg, DefaultTruncateLength))
 		}
 	}
 
@@ -491,7 +491,7 @@ func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority P
 
 	if !exists {
 		// Fallback to simple message if template not found
-		return w.truncateMessage(event.GetMessage(), 500)
+		return w.truncateMessage(event.GetMessage(), DefaultMessageTruncateLength)
 	}
 
 	// Prepare template data
@@ -514,12 +514,12 @@ func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority P
 			"error", err,
 		)
 		// Fallback to simple message
-		return w.truncateMessage(event.GetMessage(), 500)
+		return w.truncateMessage(event.GetMessage(), DefaultMessageTruncateLength)
 	}
 
 	// Truncate if necessary
 	result := buf.String()
-	const maxLength = 500
+	const maxLength = DefaultMessageTruncateLength
 	if len(result) > maxLength {
 		result = result[:maxLength-3] + "..."
 	}

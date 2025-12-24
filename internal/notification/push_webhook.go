@@ -209,7 +209,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 			Timestamp: time.Now(),
 			Metadata: map[string]any{
 				"test_key":   "test_value",
-				"confidence": 0.95,
+				"confidence": TestConfidenceValue,
 				"species":    "Test Species",
 			},
 		}

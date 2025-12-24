@@ -47,7 +47,7 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 	}
 
 	confidence := event.GetConfidence()
-	confidencePercent := fmt.Sprintf("%.0f", confidence*100)
+	confidencePercent := fmt.Sprintf("%.0f", confidence*PercentMultiplier)
 
 	// Get lat/lon from metadata
 	var latitude, longitude float64
