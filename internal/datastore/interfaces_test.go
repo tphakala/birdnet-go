@@ -3,6 +3,8 @@ package datastore
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -17,15 +19,11 @@ func createDatabase(t *testing.T, settings *conf.Settings) Interface {
 	dataStore := New(settings)
 
 	// Attempt to open a database connection.
-	if err := dataStore.Open(); err != nil {
-		t.Fatalf("Failed to open database: %v", err) // Use t.Fatalf to immediately fail the test on error.
-	}
+	require.NoError(t, dataStore.Open(), "Failed to open database")
 
 	// Ensure the database is closed after the test completes.
 	t.Cleanup(func() {
-		if err := dataStore.Close(); err != nil {
-			t.Errorf("Failed to close datastore: %v", err)
-		}
+		assert.NoError(t, dataStore.Close(), "Failed to close datastore")
 	})
 
 	return dataStore

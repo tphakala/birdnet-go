@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -23,7 +24,7 @@ func TestDeduplicatorBasic(t *testing.T) {
 	}
 
 	dedup := NewErrorDeduplicator(config, logger)
-	defer dedup.Shutdown()
+	t.Cleanup(dedup.Shutdown)
 
 	// Create test event
 	event := &mockErrorEvent{
@@ -37,34 +38,22 @@ func TestDeduplicatorBasic(t *testing.T) {
 	}
 
 	// First occurrence should be processed
-	if !dedup.ShouldProcess(event) {
-		t.Error("first occurrence should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event), "first occurrence should be processed")
 
 	// Immediate duplicate should be suppressed
-	if dedup.ShouldProcess(event) {
-		t.Error("immediate duplicate should be suppressed")
-	}
+	assert.False(t, dedup.ShouldProcess(event), "immediate duplicate should be suppressed")
 
 	// Check stats
 	stats := dedup.GetStats()
-	if stats.TotalSeen != 2 {
-		t.Errorf("expected 2 total seen, got %d", stats.TotalSeen)
-	}
-	if stats.TotalSuppressed != 1 {
-		t.Errorf("expected 1 suppressed, got %d", stats.TotalSuppressed)
-	}
-	if stats.CacheSize != 1 {
-		t.Errorf("expected cache size 1, got %d", stats.CacheSize)
-	}
+	assert.Equal(t, uint64(2), stats.TotalSeen)
+	assert.Equal(t, uint64(1), stats.TotalSuppressed)
+	assert.Equal(t, 1, stats.CacheSize)
 
 	// Wait for TTL to expire
 	time.Sleep(1100 * time.Millisecond)
 
 	// Same error after TTL should be processed
-	if !dedup.ShouldProcess(event) {
-		t.Error("error after TTL expiration should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event), "error after TTL expiration should be processed")
 }
 
 // TestDeduplicatorDifferentErrors tests that different errors are not deduplicated
@@ -82,7 +71,7 @@ func TestDeduplicatorDifferentErrors(t *testing.T) {
 	}
 
 	dedup := NewErrorDeduplicator(config, logger)
-	defer dedup.Shutdown()
+	t.Cleanup(dedup.Shutdown)
 
 	// Different components
 	event1 := &mockErrorEvent{
@@ -100,12 +89,8 @@ func TestDeduplicatorDifferentErrors(t *testing.T) {
 	}
 
 	// Both should be processed
-	if !dedup.ShouldProcess(event1) {
-		t.Error("event1 should be processed")
-	}
-	if !dedup.ShouldProcess(event2) {
-		t.Error("event2 should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event1), "event1 should be processed")
+	assert.True(t, dedup.ShouldProcess(event2), "event2 should be processed")
 
 	// Different categories
 	event3 := &mockErrorEvent{
@@ -122,12 +107,8 @@ func TestDeduplicatorDifferentErrors(t *testing.T) {
 		timestamp: time.Now(),
 	}
 
-	if !dedup.ShouldProcess(event3) {
-		t.Error("event3 should be processed")
-	}
-	if !dedup.ShouldProcess(event4) {
-		t.Error("event4 should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event3), "event3 should be processed")
+	assert.True(t, dedup.ShouldProcess(event4), "event4 should be processed")
 
 	// Different messages
 	event5 := &mockErrorEvent{
@@ -144,12 +125,8 @@ func TestDeduplicatorDifferentErrors(t *testing.T) {
 		timestamp: time.Now(),
 	}
 
-	if !dedup.ShouldProcess(event5) {
-		t.Error("event5 should be processed")
-	}
-	if !dedup.ShouldProcess(event6) {
-		t.Error("event6 should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event5), "event5 should be processed")
+	assert.True(t, dedup.ShouldProcess(event6), "event6 should be processed")
 }
 
 // TestDeduplicatorLRUEviction tests LRU eviction when cache is full
@@ -167,7 +144,7 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 	}
 
 	dedup := NewErrorDeduplicator(config, logger)
-	defer dedup.Shutdown()
+	t.Cleanup(dedup.Shutdown)
 
 	// Add 3 different errors
 	for i := range 3 {
@@ -177,16 +154,12 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 			message:   fmt.Sprintf("error %d", i),
 			timestamp: time.Now(),
 		}
-		if !dedup.ShouldProcess(event) {
-			t.Errorf("error %d should be processed", i)
-		}
+		assert.True(t, dedup.ShouldProcess(event), "error %d should be processed", i)
 	}
 
 	// Cache should be full
 	stats := dedup.GetStats()
-	if stats.CacheSize != 3 {
-		t.Errorf("expected cache size 3, got %d", stats.CacheSize)
-	}
+	assert.Equal(t, 3, stats.CacheSize)
 
 	// Access the first error again to make it most recently used
 	event0 := &mockErrorEvent{
@@ -195,9 +168,7 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 		message:   "error 0",
 		timestamp: time.Now(),
 	}
-	if dedup.ShouldProcess(event0) {
-		t.Error("duplicate of error 0 should be suppressed")
-	}
+	assert.False(t, dedup.ShouldProcess(event0), "duplicate of error 0 should be suppressed")
 
 	// Add a new error, should evict error 1 (least recently used)
 	event3 := &mockErrorEvent{
@@ -206,9 +177,7 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 		message:   "error 3",
 		timestamp: time.Now(),
 	}
-	if !dedup.ShouldProcess(event3) {
-		t.Error("error 3 should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event3), "error 3 should be processed")
 
 	// Error 1 should have been evicted and now be processed again
 	event1 := &mockErrorEvent{
@@ -217,9 +186,7 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 		message:   "error 1",
 		timestamp: time.Now(),
 	}
-	if !dedup.ShouldProcess(event1) {
-		t.Error("error 1 should be processed after eviction")
-	}
+	assert.True(t, dedup.ShouldProcess(event1), "error 1 should be processed after eviction")
 }
 
 // TestDeduplicatorCleanup tests automatic cleanup of expired entries
@@ -237,7 +204,7 @@ func TestDeduplicatorCleanup(t *testing.T) {
 	}
 
 	dedup := NewErrorDeduplicator(config, logger)
-	defer dedup.Shutdown()
+	t.Cleanup(dedup.Shutdown)
 
 	// Add some errors
 	for i := range 5 {
@@ -252,18 +219,14 @@ func TestDeduplicatorCleanup(t *testing.T) {
 
 	// Check initial cache size
 	stats := dedup.GetStats()
-	if stats.CacheSize != 5 {
-		t.Errorf("expected initial cache size 5, got %d", stats.CacheSize)
-	}
+	assert.Equal(t, 5, stats.CacheSize)
 
 	// Wait for cleanup to run after TTL expires
 	time.Sleep(800 * time.Millisecond)
 
 	// Cache should be empty after cleanup
 	stats = dedup.GetStats()
-	if stats.CacheSize != 0 {
-		t.Errorf("expected cache size 0 after cleanup, got %d", stats.CacheSize)
-	}
+	assert.Equal(t, 0, stats.CacheSize)
 }
 
 // TestDeduplicatorDisabled tests behavior when deduplication is disabled
@@ -278,7 +241,7 @@ func TestDeduplicatorDisabled(t *testing.T) {
 	}
 
 	dedup := NewErrorDeduplicator(config, logger)
-	defer dedup.Shutdown()
+	t.Cleanup(dedup.Shutdown)
 
 	event := &mockErrorEvent{
 		component: "test",
@@ -289,16 +252,12 @@ func TestDeduplicatorDisabled(t *testing.T) {
 
 	// All events should be processed when disabled
 	for range 10 {
-		if !dedup.ShouldProcess(event) {
-			t.Error("all events should be processed when deduplication is disabled")
-		}
+		assert.True(t, dedup.ShouldProcess(event), "all events should be processed when deduplication is disabled")
 	}
 
 	// Stats should show no suppression
 	stats := dedup.GetStats()
-	if stats.TotalSuppressed != 0 {
-		t.Errorf("expected 0 suppressed when disabled, got %d", stats.TotalSuppressed)
-	}
+	assert.Equal(t, uint64(0), stats.TotalSuppressed)
 }
 
 // TestDeduplicatorContext tests that context fields affect deduplication
@@ -316,7 +275,7 @@ func TestDeduplicatorContext(t *testing.T) {
 	}
 
 	dedup := NewErrorDeduplicator(config, logger)
-	defer dedup.Shutdown()
+	t.Cleanup(dedup.Shutdown)
 
 	// Same error with different operation context
 	event1 := &mockErrorEvent{
@@ -340,12 +299,8 @@ func TestDeduplicatorContext(t *testing.T) {
 	}
 
 	// Different operations should not be deduplicated
-	if !dedup.ShouldProcess(event1) {
-		t.Error("event1 should be processed")
-	}
-	if !dedup.ShouldProcess(event2) {
-		t.Error("event2 with different operation should be processed")
-	}
+	assert.True(t, dedup.ShouldProcess(event1), "event1 should be processed")
+	assert.True(t, dedup.ShouldProcess(event2), "event2 with different operation should be processed")
 
 	// Same operation should be deduplicated
 	event3 := &mockErrorEvent{
@@ -358,7 +313,5 @@ func TestDeduplicatorContext(t *testing.T) {
 		},
 	}
 
-	if dedup.ShouldProcess(event3) {
-		t.Error("event3 with same operation should be suppressed")
-	}
+	assert.False(t, dedup.ShouldProcess(event3), "event3 with same operation should be suppressed")
 }

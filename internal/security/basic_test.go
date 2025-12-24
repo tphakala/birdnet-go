@@ -27,9 +27,7 @@ import (
 func parseURLOrFail(t *testing.T, rawURL string) *url.URL {
 	t.Helper()
 	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		t.Fatalf("Failed to parse URL '%s': %v", rawURL, err)
-	}
+	require.NoError(t, err, "Failed to parse URL '%s'", rawURL)
 	return parsedURL
 }
 
