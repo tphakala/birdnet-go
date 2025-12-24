@@ -5,6 +5,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test data constants
@@ -108,13 +111,14 @@ func TestBroadcastMetadataRace(t *testing.T) {
 // NotificationWorker.ProcessEvent that causes the race condition.
 //
 // The bug is in worker.go lines 200-241:
-//   notification, err := w.service.CreateWithComponent(...)  // broadcasts pointer
-//   // ... error handling ...
-//   if notification != nil && event.GetContext() != nil {
-//       for k, v := range event.GetContext() {
-//           notification.WithMetadata(k, v)  // WRITE after broadcast!
-//       }
-//   }
+//
+//	notification, err := w.service.CreateWithComponent(...)  // broadcasts pointer
+//	// ... error handling ...
+//	if notification != nil && event.GetContext() != nil {
+//	    for k, v := range event.GetContext() {
+//	        notification.WithMetadata(k, v)  // WRITE after broadcast!
+//	    }
+//	}
 func TestBroadcastMetadataRaceWithWorkerPattern(t *testing.T) {
 	config := &ServiceConfig{
 		MaxNotifications:   100,
@@ -268,6 +272,8 @@ func TestCloneProvidesSafeAccess(t *testing.T) {
 
 // TestCloneCreatesDeepCopy verifies that Clone() creates a true deep copy
 func TestCloneCreatesDeepCopy(t *testing.T) {
+	t.Parallel()
+
 	original := NewNotification(TypeInfo, PriorityMedium, "Original Title", "Original Message")
 	original.WithComponent("original-component")
 	original.WithMetadata("key1", testMetadataValue1)
@@ -277,59 +283,42 @@ func TestCloneCreatesDeepCopy(t *testing.T) {
 	clone := original.Clone()
 
 	// Verify all fields are copied
-	if clone.ID != original.ID {
-		t.Errorf("ID mismatch: got %s, want %s", clone.ID, original.ID)
-	}
-	if clone.Title != original.Title {
-		t.Errorf("Title mismatch: got %s, want %s", clone.Title, original.Title)
-	}
-	if clone.Message != original.Message {
-		t.Errorf("Message mismatch: got %s, want %s", clone.Message, original.Message)
-	}
-	if clone.Component != original.Component {
-		t.Errorf("Component mismatch: got %s, want %s", clone.Component, original.Component)
-	}
-	if clone.ExpiresAt == nil || original.ExpiresAt == nil {
-		t.Error("ExpiresAt should not be nil")
-	} else if !clone.ExpiresAt.Equal(*original.ExpiresAt) {
-		t.Errorf("ExpiresAt mismatch: got %v, want %v", clone.ExpiresAt, original.ExpiresAt)
-	}
+	assert.Equal(t, original.ID, clone.ID)
+	assert.Equal(t, original.Title, clone.Title)
+	assert.Equal(t, original.Message, clone.Message)
+	assert.Equal(t, original.Component, clone.Component)
+
+	require.NotNil(t, clone.ExpiresAt)
+	require.NotNil(t, original.ExpiresAt)
+	assert.True(t, clone.ExpiresAt.Equal(*original.ExpiresAt))
 
 	// Verify metadata is copied
-	if clone.Metadata["key1"] != testMetadataValue1 {
-		t.Errorf("Metadata key1 mismatch: got %v, want %s", clone.Metadata["key1"], testMetadataValue1)
-	}
-	if clone.Metadata["key2"] != 42 {
-		t.Errorf("Metadata key2 mismatch: got %v, want 42", clone.Metadata["key2"])
-	}
+	assert.Equal(t, testMetadataValue1, clone.Metadata["key1"])
+	assert.Equal(t, 42, clone.Metadata["key2"])
 
 	// Verify modifying clone doesn't affect original
 	clone.Title = "Modified Title"
 	clone.WithMetadata("key1", "modified")
 	clone.WithMetadata("newKey", "newValue")
 
-	if original.Title != "Original Title" {
-		t.Error("Modifying clone should not affect original Title")
-	}
-	if original.Metadata["key1"] != testMetadataValue1 {
-		t.Error("Modifying clone metadata should not affect original")
-	}
-	if _, exists := original.Metadata["newKey"]; exists {
-		t.Error("Adding to clone metadata should not affect original")
-	}
+	assert.Equal(t, "Original Title", original.Title,
+		"Modifying clone should not affect original Title")
+	assert.Equal(t, testMetadataValue1, original.Metadata["key1"],
+		"Modifying clone metadata should not affect original")
+	_, exists := original.Metadata["newKey"]
+	assert.False(t, exists, "Adding to clone metadata should not affect original")
 
 	// Verify modifying original doesn't affect clone
 	original.WithMetadata("key2", 999)
-	if clone.Metadata["key2"] != 42 {
-		t.Error("Modifying original should not affect clone")
-	}
+	assert.Equal(t, 42, clone.Metadata["key2"],
+		"Modifying original should not affect clone")
 }
 
 // TestCloneNilNotification verifies Clone() handles nil correctly
 func TestCloneNilNotification(t *testing.T) {
+	t.Parallel()
+
 	var nilNotif *Notification
 	clone := nilNotif.Clone()
-	if clone != nil {
-		t.Error("Clone of nil should return nil")
-	}
+	assert.Nil(t, clone, "Clone of nil should return nil")
 }

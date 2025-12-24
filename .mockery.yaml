@@ -19,3 +19,29 @@ packages:
         config:
           filename: "mock_Interface.go"
           mockname: "MockInterface"
+
+  github.com/tphakala/birdnet-go/internal/notification:
+    interfaces:
+      # Provider interface for push notification providers
+      Provider:
+        config:
+          filename: "mock_Provider.go"
+          mockname: "MockProvider"
+      # NotificationStore interface for storage backends
+      NotificationStore:
+        config:
+          filename: "mock_NotificationStore.go"
+          mockname: "MockNotificationStore"
+      # TelemetryReporter interface for telemetry integration
+      TelemetryReporter:
+        config:
+          filename: "mock_TelemetryReporter.go"
+          mockname: "MockTelemetryReporter"
+
+  github.com/tphakala/birdnet-go/internal/events:
+    interfaces:
+      # ErrorEvent interface for error event handling
+      ErrorEvent:
+        config:
+          filename: "mock_ErrorEvent.go"
+          mockname: "MockErrorEvent"

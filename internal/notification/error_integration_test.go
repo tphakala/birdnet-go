@@ -4,11 +4,14 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestGetNotificationPriority tests the priority mappings for new error categories
 func TestGetNotificationPriority(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		category string
@@ -47,32 +50,33 @@ func TestGetNotificationPriority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			priority := getNotificationPriority(tt.category, "")
-			if priority != tt.expected {
-				t.Errorf("getNotificationPriority(%s) = %v, want %v",
-					tt.category, priority, tt.expected)
-			}
+			assert.Equal(t, tt.expected, priority,
+				"getNotificationPriority(%s) mismatch", tt.category)
 		})
 	}
 }
 
 // TestExplicitPriorityOverride tests that explicit priority overrides category-based priority
 func TestExplicitPriorityOverride(t *testing.T) {
+	t.Parallel()
+
 	// Low category but explicit critical priority
 	priority := getNotificationPriority(string(errors.CategorySoundLevel), "critical")
-	if priority != PriorityCritical {
-		t.Errorf("Explicit critical priority should override category priority, got %v", priority)
-	}
+	assert.Equal(t, PriorityCritical, priority,
+		"Explicit critical priority should override category priority")
 
 	// Critical category but explicit low priority
 	priority = getNotificationPriority(string(errors.CategoryAudioAnalysis), "low")
-	if priority != PriorityLow {
-		t.Errorf("Explicit low priority should override category priority, got %v", priority)
-	}
+	assert.Equal(t, PriorityLow, priority,
+		"Explicit low priority should override category priority")
 }
 
 // TestAllCategoriesHavePriority tests that all defined categories have a priority mapping
 func TestAllCategoriesHavePriority(t *testing.T) {
+	t.Parallel()
+
 	// List of all analysis-related categories
 	categories := []errors.ErrorCategory{
 		errors.CategoryAudioAnalysis,
@@ -91,22 +95,18 @@ func TestAllCategoriesHavePriority(t *testing.T) {
 		errors.CategoryIntegration,
 	}
 
+	validPriorities := []Priority{
+		PriorityCritical,
+		PriorityHigh,
+		PriorityMedium,
+		PriorityLow,
+	}
+
 	for _, category := range categories {
 		priority := getNotificationPriority(string(category), "")
-		// Should not be empty/zero value
-		if priority == "" {
-			t.Errorf("Category %s has no priority mapping", category)
-		}
-		// Should be one of the valid priorities
-		validPriorities := []Priority{
-			PriorityCritical,
-			PriorityHigh,
-			PriorityMedium,
-			PriorityLow,
-		}
-		found := slices.Contains(validPriorities, priority)
-		if !found {
-			t.Errorf("Category %s has invalid priority: %v", category, priority)
-		}
+
+		assert.NotEmpty(t, priority, "Category %s has no priority mapping", category)
+		assert.True(t, slices.Contains(validPriorities, priority),
+			"Category %s has invalid priority: %v", category, priority)
 	}
 }

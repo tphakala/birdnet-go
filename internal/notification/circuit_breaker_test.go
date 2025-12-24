@@ -6,178 +6,132 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCircuitBreaker_ClosedState(t *testing.T) {
-	config := CircuitBreakerConfig{
-		MaxFailures:         3,
-		Timeout:             100 * time.Millisecond,
-		HalfOpenMaxRequests: 1,
-	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	t.Parallel()
+
+	cb := newTestCircuitBreaker(t, DefaultCircuitBreakerTestConfig())
 
 	// Verify initial state
-	if cb.State() != StateClosed {
-		t.Errorf("expected initial state to be Closed, got %v", cb.State())
-	}
+	assertCircuitState(t, cb, StateClosed)
 
 	// Successful calls should keep circuit closed
 	for i := range 5 {
-		err := cb.Call(context.Background(), func(ctx context.Context) error {
+		err := cb.Call(context.Background(), func(_ context.Context) error {
 			return nil
 		})
-		if err != nil {
-			t.Errorf("call %d failed: %v", i, err)
-		}
-		if cb.State() != StateClosed {
-			t.Errorf("expected state to be Closed after success, got %v", cb.State())
-		}
+		require.NoError(t, err, "call %d should succeed", i)
+		assertCircuitState(t, cb, StateClosed)
 	}
 }
 
 func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
-	config := CircuitBreakerConfig{
-		MaxFailures:         3,
-		Timeout:             100 * time.Millisecond,
-		HalfOpenMaxRequests: 1,
-	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	t.Parallel()
+
+	config := DefaultCircuitBreakerTestConfig()
+	cb := newTestCircuitBreaker(t, config)
 
 	testErr := errors.New("test error")
 
 	// Make failures up to threshold - 1
 	for i := 0; i < config.MaxFailures-1; i++ {
-		err := cb.Call(context.Background(), func(ctx context.Context) error {
+		err := cb.Call(context.Background(), func(_ context.Context) error {
 			return testErr
 		})
-		if !errors.Is(err, testErr) {
-			t.Errorf("expected test error, got %v", err)
-		}
-		if cb.State() != StateClosed {
-			t.Errorf("expected state to be Closed at failure %d, got %v", i, cb.State())
-		}
+		require.ErrorIs(t, err, testErr, "call %d should return test error", i)
+		assertCircuitState(t, cb, StateClosed)
 	}
 
 	// One more failure should open the circuit
-	err := cb.Call(context.Background(), func(ctx context.Context) error {
+	err := cb.Call(context.Background(), func(_ context.Context) error {
 		return testErr
 	})
-	if !errors.Is(err, testErr) {
-		t.Errorf("expected test error, got %v", err)
-	}
-	if cb.State() != StateOpen {
-		t.Errorf("expected state to be Open after max failures, got %v", cb.State())
-	}
+	require.ErrorIs(t, err, testErr)
+	assertCircuitState(t, cb, StateOpen)
 
 	// Subsequent calls should fail immediately with circuit breaker error
-	err = cb.Call(context.Background(), func(ctx context.Context) error {
+	err = cb.Call(context.Background(), func(_ context.Context) error {
 		t.Error("function should not be called when circuit is open")
 		return nil
 	})
-	if !errors.Is(err, ErrCircuitBreakerOpen) {
-		t.Errorf("expected ErrCircuitBreakerOpen, got %v", err)
-	}
+	require.ErrorIs(t, err, ErrCircuitBreakerOpen)
 }
 
 func TestCircuitBreaker_TransitionToHalfOpen(t *testing.T) {
+	t.Parallel()
+
 	config := CircuitBreakerConfig{
 		MaxFailures:         2,
 		Timeout:             50 * time.Millisecond,
 		HalfOpenMaxRequests: 1,
 	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
-
-	testErr := errors.New("test error")
+	cb := newTestCircuitBreaker(t, config)
 
 	// Open the circuit
-	for i := 0; i < config.MaxFailures; i++ {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
-			return testErr
-		})
-	}
-
-	if cb.State() != StateOpen {
-		t.Fatalf("expected circuit to be Open, got %v", cb.State())
-	}
+	openCircuitBreaker(t, cb, config.MaxFailures)
+	require.Equal(t, StateOpen, cb.State(), "circuit should be open")
 
 	// Wait for timeout
 	time.Sleep(config.Timeout + 10*time.Millisecond)
 
 	// Next call should transition to half-open
 	callMade := false
-	err := cb.Call(context.Background(), func(ctx context.Context) error {
+	err := cb.Call(context.Background(), func(_ context.Context) error {
 		callMade = true
 		return nil
 	})
 
-	if err != nil {
-		t.Errorf("expected successful call in half-open state, got error: %v", err)
-	}
-
-	if !callMade {
-		t.Error("expected function to be called in half-open state")
-	}
-
-	// Should transition back to closed after successful call
-	if cb.State() != StateClosed {
-		t.Errorf("expected state to be Closed after successful half-open call, got %v", cb.State())
-	}
+	require.NoError(t, err, "call in half-open state should succeed")
+	assert.True(t, callMade, "function should be called in half-open state")
+	assertCircuitState(t, cb, StateClosed)
 }
 
 func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
+	t.Parallel()
+
 	config := CircuitBreakerConfig{
 		MaxFailures:         2,
 		Timeout:             50 * time.Millisecond,
 		HalfOpenMaxRequests: 1,
 	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	cb := newTestCircuitBreaker(t, config)
 
 	testErr := errors.New("test error")
 
 	// Open the circuit
-	for i := 0; i < config.MaxFailures; i++ {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
-			return testErr
-		})
-	}
+	openCircuitBreaker(t, cb, config.MaxFailures)
 
 	// Wait for timeout to allow half-open
 	time.Sleep(config.Timeout + 10*time.Millisecond)
 
 	// Fail in half-open state should reopen circuit
-	err := cb.Call(context.Background(), func(ctx context.Context) error {
+	err := cb.Call(context.Background(), func(_ context.Context) error {
 		return testErr
 	})
 
-	if !errors.Is(err, testErr) {
-		t.Errorf("expected test error, got %v", err)
-	}
-
-	if cb.State() != StateOpen {
-		t.Errorf("expected state to be Open after half-open failure, got %v", cb.State())
-	}
+	require.ErrorIs(t, err, testErr)
+	assertCircuitState(t, cb, StateOpen)
 }
 
 func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
+	t.Parallel()
+
 	config := CircuitBreakerConfig{
 		MaxFailures:         2,
 		Timeout:             50 * time.Millisecond,
 		HalfOpenMaxRequests: 2,
 	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	cb := newTestCircuitBreaker(t, config)
 
 	testErr := errors.New("test error")
 
 	// Open the circuit
-	for i := 0; i < config.MaxFailures; i++ {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
-			return testErr
-		})
-	}
-
-	if cb.State() != StateOpen {
-		t.Fatalf("expected circuit to be Open after failures, got %v", cb.State())
-	}
+	openCircuitBreaker(t, cb, config.MaxFailures)
+	require.Equal(t, StateOpen, cb.State(), "circuit should be open after failures")
 
 	// Wait for timeout to allow transition to half-open
 	time.Sleep(config.Timeout + 10*time.Millisecond)
@@ -189,16 +143,14 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 
 	// Launch HalfOpenMaxRequests + 1 concurrent calls
 	for i := 0; i < config.HalfOpenMaxRequests+1; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			err := cb.Call(context.Background(), func(ctx context.Context) error {
+		wg.Go(func() {
+			err := cb.Call(context.Background(), func(_ context.Context) error {
 				// Block to ensure concurrent execution
 				<-blocker
 				return testErr
 			})
 			errChan <- err
-		}(i)
+		})
 	}
 
 	// Give goroutines time to start and call beforeCall()
@@ -221,142 +173,112 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 	}
 
 	// Exactly one should be rejected (N+1 callers with N allowed)
-	if tooManyCount != 1 {
-		t.Errorf("expected exactly 1 ErrTooManyRequests when exceeding HalfOpenMaxRequests=%d, got %d", config.HalfOpenMaxRequests, tooManyCount)
-	}
+	assert.Equal(t, 1, tooManyCount,
+		"expected exactly 1 ErrTooManyRequests when exceeding HalfOpenMaxRequests=%d",
+		config.HalfOpenMaxRequests)
 
-	// The others should get through and fail with testErr (blocked, then return testErr)
-	if otherErrCount != config.HalfOpenMaxRequests {
-		t.Errorf("expected %d half-open probes to execute, got %d", config.HalfOpenMaxRequests, otherErrCount)
-	}
+	// The others should get through and fail with testErr
+	assert.Equal(t, config.HalfOpenMaxRequests, otherErrCount,
+		"expected %d half-open probes to execute", config.HalfOpenMaxRequests)
 }
 
 func TestCircuitBreaker_Reset(t *testing.T) {
+	t.Parallel()
+
 	config := CircuitBreakerConfig{
 		MaxFailures:         2,
 		Timeout:             100 * time.Millisecond,
 		HalfOpenMaxRequests: 1,
 	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
-
-	testErr := errors.New("test error")
+	cb := newTestCircuitBreaker(t, config)
 
 	// Open the circuit
-	for i := 0; i < config.MaxFailures; i++ {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
-			return testErr
-		})
-	}
-
-	if cb.State() != StateOpen {
-		t.Fatalf("expected circuit to be Open, got %v", cb.State())
-	}
+	openCircuitBreaker(t, cb, config.MaxFailures)
+	require.Equal(t, StateOpen, cb.State(), "circuit should be open")
 
 	// Reset should close circuit
 	cb.Reset()
 
-	if cb.State() != StateClosed {
-		t.Errorf("expected state to be Closed after reset, got %v", cb.State())
-	}
-
-	if cb.Failures() != 0 {
-		t.Errorf("expected failures to be 0 after reset, got %d", cb.Failures())
-	}
+	assertCircuitState(t, cb, StateClosed)
+	assert.Equal(t, 0, cb.Failures(), "failures should be 0 after reset")
 
 	// Should allow calls
-	err := cb.Call(context.Background(), func(ctx context.Context) error {
+	err := cb.Call(context.Background(), func(_ context.Context) error {
 		return nil
 	})
-	if err != nil {
-		t.Errorf("expected successful call after reset, got error: %v", err)
-	}
+	require.NoError(t, err, "call should succeed after reset")
 }
 
 func TestCircuitBreaker_IsHealthy(t *testing.T) {
+	t.Parallel()
+
 	config := CircuitBreakerConfig{
 		MaxFailures:         2,
 		Timeout:             50 * time.Millisecond,
 		HalfOpenMaxRequests: 1,
 	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	cb := newTestCircuitBreaker(t, config)
 
 	// Initially healthy
-	if !cb.IsHealthy() {
-		t.Error("expected circuit to be healthy initially")
-	}
+	assertCircuitHealthy(t, cb, true)
 
 	// Open circuit
-	testErr := errors.New("test error")
-	for i := 0; i < config.MaxFailures; i++ {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
-			return testErr
-		})
-	}
+	openCircuitBreaker(t, cb, config.MaxFailures)
 
 	// Should be unhealthy when open
-	if cb.IsHealthy() {
-		t.Error("expected circuit to be unhealthy when open")
-	}
+	assertCircuitHealthy(t, cb, false)
 
 	// Wait for half-open
 	time.Sleep(config.Timeout + 10*time.Millisecond)
 
 	// Successful call should restore health
-	_ = cb.Call(context.Background(), func(ctx context.Context) error {
+	err := cb.Call(context.Background(), func(_ context.Context) error {
 		return nil
 	})
+	require.NoError(t, err)
 
-	if !cb.IsHealthy() {
-		t.Error("expected circuit to be healthy after successful recovery")
-	}
+	assertCircuitHealthy(t, cb, true)
 }
 
 func TestCircuitBreaker_GetStats(t *testing.T) {
-	config := CircuitBreakerConfig{
-		MaxFailures:         3,
-		Timeout:             100 * time.Millisecond,
-		HalfOpenMaxRequests: 1,
-	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	t.Parallel()
+
+	cb := newTestCircuitBreaker(t, DefaultCircuitBreakerTestConfig())
 
 	testErr := errors.New("test error")
 
 	// Make some failures
 	for range 2 {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
+		_ = cb.Call(context.Background(), func(_ context.Context) error {
 			return testErr
 		})
 	}
 
 	stats := cb.GetStats()
 
-	if stats.State != StateClosed {
-		t.Errorf("expected state Closed, got %v", stats.State)
-	}
-
-	if stats.Failures != 2 {
-		t.Errorf("expected 2 failures, got %d", stats.Failures)
-	}
-
-	if stats.LastFailureTime.IsZero() {
-		t.Error("expected LastFailureTime to be set")
-	}
+	assert.Equal(t, StateClosed, stats.State)
+	assert.Equal(t, 2, stats.Failures)
+	assert.False(t, stats.LastFailureTime.IsZero(), "LastFailureTime should be set")
 }
 
 func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
+	t.Parallel()
+
 	config := CircuitBreakerConfig{
 		MaxFailures:         10,
 		Timeout:             100 * time.Millisecond,
 		HalfOpenMaxRequests: 1,
 	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	cb := newTestCircuitBreaker(t, config)
+
+	const numCalls = 100
 
 	// Run concurrent successful calls
-	errChan := make(chan error, 100)
-	done := make(chan bool, 100)
-	for range 100 {
+	errChan := make(chan error, numCalls)
+	done := make(chan bool, numCalls)
+	for range numCalls {
 		go func() {
-			err := cb.Call(context.Background(), func(ctx context.Context) error {
+			err := cb.Call(context.Background(), func(_ context.Context) error {
 				time.Sleep(1 * time.Millisecond)
 				return nil
 			})
@@ -368,28 +290,23 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	}
 
 	// Wait for all to complete
-	for range 100 {
+	for range numCalls {
 		<-done
 	}
 	close(errChan)
 
-	// Check for errors from main goroutine
+	// Check for errors
 	for err := range errChan {
 		t.Errorf("concurrent call failed: %v", err)
 	}
 
-	if cb.State() != StateClosed {
-		t.Errorf("expected state to be Closed after concurrent successes, got %v", cb.State())
-	}
+	assertCircuitState(t, cb, StateClosed)
 }
 
 func TestCircuitBreaker_ContextCancellation(t *testing.T) {
-	config := CircuitBreakerConfig{
-		MaxFailures:         3,
-		Timeout:             100 * time.Millisecond,
-		HalfOpenMaxRequests: 1,
-	}
-	cb := NewPushCircuitBreaker(config, nil, "test-provider")
+	t.Parallel()
+
+	cb := newTestCircuitBreaker(t, DefaultCircuitBreakerTestConfig())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -403,13 +320,9 @@ func TestCircuitBreaker_ContextCancellation(t *testing.T) {
 		}
 	})
 
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled error, got %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled)
 
 	// Context cancellation should NOT count as provider failure (it's client-side)
-	// The circuit breaker should only open for actual provider issues
-	if cb.Failures() != 0 {
-		t.Errorf("expected 0 failures from context cancellation (client-side), got %d", cb.Failures())
-	}
+	assert.Equal(t, 0, cb.Failures(),
+		"context cancellation (client-side) should not count as provider failure")
 }

@@ -3,27 +3,24 @@ package notification
 import (
 	"log/slog"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileLoggerInitialization(t *testing.T) {
 	t.Parallel()
 
-	// Test debug mode initialization
 	t.Run("DebugMode", func(t *testing.T) {
 		t.Parallel()
 		logger := getFileLogger(true)
-		if logger == nil {
-			t.Error("Expected logger to be initialized, got nil")
-		}
+		require.NotNil(t, logger, "logger should be initialized")
 	})
 
-	// Test non-debug mode initialization
 	t.Run("NonDebugMode", func(t *testing.T) {
 		t.Parallel()
 		logger := getFileLogger(false)
-		if logger == nil {
-			t.Error("Expected logger to be initialized, got nil")
-		}
+		require.NotNil(t, logger, "logger should be initialized")
 	})
 }
 
@@ -32,35 +29,29 @@ func TestSetDebugLevel(t *testing.T) {
 
 	// Test 1: Verify singleton behavior
 	logger1 := getFileLogger(false)
-	logger2 := getFileLogger(true) // Should return same logger instance
-	if logger1 != logger2 {
-		t.Error("Expected getFileLogger to return same instance (singleton)")
-	}
+	logger2 := getFileLogger(true)
+	assert.Same(t, logger1, logger2, "getFileLogger should return same instance (singleton)")
 
 	// Test 2: Verify debug level changes
-	// Start with debug disabled
 	SetDebugLevel(false)
-	if levelVar != nil && levelVar.Level() != slog.LevelInfo {
-		t.Errorf("Expected log level to be Info after SetDebugLevel(false), got %v", levelVar.Level())
+	if levelVar != nil {
+		assert.Equal(t, slog.LevelInfo, levelVar.Level(), "level should be Info after SetDebugLevel(false)")
 	}
 
-	// Enable debug
 	SetDebugLevel(true)
-	if levelVar != nil && levelVar.Level() != slog.LevelDebug {
-		t.Errorf("Expected log level to be Debug after SetDebugLevel(true), got %v", levelVar.Level())
+	if levelVar != nil {
+		assert.Equal(t, slog.LevelDebug, levelVar.Level(), "level should be Debug after SetDebugLevel(true)")
 	}
 
-	// Disable debug again
 	SetDebugLevel(false)
-	if levelVar != nil && levelVar.Level() != slog.LevelInfo {
-		t.Errorf("Expected log level to be Info after second SetDebugLevel(false), got %v", levelVar.Level())
+	if levelVar != nil {
+		assert.Equal(t, slog.LevelInfo, levelVar.Level(), "level should be Info after second SetDebugLevel(false)")
 	}
 
 	// Test 3: Verify SetDebugLevel handles nil levelVar gracefully
-	// This would happen if logger initialization failed
 	originalLevelVar := levelVar
 	levelVar = nil
-	SetDebugLevel(true) // Should not panic
-	SetDebugLevel(false) // Should not panic
+	assert.NotPanics(t, func() { SetDebugLevel(true) }, "SetDebugLevel(true) should not panic with nil levelVar")
+	assert.NotPanics(t, func() { SetDebugLevel(false) }, "SetDebugLevel(false) should not panic with nil levelVar")
 	levelVar = originalLevelVar
 }

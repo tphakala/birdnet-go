@@ -3,6 +3,9 @@ package notification
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Expected value for redacted credentials in scrubContextMap output
@@ -112,9 +115,7 @@ func TestScrubContextMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubContextMap(tt.input)
-			if !tt.expected(result) {
-				t.Errorf("scrubContextMap() result did not meet expectations")
-			}
+			assert.True(t, tt.expected(result), "scrubContextMap() result did not meet expectations")
 		})
 	}
 }
@@ -148,11 +149,10 @@ func TestScrubPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubPath(tt.input)
-			if tt.input != "" && result == tt.input {
-				t.Errorf("scrubPath() should have anonymized the path, but got: %s", result)
-			}
-			if tt.input == "" && result != "" {
-				t.Errorf("scrubPath() should return empty string for empty input, but got: %s", result)
+			if tt.input != "" {
+				assert.NotEqual(t, tt.input, result, "should have anonymized the path")
+			} else {
+				assert.Empty(t, result, "should return empty string for empty input")
 			}
 		})
 	}
@@ -187,10 +187,7 @@ func TestScrubNotificationContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubNotificationContent(tt.input)
-			// Result should be different from input (scrubbed)
-			if result == tt.input {
-				t.Errorf("scrubNotificationContent() should have scrubbed the content, but got: %s", result)
-			}
+			assert.NotEqual(t, tt.input, result, "should have scrubbed the content")
 		})
 	}
 }
@@ -224,11 +221,10 @@ func TestScrubIPAddress(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubIPAddress(tt.input)
-			if tt.input != "" && result == tt.input {
-				t.Errorf("scrubIPAddress() should have anonymized the IP, but got: %s", result)
-			}
-			if tt.input == "" && result != "" {
-				t.Errorf("scrubIPAddress() should return empty string for empty input, but got: %s", result)
+			if tt.input != "" {
+				assert.NotEqual(t, tt.input, result, "should have anonymized the IP")
+			} else {
+				assert.Empty(t, result, "should return empty string for empty input")
 			}
 		})
 	}
@@ -290,19 +286,15 @@ func TestEnrichWithTemplateData(t *testing.T) {
 			t.Parallel()
 			result := EnrichWithTemplateData(tt.notification, tt.templateData)
 
-			if tt.wantNil && result != nil {
-				t.Errorf("EnrichWithTemplateData() expected nil, got %v", result)
+			if tt.wantNil {
+				assert.Nil(t, result)
 				return
 			}
 
-			if !tt.wantNil && result == nil {
-				t.Errorf("EnrichWithTemplateData() expected non-nil result")
-				return
-			}
+			require.NotNil(t, result)
 
 			// Verify metadata was added when both inputs are valid
-			if tt.notification != nil && tt.templateData != nil && result != nil {
-				// Verify all field values match expected template data
+			if tt.notification != nil && tt.templateData != nil {
 				expectedValues := map[string]any{
 					"bg_detection_id":       tt.templateData.DetectionID,
 					"bg_detection_path":     tt.templateData.DetectionPath,
@@ -318,13 +310,8 @@ func TestEnrichWithTemplateData(t *testing.T) {
 
 				for field, expectedValue := range expectedValues {
 					actualValue, exists := result.Metadata[field]
-					if !exists {
-						t.Errorf("EnrichWithTemplateData() missing expected field: %s", field)
-						continue
-					}
-					if actualValue != expectedValue {
-						t.Errorf("%s = %v, want %v", field, actualValue, expectedValue)
-					}
+					require.True(t, exists, "missing expected field: %s", field)
+					assert.Equal(t, expectedValue, actualValue, "field %s mismatch", field)
 				}
 			}
 		})
