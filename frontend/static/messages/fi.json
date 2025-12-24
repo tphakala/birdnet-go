@@ -2320,6 +2320,7 @@
     "security": {
       "baseUrlLabel": "Perus-URL",
       "baseUrlHelp": "Täydellinen ulkoinen URL käänteiselle välityspalvelimelle. Kun asetettu, tätä URL-osoitetta käytetään sellaisenaan ilmoituksiin ja OAuth-uudelleenohjauksiin, ohittaen isäntä- ja AutoTLS-asetukset.",
+      "baseUrlValidation": "Anna kelvollinen URL, joka alkaa http:// tai https:// ja sisältää isäntänimen",
       "hostLabel": "Isäntäosoite",
       "allowSubnetBypassLabel": "Salli aliverkon käyttää ohitustunnistautumista",
       "allowedSubnetsLabel": "Sallitut aliverkot",

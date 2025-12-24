@@ -2040,6 +2040,7 @@
     "security": {
       "baseUrlLabel": "Bazowy URL",
       "baseUrlHelp": "Pełny zewnętrzny URL dla konfiguracji reverse proxy. Po ustawieniu ten URL jest używany bez zmian dla powiadomień i przekierowań OAuth, ignorując ustawienia Host i AutoTLS.",
+      "baseUrlValidation": "Wprowadź prawidłowy URL zaczynający się od http:// lub https:// i zawierający nazwę hosta",
       "hostLabel": "Adres Hosta",
       "allowSubnetBypassLabel": "Zezwól na Dostęp z Podsieci Omijając Uwierzytelnianie",
       "allowedSubnetsLabel": "Dozwolone Podsieci",

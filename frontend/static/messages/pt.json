@@ -2373,6 +2373,7 @@
       },
       "baseUrlLabel": "URL Base",
       "baseUrlHelp": "URL externa completa para configurações de proxy reverso. Quando definida, esta URL é usada como está para notificações e redirecionamentos OAuth, ignorando as configurações de Host e AutoTLS.",
+      "baseUrlValidation": "Por favor, insira uma URL válida começando com http:// ou https:// e incluindo um nome de host",
       "hostLabel": "Endereço do host",
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
       "allowedSubnetsLabel": "Sub-redes permitidas",

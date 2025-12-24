@@ -2320,6 +2320,7 @@
     "security": {
       "baseUrlLabel": "URL base",
       "baseUrlHelp": "URL externa completa para configuraciones de proxy inverso. Cuando se establece, esta URL se usa tal cual para notificaciones y redirecciones OAuth, ignorando la configuración de Host y AutoTLS.",
+      "baseUrlValidation": "Por favor, introduce una URL válida que comience con http:// o https:// e incluya un nombre de host",
       "hostLabel": "Dirección del host",
       "allowSubnetBypassLabel": "Permitir acceso desde subred para omitir autenticación",
       "allowedSubnetsLabel": "Subredes permitidas",

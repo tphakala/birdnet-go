@@ -2034,6 +2034,7 @@
     "security": {
       "baseUrlLabel": "URL de base",
       "baseUrlHelp": "URL externe complète pour les configurations de proxy inverse. Lorsqu'elle est définie, cette URL est utilisée telle quelle pour les notifications et les redirections OAuth, ignorant les paramètres Host et AutoTLS.",
+      "baseUrlValidation": "Veuillez entrer une URL valide commençant par http:// ou https:// et incluant un nom d'hôte",
       "hostLabel": "Adresse de l'hôte",
       "allowSubnetBypassLabel": "Autoriser les accès depuis le sous-réseau à contourner l'authentification",
       "allowedSubnetsLabel": "Sous-réseaux autorisés",

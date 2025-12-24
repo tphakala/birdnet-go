@@ -2034,6 +2034,7 @@
     "security": {
       "baseUrlLabel": "Basis URL",
       "baseUrlHelp": "Volledige externe URL voor reverse proxy configuraties. Wanneer ingesteld, wordt deze URL ongewijzigd gebruikt voor meldingen en OAuth omleidingen, waarbij Host en AutoTLS instellingen worden genegeerd.",
+      "baseUrlValidation": "Voer een geldige URL in die begint met http:// of https:// en een hostnaam bevat",
       "hostLabel": "Host Adres",
       "allowSubnetBypassLabel": "Sta Toegang vanaf Subnet toe om Authenticatie te Omzeilen",
       "allowedSubnetsLabel": "Toegestane Subnets",

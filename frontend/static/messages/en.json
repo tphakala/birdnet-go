@@ -2040,6 +2040,7 @@
     "security": {
       "baseUrlLabel": "Base URL",
       "baseUrlHelp": "Complete external URL for reverse proxy setups. When set, this URL is used as-is for notifications and OAuth redirects, ignoring Host and AutoTLS settings.",
+      "baseUrlValidation": "Please enter a valid URL starting with http:// or https:// and including a hostname",
       "hostLabel": "Host Address",
       "allowSubnetBypassLabel": "Allow Access from Subnet to Bypass Authentication",
       "allowedSubnetsLabel": "Allowed Subnets",
