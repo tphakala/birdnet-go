@@ -20,9 +20,7 @@ func runBooleanTests(t *testing.T, testFunc func(string) bool, tests []struct {
 			t.Parallel()
 
 			result := testFunc(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %t, got %t for input %q", tt.expected, result, tt.input)
-			}
+			assert.Equal(t, tt.expected, result, "for input %q", tt.input)
 		})
 	}
 }
@@ -39,9 +37,7 @@ func runScrubTests(t *testing.T, testFunc func(string) string, tests []struct {
 			t.Parallel()
 
 			result := testFunc(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -112,15 +108,11 @@ func TestScrubMessage(t *testing.T) {
 			result := ScrubMessage(tt.input)
 
 			for _, expected := range tt.contains {
-				if !strings.Contains(result, expected) {
-					t.Errorf("Expected result to contain %q, but got: %s", expected, result)
-				}
+				assert.Contains(t, result, expected, "Expected result to contain %q", expected)
 			}
 
 			for _, unexpected := range tt.notContains {
-				if strings.Contains(result, unexpected) {
-					t.Errorf("Expected result to NOT contain %q, but got: %s", unexpected, result)
-				}
+				assert.NotContains(t, result, unexpected, "Expected result to NOT contain %q", unexpected)
 			}
 		})
 	}
@@ -167,15 +159,12 @@ func TestAnonymizeURL(t *testing.T) {
 
 			result := AnonymizeURL(tt.input)
 
-			if !strings.HasPrefix(result, tt.expectPrefix) {
-				t.Errorf("Expected result to start with %q, but got: %s", tt.expectPrefix, result)
-			}
+			assert.True(t, strings.HasPrefix(result, tt.expectPrefix),
+				"Expected result to start with %q, but got: %s", tt.expectPrefix, result)
 
 			// Ensure consistent anonymization - same input should produce same output
 			result2 := AnonymizeURL(tt.input)
-			if result != result2 {
-				t.Errorf("Expected consistent anonymization, but got different results: %s vs %s", result, result2)
-			}
+			assert.Equal(t, result, result2, "Expected consistent anonymization")
 		})
 	}
 }
@@ -230,9 +219,7 @@ func TestSanitizeRTSPUrl(t *testing.T) {
 			t.Parallel()
 
 			result := SanitizeRTSPUrl(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -282,9 +269,7 @@ func TestSanitizeRTSPUrls(t *testing.T) {
 			t.Parallel()
 
 			result := SanitizeRTSPUrls(tt.input)
-			if result != tt.expected {
-				t.Errorf("SanitizeRTSPUrls() = %q, want %q", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -296,29 +281,20 @@ func TestGenerateSystemID(t *testing.T) {
 	ids := make(map[string]bool)
 	for range 100 {
 		id, err := GenerateSystemID()
-		if err != nil {
-			t.Fatalf("GenerateSystemID failed: %v", err)
-		}
+		require.NoError(t, err, "GenerateSystemID failed")
 
 		// Check format
-		if !IsValidSystemID(id) {
-			t.Errorf("Generated ID %q is not valid", id)
-		}
+		assert.True(t, IsValidSystemID(id), "Generated ID %q is not valid", id)
 
 		// Check uniqueness
-		if ids[id] {
-			t.Errorf("Duplicate ID generated: %q", id)
-		}
+		assert.False(t, ids[id], "Duplicate ID generated: %q", id)
 		ids[id] = true
 
 		// Check format manually as well
-		if len(id) != 14 {
-			t.Errorf("Expected ID length 14, got %d for ID: %q", len(id), id)
-		}
+		assert.Len(t, id, 14, "Expected ID length 14 for ID: %q", id)
 
-		if id[4] != '-' || id[9] != '-' {
-			t.Errorf("Expected hyphens at positions 4 and 9, got: %q", id)
-		}
+		assert.Equal(t, byte('-'), id[4], "Expected hyphen at position 4, got: %q", id)
+		assert.Equal(t, byte('-'), id[9], "Expected hyphen at position 9, got: %q", id)
 	}
 }
 
@@ -382,9 +358,7 @@ func TestIsValidSystemID(t *testing.T) {
 			t.Parallel()
 
 			result := IsValidSystemID(tt.input)
-			if result != tt.valid {
-				t.Errorf("Expected IsValidSystemID(%q) = %v, got %v", tt.input, tt.valid, result)
-			}
+			assert.Equal(t, tt.valid, result, "IsValidSystemID(%q)", tt.input)
 		})
 	}
 }
@@ -474,9 +448,7 @@ func TestCategorizeHost(t *testing.T) {
 			t.Parallel()
 
 			result := categorizeHost(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected categorizeHost(%q) = %q, got %q", tt.input, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result, "categorizeHost(%q)", tt.input)
 		})
 	}
 }
@@ -551,9 +523,7 @@ func TestIsPrivateIP(t *testing.T) {
 			t.Parallel()
 
 			result := IsPrivateIP(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected isPrivateIP(%q) = %v, got %v", tt.input, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result, "IsPrivateIP(%q)", tt.input)
 		})
 	}
 }
@@ -608,9 +578,7 @@ func TestIsIPAddress(t *testing.T) {
 			t.Parallel()
 
 			result := isIPAddress(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected isIPAddress(%q) = %v, got %v", tt.input, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result, "isIPAddress(%q)", tt.input)
 		})
 	}
 }
@@ -786,9 +754,7 @@ func TestIsHexChar(t *testing.T) {
 			t.Parallel()
 
 			result := isHexChar(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected isHexChar(%q) = %v, got %v", tt.input, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result, "isHexChar(%q)", tt.input)
 		})
 	}
 }
@@ -858,9 +824,7 @@ func TestCategorizeDomain(t *testing.T) {
 			t.Parallel()
 
 			result := categorizeDomain(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected categorizeDomain(%q) = %q, got %q", tt.input, tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result, "categorizeDomain(%q)", tt.input)
 		})
 	}
 }
@@ -1011,9 +975,7 @@ func TestScrubEmails(t *testing.T) {
 			t.Parallel()
 
 			result := ScrubEmails(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -1058,9 +1020,7 @@ func TestScrubUUIDs(t *testing.T) {
 			t.Parallel()
 
 			result := ScrubUUIDs(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -1113,15 +1073,11 @@ func TestScrubStandaloneIPs(t *testing.T) {
 			result := ScrubStandaloneIPs(tt.input)
 
 			for _, expected := range tt.contains {
-				if !strings.Contains(result, expected) {
-					t.Errorf("Expected result to contain %q, but got: %s", expected, result)
-				}
+				assert.Contains(t, result, expected, "Expected result to contain %q", expected)
 			}
 
 			for _, unexpected := range tt.notContains {
-				if strings.Contains(result, unexpected) {
-					t.Errorf("Expected result to NOT contain %q, but got: %s", unexpected, result)
-				}
+				assert.NotContains(t, result, unexpected, "Expected result to NOT contain %q", unexpected)
 			}
 		})
 	}
@@ -1157,9 +1113,7 @@ func TestBearerTokenScrubbing(t *testing.T) {
 			t.Parallel()
 
 			result := ScrubAPITokens(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

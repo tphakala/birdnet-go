@@ -2,8 +2,9 @@ package errors
 
 import (
 	"fmt"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFastPathNoTelemetry(t *testing.T) {
@@ -17,18 +18,12 @@ func TestFastPathNoTelemetry(t *testing.T) {
 	err := fmt.Errorf("test error")
 	ee := New(err).Build()
 
-	if ee.Err.Error() != "test error" {
-		t.Errorf("Expected error message 'test error', got '%s'", ee.Err.Error())
-	}
+	assert.Equal(t, "test error", ee.Err.Error(), "expected error message 'test error'")
 
 	// Use production constant directly to ensure test stays in sync
-	if ee.GetComponent() != ComponentUnknown {
-		t.Errorf("Expected component '%s' in fast path, got '%s'", ComponentUnknown, ee.GetComponent())
-	}
+	assert.Equal(t, ComponentUnknown, ee.GetComponent(), "expected component to be unknown in fast path")
 
-	if ee.Category != CategoryGeneric {
-		t.Errorf("Expected category 'generic' in fast path, got '%s'", ee.Category)
-	}
+	assert.Equal(t, CategoryGeneric, ee.Category, "expected category 'generic' in fast path")
 }
 
 func TestRegexPrecompilation(t *testing.T) {
@@ -63,16 +58,14 @@ func TestRegexPrecompilation(t *testing.T) {
 			t.Parallel()
 			scrubbed := basicURLScrub(tt.input)
 
-			if tt.expected != "" && scrubbed != tt.expected {
-				t.Errorf("Expected: %s, got: %s", tt.expected, scrubbed)
+			if tt.expected != "" {
+				assert.Equal(t, tt.expected, scrubbed)
 			}
-			if tt.contains != "" && !strings.Contains(scrubbed, tt.contains) {
-				t.Errorf("Expected to contain '%s', got: %s", tt.contains, scrubbed)
+			if tt.contains != "" {
+				assert.Contains(t, scrubbed, tt.contains)
 			}
 			for _, exclude := range tt.excludes {
-				if strings.Contains(scrubbed, exclude) {
-					t.Errorf("Should not contain '%s', got: %s", exclude, scrubbed)
-				}
+				assert.NotContains(t, scrubbed, exclude)
 			}
 		})
 	}
