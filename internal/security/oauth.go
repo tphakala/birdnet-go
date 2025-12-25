@@ -324,6 +324,9 @@ func initializeProviders(settings *conf.Settings) {
 		if redirectURI == "" && baseURL != "" {
 			redirectURI = baseURL + "/auth/" + ProviderGoogle + "/callback"
 		}
+		if redirectURI == "" {
+			logger().Warn("Google OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for Google OAuth.")
+		}
 		logger().Info("Enabling Google Auth provider", "redirect_uri", redirectURI)
 		googleProvider := gothGoogle.New(
 			settings.Security.GoogleAuth.ClientID,
@@ -342,6 +345,9 @@ func initializeProviders(settings *conf.Settings) {
 		if redirectURI == "" && baseURL != "" {
 			redirectURI = baseURL + "/auth/" + ProviderGitHub + "/callback"
 		}
+		if redirectURI == "" {
+			logger().Warn("GitHub OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for GitHub OAuth.")
+		}
 		logger().Info("Enabling GitHub Auth provider", "redirect_uri", redirectURI)
 		providers = append(providers, github.New(
 			settings.Security.GithubAuth.ClientID,
@@ -357,6 +363,9 @@ func initializeProviders(settings *conf.Settings) {
 		redirectURI := settings.Security.MicrosoftAuth.RedirectURI
 		if redirectURI == "" && baseURL != "" {
 			redirectURI = baseURL + "/auth/" + ProviderMicrosoft + "/callback"
+		}
+		if redirectURI == "" {
+			logger().Warn("Microsoft OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for Microsoft OAuth.")
 		}
 		logger().Info("Enabling Microsoft Account Auth provider", "redirect_uri", redirectURI)
 		providers = append(providers, microsoftonline.New(
