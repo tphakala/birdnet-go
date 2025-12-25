@@ -407,15 +407,9 @@ func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogg
 		log.Debug("Found userId in session, checking provider sessions")
 	}
 
-	if s.checkGoogleAuth(r, userId, log) {
-		return true
-	}
-
-	if s.checkGithubAuth(r, userId, log) {
-		return true
-	}
-
-	return s.checkMicrosoftAuth(r, userId, log)
+	return s.checkGoogleAuth(r, userId, log) ||
+		s.checkGithubAuth(r, userId, log) ||
+		s.checkMicrosoftAuth(r, userId, log)
 }
 
 // checkGoogleAuth validates Google OAuth session
