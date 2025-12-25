@@ -1,7 +1,10 @@
 package conf
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestValidateBirdNETSettings_Valid verifies valid BirdNET configurations pass.
@@ -62,7 +65,8 @@ func TestValidateBirdNETSettings_Valid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateBirdNETSettings(&tt.config)
-			assertValidationPasses(t, result)
+			assert.True(t, result.Valid, "expected valid config, got errors: %v", result.Errors)
+			assert.Empty(t, result.Errors, "expected no errors")
 		})
 	}
 }
@@ -185,8 +189,17 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateBirdNETSettings(&tt.config)
-			assertValidationFails(t, result)
-			assertErrorContains(t, result, tt.expectError)
+			assert.False(t, result.Valid, "expected invalid config to fail validation")
+			assert.NotEmpty(t, result.Errors, "expected validation errors but got none")
+
+			found := false
+			for _, err := range result.Errors {
+				if strings.Contains(err, tt.expectError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "expected error containing %q, got errors: %v", tt.expectError, result.Errors)
 		})
 	}
 }
@@ -235,7 +248,8 @@ func TestValidateBirdweatherSettings_Valid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateBirdweatherSettings(&tt.settings)
-			assertValidationPasses(t, result)
+			assert.True(t, result.Valid, "expected valid config, got errors: %v", result.Errors)
+			assert.Empty(t, result.Errors, "expected no errors")
 		})
 	}
 }
@@ -313,8 +327,17 @@ func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateBirdweatherSettings(&tt.settings)
-			assertValidationFails(t, result)
-			assertErrorContains(t, result, tt.expectError)
+			assert.False(t, result.Valid, "expected invalid config to fail validation")
+			assert.NotEmpty(t, result.Errors, "expected validation errors but got none")
+
+			found := false
+			for _, err := range result.Errors {
+				if strings.Contains(err, tt.expectError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "expected error containing %q, got errors: %v", tt.expectError, result.Errors)
 		})
 	}
 }
@@ -378,7 +401,8 @@ func TestValidateWebhookProvider_Valid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateWebhookProvider(&tt.provider)
-			assertValidationPasses(t, result)
+			assert.True(t, result.Valid, "expected valid config, got errors: %v", result.Errors)
+			assert.Empty(t, result.Errors, "expected no errors")
 		})
 	}
 }
@@ -534,8 +558,17 @@ func TestValidateWebhookProvider_Invalid(t *testing.T) {
 			t.Parallel()
 			result := ValidateWebhookProvider(&tt.provider)
 
-			assertValidationFails(t, result)
-			assertErrorContains(t, result, tt.expectError)
+			assert.False(t, result.Valid, "expected invalid config to fail validation")
+			assert.NotEmpty(t, result.Errors, "expected validation errors but got none")
+
+			found := false
+			for _, err := range result.Errors {
+				if strings.Contains(err, tt.expectError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "expected error containing %q, got errors: %v", tt.expectError, result.Errors)
 		})
 	}
 }
@@ -582,7 +615,8 @@ func TestValidateMQTTSettings_Valid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateMQTTSettings(&tt.settings)
-			assertValidationPasses(t, result)
+			assert.True(t, result.Valid, "expected valid config, got errors: %v", result.Errors)
+			assert.Empty(t, result.Errors, "expected no errors")
 		})
 	}
 }
@@ -659,8 +693,17 @@ func TestValidateMQTTSettings_Invalid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateMQTTSettings(&tt.settings)
-			assertValidationFails(t, result)
-			assertErrorContains(t, result, tt.expectError)
+			assert.False(t, result.Valid, "expected invalid config to fail validation")
+			assert.NotEmpty(t, result.Errors, "expected validation errors but got none")
+
+			found := false
+			for _, err := range result.Errors {
+				if strings.Contains(err, tt.expectError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "expected error containing %q, got errors: %v", tt.expectError, result.Errors)
 		})
 	}
 }
@@ -721,7 +764,8 @@ func TestValidateWebServerSettings_Valid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateWebServerSettings(&tt.settings)
-			assertValidationPasses(t, result)
+			assert.True(t, result.Valid, "expected valid config, got errors: %v", result.Errors)
+			assert.Empty(t, result.Errors, "expected no errors")
 		})
 	}
 }
@@ -820,8 +864,17 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := ValidateWebServerSettings(&tt.settings)
-			assertValidationFails(t, result)
-			assertErrorContains(t, result, tt.expectError)
+			assert.False(t, result.Valid, "expected invalid config to fail validation")
+			assert.NotEmpty(t, result.Errors, "expected validation errors but got none")
+
+			found := false
+			for _, err := range result.Errors {
+				if strings.Contains(err, tt.expectError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "expected error containing %q, got errors: %v", tt.expectError, result.Errors)
 		})
 	}
 }
