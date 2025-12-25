@@ -38,9 +38,7 @@ func TestRaceCondition_ConcurrentExecution(t *testing.T) {
 	queue.SetProcessingInterval(10 * time.Millisecond)
 	queue.Start()
 	defer func() {
-		if err := queue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
 	}()
 
 	// Create processor
@@ -161,9 +159,7 @@ func TestRaceCondition_OrderingDependency(t *testing.T) {
 	queue.SetProcessingInterval(5 * time.Millisecond)
 	queue.Start()
 	defer func() {
-		if err := queue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
 	}()
 
 	processor := &Processor{
@@ -247,9 +243,7 @@ func TestRaceCondition_TimeoutScenario(t *testing.T) {
 	queue.SetProcessingInterval(50 * time.Millisecond) // Simulate some processing delay
 	queue.Start()
 	defer func() {
-		if err := queue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
 	}()
 
 	processor := &Processor{
