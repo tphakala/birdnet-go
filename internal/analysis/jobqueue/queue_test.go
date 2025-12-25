@@ -709,12 +709,7 @@ func TestJobExpiration(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// All successful jobs completed
-	case <-time.After(5 * time.Second):
-		require.Fail(t, "Timed out waiting for jobs to complete")
-	}
+	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for jobs to complete")
 
 	// Wait for the cleanup to happen (cleanup happens on the 1-second ticker)
 	time.Sleep(3 * time.Second)
@@ -780,12 +775,7 @@ func TestArchiveLimit(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// All jobs completed
-	case <-time.After(5 * time.Second):
-		require.Fail(t, "Timed out waiting for jobs to complete")
-	}
+	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for jobs to complete")
 
 	// Wait for the cleanup to happen (cleanup happens on the 1-second ticker)
 	time.Sleep(3 * time.Second)
@@ -852,12 +842,7 @@ func TestQueueOverflow(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for the blocking job to start (up to 1 second)
-	select {
-	case <-jobStarted:
-		t.Log("Blocking job started successfully")
-	case <-time.After(1 * time.Second):
-		require.Fail(t, "Timed out waiting for blocking job to start")
-	}
+	waitForChannelWithLog(t, jobStarted, ShortTestTimeout, "Timed out waiting for blocking job to start", "Blocking job started successfully")
 
 	// Now fill the rest of the queue with additional jobs
 	// The queue capacity is queueCapacity, and one job is already running,
@@ -980,12 +965,7 @@ func TestDropOldestJob(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for the blocking job to start (up to 1 second)
-	select {
-	case <-jobStarted:
-		t.Log("Blocking job started successfully")
-	case <-time.After(1 * time.Second):
-		require.Fail(t, "Timed out waiting for blocking job to start")
-	}
+	waitForChannelWithLog(t, jobStarted, ShortTestTimeout, "Timed out waiting for blocking job to start", "Blocking job started successfully")
 
 	// Now fill the rest of the queue with pending jobs
 	pendingJobIDs := []string{
@@ -1089,12 +1069,7 @@ func TestHangingJobTimeout(t *testing.T) {
 	}()
 
 	// Wait for the job to be enqueued
-	select {
-	case <-done:
-		// Job enqueued successfully
-	case <-time.After(1 * time.Second):
-		require.Fail(t, "Timed out waiting for job to be enqueued")
-	}
+	waitForChannel(t, done, ShortTestTimeout, "Timed out waiting for job to be enqueued")
 
 	// Wait for the job to be picked up for processing
 	time.Sleep(2 * time.Second)
@@ -1159,12 +1134,7 @@ func TestContextCancellation(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Wait for the job to start executing
-	select {
-	case <-executionStarted:
-		// Job execution has started
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "Timed out waiting for job execution to start")
-	}
+	waitForChannel(t, executionStarted, 3*time.Second, "Timed out waiting for job execution to start")
 
 	// Stop the queue, which should cancel all running jobs
 	err = queue.StopWithTimeout(500 * time.Millisecond)
@@ -1459,13 +1429,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for job to start
-	select {
-	case <-jobStarted:
-		// Job started
-		t.Log("Job started successfully")
-	case <-time.After(2 * time.Second):
-		require.Fail(t, "Job didn't start in time")
-	}
+	waitForChannelWithLog(t, jobStarted, 2*time.Second, "Job didn't start in time", "Job started successfully")
 
 	// Initiate graceful shutdown with a reasonable timeout
 	shutdownErr := make(chan error, 1)
@@ -1559,13 +1523,7 @@ func TestJobCancellation(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for job to start
-	select {
-	case <-longJobStarted:
-		// Job started
-		t.Log("Long job started successfully")
-	case <-time.After(2 * time.Second):
-		require.Fail(t, "Job didn't start in time")
-	}
+	waitForChannelWithLog(t, longJobStarted, 2*time.Second, "Job didn't start in time", "Long job started successfully")
 
 	// Cancel the context
 	cancel()
@@ -1861,12 +1819,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// All jobs completed
-	case <-time.After(30 * time.Second):
-		require.Fail(t, "Timed out waiting for jobs to complete")
-	}
+	waitForChannel(t, done, LongTestTimeout, "Timed out waiting for jobs to complete")
 
 	// Force cleanup and GC
 	queue.cleanupStaleJobs(context.Background())
