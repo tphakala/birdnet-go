@@ -876,17 +876,22 @@ func (s *OAuth2Server) cleanupExpired() {
 
 // logThrottledError logs an error message, but only once per specified interval for a given key
 func (s *OAuth2Server) logThrottledError(key, msg string, err error, interval time.Duration) {
+	shouldLog := false
+
 	s.mutex.Lock()
 	if s.throttledMessages == nil {
 		s.throttledMessages = make(map[string]time.Time)
 	}
 	lastLogTime, exists := s.throttledMessages[key]
-	s.mutex.Unlock() // Unlock early before logging
-
 	if !exists || time.Since(lastLogTime) > interval {
-		logger().Error(msg, "key", key, "error", err)
-		s.mutex.Lock()
+		// Update timestamp while holding lock to prevent race condition
 		s.throttledMessages[key] = time.Now()
-		s.mutex.Unlock()
+		shouldLog = true
+	}
+	s.mutex.Unlock()
+
+	// Log outside the lock to avoid blocking other operations
+	if shouldLog {
+		logger().Error(msg, "key", key, "error", err)
 	}
 }
