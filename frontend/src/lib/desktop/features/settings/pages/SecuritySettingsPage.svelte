@@ -65,6 +65,12 @@
         clientSecret: '',
         userId: '',
       },
+      microsoftAuth: {
+        enabled: false,
+        clientId: '',
+        clientSecret: '',
+        userId: '',
+      },
       allowSubnetBypass: {
         enabled: false,
         subnet: '',
@@ -102,10 +108,12 @@
       {
         googleAuth: store.originalData.security?.googleAuth,
         githubAuth: store.originalData.security?.githubAuth,
+        microsoftAuth: store.originalData.security?.microsoftAuth,
       },
       {
         googleAuth: store.formData.security?.googleAuth,
         githubAuth: store.formData.security?.githubAuth,
+        microsoftAuth: store.formData.security?.microsoftAuth,
       }
     )
   );
@@ -130,6 +138,7 @@
   // Backend supports both /auth/:provider/callback and /api/v1/auth/:provider/callback
   let googleRedirectURI = $derived(`${currentHost}/auth/google/callback`);
   let githubRedirectURI = $derived(`${currentHost}/auth/github/callback`);
+  let microsoftRedirectURI = $derived(`${currentHost}/auth/microsoftonline/callback`);
 
   // Server Configuration update handlers
   function updateBaseUrl(baseUrl: string) {
@@ -224,6 +233,30 @@
       ...settings,
       githubAuth: { ...settings.githubAuth, userId },
     });
+  }
+
+  // Microsoft OAuth update handlers
+  function updateMicrosoftAuth(update: Partial<typeof settings.microsoftAuth>) {
+    settingsActions.updateSection('security', {
+      ...settings,
+      microsoftAuth: { ...settings.microsoftAuth, ...update },
+    });
+  }
+
+  function updateMicrosoftAuthEnabled(enabled: boolean) {
+    updateMicrosoftAuth({ enabled });
+  }
+
+  function updateMicrosoftClientId(clientId: string) {
+    updateMicrosoftAuth({ clientId });
+  }
+
+  function updateMicrosoftClientSecret(clientSecret: string) {
+    updateMicrosoftAuth({ clientSecret });
+  }
+
+  function updateMicrosoftUserId(userId: string) {
+    updateMicrosoftAuth({ userId });
   }
 
   // Subnet Bypass update handlers
@@ -406,10 +439,12 @@
       originalData={{
         googleAuth: store.originalData.security?.googleAuth,
         githubAuth: store.originalData.security?.githubAuth,
+        microsoftAuth: store.originalData.security?.microsoftAuth,
       }}
       currentData={{
         googleAuth: store.formData.security?.googleAuth,
         githubAuth: store.formData.security?.githubAuth,
+        microsoftAuth: store.formData.security?.microsoftAuth,
       }}
     >
     <div class="space-y-6">
@@ -563,6 +598,78 @@
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateGithubUserId}
+            />
+          </div>
+        {/if}
+      </div>
+
+      <!-- Microsoft Auth -->
+      <div class="border border-base-300 rounded-lg p-4">
+        <h4 class="text-lg font-medium mb-4 flex items-center gap-3">
+          <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <path fill="#F25022" d="M1 1h10v10H1z"/>
+            <path fill="#7FBA00" d="M13 1h10v10H13z"/>
+            <path fill="#00A4EF" d="M1 13h10v10H1z"/>
+            <path fill="#FFB900" d="M13 13h10v10H13z"/>
+          </svg>
+          {t('settings.security.oauth.microsoft.title')}
+        </h4>
+
+        <Checkbox
+          checked={settings.microsoftAuth.enabled}
+          label={t('settings.security.oauth.microsoft.enableLabel')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateMicrosoftAuthEnabled}
+        />
+
+        {#if settings.microsoftAuth?.enabled}
+          <div class="mt-4 space-y-4">
+            <!-- Redirect URI Information -->
+            <div class="bg-base-200 p-3 rounded-lg">
+              <div class="text-sm">
+                <p class="font-medium mb-1">{t('settings.security.oauth.microsoft.redirectUriTitle')}</p>
+                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{microsoftRedirectURI}</code>
+              </div>
+              <a
+                href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
+              >
+                {t('settings.security.oauth.microsoft.getCredentialsLabel')}
+                <ExternalLink class="size-4" />
+              </a>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <PasswordField
+                label={t('settings.security.oauth.microsoft.clientIdLabel')}
+                value={settings.microsoftAuth.clientId}
+                onUpdate={updateMicrosoftClientId}
+                placeholder=""
+                helpText={t('settings.security.oauth.microsoft.clientIdHelpText')}
+                disabled={store.isLoading || store.isSaving}
+                allowReveal={true}
+              />
+
+              <PasswordField
+                label={t('settings.security.oauth.microsoft.clientSecretLabel')}
+                value={settings.microsoftAuth.clientSecret}
+                onUpdate={updateMicrosoftClientSecret}
+                placeholder=""
+                helpText={t('settings.security.oauth.microsoft.clientSecretHelpText')}
+                disabled={store.isLoading || store.isSaving}
+                allowReveal={true}
+              />
+            </div>
+
+            <TextInput
+              id="microsoft-user-id"
+              value={settings.microsoftAuth.userId ?? ''}
+              label={t('settings.security.oauth.microsoft.userIdLabel')}
+              placeholder={t('settings.security.placeholders.allowedUsers')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={updateMicrosoftUserId}
             />
           </div>
         {/if}

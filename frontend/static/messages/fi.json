@@ -2393,6 +2393,17 @@
           "clientSecretLabel": "Asiakassalaisuus",
           "clientSecretHelpText": "OAuth 2.0 -asiakassalaisuus, joka saadaan GitHub-kehittäjäasetuksista OAuth-tunnusten määrittämisen yhteydessä.",
           "userIdLabel": "Käyttäjä-ID"
+        },
+        "microsoft": {
+          "title": "Microsoft-tili",
+          "enableLabel": "Salli OAuth2-kirjautuminen Microsoft-tilillä",
+          "redirectUriTitle": "Uudelleenohjaus-URI Azure-sovellusrekisteröintiä varten:",
+          "getCredentialsLabel": "Hae tunnukset Azure-portaalista",
+          "clientIdLabel": "Asiakastunnus",
+          "clientIdHelpText": "Azure-sovellusrekisteröinnistä saatu sovellus- (asiakas-)tunnus.",
+          "clientSecretLabel": "Asiakassalaisuus",
+          "clientSecretHelpText": "Azure-sovellusrekisteröinnistä saatu asiakassalaisuuden arvo.",
+          "userIdLabel": "Käyttäjätunnus"
         }
       },
       "bypassAuthentication": {

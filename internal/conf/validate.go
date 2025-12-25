@@ -464,12 +464,13 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 func validateSecuritySettings(settings *Security) error {
 	// Check if any OAuth provider is enabled (OAuth providers require host or baseUrl for redirect URLs)
 	// Note: BasicAuth doesn't require host as it doesn't use OAuth redirects
-	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" && settings.BaseURL == "" {
-		return errors.New(fmt.Errorf("security.host or security.baseUrl must be set when using OAuth authentication providers (Google or GitHub)")).
+	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled || settings.MicrosoftAuth.Enabled) && settings.Host == "" && settings.BaseURL == "" {
+		return errors.New(fmt.Errorf("security.host or security.baseUrl must be set when using OAuth authentication providers (Google, GitHub, or Microsoft)")).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-oauth-host").
 			Context("google_enabled", settings.GoogleAuth.Enabled).
 			Context("github_enabled", settings.GithubAuth.Enabled).
+			Context("microsoft_enabled", settings.MicrosoftAuth.Enabled).
 			Build()
 	}
 

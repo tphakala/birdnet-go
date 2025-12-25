@@ -61,6 +61,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/markbates/going v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

@@ -2393,6 +2393,17 @@
           "clientSecretLabel": "Secreto de cliente",
           "clientSecretHelpText": "El secreto de cliente OAuth 2.0 obtenido de la configuración de desarrollador de GitHub al configurar las credenciales OAuth.",
           "userIdLabel": "ID de usuario"
+        },
+        "microsoft": {
+          "title": "Cuenta de Microsoft",
+          "enableLabel": "Permitir inicio de sesión OAuth2 con cuenta de Microsoft",
+          "redirectUriTitle": "URI de redirección para el registro de aplicaciones de Azure:",
+          "getCredentialsLabel": "Obtener credenciales desde el portal de Azure",
+          "clientIdLabel": "ID de cliente",
+          "clientIdHelpText": "El ID de aplicación (cliente) obtenido del registro de aplicaciones de Azure.",
+          "clientSecretLabel": "Secreto de cliente",
+          "clientSecretHelpText": "El valor del secreto de cliente obtenido del registro de aplicaciones de Azure.",
+          "userIdLabel": "ID de usuario"
         }
       },
       "bypassAuthentication": {

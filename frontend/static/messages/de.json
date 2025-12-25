@@ -2393,6 +2393,17 @@
           "clientSecretLabel": "Client-Geheimnis",
           "clientSecretHelpText": "Das OAuth 2.0 Client-Geheimnis, das Sie bei der Einrichtung der OAuth-Anmeldedaten von den GitHub-Entwicklereinstellungen erhalten haben.",
           "userIdLabel": "Benutzer-ID"
+        },
+        "microsoft": {
+          "title": "Microsoft-Konto",
+          "enableLabel": "OAuth2-Anmeldung über Microsoft-Konto erlauben",
+          "redirectUriTitle": "Umleitungs-URI für Azure-App-Registrierung:",
+          "getCredentialsLabel": "Zugangsdaten aus dem Azure-Portal abrufen",
+          "clientIdLabel": "Client-ID",
+          "clientIdHelpText": "Die Anwendungs-ID (Client-ID) aus der Azure-App-Registrierung.",
+          "clientSecretLabel": "Client-Geheimnis",
+          "clientSecretHelpText": "Das Client-Geheimnis aus der Azure-App-Registrierung.",
+          "userIdLabel": "Benutzer-ID"
         }
       },
       "bypassAuthentication": {

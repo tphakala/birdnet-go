@@ -2113,6 +2113,17 @@
           "clientSecretLabel": "Sekret Klienta",
           "clientSecretHelpText": "Sekret Klienta OAuth 2.0 uzyskany z Ustawień Deweloperskich GitHub podczas konfigurowania poświadczeń OAuth.",
           "userIdLabel": "ID Użytkownika"
+        },
+        "microsoft": {
+          "title": "Konto Microsoft",
+          "enableLabel": "Zezwól na logowanie OAuth2 przez konto Microsoft",
+          "redirectUriTitle": "URI przekierowania dla rejestracji aplikacji Azure:",
+          "getCredentialsLabel": "Pobierz dane uwierzytelniające z portalu Azure",
+          "clientIdLabel": "Identyfikator klienta",
+          "clientIdHelpText": "Identyfikator aplikacji (klienta) uzyskany z rejestracji aplikacji Azure.",
+          "clientSecretLabel": "Klucz tajny klienta",
+          "clientSecretHelpText": "Wartość klucza tajnego klienta uzyskana z rejestracji aplikacji Azure.",
+          "userIdLabel": "Identyfikator użytkownika"
         }
       },
       "bypassAuthentication": {
