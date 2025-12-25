@@ -71,6 +71,11 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 		return true
 	}
 
+	// Skip for social OAuth endpoints (GET requests for OAuth flow)
+	if strings.HasPrefix(path, "/auth/") {
+		return true
+	}
+
 	return false
 }
 

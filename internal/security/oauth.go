@@ -287,17 +287,51 @@ func getSessionPath() (string, bool) {
 	return sessionPath, true
 }
 
+// computeBaseURL returns the base URL for constructing OAuth redirect URIs.
+// It prioritizes BaseURL, then falls back to Host (which may include scheme).
+// Returns empty string if neither is configured.
+func computeBaseURL(settings *conf.Settings) string {
+	// BaseURL takes precedence if configured
+	if settings.Security.BaseURL != "" {
+		// Ensure no trailing slash
+		return strings.TrimSuffix(settings.Security.BaseURL, "/")
+	}
+
+	// Fall back to Host (may already include scheme like "https://example.com")
+	if settings.Security.Host != "" {
+		host := strings.TrimSuffix(settings.Security.Host, "/")
+		// If host already has a scheme, use it as-is
+		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
+			return host
+		}
+		// Otherwise, assume HTTPS for security
+		return "https://" + host
+	}
+
+	return ""
+}
+
 // initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft).
 func initializeProviders(settings *conf.Settings) {
 	logger().Info("Configuring Goth providers")
 	providers := make([]goth.Provider, 0, InitialProviderCapacity)
 
+	// Compute base URL for redirect URIs if not explicitly configured
+	baseURL := computeBaseURL(settings)
+
 	if settings.Security.GoogleAuth.Enabled && settings.Security.GoogleAuth.ClientID != "" && settings.Security.GoogleAuth.ClientSecret != "" {
-		logger().Info("Enabling Google Auth provider")
+		redirectURI := settings.Security.GoogleAuth.RedirectURI
+		if redirectURI == "" && baseURL != "" {
+			redirectURI = baseURL + "/auth/" + ProviderGoogle + "/callback"
+		}
+		if redirectURI == "" {
+			logger().Warn("Google OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for Google OAuth.")
+		}
+		logger().Info("Enabling Google Auth provider", "redirect_uri", redirectURI)
 		googleProvider := gothGoogle.New(
 			settings.Security.GoogleAuth.ClientID,
 			settings.Security.GoogleAuth.ClientSecret,
-			settings.Security.GoogleAuth.RedirectURI,
+			redirectURI,
 			"https://www.googleapis.com/auth/userinfo.email", // Scope for email
 		)
 		googleProvider.SetAccessType("offline")
@@ -307,11 +341,18 @@ func initializeProviders(settings *conf.Settings) {
 	}
 
 	if settings.Security.GithubAuth.Enabled && settings.Security.GithubAuth.ClientID != "" && settings.Security.GithubAuth.ClientSecret != "" {
-		logger().Info("Enabling GitHub Auth provider")
+		redirectURI := settings.Security.GithubAuth.RedirectURI
+		if redirectURI == "" && baseURL != "" {
+			redirectURI = baseURL + "/auth/" + ProviderGitHub + "/callback"
+		}
+		if redirectURI == "" {
+			logger().Warn("GitHub OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for GitHub OAuth.")
+		}
+		logger().Info("Enabling GitHub Auth provider", "redirect_uri", redirectURI)
 		providers = append(providers, github.New(
 			settings.Security.GithubAuth.ClientID,
 			settings.Security.GithubAuth.ClientSecret,
-			settings.Security.GithubAuth.RedirectURI,
+			redirectURI,
 			"user:email", // Scope for email
 		))
 	} else {
@@ -319,11 +360,18 @@ func initializeProviders(settings *conf.Settings) {
 	}
 
 	if settings.Security.MicrosoftAuth.Enabled && settings.Security.MicrosoftAuth.ClientID != "" && settings.Security.MicrosoftAuth.ClientSecret != "" {
-		logger().Info("Enabling Microsoft Account Auth provider")
+		redirectURI := settings.Security.MicrosoftAuth.RedirectURI
+		if redirectURI == "" && baseURL != "" {
+			redirectURI = baseURL + "/auth/" + ProviderMicrosoft + "/callback"
+		}
+		if redirectURI == "" {
+			logger().Warn("Microsoft OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for Microsoft OAuth.")
+		}
+		logger().Info("Enabling Microsoft Account Auth provider", "redirect_uri", redirectURI)
 		providers = append(providers, microsoftonline.New(
 			settings.Security.MicrosoftAuth.ClientID,
 			settings.Security.MicrosoftAuth.ClientSecret,
-			settings.Security.MicrosoftAuth.RedirectURI,
+			redirectURI,
 			"user.read", // Scope for email/profile
 		))
 	} else {
