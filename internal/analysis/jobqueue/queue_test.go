@@ -340,8 +340,7 @@ func TestRetryProcess(t *testing.T) {
 		ExecuteFunc: func(data any) error {
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryProcess: Attempt %d of %d", count, failCount+1)
-			// Safely convert failCount to int32 to match atomic counter type
-			require.LessOrEqual(t, failCount, math.MaxInt32, "failCount %d exceeds int32 range", failCount)
+			// failCount is a small test constant, safe to convert to int32
 			if count <= int32(failCount) { //nolint:gosec // G115: test values small, safe conversion
 				// Return failure for the first N attempts
 				return errors.New("simulated failure")

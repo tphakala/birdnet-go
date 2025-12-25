@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // --- Audio Source Helpers ---
@@ -387,21 +387,11 @@ func setupTestProcessorWithInterval(t *testing.T, interval time.Duration) *Proce
 // waitForChannel waits for a signal on the channel or fails after timeout.
 func waitForChannel(t *testing.T, ch <-chan struct{}, timeout time.Duration, msg string) {
 	t.Helper()
-	select {
-	case <-ch:
-		// Success
-	case <-time.After(timeout):
-		require.Fail(t, msg)
-	}
+	testutil.WaitForChannel(t, ch, timeout, msg)
 }
 
 // waitForChannelWithLog waits for a signal and logs on success.
 func waitForChannelWithLog(t *testing.T, ch <-chan struct{}, timeout time.Duration, failMsg, successMsg string) {
 	t.Helper()
-	select {
-	case <-ch:
-		t.Log(successMsg)
-	case <-time.After(timeout):
-		require.Fail(t, failMsg)
-	}
+	testutil.WaitForChannelWithLog(t, ch, timeout, failMsg, successMsg)
 }
