@@ -556,7 +556,18 @@
       "showing": "Näytetään {from}-{to} / {total} tuloksesta"
     },
     "weather": {
-      "noData": "Ei säätietoja",
+      "title": "Weather Information",
+      "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "units": {
         "temperature": "°C",
         "windSpeed": "m/s",
@@ -2028,6 +2039,14 @@
           "apiKeyRequired": "API-avain täytyy määrittää",
           "inProgress": "Testaus käynnissä...",
           "description": "Testaa sääpalveluyhteys"
+        },
+        "temperatureUnit": {
+          "label": "Lämpötilan näyttöyksikkö",
+          "helpText": "Valitse, miten lämpötilat näytetään sovelluksessa.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
         }
       }
     },
@@ -2425,7 +2444,18 @@
   },
   "dataDisplay": {
     "table": {
-      "noData": "Ei tietoja saatavilla",
+      "title": "Weather Information",
+      "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "loading": "Ladataan tietoja...",
       "error": "Tietojen lataus epäonnistui",
       "sortBy": "Lajittele {column}",

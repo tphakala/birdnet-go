@@ -556,7 +556,18 @@
       "showing": "Toont {from} tot {to} van {total} resultaten"
     },
     "weather": {
-      "noData": "Geen weer info",
+      "title": "Weather Information",
+      "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "units": {
         "temperature": "°C",
         "windSpeed": "m/s",
@@ -1755,6 +1766,14 @@
           "apiKeyRequired": "API sleutel moet worden opgegeven",
           "inProgress": "Test bezig...",
           "description": "Test weer leverancier verbinding"
+        },
+        "temperatureUnit": {
+          "label": "Temperatuur Weergave Eenheid",
+          "helpText": "Kies hoe temperaturen worden weergegeven in de applicatie.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
         }
       }
     },
@@ -2425,7 +2444,18 @@
   },
   "dataDisplay": {
     "table": {
-      "noData": "Geen gegevens beschikbaar",
+      "title": "Weather Information",
+      "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "loading": "Gegevens inlezen ...",
       "error": "Gegevens inlezen is mislukt",
       "sortBy": "Sorteer op {column}",

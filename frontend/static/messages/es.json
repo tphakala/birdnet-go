@@ -556,7 +556,18 @@
       "showing": "Mostrando {from} a {to} de {total} resultados"
     },
     "weather": {
-      "noData": "Sin datos meteorológicos",
+      "title": "Weather Information",
+      "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "units": {
         "temperature": "°C",
         "windSpeed": "m/s",
@@ -2028,6 +2039,14 @@
           "apiKeyRequired": "Se debe especificar la clave API de OpenWeather",
           "inProgress": "Prueba en progreso...",
           "description": "Probar conexión del proveedor de clima"
+        },
+        "temperatureUnit": {
+          "label": "Unidad de visualización de temperatura",
+          "helpText": "Elija cómo se muestran las temperaturas en la aplicación.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
         }
       }
     },
@@ -2425,7 +2444,18 @@
   },
   "dataDisplay": {
     "table": {
-      "noData": "No hay datos disponibles",
+      "title": "Weather Information",
+      "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "loading": "Cargando datos...",
       "error": "Error al cargar datos",
       "sortBy": "Ordenar por {column}",

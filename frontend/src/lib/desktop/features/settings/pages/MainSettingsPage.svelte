@@ -1229,12 +1229,6 @@
     });
   }
 
-  function updateWeatherUnits(units: string) {
-    settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather, openWeather: { ...settings.weather.openWeather, units } },
-    });
-  }
-
   function updateWundergroundSetting(key: keyof typeof wundergroundDefaults, value: string) {
     settingsActions.updateSection('realtime', {
       weather: {
@@ -2265,27 +2259,6 @@
               disabled={store.isLoading || store.isSaving}
               allowReveal={true}
             />
-
-            <SelectDropdown
-              options={[
-                {
-                  value: 'standard',
-                  label: t('settings.integration.weather.units.options.standard'),
-                },
-                { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
-                {
-                  value: 'imperial',
-                  label: t('settings.integration.weather.units.options.imperial'),
-                },
-              ]}
-              value={settings.weather.openWeather?.units || 'metric'}
-              label={t('settings.integration.weather.units.label')}
-              disabled={store.isLoading || store.isSaving}
-              variant="select"
-              groupBy={false}
-              menuSize="sm"
-              onChange={value => updateWeatherUnits(value as string)}
-            />
           </div>
         {:else if settings.weather.provider === 'wunderground'}
           <SettingsNote>
@@ -2320,25 +2293,34 @@
               helpText={t('settings.integration.weather.wunderground.endpoint.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
-
-            <SelectDropdown
-              options={[
-                { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
-                { value: 'm', label: t('settings.integration.weather.units.options.metric') },
-                { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
-              ]}
-              value={settings.weather.wunderground?.units ?? 'm'}
-              label={t('settings.integration.weather.wunderground.units.label')}
-              disabled={store.isLoading || store.isSaving}
-              variant="select"
-              groupBy={false}
-              menuSize="sm"
-              onChange={value => updateWundergroundSetting('units', value as string)}
-            />
           </div>
         {/if}
 
         {#if settings.weather.provider !== 'none'}
+          <!-- Temperature Display Unit -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <SelectDropdown
+              options={[
+                {
+                  value: 'celsius',
+                  label: t('settings.integration.weather.temperatureUnit.options.celsius'),
+                },
+                {
+                  value: 'fahrenheit',
+                  label: t('settings.integration.weather.temperatureUnit.options.fahrenheit'),
+                },
+              ]}
+              value={settings.dashboard.temperatureUnit || 'celsius'}
+              label={t('settings.integration.weather.temperatureUnit.label')}
+              helpText={t('settings.integration.weather.temperatureUnit.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateDashboardSetting('temperatureUnit', value as string)}
+            />
+          </div>
+
           <!-- Test Weather Provider -->
           <div class="space-y-4">
             <div class="flex items-center gap-3">
