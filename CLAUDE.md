@@ -9,12 +9,14 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **Frontend**: See `frontend/CLAUDE.md` for Svelte 5, TypeScript, UI
 - **Backend**: See `internal/CLAUDE.md` for Go standards, testing
 - **API v2**: See `internal/api/v2/CLAUDE.md` for endpoints
+- **Testing**: See `TESTING.md` for test patterns, testify usage, shared helpers
 
 **IMPORTANT**: Always read the relevant CLAUDE.md file before working on code:
 
 - Working on Go code? Read `internal/CLAUDE.md` first
 - Working on frontend? Read `frontend/CLAUDE.md` first
 - Working on API v2? Read `internal/api/v2/CLAUDE.md` first
+- Writing tests? Read `TESTING.md` first - all tests MUST use testify
 
 ## Universal Rules
 
