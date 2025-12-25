@@ -33,6 +33,11 @@
   import { t } from '$lib/i18n';
   import { Thermometer, Wind } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
+  import {
+    convertTemperature,
+    getTemperatureSymbol,
+    type TemperatureUnit,
+  } from '$lib/utils/formatters';
 
   interface Props {
     weatherIcon?: string;
@@ -62,16 +67,13 @@
     error = null,
   }: Props = $props();
 
-  // Get the appropriate unit labels based on the units setting
-  const temperatureUnit = $derived.by(() => {
-    switch (units) {
-      case 'imperial':
-        return '°F';
-      case 'standard':
-        return 'K';
-      default:
-        return '°C';
-    }
+  // Get the appropriate unit label based on the units setting
+  const temperatureUnit = $derived(getTemperatureSymbol(units as TemperatureUnit));
+
+  // Convert temperature from Celsius (internal storage) to display unit
+  const displayTemperature = $derived.by(() => {
+    if (temperature === undefined) return undefined;
+    return convertTemperature(temperature, units as TemperatureUnit);
   });
 
   const windSpeedUnit = $derived.by(() => {
@@ -214,14 +216,14 @@
   {/if}
 
   <!-- Temperature with Thermometer Icon -->
-  {#if temperature !== undefined}
+  {#if displayTemperature !== undefined}
     <div class="wd-temperature-row flex items-center gap-2">
       <Thermometer
         class={cn(safeGet(iconSizeClasses, size, ''), 'shrink-0')}
-        aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit}`}
+        aria-label={`Temperature: ${displayTemperature.toFixed(1)}${temperatureUnit}`}
       />
       <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
-        {temperature.toFixed(1)}{temperatureUnit}
+        {displayTemperature.toFixed(1)}{temperatureUnit}
       </span>
     </div>
   {/if}

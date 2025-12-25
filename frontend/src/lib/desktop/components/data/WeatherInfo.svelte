@@ -107,10 +107,12 @@
     }
   }
 
-  // Helper function to format temperature
-  function formatTemperature(temp: number | undefined): string {
+  // Note: Temperature from API is always in Celsius.
+  // This component receives data from API which already includes the display unit preference.
+  // For now, we display as Celsius. Future enhancement: pass unit preference to this component.
+  function formatTemperatureDisplay(temp: number | undefined): string {
     if (temp === undefined) return 'N/A';
-    return `${temp}°C`;
+    return `${temp.toFixed(1)}°C`;
   }
 
   // Helper function to format percentage
@@ -185,7 +187,7 @@
           <Thermometer class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">Temperature</div>
-            <div class="font-medium">{formatTemperature(weather.hourly?.temperature)}</div>
+            <div class="font-medium">{formatTemperatureDisplay(weather.hourly?.temperature)}</div>
           </div>
         </div>
 

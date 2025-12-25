@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -59,12 +60,12 @@ type OpenWeatherResponse struct {
 func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 	apiKey := settings.Realtime.Weather.OpenWeather.APIKey
 	if apiKey == "" {
-		weatherLogger.Error("OpenWeather API key is missing", "provider", openWeatherProviderName)
-		return nil, errors.New(fmt.Errorf("OpenWeather API key not configured")).
-			Component("weather").
-			Category(errors.CategoryConfiguration).
-			Context("provider", openWeatherProviderName).
-			Build()
+		return nil, newWeatherError(
+			fmt.Errorf("OpenWeather API key not configured"),
+			errors.CategoryConfiguration,
+			"validate_config",
+			openWeatherProviderName,
+		)
 	}
 
 	apiURL := fmt.Sprintf("%s?lat=%.3f&lon=%.3f&appid=%s&units=%s&lang=en",
@@ -75,45 +76,55 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		settings.Realtime.Weather.OpenWeather.Units,
 	)
 
-	safeURL := maskAPIKey(apiURL, "appid")
 	logger := weatherLogger.With("provider", openWeatherProviderName)
-	logger.Info("Fetching weather data", "url", safeURL)
-
-	client := &http.Client{
-		Timeout: RequestTimeout,
-	}
+	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "appid"))
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
-		logger.Error("Failed to create HTTP request", "url", safeURL, "error", err)
-		return nil, errors.New(err).
-			Component("weather").
-			Category(errors.CategoryNetwork).
-			Context("operation", "create_http_request").
-			Context("provider", openWeatherProviderName).
-			Build()
+		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", openWeatherProviderName)
 	}
-
 	req.Header.Set("User-Agent", UserAgent)
 
+	// Execute request with retry
+	body, err := executeOpenWeatherRequest(req, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse response
 	var weatherData OpenWeatherResponse
-	var resp *http.Response
+	if err := json.Unmarshal(body, &weatherData); err != nil {
+		return nil, newWeatherError(err, errors.CategoryValidation, "unmarshal_weather_data", openWeatherProviderName)
+	}
+
+	if len(weatherData.Weather) == 0 {
+		return nil, newWeatherError(
+			fmt.Errorf("no weather conditions returned from API"),
+			errors.CategoryValidation,
+			"validate_weather_response",
+			openWeatherProviderName,
+		)
+	}
+
+	logger.Info("Successfully received and parsed weather data")
+	mappedData := mapOpenWeatherResponse(&weatherData, settings)
+	logger.Debug("Mapped API response to WeatherData structure", "city", mappedData.Location.City, "temp", mappedData.Temperature.Current)
+	return mappedData, nil
+}
+
+// executeOpenWeatherRequest executes HTTP request with retry logic
+func executeOpenWeatherRequest(req *http.Request, logger *slog.Logger) ([]byte, error) {
+	client := &http.Client{Timeout: RequestTimeout}
 
 	for i := range MaxRetries {
+		isLastAttempt := i == MaxRetries-1
 		attemptLogger := logger.With("attempt", i+1, "max_attempts", MaxRetries)
-		attemptLogger.Debug("Sending HTTP request")
-		resp, err = client.Do(req)
+
+		resp, err := client.Do(req)
 		if err != nil {
 			attemptLogger.Warn("HTTP request failed", "error", err)
-			if i == MaxRetries-1 {
-				logger.Error("Failed to fetch weather data after max retries", "error", err)
-				return nil, errors.New(err).
-					Component("weather").
-					Category(errors.CategoryNetwork).
-					Context("operation", "weather_api_request").
-					Context("provider", openWeatherProviderName).
-					Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
-					Build()
+			if isLastAttempt {
+				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", openWeatherProviderName)
 			}
 			time.Sleep(RetryDelay)
 			continue
@@ -123,92 +134,98 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
-			if err := resp.Body.Close(); err != nil {
-				attemptLogger.Debug("Failed to close response body", "error", err)
+			_ = resp.Body.Close()
+			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode)
+			if isLastAttempt {
+				return nil, newWeatherErrorWithRetries(
+					fmt.Errorf("received non-200 response (%d)", resp.StatusCode),
+					errors.CategoryNetwork,
+					"weather_api_response",
+					openWeatherProviderName,
+				)
 			}
-			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
-			if i == MaxRetries-1 {
-				logger.Error("Failed to fetch weather data due to non-OK status after max retries", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
-				return nil, errors.New(fmt.Errorf("received non-200 response (%d) after %d retries", resp.StatusCode, MaxRetries)).
-					Component("weather").
-					Category(errors.CategoryNetwork).
-					Context("operation", "weather_api_response").
-					Context("provider", openWeatherProviderName).
-					Context("status_code", fmt.Sprintf("%d", resp.StatusCode)).
-					Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
-					Build()
-			}
+			_ = bodyBytes // Suppress unused warning
 			time.Sleep(RetryDelay)
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			logger.Debug("Failed to close response body", "error", err)
-		}
+		_ = resp.Body.Close()
 		if err != nil {
-			logger.Error("Failed to read response body", "status_code", resp.StatusCode, "error", err)
-			return nil, errors.New(err).
-				Component("weather").
-				Category(errors.CategoryNetwork).
-				Context("operation", "read_response_body").
-				Context("provider", openWeatherProviderName).
-				Build()
+			return nil, newWeatherError(err, errors.CategoryNetwork, "read_response_body", openWeatherProviderName)
 		}
-
-		if err := json.Unmarshal(body, &weatherData); err != nil {
-			logger.Error("Failed to unmarshal response JSON", "status_code", resp.StatusCode, "error", err, "response_body", string(body))
-			return nil, errors.New(err).
-				Component("weather").
-				Category(errors.CategoryValidation).
-				Context("operation", "unmarshal_weather_data").
-				Context("provider", openWeatherProviderName).
-				Build()
-		}
-
-		logger.Info("Successfully received and parsed weather data", "status_code", resp.StatusCode)
-		break
+		return body, nil
 	}
 
-	if len(weatherData.Weather) == 0 {
-		logger.Error("API response parsed successfully but contained no weather conditions")
-		return nil, errors.New(fmt.Errorf("no weather conditions returned from API")).
-			Component("weather").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_weather_response").
-			Context("provider", openWeatherProviderName).
-			Build()
-	}
+	return nil, newWeatherErrorWithRetries(
+		fmt.Errorf("max retries exceeded"),
+		errors.CategoryNetwork,
+		"weather_api_request",
+		openWeatherProviderName,
+	)
+}
 
-	mappedData := &WeatherData{
-		Time: time.Unix(weatherData.Dt, 0),
+// mapOpenWeatherResponse converts OpenWeatherResponse to WeatherData
+func mapOpenWeatherResponse(data *OpenWeatherResponse, settings *conf.Settings) *WeatherData {
+	temp, feelsLike, tempMin, tempMax := convertOpenWeatherTemps(
+		data.Main.Temp,
+		data.Main.FeelsLike,
+		data.Main.TempMin,
+		data.Main.TempMax,
+		settings.Realtime.Weather.OpenWeather.Units,
+	)
+
+	return &WeatherData{
+		Time: time.Unix(data.Dt, 0),
 		Location: Location{
-			Latitude:  weatherData.Coord.Lat,
-			Longitude: weatherData.Coord.Lon,
-			Country:   weatherData.Sys.Country,
-			City:      weatherData.Name,
+			Latitude:  data.Coord.Lat,
+			Longitude: data.Coord.Lon,
+			Country:   data.Sys.Country,
+			City:      data.Name,
 		},
 		Temperature: Temperature{
-			Current:   weatherData.Main.Temp,
-			FeelsLike: weatherData.Main.FeelsLike,
-			Min:       weatherData.Main.TempMin,
-			Max:       weatherData.Main.TempMax,
+			Current:   temp,
+			FeelsLike: feelsLike,
+			Min:       tempMin,
+			Max:       tempMax,
 		},
 		Wind: Wind{
-			Speed: weatherData.Wind.Speed,
-			Deg:   weatherData.Wind.Deg,
-			Gust:  weatherData.Wind.Gust,
+			Speed: data.Wind.Speed,
+			Deg:   data.Wind.Deg,
+			Gust:  data.Wind.Gust,
 		},
-		Clouds:      weatherData.Clouds.All,
-		Visibility:  weatherData.Visibility,
-		Pressure:    weatherData.Main.Pressure,
-		Humidity:    weatherData.Main.Humidity,
-		Description: weatherData.Weather[0].Description,
-		Icon:        string(GetStandardIconCode(weatherData.Weather[0].Icon, openWeatherProviderName)),
+		Clouds:      data.Clouds.All,
+		Visibility:  data.Visibility,
+		Pressure:    data.Main.Pressure,
+		Humidity:    data.Main.Humidity,
+		Description: data.Weather[0].Description,
+		Icon:        string(GetStandardIconCode(data.Weather[0].Icon, openWeatherProviderName)),
 	}
+}
 
-	logger.Debug("Mapped API response to WeatherData structure", "city", mappedData.Location.City, "temp", mappedData.Temperature.Current)
-	return mappedData, nil
+// convertOpenWeatherTemps converts OpenWeather temperatures to Celsius.
+// OpenWeather unit systems:
+// - "metric": Already Celsius, no conversion needed
+// - "imperial": Fahrenheit, convert to Celsius
+// - "standard": Kelvin, convert to Celsius
+func convertOpenWeatherTemps(temp, feelsLike, tempMin, tempMax float64, units string) (tempC, feelsLikeC, tempMinC, tempMaxC float64) {
+	switch units {
+	case "imperial":
+		// Fahrenheit to Celsius
+		return FahrenheitToCelsius(temp),
+			FahrenheitToCelsius(feelsLike),
+			FahrenheitToCelsius(tempMin),
+			FahrenheitToCelsius(tempMax)
+	case "standard":
+		// Kelvin to Celsius
+		return KelvinToCelsius(temp),
+			KelvinToCelsius(feelsLike),
+			KelvinToCelsius(tempMin),
+			KelvinToCelsius(tempMax)
+	default:
+		// metric: already Celsius
+		return temp, feelsLike, tempMin, tempMax
+	}
 }
 
 func maskAPIKey(rawURL, keyParamName string) string {

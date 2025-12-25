@@ -14,6 +14,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
+  import { formatTemperatureCompact, type TemperatureUnit } from '$lib/utils/formatters';
 
   interface Props {
     weatherIcon: string;
@@ -51,15 +52,11 @@
   );
   const icon = $derived(isNight ? iconData.night : iconData.day);
 
-  // Format temperature
-  function formatTemperature(temp: number | undefined, unit: string | undefined): string {
-    if (temp === undefined) return '';
-    const rounded = Math.round(temp);
-    if (unit === 'imperial') return `${rounded}°F`;
-    return `${rounded}°C`;
-  }
-
-  const formattedTemp = $derived(formatTemperature(temperature, units));
+  // Format temperature with conversion from Celsius (internal storage) to display unit
+  // Temperature is always stored in Celsius; units prop indicates display preference
+  const formattedTemp = $derived(
+    formatTemperatureCompact(temperature, (units as TemperatureUnit) || 'metric')
+  );
 </script>
 
 <div

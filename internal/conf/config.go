@@ -125,12 +125,19 @@ type Thumbnails struct {
 	FallbackPolicy string `json:"fallbackPolicy"` // fallback policy: "none", "all" - try all available providers if preferred fails
 }
 
+// Temperature unit constants for display preference
+const (
+	TemperatureUnitCelsius    = "celsius"
+	TemperatureUnitFahrenheit = "fahrenheit"
+)
+
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails   Thumbnails           `json:"thumbnails"`       // thumbnails settings
-	SummaryLimit int                  `json:"summaryLimit"`     // limit for the number of species shown in the summary table
-	Locale       string               `json:"locale,omitempty"` // UI locale setting
-	Spectrogram  SpectrogramPreRender `json:"spectrogram"`      // Spectrogram pre-rendering settings
+	Thumbnails      Thumbnails           `json:"thumbnails"`              // thumbnails settings
+	SummaryLimit    int                  `json:"summaryLimit"`            // limit for the number of species shown in the summary table
+	Locale          string               `json:"locale,omitempty"`        // UI locale setting
+	Spectrogram     SpectrogramPreRender `json:"spectrogram"`             // Spectrogram pre-rendering settings
+	TemperatureUnit string               `json:"temperatureUnit"`         // display unit for temperature: "celsius" or "fahrenheit"
 }
 
 // Spectrogram generation mode constants
