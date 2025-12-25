@@ -284,7 +284,7 @@ func TestNormalizeClipPathStrict_SecurityCritical(t *testing.T) {
 			result, ok := NormalizeClipPathStrict(tc.path, "clips/")
 			assert.False(t, ok, "Path %q should be rejected (%s)", tc.path, tc.reason)
 			if ok {
-				t.Errorf("SECURITY: Path %q was accepted and normalized to %q", tc.path, result)
+				assert.Failf(t, "SECURITY", "Path %q was accepted and normalized to %q", tc.path, result)
 			}
 		})
 	}

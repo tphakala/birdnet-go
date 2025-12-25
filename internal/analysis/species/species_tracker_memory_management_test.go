@@ -555,7 +555,7 @@ func TestConcurrentCacheOperations_CriticalReliability(t *testing.T) {
 	// Check for any errors
 	errorCount := 0
 	for err := range errors {
-		t.Errorf("Concurrent operation error: %v", err)
+		require.NoError(t, err, "Concurrent operation error")
 		errorCount++
 	}
 

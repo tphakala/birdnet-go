@@ -170,7 +170,7 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 		case initialized := <-streamInitialized:
 			assert.True(t, initialized, "Stream should have been initialized")
 		case <-time.After(1 * time.Second):
-			t.Fatal("Stream initialization timed out")
+			require.Fail(t, "Stream initialization timed out")
 		}
 
 		// Simulate data reception to make the stream healthy
@@ -331,7 +331,7 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 		// Go 1.25: time.After() timeout uses fake time in synctest bubble
 		// Timeout behavior is now deterministic instead of real-world timing
 		case <-time.After(1 * time.Second):
-			t.Fatal("Monitoring test timed out")
+			require.Fail(t, "Monitoring test timed out")
 		}
 
 		// Simulate data reception to make the stream healthy
@@ -427,7 +427,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	// Go 1.25: Real timeout since we're not using synctest
 	// The 3-second timeout is reasonable for concurrent operations
 	case <-time.After(3 * time.Second):
-		t.Fatal("Concurrent operations timed out")
+		require.Fail(t, "Concurrent operations timed out")
 	}
 
 	// Verify manager is still in a consistent state
@@ -522,7 +522,7 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 		case <-done:
 			// Test completed
 		case <-time.After(1 * time.Second):
-			t.Fatal("Stress test timed out")
+			require.Fail(t, "Stress test timed out")
 		}
 	}
 

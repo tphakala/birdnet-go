@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewMetricsConcurrency verifies that NewMetrics can be called concurrently
@@ -54,20 +55,14 @@ func TestNewMetricsConcurrency(t *testing.T) {
 func TestSetMetricsIdempotent(t *testing.T) {
 	// Create first metrics instance
 	firstMetrics, err := NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create first metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create first metrics")
 
 	// Create second metrics instance (different from first)
 	secondMetrics, err := NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create second metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create second metrics")
 
 	// Verify the two metrics instances are different
-	if firstMetrics == secondMetrics {
-		t.Error("Expected different metrics instances")
-	}
+	assert.NotSame(t, firstMetrics, secondMetrics, "Expected different metrics instances")
 
 	// Now test that SetMetrics is idempotent for each component
 	// The second call should be ignored due to sync.Once
@@ -104,9 +99,7 @@ func TestSetMetricsIdempotent(t *testing.T) {
 	metricsInstances := make([]*Metrics, numGoroutines)
 	for i := range numGoroutines {
 		m, err := NewMetrics()
-		if err != nil {
-			t.Fatalf("Failed to create metrics instance %d: %v", i, err)
-		}
+		require.NoError(t, err, "Failed to create metrics instance %d", i)
 		metricsInstances[i] = m
 	}
 

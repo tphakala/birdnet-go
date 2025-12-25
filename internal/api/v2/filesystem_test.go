@@ -39,9 +39,7 @@ func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller, stri
 
 	// Close existing SFS if any
 	if controller.SFS != nil {
-		if err := controller.SFS.Close(); err != nil {
-			t.Errorf("Failed to close existing SFS: %v", err)
-		}
+		require.NoError(t, controller.SFS.Close(), "Failed to close existing SFS")
 	}
 
 	// Create new SecureFS rooted in temp directory
@@ -53,9 +51,7 @@ func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller, stri
 	WithAuthMiddleware(passthroughMiddleware())(controller)
 
 	t.Cleanup(func() {
-		if err := controller.SFS.Close(); err != nil {
-			t.Errorf("Failed to close SFS: %v", err)
-		}
+		assert.NoError(t, controller.SFS.Close(), "Failed to close SFS")
 	})
 
 	// Initialize filesystem routes

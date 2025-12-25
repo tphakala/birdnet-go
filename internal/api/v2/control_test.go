@@ -170,7 +170,7 @@ func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Con
 		assert.Equal(t, http.StatusOK, rec.Code,
 			"Should return success with buffered channel")
 	case <-time.After(150 * time.Millisecond):
-		t.Fatal("Handler blocked indefinitely with a blocked channel")
+		require.Fail(t, "Handler blocked indefinitely with a blocked channel")
 	}
 }
 

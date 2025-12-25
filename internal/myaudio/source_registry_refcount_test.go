@@ -193,9 +193,7 @@ func TestConcurrentReferenceOperations(t *testing.T) {
 	source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 		Type: SourceTypeRTSP,
 	})
-	if err != nil {
-		t.Fatalf("Failed to register source: %v", err)
-	}
+	require.NoError(t, err, "Failed to register source")
 
 	const numGoroutines = 100
 	var wg sync.WaitGroup

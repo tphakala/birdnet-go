@@ -659,7 +659,7 @@ func TestDDoSProtection(t *testing.T) {
 
 			// Call handler
 			if err := controller.GetDetections(c); err != nil {
-				t.Errorf("GetDetections failed: %v", err)
+				assert.NoError(t, err, "GetDetections failed")
 			}
 
 			// Record response time

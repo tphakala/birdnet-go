@@ -11,6 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
@@ -64,7 +65,7 @@ func TestFFmpegStream_ZombieCreationOnProcessExit(t *testing.T) {
 		case <-cleanupDone:
 			// Cleanup completed
 		case <-time.After(2 * time.Second):
-			t.Fatal("Cleanup timeout")
+			require.Fail(t, "Cleanup timeout")
 		}
 
 		// Verify no zombie
@@ -135,14 +136,12 @@ func TestFFmpegStream_ZombiePreventionWithWaitTimeout(t *testing.T) {
 	zombieCount := 0
 	for _, pid := range pids {
 		if isProcessZombie(t, pid) {
-			t.Errorf("Process %d is still a zombie after cleanup timeout", pid)
+			assert.Failf(t, "Process is still a zombie", "PID %d is still a zombie after cleanup timeout", pid)
 			zombieCount++
 		}
 	}
 
-	if zombieCount > 0 {
-		t.Errorf("Found %d zombie processes out of %d total", zombieCount, len(pids))
-	}
+	assert.Equal(t, 0, zombieCount, "Found %d zombie processes out of %d total", zombieCount, len(pids))
 }
 
 // TestFFmpegStream_ZombieAccumulationDuringRestarts tests zombie accumulation during repeated restarts
@@ -211,8 +210,8 @@ func TestFFmpegStream_ZombieAccumulationDuringRestarts(t *testing.T) {
 		}
 	}
 
+	assert.Equal(t, 0, zombieCount, "Accumulated %d zombie processes out of %d restarts", zombieCount, numRestarts)
 	if zombieCount > 0 {
-		t.Errorf("Accumulated %d zombie processes out of %d restarts", zombieCount, numRestarts)
 		t.Logf("Zombie PIDs: %v", activePids)
 	}
 }
@@ -340,9 +339,7 @@ func TestFFmpegStream_ProcessStateTransitions(t *testing.T) {
 
 	// Check final state
 	finalState := getProcessState(t, pid)
-	if finalState == "Z" {
-		t.Error("Process ended up as zombie")
-	}
+	assert.NotEqual(t, "Z", finalState, "Process ended up as zombie")
 }
 
 // Helper to get process state

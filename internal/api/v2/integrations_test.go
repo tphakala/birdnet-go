@@ -110,7 +110,7 @@ func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc fun
 	case err := <-errChan:
 		require.NoError(t, err)
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Handler took too long to complete")
+		require.Fail(t, "Handler took too long to complete")
 	}
 
 	// Verify the handler completed gracefully despite the client disconnection

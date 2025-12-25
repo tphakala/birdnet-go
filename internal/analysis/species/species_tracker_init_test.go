@@ -564,7 +564,7 @@ func TestIsNewSpecies_ThreadSafety(t *testing.T) {
 	// Check for errors
 	var errorCount int
 	for err := range errors {
-		t.Errorf("Concurrent read error: %v", err)
+		require.NoError(t, err, "Concurrent read error")
 		errorCount++
 	}
 
