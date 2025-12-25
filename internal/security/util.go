@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // normalizePort returns the port string, substituting the default port if empty.
@@ -90,7 +92,7 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 // - Path starting with '/'
 // - No double slashes '//' or backslashes '\\'
 // - No protocol specifiers '://'
-// - No directory traversal '..' (including URL-encoded variants)
+// - No directory traversal '..' (including URL-encoded variants and Unicode equivalents)
 // - No null bytes '\x00' (including URL-encoded variants)
 // - Reasonable length limit
 func IsSafePath(pathStr string) bool {
@@ -100,6 +102,10 @@ func IsSafePath(pathStr string) bool {
 	if len(pathStr) >= MaxSafePathLength {
 		return false
 	}
+
+	// Normalize Unicode to NFKC form to prevent bypass using full-width or
+	// other compatibility characters (e.g., U+FF0E "．" → U+002E ".")
+	pathStr = norm.NFKC.String(pathStr)
 
 	// Check both raw string and lowercased version for encoded patterns
 	lower := strings.ToLower(pathStr)

@@ -730,9 +730,11 @@ func TestAdvancedPathTraversalAttacks(t *testing.T) {
 		// Triple encoding
 		{"Triple encoded traversal", "/path/%25252e%25252e/etc", false},
 
-		// Unicode normalization attacks
-		{"Unicode dot (fullwidth)", "/path\uff0e\uff0e/etc", true}, // ．．- may pass if not normalized
-		{"Unicode slash (fullwidth)", "/path\uff0fetc", true},      // ／ - may pass if not normalized
+		// Unicode normalization attacks - NFKC normalizes these to ASCII equivalents
+		{"Unicode dot (fullwidth)", "/path\uff0e\uff0e/etc", false},  // ．．→ .. after NFKC
+		{"Unicode slash (fullwidth)", "/path\uff0fetc", true},        // ／ → / after NFKC, becomes /path/etc (valid)
+		{"Unicode double slash", "/\uff0f/evil.com", false},          // ／/ → // after NFKC (protocol-relative)
+		{"Unicode traversal", "/path/\uff0e\uff0e/etc", false},       // ．．→ .. after NFKC
 
 		// Case variation attacks
 		{"Mixed case encoded", "/path/%2E%2e/etc", false},
@@ -853,8 +855,8 @@ func TestAdvancedRedirectAttacks(t *testing.T) {
 
 		// Valid redirects that should pass
 		{"Simple path", "/dashboard", "/dashboard", false},
-		{"Path with query", "/path?param=value", "/path", false},
-		{"Nested path", "/admin/users/list", "/admin", false},
+		{"Path with query", "/path?param=value", "/path?param=value", false},
+		{"Nested path", "/admin/users/list", "/admin/users/list", false},
 		{"Root path", "/", "/", true},
 	}
 
