@@ -83,77 +83,70 @@ func stripClipsPrefix(p, clipsPrefix string) string {
 	return p
 }
 
+// dangerousEncodedPatterns contains URL-encoded patterns that indicate path traversal attempts.
+// These patterns are checked against the lowercased path.
+var dangerousEncodedPatterns = []string{
+	// Encoded null bytes
+	"%00", "%2500",
+	// URL-encoded path traversal: %2e = '.'
+	"%2e%2e", "%2e.", ".%2e",
+	// Double-encoded: %25 = '%', so %252e = '%2e' after one decode
+	"%252e",
+	// Triple-encoded (defense in depth)
+	"%25252e",
+	// Encoded slashes that could create traversal after decoding
+	"%2f", "%252f",
+	// Encoded backslashes for Windows-style traversal
+	"%5c", "%255c",
+}
+
+// containsDangerousEncodedPattern checks if a lowercased path contains any dangerous URL-encoded patterns.
+func containsDangerousEncodedPattern(lower string) bool {
+	for _, pattern := range dangerousEncodedPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// isWindowsAbsolutePath checks for Windows-style absolute paths (e.g., C:, D:).
+func isWindowsAbsolutePath(p string) bool {
+	if len(p) < 2 {
+		return false
+	}
+	firstChar := p[0]
+	return ((firstChar >= 'A' && firstChar <= 'Z') || (firstChar >= 'a' && firstChar <= 'z')) && p[1] == ':'
+}
+
 // isUnsafePath checks if a path would escape the SecureFS root.
 // Uses filepath.IsLocal for robust path validation that handles platform-specific
 // traversal patterns, reserved names, and edge cases.
 // Also checks for URL-encoded attacks and null bytes.
 func isUnsafePath(p string) bool {
-	// Check for null bytes (raw or encoded) - do this first as they can bypass other checks
+	// Check for null bytes - do this first as they can bypass other checks
 	if strings.Contains(p, "\x00") {
 		return true
 	}
 
-	// Check for Windows-style absolute paths (e.g., C:, D:) on any platform
-	// These should never appear in clip paths and indicate malicious input
-	if len(p) >= 2 && ((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) && p[1] == ':' {
+	// Check for Windows-style absolute paths on any platform
+	if isWindowsAbsolutePath(p) {
 		return true
 	}
 
-	lower := strings.ToLower(p)
-
-	// Check for encoded null bytes
-	if strings.Contains(lower, "%00") || strings.Contains(lower, "%2500") {
-		return true
-	}
-
-	// Check for ".." anywhere in the path - this could be dangerous after URL decoding
-	// Pattern: raw .. followed by encoded slash (e.g., "..%2f")
-	// or encoded slash followed by raw .. (e.g., "%2f..")
+	// Check for ".." anywhere in the path - dangerous after URL decoding
 	if strings.Contains(p, "..") {
 		return true
 	}
 
-	// Check for URL-encoded path traversal patterns
-	// %2e = '.', so %2e%2e = '..'
-	if strings.Contains(lower, "%2e%2e") || // fully encoded ..
-		strings.Contains(lower, "%2e.") || // mixed encoding
-		strings.Contains(lower, ".%2e") { // mixed encoding
-		return true
-	}
-
-	// Check for double-encoded path traversal
-	// %25 = '%', so %252e = '%2e' after one decode
-	if strings.Contains(lower, "%252e") {
-		return true
-	}
-
-	// Check for triple-encoded (defense in depth)
-	if strings.Contains(lower, "%25252e") {
-		return true
-	}
-
-	// Check for encoded slash which could create traversal after decoding
-	// %2f = '/', so "..%2f" would become "../" after URL decoding
-	if strings.Contains(lower, "%2f") || strings.Contains(lower, "%252f") {
-		return true
-	}
-
-	// Check for encoded backslash which might be used for Windows-style traversal
-	if strings.Contains(lower, "%5c") || strings.Contains(lower, "%255c") {
+	// Check for dangerous URL-encoded patterns
+	if containsDangerousEncodedPattern(strings.ToLower(p)) {
 		return true
 	}
 
 	// filepath.IsLocal provides platform-specific validation for:
-	// - Absolute paths
-	// - Paths with ".." components (as path separators, already caught above)
-	// - Empty paths
-	// - Windows reserved names (NUL, COM1, etc.)
-	// - Paths starting with "\"
-	if !filepath.IsLocal(p) {
-		return true
-	}
-
-	return false
+	// - Absolute paths, empty paths, Windows reserved names (NUL, COM1, etc.)
+	return !filepath.IsLocal(p)
 }
 
 // NormalizeClipPath normalizes audio clip paths for use with SecureFS.
