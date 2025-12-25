@@ -25,6 +25,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **NEVER expand API v1** - All new endpoints in `internal/api/v2/`
 - **Always lint before commit**: `golangci-lint run -v` (Go), `npm run check:all` (Frontend)
 - **Branch from updated main**: `git pull origin main && git checkout -b feature-name`
+- **No magic numbers/strings** - Use named constants with descriptive names
 
 ### Project Structure
 
