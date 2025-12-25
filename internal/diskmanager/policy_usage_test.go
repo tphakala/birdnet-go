@@ -109,10 +109,9 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 
 				// If the file has a disallowed extension but would be processed for deletion,
 				// fail the test with a security warning
-				if !isAllowedExt && !hasError {
-					t.Errorf("SECURITY ISSUE: %s file would be processed for deletion but should be protected: %s",
-						tc.extension, tc.description)
-				}
+				assert.True(t, isAllowedExt || hasError,
+					"SECURITY ISSUE: %s file would be processed for deletion but should be protected: %s",
+					tc.extension, tc.description)
 
 				// If the function returned an error, validate it's the right kind of error
 				if hasError {
