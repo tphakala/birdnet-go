@@ -344,6 +344,40 @@ func TestContainsCRLF(t *testing.T) {
 			expected: true,
 		},
 
+		// Double-encoded CRLF (security fix)
+		{
+			name:     "double-encoded CR",
+			input:    "hello%250dworld",
+			expected: true,
+		},
+		{
+			name:     "double-encoded LF",
+			input:    "hello%250aworld",
+			expected: true,
+		},
+		{
+			name:     "double-encoded CRLF",
+			input:    "hello%250d%250aworld",
+			expected: true,
+		},
+		{
+			name:     "double-encoded CR uppercase",
+			input:    "hello%250Dworld",
+			expected: true,
+		},
+
+		// Triple-encoded CRLF (defense in depth)
+		{
+			name:     "triple-encoded CR",
+			input:    "hello%25250dworld",
+			expected: true,
+		},
+		{
+			name:     "triple-encoded LF",
+			input:    "hello%25250aworld",
+			expected: true,
+		},
+
 		// False positives check - these should NOT match
 		{
 			name:     "normal percent encoding not matched",
@@ -353,6 +387,11 @@ func TestContainsCRLF(t *testing.T) {
 		{
 			name:     "partial pattern not matched",
 			input:    "hello%0world",
+			expected: false,
+		},
+		{
+			name:     "percent-25 without CRLF",
+			input:    "hello%25world",
 			expected: false,
 		},
 	}
@@ -493,10 +532,79 @@ func TestIsSafePath(t *testing.T) {
 			expected: false,
 		},
 
+		// Invalid: URL-encoded attacks (security fix)
+		{
+			name:     "URL-encoded directory traversal",
+			path:     "/path/%2e%2e/etc/passwd",
+			expected: false,
+		},
+		{
+			name:     "mixed encoded directory traversal",
+			path:     "/path/%2e./etc/passwd",
+			expected: false,
+		},
+		{
+			name:     "mixed encoded directory traversal 2",
+			path:     "/path/.%2e/etc/passwd",
+			expected: false,
+		},
+		{
+			name:     "URL-encoded null byte",
+			path:     "/path%00evil",
+			expected: false,
+		},
+		{
+			name:     "URL-encoded backslash",
+			path:     "/path%5cto%5cresource",
+			expected: false,
+		},
+		{
+			name:     "URL-encoded double slash",
+			path:     "/path%2f%2fto",
+			expected: false,
+		},
+		{
+			name:     "URL-encoded slash with literal",
+			path:     "/path/%2f/to",
+			expected: false,
+		},
+		{
+			name:     "uppercase URL-encoded traversal",
+			path:     "/path/%2E%2E/etc",
+			expected: false,
+		},
+
+		// Invalid: double-encoded attacks (security fix)
+		{
+			name:     "double-encoded directory traversal",
+			path:     "/path/%252e%252e/etc",
+			expected: false,
+		},
+		{
+			name:     "double-encoded slash",
+			path:     "/path%252f%252fetc",
+			expected: false,
+		},
+		{
+			name:     "double-encoded backslash",
+			path:     "/path%255c%255c",
+			expected: false,
+		},
+		{
+			name:     "double-encoded null byte",
+			path:     "/path%2500evil",
+			expected: false,
+		},
+		{
+			name:     "triple-encoded directory traversal",
+			path:     "/path/%25252e%25252e/etc",
+			expected: false,
+		},
+
 		// Invalid: too long
 		{
 			name:     "path too long",
-			path:     "/" + string(make([]byte, 512)),
+			path:     "/" + string(make([]byte, MaxSafePathLength)),
 			expected: false,
 		},
 	}
