@@ -4,6 +4,7 @@
 package api
 
 import (
+	"fmt"
 	"math"
 	"net/url"
 	"slices"
@@ -714,9 +715,12 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 		strings.Repeat("\r\n", 1000),
 	}
 
-	for _, input := range malformedInputs {
+	for i, input := range malformedInputs {
+		idx := i // capture index for unique test names
+
 		// Test isValidBasePath
-		t.Run("isValidBasePath", func(t *testing.T) {
+		t.Run(fmt.Sprintf("isValidBasePath/%d", idx), func(t *testing.T) {
+			t.Parallel()
 			// Should not panic
 			result := isValidBasePath(input)
 			// Most malformed inputs should be rejected
@@ -726,32 +730,37 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 		})
 
 		// Test validateAndSanitizeRedirect
-		t.Run("validateAndSanitizeRedirect", func(t *testing.T) {
+		t.Run(fmt.Sprintf("validateAndSanitizeRedirect/%d", idx), func(t *testing.T) {
+			t.Parallel()
 			// Should not panic and should return safe default
 			result := validateAndSanitizeRedirect(input)
 			assert.True(t, strings.HasPrefix(result, "/"), "Should return path starting with /")
 		})
 
 		// Test containsCRLFCharacters
-		t.Run("containsCRLFCharacters", func(t *testing.T) {
+		t.Run(fmt.Sprintf("containsCRLFCharacters/%d", idx), func(t *testing.T) {
+			t.Parallel()
 			// Should not panic
 			_ = containsCRLFCharacters(input)
 		})
 
 		// Test parseConfidenceFilter
-		t.Run("parseConfidenceFilter", func(t *testing.T) {
+		t.Run(fmt.Sprintf("parseConfidenceFilter/%d", idx), func(t *testing.T) {
+			t.Parallel()
 			// Should not panic
 			_ = parseConfidenceFilter(input)
 		})
 
 		// Test parseHourFilter
-		t.Run("parseHourFilter", func(t *testing.T) {
+		t.Run(fmt.Sprintf("parseHourFilter/%d", idx), func(t *testing.T) {
+			t.Parallel()
 			// Should not panic
 			_ = parseHourFilter(input)
 		})
 
 		// Test NormalizeClipPathStrict
-		t.Run("NormalizeClipPathStrict", func(t *testing.T) {
+		t.Run(fmt.Sprintf("NormalizeClipPathStrict/%d", idx), func(t *testing.T) {
+			t.Parallel()
 			// Should not panic
 			_, _ = NormalizeClipPathStrict(input, "clips/")
 		})

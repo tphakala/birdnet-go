@@ -683,6 +683,10 @@ func parseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 		start, err1 := time.Parse("2006-01-02", startDate)
 		end, err2 := time.Parse("2006-01-02", endDate)
 		if err1 == nil && err2 == nil {
+			// Reject inverted date ranges where start is after end
+			if start.After(end) {
+				return nil
+			}
 			return &DateRangeResult{
 				Start: start,
 				End:   end.AddDate(0, 0, 1).Add(-time.Second),
