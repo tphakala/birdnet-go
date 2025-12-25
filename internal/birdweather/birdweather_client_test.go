@@ -1,7 +1,6 @@
 package birdweather
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -85,9 +86,7 @@ func createTestFLACData(t *testing.T) []byte {
 
 	// Use the myaudio package to create FLAC data
 	flacBuffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
-	if err != nil {
-		t.Fatalf("Failed to create test FLAC data: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test FLAC data")
 
 	return flacBuffer.Bytes()
 }
@@ -127,39 +126,16 @@ func TestNew(t *testing.T) {
 	settings := MockSettings()
 
 	client, err := New(settings)
-	if err != nil || client == nil {
-		if err != nil {
-			t.Fatalf("Failed to create new BwClient: %v", err)
-		}
-		t.Fatal("New returned nil client")
-	}
+	require.NoError(t, err, "Failed to create new BwClient")
+	require.NotNil(t, client, "New returned nil client")
 
 	// Verify client properties
-	if client.BirdweatherID != settings.Realtime.Birdweather.ID {
-		t.Errorf("Expected BirdweatherID to be %s, got %s",
-			settings.Realtime.Birdweather.ID, client.BirdweatherID)
-	}
-
-	if client.Accuracy != settings.Realtime.Birdweather.LocationAccuracy {
-		t.Errorf("Expected Accuracy to be %f, got %f",
-			settings.Realtime.Birdweather.LocationAccuracy, client.Accuracy)
-	}
-
-	if client.Latitude != settings.BirdNET.Latitude {
-		t.Errorf("Expected Latitude to be %f, got %f",
-			settings.BirdNET.Latitude, client.Latitude)
-	}
-
-	if client.Longitude != settings.BirdNET.Longitude {
-		t.Errorf("Expected Longitude to be %f, got %f",
-			settings.BirdNET.Longitude, client.Longitude)
-	}
-
-	if client.HTTPClient == nil {
-		t.Error("HTTPClient should not be nil")
-	} else if client.HTTPClient.Timeout != 45*time.Second {
-		t.Errorf("Expected timeout to be 45s, got %v", client.HTTPClient.Timeout)
-	}
+	assert.Equal(t, settings.Realtime.Birdweather.ID, client.BirdweatherID)
+	assert.InDelta(t, settings.Realtime.Birdweather.LocationAccuracy, client.Accuracy, 0.0001)
+	assert.InDelta(t, settings.BirdNET.Latitude, client.Latitude, 0.0001)
+	assert.InDelta(t, settings.BirdNET.Longitude, client.Longitude, 0.0001)
+	require.NotNil(t, client.HTTPClient, "HTTPClient should not be nil")
+	assert.Equal(t, 45*time.Second, client.HTTPClient.Timeout)
 }
 
 //nolint:gocognit // Test function with multiple sub-tests and validation checks
@@ -194,27 +170,24 @@ func TestRandomizeLocation(t *testing.T) {
 
 				// The implementation uses math.Floor for truncation, so we need to adjust our expectations
 				// The actual value could be up to 0.0001 less than the theoretical maximum
-				if lat < originalLat-maxOffset-0.0001 || lat > originalLat+maxOffset {
-					t.Errorf("Latitude %f outside expected range [%f, %f] for radius %f",
-						lat, originalLat-maxOffset-0.0001, originalLat+maxOffset, tc.radius)
-				}
+				assert.GreaterOrEqual(t, lat, originalLat-maxOffset-0.0001,
+					"Latitude outside expected range for radius %f", tc.radius)
+				assert.LessOrEqual(t, lat, originalLat+maxOffset,
+					"Latitude outside expected range for radius %f", tc.radius)
 
-				if lon < originalLon-maxOffset-0.0001 || lon > originalLon+maxOffset {
-					t.Errorf("Longitude %f outside expected range [%f, %f] for radius %f",
-						lon, originalLon-maxOffset-0.0001, originalLon+maxOffset, tc.radius)
-				}
+				assert.GreaterOrEqual(t, lon, originalLon-maxOffset-0.0001,
+					"Longitude outside expected range for radius %f", tc.radius)
+				assert.LessOrEqual(t, lon, originalLon+maxOffset,
+					"Longitude outside expected range for radius %f", tc.radius)
 
 				// Check decimal precision (should be 4 decimal places)
 				latStr := fmt.Sprintf("%.5f", lat)
 				lonStr := fmt.Sprintf("%.5f", lon)
 
-				if latStr[len(latStr)-1] != '0' {
-					t.Errorf("Latitude %s has more than 4 decimal places", latStr)
-				}
-
-				if lonStr[len(lonStr)-1] != '0' {
-					t.Errorf("Longitude %s has more than 4 decimal places", lonStr)
-				}
+				assert.Equal(t, byte('0'), latStr[len(latStr)-1],
+					"Latitude %s has more than 4 decimal places", latStr)
+				assert.Equal(t, byte('0'), lonStr[len(lonStr)-1],
+					"Longitude %s has more than 4 decimal places", lonStr)
 
 				// Track unique coordinate pairs for randomness check
 				coordKey := fmt.Sprintf("%.4f,%.4f", lat, lon)
@@ -222,15 +195,15 @@ func TestRandomizeLocation(t *testing.T) {
 			}
 
 			// If radius > 0, we expect some randomness
-			if tc.radius > 0 && len(coordinatePairs) < 2 {
-				t.Errorf("Expected multiple different coordinate pairs for radius %f, got %d",
-					tc.radius, len(coordinatePairs))
+			if tc.radius > 0 {
+				assert.GreaterOrEqual(t, len(coordinatePairs), 2,
+					"Expected multiple different coordinate pairs for radius %f", tc.radius)
 			}
 
 			// If radius = 0, we expect no randomness
-			if tc.radius == 0 && len(coordinatePairs) > 1 {
-				t.Errorf("Expected single coordinate pair for radius 0, got %d",
-					len(coordinatePairs))
+			if tc.radius == 0 {
+				assert.LessOrEqual(t, len(coordinatePairs), 1,
+					"Expected single coordinate pair for radius 0")
 			}
 		})
 	}
@@ -261,14 +234,8 @@ func TestHandleNetworkError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resultErr := handleNetworkError(tc.err, "https://test.example.com", 30*time.Second, "test operation")
 
-			if resultErr == nil {
-				t.Fatal("handleNetworkError should never return nil")
-			}
-
-			if resultErr.Error() != tc.expectMatch {
-				t.Errorf("Expected error message %q, got %q",
-					tc.expectMatch, resultErr.Error())
-			}
+			require.NotNil(t, resultErr, "handleNetworkError should never return nil")
+			assert.Equal(t, tc.expectMatch, resultErr.Error())
 		})
 	}
 }
@@ -277,21 +244,10 @@ func TestUploadSoundscape(t *testing.T) {
 	// Setup mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check request headers
-		if r.Header.Get("Content-Type") != "application/octet-stream" {
-			t.Errorf("Expected Content-Type: application/octet-stream, got: %s",
-				r.Header.Get("Content-Type"))
-		}
-
-		// FLAC is already compressed, so no Content-Encoding header expected
-		if r.Header.Get("Content-Encoding") != "" {
-			t.Errorf("Expected no Content-Encoding header for FLAC, got: %s",
-				r.Header.Get("Content-Encoding"))
-		}
-
-		if r.Header.Get("User-Agent") != "BirdNET-Go" {
-			t.Errorf("Expected User-Agent: BirdNET-Go, got: %s",
-				r.Header.Get("User-Agent"))
-		}
+		assert.Equal(t, "application/octet-stream", r.Header.Get("Content-Type"))
+		assert.Empty(t, r.Header.Get("Content-Encoding"),
+			"Expected no Content-Encoding header for FLAC")
+		assert.Equal(t, "BirdNET-Go", r.Header.Get("User-Agent"))
 
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
@@ -330,13 +286,8 @@ func TestUploadSoundscape(t *testing.T) {
 	soundscapeID, err := client.UploadSoundscape(timestamp, pcmData)
 
 	// Check results
-	if err != nil {
-		t.Fatalf("UploadSoundscape failed: %v", err)
-	}
-
-	if soundscapeID != "12345" {
-		t.Errorf("Expected soundscapeID '12345', got '%s'", soundscapeID)
-	}
+	require.NoError(t, err, "UploadSoundscape failed")
+	assert.Equal(t, "12345", soundscapeID)
 }
 
 // mockTransport is a custom http.RoundTripper that redirects all requests to a test server
@@ -370,13 +321,8 @@ func TestUploadSoundscape_EmptyData(t *testing.T) {
 	// Test with empty PCM data
 	_, err := client.UploadSoundscape(testTimestamp, []byte{})
 
-	if err == nil {
-		t.Error("Expected error with empty pcmData, got nil")
-	}
-
-	if err != nil && err.Error() != "pcmData is empty" {
-		t.Errorf("Expected error message 'pcmData is empty', got: %v", err)
-	}
+	require.Error(t, err, "Expected error with empty pcmData")
+	assert.Equal(t, "pcmData is empty", err.Error())
 }
 
 func TestUploadSoundscape_ServerError(t *testing.T) {
@@ -406,34 +352,27 @@ func TestUploadSoundscape_ServerError(t *testing.T) {
 	_, err := client.UploadSoundscape(timestamp, pcmData)
 
 	// Check results
-	if err == nil {
-		t.Error("Expected error from server error response, got nil")
-	}
+	require.Error(t, err, "Expected error from server error response")
 }
 
 func TestPostDetection(t *testing.T) {
 	// Setup mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check method
-		if r.Method != "POST" {
-			t.Errorf("Expected POST request, got %s", r.Method)
-		}
+		assert.Equal(t, "POST", r.Method)
 
 		// Check content type
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("Expected Content-Type: application/json, got %s", r.Header.Get("Content-Type"))
-		}
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		// Check user agent
-		if r.Header.Get("User-Agent") != "BirdNET-Go" {
-			t.Errorf("Expected User-Agent: BirdNET-Go, got %s", r.Header.Get("User-Agent"))
-		}
+		assert.Equal(t, "BirdNET-Go", r.Header.Get("User-Agent"))
 
 		// Check request body
 		var reqBody map[string]any
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&reqBody); err != nil {
 			t.Errorf("Failed to decode request body: %v", err)
+			return
 		}
 
 		// Check required fields
@@ -443,9 +382,7 @@ func TestPostDetection(t *testing.T) {
 		}
 
 		for _, field := range expectedFields {
-			if _, ok := reqBody[field]; !ok {
-				t.Errorf("Missing required field in request body: %s", field)
-			}
+			assert.Contains(t, reqBody, field, "Missing required field in request body")
 		}
 
 		// Return success response
@@ -473,9 +410,7 @@ func TestPostDetection(t *testing.T) {
 	err := client.PostDetection(soundscapeID, timestamp, commonName, scientificName, confidence)
 
 	// Check result
-	if err != nil {
-		t.Errorf("PostDetection failed: %v", err)
-	}
+	require.NoError(t, err, "PostDetection failed")
 }
 
 func TestPostDetection_InvalidInput(t *testing.T) {
@@ -529,13 +464,8 @@ func TestPostDetection_InvalidInput(t *testing.T) {
 			err := client.PostDetection(
 				tc.soundscapeID, tc.timestamp, tc.commonName, tc.scientificName, tc.confidence)
 
-			if err == nil {
-				t.Error("Expected error with invalid input, got nil")
-			}
-
-			if err != nil && !bytes.Contains([]byte(err.Error()), []byte("invalid input")) {
-				t.Errorf("Expected error message containing 'invalid input', got: %v", err)
-			}
+			require.Error(t, err, "Expected error with invalid input")
+			assert.Contains(t, err.Error(), "invalid input")
 		})
 	}
 }
@@ -610,9 +540,7 @@ func TestPublish(t *testing.T) {
 	err := client.Publish(note, pcmData)
 
 	// Check result
-	if err != nil {
-		t.Errorf("Publish failed: %v", err)
-	}
+	require.NoError(t, err, "Publish failed")
 }
 
 func TestPublish_EmptyData(t *testing.T) {
@@ -629,13 +557,8 @@ func TestPublish_EmptyData(t *testing.T) {
 	// Test with empty PCM data
 	err := client.Publish(note, []byte{})
 
-	if err == nil {
-		t.Error("Expected error with empty pcmData, got nil")
-	}
-
-	if err != nil && err.Error() != "pcmData is empty" {
-		t.Errorf("Expected error message 'pcmData is empty', got: %v", err)
-	}
+	require.Error(t, err, "Expected error with empty pcmData")
+	assert.Equal(t, "pcmData is empty", err.Error())
 }
 
 func TestClose(t *testing.T) {
@@ -657,7 +580,5 @@ func TestClose(t *testing.T) {
 
 	// Attempt operations after Close to ensure they fail gracefully
 	_, err := client.UploadSoundscape(testTimestamp, []byte{1, 2, 3, 4})
-	if err == nil {
-		t.Error("Expected error when using client after Close, got nil")
-	}
+	require.Error(t, err, "Expected error when using client after Close")
 }

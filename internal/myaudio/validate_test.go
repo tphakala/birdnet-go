@@ -2,11 +2,13 @@ package myaudio
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestValidateAudioFileNoDurationCheck tests that audio files of various durations
@@ -64,25 +66,19 @@ func TestValidateAudioFileNoDurationCheck(t *testing.T) {
 
 			// Validate the file with timeout
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+			t.Cleanup(cancel)
 			result, err := ValidateAudioFile(ctx, testFile)
 
-			if err != nil && tc.expectValid {
-				t.Errorf("Expected valid file but got error: %v", err)
-			}
-
 			if tc.expectValid {
+				require.NoError(t, err, "Expected valid file but got error")
 				// For valid files, check that they're marked as complete
 				// regardless of duration
-				if result != nil && !result.IsComplete {
-					t.Errorf("Expected file to be marked as complete, but IsComplete=%v, Error=%v",
-						result.IsComplete, result.Error)
+				if result != nil {
+					assert.True(t, result.IsComplete, "Expected file to be marked as complete")
 				}
-			} else {
+			} else if result != nil {
 				// For invalid files (too small), they should not be valid
-				if result != nil && result.IsValid {
-					t.Errorf("Expected file to be invalid but got IsValid=true")
-				}
+				assert.False(t, result.IsValid, "Expected file to be invalid")
 			}
 		})
 	}
@@ -127,26 +123,22 @@ func createTestWAVFileWithSize(t *testing.T, path string, size int64) {
 
 	// Create the file
 	file, err := os.Create(path) //nolint:gosec // G304: test fixture path
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
+	require.NoError(t, err)
+	t.Cleanup(func() {
 		if closeErr := file.Close(); closeErr != nil {
 			t.Logf("Warning: failed to close file: %v", closeErr)
 		}
-	}()
+	})
 
 	// Write header
-	if _, err := file.Write(wavHeader); err != nil {
-		t.Fatal(err)
-	}
+	_, err = file.Write(wavHeader)
+	require.NoError(t, err)
 
 	// Write data (zeros)
 	if dataSize > 0 {
 		data := make([]byte, dataSize)
-		if _, err := file.Write(data); err != nil {
-			t.Fatal(err)
-		}
+		_, err = file.Write(data)
+		require.NoError(t, err)
 	}
 }
 
@@ -161,41 +153,28 @@ func TestQuickValidateAudioFile(t *testing.T) {
 		createTestWAVFileWithSize(t, testFile, 10*1024) // 10KB file
 
 		valid, err := QuickValidateAudioFile(testFile)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if !valid {
-			t.Error("Expected file to be valid")
-		}
+		require.NoError(t, err, "Unexpected error")
+		assert.True(t, valid, "Expected file to be valid")
 	})
 
 	t.Run("Non-existent file", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 		valid, err := QuickValidateAudioFile(filepath.Join(tmpDir, "nonexistent.wav"))
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if valid {
-			t.Error("Expected non-existent file to be invalid")
-		}
+		require.NoError(t, err, "Unexpected error")
+		assert.False(t, valid, "Expected non-existent file to be invalid")
 	})
 
 	t.Run("File too small", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "tiny.wav")
-		if err := os.WriteFile(testFile, []byte("small"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		err := os.WriteFile(testFile, []byte("small"), 0o600)
+		require.NoError(t, err)
 
 		valid, err := QuickValidateAudioFile(testFile)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if valid {
-			t.Error("Expected tiny file to be invalid")
-		}
+		require.NoError(t, err, "Unexpected error")
+		assert.False(t, valid, "Expected tiny file to be invalid")
 	})
 }
 
@@ -208,15 +187,12 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		createTestWAVFileWithSize(t, testFile, 10*1024)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		t.Cleanup(cancel)
 		result, err := ValidateAudioFileWithRetry(ctx, testFile)
 
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if result == nil || !result.IsValid {
-			t.Error("Expected file to be valid")
-		}
+		require.NoError(t, err, "Unexpected error")
+		require.NotNil(t, result)
+		assert.True(t, result.IsValid, "Expected file to be valid")
 	})
 
 	t.Run("File becomes valid during retry", func(t *testing.T) {
@@ -225,9 +201,8 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		testFile := filepath.Join(tmpDir, "growing.wav")
 
 		// Start with a small file
-		if err := os.WriteFile(testFile, []byte("small"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		err := os.WriteFile(testFile, []byte("small"), 0o600)
+		require.NoError(t, err)
 
 		// Channel to coordinate file growth and validation completion
 		validationStarted := make(chan struct{})
@@ -236,11 +211,11 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		// Start validation in a goroutine
 		ctx := context.Background()
 		var result *AudioValidationResult
-		var err error
+		var validationErr error
 
 		go func() {
 			close(validationStarted) // Signal that validation is starting
-			result, err = ValidateAudioFileWithRetry(ctx, testFile)
+			result, validationErr = ValidateAudioFileWithRetry(ctx, testFile)
 			close(validationDone) // Signal that validation is complete
 		}()
 
@@ -257,15 +232,15 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		<-validationDone
 
 		// The file should eventually become valid
-		if err == nil && result != nil && result.IsValid {
+		if validationErr == nil && result != nil && result.IsValid {
 			// Success - file became valid during retry
 			return
 		}
 
 		// If it didn't become valid, that's okay too (timing dependent)
 		// Just make sure we didn't get an unexpected error
-		if err != nil && !errors.Is(err, ErrValidationFailed) {
-			t.Errorf("Unexpected error: %v", err)
+		if validationErr != nil {
+			assert.ErrorIs(t, validationErr, ErrValidationFailed, "Unexpected error type")
 		}
 	})
 }

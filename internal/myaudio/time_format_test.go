@@ -3,6 +3,8 @@ package myaudio
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFormatDuration(t *testing.T) {
@@ -106,9 +108,7 @@ func TestFormatDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatDuration(tt.duration)
-			if got != tt.want {
-				t.Errorf("FormatDuration(%v) = %q, want %q", tt.duration, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "FormatDuration(%v)", tt.duration)
 		})
 	}
 }
@@ -155,9 +155,7 @@ func TestFormatDurationRounding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatDuration(tt.duration)
-			if got != tt.want {
-				t.Errorf("FormatDuration(%v) = %q, want %q", tt.duration, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "FormatDuration(%v)", tt.duration)
 		})
 	}
 }

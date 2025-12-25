@@ -3,6 +3,8 @@ package observability
 import (
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestNewMetricsConcurrency verifies that NewMetrics can be called concurrently
@@ -21,51 +23,25 @@ func TestNewMetricsConcurrency(t *testing.T) {
 
 			// Call NewMetrics - this should not cause a race condition
 			metrics, err := NewMetrics()
-			if err != nil {
-				t.Errorf("NewMetrics failed: %v", err)
-				return
-			}
-
-			// Verify metrics is not nil
+			// Use assert instead of require inside goroutines (require can cause issues with t.FailNow)
+			assert.NoError(t, err, "NewMetrics failed")
 			if metrics == nil {
-				t.Error("NewMetrics returned nil")
+				assert.Fail(t, "NewMetrics returned nil")
 				return
 			}
 
 			// Verify all metric fields are initialized
-			if metrics.registry == nil {
-				t.Error("metrics.registry is nil")
-			}
-			if metrics.MQTT == nil {
-				t.Error("metrics.MQTT is nil")
-			}
-			if metrics.BirdNET == nil {
-				t.Error("metrics.BirdNET is nil")
-			}
-			if metrics.ImageProvider == nil {
-				t.Error("metrics.ImageProvider is nil")
-			}
-			if metrics.DiskManager == nil {
-				t.Error("metrics.DiskManager is nil")
-			}
-			if metrics.Weather == nil {
-				t.Error("metrics.Weather is nil")
-			}
-			if metrics.SunCalc == nil {
-				t.Error("metrics.SunCalc is nil")
-			}
-			if metrics.Datastore == nil {
-				t.Error("metrics.Datastore is nil")
-			}
-			if metrics.MyAudio == nil {
-				t.Error("metrics.MyAudio is nil")
-			}
-			if metrics.SoundLevel == nil {
-				t.Error("metrics.SoundLevel is nil")
-			}
-			if metrics.HTTP == nil {
-				t.Error("metrics.HTTP is nil")
-			}
+			assert.NotNil(t, metrics.registry, "metrics.registry is nil")
+			assert.NotNil(t, metrics.MQTT, "metrics.MQTT is nil")
+			assert.NotNil(t, metrics.BirdNET, "metrics.BirdNET is nil")
+			assert.NotNil(t, metrics.ImageProvider, "metrics.ImageProvider is nil")
+			assert.NotNil(t, metrics.DiskManager, "metrics.DiskManager is nil")
+			assert.NotNil(t, metrics.Weather, "metrics.Weather is nil")
+			assert.NotNil(t, metrics.SunCalc, "metrics.SunCalc is nil")
+			assert.NotNil(t, metrics.Datastore, "metrics.Datastore is nil")
+			assert.NotNil(t, metrics.MyAudio, "metrics.MyAudio is nil")
+			assert.NotNil(t, metrics.SoundLevel, "metrics.SoundLevel is nil")
+			assert.NotNil(t, metrics.HTTP, "metrics.HTTP is nil")
 		}()
 	}
 

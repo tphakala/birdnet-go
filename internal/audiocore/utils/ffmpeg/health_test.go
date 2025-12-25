@@ -3,10 +3,12 @@ package ffmpeg
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mockProcess implements the Process interface for testing
@@ -73,9 +75,7 @@ func TestNewHealthChecker(t *testing.T) {
 	t.Parallel()
 
 	checker := NewHealthChecker()
-	if checker == nil {
-		t.Error("NewHealthChecker should not return nil")
-	}
+	assert.NotNil(t, checker, "NewHealthChecker should not return nil")
 }
 
 func TestHealthCheckerSetSilenceThreshold(t *testing.T) {
@@ -100,9 +100,7 @@ func TestHealthCheckerCheckRunningProcess(t *testing.T) {
 
 	// Check running process should pass initially
 	err := checker.Check(process)
-	if err != nil {
-		t.Errorf("Health check should pass for running process: %v", err)
-	}
+	assert.NoError(t, err, "Health check should pass for running process")
 }
 
 func TestHealthCheckerCheckNotRunningProcess(t *testing.T) {
@@ -114,9 +112,7 @@ func TestHealthCheckerCheckNotRunningProcess(t *testing.T) {
 
 	// Check non-running process should fail
 	err := checker.Check(process)
-	if err == nil {
-		t.Error("Health check should fail for non-running process")
-	}
+	assert.Error(t, err, "Health check should fail for non-running process")
 }
 
 func TestHealthCheckerCheckFrequentRestarts(t *testing.T) {
@@ -130,9 +126,7 @@ func TestHealthCheckerCheckFrequentRestarts(t *testing.T) {
 	process.metrics.LastRestart = time.Now().Add(-2 * time.Minute)
 
 	err := checker.Check(process)
-	if err == nil {
-		t.Error("Health check should fail for frequently restarting process")
-	}
+	assert.Error(t, err, "Health check should fail for frequently restarting process")
 }
 
 func TestHealthCheckerCheckRecentError(t *testing.T) {
@@ -146,9 +140,7 @@ func TestHealthCheckerCheckRecentError(t *testing.T) {
 	process.metrics.LastRestart = time.Now().Add(-10 * time.Second)
 
 	err := checker.Check(process)
-	if err == nil {
-		t.Error("Health check should fail for process with recent error")
-	}
+	assert.Error(t, err, "Health check should fail for process with recent error")
 }
 
 func TestCalculateAudioLevel(t *testing.T) {
@@ -158,35 +150,25 @@ func TestCalculateAudioLevel(t *testing.T) {
 
 	// Test empty data
 	level := checker.calculateAudioLevel([]byte{})
-	if level != 0 {
-		t.Errorf("Expected level 0 for empty data, got %f", level)
-	}
+	assert.InDelta(t, 0.0, level, 0.001, "Expected level 0 for empty data")
 
 	// Test single byte (insufficient data)
 	level = checker.calculateAudioLevel([]byte{0x00})
-	if level != 0 {
-		t.Errorf("Expected level 0 for insufficient data, got %f", level)
-	}
+	assert.InDelta(t, 0.0, level, 0.001, "Expected level 0 for insufficient data")
 
 	// Test silence (16-bit samples of 0)
 	silenceData := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	level = checker.calculateAudioLevel(silenceData)
-	if level != 0 {
-		t.Errorf("Expected level 0 for silence, got %f", level)
-	}
+	assert.InDelta(t, 0.0, level, 0.001, "Expected level 0 for silence")
 
 	// Test maximum amplitude (16-bit signed)
 	maxData := []byte{0xFF, 0x7F, 0xFF, 0x7F} // Two samples at max positive
 	level = checker.calculateAudioLevel(maxData)
-	if level == 0 {
-		t.Error("Expected non-zero level for maximum amplitude")
-	}
+	assert.NotEqual(t, float32(0), level, "Expected non-zero level for maximum amplitude")
 
 	// Level should be close to 1.0 for maximum amplitude
 	expected := float32(0.9) // Allow some tolerance
-	if level < expected {
-		t.Errorf("Expected level >= %f for maximum amplitude, got %f", expected, level)
-	}
+	assert.GreaterOrEqual(t, level, expected, "Expected level >= 0.9 for maximum amplitude")
 }
 
 func TestAmplitudeToDecibels(t *testing.T) {
@@ -196,28 +178,19 @@ func TestAmplitudeToDecibels(t *testing.T) {
 
 	// Test zero amplitude
 	db := checker.amplitudeToDecibels(0)
-	if db != -100.0 {
-		t.Errorf("Expected -100 dB for zero amplitude, got %f", db)
-	}
+	assert.InDelta(t, -100.0, db, 0.001, "Expected -100 dB for zero amplitude")
 
 	// Test negative amplitude (should return -100)
 	db = checker.amplitudeToDecibels(-0.5)
-	if db != -100.0 {
-		t.Errorf("Expected -100 dB for negative amplitude, got %f", db)
-	}
+	assert.InDelta(t, -100.0, db, 0.001, "Expected -100 dB for negative amplitude")
 
 	// Test unit amplitude (should be 0 dB)
 	db = checker.amplitudeToDecibels(1.0)
-	if math.Abs(float64(db)) > 0.001 {
-		t.Errorf("Expected ~0 dB for unit amplitude, got %f", db)
-	}
+	assert.InDelta(t, 0.0, db, 0.001, "Expected ~0 dB for unit amplitude")
 
 	// Test half amplitude (should be ~-6 dB)
 	db = checker.amplitudeToDecibels(0.5)
-	expected := float32(-6.0)
-	if math.Abs(float64(db-expected)) > 0.1 {
-		t.Errorf("Expected ~-6 dB for half amplitude, got %f", db)
-	}
+	assert.InDelta(t, -6.0, db, 0.1, "Expected ~-6 dB for half amplitude")
 }
 
 func TestHealthCheckerAudioLevelStats(t *testing.T) {
@@ -229,9 +202,7 @@ func TestHealthCheckerAudioLevelStats(t *testing.T) {
 
 	// Test non-existent process
 	_, _, _, ok := checker.GetAudioLevelStats("nonexistent")
-	if ok {
-		t.Error("Should return false for non-existent process")
-	}
+	assert.False(t, ok, "Should return false for non-existent process")
 
 	// Add a tracker manually
 	processID := "test-process"
@@ -242,21 +213,10 @@ func TestHealthCheckerAudioLevelStats(t *testing.T) {
 	}
 
 	avgLevel, lastLevel, sampleCount, ok := checker.GetAudioLevelStats(processID)
-	if !ok {
-		t.Error("Should return true for existing process")
-	}
-
-	if avgLevel != 0.5 {
-		t.Errorf("Expected avg level 0.5, got %f", avgLevel)
-	}
-
-	if lastLevel != 0.7 {
-		t.Errorf("Expected last level 0.7, got %f", lastLevel)
-	}
-
-	if sampleCount != 100 {
-		t.Errorf("Expected sample count 100, got %d", sampleCount)
-	}
+	assert.True(t, ok, "Should return true for existing process")
+	assert.InDelta(t, 0.5, avgLevel, 0.001, "Expected avg level 0.5")
+	assert.InDelta(t, 0.7, lastLevel, 0.001, "Expected last level 0.7")
+	assert.Equal(t, int64(100), sampleCount, "Expected sample count 100")
 }
 
 func TestHealthCheckerSilenceDetection(t *testing.T) {
@@ -272,29 +232,19 @@ func TestHealthCheckerSilenceDetection(t *testing.T) {
 
 	// First check should initialize the tracker and pass
 	err := checker.Check(process)
-	if err != nil {
-		t.Errorf("Initial check should pass: %v", err)
-	}
+	require.NoError(t, err, "Initial check should pass")
 
 	// Test process not running - should fail
 	err = process.Stop()
-	if err != nil {
-		t.Errorf("Failed to stop process: %v", err)
-	}
+	require.NoError(t, err, "Failed to stop process")
 	err = checker.Check(process)
-	if err == nil {
-		t.Error("Health check should fail for stopped process")
-	}
+	require.Error(t, err, "Health check should fail for stopped process")
 
 	// Start process again for final verification
 	err = process.Start(context.Background())
-	if err != nil {
-		t.Errorf("Failed to start process: %v", err)
-	}
+	require.NoError(t, err, "Failed to start process")
 	err = checker.Check(process)
-	if err != nil {
-		t.Errorf("Health check should pass for running process: %v", err)
-	}
+	assert.NoError(t, err, "Health check should pass for running process")
 }
 
 func TestHealthCheckerConcurrentAccess(t *testing.T) {

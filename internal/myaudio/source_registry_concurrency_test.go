@@ -3,11 +3,13 @@ package myaudio
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRaceConditionFix verifies that GetOrCreateSource prevents race conditions
@@ -15,12 +17,7 @@ func TestRaceConditionFix(t *testing.T) {
 	t.Attr("component", "source-registry")
 	t.Attr("test-type", "concurrency")
 
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	// Test concurrent migrations of the same source
 	const numGoroutines = 100
@@ -51,31 +48,24 @@ func TestRaceConditionFix(t *testing.T) {
 
 	// All goroutines should have returned the same ID
 	if len(ids) != 1 {
-		t.Errorf("Race condition detected: got %d different IDs, expected 1", len(ids))
 		for id, count := range ids {
 			t.Logf("ID %s returned %d times", id, count)
 		}
 	}
+	assert.Len(t, ids, 1, "Race condition detected: all goroutines should return same ID")
 
 	// Verify only one source was created
 	registry.mu.RLock()
 	sourcesCount := len(registry.sources)
 	registry.mu.RUnlock()
-	if sourcesCount != 1 {
-		t.Errorf("Expected 1 source in registry, got %d", sourcesCount)
-	}
+	assert.Equal(t, 1, sourcesCount, "Expected 1 source in registry")
 }
 
 // TestMemoryLeakFix verifies that sources can be properly cleaned up
 func TestMemoryLeakFix(t *testing.T) {
 	t.Attr("component", "source-registry")
 	t.Attr("test-type", "cleanup")
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	// Register multiple sources
 	urls := []string{
@@ -89,9 +79,7 @@ func TestMemoryLeakFix(t *testing.T) {
 		source, err := registry.RegisterSource(url, SourceConfig{
 			Type: SourceTypeRTSP,
 		})
-		if err != nil {
-			t.Fatalf("Failed to register source: %v", err)
-		}
+		require.NoError(t, err, "Failed to register source")
 		sourceIDs = append(sourceIDs, source.ID)
 	}
 
@@ -99,15 +87,12 @@ func TestMemoryLeakFix(t *testing.T) {
 	registry.mu.RLock()
 	sourcesCount := len(registry.sources)
 	registry.mu.RUnlock()
-	if sourcesCount != 3 {
-		t.Errorf("Expected 3 sources, got %d", sourcesCount)
-	}
+	assert.Equal(t, 3, sourcesCount, "Expected 3 sources")
 
 	// Remove sources
 	for _, id := range sourceIDs {
-		if err := registry.RemoveSource(id); err != nil {
-			t.Errorf("Failed to remove source %s: %v", id, err)
-		}
+		err := registry.RemoveSource(id)
+		require.NoError(t, err, "Failed to remove source %s", id)
 	}
 
 	// Verify sources are removed
@@ -115,24 +100,15 @@ func TestMemoryLeakFix(t *testing.T) {
 	sourcesCount = len(registry.sources)
 	connectionMapCount := len(registry.connectionMap)
 	registry.mu.RUnlock()
-	if sourcesCount != 0 {
-		t.Errorf("Expected 0 sources after cleanup, got %d", sourcesCount)
-	}
-	if connectionMapCount != 0 {
-		t.Errorf("Expected 0 entries in connectionMap after cleanup, got %d", connectionMapCount)
-	}
+	assert.Equal(t, 0, sourcesCount, "Expected 0 sources after cleanup")
+	assert.Equal(t, 0, connectionMapCount, "Expected 0 entries in connectionMap after cleanup")
 }
 
 // TestInactiveSourceCleanup verifies that inactive sources can be cleaned up
 func TestInactiveSourceCleanup(t *testing.T) {
 	t.Attr("component", "source-registry")
 	t.Attr("test-type", "cleanup")
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	// Register sources with different last seen times
 	now := time.Now()
@@ -172,9 +148,7 @@ func TestInactiveSourceCleanup(t *testing.T) {
 	removed := registry.CleanupInactiveSources(1 * time.Hour)
 
 	// Should remove only the old inactive source
-	if removed != 1 {
-		t.Errorf("Expected to remove 1 source, removed %d", removed)
-	}
+	assert.Equal(t, 1, removed, "Expected to remove 1 source")
 
 	// Verify correct sources remain
 	registry.mu.RLock()
@@ -183,15 +157,9 @@ func TestInactiveSourceCleanup(t *testing.T) {
 	_, oldExists := registry.sources["old_001"]
 	registry.mu.RUnlock()
 
-	if !activeExists {
-		t.Error("Active source should not be removed")
-	}
-	if !recentExists {
-		t.Error("Recent inactive source should not be removed")
-	}
-	if oldExists {
-		t.Error("Old inactive source should be removed")
-	}
+	assert.True(t, activeExists, "Active source should not be removed")
+	assert.True(t, recentExists, "Recent inactive source should not be removed")
+	assert.False(t, oldExists, "Old inactive source should be removed")
 }
 
 // TestURLValidation verifies that dangerous URLs are rejected
@@ -274,15 +242,12 @@ func TestURLValidation(t *testing.T) {
 			})
 
 			if tc.shouldFail {
-				if err == nil {
-					t.Errorf("Expected validation to fail for %s", tc.url)
-				} else if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
-					t.Errorf("Expected error to contain '%s', got: %v", tc.errorContains, err)
+				require.Error(t, err, "Expected validation to fail for %s", tc.url)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains, "Expected error to contain '%s'", tc.errorContains)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected validation to pass for %s, got: %v", tc.url, err)
-				}
+				require.NoError(t, err, "Expected validation to pass for %s", tc.url)
 			}
 		})
 	}
@@ -346,16 +311,14 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 		// Get the connection string safely and verify mapping consistency
 		connStr, err := source.GetConnectionString()
 		if err != nil {
-			t.Errorf("Failed to get connection string for source %s: %v", source.ID, err)
+			t.Logf("Failed to get connection string for source %s: %v", source.ID, err)
 			continue
 		}
 
 		// Verify the source can be found by its connection string
 		foundSource, exists := registry.GetSourceByConnection(connStr)
-		if !exists {
-			t.Errorf("Source %s exists but not found by connection string %s", source.ID, source.SafeString)
-		} else if foundSource.ID != source.ID {
-			t.Errorf("Inconsistent mapping: source ID %s mapped to %s", source.ID, foundSource.ID)
+		if assert.True(t, exists, "Source %s exists but not found by connection string %s", source.ID, source.SafeString) {
+			assert.Equal(t, source.ID, foundSource.ID, "Inconsistent mapping: source ID should match")
 		}
 	}
 }

@@ -3,11 +3,11 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -17,12 +17,9 @@ func assertMapContainsExpected(t *testing.T, result, expected map[string]any) {
 	t.Helper()
 	for key, expectedValue := range expected {
 		actualValue, exists := result[key]
-		if !exists {
-			t.Errorf("createToastEventData() missing key %q", key)
-			continue
-		}
-		if !reflect.DeepEqual(actualValue, expectedValue) {
-			t.Errorf("createToastEventData() key %q = %v, want %v", key, actualValue, expectedValue)
+		assert.True(t, exists, "createToastEventData() missing key %q", key)
+		if exists {
+			assert.Equal(t, expectedValue, actualValue, "createToastEventData() key %q mismatch", key)
 		}
 	}
 }
@@ -31,9 +28,8 @@ func assertMapContainsExpected(t *testing.T, result, expected map[string]any) {
 func assertNoZeroDuration(t *testing.T, result, metadata map[string]any) {
 	t.Helper()
 	if metadata["duration"] == 0 {
-		if _, exists := result["duration"]; exists {
-			t.Error("createToastEventData() should not include zero duration")
-		}
+		_, exists := result["duration"]
+		assert.False(t, exists, "createToastEventData() should not include zero duration")
 	}
 }
 
@@ -41,9 +37,8 @@ func assertNoZeroDuration(t *testing.T, result, metadata map[string]any) {
 func assertNoNilAction(t *testing.T, result, metadata map[string]any) {
 	t.Helper()
 	if metadata["action"] == nil {
-		if _, exists := result["action"]; exists {
-			t.Error("createToastEventData() should not include nil action")
-		}
+		_, exists := result["action"]
+		assert.False(t, exists, "createToastEventData() should not include nil action")
 	}
 }
 
@@ -230,8 +225,8 @@ func TestController_processNotificationEvent(t *testing.T) {
 
 			// The method will likely fail because sendSSEMessage isn't mocked,
 			// but we're mainly testing that it doesn't panic and follows the right path
-			if tt.expectErr && err == nil {
-				t.Error("processNotificationEvent() expected error but got none")
+			if tt.expectErr {
+				assert.Error(t, err, "processNotificationEvent() expected error but got none")
 			}
 
 			// The main value of this test is ensuring the method doesn't panic
@@ -260,9 +255,7 @@ func Test_setSSEHeaders(t *testing.T) {
 
 	for key, expectedValue := range expectedHeaders {
 		actualValue := rec.Header().Get(key)
-		if actualValue != expectedValue {
-			t.Errorf("setSSEHeaders() header %q = %q, want %q", key, actualValue, expectedValue)
-		}
+		assert.Equal(t, expectedValue, actualValue, "setSSEHeaders() header %q mismatch", key)
 	}
 }
 
@@ -382,9 +375,7 @@ func TestMetadataExtraction(t *testing.T) {
 				isToast, _ = tt.metadata["isToast"].(bool)
 			}
 
-			if isToast != tt.wantBool {
-				t.Errorf("metadata extraction isToast = %v, want %v", isToast, tt.wantBool)
-			}
+			assert.Equal(t, tt.wantBool, isToast, "metadata extraction isToast mismatch")
 		})
 	}
 }

@@ -608,7 +608,7 @@ func TestValueCanonicalization(t *testing.T) {
 				assert.IsType(t, "", actual, "Expected string type")
 				assert.Equal(t, tt.expectedValue, actual)
 			default:
-				t.Fatalf("Unknown expected type: %s", tt.expectedType)
+				require.Fail(t, "Unknown expected type", "type: %s", tt.expectedType)
 			}
 		})
 	}

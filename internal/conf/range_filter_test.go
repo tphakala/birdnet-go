@@ -4,6 +4,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestShouldUpdateRangeFilterToday_SingleThread verifies basic functionality
@@ -14,14 +16,10 @@ func TestShouldUpdateRangeFilterToday_SingleThread(t *testing.T) {
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
 
 	// First call should return true
-	if !settings.ShouldUpdateRangeFilterToday() {
-		t.Error("First call should return true when LastUpdated is yesterday")
-	}
+	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "First call should return true when LastUpdated is yesterday")
 
 	// Second call should return false (already updated today)
-	if settings.ShouldUpdateRangeFilterToday() {
-		t.Error("Second call should return false (already updated today)")
-	}
+	assert.False(t, settings.ShouldUpdateRangeFilterToday(), "Second call should return false (already updated today)")
 }
 
 // TestShouldUpdateRangeFilterToday_ConcurrentAccess tests for race conditions
@@ -53,9 +51,7 @@ func TestShouldUpdateRangeFilterToday_ConcurrentAccess(t *testing.T) {
 	// CRITICAL: Only ONE goroutine should have received true
 	// This prevents the bug in issue #1357 where multiple goroutines
 	// would all create UpdateRangeFilterAction, causing race conditions
-	if trueCount != 1 {
-		t.Errorf("Expected exactly 1 goroutine to receive true, got %d", trueCount)
-	}
+	assert.Equal(t, 1, trueCount, "Expected exactly 1 goroutine to receive true")
 }
 
 // TestShouldUpdateRangeFilterToday_AlreadyUpdated verifies that when
@@ -66,9 +62,7 @@ func TestShouldUpdateRangeFilterToday_AlreadyUpdated(t *testing.T) {
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now() // Already updated today
 
-	if settings.ShouldUpdateRangeFilterToday() {
-		t.Error("Should return false when already updated today")
-	}
+	assert.False(t, settings.ShouldUpdateRangeFilterToday(), "Should return false when already updated today")
 }
 
 // TestGetLastRangeFilterUpdate verifies thread-safe reading of LastUpdated
@@ -98,9 +92,7 @@ func TestGetLastRangeFilterUpdate(t *testing.T) {
 
 	wg.Wait()
 
-	if len(errors) > 0 {
-		t.Errorf("Concurrent reads failed: found %d errors", len(errors))
-	}
+	assert.Empty(t, errors, "Concurrent reads failed: found %d errors", len(errors))
 }
 
 // TestUpdateIncludedSpecies_ThreadSafety verifies concurrent updates are safe
@@ -126,9 +118,7 @@ func TestUpdateIncludedSpecies_ThreadSafety(t *testing.T) {
 
 	// Verify the final state is valid
 	species := settings.GetIncludedSpecies()
-	if len(species) != 2 {
-		t.Errorf("Expected 2 species, got %d", len(species))
-	}
+	assert.Len(t, species, 2, "Expected 2 species")
 }
 
 // TestIsSpeciesIncluded_ThreadSafety verifies concurrent reads during updates
@@ -170,9 +160,7 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 
 	wg.Wait()
 
-	if len(errors) > 0 {
-		t.Errorf("Concurrent reads failed: found %d errors", len(errors))
-	}
+	assert.Empty(t, errors, "Concurrent reads failed: found %d errors", len(errors))
 }
 
 // TestResetRangeFilterUpdateFlag verifies that ResetRangeFilterUpdateFlag
@@ -184,22 +172,16 @@ func TestResetRangeFilterUpdateFlag(t *testing.T) {
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
 
 	// Verify it's set
-	if settings.BirdNET.RangeFilter.LastUpdated.IsZero() {
-		t.Error("LastUpdated should not be zero initially")
-	}
+	assert.False(t, settings.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should not be zero initially")
 
 	// Reset the flag
 	settings.ResetRangeFilterUpdateFlag()
 
 	// Verify it's been reset to zero time
-	if !settings.BirdNET.RangeFilter.LastUpdated.IsZero() {
-		t.Error("LastUpdated should be zero after reset")
-	}
+	assert.True(t, settings.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should be zero after reset")
 
 	// Verify that after reset, ShouldUpdateRangeFilterToday returns true
-	if !settings.ShouldUpdateRangeFilterToday() {
-		t.Error("ShouldUpdateRangeFilterToday should return true after reset")
-	}
+	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "ShouldUpdateRangeFilterToday should return true after reset")
 }
 
 // TestResetRangeFilterUpdateFlag_ThreadSafety verifies concurrent resets are safe
@@ -222,9 +204,7 @@ func TestResetRangeFilterUpdateFlag_ThreadSafety(t *testing.T) {
 	wg.Wait()
 
 	// Verify the final state is zero time
-	if !settings.BirdNET.RangeFilter.LastUpdated.IsZero() {
-		t.Error("LastUpdated should be zero after concurrent resets")
-	}
+	assert.True(t, settings.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should be zero after concurrent resets")
 }
 
 // TestErrorRecoveryScenario simulates the full error recovery flow:
@@ -238,26 +218,20 @@ func TestErrorRecoveryScenario(t *testing.T) {
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
 
 	// First detection: should trigger update
-	if !settings.ShouldUpdateRangeFilterToday() {
-		t.Error("First call should return true when LastUpdated is yesterday")
-	}
+	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "First call should return true when LastUpdated is yesterday")
 
 	// Simulate update failure by resetting the flag
 	// (In production, this is called in UpdateRangeFilterAction.Execute on error)
 	settings.ResetRangeFilterUpdateFlag()
 
 	// Next detection: should be able to retry
-	if !settings.ShouldUpdateRangeFilterToday() {
-		t.Error("Should return true after failed update (reset flag)")
-	}
+	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "Should return true after failed update (reset flag)")
 
 	// Simulate successful update by calling UpdateIncludedSpecies
 	settings.UpdateIncludedSpecies([]string{"Test Species"})
 
 	// Next detection: should NOT trigger update (already succeeded)
-	if settings.ShouldUpdateRangeFilterToday() {
-		t.Error("Should return false after successful update")
-	}
+	assert.False(t, settings.ShouldUpdateRangeFilterToday(), "Should return false after successful update")
 }
 
 // TestErrorRecoveryScenario_Concurrent simulates concurrent error recovery
@@ -292,9 +266,7 @@ func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
 
 	// CRITICAL: Only ONE goroutine should have received true
 	// This ensures that even after a reset, we don't get duplicate retries
-	if trueCount != 1 {
-		t.Errorf("Expected exactly 1 goroutine to receive true after reset, got %d", trueCount)
-	}
+	assert.Equal(t, 1, trueCount, "Expected exactly 1 goroutine to receive true after reset")
 }
 
 // TestResetAndCheckInterleaved tests interleaved reset and check operations

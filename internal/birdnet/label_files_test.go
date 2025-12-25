@@ -22,6 +22,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -48,30 +50,18 @@ func TestLoadAllV24LabelFiles(t *testing.T) {
 
 			// Test loading the label file
 			data, err := GetLabelFileDataWithLogger(modelVersion, localeCode, logger)
-			if err != nil {
-				t.Fatalf("Failed to load label file for locale %s: %v", localeCode, err)
-			}
-
-			if len(data) == 0 {
-				t.Fatalf("Label file for locale %s is empty", localeCode)
-			}
+			require.NoError(t, err, "Failed to load label file for locale %s", localeCode)
+			require.NotEmpty(t, data, "Label file for locale %s is empty", localeCode)
 
 			// Verify file content is not binary (should be text)
-			if !isValidTextContent(data) {
-				t.Errorf("Label file for locale %s contains non-text content", localeCode)
-			}
+			assert.True(t, isValidTextContent(data), "Label file for locale %s contains non-text content", localeCode)
 
 			// Test that we can get the filename without error
 			filename, err := conf.GetLabelFilename(modelVersion, localeCode)
-			if err != nil {
-				t.Errorf("Failed to get filename for locale %s: %v", localeCode, err)
-			} else {
-				expectedPattern := filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_"+fileLocale+".txt")
-				if filename != expectedPattern {
-					t.Errorf("Unexpected filename for locale %s: got %s, expected %s",
-						localeCode, filename, expectedPattern)
-				}
-			}
+			require.NoError(t, err, "Failed to get filename for locale %s", localeCode)
+
+			expectedPattern := filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_"+fileLocale+".txt")
+			assert.Equal(t, expectedPattern, filename, "Unexpected filename for locale %s", localeCode)
 		})
 	}
 }
@@ -83,19 +73,13 @@ func TestValidateV24LabelFileLineCount(t *testing.T) {
 		t.Run(localeCode, func(t *testing.T) {
 			t.Parallel()
 			data, err := GetLabelFileData(modelVersion, localeCode)
-			if err != nil {
-				t.Fatalf("Failed to load label file for locale %s: %v", localeCode, err)
-			}
+			require.NoError(t, err, "Failed to load label file for locale %s", localeCode)
 
 			lines := countNonEmptyLines(data)
-			if lines == -1 {
-				t.Fatalf("Error scanning label file for locale %s", localeCode)
-			}
+			require.NotEqual(t, -1, lines, "Error scanning label file for locale %s", localeCode)
+
 			expectedLines := GetExpectedLinesV24()
-			if lines != expectedLines {
-				t.Errorf("Label file for locale %s has %d lines, expected %d",
-					localeCode, lines, expectedLines)
-			}
+			assert.Equal(t, expectedLines, lines, "Label file for locale %s has wrong line count", localeCode)
 		})
 	}
 }
@@ -107,9 +91,7 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 		t.Run(localeCode, func(t *testing.T) {
 			t.Parallel()
 			data, err := GetLabelFileData(modelVersion, localeCode)
-			if err != nil {
-				t.Fatalf("Failed to load label file for locale %s: %v", localeCode, err)
-			}
+			require.NoError(t, err, "Failed to load label file for locale %s", localeCode)
 
 			lines := strings.Split(string(data), "\n")
 			nonEmptyLines := 0
@@ -123,32 +105,23 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 				nonEmptyLines++
 
 				// Validate that line is not too short
-				if len(line) < 5 {
-					t.Errorf("Line %d in %s locale file is too short: %s",
-						i+1, localeCode, line)
-				}
+				assert.GreaterOrEqual(t, len(line), 5, "Line %d in %s locale file is too short: %s", i+1, localeCode, line)
 
 				// Check for proper scientific name format (should split into exactly two parts)
 				parts := strings.SplitN(line, "_", 2)
-				if len(parts) != 2 {
-					t.Errorf("Line %d in %s locale file is malformed (should have exactly one underscore): %s",
-						i+1, localeCode, line)
+				if !assert.Len(t, parts, 2, "Line %d in %s locale file is malformed (should have exactly one underscore): %s", i+1, localeCode, line) {
 					continue
 				}
 
 				scientificName := parts[0]
-				if scientificName != "" && !isFirstRuneUpperCase(scientificName) {
-					t.Errorf("Line %d in %s locale file has invalid scientific name format: %s",
-						i+1, localeCode, scientificName)
+				if scientificName != "" {
+					assert.True(t, isFirstRuneUpperCase(scientificName), "Line %d in %s locale file has invalid scientific name format: %s", i+1, localeCode, scientificName)
 				}
 			}
 
 			// Validate total line count matches expected
 			expectedLines := GetExpectedLinesV24()
-			if nonEmptyLines != expectedLines {
-				t.Errorf("Locale %s has %d non-empty lines, expected %d",
-					localeCode, nonEmptyLines, expectedLines)
-			}
+			assert.Equal(t, expectedLines, nonEmptyLines, "Locale %s has wrong non-empty line count", localeCode)
 		})
 	}
 }
@@ -158,9 +131,7 @@ func TestLabelFileConsistency(t *testing.T) {
 
 	// Load English labels as reference
 	enData, err := GetLabelFileData(modelVersion, "en-us")
-	if err != nil {
-		t.Fatalf("Failed to load English reference labels: %v", err)
-	}
+	require.NoError(t, err, "Failed to load English reference labels")
 
 	enLines := extractNonEmptyLines(enData)
 	enScientificNames := extractScientificNames(enLines)
@@ -176,16 +147,12 @@ func TestLabelFileConsistency(t *testing.T) {
 
 		t.Run("consistency_"+localeCode, func(t *testing.T) {
 			data, err := GetLabelFileData(modelVersion, localeCode)
-			if err != nil {
-				t.Fatalf("Failed to load label file for locale %s: %v", localeCode, err)
-			}
+			require.NoError(t, err, "Failed to load label file for locale %s", localeCode)
 
 			lines := extractNonEmptyLines(data)
 			scientificNames := extractScientificNames(lines)
 
-			if len(scientificNames) != len(enScientificNames) {
-				t.Errorf("Locale %s has %d scientific names, expected %d",
-					localeCode, len(scientificNames), len(enScientificNames))
+			if !assert.Len(t, scientificNames, len(enScientificNames), "Locale %s has wrong scientific name count", localeCode) {
 				return
 			}
 
@@ -230,18 +197,12 @@ func TestLabelFileConsistency(t *testing.T) {
 func TestLabelFileDataErrors(t *testing.T) {
 	// Test unsupported model version
 	_, err := GetLabelFileData("INVALID_MODEL", "en-us")
-	if err == nil {
-		t.Error("Expected error for unsupported model version, got nil")
-	}
+	require.Error(t, err, "Expected error for unsupported model version")
 
 	// Test unsupported locale (should fall back to default)
 	data, err := GetLabelFileData(BirdNET_GLOBAL_6K_V2_4, "invalid-locale")
-	if err != nil {
-		t.Errorf("Expected fallback for invalid locale, got error: %v", err)
-	}
-	if len(data) == 0 {
-		t.Error("Expected fallback data for invalid locale, got empty data")
-	}
+	require.NoError(t, err, "Expected fallback for invalid locale")
+	assert.NotEmpty(t, data, "Expected fallback data for invalid locale")
 }
 
 func TestGetLabelFilename(t *testing.T) {
@@ -282,16 +243,10 @@ func TestGetLabelFilename(t *testing.T) {
 			filename, err := conf.GetLabelFilename(tc.modelVersion, tc.localeCode)
 
 			if tc.expectError {
-				if err == nil {
-					t.Errorf("Expected error for %s/%s, got nil", tc.modelVersion, tc.localeCode)
-				}
+				assert.Error(t, err, "Expected error for %s/%s", tc.modelVersion, tc.localeCode)
 			} else {
-				if err != nil {
-					t.Errorf("Unexpected error for %s/%s: %v", tc.modelVersion, tc.localeCode, err)
-				}
-				if filename != tc.expected {
-					t.Errorf("Expected filename %s, got %s", tc.expected, filename)
-				}
+				require.NoError(t, err, "Unexpected error for %s/%s", tc.modelVersion, tc.localeCode)
+				assert.Equal(t, tc.expected, filename, "Unexpected filename")
 			}
 		})
 	}

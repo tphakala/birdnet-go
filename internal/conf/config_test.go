@@ -1,11 +1,17 @@
 package conf
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestAudioSettings_NeedsFfprobeWorkaround(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name        string
-		audio       AudioSettings
+		name           string
+		audio          AudioSettings
 		wantWorkaround bool
 	}{
 		{
@@ -57,14 +63,18 @@ func TestAudioSettings_NeedsFfprobeWorkaround(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.audio.NeedsFfprobeWorkaround(); got != tt.wantWorkaround {
-				t.Errorf("AudioSettings.NeedsFfprobeWorkaround() = %v, want %v", got, tt.wantWorkaround)
-			}
+			t.Parallel()
+
+			got := tt.audio.NeedsFfprobeWorkaround()
+			assert.Equal(t, tt.wantWorkaround, got,
+				"AudioSettings.NeedsFfprobeWorkaround() mismatch")
 		})
 	}
 }
 
 func TestAudioSettings_HasFfmpegVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		audio   AudioSettings
@@ -110,9 +120,11 @@ func TestAudioSettings_HasFfmpegVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.audio.HasFfmpegVersion(); got != tt.wantHas {
-				t.Errorf("AudioSettings.HasFfmpegVersion() = %v, want %v", got, tt.wantHas)
-			}
+			t.Parallel()
+
+			got := tt.audio.HasFfmpegVersion()
+			assert.Equal(t, tt.wantHas, got,
+				"AudioSettings.HasFfmpegVersion() mismatch")
 		})
 	}
 }

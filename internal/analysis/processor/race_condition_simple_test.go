@@ -17,105 +17,17 @@
 package processor
 
 import (
-	"context"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// SimpleAction tracks execution timing for race condition tests
-type SimpleAction struct {
-	name          string
-	executeDelay  time.Duration
-	executedAt    time.Time
-	executed      bool
-	executeMutex  sync.Mutex
-	onExecute     func() // Callback for additional behavior
-}
-
-func (a *SimpleAction) Execute(data any) error {
-	// Use ExecuteContext with background context for backward compatibility
-	return a.ExecuteContext(context.Background(), data)
-}
-
-// ExecuteContext implements the ContextAction interface for proper context propagation
-func (a *SimpleAction) ExecuteContext(ctx context.Context, data any) error {
-	a.executeMutex.Lock()
-	defer a.executeMutex.Unlock()
-	
-	// Simulate processing time with context-aware sleep
-	if a.executeDelay > 0 {
-		if err := a.interruptibleSleep(ctx, a.executeDelay); err != nil {
-			return err
-		}
-	}
-	
-	a.executedAt = time.Now()
-	a.executed = true
-	
-	// Execute callback if provided
-	if a.onExecute != nil {
-		a.onExecute()
-	}
-	
-	return nil
-}
-
-// interruptibleSleep performs a sleep that can be interrupted by context cancellation
-func (a *SimpleAction) interruptibleSleep(ctx context.Context, duration time.Duration) error {
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	
-	select {
-	case <-timer.C:
-		// Sleep completed normally
-		return nil
-	case <-ctx.Done():
-		// Context was cancelled/timed out
-		return ctx.Err()
-	}
-}
-
-func (a *SimpleAction) GetDescription() string {
-	return a.name
-}
-
-func (a *SimpleAction) GetExecutionTime() time.Time {
-	a.executeMutex.Lock()
-	defer a.executeMutex.Unlock()
-	return a.executedAt
-}
-
-func (a *SimpleAction) WasExecuted() bool {
-	a.executeMutex.Lock()
-	defer a.executeMutex.Unlock()
-	return a.executed
-}
-
-// createSimpleDetection creates a basic detection for testing
-func createSimpleDetection() Detections {
-	now := time.Now()
-	return Detections{
-		Note: datastore.Note{
-			CommonName:     "Test Bird",
-			ScientificName: "Testus birdus",
-			Confidence:     0.95,
-			Source: datastore.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
-			Date:           now.Format("2006-01-02"),
-			Time:           now.Format("15:04:05"),
-			BeginTime:      now,
-			EndTime:        now.Add(15 * time.Second),
-		},
-		Results: []datastore.Results{
-			{Species: "Testus birdus", Confidence: 0.95},
-		},
-	}
-}
+// SimpleAction and testDetection are now defined in test_helpers_test.go
 
 // TestRaceCondition_ConcurrentExecution demonstrates that actions execute concurrently
 func TestRaceCondition_ConcurrentExecution(t *testing.T) {
@@ -160,12 +72,8 @@ func TestRaceCondition_ConcurrentExecution(t *testing.T) {
 	err1 := processor.EnqueueTask(dbTask)
 	err2 := processor.EnqueueTask(sseTask)
 
-	if err1 != nil {
-		t.Fatalf("Failed to enqueue database task: %v", err1)
-	}
-	if err2 != nil {
-		t.Fatalf("Failed to enqueue SSE task: %v", err2)
-	}
+	require.NoError(t, err1, "Failed to enqueue database task")
+	require.NoError(t, err2, "Failed to enqueue SSE task")
 
 	// Wait for both actions to complete
 	timeout := time.After(2 * time.Second)
@@ -175,7 +83,7 @@ func TestRaceCondition_ConcurrentExecution(t *testing.T) {
 	for {
 		select {
 		case <-timeout:
-			t.Fatal("Timeout waiting for actions to execute")
+			require.Fail(t, "Timeout waiting for actions to execute")
 		case <-ticker.C:
 			if slowDbAction.WasExecuted() && fastSSEAction.WasExecuted() {
 				goto ActionsCompleted
@@ -197,13 +105,13 @@ ActionsCompleted:
 
 	// The race condition is demonstrated if SSE starts close to when DB starts
 	// rather than waiting for DB to complete (which would be 500ms+ later)
-	
+
 	// The race condition is demonstrated by the timing analysis
-	// Even if actions don't start simultaneously, the key issue is that 
+	// Even if actions don't start simultaneously, the key issue is that
 	// SSE can start before DatabaseAction completes its work
-	
+
 	timeDiff := sseExecutionTime.Sub(dbExecutionTime).Abs()
-	
+
 	if sseExecutionTime.Before(dbExecutionTime.Add(slowDbAction.executeDelay)) {
 		t.Logf("✓ Race condition confirmed: SSE started before DB action would complete")
 		t.Logf("  SSE execution time: %v", sseDelay)
@@ -212,10 +120,10 @@ ActionsCompleted:
 	} else {
 		t.Logf("Actions executed with proper timing (time diff: %v)", timeDiff)
 	}
-	
+
 	// Log insights regardless of timing
 	t.Logf("Analysis: This test demonstrates the execution pattern that leads to:")
-	t.Logf("  • 'database ID not assigned after 10s timeout'") 
+	t.Logf("  • 'database ID not assigned after 10s timeout'")
 	t.Logf("  • 'note not found in database'")
 	t.Logf("  • 'audio file not ready after 5s timeout'")
 }
@@ -269,16 +177,12 @@ func TestRaceCondition_OrderingDependency(t *testing.T) {
 	sseTask := &Task{Type: TaskTypeAction, Detection: detection, Action: sseAction}
 
 	startTime := time.Now()
-	
+
 	err1 := processor.EnqueueTask(dbTask)
 	err2 := processor.EnqueueTask(sseTask)
 
-	if err1 != nil {
-		t.Fatalf("Failed to enqueue database task: %v", err1)
-	}
-	if err2 != nil {
-		t.Fatalf("Failed to enqueue SSE task: %v", err2)
-	}
+	require.NoError(t, err1, "Failed to enqueue database task")
+	require.NoError(t, err2, "Failed to enqueue SSE task")
 
 	// Wait for events with timeout
 	var sseStartTime, dbCompleteTime time.Time
@@ -294,7 +198,7 @@ func TestRaceCondition_OrderingDependency(t *testing.T) {
 			eventsReceived++
 			t.Logf("Database action completed at: %v", dbCompleteTime.Sub(startTime))
 		case <-timeout:
-			t.Fatal("Timeout waiting for action events")
+			require.Fail(t, "Timeout waiting for action events")
 		}
 	}
 
@@ -359,16 +263,12 @@ func TestRaceCondition_TimeoutScenario(t *testing.T) {
 	sseTask := &Task{Type: TaskTypeAction, Detection: detection, Action: simulatedSSEAction}
 
 	startTime := time.Now()
-	
+
 	err1 := processor.EnqueueTask(dbTask)
 	err2 := processor.EnqueueTask(sseTask)
 
-	if err1 != nil {
-		t.Fatalf("Failed to enqueue database task: %v", err1)
-	}
-	if err2 != nil {
-		t.Fatalf("Failed to enqueue SSE task: %v", err2)
-	}
+	require.NoError(t, err1, "Failed to enqueue database task")
+	require.NoError(t, err2, "Failed to enqueue SSE task")
 
 	// Monitor the race condition
 	var lookupTime, saveTime time.Time
@@ -386,7 +286,7 @@ func TestRaceCondition_TimeoutScenario(t *testing.T) {
 			eventsReceived++
 			t.Logf("Database save completed at: %v", saveTime.Sub(startTime))
 		case <-timeout:
-			t.Fatal("Timeout waiting for events")
+			require.Fail(t, "Timeout waiting for events")
 		}
 	}
 
@@ -446,41 +346,25 @@ func TestRaceCondition_CompositeActionSolution(t *testing.T) {
 	err := compositeAction.Execute(detection)
 	totalDuration := time.Since(startTime)
 
-	if err != nil {
-		t.Fatalf("Composite action failed: %v", err)
-	}
+	require.NoError(t, err, "Composite action failed")
 
 	// Verify both actions executed
-	if !dbAction.WasExecuted() {
-		t.Fatal("Database action was not executed")
-	}
-	if !sseAction.WasExecuted() {
-		t.Fatal("SSE action was not executed")
-	}
+	require.True(t, dbAction.WasExecuted(), "Database action was not executed")
+	require.True(t, sseAction.WasExecuted(), "SSE action was not executed")
 
 	// Verify execution order
 	executionMutex.Lock()
 	defer executionMutex.Unlock()
-	
-	if len(executionOrder) != 2 {
-		t.Fatalf("Expected 2 actions to execute, got %d", len(executionOrder))
-	}
-	
-	if executionOrder[0] != "database" {
-		t.Errorf("Expected database action to execute first, but got: %s", executionOrder[0])
-	}
-	
-	if executionOrder[1] != "sse" {
-		t.Errorf("Expected SSE action to execute second, but got: %s", executionOrder[1])
-	}
+
+	require.Len(t, executionOrder, 2, "Expected 2 actions to execute")
+	assert.Equal(t, "database", executionOrder[0], "Expected database action to execute first")
+	assert.Equal(t, "sse", executionOrder[1], "Expected SSE action to execute second")
 
 	// Verify timing characteristics
 	dbExecutionTime := dbAction.GetExecutionTime()
 	sseExecutionTime := sseAction.GetExecutionTime()
 
-	if sseExecutionTime.Before(dbExecutionTime) {
-		t.Fatal("SSE action executed before database action - race condition still present!")
-	}
+	assert.False(t, sseExecutionTime.Before(dbExecutionTime), "SSE action executed before database action - race condition still present!")
 
 	timeBetweenActions := sseExecutionTime.Sub(dbExecutionTime)
 	t.Logf("CompositeAction execution results:")
@@ -488,12 +372,10 @@ func TestRaceCondition_CompositeActionSolution(t *testing.T) {
 	t.Logf("  Database completed at: %v", dbExecutionTime.Sub(startTime))
 	t.Logf("  SSE started at: %v", sseExecutionTime.Sub(startTime))
 	t.Logf("  Time between actions: %v", timeBetweenActions)
-	
+
 	// The time between actions should be minimal (just the SSE execution time)
 	// since SSE starts immediately after DB completes
-	if timeBetweenActions > 100*time.Millisecond {
-		t.Errorf("Too much delay between actions: %v", timeBetweenActions)
-	}
+	assert.LessOrEqual(t, timeBetweenActions, 100*time.Millisecond, "Too much delay between actions")
 
 	t.Logf("✓ CompositeAction enforces sequential execution")
 	t.Logf("✓ Database action completes before SSE action starts")
@@ -549,32 +431,25 @@ func TestCompositeAction_TimeoutProtection(t *testing.T) {
 	duration := time.Since(startTime)
 
 	// Verify that we got a timeout error
-	if err == nil {
-		t.Fatal("Expected timeout error but got nil")
-	}
+	require.Error(t, err, "Expected timeout error")
 
 	// Check that the error message indicates timeout
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Errorf("Expected timeout error, got: %v", err)
-	}
+	assert.Contains(t, err.Error(), "timed out", "Expected timeout error")
 
 	// Verify that fast action completed but hanging action did not
 	executionMutex.Lock()
 	defer executionMutex.Unlock()
 
-	if len(executionTracker) != 1 || executionTracker[0] != "fast" {
-		t.Errorf("Expected only fast action to complete, got: %v", executionTracker)
-	}
+	require.Len(t, executionTracker, 1, "Expected only fast action to complete")
+	assert.Equal(t, "fast", executionTracker[0], "Expected fast action to complete")
 
 	// Verify the timeout duration is approximately correct
 	// Should be around 2s (custom timeout) + 100ms (fast action)
 	expectedDuration := 2*time.Second + 100*time.Millisecond
 	tolerance := 500 * time.Millisecond // Allow some tolerance for test execution
 
-	if duration < expectedDuration-tolerance || duration > expectedDuration+tolerance {
-		t.Errorf("Duration %v is outside expected range [%v, %v]", 
-			duration, expectedDuration-tolerance, expectedDuration+tolerance)
-	}
+	assert.GreaterOrEqual(t, duration, expectedDuration-tolerance, "Duration too short")
+	assert.LessOrEqual(t, duration, expectedDuration+tolerance, "Duration too long")
 
 	t.Logf("✓ CompositeAction properly handles custom timeout")
 	t.Logf("✓ Fast action completed, hanging action was interrupted")
@@ -602,14 +477,10 @@ func TestCompositeAction_DefaultTimeout(t *testing.T) {
 
 	// Execute the action
 	err := compositeAction.Execute(detection)
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	require.NoError(t, err, "Unexpected error")
 
 	// Verify the action executed successfully with default timeout
-	if !simpleAction.WasExecuted() {
-		t.Error("Action was not executed")
-	}
+	assert.True(t, simpleAction.WasExecuted(), "Action was not executed")
 
 	t.Log("✓ CompositeAction uses default timeout when not overridden")
 }
@@ -666,22 +537,17 @@ func TestCompositeAction_PanicRecovery(t *testing.T) {
 	err := compositeAction.Execute(detection)
 
 	// Verify that we got a panic error
-	if err == nil {
-		t.Fatal("Expected panic error but got nil")
-	}
+	require.Error(t, err, "Expected panic error")
 
 	// Check that the error message indicates panic
-	if !strings.Contains(err.Error(), "panic") {
-		t.Errorf("Expected panic error, got: %v", err)
-	}
+	assert.Contains(t, err.Error(), "panic", "Expected panic error")
 
 	// Verify that only the first action completed
 	executionMutex.Lock()
 	defer executionMutex.Unlock()
 
-	if len(executionTracker) != 1 || executionTracker[0] != "normal1" {
-		t.Errorf("Expected only first action to complete before panic, got: %v", executionTracker)
-	}
+	require.Len(t, executionTracker, 1, "Expected only first action to complete before panic")
+	assert.Equal(t, "normal1", executionTracker[0], "Expected first action to complete")
 
 	t.Logf("✓ CompositeAction properly recovered from panic")
 	t.Logf("✓ Panic error was returned: %v", err)
@@ -697,9 +563,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 	t.Run("nil CompositeAction", func(t *testing.T) {
 		var compositeAction *CompositeAction
 		err := compositeAction.Execute(detection)
-		if err != nil {
-			t.Errorf("Expected nil CompositeAction to return nil error, got: %v", err)
-		}
+		assert.NoError(t, err, "Expected nil CompositeAction to return nil error")
 	})
 
 	t.Run("nil Actions slice", func(t *testing.T) {
@@ -708,9 +572,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test nil actions",
 		}
 		err := compositeAction.Execute(detection)
-		if err != nil {
-			t.Errorf("Expected nil Actions slice to return nil error, got: %v", err)
-		}
+		assert.NoError(t, err, "Expected nil Actions slice to return nil error")
 	})
 
 	t.Run("empty Actions slice", func(t *testing.T) {
@@ -719,9 +581,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test empty actions",
 		}
 		err := compositeAction.Execute(detection)
-		if err != nil {
-			t.Errorf("Expected empty Actions slice to return nil error, got: %v", err)
-		}
+		assert.NoError(t, err, "Expected empty Actions slice to return nil error")
 	})
 
 	t.Run("all nil actions", func(t *testing.T) {
@@ -730,9 +590,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test all nil actions",
 		}
 		err := compositeAction.Execute(detection)
-		if err != nil {
-			t.Errorf("Expected all nil actions to return nil error, got: %v", err)
-		}
+		assert.NoError(t, err, "Expected all nil actions to return nil error")
 	})
 
 	t.Run("mixed nil and valid actions", func(t *testing.T) {
@@ -765,21 +623,14 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 		}
 
 		err := compositeAction.Execute(detection)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
+		require.NoError(t, err, "Unexpected error")
 
 		executionMutex.Lock()
 		defer executionMutex.Unlock()
 
-		if len(executionOrder) != 2 {
-			t.Errorf("Expected 2 actions to execute, got %d", len(executionOrder))
-		}
-		if len(executionOrder) == 2 {
-			if executionOrder[0] != "action1" || executionOrder[1] != "action2" {
-				t.Errorf("Actions executed in wrong order: %v", executionOrder)
-			}
-		}
+		require.Len(t, executionOrder, 2, "Expected 2 actions to execute")
+		assert.Equal(t, "action1", executionOrder[0], "First action executed in wrong order")
+		assert.Equal(t, "action2", executionOrder[1], "Second action executed in wrong order")
 	})
 
 	t.Run("single action", func(t *testing.T) {
@@ -798,16 +649,10 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 		}
 
 		err := compositeAction.Execute(detection)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-
-		if !executed {
-			t.Error("Single action was not executed")
-		}
+		require.NoError(t, err, "Unexpected error")
+		assert.True(t, executed, "Single action was not executed")
 	})
 }
-
 
 // TestRaceCondition_ProposedSolutionValidation demonstrates how sequential execution would solve the issue
 func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
@@ -834,16 +679,12 @@ func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
 	err1 := dbAction.Execute(detection)
 	dbCompleteTime := time.Now()
 
-	// Step 2: Execute SSE action only after database completes  
+	// Step 2: Execute SSE action only after database completes
 	err2 := sseAction.Execute(detection)
 	sseCompleteTime := time.Now()
 
-	if err1 != nil {
-		t.Fatalf("Database action failed: %v", err1)
-	}
-	if err2 != nil {
-		t.Fatalf("SSE action failed: %v", err2)
-	}
+	require.NoError(t, err1, "Database action failed")
+	require.NoError(t, err2, "SSE action failed")
 
 	// Analyze sequential timing
 	dbDuration := dbCompleteTime.Sub(startTime)
@@ -852,17 +693,12 @@ func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
 
 	t.Logf("Sequential execution results:")
 	t.Logf("  Database action: %v", dbDuration)
-	t.Logf("  SSE action: %v", sseDuration)  
+	t.Logf("  SSE action: %v", sseDuration)
 	t.Logf("  Total duration: %v", totalDuration)
 
 	// Verify sequential characteristics
-	if dbDuration < 150*time.Millisecond {
-		t.Errorf("Database action completed too quickly: %v", dbDuration)
-	}
-
-	if sseDuration > 100*time.Millisecond {
-		t.Errorf("SSE action took too long (should be fast when DB is ready): %v", sseDuration)
-	}
+	assert.GreaterOrEqual(t, dbDuration, 150*time.Millisecond, "Database action completed too quickly")
+	assert.LessOrEqual(t, sseDuration, 100*time.Millisecond, "SSE action took too long (should be fast when DB is ready)")
 
 	t.Logf("✓ Sequential execution prevents race condition")
 	t.Logf("✓ SSE action executes quickly when database operation is complete")

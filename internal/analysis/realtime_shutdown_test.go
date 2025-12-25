@@ -51,7 +51,7 @@ func TestMonitorShutdownSignals(t *testing.T) {
 			case <-quitChan:
 				// Success - channel was closed
 			case <-time.After(1 * time.Second):
-				t.Fatal("Timeout waiting for quit channel to close")
+				require.Fail(t, "Timeout waiting for quit channel to close")
 			}
 		})
 	}
@@ -134,7 +134,7 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 		case <-shutdownComplete:
 			// Success
 		case <-ctx.Done():
-			t.Fatal("Context timeout during shutdown sequence")
+			require.Fail(t, "Context timeout during shutdown sequence")
 		}
 
 		wg.Wait()
@@ -199,7 +199,7 @@ func TestSignalNotification(t *testing.T) {
 		case sig := <-sigChan:
 			assert.Equal(t, syscall.SIGINT, sig, "Should receive SIGINT")
 		case <-time.After(1 * time.Second):
-			t.Fatal("Timeout waiting for signal")
+			require.Fail(t, "Timeout waiting for signal")
 		}
 	})
 }

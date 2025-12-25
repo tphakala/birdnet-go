@@ -2,12 +2,15 @@ package myaudio
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestGetAudioDurationIntegration(t *testing.T) {
@@ -46,27 +49,21 @@ func TestGetAudioDurationIntegration(t *testing.T) {
 	t.Logf("Testing with file: %s", testFile)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	start := time.Now()
 	duration, err := GetAudioDuration(ctx, testFile)
 	elapsed := time.Since(start)
 
-	if err != nil {
-		t.Fatalf("GetAudioDuration() failed: %v", err)
-	}
+	require.NoError(t, err, "GetAudioDuration() failed")
 
 	t.Logf("Duration: %.2f seconds", duration)
 	t.Logf("Time taken: %v", elapsed)
 
 	// Basic sanity checks
-	if duration <= 0 {
-		t.Errorf("Duration should be positive, got %f", duration)
-	}
-
-	if duration > 3600 { // More than 1 hour seems unlikely for test clips
-		t.Errorf("Duration seems unreasonably long: %f seconds", duration)
-	}
+	assert.Positive(t, duration, "Duration should be positive")
+	assert.LessOrEqual(t, duration, 3600.0,
+		"Duration seems unreasonably long (more than 1 hour for test clips)")
 
 	// Performance check - should be fast
 	if elapsed > 100*time.Millisecond {

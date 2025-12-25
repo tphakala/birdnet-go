@@ -1,16 +1,16 @@
 package birdweather
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"io"
 	"math"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
@@ -21,13 +21,8 @@ func TestEncodePCMtoWAV_EmptyInput(t *testing.T) {
 	ctx := context.Background()
 	_, err := myaudio.EncodePCMtoWAVWithContext(ctx, emptyData)
 
-	if err == nil {
-		t.Error("EncodePCMtoWAVWithContext should return an error with empty PCM data")
-	}
-
-	if err != nil && err.Error() != "PCM data is empty for WAV encoding" {
-		t.Errorf("Expected error message 'PCM data is empty for WAV encoding', got: %v", err)
-	}
+	require.Error(t, err, "EncodePCMtoWAVWithContext should return an error with empty PCM data")
+	assert.Equal(t, "PCM data is empty for WAV encoding", err.Error())
 }
 
 func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
@@ -47,77 +42,50 @@ func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
 
 	// Check for errors
-	if err != nil {
-		t.Errorf("EncodePCMtoWAVWithContext failed with valid input: %v", err)
-		return
-	}
-
-	// Basic validation of WAV header
-	if wavBuffer == nil {
-		t.Fatal("EncodePCMtoWAVWithContext returned nil buffer")
-	}
+	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with valid input")
+	require.NotNil(t, wavBuffer, "EncodePCMtoWAVWithContext returned nil buffer")
 
 	// Extract header components
 	header := make([]byte, 44) // Standard WAV header size
 
 	// Get all data from buffer to avoid issues with reading twice
 	allData := wavBuffer.Bytes()
-	if len(allData) < 44 {
-		t.Fatalf("WAV buffer too small for header: got %d bytes, need at least 44", len(allData))
-	}
+	require.GreaterOrEqual(t, len(allData), 44, "WAV buffer too small for header")
 
 	// Copy header from the beginning of the data
 	copy(header, allData[:44])
 
 	// Check RIFF header
-	if string(header[0:4]) != "RIFF" {
-		t.Errorf("WAV header missing RIFF marker, got: %s", string(header[0:4]))
-	}
+	assert.Equal(t, "RIFF", string(header[0:4]), "WAV header missing RIFF marker")
 
 	// Check WAVE format
-	if string(header[8:12]) != "WAVE" {
-		t.Errorf("WAV header missing WAVE format, got: %s", string(header[8:12]))
-	}
+	assert.Equal(t, "WAVE", string(header[8:12]), "WAV header missing WAVE format")
 
 	// Check fmt chunk
-	if string(header[12:16]) != "fmt " {
-		t.Errorf("WAV header missing fmt chunk, got: %s", string(header[12:16]))
-	}
+	assert.Equal(t, "fmt ", string(header[12:16]), "WAV header missing fmt chunk")
 
 	// Check PCM format (should be 1)
 	format := binary.LittleEndian.Uint16(header[20:22])
-	if format != 1 {
-		t.Errorf("WAV format should be 1 (PCM), got: %d", format)
-	}
+	assert.Equal(t, uint16(1), format, "WAV format should be 1 (PCM)")
 
 	// Check channels (should be 1 - mono)
 	channels := binary.LittleEndian.Uint16(header[22:24])
-	if channels != 1 {
-		t.Errorf("WAV channels should be 1 (mono), got: %d", channels)
-	}
+	assert.Equal(t, uint16(1), channels, "WAV channels should be 1 (mono)")
 
 	// Check sample rate (should be 48000)
 	sampleRate := binary.LittleEndian.Uint32(header[24:28])
-	if sampleRate != 48000 {
-		t.Errorf("WAV sample rate should be 48000, got: %d", sampleRate)
-	}
+	assert.Equal(t, uint32(48000), sampleRate, "WAV sample rate should be 48000")
 
 	// Check bit depth (should be 16)
 	bitDepth := binary.LittleEndian.Uint16(header[34:36])
-	if bitDepth != 16 {
-		t.Errorf("WAV bit depth should be 16, got: %d", bitDepth)
-	}
+	assert.Equal(t, uint16(16), bitDepth, "WAV bit depth should be 16")
 
 	// Check data chunk
-	if string(header[36:40]) != "data" {
-		t.Errorf("WAV header missing data chunk, got: %s", string(header[36:40]))
-	}
+	assert.Equal(t, "data", string(header[36:40]), "WAV header missing data chunk")
 
 	// Check data size (should match input size)
 	dataSize := binary.LittleEndian.Uint32(header[40:44])
-	if int(dataSize) != len(pcmData) {
-		t.Errorf("WAV data size should be %d, got: %d", len(pcmData), dataSize)
-	}
+	assert.Equal(t, len(pcmData), int(dataSize), "WAV data size mismatch")
 }
 
 func TestEncodePCMtoWAV_SmallInput(t *testing.T) {
@@ -127,22 +95,15 @@ func TestEncodePCMtoWAV_SmallInput(t *testing.T) {
 	ctx := context.Background()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, smallData)
 
-	if err != nil {
-		t.Errorf("EncodePCMtoWAVWithContext failed with small input: %v", err)
-		return
-	}
+	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with small input")
 
 	// The WAV file should still be valid, just with a very small data chunk
 	wavData, err := io.ReadAll(wavBuffer)
-	if err != nil {
-		t.Fatalf("Failed to read WAV data: %v", err)
-	}
+	require.NoError(t, err, "Failed to read WAV data")
 
 	// Expected size: 44 byte header + 4 bytes of data
 	expectedSize := 44 + 4
-	if len(wavData) != expectedSize {
-		t.Errorf("Expected WAV file size to be %d bytes, got %d bytes", expectedSize, len(wavData))
-	}
+	assert.Len(t, wavData, expectedSize, "WAV file size mismatch")
 }
 
 func TestEncodePCMtoWAV_RecreateOriginalPCM(t *testing.T) {
@@ -159,32 +120,17 @@ func TestEncodePCMtoWAV_RecreateOriginalPCM(t *testing.T) {
 	// Encode to WAV
 	ctx := context.Background()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
-	if err != nil {
-		t.Fatalf("EncodePCMtoWAVWithContext failed: %v", err)
-	}
+	require.NoError(t, err, "EncodePCMtoWAVWithContext failed")
 
 	// Read the WAV file data
 	wavData, err := io.ReadAll(wavBuffer)
-	if err != nil {
-		t.Fatalf("Failed to read WAV data: %v", err)
-	}
+	require.NoError(t, err, "Failed to read WAV data")
 
 	// Extract just the PCM portion (skip 44 byte header)
 	extractedPCM := wavData[44:]
 
 	// Verify the extracted PCM matches the original
-	if !bytes.Equal(extractedPCM, pcmData) {
-		t.Error("Extracted PCM data does not match the original PCM data")
-
-		// Find the first mismatch for better diagnostics
-		for i := 0; i < len(pcmData) && i < len(extractedPCM); i++ {
-			if pcmData[i] != extractedPCM[i] {
-				t.Errorf("First mismatch at byte %d: original=0x%02x, extracted=0x%02x",
-					i, pcmData[i], extractedPCM[i])
-				break
-			}
-		}
-	}
+	assert.Equal(t, pcmData, extractedPCM, "Extracted PCM data does not match the original PCM data")
 }
 
 func TestEncodePCMtoWAV_LargeInput(t *testing.T) {
@@ -202,21 +148,14 @@ func TestEncodePCMtoWAV_LargeInput(t *testing.T) {
 
 	ctx := context.Background()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, largeData)
-	if err != nil {
-		t.Errorf("EncodePCMtoWAVWithContext failed with large input: %v", err)
-		return
-	}
+	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with large input")
 
 	// Check that the returned buffer size is correct (header + data)
 	wavData, err := io.ReadAll(wavBuffer)
-	if err != nil {
-		t.Fatalf("Failed to read WAV data: %v", err)
-	}
+	require.NoError(t, err, "Failed to read WAV data")
 
 	expectedSize := 44 + len(largeData) // 44 byte header + PCM data
-	if len(wavData) != expectedSize {
-		t.Errorf("Expected WAV size to be %d bytes, got %d bytes", expectedSize, len(wavData))
-	}
+	assert.Len(t, wavData, expectedSize, "WAV size mismatch")
 }
 
 func TestContextTimeout(t *testing.T) {
@@ -233,12 +172,8 @@ func TestContextTimeout(t *testing.T) {
 
 	// This should fail due to context cancellation
 	_, err := myaudio.EncodePCMtoWAVWithContext(ctx, largeData)
-	if err == nil {
-		t.Error("Expected context timeout error, got nil")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("Expected context.DeadlineExceeded error, got: %v", err)
-	}
+	require.Error(t, err, "Expected context timeout error")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "Expected context.DeadlineExceeded error")
 }
 
 func TestEncodeFlacUsingFFmpeg(t *testing.T) {
@@ -279,26 +214,15 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 	// Pass a background context since this test doesn't need timeout control itself
 	ctx := context.Background()
 	flacBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForTest, settings)
-	if err != nil {
-		t.Errorf("encodeFlacUsingFFmpeg failed with valid input: %v", err)
-		return
-	}
-
-	// Basic validation
-	if flacBuffer == nil {
-		t.Fatal("encodeFlacUsingFFmpeg returned nil buffer")
-	}
+	require.NoError(t, err, "encodeFlacUsingFFmpeg failed with valid input")
+	require.NotNil(t, flacBuffer, "encodeFlacUsingFFmpeg returned nil buffer")
 
 	// Validate FLAC header (just check signature bytes)
 	flacBytes := flacBuffer.Bytes()
-	if len(flacBytes) < 4 {
-		t.Fatal("FLAC buffer too small, need at least 4 bytes")
-	}
+	require.GreaterOrEqual(t, len(flacBytes), 4, "FLAC buffer too small, need at least 4 bytes")
 
 	// Check FLAC signature (should start with "fLaC")
-	if string(flacBytes[0:4]) != "fLaC" {
-		t.Errorf("FLAC signature not found, got: %v", flacBytes[0:4])
-	}
+	assert.Equal(t, "fLaC", string(flacBytes[0:4]), "FLAC signature not found")
 
 	// The FLAC data should be smaller than the raw PCM (compression)
 	if flacBuffer.Len() >= len(pcmData) {

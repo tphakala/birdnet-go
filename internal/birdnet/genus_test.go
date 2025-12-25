@@ -1,9 +1,10 @@
 package birdnet
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -14,39 +15,18 @@ func TestLoadTaxonomyDatabase(t *testing.T) {
 	t.Attr("category", "loader")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
-
-	if db == nil {
-		t.Fatal("Expected non-nil database")
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
+	require.NotNil(t, db, "Expected non-nil database")
 
 	// Verify basic structure
-	if len(db.Genera) == 0 {
-		t.Error("Expected non-empty genera map")
-	}
-
-	if len(db.Families) == 0 {
-		t.Error("Expected non-empty families map")
-	}
-
-	if len(db.SpeciesIndex) == 0 {
-		t.Error("Expected non-empty species index")
-	}
+	assert.NotEmpty(t, db.Genera, "Expected non-empty genera map")
+	assert.NotEmpty(t, db.Families, "Expected non-empty families map")
+	assert.NotEmpty(t, db.SpeciesIndex, "Expected non-empty species index")
 
 	// Verify metadata
-	if db.Version == "" {
-		t.Error("Expected version to be set")
-	}
-
-	if db.Source == "" {
-		t.Error("Expected source to be set")
-	}
-
-	if db.Attribution == "" {
-		t.Error("Expected attribution to be set")
-	}
+	assert.NotEmpty(t, db.Version, "Expected version to be set")
+	assert.NotEmpty(t, db.Source, "Expected source to be set")
+	assert.NotEmpty(t, db.Attribution, "Expected attribution to be set")
 
 	t.Logf("Loaded taxonomy database: %d genera, %d families, %d species",
 		len(db.Genera), len(db.Families), len(db.SpeciesIndex))
@@ -59,9 +39,7 @@ func TestGetGenusByScientificName(t *testing.T) {
 	t.Attr("category", "lookup")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tests := []struct {
 		name           string
@@ -120,42 +98,21 @@ func TestGetGenusByScientificName(t *testing.T) {
 			genusName, metadata, err := db.GetGenusByScientificName(tt.scientificName)
 
 			if tt.wantError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				require.Error(t, err, "Expected error but got none")
 				// Verify error is properly categorized
 				var enhancedErr *errors.EnhancedError
 				if errors.As(err, &enhancedErr) {
-					if enhancedErr.Category != errors.CategoryNotFound {
-						t.Errorf("Expected CategoryNotFound, got %v", enhancedErr.Category)
-					}
+					assert.Equal(t, errors.CategoryNotFound, enhancedErr.Category)
 				}
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if genusName != tt.wantGenus {
-				t.Errorf("Expected genus %q, got %q", tt.wantGenus, genusName)
-			}
-
-			if metadata == nil {
-				t.Fatal("Expected non-nil metadata")
-			}
-
-			if metadata.Family != tt.wantFamily {
-				t.Errorf("Expected family %q, got %q", tt.wantFamily, metadata.Family)
-			}
-
-			if metadata.Order != tt.wantOrder {
-				t.Errorf("Expected order %q, got %q", tt.wantOrder, metadata.Order)
-			}
-
-			if len(metadata.Species) == 0 {
-				t.Error("Expected non-empty species list")
-			}
+			require.NoError(t, err, "Unexpected error")
+			assert.Equal(t, tt.wantGenus, genusName)
+			require.NotNil(t, metadata, "Expected non-nil metadata")
+			assert.Equal(t, tt.wantFamily, metadata.Family)
+			assert.Equal(t, tt.wantOrder, metadata.Order)
+			assert.NotEmpty(t, metadata.Species, "Expected non-empty species list")
 		})
 	}
 }
@@ -167,9 +124,7 @@ func TestGetAllSpeciesInGenus(t *testing.T) {
 	t.Attr("category", "query")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tests := []struct {
 		name      string
@@ -207,25 +162,16 @@ func TestGetAllSpeciesInGenus(t *testing.T) {
 			species, err := db.GetAllSpeciesInGenus(tt.genus)
 
 			if tt.wantError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				assert.Error(t, err, "Expected error but got none")
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if len(species) < tt.minCount {
-				t.Errorf("Expected at least %d species, got %d", tt.minCount, len(species))
-			}
+			require.NoError(t, err, "Unexpected error")
+			assert.GreaterOrEqual(t, len(species), tt.minCount, "Expected at least %d species, got %d", tt.minCount, len(species))
 
 			// Verify all species are properly formatted
 			for _, sp := range species {
-				if !strings.Contains(sp, " ") {
-					t.Errorf("Species name %q doesn't appear to be a proper scientific name", sp)
-				}
+				assert.Contains(t, sp, " ", "Species name %q doesn't appear to be a proper scientific name", sp)
 			}
 
 			t.Logf("Found %d species in genus %s", len(species), tt.genus)
@@ -240,9 +186,7 @@ func TestGetAllSpeciesInFamily(t *testing.T) {
 	t.Attr("category", "query")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tests := []struct {
 		name      string
@@ -280,19 +224,12 @@ func TestGetAllSpeciesInFamily(t *testing.T) {
 			species, err := db.GetAllSpeciesInFamily(tt.family)
 
 			if tt.wantError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				assert.Error(t, err, "Expected error but got none")
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if len(species) < tt.minCount {
-				t.Errorf("Expected at least %d species, got %d", tt.minCount, len(species))
-			}
+			require.NoError(t, err, "Unexpected error")
+			assert.GreaterOrEqual(t, len(species), tt.minCount, "Expected at least %d species, got %d", tt.minCount, len(species))
 
 			t.Logf("Found %d species in family %s", len(species), tt.family)
 		})
@@ -306,9 +243,7 @@ func TestGetSpeciesTree(t *testing.T) {
 	t.Attr("category", "query")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tests := []struct {
 		name           string
@@ -346,67 +281,29 @@ func TestGetSpeciesTree(t *testing.T) {
 			result, err := db.GetSpeciesTree(tt.scientificName)
 
 			if tt.wantError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				assert.Error(t, err, "Expected error but got none")
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if result == nil {
-				t.Fatal("Expected non-nil result")
-			}
-
-			if result.TaxonomyTree == nil {
-				t.Fatal("Expected non-nil taxonomy tree")
-			}
+			require.NoError(t, err, "Unexpected error")
+			require.NotNil(t, result, "Expected non-nil result")
+			require.NotNil(t, result.TaxonomyTree, "Expected non-nil taxonomy tree")
 
 			tree := result.TaxonomyTree
 
 			// Verify standard bird taxonomy
-			if tree.Kingdom != "Animalia" {
-				t.Errorf("Expected kingdom Animalia, got %q", tree.Kingdom)
-			}
-
-			if tree.Phylum != "Chordata" {
-				t.Errorf("Expected phylum Chordata, got %q", tree.Phylum)
-			}
-
-			if tree.Class != "Aves" {
-				t.Errorf("Expected class Aves, got %q", tree.Class)
-			}
-
-			if tree.Order != tt.wantOrder {
-				t.Errorf("Expected order %q, got %q", tt.wantOrder, tree.Order)
-			}
-
-			if tree.Family != tt.wantFamily {
-				t.Errorf("Expected family %q, got %q", tt.wantFamily, tree.Family)
-			}
-
-			if tree.Genus != tt.wantGenus {
-				t.Errorf("Expected genus %q, got %q", tt.wantGenus, tree.Genus)
-			}
-
-			if tree.Species != tt.scientificName {
-				t.Errorf("Expected species %q, got %q", tt.scientificName, tree.Species)
-			}
+			assert.Equal(t, "Animalia", tree.Kingdom)
+			assert.Equal(t, "Chordata", tree.Phylum)
+			assert.Equal(t, "Aves", tree.Class)
+			assert.Equal(t, tt.wantOrder, tree.Order)
+			assert.Equal(t, tt.wantFamily, tree.Family)
+			assert.Equal(t, tt.wantGenus, tree.Genus)
+			assert.Equal(t, tt.scientificName, tree.Species)
 
 			// Verify related species
-			if len(result.RelatedInGenus) == 0 {
-				t.Error("Expected non-empty related species list")
-			}
-
-			if result.TotalInGenus == 0 {
-				t.Error("Expected non-zero total in genus")
-			}
-
-			if result.TotalInFamily == 0 {
-				t.Error("Expected non-zero total in family")
-			}
+			assert.NotEmpty(t, result.RelatedInGenus, "Expected non-empty related species list")
+			assert.NotZero(t, result.TotalInGenus, "Expected non-zero total in genus")
+			assert.NotZero(t, result.TotalInFamily, "Expected non-zero total in family")
 
 			t.Logf("Species tree: %d species in genus, %d in family",
 				result.TotalInGenus, result.TotalInFamily)
@@ -421,26 +318,14 @@ func TestBuildFamilyTree(t *testing.T) {
 	t.Attr("category", "compatibility")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tree, err := db.BuildFamilyTree("Turdus migratorius")
-	if err != nil {
-		t.Fatalf("Failed to build family tree: %v", err)
-	}
+	require.NoError(t, err, "Failed to build family tree")
+	require.NotNil(t, tree, "Expected non-nil tree")
 
-	if tree == nil {
-		t.Fatal("Expected non-nil tree")
-	}
-
-	if tree.Family != "Turdidae" {
-		t.Errorf("Expected family Turdidae, got %q", tree.Family)
-	}
-
-	if tree.Genus != "Turdus" {
-		t.Errorf("Expected genus Turdus, got %q", tree.Genus)
-	}
+	assert.Equal(t, "Turdidae", tree.Family)
+	assert.Equal(t, "Turdus", tree.Genus)
 }
 
 // TestGetFamilyInfo tests retrieving family information
@@ -450,34 +335,16 @@ func TestGetFamilyInfo(t *testing.T) {
 	t.Attr("category", "query")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	familyInfo, err := db.GetFamilyInfo("strigidae")
-	if err != nil {
-		t.Fatalf("Failed to get family info: %v", err)
-	}
+	require.NoError(t, err, "Failed to get family info")
+	require.NotNil(t, familyInfo, "Expected non-nil family info")
 
-	if familyInfo == nil {
-		t.Fatal("Expected non-nil family info")
-	}
-
-	if familyInfo.FamilyCommon == "" {
-		t.Error("Expected non-empty family common name")
-	}
-
-	if familyInfo.Order == "" {
-		t.Error("Expected non-empty order")
-	}
-
-	if len(familyInfo.Genera) == 0 {
-		t.Error("Expected non-empty genera list")
-	}
-
-	if familyInfo.SpeciesCount == 0 {
-		t.Error("Expected non-zero species count")
-	}
+	assert.NotEmpty(t, familyInfo.FamilyCommon, "Expected non-empty family common name")
+	assert.NotEmpty(t, familyInfo.Order, "Expected non-empty order")
+	assert.NotEmpty(t, familyInfo.Genera, "Expected non-empty genera list")
+	assert.NotZero(t, familyInfo.SpeciesCount, "Expected non-zero species count")
 
 	t.Logf("Family %s: %d genera, %d species",
 		familyInfo.FamilyCommon, len(familyInfo.Genera), familyInfo.SpeciesCount)
@@ -495,9 +362,7 @@ func testSearchHelper(t *testing.T, searchFn func(string) []string, testCases []
 		t.Run(tt.name, func(t *testing.T) {
 			matches := searchFn(tt.pattern)
 
-			if len(matches) < tt.minMatch {
-				t.Errorf("Expected at least %d matches, got %d", tt.minMatch, len(matches))
-			}
+			assert.GreaterOrEqual(t, len(matches), tt.minMatch, "Expected at least %d matches, got %d", tt.minMatch, len(matches))
 
 			t.Logf("Found %d matches for pattern %q", len(matches), tt.pattern)
 		})
@@ -511,9 +376,7 @@ func TestSearchGenus(t *testing.T) {
 	t.Attr("category", "search")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tests := []struct {
 		name     string
@@ -552,9 +415,7 @@ func TestSearchFamily(t *testing.T) {
 	t.Attr("category", "search")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	tests := []struct {
 		name     string
@@ -593,38 +454,28 @@ func TestStats(t *testing.T) {
 	t.Attr("category", "metadata")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	stats := db.Stats()
-
-	if stats == nil {
-		t.Fatal("Expected non-nil stats")
-	}
+	require.NotNil(t, stats, "Expected non-nil stats")
 
 	requiredKeys := []string{"version", "updated_at", "genus_count", "family_count", "species_count", "source"}
 	for _, key := range requiredKeys {
-		if _, exists := stats[key]; !exists {
-			t.Errorf("Expected stats to contain key %q", key)
-		}
+		assert.Contains(t, stats, key, "Expected stats to contain key %q", key)
 	}
 
 	// Verify counts are reasonable
 	genusCount, ok := stats["genus_count"].(int)
-	if !ok || genusCount < 2000 {
-		t.Errorf("Expected genus count >= 2000, got %v", genusCount)
-	}
+	require.True(t, ok, "genus_count should be an int")
+	assert.GreaterOrEqual(t, genusCount, 2000, "Expected genus count >= 2000")
 
 	familyCount, ok := stats["family_count"].(int)
-	if !ok || familyCount < 200 {
-		t.Errorf("Expected family count >= 200, got %v", familyCount)
-	}
+	require.True(t, ok, "family_count should be an int")
+	assert.GreaterOrEqual(t, familyCount, 200, "Expected family count >= 200")
 
 	speciesCount, ok := stats["species_count"].(int)
-	if !ok || speciesCount < 10000 {
-		t.Errorf("Expected species count >= 10000, got %v", speciesCount)
-	}
+	require.True(t, ok, "species_count should be an int")
+	assert.GreaterOrEqual(t, speciesCount, 10000, "Expected species count >= 10000")
 
 	t.Logf("Stats: %d genera, %d families, %d species",
 		genusCount, familyCount, speciesCount)
@@ -636,12 +487,8 @@ func BenchmarkLoadTaxonomyDatabase(b *testing.B) {
 
 	for b.Loop() {
 		db, err := LoadTaxonomyDatabase()
-		if err != nil {
-			b.Fatalf("Failed to load database: %v", err)
-		}
-		if db == nil {
-			b.Fatal("Expected non-nil database")
-		}
+		require.NoError(b, err, "Failed to load database")
+		require.NotNil(b, db, "Expected non-nil database")
 	}
 }
 
@@ -650,15 +497,11 @@ func BenchmarkGetGenusByScientificName(b *testing.B) {
 	b.ReportAllocs()
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	for b.Loop() {
 		_, _, err := db.GetGenusByScientificName("Turdus migratorius")
-		if err != nil {
-			b.Fatalf("Lookup failed: %v", err)
-		}
+		require.NoError(b, err, "Lookup failed")
 	}
 }
 
@@ -667,14 +510,10 @@ func BenchmarkGetSpeciesTree(b *testing.B) {
 	b.ReportAllocs()
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	for b.Loop() {
 		_, err := db.GetSpeciesTree("Turdus migratorius")
-		if err != nil {
-			b.Fatalf("Tree building failed: %v", err)
-		}
+		require.NoError(b, err, "Tree building failed")
 	}
 }

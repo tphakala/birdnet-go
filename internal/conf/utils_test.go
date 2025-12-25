@@ -2,6 +2,8 @@ package conf
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseFfmpegVersion(t *testing.T) {
@@ -88,15 +90,9 @@ libavformat    62.  3.100 / 62.  3.100`,
 		t.Run(tt.name, func(t *testing.T) {
 			gotVersion, gotMajor, gotMinor := ParseFfmpegVersion(tt.output)
 
-			if gotVersion != tt.wantVersion {
-				t.Errorf("ParseFfmpegVersion() version = %v, want %v", gotVersion, tt.wantVersion)
-			}
-			if gotMajor != tt.wantMajor {
-				t.Errorf("ParseFfmpegVersion() major = %v, want %v", gotMajor, tt.wantMajor)
-			}
-			if gotMinor != tt.wantMinor {
-				t.Errorf("ParseFfmpegVersion() minor = %v, want %v", gotMinor, tt.wantMinor)
-			}
+			assert.Equal(t, tt.wantVersion, gotVersion, "version mismatch")
+			assert.Equal(t, tt.wantMajor, gotMajor, "major version mismatch")
+			assert.Equal(t, tt.wantMinor, gotMinor, "minor version mismatch")
 		})
 	}
 }
@@ -112,18 +108,14 @@ func TestGetFfmpegVersion(t *testing.T) {
 
 	// If we got a version, validate it has sensible values
 	// Note: For git builds, major version is derived from libavutil, so it should be valid
-	if major < 3 || major > 10 {
-		t.Errorf("GetFfmpegVersion() major version %d seems out of reasonable range (3-10 expected)", major)
-	}
+	assert.GreaterOrEqual(t, major, 3, "major version should be at least 3")
+	assert.LessOrEqual(t, major, 10, "major version should be at most 10")
 
-	if minor < 0 || minor > 99 {
-		t.Errorf("GetFfmpegVersion() minor version %d seems out of reasonable range (0-99 expected)", minor)
-	}
+	assert.GreaterOrEqual(t, minor, 0, "minor version should be non-negative")
+	assert.LessOrEqual(t, minor, 99, "minor version should be at most 99")
 
 	// Additional validation: if major is 0, something went wrong
-	if major == 0 {
-		t.Errorf("GetFfmpegVersion() failed to detect major version, got: version=%s, major=%d, minor=%d", version, major, minor)
-	}
+	assert.NotEqual(t, 0, major, "failed to detect major version, got: version=%s, major=%d, minor=%d", version, major, minor)
 
 	t.Logf("Detected FFmpeg version: %s (major: %d, minor: %d)", version, major, minor)
 }

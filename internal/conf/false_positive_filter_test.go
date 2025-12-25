@@ -2,6 +2,8 @@ package conf
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFalsePositiveFilterSettings_Validate(t *testing.T) {
@@ -29,12 +31,10 @@ func TestFalsePositiveFilterSettings_Validate(t *testing.T) {
 
 			err := f.Validate()
 
-			if tt.wantError && err == nil {
-				t.Errorf("Validate() expected error for level %d, but got nil", tt.level)
-			}
-
-			if !tt.wantError && err != nil {
-				t.Errorf("Validate() unexpected error for level %d: %v", tt.level, err)
+			if tt.wantError {
+				assert.Error(t, err, "Validate() expected error for level %d", tt.level)
+			} else {
+				assert.NoError(t, err, "Validate() unexpected error for level %d", tt.level)
 			}
 		})
 	}

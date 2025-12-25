@@ -139,7 +139,8 @@ realtime:
 		case int:
 			threshold = float64(v)
 		default:
-			t.Errorf("%s threshold should be numeric, got %T: %v", birdName, thresholdValue, thresholdValue)
+			assert.Fail(t, "threshold type mismatch",
+				"%s threshold should be numeric, got %T: %v", birdName, thresholdValue, thresholdValue)
 			continue
 		}
 
@@ -154,7 +155,8 @@ realtime:
 		case float64:
 			interval = int(v)
 		default:
-			t.Errorf("%s interval should be numeric, got %T: %v", birdName, intervalValue, intervalValue)
+			assert.Fail(t, "interval type mismatch",
+				"%s interval should be numeric, got %T: %v", birdName, intervalValue, intervalValue)
 			continue
 		}
 

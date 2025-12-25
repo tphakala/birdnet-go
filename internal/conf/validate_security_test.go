@@ -1,11 +1,11 @@
 package conf
 
 import (
-	stderrors "errors"
 	"testing"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestValidateSecuritySettings_OAuth tests OAuth-related validation rules
@@ -130,29 +130,11 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 
 			err := validateSecuritySettings(&tt.security)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSecuritySettings() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && err != nil {
-				var enhancedErr *errors.EnhancedError
-				if !stderrors.As(err, &enhancedErr) {
-					t.Errorf("expected EnhancedError type, got %T", err)
-					return
-				}
-
-				if ctx, exists := enhancedErr.Context["validation_type"]; exists {
-					if ctx != tt.errType {
-						t.Errorf("expected validation_type = %s, got %s", tt.errType, ctx)
-					}
-				} else {
-					t.Errorf("expected validation_type context to be set")
-				}
-
-				if enhancedErr.Category != errors.CategoryValidation {
-					t.Errorf("expected error category = %s, got %s", errors.CategoryValidation, enhancedErr.Category)
-				}
+			if tt.wantErr {
+				require.Error(t, err)
+				assertValidationError(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -222,25 +204,11 @@ func TestValidateSecuritySettings_AutoTLS(t *testing.T) {
 
 			err := validateSecuritySettings(&tt.security)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSecuritySettings() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && err != nil {
-				var enhancedErr *errors.EnhancedError
-				if !stderrors.As(err, &enhancedErr) {
-					t.Errorf("expected EnhancedError type, got %T", err)
-					return
-				}
-
-				if ctx, exists := enhancedErr.Context["validation_type"]; exists {
-					if ctx != tt.errType {
-						t.Errorf("expected validation_type = %s, got %s", tt.errType, ctx)
-					}
-				} else {
-					t.Errorf("expected validation_type context to be set")
-				}
+			if tt.wantErr {
+				require.Error(t, err)
+				assertValidationError(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -355,23 +323,11 @@ func TestValidateSecuritySettings_SubnetBypass(t *testing.T) {
 
 			err := validateSecuritySettings(&tt.security)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSecuritySettings() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && err != nil {
-				var enhancedErr *errors.EnhancedError
-				if !stderrors.As(err, &enhancedErr) {
-					t.Errorf("expected EnhancedError type, got %T", err)
-					return
-				}
-
-				if ctx, exists := enhancedErr.Context["validation_type"]; exists {
-					if ctx != tt.errType {
-						t.Errorf("expected validation_type = %s, got %s", tt.errType, ctx)
-					}
-				}
+			if tt.wantErr {
+				require.Error(t, err)
+				assertValidationError(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -418,23 +374,11 @@ func TestValidateSecuritySettings_SessionDuration(t *testing.T) {
 
 			err := validateSecuritySettings(&tt.security)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSecuritySettings() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr && err != nil {
-				var enhancedErr *errors.EnhancedError
-				if !stderrors.As(err, &enhancedErr) {
-					t.Errorf("expected EnhancedError type, got %T", err)
-					return
-				}
-
-				if ctx, exists := enhancedErr.Context["validation_type"]; exists {
-					if ctx != tt.errType {
-						t.Errorf("expected validation_type = %s, got %s", tt.errType, ctx)
-					}
-				}
+			if tt.wantErr {
+				require.Error(t, err)
+				assertValidationError(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -512,8 +456,10 @@ func TestValidateSecuritySettings_EdgeCases(t *testing.T) {
 
 			err := validateSecuritySettings(&tt.security)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSecuritySettings() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper function to create an isolated test registry
@@ -27,58 +30,40 @@ func TestReferenceCountingBasic(t *testing.T) {
 	source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 		Type: SourceTypeRTSP,
 	})
-	if err != nil {
-		t.Fatalf("Failed to register source: %v", err)
-	}
+	require.NoError(t, err, "Failed to register source")
 
 	// Initially no reference count
-	if registry.refCounts[source.ID] != nil {
-		t.Errorf("Expected nil reference count initially, got %v", *registry.refCounts[source.ID])
-	}
+	assert.Nil(t, registry.refCounts[source.ID], "Expected nil reference count initially")
 
 	// Acquire first reference
 	registry.AcquireSourceReference(source.ID)
-	if registry.refCounts[source.ID] == nil || *registry.refCounts[source.ID] != 1 {
-		t.Errorf("Expected reference count 1, got %v", registry.refCounts[source.ID])
-	}
+	require.NotNil(t, registry.refCounts[source.ID])
+	assert.Equal(t, int32(1), *registry.refCounts[source.ID], "Expected reference count 1")
 
 	// Acquire second reference
 	registry.AcquireSourceReference(source.ID)
-	if *registry.refCounts[source.ID] != 2 {
-		t.Errorf("Expected reference count 2, got %v", *registry.refCounts[source.ID])
-	}
+	assert.Equal(t, int32(2), *registry.refCounts[source.ID], "Expected reference count 2")
 
 	// Release one reference - source should still exist
 	err = registry.ReleaseSourceReference(source.ID)
-	if err != nil {
-		t.Errorf("Failed to release reference: %v", err)
-	}
-	if *registry.refCounts[source.ID] != 1 {
-		t.Errorf("Expected reference count 1 after release, got %v", *registry.refCounts[source.ID])
-	}
+	require.NoError(t, err, "Failed to release reference")
+	assert.Equal(t, int32(1), *registry.refCounts[source.ID], "Expected reference count 1 after release")
 
 	// Verify source still exists
 	_, exists := registry.GetSourceByID(source.ID)
-	if !exists {
-		t.Error("Source should still exist with reference count 1")
-	}
+	assert.True(t, exists, "Source should still exist with reference count 1")
 
 	// Release last reference - source should be removed
 	err = registry.ReleaseSourceReference(source.ID)
-	if err != nil {
-		t.Errorf("Failed to release final reference: %v", err)
-	}
+	require.NoError(t, err, "Failed to release final reference")
 
 	// Verify source is removed
 	_, exists = registry.GetSourceByID(source.ID)
-	if exists {
-		t.Error("Source should be removed when reference count reaches 0")
-	}
+	assert.False(t, exists, "Source should be removed when reference count reaches 0")
 
 	// Verify reference count is cleaned up
-	if _, hasRefCount := registry.refCounts[source.ID]; hasRefCount {
-		t.Error("Reference count entry should be removed when source is removed")
-	}
+	_, hasRefCount := registry.refCounts[source.ID]
+	assert.False(t, hasRefCount, "Reference count entry should be removed when source is removed")
 }
 
 // TestReferenceCountingWithoutAcquire tests releasing without acquiring
@@ -89,21 +74,15 @@ func TestReferenceCountingWithoutAcquire(t *testing.T) {
 	source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 		Type: SourceTypeRTSP,
 	})
-	if err != nil {
-		t.Fatalf("Failed to register source: %v", err)
-	}
+	require.NoError(t, err, "Failed to register source")
 
 	// Release without acquire - should remove source immediately
 	err = registry.ReleaseSourceReference(source.ID)
-	if err != nil {
-		t.Errorf("Failed to release reference: %v", err)
-	}
+	require.NoError(t, err, "Failed to release reference")
 
 	// Source should be removed
 	_, exists := registry.GetSourceByID(source.ID)
-	if exists {
-		t.Error("Source should be removed when released without prior acquire")
-	}
+	assert.False(t, exists, "Source should be removed when released without prior acquire")
 }
 
 // TestReleaseNonExistentSource tests releasing a source that doesn't exist
@@ -112,12 +91,8 @@ func TestReleaseNonExistentSource(t *testing.T) {
 
 	// Try to release non-existent source
 	err := registry.ReleaseSourceReference("non_existent_id")
-	if err == nil {
-		t.Error("Expected error when releasing non-existent source")
-	}
-	if err != nil && err.Error() != "source not found: non_existent_id" {
-		t.Errorf("Unexpected error message: %v", err)
-	}
+	require.Error(t, err, "Expected error when releasing non-existent source")
+	assert.Equal(t, "source not found: non_existent_id", err.Error(), "Unexpected error message")
 }
 
 // TestAcquireNonExistentSource tests acquiring reference for non-existent source
@@ -128,9 +103,8 @@ func TestAcquireNonExistentSource(t *testing.T) {
 	registry.AcquireSourceReference("non_existent_id")
 
 	// Verify no reference count was created
-	if _, exists := registry.refCounts["non_existent_id"]; exists {
-		t.Error("Reference count should not be created for non-existent source")
-	}
+	_, exists := registry.refCounts["non_existent_id"]
+	assert.False(t, exists, "Reference count should not be created for non-existent source")
 }
 
 // TestRemoveSourceIfUnused tests the atomic remove-if-unused operation
@@ -141,9 +115,7 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 		source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 			Type: SourceTypeRTSP,
 		})
-		if err != nil {
-			t.Fatalf("Failed to register source: %v", err)
-		}
+		require.NoError(t, err, "Failed to register source")
 
 		// Mock checker that reports source is in use
 		inUseChecker := func(sourceID string) bool {
@@ -152,18 +124,12 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 
 		result, err := registry.RemoveSourceIfUnused(source.ID, inUseChecker)
 		// When source is in use, expect both error and result code
-		if err == nil {
-			t.Error("Expected error when source is in use")
-		}
-		if result != RemoveSourceInUse {
-			t.Errorf("Expected RemoveSourceInUse, got %v", result)
-		}
+		require.Error(t, err, "Expected error when source is in use")
+		assert.Equal(t, RemoveSourceInUse, result, "Expected RemoveSourceInUse")
 
 		// Source should still exist
 		_, exists := registry.GetSourceByID(source.ID)
-		if !exists {
-			t.Error("Source should not be removed when in use")
-		}
+		assert.True(t, exists, "Source should not be removed when in use")
 	})
 
 	t.Run("source_not_in_use", func(t *testing.T) {
@@ -172,9 +138,7 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 		source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 			Type: SourceTypeRTSP,
 		})
-		if err != nil {
-			t.Fatalf("Failed to register source: %v", err)
-		}
+		require.NoError(t, err, "Failed to register source")
 
 		// Mock checker that reports source is NOT in use
 		notInUseChecker := func(sourceID string) bool {
@@ -182,18 +146,12 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 		}
 
 		result, err := registry.RemoveSourceIfUnused(source.ID, notInUseChecker)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if result != RemoveSourceSuccess {
-			t.Errorf("Expected RemoveSourceSuccess, got %v", result)
-		}
+		require.NoError(t, err, "Unexpected error")
+		assert.Equal(t, RemoveSourceSuccess, result, "Expected RemoveSourceSuccess")
 
 		// Source should be removed
 		_, exists := registry.GetSourceByID(source.ID)
-		if exists {
-			t.Error("Source should be removed when not in use")
-		}
+		assert.False(t, exists, "Source should be removed when not in use")
 	})
 
 	t.Run("multiple_checkers", func(t *testing.T) {
@@ -202,9 +160,7 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 		source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 			Type: SourceTypeRTSP,
 		})
-		if err != nil {
-			t.Fatalf("Failed to register source: %v", err)
-		}
+		require.NoError(t, err, "Failed to register source")
 
 		// First checker says not in use, second says in use
 		checker1 := func(sourceID string) bool { return false }
@@ -212,18 +168,12 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 
 		result, err := registry.RemoveSourceIfUnused(source.ID, checker1, checker2)
 		// When any checker says in use, expect error
-		if err == nil {
-			t.Error("Expected error when any checker reports in use")
-		}
-		if result != RemoveSourceInUse {
-			t.Errorf("Expected RemoveSourceInUse when any checker reports in use, got %v", result)
-		}
+		require.Error(t, err, "Expected error when any checker reports in use")
+		assert.Equal(t, RemoveSourceInUse, result, "Expected RemoveSourceInUse when any checker reports in use")
 
 		// Source should still exist
 		_, exists := registry.GetSourceByID(source.ID)
-		if !exists {
-			t.Error("Source should not be removed when any checker reports in use")
-		}
+		assert.True(t, exists, "Source should not be removed when any checker reports in use")
 	})
 
 	t.Run("non_existent_source", func(t *testing.T) {
@@ -231,12 +181,8 @@ func TestRemoveSourceIfUnused(t *testing.T) {
 
 		result, err := registry.RemoveSourceIfUnused("non_existent_id")
 		// When source doesn't exist, expect error
-		if err == nil {
-			t.Error("Expected error when source doesn't exist")
-		}
-		if result != RemoveSourceNotFound {
-			t.Errorf("Expected RemoveSourceNotFound, got %v", result)
-		}
+		require.Error(t, err, "Expected error when source doesn't exist")
+		assert.Equal(t, RemoveSourceNotFound, result, "Expected RemoveSourceNotFound")
 	})
 }
 
@@ -308,9 +254,7 @@ func TestReferenceCountingWithMultipleSources(t *testing.T) {
 			fmt.Sprintf("rtsp://cam%d.local/stream", i),
 			SourceConfig{Type: SourceTypeRTSP},
 		)
-		if err != nil {
-			t.Fatalf("Failed to register source %d: %v", i, err)
-		}
+		require.NoError(t, err, "Failed to register source %d", i)
 		sources = append(sources, source)
 	}
 
@@ -324,12 +268,8 @@ func TestReferenceCountingWithMultipleSources(t *testing.T) {
 	// Verify reference counts
 	for i, source := range sources {
 		expectedCount := int32(i + 1) //nolint:gosec // G115: i is a small loop index (0-4)
-		if registry.refCounts[source.ID] == nil {
-			t.Errorf("Source %d: expected reference count %d, got nil", i, expectedCount)
-		} else if *registry.refCounts[source.ID] != expectedCount {
-			t.Errorf("Source %d: expected reference count %d, got %d",
-				i, expectedCount, *registry.refCounts[source.ID])
-		}
+		require.NotNil(t, registry.refCounts[source.ID], "Source %d: expected reference count %d, got nil", i, expectedCount)
+		assert.Equal(t, expectedCount, *registry.refCounts[source.ID], "Source %d: expected reference count %d", i, expectedCount)
 	}
 
 	// Release all references for even-indexed sources
@@ -345,13 +285,9 @@ func TestReferenceCountingWithMultipleSources(t *testing.T) {
 	for i, source := range sources {
 		_, exists := registry.GetSourceByID(source.ID)
 		if i%2 == 0 {
-			if exists {
-				t.Errorf("Source %d should be removed after releasing all references", i)
-			}
+			assert.False(t, exists, "Source %d should be removed after releasing all references", i)
 		} else {
-			if !exists {
-				t.Errorf("Source %d should still exist with references", i)
-			}
+			assert.True(t, exists, "Source %d should still exist with references", i)
 		}
 	}
 }
@@ -363,9 +299,7 @@ func TestRemoveSourceWithReferences(t *testing.T) {
 	source, err := registry.RegisterSource("rtsp://test.local/stream", SourceConfig{
 		Type: SourceTypeRTSP,
 	})
-	if err != nil {
-		t.Fatalf("Failed to register source: %v", err)
-	}
+	require.NoError(t, err, "Failed to register source")
 
 	// Acquire multiple references
 	registry.AcquireSourceReference(source.ID)
@@ -374,20 +308,15 @@ func TestRemoveSourceWithReferences(t *testing.T) {
 
 	// Force remove should work even with references
 	err = registry.RemoveSource(source.ID)
-	if err != nil {
-		t.Errorf("Failed to remove source: %v", err)
-	}
+	require.NoError(t, err, "Failed to remove source")
 
 	// Source should be gone
 	_, exists := registry.GetSourceByID(source.ID)
-	if exists {
-		t.Error("Source should be removed by RemoveSource even with references")
-	}
+	assert.False(t, exists, "Source should be removed by RemoveSource even with references")
 
 	// Reference count should be cleaned up
-	if _, hasRefCount := registry.refCounts[source.ID]; hasRefCount {
-		t.Error("Reference count should be cleaned up after RemoveSource")
-	}
+	_, hasRefCount := registry.refCounts[source.ID]
+	assert.False(t, hasRefCount, "Reference count should be cleaned up after RemoveSource")
 }
 
 // TestReferenceCountingMemoryLeak tests that reference counts don't cause memory leaks
@@ -400,9 +329,7 @@ func TestReferenceCountingMemoryLeak(t *testing.T) {
 			fmt.Sprintf("rtsp://test%d.local/stream", i),
 			SourceConfig{Type: SourceTypeRTSP},
 		)
-		if err != nil {
-			t.Fatalf("Failed to register source: %v", err)
-		}
+		require.NoError(t, err, "Failed to register source")
 
 		// Acquire and release references
 		registry.AcquireSourceReference(source.ID)
@@ -412,19 +339,13 @@ func TestReferenceCountingMemoryLeak(t *testing.T) {
 	}
 
 	// All sources should be removed
-	if len(registry.sources) != 0 {
-		t.Errorf("Expected 0 sources after cleanup, got %d", len(registry.sources))
-	}
+	assert.Empty(t, registry.sources, "Expected 0 sources after cleanup")
 
 	// All reference counts should be cleaned up
-	if len(registry.refCounts) != 0 {
-		t.Errorf("Expected 0 reference counts after cleanup, got %d", len(registry.refCounts))
-	}
+	assert.Empty(t, registry.refCounts, "Expected 0 reference counts after cleanup")
 
 	// Connection map should be empty
-	if len(registry.connectionMap) != 0 {
-		t.Errorf("Expected 0 connection mappings after cleanup, got %d", len(registry.connectionMap))
-	}
+	assert.Empty(t, registry.connectionMap, "Expected 0 connection mappings after cleanup")
 }
 
 // TestDynamicSourceLifecycle simulates real-world source add/remove operations
@@ -451,9 +372,7 @@ func TestDynamicSourceLifecycle(t *testing.T) {
 		source, err := registry.RegisterSource(conn, SourceConfig{
 			Type: sourceType,
 		})
-		if err != nil {
-			t.Fatalf("Failed to register %s: %v", conn, err)
-		}
+		require.NoError(t, err, "Failed to register %s", conn)
 		sourceIDs[conn] = source.ID
 
 		// Simulate buffer allocation (acquire reference)
@@ -461,37 +380,28 @@ func TestDynamicSourceLifecycle(t *testing.T) {
 	}
 
 	// Verify all sources exist
-	if len(registry.sources) != 3 {
-		t.Errorf("Expected 3 sources, got %d", len(registry.sources))
-	}
+	assert.Len(t, registry.sources, 3, "Expected 3 sources")
 
 	// Phase 2: User removes one camera, adds another
 	// Remove cam1
 	cam1ID := sourceIDs["rtsp://cam1.local/stream"]
 	err := registry.ReleaseSourceReference(cam1ID)
-	if err != nil {
-		t.Errorf("Failed to release cam1: %v", err)
-	}
+	require.NoError(t, err, "Failed to release cam1")
 
 	// Add cam3
 	source, err := registry.RegisterSource("rtsp://cam3.local/stream", SourceConfig{
 		Type: SourceTypeRTSP,
 	})
-	if err != nil {
-		t.Fatalf("Failed to register cam3: %v", err)
-	}
+	require.NoError(t, err, "Failed to register cam3")
 	sourceIDs["rtsp://cam3.local/stream"] = source.ID
 	registry.AcquireSourceReference(source.ID)
 
 	// Should still have 3 sources (cam1 removed, cam3 added)
-	if len(registry.sources) != 3 {
-		t.Errorf("After swap, expected 3 sources, got %d", len(registry.sources))
-	}
+	assert.Len(t, registry.sources, 3, "After swap, expected 3 sources")
 
 	// Verify cam1 is gone
-	if _, exists := registry.GetSourceByID(cam1ID); exists {
-		t.Error("cam1 should be removed")
-	}
+	_, exists := registry.GetSourceByID(cam1ID)
+	assert.False(t, exists, "cam1 should be removed")
 
 	// Phase 3: Simulate source failure and recovery
 	// Cam2 fails but we keep the reference (might reconnect)
@@ -508,14 +418,11 @@ func TestDynamicSourceLifecycle(t *testing.T) {
 		return id == cam2ID // Simulate buffer still using cam2
 	}
 	result, _ := registry.RemoveSourceIfUnused(cam2ID, mockChecker)
-	if result != RemoveSourceInUse {
-		t.Errorf("Expected RemoveSourceInUse for cam2, got %v", result)
-	}
+	assert.Equal(t, RemoveSourceInUse, result, "Expected RemoveSourceInUse for cam2")
 
 	// Verify cam2 still exists
-	if _, exists := registry.GetSourceByID(cam2ID); !exists {
-		t.Error("cam2 should still exist when buffer reports in use")
-	}
+	_, exists = registry.GetSourceByID(cam2ID)
+	assert.True(t, exists, "cam2 should still exist when buffer reports in use")
 
 	// Phase 4: Clean shutdown - release all references
 	for _, id := range sourceIDs {
@@ -525,13 +432,13 @@ func TestDynamicSourceLifecycle(t *testing.T) {
 	// Verify cleanup
 	remainingSources := len(registry.sources)
 	if remainingSources > 0 {
-		t.Errorf("Expected 0 sources after cleanup, got %d", remainingSources)
 		// Log what's left
 		for id, source := range registry.sources {
 			connStr, _ := source.GetConnectionString()
 			t.Logf("Remaining source: %s -> %s", id, connStr)
 		}
 	}
+	assert.Equal(t, 0, remainingSources, "Expected 0 sources after cleanup")
 }
 
 // BenchmarkReferenceOperations benchmarks reference counting operations
