@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"html/template"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -19,28 +20,34 @@ type SPAHandler struct {
 	settings    *conf.Settings
 	template    *template.Template
 	authService auth.Service
+	assetPaths  *AssetPaths
+	logger      *slog.Logger
 }
 
 // spaTemplateData holds the data passed to the SPA template.
 type spaTemplateData struct {
-	CSRFToken         string
-	SecurityEnabled   bool
-	AccessAllowed     bool
-	Version           string
-	BasicAuthEnabled  bool
-	GoogleAuthEnabled bool
-	GithubAuthEnabled bool
+	CSRFToken            string
+	SecurityEnabled      bool
+	AccessAllowed        bool
+	Version              string
+	BasicAuthEnabled     bool
+	GoogleAuthEnabled    bool
+	GithubAuthEnabled    bool
 	MicrosoftAuthEnabled bool
+	EntryJS              string
+	EntryCSS             []string // Supports multiple CSS files from Vite manifest
 }
 
 // NewSPAHandler creates a new SPA handler.
-func NewSPAHandler(settings *conf.Settings) *SPAHandler {
+func NewSPAHandler(settings *conf.Settings, assetPaths *AssetPaths, logger *slog.Logger) *SPAHandler {
 	// Parse the embedded template
 	tmpl := template.Must(template.ParseFS(spaTemplateFS, "templates/spa.html"))
 
 	return &SPAHandler{
-		settings: settings,
-		template: tmpl,
+		settings:   settings,
+		template:   tmpl,
+		assetPaths: assetPaths,
+		logger:     logger,
 	}
 }
 
@@ -67,6 +74,9 @@ func (h *SPAHandler) ServeApp(c echo.Context) error {
 	// Determine access status using auth service
 	accessAllowed := h.determineAccessAllowed(c, securityEnabled)
 
+	// Get asset paths with fallback for safety
+	entryJS, entryCSS := h.getAssetPaths()
+
 	// Prepare template data
 	data := spaTemplateData{
 		CSRFToken:            csrfToken,
@@ -77,6 +87,8 @@ func (h *SPAHandler) ServeApp(c echo.Context) error {
 		GoogleAuthEnabled:    h.settings.Security.GoogleAuth.Enabled,
 		GithubAuthEnabled:    h.settings.Security.GithubAuth.Enabled,
 		MicrosoftAuthEnabled: h.settings.Security.MicrosoftAuth.Enabled,
+		EntryJS:              entryJS,
+		EntryCSS:             entryCSS,
 	}
 
 	// Render template to buffer
@@ -108,4 +120,17 @@ func (h *SPAHandler) determineAccessAllowed(c echo.Context, securityEnabled bool
 	// Use auth service to check authentication status
 	// This checks: subnet bypass, token auth, and session auth
 	return h.authService.IsAuthenticated(c)
+}
+
+// getAssetPaths returns the JS and CSS entry points from the manifest.
+// Returns empty values if asset paths are not configured (should not happen in production).
+func (h *SPAHandler) getAssetPaths() (entryJS string, entryCSS []string) {
+	if h.assetPaths == nil {
+		if h.logger != nil {
+			h.logger.Error("Asset paths not configured - manifest may not have been loaded")
+		}
+		return "", nil
+	}
+
+	return h.assetPaths.EntryJS, h.assetPaths.EntryCSS
 }

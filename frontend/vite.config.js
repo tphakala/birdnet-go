@@ -77,6 +77,7 @@ export default defineConfig({
     outDir: 'dist',
     chunkSizeWarningLimit: 1000,
     emptyOutDir: true,
+    manifest: true, // Generates .vite/manifest.json for cache busting
     // Watch mode disabled by default for CI/CD compatibility
     // When using --watch flag, chokidar options are applied for reliable file change detection
     watch: process.argv.includes('--watch')
@@ -89,13 +90,13 @@ export default defineConfig({
       : null,
     rollupOptions: {
       output: {
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name].js',
-        assetFileNames: '[name].[ext]',
+        // Content hashes enable proper cache busting with CDNs like Cloudflare
+        entryFileNames: '[name]-[hash].js',
+        chunkFileNames: '[name]-[hash].js',
+        assetFileNames: '[name]-[hash].[ext]',
         manualChunks: {
           vendor: ['svelte'],
           charts: ['chart.js'],
-          ui: [/* UI library chunks */]
         }
       },
     },
