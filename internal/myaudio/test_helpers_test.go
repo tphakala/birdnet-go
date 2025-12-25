@@ -108,10 +108,16 @@ func newTestRegistry() *AudioSourceRegistry {
 type TestStreamResult struct {
 	Stream    *FFmpegStream
 	AudioChan chan UnifiedAudioData
+	closed    bool
 }
 
 // Close cleans up the test stream and channel.
+// Safe to call multiple times.
 func (r *TestStreamResult) Close() {
+	if r.closed {
+		return
+	}
+	r.closed = true
 	if r.Stream != nil {
 		r.Stream.Stop()
 	}

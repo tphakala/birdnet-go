@@ -193,6 +193,8 @@ func TestConcurrentSourceAccess(t *testing.T) {
 }
 
 func TestBackwardCompatibility(t *testing.T) {
+	registry := GetRegistry()
+
 	// Test that GetOrCreateSource works correctly
 	testURL := "rtsp://test.local/stream"
 

@@ -29,9 +29,9 @@ func awaitNotification(t *testing.T, ch <-chan *notification.Notification, timeo
 func checkToastMarking(t *testing.T, notif *notification.Notification) string {
 	t.Helper()
 	isToast, ok := notif.Metadata["isToast"].(bool)
-	assert.True(t, ok && isToast, "Notification should be marked as toast")
+	require.True(t, ok && isToast, "Notification should be marked as toast")
 	toastID, ok := notif.Metadata["toastId"].(string)
-	assert.True(t, ok && toastID != "", "Notification should have toastId in metadata")
+	require.True(t, ok && toastID != "", "Notification should have toastId in metadata")
 	return toastID
 }
 
@@ -55,10 +55,8 @@ func checkSSERequired(t *testing.T, eventData map[string]any) {
 		assert.True(t, exists, "SSE event data missing required field %q", field)
 	}
 	timestamp, ok := eventData["timestamp"].(time.Time)
-	assert.True(t, ok, "SSE event timestamp should be a time.Time")
-	if ok {
-		assert.WithinDuration(t, time.Now(), timestamp, time.Second, "SSE event timestamp should be recent")
-	}
+	require.True(t, ok, "SSE event timestamp should be a time.Time")
+	assert.WithinDuration(t, time.Now(), timestamp, time.Second, "SSE event timestamp should be recent")
 }
 
 // TestToastIntegrationFlow tests the complete flow:

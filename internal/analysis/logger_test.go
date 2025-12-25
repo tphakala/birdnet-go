@@ -3,6 +3,7 @@ package analysis
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -102,18 +103,24 @@ func TestLoggerLevels(t *testing.T) {
 // TestConcurrentLoggerAccess tests thread-safe access
 func TestConcurrentLoggerAccess(t *testing.T) {
 	// Run multiple goroutines accessing the logger
-	done := make(chan struct{}, 10)
+	// Use error channel to safely collect results (testing.T is not goroutine-safe)
+	errCh := make(chan error, 10)
 
 	for i := range 10 {
 		go func(id int) {
 			l := GetLogger()
-			assert.NotNil(t, l, "GetLogger returned nil in goroutine")
-			done <- struct{}{}
+			if l == nil {
+				errCh <- fmt.Errorf("GetLogger returned nil in goroutine %d", id)
+			} else {
+				errCh <- nil
+			}
 		}(i)
 	}
 
-	// Wait for all goroutines
+	// Collect results from all goroutines
 	for range 10 {
-		<-done
+		if err := <-errCh; err != nil {
+			t.Error(err)
+		}
 	}
 }

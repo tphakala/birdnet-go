@@ -271,11 +271,15 @@ func BenchmarkSearchGenus(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
 	require.NoError(b, err, "Failed to load database")
 
+	// Validate once before timing
+	matches := db.SearchGenus("corv")
+	require.NotEmpty(b, matches, "Expected matches")
+
 	b.ReportAllocs()
+	b.ResetTimer()
 
 	for b.Loop() {
-		matches := db.SearchGenus("corv")
-		assert.NotEmpty(b, matches, "Expected matches")
+		_ = db.SearchGenus("corv")
 	}
 }
 
@@ -284,11 +288,15 @@ func BenchmarkSearchFamily(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
 	require.NoError(b, err, "Failed to load database")
 
+	// Validate once before timing
+	matches := db.SearchFamily("strig")
+	require.NotEmpty(b, matches, "Expected matches")
+
 	b.ReportAllocs()
+	b.ResetTimer()
 
 	for b.Loop() {
-		matches := db.SearchFamily("strig")
-		assert.NotEmpty(b, matches, "Expected matches")
+		_ = db.SearchFamily("strig")
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -161,7 +162,7 @@ func TestDescriptiveErrorMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := handleNetworkError(tt.baseErr, "https://test.com", 30*time.Second, tt.operation)
 
-			assert.NotNil(t, result, "Expected non-nil error")
+			require.NotNil(t, result, "Expected non-nil error")
 			assert.Contains(t, result.Error(), tt.expectedPrefix)
 		})
 	}
