@@ -55,9 +55,9 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/ui/assets/apple-touch-icon.png">
   <link rel="shortcut icon" href="/ui/assets/favicon.ico">
   <meta name="csrf-token" content="{{.CSRFToken}}">
-  <script type="module" crossorigin src="/ui/assets/index.js"></script>
-  <link rel="modulepreload" crossorigin href="/ui/assets/vendor.js">
-  <link rel="stylesheet" crossorigin href="/ui/assets/index.css">
+  <script type="module" crossorigin src="/ui/assets/{{.EntryJS}}"></script>
+  {{range .EntryCSS}}<link rel="stylesheet" crossorigin href="/ui/assets/{{.}}">
+  {{end}}
 </head>
 <body>
   <div id="app"></div>

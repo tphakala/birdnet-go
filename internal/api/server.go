@@ -29,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/frontend"
 )
 
 // AssetsFs holds the embedded assets filesystem (sounds, images, etc.).
@@ -309,8 +310,14 @@ func (s *Server) setupRoutes() error {
 	s.staticServer = NewStaticFileServer(s.slogger, s.assetsFS)
 	s.staticServer.RegisterRoutes(s.echo)
 
+	// Load Vite manifest for asset paths (enables cache busting)
+	assetPaths, err := s.loadViteManifest()
+	if err != nil {
+		return fmt.Errorf("failed to load Vite manifest: %w", err)
+	}
+
 	// Initialize SPA handler (routes registered after API controller)
-	s.spaHandler = NewSPAHandler(s.settings)
+	s.spaHandler = NewSPAHandler(s.settings, assetPaths, s.slogger)
 	// Set auth service for SPA handler to determine access status
 	if s.authService != nil {
 		s.spaHandler.SetAuthService(s.authService)
@@ -374,6 +381,20 @@ func (s *Server) healthCheck(c echo.Context) error {
 		"uptime_seconds": uptime.Seconds(),
 		"timestamp":      time.Now().Format(time.RFC3339),
 	})
+}
+
+// loadViteManifest loads the Vite manifest from either disk (dev mode) or embedded FS (production).
+// The manifest contains the hashed filenames for cache busting.
+func (s *Server) loadViteManifest() (*AssetPaths, error) {
+	// Check if we're in dev mode (static server detects this)
+	if devPath := s.staticServer.DevModePath(); devPath != "" {
+		s.slogger.Debug("Loading Vite manifest from disk", "path", devPath)
+		return LoadManifestFromDisk(devPath)
+	}
+
+	// Production mode: load from embedded filesystem
+	s.slogger.Debug("Loading Vite manifest from embedded filesystem")
+	return LoadManifestFromFS(frontend.DistFS)
 }
 
 // Start begins serving HTTP requests in a background goroutine.

@@ -44,9 +44,8 @@ func (sfs *StaticFileServer) initDevMode() {
 		// Check relative to current working directory
 		distPath := filepath.Join("frontend", "dist")
 
-		// Check if the directory exists and contains index.js (main entry point)
-		indexPath := filepath.Join(distPath, "index.js")
-		if info, err := os.Stat(indexPath); err == nil && !info.IsDir() {
+		// Check if the directory contains the Vite manifest (indicates a valid build)
+		if ManifestExistsOnDisk(distPath) {
 			sfs.devMode = true
 			sfs.devModePath = distPath
 			if sfs.logger != nil {
@@ -68,6 +67,16 @@ func (sfs *StaticFileServer) initDevMode() {
 func (sfs *StaticFileServer) IsDevMode() bool {
 	sfs.initDevMode()
 	return sfs.devMode
+}
+
+// DevModePath returns the path to the dev mode dist directory.
+// Returns empty string if not in dev mode.
+func (sfs *StaticFileServer) DevModePath() string {
+	sfs.initDevMode()
+	if sfs.devMode {
+		return sfs.devModePath
+	}
+	return ""
 }
 
 // RegisterRoutes registers the static file serving routes on the Echo instance.
