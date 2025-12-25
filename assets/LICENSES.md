@@ -109,7 +109,7 @@ Source: Apache-2.0
 
 ### github.com/go-sql-driver/mysql
 
-License: https://github.com/go-sql-driver/mysql/blob/v1.8.1/LICENSE
+License: https://github.com/go-sql-driver/mysql/blob/v1.9.3/LICENSE
 Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
@@ -139,7 +139,7 @@ Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
 
-License: https://github.com/gorilla/mux/blob/v1.6.2/LICENSE
+License: https://github.com/gorilla/mux/blob/v1.8.1/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/securecookie
@@ -279,12 +279,12 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.66.1/LICENSE
+License: https://github.com/prometheus/common/blob/v0.67.4/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs
 
-License: https://github.com/prometheus/procfs/blob/v0.16.1/LICENSE
+License: https://github.com/prometheus/procfs/blob/v0.19.2/LICENSE
 Source: Apache-2.0
 
 ### github.com/sagikazarmark/locafero
@@ -334,7 +334,7 @@ Source: MIT
 
 ### github.com/stretchr/objx
 
-License: https://github.com/stretchr/objx/blob/v0.5.2/LICENSE
+License: https://github.com/stretchr/objx/blob/v0.5.3/LICENSE
 Source: MIT
 
 ### github.com/stretchr/testify
@@ -349,12 +349,12 @@ Source: MIT
 
 ### github.com/tklauser/go-sysconf
 
-License: https://github.com/tklauser/go-sysconf/blob/v0.3.12/LICENSE
+License: https://github.com/tklauser/go-sysconf/blob/v0.3.16/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/tklauser/numcpus
 
-License: https://github.com/tklauser/numcpus/blob/v0.6.1/LICENSE
+License: https://github.com/tklauser/numcpus/blob/v0.11.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/tphakala/birdnet-go/cmd
@@ -434,7 +434,7 @@ Source: MIT
 
 ### go.yaml.in/yaml/v2
 
-License: https://github.com/yaml/go-yaml/blob/v2.4.2/LICENSE
+License: https://github.com/yaml/go-yaml/blob/v2.4.3/LICENSE
 Source: Apache-2.0
 
 ### go.yaml.in/yaml/v3
@@ -526,3 +526,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
 Source: MIT
+
