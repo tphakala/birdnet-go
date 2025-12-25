@@ -135,7 +135,7 @@ type Interface interface {
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
 	UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error
 	BatchSaveDynamicThresholds(thresholds []DynamicThreshold) error
-	DeleteAllDynamicThresholds() (int64, error)                                    // BG-59: Reset all thresholds
+	DeleteAllDynamicThresholds() (int64, error) // BG-59: Reset all thresholds
 	GetDynamicThresholdStats() (totalCount, activeCount, atMinimumCount int64, levelDistribution map[int]int64, err error)
 	// Threshold Event methods (BG-59: Threshold change history)
 	SaveThresholdEvent(event *ThresholdEvent) error
@@ -1847,26 +1847,25 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		}
 
 		sunTimes := weekData.sunTimes
-		sunriseStr := sunTimes.Sunrise.Format("15:04:05")
-		sunsetStr := sunTimes.Sunset.Format("15:04:05")
+
+		// Calculate all time boundaries once before the switch statement
+		// This reduces code duplication and makes maintenance easier
+		sunriseStart := sunTimes.Sunrise.Add(-window).Format("15:04:05")
+		sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
+		sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
+		sunsetEnd := sunTimes.Sunset.Add(window).Format("15:04:05")
 
 		var condition *gorm.DB
 		switch filters.TimeOfDay {
 		case TimeOfDayDay:
-			// Exclude the sunrise and sunset windows (30 minutes before and after)
-			sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
-			sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
 			// Time should be after sunrise window but before sunset window
 			condition = db.Where("notes.date = ? AND notes.time > ? AND notes.time < ?", dateStr, sunriseEnd, sunsetStart)
 		case TimeOfDayNight:
-			condition = db.Where("notes.date = ? AND (notes.time < ? OR notes.time > ?)", dateStr, sunriseStr, sunsetStr)
+			// Time should be before sunrise window or after sunset window
+			condition = db.Where("notes.date = ? AND (notes.time < ? OR notes.time > ?)", dateStr, sunriseStart, sunsetEnd)
 		case TimeOfDaySunrise:
-			sunriseStart := sunTimes.Sunrise.Add(-window).Format("15:04:05")
-			sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
 			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunriseStart, sunriseEnd)
 		case TimeOfDaySunset:
-			sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
-			sunsetEnd := sunTimes.Sunset.Add(window).Format("15:04:05")
 			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunsetStart, sunsetEnd)
 		default:
 			// Should not happen due to sanitise, but skip if it does
