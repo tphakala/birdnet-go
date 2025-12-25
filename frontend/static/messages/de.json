@@ -2401,8 +2401,8 @@
           "getCredentialsLabel": "Zugangsdaten aus dem Azure-Portal abrufen",
           "clientIdLabel": "Client-ID",
           "clientIdHelpText": "Die Anwendungs-ID (Client-ID) aus der Azure-App-Registrierung.",
-          "clientSecretLabel": "Clientgeheimnis",
-          "clientSecretHelpText": "Der Clientgeheimnisswert aus der Azure-App-Registrierung.",
+          "clientSecretLabel": "Client-Geheimnis",
+          "clientSecretHelpText": "Das Client-Geheimnis aus der Azure-App-Registrierung.",
           "userIdLabel": "Benutzer-ID"
         }
       },

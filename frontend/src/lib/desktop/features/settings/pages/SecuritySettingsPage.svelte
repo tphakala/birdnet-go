@@ -236,32 +236,27 @@
   }
 
   // Microsoft OAuth update handlers
-  function updateMicrosoftAuthEnabled(enabled: boolean) {
+  function updateMicrosoftAuth(update: Partial<typeof settings.microsoftAuth>) {
     settingsActions.updateSection('security', {
       ...settings,
-      microsoftAuth: { ...settings.microsoftAuth, enabled },
+      microsoftAuth: { ...settings.microsoftAuth, ...update },
     });
+  }
+
+  function updateMicrosoftAuthEnabled(enabled: boolean) {
+    updateMicrosoftAuth({ enabled });
   }
 
   function updateMicrosoftClientId(clientId: string) {
-    settingsActions.updateSection('security', {
-      ...settings,
-      microsoftAuth: { ...settings.microsoftAuth, clientId },
-    });
+    updateMicrosoftAuth({ clientId });
   }
 
   function updateMicrosoftClientSecret(clientSecret: string) {
-    settingsActions.updateSection('security', {
-      ...settings,
-      microsoftAuth: { ...settings.microsoftAuth, clientSecret },
-    });
+    updateMicrosoftAuth({ clientSecret });
   }
 
   function updateMicrosoftUserId(userId: string) {
-    settingsActions.updateSection('security', {
-      ...settings,
-      microsoftAuth: { ...settings.microsoftAuth, userId },
-    });
+    updateMicrosoftAuth({ userId });
   }
 
   // Subnet Bypass update handlers
@@ -444,10 +439,12 @@
       originalData={{
         googleAuth: store.originalData.security?.googleAuth,
         githubAuth: store.originalData.security?.githubAuth,
+        microsoftAuth: store.originalData.security?.microsoftAuth,
       }}
       currentData={{
         googleAuth: store.formData.security?.googleAuth,
         githubAuth: store.formData.security?.githubAuth,
+        microsoftAuth: store.formData.security?.microsoftAuth,
       }}
     >
     <div class="space-y-6">
@@ -636,7 +633,7 @@
               <a
                 href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.microsoft.getCredentialsLabel')}
