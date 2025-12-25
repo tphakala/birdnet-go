@@ -2440,6 +2440,7 @@
     "or": "tai",
     "loginWithGoogle": "Kirjaudu Googlella",
     "loginWithGithub": "Kirjaudu GitHubilla",
+    "loginWithMicrosoft": "Kirjaudu sisään Microsoftilla",
     "errors": {
       "loginFailed": "Kirjautuminen epäonnistui. Tarkista salasanasi ja yritä uudelleen.",
       "passwordRequired": "Salasana vaaditaan.",

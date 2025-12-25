@@ -2440,6 +2440,7 @@
     "or": "ou",
     "loginWithGoogle": "Se connecter avec Google",
     "loginWithGithub": "Se connecter avec GitHub",
+    "loginWithMicrosoft": "Se connecter avec Microsoft",
     "errors": {
       "loginFailed": "Échec de la connexion. Veuillez vérifier votre mot de passe et réessayer.",
       "passwordRequired": "Le mot de passe est requis.",

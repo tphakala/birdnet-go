@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
+  import type { AuthConfig } from '../../../app.d';
   import { cn } from '$lib/utils/cn';
   import Header from './DesktopHeader.svelte';
   import Sidebar from './DesktopSidebar.svelte';
@@ -17,6 +18,7 @@
     version?: string;
     children?: Snippet;
     className?: string;
+    authConfig?: AuthConfig;
   }
 
   let {
@@ -27,6 +29,12 @@
     version = 'Development Build',
     children,
     className = '',
+    authConfig = {
+      basicEnabled: true,
+      googleEnabled: false,
+      githubEnabled: false,
+      microsoftEnabled: false,
+    },
   }: Props = $props();
 
   // Drawer state
@@ -138,6 +146,7 @@
     {version}
     currentRoute={`/ui/${currentPage}`}
     onNavigate={handleNavigate}
+    {authConfig}
   />
 
   <!-- Login Modal placeholder -->

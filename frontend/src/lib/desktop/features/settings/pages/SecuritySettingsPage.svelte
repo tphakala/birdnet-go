@@ -389,7 +389,7 @@
       originalData={store.originalData.security?.basicAuth}
       currentData={store.formData.security?.basicAuth}
     >
-      <div class="space-y-4">
+      <form class="space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
         <Checkbox
           checked={settings.basicAuth.enabled}
           label={t('settings.security.basicAuthentication.enableLabel')}
@@ -425,7 +425,7 @@
             </div>
           </div>
         </fieldset>
-      </div>
+      </form>
     </SettingsSection>
   </div>
 {/snippet}
@@ -480,7 +480,7 @@
         />
 
         {#if settings.googleAuth?.enabled}
-          <div class="mt-4 space-y-4">
+          <form class="mt-4 space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
@@ -528,7 +528,7 @@
               disabled={store.isLoading || store.isSaving}
               onchange={updateGoogleUserId}
             />
-          </div>
+          </form>
         {/if}
       </div>
 
@@ -551,7 +551,7 @@
         />
 
         {#if settings.githubAuth?.enabled}
-          <div class="mt-4 space-y-4">
+          <form class="mt-4 space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
@@ -599,7 +599,7 @@
               disabled={store.isLoading || store.isSaving}
               onchange={updateGithubUserId}
             />
-          </div>
+          </form>
         {/if}
       </div>
 
@@ -623,7 +623,7 @@
         />
 
         {#if settings.microsoftAuth?.enabled}
-          <div class="mt-4 space-y-4">
+          <form class="mt-4 space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
@@ -671,7 +671,7 @@
               disabled={store.isLoading || store.isSaving}
               onchange={updateMicrosoftUserId}
             />
-          </div>
+          </form>
         {/if}
       </div>
     </div>

@@ -2440,6 +2440,7 @@
     "or": "oder",
     "loginWithGoogle": "Mit Google anmelden",
     "loginWithGithub": "Mit GitHub anmelden",
+    "loginWithMicrosoft": "Mit Microsoft anmelden",
     "errors": {
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihr Passwort und versuchen Sie es erneut.",
       "passwordRequired": "Passwort ist erforderlich.",

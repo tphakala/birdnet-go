@@ -13,6 +13,8 @@
   import { safeGet, safeArrayAccess, safeElementAccess } from '$lib/utils/security';
   import { extractRelativePath } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import { t } from '$lib/i18n';
+  import type { AuthConfig } from '../../../../app.d';
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
@@ -22,19 +24,7 @@
   const logger = loggers.auth;
 
   // Loading state type for single state management
-  type LoadingState = 'idle' | 'password' | 'google' | 'github';
-
-  interface AuthEndpoints {
-    google?: string;
-    github?: string;
-  }
-
-  interface AuthConfig {
-    basicEnabled: boolean;
-    googleEnabled: boolean;
-    githubEnabled: boolean;
-    endpoints?: AuthEndpoints;
-  }
+  type LoadingState = 'idle' | 'password' | 'google' | 'github' | 'microsoft';
 
   interface Props {
     isOpen: boolean;
@@ -47,7 +37,12 @@
     isOpen = false,
     onClose,
     redirectUrl = '/ui/',
-    authConfig = { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+    authConfig = {
+      basicEnabled: true,
+      googleEnabled: false,
+      githubEnabled: false,
+      microsoftEnabled: false,
+    },
   }: Props = $props();
 
   let password = $state('');
@@ -63,6 +58,7 @@
   let isSubmitting = $derived(loadingState === 'password');
   let googleLoading = $derived(loadingState === 'google');
   let githubLoading = $derived(loadingState === 'github');
+  let microsoftLoading = $derived(loadingState === 'microsoft');
   let isAnyLoading = $derived(loadingState !== 'idle');
 
   // SECURITY: Validate redirect URL to prevent open redirects
@@ -221,12 +217,13 @@
   }
 
   // SECURITY: Validate OAuth endpoints before redirect
-  function handleOAuthLogin(provider: 'google' | 'github') {
+  function handleOAuthLogin(provider: 'google' | 'github' | 'microsoft') {
     // Use clean OAuth routes (without /api/v1 prefix) for consistency
     // Backend supports both /auth/:provider and /api/v1/auth/:provider
     const defaultEndpoints = {
       google: '/auth/google',
       github: '/auth/github',
+      microsoft: '/auth/microsoftonline',
     };
 
     const configuredEndpoints = authConfig.endpoints || {};
@@ -416,11 +413,11 @@
           </div>
         {/if}
 
-        {#if authConfig.basicEnabled && (authConfig.googleEnabled || authConfig.githubEnabled)}
+        {#if authConfig.basicEnabled && (authConfig.googleEnabled || authConfig.githubEnabled || authConfig.microsoftEnabled)}
           <div class="divider">or</div>
         {/if}
 
-        {#if authConfig.googleEnabled || authConfig.githubEnabled}
+        {#if authConfig.googleEnabled || authConfig.githubEnabled || authConfig.microsoftEnabled}
           <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-6 xs:px-16 pb-6">
             {#if authConfig.googleEnabled}
               <button
@@ -428,7 +425,7 @@
                 class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
                 onclick={() => handleOAuthLogin('google')}
                 disabled={isAnyLoading}
-                aria-label="Login with Google"
+                aria-label={t('auth.loginWithGoogle')}
               >
                 {#if googleLoading}
                   <span
@@ -436,7 +433,7 @@
                     aria-hidden="true"
                   ></span>
                 {/if}
-                Login with Google
+                {t('auth.loginWithGoogle')}
               </button>
             {/if}
 
@@ -446,7 +443,7 @@
                 class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
                 onclick={() => handleOAuthLogin('github')}
                 disabled={isAnyLoading}
-                aria-label="Login with GitHub"
+                aria-label={t('auth.loginWithGithub')}
               >
                 {#if githubLoading}
                   <span
@@ -454,7 +451,25 @@
                     aria-hidden="true"
                   ></span>
                 {/if}
-                Login with GitHub
+                {t('auth.loginWithGithub')}
+              </button>
+            {/if}
+
+            {#if authConfig.microsoftEnabled}
+              <button
+                type="button"
+                class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
+                onclick={() => handleOAuthLogin('microsoft')}
+                disabled={isAnyLoading}
+                aria-label={t('auth.loginWithMicrosoft')}
+              >
+                {#if microsoftLoading}
+                  <span
+                    class="loading loading-spinner xs:loading xs:loading-spinner"
+                    aria-hidden="true"
+                  ></span>
+                {/if}
+                {t('auth.loginWithMicrosoft')}
               </button>
             {/if}
           </div>

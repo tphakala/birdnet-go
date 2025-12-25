@@ -23,10 +23,14 @@ type SPAHandler struct {
 
 // spaTemplateData holds the data passed to the SPA template.
 type spaTemplateData struct {
-	CSRFToken       string
-	SecurityEnabled bool
-	AccessAllowed   bool
-	Version         string
+	CSRFToken         string
+	SecurityEnabled   bool
+	AccessAllowed     bool
+	Version           string
+	BasicAuthEnabled  bool
+	GoogleAuthEnabled bool
+	GithubAuthEnabled bool
+	MicrosoftAuthEnabled bool
 }
 
 // NewSPAHandler creates a new SPA handler.
@@ -57,17 +61,22 @@ func (h *SPAHandler) ServeApp(c echo.Context) error {
 	// Determine security state
 	securityEnabled := h.settings.Security.BasicAuth.Enabled ||
 		h.settings.Security.GoogleAuth.Enabled ||
-		h.settings.Security.GithubAuth.Enabled
+		h.settings.Security.GithubAuth.Enabled ||
+		h.settings.Security.MicrosoftAuth.Enabled
 
 	// Determine access status using auth service
 	accessAllowed := h.determineAccessAllowed(c, securityEnabled)
 
 	// Prepare template data
 	data := spaTemplateData{
-		CSRFToken:       csrfToken,
-		SecurityEnabled: securityEnabled,
-		AccessAllowed:   accessAllowed,
-		Version:         h.settings.Version,
+		CSRFToken:            csrfToken,
+		SecurityEnabled:      securityEnabled,
+		AccessAllowed:        accessAllowed,
+		Version:              h.settings.Version,
+		BasicAuthEnabled:     h.settings.Security.BasicAuth.Enabled,
+		GoogleAuthEnabled:    h.settings.Security.GoogleAuth.Enabled,
+		GithubAuthEnabled:    h.settings.Security.GithubAuth.Enabled,
+		MicrosoftAuthEnabled: h.settings.Security.MicrosoftAuth.Enabled,
 	}
 
 	// Render template to buffer

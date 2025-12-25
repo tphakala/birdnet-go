@@ -3,7 +3,7 @@
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
-  import type { BirdnetConfig } from './app.d.ts';
+  import type { AuthConfig, BirdnetConfig } from './app.d';
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
@@ -41,6 +41,12 @@
   let securityEnabled = $state<boolean>(false);
   let accessAllowed = $state<boolean>(true);
   let version = $state<string>('Development Build');
+  let authConfig = $state<AuthConfig>({
+    basicEnabled: true,
+    googleEnabled: false,
+    githubEnabled: false,
+    microsoftEnabled: false,
+  });
 
   // Route configuration for better maintainability
   interface RouteConfig {
@@ -338,6 +344,16 @@
     accessAllowed = config?.security?.accessAllowed !== false; // Default to true unless explicitly false
     version = config?.version || 'Development Build';
 
+    // Get auth configuration from server
+    if (config?.security?.authConfig) {
+      authConfig = {
+        basicEnabled: config.security.authConfig.basicEnabled ?? true,
+        googleEnabled: config.security.authConfig.googleEnabled ?? false,
+        githubEnabled: config.security.authConfig.githubEnabled ?? false,
+        microsoftEnabled: config.security.authConfig.microsoftEnabled ?? false,
+      };
+    }
+
     // Ensure SSE notifications manager is connected (it auto-connects on import)
     // This prevents tree-shaking and ensures toast messages work properly
     if (sseNotifications) {
@@ -357,7 +373,14 @@
   {/if}
 {/snippet}
 
-<RootLayout title={pageTitle} {currentPage} {securityEnabled} {accessAllowed} {version}>
+<RootLayout
+  title={pageTitle}
+  {currentPage}
+  {securityEnabled}
+  {accessAllowed}
+  {version}
+  {authConfig}
+>
   {#if currentRoute === 'dashboard'}
     <DashboardPage />
   {:else if currentRoute === 'notifications'}
