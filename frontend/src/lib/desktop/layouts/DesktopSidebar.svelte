@@ -102,12 +102,35 @@ Performance Optimizations:
   let analyticsFlyoutPosition = $state({ top: 0, left: 0 });
   let settingsFlyoutPosition = $state({ top: 0, left: 0 });
 
+  // Tooltip state for fixed positioning (escapes overflow containers)
+  let tooltipText = $state('');
+  let tooltipPosition = $state({ top: 0, left: 0 });
+  let tooltipVisible = $state(false);
+
+  // Show tooltip with calculated position
+  function showTooltip(event: MouseEvent, text: string) {
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    tooltipPosition = {
+      top: rect.top + rect.height / 2,
+      left: rect.right + 8, // 8px gap (ml-2)
+    };
+    tooltipText = text;
+    tooltipVisible = true;
+  }
+
+  // Hide tooltip
+  function hideTooltip() {
+    tooltipVisible = false;
+  }
+
   // Button refs for position calculation
   let analyticsButtonRef = $state<HTMLButtonElement | null>(null);
   let settingsButtonRef = $state<HTMLButtonElement | null>(null);
 
   // Toggle flyout with position calculation
   function toggleAnalyticsFlyout() {
+    hideTooltip(); // Hide tooltip when opening flyout
     if (!analyticsFlyoutOpen && analyticsButtonRef) {
       const rect = analyticsButtonRef.getBoundingClientRect();
       analyticsFlyoutPosition = {
@@ -120,6 +143,7 @@ Performance Optimizations:
   }
 
   function toggleSettingsFlyout() {
+    hideTooltip(); // Hide tooltip when opening flyout
     if (!settingsFlyoutOpen && settingsButtonRef) {
       const rect = settingsButtonRef.getBoundingClientRect();
       settingsFlyoutPosition = {
@@ -319,9 +343,11 @@ Performance Optimizations:
     <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
       <div class="flex flex-col gap-1" role="navigation">
         <!-- Dashboard -->
-        <div class="relative group">
+        <div class="relative">
           <button
             onclick={() => navigate(navigationUrls.dashboard)}
+            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.dashboard'))}
+            onmouseleave={hideTooltip}
             class={cn(
               menuItemBase,
               menuItemCollapsed,
@@ -335,24 +361,19 @@ Performance Optimizations:
               <span>{t('navigation.dashboard')}</span>
             {/if}
           </button>
-          <!-- Tooltip for collapsed state -->
-          {#if isCollapsed}
-            <div
-              class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-            >
-              {t('navigation.dashboard')}
-            </div>
-          {/if}
         </div>
 
         <!-- Analytics (Collapsible) -->
         <div class="flex flex-col relative flyout-container">
           {#if isCollapsed}
             <!-- Collapsed: Icon with flyout -->
-            <div class="relative group">
+            <div class="relative">
               <button
                 bind:this={analyticsButtonRef}
                 onclick={toggleAnalyticsFlyout}
+                onmouseenter={e =>
+                  !analyticsFlyoutOpen && showTooltip(e, t('navigation.analytics'))}
+                onmouseleave={hideTooltip}
                 class={cn(
                   menuItemBase,
                   menuItemCollapsed,
@@ -363,14 +384,6 @@ Performance Optimizations:
               >
                 <BarChart3 class="size-5 shrink-0" />
               </button>
-              <!-- Tooltip when flyout is closed -->
-              {#if !analyticsFlyoutOpen}
-                <div
-                  class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-                >
-                  {t('navigation.analytics')}
-                </div>
-              {/if}
             </div>
             <!-- Flyout submenu (fixed positioning to escape overflow container) -->
             {#if analyticsFlyoutOpen}
@@ -463,9 +476,11 @@ Performance Optimizations:
         </div>
 
         <!-- Search -->
-        <div class="relative group">
+        <div class="relative">
           <button
             onclick={() => navigate(navigationUrls.search)}
+            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.search'))}
+            onmouseleave={hideTooltip}
             class={cn(
               menuItemBase,
               menuItemCollapsed,
@@ -478,19 +493,14 @@ Performance Optimizations:
               <span>{t('navigation.search')}</span>
             {/if}
           </button>
-          {#if isCollapsed}
-            <div
-              class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-            >
-              {t('navigation.search')}
-            </div>
-          {/if}
         </div>
 
         <!-- About -->
-        <div class="relative group">
+        <div class="relative">
           <button
             onclick={() => navigate(navigationUrls.about)}
+            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.about'))}
+            onmouseleave={hideTooltip}
             class={cn(
               menuItemBase,
               menuItemCollapsed,
@@ -503,13 +513,6 @@ Performance Optimizations:
               <span>{t('navigation.about')}</span>
             {/if}
           </button>
-          {#if isCollapsed}
-            <div
-              class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-            >
-              {t('navigation.about')}
-            </div>
-          {/if}
         </div>
 
         {#if !securityEnabled || accessAllowed}
@@ -517,9 +520,11 @@ Performance Optimizations:
           <div class="my-2 border-t border-base-200/50"></div>
 
           <!-- System -->
-          <div class="relative group">
+          <div class="relative">
             <button
               onclick={() => navigate(navigationUrls.system)}
+              onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.system'))}
+              onmouseleave={hideTooltip}
               class={cn(
                 menuItemBase,
                 menuItemCollapsed,
@@ -533,23 +538,19 @@ Performance Optimizations:
                 <span>{t('navigation.system')}</span>
               {/if}
             </button>
-            {#if isCollapsed}
-              <div
-                class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-              >
-                {t('navigation.system')}
-              </div>
-            {/if}
           </div>
 
           <!-- Settings (Collapsible) -->
           <div class="flex flex-col relative flyout-container">
             {#if isCollapsed}
               <!-- Collapsed: Icon with flyout -->
-              <div class="relative group">
+              <div class="relative">
                 <button
                   bind:this={settingsButtonRef}
                   onclick={toggleSettingsFlyout}
+                  onmouseenter={e =>
+                    !settingsFlyoutOpen && showTooltip(e, t('navigation.settings'))}
+                  onmouseleave={hideTooltip}
                   class={cn(
                     menuItemBase,
                     menuItemCollapsed,
@@ -560,14 +561,6 @@ Performance Optimizations:
                 >
                   <Settings class="size-5 shrink-0" />
                 </button>
-                <!-- Tooltip when flyout is closed -->
-                {#if !settingsFlyoutOpen}
-                  <div
-                    class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-                  >
-                    {t('navigation.settings')}
-                  </div>
-                {/if}
               </div>
               <!-- Flyout submenu (fixed positioning to escape overflow container) -->
               {#if settingsFlyoutOpen}
@@ -798,9 +791,11 @@ Performance Optimizations:
     <div class={cn('flex-none py-4 border-t border-base-200/50', isCollapsed ? 'px-2' : 'px-3')}>
       {#if securityEnabled}
         {#if accessAllowed}
-          <div class="relative group">
+          <div class="relative">
             <button
               onclick={handleLogout}
+              onmouseenter={e => isCollapsed && showTooltip(e, t('auth.logout'))}
+              onmouseleave={hideTooltip}
               class={cn(
                 'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150',
                 isCollapsed && 'justify-center'
@@ -812,18 +807,13 @@ Performance Optimizations:
                 <span>{t('auth.logout')}</span>
               {/if}
             </button>
-            {#if isCollapsed}
-              <div
-                class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-              >
-                {t('auth.logout')}
-              </div>
-            {/if}
           </div>
         {:else}
-          <div class="relative group">
+          <div class="relative">
             <button
               onclick={handleLogin}
+              onmouseenter={e => isCollapsed && showTooltip(e, t('auth.login'))}
+              onmouseleave={hideTooltip}
               class={cn(
                 'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150',
                 isCollapsed && 'justify-center'
@@ -835,13 +825,6 @@ Performance Optimizations:
                 <span>{t('auth.login')}</span>
               {/if}
             </button>
-            {#if isCollapsed}
-              <div
-                class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-50"
-              >
-                {t('auth.login')}
-              </div>
-            {/if}
           </div>
         {/if}
       {/if}
@@ -862,6 +845,17 @@ Performance Optimizations:
       {/if}
     </div>
   </nav>
+
+  <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers) -->
+  {#if tooltipVisible && isCollapsed}
+    <div
+      class="fixed px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
+      style:top="{tooltipPosition.top}px"
+      style:left="{tooltipPosition.left}px"
+    >
+      {tooltipText}
+    </div>
+  {/if}
 </aside>
 
 <!-- Login Modal -->
