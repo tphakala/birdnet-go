@@ -1,9 +1,9 @@
 package processor
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -84,10 +84,8 @@ func TestCalculateMinDetections_AllLevels(t *testing.T) {
 
 			result := p.calculateMinDetections()
 
-			if result != tt.expectedMin {
-				t.Errorf("%s\nGot minDetections = %d, want %d\nLevel=%d, Overlap=%.1f",
-					tt.description, result, tt.expectedMin, tt.level, tt.overlap)
-			}
+			assert.Equal(t, tt.expectedMin, result, "%s\nLevel=%d, Overlap=%.1f",
+				tt.description, tt.level, tt.overlap)
 		})
 	}
 }
@@ -130,10 +128,8 @@ func TestCalculateMinDetections_OverlapVariation(t *testing.T) {
 
 			result := p.calculateMinDetections()
 
-			if result != tt.expectedMin {
-				t.Errorf("Level %d with overlap %.1f: got %d, want %d",
-					tt.level, tt.overlap, result, tt.expectedMin)
-			}
+			assert.Equal(t, tt.expectedMin, result, "Level %d with overlap %.1f",
+				tt.level, tt.overlap)
 		})
 	}
 }
@@ -158,14 +154,8 @@ func TestGetRecommendedLevelForOverlap(t *testing.T) {
 
 	for _, tt := range tests {
 		level, sufficient := getRecommendedLevelForOverlap(tt.overlap)
-		if level != tt.expectedLevel {
-			t.Errorf("Overlap %.1f: got level %d, want %d",
-				tt.overlap, level, tt.expectedLevel)
-		}
-		if sufficient != tt.overlapSufficient {
-			t.Errorf("Overlap %.1f: got sufficient=%v, want %v",
-				tt.overlap, sufficient, tt.overlapSufficient)
-		}
+		assert.Equal(t, tt.expectedLevel, level, "Overlap %.1f", tt.overlap)
+		assert.Equal(t, tt.overlapSufficient, sufficient, "Overlap %.1f", tt.overlap)
 	}
 }
 
@@ -188,10 +178,7 @@ func TestHelperFunctions(t *testing.T) {
 
 		for _, tt := range tests {
 			result := getMinimumOverlapForLevel(tt.level)
-			if result != tt.minOverlap {
-				t.Errorf("Level %d: got min overlap %.1f, want %.1f",
-					tt.level, result, tt.minOverlap)
-			}
+			assert.InDelta(t, tt.minOverlap, result, 0, "Level %d", tt.level)
 		}
 	})
 
@@ -212,10 +199,7 @@ func TestHelperFunctions(t *testing.T) {
 
 		for _, tt := range tests {
 			result := getThresholdForLevel(tt.level)
-			if result != tt.threshold {
-				t.Errorf("Level %d: got threshold %.2f, want %.2f",
-					tt.level, result, tt.threshold)
-			}
+			assert.InDelta(t, tt.threshold, result, 0, "Level %d", tt.level)
 		}
 	})
 
@@ -236,10 +220,7 @@ func TestHelperFunctions(t *testing.T) {
 
 		for _, tt := range tests {
 			result := getLevelName(tt.level)
-			if result != tt.name {
-				t.Errorf("Level %d: got name %q, want %q",
-					tt.level, result, tt.name)
-			}
+			assert.Equal(t, tt.name, result, "Level %d", tt.level)
 		}
 	})
 
@@ -260,10 +241,7 @@ func TestHelperFunctions(t *testing.T) {
 
 		for _, tt := range tests {
 			result := getHardwareRequirementForLevel(tt.level)
-			if result != tt.hardware {
-				t.Errorf("Level %d: got hardware %q, want %q",
-					tt.level, result, tt.hardware)
-			}
+			assert.Equal(t, tt.hardware, result, "Level %d", tt.level)
 		}
 	})
 
@@ -282,24 +260,16 @@ func TestHelperFunctions(t *testing.T) {
 
 		for _, tt := range tests {
 			result := getLevelDescription(tt.level)
-			if result == "" {
-				t.Errorf("Level %d: got empty description", tt.level)
-				continue
-			}
+			assert.NotEmpty(t, result, "Level %d: got empty description", tt.level)
 
 			for _, phrase := range tt.shouldContain {
-				if !strings.Contains(result, phrase) {
-					t.Errorf("Level %d: description missing expected phrase %q\nGot: %s",
-						tt.level, phrase, result)
-				}
+				assert.Contains(t, result, phrase, "Level %d: description missing expected phrase", tt.level)
 			}
 		}
 
 		// Test invalid level
 		result := getLevelDescription(99)
-		if !strings.Contains(result, "Unknown") {
-			t.Errorf("Invalid level should return 'Unknown', got: %s", result)
-		}
+		assert.Contains(t, result, "Unknown", "Invalid level should return 'Unknown'")
 	})
 }
 
@@ -402,10 +372,8 @@ func TestCalculateMinDetections(t *testing.T) {
 
 			result := p.calculateMinDetections()
 
-			if result != tt.expectedMin {
-				t.Errorf("%s\nGot minDetections = %d, want %d\nOverlap=%.1f",
-					tt.description, result, tt.expectedMin, tt.overlap)
-			}
+			assert.Equal(t, tt.expectedMin, result, "%s\nOverlap=%.1f",
+				tt.description, tt.overlap)
 		})
 	}
 }
@@ -475,10 +443,9 @@ func TestCalculateMinDetectionsIndependentOfClipLength(t *testing.T) {
 
 				result := p.calculateMinDetections()
 
-				if result != tt.expectedMinDet {
-					t.Errorf("%s\nConfig %d (length=%ds, preCapture=%ds): Got minDetections = %d, want %d\nClip length should NOT affect minDetections!",
-						tt.description, i+1, config.length, config.preCapture, result, tt.expectedMinDet)
-				}
+				assert.Equal(t, tt.expectedMinDet, result,
+					"%s\nConfig %d (length=%ds, preCapture=%ds): Clip length should NOT affect minDetections!",
+					tt.description, i+1, config.length, config.preCapture)
 			}
 		})
 	}
@@ -510,9 +477,7 @@ func TestCalculateMinDetectionsConsistency(t *testing.T) {
 	first := p.calculateMinDetections()
 	for i := range 100 {
 		result := p.calculateMinDetections()
-		if result != first {
-			t.Errorf("Inconsistent results: iteration %d returned %d, expected %d", i, result, first)
-		}
+		assert.Equal(t, first, result, "Inconsistent results: iteration %d", i)
 	}
 }
 
@@ -547,21 +512,17 @@ func TestCalculateMinDetectionsIssue1314(t *testing.T) {
 	// With the fix and Level 2, this should be 3 (reasonable)
 	// Level 2 with overlap 2.2: step=0.8s, max ~8 in 6s, 30% = 3
 	expectedMin := 3
-	if result != expectedMin {
-		t.Errorf("Issue #1314 regression: Got minDetections = %d, want %d\n"+
-			"Long clip lengths should NOT increase detection requirements!\n"+
+	assert.Equal(t, expectedMin, result,
+		"Issue #1314 regression: Long clip lengths should NOT increase detection requirements!\n"+
 			"Settings: level=%d, overlap=%.1f, captureLength=%ds, preCapture=%ds",
-			result, expectedMin, p.Settings.Realtime.FalsePositiveFilter.Level,
-			p.Settings.BirdNET.Overlap,
-			p.Settings.Realtime.Audio.Export.Length,
-			p.Settings.Realtime.Audio.Export.PreCapture)
-	}
+		p.Settings.Realtime.FalsePositiveFilter.Level,
+		p.Settings.BirdNET.Overlap,
+		p.Settings.Realtime.Audio.Export.Length,
+		p.Settings.Realtime.Audio.Export.PreCapture)
 
 	// Verify it's reasonable by checking logs showed "matched 1/14 times"
 	// With our fix, this should now be "matched 1/3 times" (rejected) or "matched 3/3 times" (accepted)
-	if result >= 14 {
-		t.Errorf("minDetections = %d is too high! This was the bug in issue #1314", result)
-	}
+	assert.Less(t, result, 14, "minDetections = %d is too high! This was the bug in issue #1314", result)
 }
 
 // TestSuggestLevelForDisabledFilter verifies that the smart migration logic
@@ -634,14 +595,10 @@ func TestSuggestLevelForDisabledFilter(t *testing.T) {
 			// Verify the underlying recommendation logic
 			recommendedLevel, _ := getRecommendedLevelForOverlap(tt.overlap)
 			if tt.expectRecommendation {
-				if recommendedLevel != tt.expectedLevel {
-					t.Errorf("Expected recommendation level %d (%s), got %d",
-						tt.expectedLevel, tt.expectedLevelName, recommendedLevel)
-				}
+				assert.Equal(t, tt.expectedLevel, recommendedLevel,
+					"Expected recommendation level %d (%s)", tt.expectedLevel, tt.expectedLevelName)
 			} else {
-				if recommendedLevel != 0 {
-					t.Errorf("Expected no recommendation (level 0), got level %d", recommendedLevel)
-				}
+				assert.Equal(t, 0, recommendedLevel, "Expected no recommendation (level 0)")
 			}
 		})
 	}
@@ -730,10 +687,9 @@ func TestValidateOverlapForLevel(t *testing.T) {
 
 			// Verify the warning condition is correctly identified
 			shouldWarn := tt.overlap < tt.minOverlap
-			if shouldWarn != tt.expectWarning {
-				t.Errorf("%s: Expected warning=%v, but condition suggests warning=%v (overlap=%.1f, minOverlap=%.1f)",
-					tt.description, tt.expectWarning, shouldWarn, tt.overlap, tt.minOverlap)
-			}
+			assert.Equal(t, tt.expectWarning, shouldWarn,
+				"%s: overlap=%.1f, minOverlap=%.1f",
+				tt.description, tt.overlap, tt.minOverlap)
 		})
 	}
 }
@@ -826,10 +782,8 @@ func TestWarnAboutHardwareRequirements(t *testing.T) {
 
 			// Verify the warning condition
 			shouldWarn := tt.level >= 4
-			if shouldWarn != tt.expectWarning {
-				t.Errorf("%s: Expected warning=%v, but got warning=%v (level=%d)",
-					tt.description, tt.expectWarning, shouldWarn, tt.level)
-			}
+			assert.Equal(t, tt.expectWarning, shouldWarn,
+				"%s: level=%d", tt.description, tt.level)
 
 			// For high levels with valid overlap, verify inference time calculation logic
 			if tt.level >= 4 && tt.overlap < 3.0 {
@@ -912,10 +866,8 @@ func TestValidateAndLogFilterConfig_Integration(t *testing.T) {
 			validateAndLogFilterConfig(settings)
 
 			// Verify the level wasn't changed (no validation errors)
-			if settings.Realtime.FalsePositiveFilter.Level != tt.level {
-				t.Errorf("%s: Level was unexpectedly changed from %d to %d",
-					tt.description, tt.level, settings.Realtime.FalsePositiveFilter.Level)
-			}
+			assert.Equal(t, tt.level, settings.Realtime.FalsePositiveFilter.Level,
+				"%s: Level was unexpectedly changed", tt.description)
 		})
 	}
 }
@@ -959,10 +911,8 @@ func TestValidateAndLogFilterConfig_InvalidLevel(t *testing.T) {
 			// Call validation - should reset invalid level to 0
 			validateAndLogFilterConfig(settings)
 
-			if settings.Realtime.FalsePositiveFilter.Level != tt.expectedLevel {
-				t.Errorf("%s: Expected level to be reset to %d, got %d",
-					tt.description, tt.expectedLevel, settings.Realtime.FalsePositiveFilter.Level)
-			}
+			assert.Equal(t, tt.expectedLevel, settings.Realtime.FalsePositiveFilter.Level,
+				"%s: Expected level to be reset", tt.description)
 		})
 	}
 }

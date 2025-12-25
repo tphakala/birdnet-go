@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // simulateOldBehavior simulates the old pattern where buffers could be allocated multiple times
@@ -178,9 +180,7 @@ func BenchmarkMemoryImpact(b *testing.B) {
 
 			// Single allocation
 			err := AllocateCaptureBuffer(60, 48000, 2, source)
-			if err != nil {
-				b.Fatalf("Allocation failed: %v", err)
-			}
+			require.NoError(b, err, "Allocation failed")
 
 			// Clean up
 			_ = RemoveCaptureBuffer(source)
@@ -198,15 +198,11 @@ func BenchmarkMemoryImpact(b *testing.B) {
 
 			// First allocation succeeds
 			err := AllocateCaptureBufferIfNeeded(60, 48000, 2, source)
-			if err != nil {
-				b.Fatalf("First allocation failed: %v", err)
-			}
+			require.NoError(b, err, "First allocation failed")
 
 			// Second allocation is prevented (no additional memory)
 			err = AllocateCaptureBufferIfNeeded(60, 48000, 2, source)
-			if err != nil {
-				b.Fatalf("Second allocation failed: %v", err)
-			}
+			require.NoError(b, err, "Second allocation failed")
 
 			// Clean up
 			_ = RemoveCaptureBuffer(source)

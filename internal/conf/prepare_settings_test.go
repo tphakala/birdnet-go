@@ -3,6 +3,9 @@ package conf
 import (
 	"maps"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPrepareSettingsForSave_NoSeasonalTracking verifies behavior when seasonal tracking is disabled.
@@ -27,9 +30,8 @@ func TestPrepareSettingsForSave_NoSeasonalTracking(t *testing.T) {
 			result := prepareSettingsForSave(settings, tt.latitude)
 
 			// Verify seasons remain nil when disabled
-			if result.Realtime.SpeciesTracking.SeasonalTracking.Seasons != nil {
-				t.Error("Expected seasons to remain nil when seasonal tracking disabled")
-			}
+			assert.Nil(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+				"Expected seasons to remain nil when seasonal tracking disabled")
 		})
 	}
 }
@@ -61,24 +63,17 @@ func TestPrepareSettingsForSave_EnabledWithExistingSeasons(t *testing.T) {
 			result := prepareSettingsForSave(settings, tt.latitude)
 
 			// Verify custom seasons are preserved
-			if len(result.Realtime.SpeciesTracking.SeasonalTracking.Seasons) != len(customSeasons) {
-				t.Errorf("Expected %d seasons, got %d",
-					len(customSeasons),
-					len(result.Realtime.SpeciesTracking.SeasonalTracking.Seasons))
-			}
+			assert.Len(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons, len(customSeasons),
+				"Expected %d seasons", len(customSeasons))
 
 			// Verify content matches
 			for name, season := range customSeasons {
 				resultSeason, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons[name]
-				if !exists {
-					t.Errorf("Expected season %q to exist in result", name)
-					continue
-				}
-				if resultSeason.StartMonth != season.StartMonth || resultSeason.StartDay != season.StartDay {
-					t.Errorf("Season %q mismatch: expected %d/%d, got %d/%d",
-						name, season.StartMonth, season.StartDay,
-						resultSeason.StartMonth, resultSeason.StartDay)
-				}
+				require.True(t, exists, "Expected season %q to exist in result", name)
+				assert.Equal(t, season.StartMonth, resultSeason.StartMonth,
+					"Season %q start month mismatch", name)
+				assert.Equal(t, season.StartDay, resultSeason.StartDay,
+					"Season %q start day mismatch", name)
 			}
 		})
 	}
@@ -107,18 +102,14 @@ func TestPrepareSettingsForSave_NorthernHemisphere(t *testing.T) {
 			result := prepareSettingsForSave(settings, tt.latitude)
 
 			// Verify seasons were populated
-			if len(result.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-				t.Fatal("Expected default seasons to be populated for northern hemisphere")
-			}
+			require.NotEmpty(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+				"Expected default seasons to be populated for northern hemisphere")
 
 			// Verify we got northern hemisphere seasons (spring starts in March)
 			spring, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
-			if !exists {
-				t.Error("Expected to find spring season in northern hemisphere defaults")
-			} else if spring.StartMonth != 3 {
-				// Northern hemisphere spring starts in March (3/20)
-				t.Errorf("Expected northern spring to start in March, got month %d", spring.StartMonth)
-			}
+			require.True(t, exists, "Expected to find spring season in northern hemisphere defaults")
+			// Northern hemisphere spring starts in March (3/20)
+			assert.Equal(t, 3, spring.StartMonth, "Expected northern spring to start in March")
 		})
 	}
 }
@@ -146,18 +137,14 @@ func TestPrepareSettingsForSave_SouthernHemisphere(t *testing.T) {
 			result := prepareSettingsForSave(settings, tt.latitude)
 
 			// Verify seasons were populated
-			if len(result.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-				t.Fatal("Expected default seasons to be populated for southern hemisphere")
-			}
+			require.NotEmpty(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+				"Expected default seasons to be populated for southern hemisphere")
 
 			// Verify we got southern hemisphere seasons (spring starts in September)
 			spring, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
-			if !exists {
-				t.Error("Expected to find spring season in southern hemisphere defaults")
-			} else if spring.StartMonth != 9 {
-				// Southern hemisphere spring starts in September (9/22)
-				t.Errorf("Expected southern spring to start in September, got month %d", spring.StartMonth)
-			}
+			require.True(t, exists, "Expected to find spring season in southern hemisphere defaults")
+			// Southern hemisphere spring starts in September (9/22)
+			assert.Equal(t, 9, spring.StartMonth, "Expected southern spring to start in September")
 		})
 	}
 }
@@ -186,9 +173,8 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 			result := prepareSettingsForSave(settings, tt.latitude)
 
 			// Verify seasons were populated (GetDefaultSeasons should return year-round for equatorial)
-			if len(result.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-				t.Fatal("Expected default seasons to be populated for equatorial region")
-			}
+			require.NotEmpty(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+				"Expected default seasons to be populated for equatorial region")
 		})
 	}
 }
@@ -203,9 +189,8 @@ func TestPrepareSettingsForSave_DoesNotMutateInput(t *testing.T) {
 	_ = prepareSettingsForSave(originalSettings, 45.0)
 
 	// Verify original settings were not modified
-	if originalSettings.Realtime.SpeciesTracking.SeasonalTracking.Seasons != nil {
-		t.Error("prepareSettingsForSave should not mutate input settings")
-	}
+	assert.Nil(t, originalSettings.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+		"prepareSettingsForSave should not mutate input settings")
 }
 
 // TestPrepareSettingsForSave_DifferentLatitudes verifies correct hemisphere detection.
@@ -235,9 +220,8 @@ func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
 
 			result := prepareSettingsForSave(settings, lat.value)
 
-			if len(result.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-				t.Errorf("Expected seasons for latitude %.1f (%s)", lat.value, lat.expectedHemisphere)
-			}
+			require.NotEmpty(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+				"Expected seasons for latitude %.1f (%s)", lat.value, lat.expectedHemisphere)
 		})
 	}
 }

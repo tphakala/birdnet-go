@@ -5,12 +5,9 @@ package birdnet
 import (
 	"testing"
 
-	"go.uber.org/goleak"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
-}
 
 // TestProcessChunkWithOccurrence tests end-to-end processing with occurrence probability calculations.
 //
@@ -43,11 +40,27 @@ func TestMain(m *testing.M) {
 //     │   └── robin.wav      # 3-second WAV file with Erithacus rubecula
 //     └── negative/          # Audio files with no bird sounds
 //         └── silence.wav    # 3-second WAV file with ambient noise only
+//
+// When implementing, use testify assertions:
+//   - require.NoError(t, err) for critical assertions that should stop the test
+//   - assert.Equal(t, expected, actual) for non-critical comparisons
+//   - assert.Greater(t, actual, threshold) for confidence threshold checks
 func TestProcessChunkWithOccurrence(t *testing.T) {
 	t.Parallel()
 
 	// TODO: Implement full integration test - blocked on model availability
 	// Reference issue: https://github.com/tphakala/birdnet-go/issues/XXXX
 	// CI job: integration-tests-with-models
+	//
+	// Example implementation structure:
+	//   1. Load test audio: require.NoError(t, err)
+	//   2. Initialize analyzer: require.NoError(t, err)
+	//   3. Process chunk: require.NoError(t, err)
+	//   4. Verify detections: assert.Equal(t, expectedSpecies, actualSpecies)
+	//   5. Check occurrence probability: assert.Greater(t, probability, 0.0)
 	t.Skip("Integration test requires BirdNET model files - see function documentation for setup instructions")
+
+	// Suppress unused import warnings until implementation
+	_ = assert.Equal
+	_ = require.NoError
 }

@@ -4,11 +4,14 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewProcess(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "test-process",
 		InputURL:     "test.wav",
@@ -22,18 +25,13 @@ func TestNewProcess(t *testing.T) {
 
 	process := NewProcess(config)
 
-	if process.ID() != config.ID {
-		t.Errorf("Expected process ID %s, got %s", config.ID, process.ID())
-	}
-
-	if process.IsRunning() {
-		t.Error("Process should not be running initially")
-	}
+	assert.Equal(t, config.ID, process.ID(), "Process ID should match config")
+	assert.False(t, process.IsRunning(), "Process should not be running initially")
 }
 
 func TestProcessMetrics(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "metrics-test",
 		InputURL:     "test.wav",
@@ -48,18 +46,13 @@ func TestProcessMetrics(t *testing.T) {
 	process := NewProcess(config)
 	metrics := process.Metrics()
 
-	if metrics.RestartCount != 0 {
-		t.Errorf("Expected restart count 0, got %d", metrics.RestartCount)
-	}
-
-	if !metrics.StartTime.IsZero() {
-		t.Error("Start time should be zero for unstarted process")
-	}
+	assert.Equal(t, 0, metrics.RestartCount, "Expected restart count 0")
+	assert.True(t, metrics.StartTime.IsZero(), "Start time should be zero for unstarted process")
 }
 
 func TestProcessChannels(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "channels-test",
 		InputURL:     "test.wav",
@@ -77,18 +70,13 @@ func TestProcessChannels(t *testing.T) {
 	audioOutput := process.AudioOutput()
 	errorOutput := process.ErrorOutput()
 
-	if audioOutput == nil {
-		t.Error("Audio output channel should not be nil")
-	}
-
-	if errorOutput == nil {
-		t.Error("Error output channel should not be nil")
-	}
+	assert.NotNil(t, audioOutput, "Audio output channel should not be nil")
+	assert.NotNil(t, errorOutput, "Error output channel should not be nil")
 }
 
 func TestProcessStopBeforeStart(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "stop-test",
 		InputURL:     "test.wav",
@@ -104,14 +92,12 @@ func TestProcessStopBeforeStart(t *testing.T) {
 
 	// Should be able to stop a process that was never started
 	err := process.Stop()
-	if err != nil {
-		t.Errorf("Stop should not error for unstarted process: %v", err)
-	}
+	assert.NoError(t, err, "Stop should not error for unstarted process")
 }
 
 func TestBuildFFmpegArgs(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "args-test",
 		InputURL:     "rtsp://example.com/stream",
@@ -155,26 +141,15 @@ func TestBuildFFmpegArgs(t *testing.T) {
 		}
 	}
 
-	if !hasInput {
-		t.Error("Args should contain input URL")
-	}
-
-	if !hasOutput {
-		t.Error("Args should contain pipe:1 output")
-	}
-
-	if !hasRTSPTransport {
-		t.Error("Args should contain RTSP transport for RTSP URLs")
-	}
-
-	if !hasExtraArgs {
-		t.Error("Args should contain extra arguments")
-	}
+	assert.True(t, hasInput, "Args should contain input URL")
+	assert.True(t, hasOutput, "Args should contain pipe:1 output")
+	assert.True(t, hasRTSPTransport, "Args should contain RTSP transport for RTSP URLs")
+	assert.True(t, hasExtraArgs, "Args should contain extra arguments")
 }
 
 func TestIsRTSPURL(t *testing.T) {
 	t.Parallel()
-	
+
 	tests := []struct {
 		url      string
 		expected bool
@@ -190,15 +165,13 @@ func TestIsRTSPURL(t *testing.T) {
 
 	for _, test := range tests {
 		result := isRTSPURL(test.url)
-		if result != test.expected {
-			t.Errorf("isRTSPURL(%q) = %v, expected %v", test.url, result, test.expected)
-		}
+		assert.Equal(t, test.expected, result, "isRTSPURL(%q) should return %v", test.url, test.expected)
 	}
 }
 
 func TestProcessStartInvalidCommand(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "invalid-command-test",
 		InputURL:     "test.wav",
@@ -215,15 +188,15 @@ func TestProcessStartInvalidCommand(t *testing.T) {
 	defer cancel()
 
 	err := process.Start(ctx)
+	require.Error(t, err, "Expected error when starting with invalid FFmpeg path")
 	if err == nil {
-		t.Error("Expected error when starting with invalid FFmpeg path")
 		_ = process.Stop() // Ignore error for cleanup
 	}
 }
 
 func TestProcessDoubleStart(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "double-start-test",
 		InputURL:     "test.wav",
@@ -241,20 +214,18 @@ func TestProcessDoubleStart(t *testing.T) {
 
 	// First start (may fail due to invalid input, but that's OK)
 	err1 := process.Start(ctx)
-	
+
 	// Second start should return the same error (sync.Once behavior)
 	err2 := process.Start(ctx)
-	
-	if (err1 == nil) != (err2 == nil) {
-		t.Error("Multiple Start() calls should return consistent error state")
-	}
-	
+
+	assert.Equal(t, err1 == nil, err2 == nil, "Multiple Start() calls should return consistent error state")
+
 	_ = process.Stop() // Ignore error for cleanup
 }
 
 func TestProcessDoubleStop(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "double-stop-test",
 		InputURL:     "test.wav",
@@ -270,13 +241,9 @@ func TestProcessDoubleStop(t *testing.T) {
 
 	// First stop
 	err1 := process.Stop()
-	if err1 != nil {
-		t.Errorf("First stop failed: %v", err1)
-	}
+	require.NoError(t, err1, "First stop should not fail")
 
 	// Second stop should also succeed
 	err2 := process.Stop()
-	if err2 != nil {
-		t.Errorf("Second stop failed: %v", err2)
-	}
+	assert.NoError(t, err2, "Second stop should not fail")
 }

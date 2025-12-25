@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -22,9 +24,7 @@ func TestFlushDeadlineInFuture(t *testing.T) {
 
 	// With defaults: detectionWindow = 15s - 3s = 12s
 	expectedWindow := 12 * time.Second
-	if detectionWindow != expectedWindow {
-		t.Errorf("Expected detectionWindow to be %v, got %v", expectedWindow, detectionWindow)
-	}
+	require.Equal(t, expectedWindow, detectionWindow, "detectionWindow mismatch")
 
 	// Simulate what happens when a new detection is created
 	// item.StartTime would be backdated (Now - 13s in production)
@@ -34,19 +34,17 @@ func TestFlushDeadlineInFuture(t *testing.T) {
 	afterCreation := time.Now()
 
 	// Verify FlushDeadline is in the future
-	if !flushDeadline.After(beforeCreation) {
-		t.Errorf("FlushDeadline %v is not in the future relative to creation time %v",
-			flushDeadline, beforeCreation)
-	}
+	assert.True(t, flushDeadline.After(beforeCreation),
+		"FlushDeadline %v is not in the future relative to creation time %v",
+		flushDeadline, beforeCreation)
 
 	// Verify FlushDeadline is approximately detectionWindow seconds in the future
 	minExpected := beforeCreation.Add(detectionWindow)
 	maxExpected := afterCreation.Add(detectionWindow)
 
-	if flushDeadline.Before(minExpected) || flushDeadline.After(maxExpected) {
-		t.Errorf("FlushDeadline %v is not within expected range [%v, %v]",
-			flushDeadline, minExpected, maxExpected)
-	}
+	assert.False(t, flushDeadline.Before(minExpected) || flushDeadline.After(maxExpected),
+		"FlushDeadline %v is not within expected range [%v, %v]",
+		flushDeadline, minExpected, maxExpected)
 
 	// Test with edge case: minimum capture length (10s)
 	settings.Realtime.Audio.Export.Length = 10
@@ -58,15 +56,12 @@ func TestFlushDeadlineInFuture(t *testing.T) {
 
 	// With edge case: detectionWindow = 10s - 5s = 5s
 	expectedWindow = 5 * time.Second
-	if detectionWindow != expectedWindow {
-		t.Errorf("Edge case: Expected detectionWindow to be %v, got %v", expectedWindow, detectionWindow)
-	}
+	assert.Equal(t, expectedWindow, detectionWindow, "Edge case: detectionWindow mismatch")
 
 	// Even with edge case, FlushDeadline should be in the future
 	flushDeadline = time.Now().Add(detectionWindow)
-	if !flushDeadline.After(time.Now()) {
-		t.Errorf("Edge case: FlushDeadline %v is not in the future", flushDeadline)
-	}
+	assert.True(t, flushDeadline.After(time.Now()),
+		"Edge case: FlushDeadline %v is not in the future", flushDeadline)
 }
 
 // TestDetectionWindowGivesTimeForOverlaps verifies that detectionWindow
@@ -87,11 +82,10 @@ func TestDetectionWindowGivesTimeForOverlaps(t *testing.T) {
 
 	// We need at least 2-3 overlaps for the filtering to work
 	minRequiredOverlaps := 2
-	if possibleOverlaps < minRequiredOverlaps {
-		t.Errorf("Detection window (%v) doesn't provide enough time for overlaps. "+
+	assert.GreaterOrEqual(t, possibleOverlaps, minRequiredOverlaps,
+		"Detection window (%v) doesn't provide enough time for overlaps. "+
 			"Only %d overlaps possible with step size %.1fs, need at least %d",
-			detectionWindow, possibleOverlaps, stepSize, minRequiredOverlaps)
-	}
+		detectionWindow, possibleOverlaps, stepSize, minRequiredOverlaps)
 
 	// With defaults, we should get 12s / 0.8s = 15 possible overlaps - plenty!
 	expectedOverlaps := 15
@@ -117,29 +111,26 @@ func TestFlushDeadlineNotBackdated(t *testing.T) {
 	buggyDeadline := backdatedStart.Add(detectionWindow)
 
 	// Should fail with the bug - deadline is in the past
-	if !buggyDeadline.After(time.Now()) {
-		t.Logf("Bug confirmed: deadline %v is in the past (Now: %v, backdatedStart: %v)",
-			buggyDeadline, time.Now(), backdatedStart)
-		t.Logf("Calculation: backdatedStart (%v) + detectionWindow (%v) = %v (in past!)",
-			backdatedStart.Format("15:04:05.000"), detectionWindow, buggyDeadline.Format("15:04:05.000"))
-	} else {
-		t.Errorf("Expected buggy deadline to be in the past, but it's in the future. "+
+	// We assert that buggy deadline is NOT after now (i.e., it's in the past)
+	assert.False(t, buggyDeadline.After(time.Now()),
+		"Expected buggy deadline to be in the past, but it's in the future. "+
 			"This test may need adjustment if system clock is unreliable.")
-	}
+	t.Logf("Bug confirmed: deadline %v is in the past (Now: %v, backdatedStart: %v)",
+		buggyDeadline, time.Now(), backdatedStart)
+	t.Logf("Calculation: backdatedStart (%v) + detectionWindow (%v) = %v (in past!)",
+		backdatedStart.Format("15:04:05.000"), detectionWindow, buggyDeadline.Format("15:04:05.000"))
 
 	// The fixed calculation: FlushDeadline = time.Now().Add(detectionWindow)
 	fixedDeadline := time.Now().Add(detectionWindow)
 
 	// Should pass with the fix - deadline is in the future
-	if !fixedDeadline.After(time.Now()) {
-		t.Errorf("Fix failed: deadline %v is still in the past (Now: %v)",
-			fixedDeadline, time.Now())
-	} else {
-		t.Logf("Fix confirmed: deadline %v is in the future (Now: %v)",
-			fixedDeadline, time.Now())
-		t.Logf("Calculation: Now + detectionWindow (%v) = %v (in future!)",
-			detectionWindow, fixedDeadline.Format("15:04:05.000"))
-	}
+	assert.True(t, fixedDeadline.After(time.Now()),
+		"Fix failed: deadline %v is still in the past (Now: %v)",
+		fixedDeadline, time.Now())
+	t.Logf("Fix confirmed: deadline %v is in the future (Now: %v)",
+		fixedDeadline, time.Now())
+	t.Logf("Calculation: Now + detectionWindow (%v) = %v (in future!)",
+		detectionWindow, fixedDeadline.Format("15:04:05.000"))
 
 	// Verify the difference between buggy and fixed approaches
 	timeDifference := fixedDeadline.Sub(buggyDeadline)
@@ -147,10 +138,9 @@ func TestFlushDeadlineNotBackdated(t *testing.T) {
 
 	// Allow 100ms tolerance for test execution time
 	tolerance := 100 * time.Millisecond
-	if timeDifference < expectedDifference-tolerance || timeDifference > expectedDifference+tolerance {
-		t.Errorf("Time difference between fixed and buggy deadline should be ~%v, got %v",
-			expectedDifference, timeDifference)
-	}
+	assert.InDelta(t, expectedDifference.Seconds(), timeDifference.Seconds(), tolerance.Seconds(),
+		"Time difference between fixed and buggy deadline should be ~%v, got %v",
+		expectedDifference, timeDifference)
 
 	// Document the impact
 	t.Logf("Impact: With buggy calculation, detections flushed immediately instead of waiting %v", detectionWindow)

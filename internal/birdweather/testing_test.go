@@ -7,7 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestResolveDNSWithFallback tests the DNS fallback resolution mechanism
@@ -52,25 +53,18 @@ func TestResolveDNSWithFallback(t *testing.T) {
 			duration := time.Since(start)
 
 			if tc.expectError {
-				if err == nil {
-					t.Errorf("Expected error for hostname %s, but got none", tc.hostname)
-				}
+				require.Error(t, err, "Expected error for hostname %s", tc.hostname)
 			} else {
-				if err != nil {
-					t.Errorf("Unexpected error resolving %s: %v", tc.hostname, err)
-				}
-				if len(ips) == 0 {
-					t.Errorf("Expected IPs for %s, but got none", tc.hostname)
-				}
+				require.NoError(t, err, "Unexpected error resolving %s", tc.hostname)
+				assert.NotEmpty(t, ips, "Expected IPs for %s", tc.hostname)
 			}
 
 			// Verify that resolution completes within reasonable time
 			// System DNS (10s) + fallback DNS (3 servers × 5s = 15s) = 25s max theoretical
 			// Use 27s to allow for some processing overhead while catching regressions
 			maxDuration := 27 * time.Second
-			if duration > maxDuration {
-				t.Errorf("DNS resolution took too long: %v (max: %v)", duration, maxDuration)
-			}
+			assert.LessOrEqual(t, duration, maxDuration,
+				"DNS resolution took too long: %v (max: %v)", duration, maxDuration)
 
 			t.Logf("DNS resolution for %s took %v, returned %d IPs", tc.hostname, duration, len(ips))
 		})
@@ -83,9 +77,7 @@ func TestAPIConnectivityTimeout(t *testing.T) {
 
 	settings := MockSettings()
 	client, err := New(settings)
-	if err != nil {
-		t.Fatalf("Failed to create BwClient: %v", err)
-	}
+	require.NoError(t, err, "Failed to create BwClient")
 
 	// Create a context with a very short timeout to test timeout behavior
 	// Use 10ms instead of 1ms to reduce flakiness while still being fast enough
@@ -96,14 +88,8 @@ func TestAPIConnectivityTimeout(t *testing.T) {
 	result := client.testAPIConnectivity(ctx)
 
 	// The test should timeout or fail quickly
-	if result.Success {
-		t.Error("Expected API connectivity test to fail with timeout, but it succeeded")
-	}
-
-	// Check that the error message mentions timeout or context
-	if result.Error == "" {
-		t.Error("Expected error message, but got empty string")
-	}
+	assert.False(t, result.Success, "Expected API connectivity test to fail with timeout")
+	assert.NotEmpty(t, result.Error, "Expected error message")
 
 	t.Logf("Timeout test result: %+v", result)
 }
@@ -113,37 +99,25 @@ func TestTimeoutConstants(t *testing.T) {
 	t.Parallel() // Safe - only reads constants
 
 	// Verify that timeouts are long enough to handle DNS delays
-	if apiTimeout < 10*time.Second {
-		t.Errorf("apiTimeout (%v) should be at least 10s to handle DNS resolution delays", apiTimeout)
-	}
-
-	if authTimeout < 10*time.Second {
-		t.Errorf("authTimeout (%v) should be at least 10s to handle DNS resolution delays", authTimeout)
-	}
-
-	if uploadTimeout < 20*time.Second {
-		t.Errorf("uploadTimeout (%v) should be at least 20s to handle encoding and DNS delays", uploadTimeout)
-	}
+	assert.GreaterOrEqual(t, apiTimeout, 10*time.Second,
+		"apiTimeout should be at least 10s to handle DNS resolution delays")
+	assert.GreaterOrEqual(t, authTimeout, 10*time.Second,
+		"authTimeout should be at least 10s to handle DNS resolution delays")
+	assert.GreaterOrEqual(t, uploadTimeout, 20*time.Second,
+		"uploadTimeout should be at least 20s to handle encoding and DNS delays")
 
 	// Verify DNS-specific timeouts are reasonable
 	// Linux default DNS timeout is 5s per server, so our timeouts should accommodate this
-	if dnsResolverTimeout < 5*time.Second {
-		t.Errorf("dnsResolverTimeout (%v) should be at least 5s to match Linux DNS default", dnsResolverTimeout)
-	}
-
-	if dnsLookupTimeout < 5*time.Second {
-		t.Errorf("dnsLookupTimeout (%v) should be at least 5s to match Linux DNS default", dnsLookupTimeout)
-	}
-
-	if systemDNSTimeout < 10*time.Second {
-		t.Errorf("systemDNSTimeout (%v) should be at least 10s to allow for 2 DNS servers at 5s each", systemDNSTimeout)
-	}
+	assert.GreaterOrEqual(t, dnsResolverTimeout, 5*time.Second,
+		"dnsResolverTimeout should be at least 5s to match Linux DNS default")
+	assert.GreaterOrEqual(t, dnsLookupTimeout, 5*time.Second,
+		"dnsLookupTimeout should be at least 5s to match Linux DNS default")
+	assert.GreaterOrEqual(t, systemDNSTimeout, 10*time.Second,
+		"systemDNSTimeout should be at least 10s to allow for 2 DNS servers at 5s each")
 
 	// Verify timeout hierarchy makes sense
-	if uploadTimeout <= apiTimeout {
-		t.Errorf("uploadTimeout (%v) should be longer than apiTimeout (%v) to account for encoding",
-			uploadTimeout, apiTimeout)
-	}
+	assert.Greater(t, uploadTimeout, apiTimeout,
+		"uploadTimeout should be longer than apiTimeout to account for encoding")
 
 	// Verify fallback DNS timeout math is reasonable
 	expectedFallbackDuration := dnsLookupTimeout * time.Duration(len(fallbackDNSResolvers))
@@ -157,9 +131,8 @@ func TestTimeoutConstants(t *testing.T) {
 	}
 
 	// Ensure individual DNS timeouts aren't longer than the stage timeouts they're used in
-	if dnsLookupTimeout > apiTimeout {
-		t.Errorf("dnsLookupTimeout (%v) should not exceed apiTimeout (%v)", dnsLookupTimeout, apiTimeout)
-	}
+	assert.LessOrEqual(t, dnsLookupTimeout, apiTimeout,
+		"dnsLookupTimeout should not exceed apiTimeout")
 
 	t.Logf("Timeout constants: api=%v, auth=%v, upload=%v, post=%v, systemDNS=%v, dnsResolver=%v, dnsLookup=%v",
 		apiTimeout, authTimeout, uploadTimeout, postTimeout, systemDNSTimeout, dnsResolverTimeout, dnsLookupTimeout)
@@ -169,33 +142,21 @@ func TestTimeoutConstants(t *testing.T) {
 func TestFallbackDNSResolvers(t *testing.T) {
 	t.Parallel() // Safe - only reads global slice
 
-	if len(fallbackDNSResolvers) == 0 {
-		t.Error("No fallback DNS resolvers configured")
-	}
+	assert.NotEmpty(t, fallbackDNSResolvers, "No fallback DNS resolvers configured")
 
 	// Verify that each resolver is properly formatted using net.SplitHostPort
 	for _, resolver := range fallbackDNSResolvers {
-		if resolver == "" {
-			t.Error("Empty fallback DNS resolver found")
-			continue
-		}
+		assert.NotEmpty(t, resolver, "Empty fallback DNS resolver found")
 
 		// Parse and validate the host:port format
 		host, port, err := net.SplitHostPort(resolver)
-		if err != nil {
-			t.Errorf("Fallback DNS resolver '%s' is not a valid host:port format: %v", resolver, err)
-			continue
-		}
+		require.NoError(t, err, "Fallback DNS resolver '%s' is not a valid host:port format", resolver)
 
 		// Verify host is a valid IP address
-		if net.ParseIP(host) == nil {
-			t.Errorf("Fallback DNS resolver '%s' has invalid IP address: %s", resolver, host)
-		}
+		assert.NotNil(t, net.ParseIP(host), "Fallback DNS resolver '%s' has invalid IP address: %s", resolver, host)
 
 		// Verify port is not empty
-		if port == "" {
-			t.Errorf("Fallback DNS resolver '%s' has empty port", resolver)
-		}
+		assert.NotEmpty(t, port, "Fallback DNS resolver '%s' has empty port", resolver)
 	}
 
 	t.Logf("Configured %d fallback DNS resolvers: %v", len(fallbackDNSResolvers), fallbackDNSResolvers)
@@ -240,9 +201,7 @@ func TestIsDNSError(t *testing.T) {
 			err := &testError{msg: tc.errorMsg}
 			result := isDNSError(err)
 
-			if result != tc.expectDNS {
-				t.Errorf("isDNSError(%q) = %v, want %v", tc.errorMsg, result, tc.expectDNS)
-			}
+			assert.Equal(t, tc.expectDNS, result, "isDNSError(%q)", tc.errorMsg)
 		})
 	}
 }
@@ -267,14 +226,10 @@ func TestDNSLookupCancellation(t *testing.T) {
 
 	_, err := net.DefaultResolver.LookupIP(ctx, "ip", "app.birdweather.com")
 
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("Expected context.Canceled, got: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled, "Expected context.Canceled")
 
 	// Also verify it's recognized as a DNS error
-	if !isDNSError(err) {
-		t.Error("Cancelled DNS lookup should be classified as DNS error")
-	}
+	assert.True(t, isDNSError(err), "Cancelled DNS lookup should be classified as DNS error")
 }
 
 // TestIsDNSTimeout tests the DNS timeout detection function
@@ -337,19 +292,15 @@ func TestIsDNSTimeout(t *testing.T) {
 			t.Parallel() // Safe - independent test cases
 
 			result := isDNSTimeout(tc.err)
-			if result != tc.expectTimeout {
-				t.Errorf("isDNSTimeout() = %v, want %v for error: %v", result, tc.expectTimeout, tc.err)
-			}
+			assert.Equal(t, tc.expectTimeout, result, "isDNSTimeout() for error: %v", tc.err)
 
 			// Validate DNS error classification
 			isDNSErr := isDNSError(tc.err)
-			if isDNSErr != tc.expectDNSErr {
-				t.Errorf("isDNSError() = %v, want %v for error: %v", isDNSErr, tc.expectDNSErr, tc.err)
-			}
+			assert.Equal(t, tc.expectDNSErr, isDNSErr, "isDNSError() for error: %v", tc.err)
 
 			// DNS-specific timeouts should be classified as both timeout and DNS error
-			if tc.expectTimeout && tc.expectDNSErr && !isDNSErr {
-				t.Errorf("DNS timeout should be classified as DNS error: %v", tc.err)
+			if tc.expectTimeout && tc.expectDNSErr {
+				assert.True(t, isDNSErr, "DNS timeout should be classified as DNS error: %v", tc.err)
 			}
 		})
 	}

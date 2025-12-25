@@ -2,6 +2,9 @@ package conf
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSettingsBuilder_NewTestSettings verifies that NewTestSettings creates a valid builder.
@@ -9,18 +12,11 @@ func TestSettingsBuilder_NewTestSettings(t *testing.T) {
 	t.Parallel()
 	builder := NewTestSettings()
 
-	if builder == nil {
-		t.Fatal("NewTestSettings() returned nil")
-	}
-
-	if builder.settings == nil {
-		t.Fatal("NewTestSettings() builder has nil settings")
-	}
+	require.NotNil(t, builder, "NewTestSettings() returned nil")
+	require.NotNil(t, builder.settings, "NewTestSettings() builder has nil settings")
 
 	// Verify settings have default values
-	if builder.settings.BirdNET.Threshold == 0 {
-		t.Error("Expected non-zero default threshold")
-	}
+	assert.NotZero(t, builder.settings.BirdNET.Threshold, "Expected non-zero default threshold")
 }
 
 // TestSettingsBuilder_WithBirdNET verifies BirdNET configuration.
@@ -65,15 +61,9 @@ func TestSettingsBuilder_WithBirdNET(t *testing.T) {
 				WithBirdNET(tt.threshold, tt.latitude, tt.longitude).
 				Build()
 
-			if settings.BirdNET.Threshold != tt.threshold {
-				t.Errorf("Expected threshold %v, got %v", tt.threshold, settings.BirdNET.Threshold)
-			}
-			if settings.BirdNET.Latitude != tt.latitude {
-				t.Errorf("Expected latitude %v, got %v", tt.latitude, settings.BirdNET.Latitude)
-			}
-			if settings.BirdNET.Longitude != tt.longitude {
-				t.Errorf("Expected longitude %v, got %v", tt.longitude, settings.BirdNET.Longitude)
-			}
+			assert.InDelta(t, tt.threshold, settings.BirdNET.Threshold, 0.0001)
+			assert.InDelta(t, tt.latitude, settings.BirdNET.Latitude, 0.0001)
+			assert.InDelta(t, tt.longitude, settings.BirdNET.Longitude, 0.0001)
 		})
 	}
 }
@@ -112,15 +102,9 @@ func TestSettingsBuilder_WithMQTT(t *testing.T) {
 				WithMQTT(tt.broker, tt.topic).
 				Build()
 
-			if !settings.Realtime.MQTT.Enabled {
-				t.Error("Expected MQTT to be enabled")
-			}
-			if settings.Realtime.MQTT.Broker != tt.broker {
-				t.Errorf("Expected broker %q, got %q", tt.broker, settings.Realtime.MQTT.Broker)
-			}
-			if settings.Realtime.MQTT.Topic != tt.topic {
-				t.Errorf("Expected topic %q, got %q", tt.topic, settings.Realtime.MQTT.Topic)
-			}
+			assert.True(t, settings.Realtime.MQTT.Enabled, "Expected MQTT to be enabled")
+			assert.Equal(t, tt.broker, settings.Realtime.MQTT.Broker)
+			assert.Equal(t, tt.topic, settings.Realtime.MQTT.Topic)
 		})
 	}
 }
@@ -161,18 +145,10 @@ func TestSettingsBuilder_WithAudioExport(t *testing.T) {
 				WithAudioExport(tt.path, tt.exportType, tt.bitrate).
 				Build()
 
-			if !settings.Realtime.Audio.Export.Enabled {
-				t.Error("Expected audio export to be enabled")
-			}
-			if settings.Realtime.Audio.Export.Path != tt.path {
-				t.Errorf("Expected path %q, got %q", tt.path, settings.Realtime.Audio.Export.Path)
-			}
-			if settings.Realtime.Audio.Export.Type != tt.exportType {
-				t.Errorf("Expected type %q, got %q", tt.exportType, settings.Realtime.Audio.Export.Type)
-			}
-			if settings.Realtime.Audio.Export.Bitrate != tt.bitrate {
-				t.Errorf("Expected bitrate %q, got %q", tt.bitrate, settings.Realtime.Audio.Export.Bitrate)
-			}
+			assert.True(t, settings.Realtime.Audio.Export.Enabled, "Expected audio export to be enabled")
+			assert.Equal(t, tt.path, settings.Realtime.Audio.Export.Path)
+			assert.Equal(t, tt.exportType, settings.Realtime.Audio.Export.Type)
+			assert.Equal(t, tt.bitrate, settings.Realtime.Audio.Export.Bitrate)
 		})
 	}
 }
@@ -211,15 +187,9 @@ func TestSettingsBuilder_WithSpeciesTracking(t *testing.T) {
 				WithSpeciesTracking(tt.windowDays, tt.syncInterval).
 				Build()
 
-			if !settings.Realtime.SpeciesTracking.Enabled {
-				t.Error("Expected species tracking to be enabled")
-			}
-			if settings.Realtime.SpeciesTracking.NewSpeciesWindowDays != tt.windowDays {
-				t.Errorf("Expected windowDays %d, got %d", tt.windowDays, settings.Realtime.SpeciesTracking.NewSpeciesWindowDays)
-			}
-			if settings.Realtime.SpeciesTracking.SyncIntervalMinutes != tt.syncInterval {
-				t.Errorf("Expected syncInterval %d, got %d", tt.syncInterval, settings.Realtime.SpeciesTracking.SyncIntervalMinutes)
-			}
+			assert.True(t, settings.Realtime.SpeciesTracking.Enabled, "Expected species tracking to be enabled")
+			assert.Equal(t, tt.windowDays, settings.Realtime.SpeciesTracking.NewSpeciesWindowDays)
+			assert.Equal(t, tt.syncInterval, settings.Realtime.SpeciesTracking.SyncIntervalMinutes)
 		})
 	}
 }
@@ -244,9 +214,7 @@ func TestSettingsBuilder_WithRTSPHealthThreshold(t *testing.T) {
 				WithRTSPHealthThreshold(tt.seconds).
 				Build()
 
-			if settings.Realtime.RTSP.Health.HealthyDataThreshold != tt.seconds {
-				t.Errorf("Expected threshold %d, got %d", tt.seconds, settings.Realtime.RTSP.Health.HealthyDataThreshold)
-			}
+			assert.Equal(t, tt.seconds, settings.Realtime.RTSP.Health.HealthyDataThreshold)
 		})
 	}
 }
@@ -283,12 +251,8 @@ func TestSettingsBuilder_WithImageProvider(t *testing.T) {
 				WithImageProvider(tt.provider, tt.fallbackPolicy).
 				Build()
 
-			if settings.Realtime.Dashboard.Thumbnails.ImageProvider != tt.provider {
-				t.Errorf("Expected provider %q, got %q", tt.provider, settings.Realtime.Dashboard.Thumbnails.ImageProvider)
-			}
-			if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != tt.fallbackPolicy {
-				t.Errorf("Expected fallbackPolicy %q, got %q", tt.fallbackPolicy, settings.Realtime.Dashboard.Thumbnails.FallbackPolicy)
-			}
+			assert.Equal(t, tt.provider, settings.Realtime.Dashboard.Thumbnails.ImageProvider)
+			assert.Equal(t, tt.fallbackPolicy, settings.Realtime.Dashboard.Thumbnails.FallbackPolicy)
 		})
 	}
 }
@@ -327,12 +291,8 @@ func TestSettingsBuilder_WithSecurity(t *testing.T) {
 				WithSecurity(tt.host, tt.autoTLS).
 				Build()
 
-			if settings.Security.Host != tt.host {
-				t.Errorf("Expected host %q, got %q", tt.host, settings.Security.Host)
-			}
-			if settings.Security.AutoTLS != tt.autoTLS {
-				t.Errorf("Expected autoTLS %v, got %v", tt.autoTLS, settings.Security.AutoTLS)
-			}
+			assert.Equal(t, tt.host, settings.Security.Host)
+			assert.Equal(t, tt.autoTLS, settings.Security.AutoTLS)
 		})
 	}
 }
@@ -371,12 +331,8 @@ func TestSettingsBuilder_WithWebServer(t *testing.T) {
 				WithWebServer(tt.port, tt.enabled).
 				Build()
 
-			if settings.WebServer.Port != tt.port {
-				t.Errorf("Expected port %q, got %q", tt.port, settings.WebServer.Port)
-			}
-			if settings.WebServer.Enabled != tt.enabled {
-				t.Errorf("Expected enabled %v, got %v", tt.enabled, settings.WebServer.Enabled)
-			}
+			assert.Equal(t, tt.port, settings.WebServer.Port)
+			assert.Equal(t, tt.enabled, settings.WebServer.Enabled)
 		})
 	}
 }
@@ -392,18 +348,10 @@ func TestSettingsBuilder_MethodChaining(t *testing.T) {
 		Build()
 
 	// Verify all settings were applied
-	if settings.BirdNET.Threshold != 0.8 {
-		t.Errorf("Expected threshold 0.8, got %v", settings.BirdNET.Threshold)
-	}
-	if !settings.Realtime.MQTT.Enabled {
-		t.Error("Expected MQTT enabled")
-	}
-	if !settings.Realtime.Audio.Export.Enabled {
-		t.Error("Expected audio export enabled")
-	}
-	if settings.WebServer.Port != "8080" {
-		t.Errorf("Expected port 8080, got %q", settings.WebServer.Port)
-	}
+	assert.InDelta(t, 0.8, settings.BirdNET.Threshold, 0.0001)
+	assert.True(t, settings.Realtime.MQTT.Enabled, "Expected MQTT enabled")
+	assert.True(t, settings.Realtime.Audio.Export.Enabled, "Expected audio export enabled")
+	assert.Equal(t, "8080", settings.WebServer.Port)
 }
 
 // TestSettingsBuilder_Build verifies that Build returns a valid settings object.
@@ -413,9 +361,7 @@ func TestSettingsBuilder_Build(t *testing.T) {
 		WithBirdNET(0.7, 40.0, -100.0).
 		Build()
 
-	if settings == nil {
-		t.Fatal("Build() returned nil")
-	}
+	require.NotNil(t, settings, "Build() returned nil")
 
 	// Verify it's a separate copy (not just a reference)
 	settings.BirdNET.Threshold = 0.9
@@ -424,9 +370,7 @@ func TestSettingsBuilder_Build(t *testing.T) {
 		WithBirdNET(0.7, 40.0, -100.0).
 		Build()
 
-	if newSettings.BirdNET.Threshold != 0.7 {
-		t.Error("Build() appears to return shared state")
-	}
+	assert.InDelta(t, 0.7, newSettings.BirdNET.Threshold, 0.0001, "Build() appears to return shared state")
 }
 
 // TestSettingsBuilder_Apply verifies that Apply sets global test settings.
@@ -445,13 +389,8 @@ func TestSettingsBuilder_Apply(t *testing.T) {
 	// Verify settings were applied globally
 	currentSettings := GetSettings()
 
-	if currentSettings.BirdNET.Threshold != 0.75 {
-		t.Errorf("Expected global threshold 0.75, got %v", currentSettings.BirdNET.Threshold)
-	}
-
-	if appliedSettings.BirdNET.Threshold != 0.75 {
-		t.Errorf("Expected returned threshold 0.75, got %v", appliedSettings.BirdNET.Threshold)
-	}
+	assert.InDelta(t, 0.75, currentSettings.BirdNET.Threshold, 0.0001, "Expected global threshold to be applied")
+	assert.InDelta(t, 0.75, appliedSettings.BirdNET.Threshold, 0.0001, "Expected returned threshold to match")
 }
 
 // BenchmarkSettingsBuilder_Build benchmarks the builder Build operation.

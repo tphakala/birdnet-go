@@ -59,7 +59,7 @@ func TestSoundLevelManagerConcurrentState(t *testing.T) {
 	case <-done:
 		// Success
 	case <-time.After(5 * time.Second):
-		t.Fatal("Concurrent operations timed out")
+		require.Fail(t, "Concurrent operations timed out")
 	}
 
 	// Clean up
@@ -93,7 +93,7 @@ func TestSoundLevelManagerChannelCommunication(t *testing.T) {
 	case soundLevelChan <- testData:
 		// Success
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Failed to send test data to channel")
+		require.Fail(t, "Failed to send test data to channel")
 	}
 
 	// Verify data can be received
@@ -102,7 +102,7 @@ func TestSoundLevelManagerChannelCommunication(t *testing.T) {
 		assert.Equal(t, testData.Source, received.Source)
 		assert.Equal(t, testData.Name, received.Name)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Failed to receive test data from channel")
+		require.Fail(t, "Failed to receive test data from channel")
 	}
 
 	// Clean up
@@ -142,7 +142,7 @@ func TestHotReloadIntegrationBasic(t *testing.T) {
 	case <-done:
 		// Success - restart completed
 	case <-time.After(2 * time.Second):
-		t.Fatal("Hot reload simulation timed out")
+		require.Fail(t, "Hot reload simulation timed out")
 	}
 
 	// 4. Cleanup

@@ -14,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper function to generate a test certificate
@@ -21,9 +24,7 @@ func generateTestCertificate(t *testing.T) (caCert, clientCert, clientKey string
 	t.Helper()
 	// Generate RSA private key
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("Failed to generate private key: %v", err)
-	}
+	require.NoError(t, err, "Failed to generate private key")
 
 	// Create certificate template
 	template := x509.Certificate{
@@ -38,16 +39,14 @@ func generateTestCertificate(t *testing.T) (caCert, clientCert, clientKey string
 
 	// Generate certificate
 	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		t.Fatalf("Failed to create certificate: %v", err)
-	}
+	require.NoError(t, err, "Failed to create certificate")
 
 	// Encode certificate
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
-	
+
 	// Encode private key
 	privKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-	
+
 	// Create CA certificate (same as cert for simplicity)
 	caPEM := certPEM
 
@@ -73,27 +72,21 @@ func setupTestEnvironment(t *testing.T) (tm *TLSManager, tempDir string) {
 func verifyCertificatePermissions(t *testing.T, path string, expectedPerm os.FileMode) {
 	t.Helper()
 	info, err := os.Stat(path)
-	if err != nil {
-		t.Errorf("Failed to stat file: %v", err)
-		return
-	}
-	if info.Mode().Perm() != expectedPerm {
-		t.Errorf("File has wrong permissions: got %v, want %v", info.Mode().Perm(), expectedPerm)
-	}
+	require.NoError(t, err, "Failed to stat file")
+	assert.Equal(t, expectedPerm, info.Mode().Perm(), "File has wrong permissions")
 }
 
 // saveCertificatesSet saves a complete set of certificates for testing
 func saveCertificatesSet(t *testing.T, tm *TLSManager, service string, data testCertificateData) {
 	t.Helper()
-	if _, err := tm.SaveCertificate(service, TLSCertTypeCA, data.caCert); err != nil {
-		t.Errorf("Failed to save CA cert: %v", err)
-	}
-	if _, err := tm.SaveCertificate(service, TLSCertTypeClient, data.clientCert); err != nil {
-		t.Errorf("Failed to save client cert: %v", err)
-	}
-	if _, err := tm.SaveCertificate(service, TLSCertTypeKey, data.clientKey); err != nil {
-		t.Errorf("Failed to save client key: %v", err)
-	}
+	_, err := tm.SaveCertificate(service, TLSCertTypeCA, data.caCert)
+	require.NoError(t, err, "Failed to save CA cert")
+
+	_, err = tm.SaveCertificate(service, TLSCertTypeClient, data.clientCert)
+	require.NoError(t, err, "Failed to save client cert")
+
+	_, err = tm.SaveCertificate(service, TLSCertTypeKey, data.clientKey)
+	require.NoError(t, err, "Failed to save client key")
 }
 
 // verifyCertificatesExist checks if all certificates for a service exist
@@ -104,25 +97,13 @@ func verifyCertificatesExist(t *testing.T, tm *TLSManager, service string, shoul
 	keyExists := tm.CertificateExists(service, TLSCertTypeKey)
 
 	if shouldExist {
-		if !caExists {
-			t.Error("CA certificate should exist")
-		}
-		if !clientExists {
-			t.Error("Client certificate should exist")
-		}
-		if !keyExists {
-			t.Error("Client key should exist")
-		}
+		assert.True(t, caExists, "CA certificate should exist")
+		assert.True(t, clientExists, "Client certificate should exist")
+		assert.True(t, keyExists, "Client key should exist")
 	} else {
-		if caExists {
-			t.Error("CA certificate should not exist")
-		}
-		if clientExists {
-			t.Error("Client certificate should not exist")
-		}
-		if keyExists {
-			t.Error("Client key should not exist")
-		}
+		assert.False(t, caExists, "CA certificate should not exist")
+		assert.False(t, clientExists, "Client certificate should not exist")
+		assert.False(t, keyExists, "Client key should not exist")
 	}
 }
 
@@ -176,27 +157,19 @@ func testSaveAndRetrieveCertificates(t *testing.T, tm *TLSManager, data testCert
 	t.Helper()
 	// Save CA certificate
 	caPath, err := tm.SaveCertificate("mqtt", TLSCertTypeCA, data.caCert)
-	if err != nil {
-		t.Errorf("Failed to save CA certificate: %v", err)
-	}
-	if caPath == "" {
-		t.Error("CA certificate path is empty")
-	}
+	require.NoError(t, err, "Failed to save CA certificate")
+	assert.NotEmpty(t, caPath, "CA certificate path is empty")
 
 	// Verify file exists and has correct permissions
 	verifyCertificatePermissions(t, caPath, 0o644)
 
 	// Save client certificate
 	_, err = tm.SaveCertificate("mqtt", TLSCertTypeClient, data.clientCert)
-	if err != nil {
-		t.Errorf("Failed to save client certificate: %v", err)
-	}
+	require.NoError(t, err, "Failed to save client certificate")
 
 	// Save client key
 	keyPath, err := tm.SaveCertificate("mqtt", TLSCertTypeKey, data.clientKey)
-	if err != nil {
-		t.Errorf("Failed to save client key: %v", err)
-	}
+	require.NoError(t, err, "Failed to save client key")
 
 	// Verify key has restricted permissions
 	verifyCertificatePermissions(t, keyPath, 0o600)
@@ -210,14 +183,10 @@ func testRemoveCertificate(t *testing.T, tm *TLSManager) {
 	t.Helper()
 	// Remove CA certificate
 	err := tm.RemoveCertificate("mqtt", TLSCertTypeCA)
-	if err != nil {
-		t.Errorf("Failed to remove CA certificate: %v", err)
-	}
+	require.NoError(t, err, "Failed to remove CA certificate")
 
 	// Verify it's gone
-	if tm.CertificateExists("mqtt", TLSCertTypeCA) {
-		t.Error("CA certificate should not exist after removal")
-	}
+	assert.False(t, tm.CertificateExists("mqtt", TLSCertTypeCA), "CA certificate should not exist after removal")
 }
 
 // testRemoveAllCertificates tests removing all certificates for a service
@@ -228,9 +197,7 @@ func testRemoveAllCertificates(t *testing.T, tm *TLSManager, data testCertificat
 
 	// Remove all
 	err := tm.RemoveAllCertificates("mysql")
-	if err != nil {
-		t.Errorf("Failed to remove all certificates: %v", err)
-	}
+	require.NoError(t, err, "Failed to remove all certificates")
 
 	// Verify all are gone
 	verifyCertificatesExist(t, tm, "mysql", false)
@@ -241,23 +208,15 @@ func testEmptyContentRemovesCertificate(t *testing.T, tm *TLSManager, caCert str
 	t.Helper()
 	// Save a certificate
 	_, err := tm.SaveCertificate("redis", TLSCertTypeCA, caCert)
-	if err != nil {
-		t.Errorf("Failed to save certificate: %v", err)
-	}
+	require.NoError(t, err, "Failed to save certificate")
 
 	// Save empty content
 	path, err := tm.SaveCertificate("redis", TLSCertTypeCA, "")
-	if err != nil {
-		t.Errorf("Failed to save empty content: %v", err)
-	}
-	if path != "" {
-		t.Error("Path should be empty when saving empty content")
-	}
+	require.NoError(t, err, "Failed to save empty content")
+	assert.Empty(t, path, "Path should be empty when saving empty content")
 
 	// Verify certificate is removed
-	if tm.CertificateExists("redis", TLSCertTypeCA) {
-		t.Error("Certificate should be removed when saving empty content")
-	}
+	assert.False(t, tm.CertificateExists("redis", TLSCertTypeCA), "Certificate should be removed when saving empty content")
 }
 
 // testInvalidCertificateValidation tests validation of invalid certificates
@@ -275,9 +234,7 @@ func testInvalidCertificateValidation(t *testing.T, tm *TLSManager) {
 
 	for _, tc := range testCases {
 		_, err := tm.SaveCertificate("test", tc.certType, tc.content)
-		if err == nil {
-			t.Errorf("Should fail with %s", tc.name)
-		}
+		assert.Error(t, err, "Should fail with %s", tc.name)
 	}
 }
 
@@ -305,35 +262,29 @@ func testConcurrentAccess(t *testing.T, tm *TLSManager, caCert string) {
 
 	// Check for errors
 	for err := range errors {
-		t.Errorf("Concurrent save error: %v", err)
+		require.NoError(t, err, "Concurrent save error")
 	}
 
 	// Verify certificate exists
-	if !tm.CertificateExists("concurrent", TLSCertTypeCA) {
-		t.Error("Certificate should exist after concurrent saves")
-	}
+	assert.True(t, tm.CertificateExists("concurrent", TLSCertTypeCA), "Certificate should exist after concurrent saves")
 }
 
 // testServiceIsolation tests that certificates for different services are isolated
 func testServiceIsolation(t *testing.T, tm *TLSManager, caCert string) {
 	t.Helper()
 	// Save certificates for different services
-	if _, err := tm.SaveCertificate("service1", TLSCertTypeCA, caCert); err != nil {
-		t.Errorf("Failed to save service1 CA cert: %v", err)
-	}
-	if _, err := tm.SaveCertificate("service2", TLSCertTypeCA, caCert); err != nil {
-		t.Errorf("Failed to save service2 CA cert: %v", err)
-	}
+	_, err := tm.SaveCertificate("service1", TLSCertTypeCA, caCert)
+	require.NoError(t, err, "Failed to save service1 CA cert")
+
+	_, err = tm.SaveCertificate("service2", TLSCertTypeCA, caCert)
+	require.NoError(t, err, "Failed to save service2 CA cert")
 
 	// Remove service1 certificates
-	if err := tm.RemoveAllCertificates("service1"); err != nil {
-		t.Errorf("Failed to remove service1 certificates: %v", err)
-	}
+	err = tm.RemoveAllCertificates("service1")
+	require.NoError(t, err, "Failed to remove service1 certificates")
 
 	// Verify service2 certificates still exist
-	if !tm.CertificateExists("service2", TLSCertTypeCA) {
-		t.Error("Service2 certificates should not be affected by service1 removal")
-	}
+	assert.True(t, tm.CertificateExists("service2", TLSCertTypeCA), "Service2 certificates should not be affected by service1 removal")
 }
 
 // testDirectoryPermissions tests that directories are created with correct permissions
@@ -345,9 +296,7 @@ func testDirectoryPermissions(t *testing.T, tempDir, caCert string) {
 
 	// Save a certificate to trigger directory creation
 	_, err := newTm.SaveCertificate("perm-test", TLSCertTypeCA, caCert)
-	if err != nil {
-		t.Errorf("Failed to save certificate: %v", err)
-	}
+	require.NoError(t, err, "Failed to save certificate")
 
 	// Check TLS directory permissions
 	tlsDir := filepath.Join(newTempDir, "tls")
@@ -362,30 +311,22 @@ func TestGetTLSManager(t *testing.T) {
 	t.Parallel()
 	// Test that GetTLSManager returns a valid manager
 	manager := GetTLSManager()
-	if manager == nil {
-		t.Error("GetTLSManager should not return nil")
-	}
+	assert.NotNil(t, manager, "GetTLSManager should not return nil")
 
 	// Test that subsequent calls return the same instance
 	manager2 := GetTLSManager()
-	if manager != manager2 {
-		t.Error("GetTLSManager should return the same instance")
-	}
+	assert.Same(t, manager, manager2, "GetTLSManager should return the same instance")
 }
 
 // Helper function to generate an EC private key
 func generateECKey(t *testing.T) string {
 	t.Helper()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("Failed to generate EC key: %v", err)
-	}
-	
+	require.NoError(t, err, "Failed to generate EC key")
+
 	keyBytes, err := x509.MarshalECPrivateKey(priv)
-	if err != nil {
-		t.Fatalf("Failed to marshal EC key: %v", err)
-	}
-	
+	require.NoError(t, err, "Failed to marshal EC key")
+
 	return string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}))
 }
 
@@ -393,15 +334,11 @@ func generateECKey(t *testing.T) string {
 func generatePKCS8Key(t *testing.T) string {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("Failed to generate RSA key: %v", err)
-	}
-	
+	require.NoError(t, err, "Failed to generate RSA key")
+
 	keyBytes, err := x509.MarshalPKCS8PrivateKey(priv)
-	if err != nil {
-		t.Fatalf("Failed to marshal PKCS8 key: %v", err)
-	}
-	
+	require.NoError(t, err, "Failed to marshal PKCS8 key")
+
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes}))
 }
 
@@ -437,8 +374,10 @@ func TestValidateCertificateContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			err := validateCertificateContent(tt.certType, tt.content)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateCertificateContent() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "validateCertificateContent() should return error")
+			} else {
+				assert.NoError(t, err, "validateCertificateContent() should not return error")
 			}
 		})
 	}

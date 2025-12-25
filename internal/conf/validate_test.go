@@ -1,25 +1,25 @@
 package conf
 
 import (
-	stderrors "errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestValidateSoundLevelSettings(t *testing.T) {
-	// Define test cases using table-driven tests
 	tests := []struct {
 		name     string
 		settings SoundLevelSettings
 		wantErr  bool
-		errType  string // expected error type for validation
+		errType  string
 	}{
 		{
 			name: "disabled sound level - should pass regardless of interval",
 			settings: SoundLevelSettings{
 				Enabled:  false,
-				Interval: 1, // Less than 5 seconds but should pass because disabled
+				Interval: 1,
 			},
 			wantErr: false,
 		},
@@ -70,7 +70,7 @@ func TestValidateSoundLevelSettings(t *testing.T) {
 			name: "enabled with very high interval - should pass",
 			settings: SoundLevelSettings{
 				Enabled:  true,
-				Interval: 3600, // 1 hour
+				Interval: 3600,
 			},
 			wantErr: false,
 		},
@@ -92,58 +92,35 @@ func TestValidateSoundLevelSettings(t *testing.T) {
 		},
 	}
 
-	// Run test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Call the validation function
 			err := validateSoundLevelSettings(&tt.settings)
 
-			// Check if error occurred as expected
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSoundLevelSettings() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			if tt.wantErr {
+				enhanced := requireEnhancedError(t, err)
 
-			// If we expected an error, verify it's the correct type
-			if tt.wantErr && err != nil {
-				// Check if it's an enhanced error with proper context
-				var enhancedErr *errors.EnhancedError
-				if !stderrors.As(err, &enhancedErr) {
-					t.Errorf("expected EnhancedError type, got %T", err)
-					return
-				}
+				// Verify validation type context
+				ctx, exists := enhanced.Context["validation_type"]
+				assert.True(t, exists, "expected validation_type context to be set")
+				assert.Equal(t, tt.errType, ctx)
 
-				// Verify the validation type context
-				if ctx, exists := enhancedErr.Context["validation_type"]; exists {
-					if ctx != tt.errType {
-						t.Errorf("expected validation_type = %s, got %s", tt.errType, ctx)
-					}
-				} else {
-					t.Errorf("expected validation_type context to be set")
-				}
+				// Verify error category
+				assert.Equal(t, errors.CategoryValidation, enhanced.Category)
 
-				// Verify the error category
-				if enhancedErr.Category != errors.CategoryValidation {
-					t.Errorf("expected error category = %s, got %s", errors.CategoryValidation, enhancedErr.Category)
-				}
-
-				// Verify interval context is set for interval errors
+				// Verify interval context for interval errors
 				if tt.errType == "sound-level-interval" {
-					if _, exists := enhancedErr.Context["interval"]; !exists {
-						t.Errorf("expected interval context to be set")
-					}
-					if _, exists := enhancedErr.Context["minimum_interval"]; !exists {
-						t.Errorf("expected minimum_interval context to be set")
-					}
+					assert.Contains(t, enhanced.Context, "interval")
+					assert.Contains(t, enhanced.Context, "minimum_interval")
 				}
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
 func TestValidateSoundLevelSettingsEdgeCases(t *testing.T) {
-	// Test boundary values specifically
-	boundaryTests := []struct {
+	tests := []struct {
 		name     string
 		interval int
 		enabled  bool
@@ -157,7 +134,7 @@ func TestValidateSoundLevelSettingsEdgeCases(t *testing.T) {
 		{"boundary: 6 seconds disabled", 6, false, false},
 	}
 
-	for _, tt := range boundaryTests {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			settings := &SoundLevelSettings{
 				Enabled:  tt.enabled,
@@ -165,54 +142,45 @@ func TestValidateSoundLevelSettingsEdgeCases(t *testing.T) {
 			}
 
 			err := validateSoundLevelSettings(settings)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSoundLevelSettings() for interval %d, enabled %v: error = %v, wantErr %v",
-					tt.interval, tt.enabled, err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "interval %d with enabled=%v should fail", tt.interval, tt.enabled)
+			} else {
+				assert.NoError(t, err, "interval %d with enabled=%v should pass", tt.interval, tt.enabled)
 			}
 		})
 	}
 }
 
 func TestValidateSoundLevelSettingsErrorMessage(t *testing.T) {
-	// Test specific error message content
 	settings := &SoundLevelSettings{
 		Enabled:  true,
 		Interval: 3,
 	}
 
 	err := validateSoundLevelSettings(settings)
-	if err == nil {
-		t.Fatal("expected error for interval < 5 seconds, got nil")
-	}
+	require.Error(t, err, "expected error for interval < 5 seconds")
 
-	// Check error message contains expected content
 	expectedMsg := "sound level interval must be at least 5 seconds to avoid excessive CPU usage, got 3"
-	if err.Error() != expectedMsg {
-		t.Errorf("expected error message = %q, got %q", expectedMsg, err.Error())
-	}
+	assert.Equal(t, expectedMsg, err.Error())
 }
 
 func BenchmarkValidateSoundLevelSettings(b *testing.B) {
-	// Create test settings
 	settings := &SoundLevelSettings{
 		Enabled:  true,
 		Interval: 10,
 	}
 
-	// Run validation N times
 	for b.Loop() {
 		_ = validateSoundLevelSettings(settings)
 	}
 }
 
 func BenchmarkValidateSoundLevelSettingsWithError(b *testing.B) {
-	// Create test settings that will generate an error
 	settings := &SoundLevelSettings{
 		Enabled:  true,
 		Interval: 2,
 	}
 
-	// Run validation N times
 	for b.Loop() {
 		_ = validateSoundLevelSettings(settings)
 	}

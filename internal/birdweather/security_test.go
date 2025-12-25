@@ -2,10 +2,10 @@ package birdweather
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -64,9 +64,7 @@ func TestMaskURL(t *testing.T) {
 			}
 
 			result := client.maskURL(tt.inputURL)
-			if result != tt.expectedURL {
-				t.Errorf("maskURL() = %v, want %v", result, tt.expectedURL)
-			}
+			assert.Equal(t, tt.expectedURL, result)
 		})
 	}
 }
@@ -101,9 +99,7 @@ func TestMaskURLForLogging(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := maskURLForLogging(tt.inputURL, tt.birdweatherID)
-			if result != tt.expectedURL {
-				t.Errorf("maskURLForLogging() = %v, want %v", result, tt.expectedURL)
-			}
+			assert.Equal(t, tt.expectedURL, result)
 		})
 	}
 }
@@ -128,9 +124,7 @@ func TestErrorContextScrubbing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Verify that the URL passed to handleNetworkError is already masked
-			if !strings.Contains(tt.url, tt.expectInURL) {
-				t.Errorf("URL should contain %v, but got %v", tt.expectInURL, tt.url)
-			}
+			assert.Contains(t, tt.url, tt.expectInURL)
 		})
 	}
 }
@@ -167,13 +161,8 @@ func TestDescriptiveErrorMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := handleNetworkError(tt.baseErr, "https://test.com", 30*time.Second, tt.operation)
 
-			if result == nil {
-				t.Fatal("Expected non-nil error")
-			}
-
-			if !strings.Contains(result.Error(), tt.expectedPrefix) {
-				t.Errorf("Expected error to contain %q, got %q", tt.expectedPrefix, result.Error())
-			}
+			assert.NotNil(t, result, "Expected non-nil error")
+			assert.Contains(t, result.Error(), tt.expectedPrefix)
 		})
 	}
 }

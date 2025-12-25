@@ -3,29 +3,15 @@ package myaudio
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func getTestLogger() *slog.Logger {
-	logger := logging.ForService("test")
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return logger
-}
-
 func TestSourceRegistration(t *testing.T) {
-	// Create a fresh registry for testing
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	// Test RTSP source registration
 	rtspURL := "rtsp://admin:password@192.168.1.100/stream"
@@ -36,41 +22,23 @@ func TestSourceRegistration(t *testing.T) {
 	}
 
 	source, err := registry.RegisterSource(rtspURL, config)
-	if err != nil {
-		t.Fatalf("Failed to register RTSP source: %v", err)
-	}
+	require.NoError(t, err, "Failed to register RTSP source")
 
 	// Verify source properties
-	if source.ID != "test_cam" {
-		t.Errorf("Expected ID 'test_cam', got '%s'", source.ID)
-	}
-	if source.DisplayName != "Test Camera" {
-		t.Errorf("Expected display name 'Test Camera', got '%s'", source.DisplayName)
-	}
-	if source.Type != SourceTypeRTSP {
-		t.Errorf("Expected type RTSP, got %s", source.Type)
-	}
+	assert.Equal(t, "test_cam", source.ID)
+	assert.Equal(t, "Test Camera", source.DisplayName)
+	assert.Equal(t, SourceTypeRTSP, source.Type)
+
 	connStr, err := source.GetConnectionString()
-	if err != nil {
-		t.Fatalf("Failed to get connection string: %v", err)
-	}
-	if connStr != rtspURL {
-		t.Errorf("Connection string mismatch")
-	}
+	require.NoError(t, err, "Failed to get connection string")
+	assert.Equal(t, rtspURL, connStr)
 
 	// Verify safe string doesn't contain credentials
-	if strings.Contains(source.SafeString, "password") {
-		t.Errorf("Safe string contains credentials: %s", source.SafeString)
-	}
+	assert.NotContains(t, source.SafeString, "password", "Safe string should not contain credentials")
 }
 
 func TestRTSPValidationWithQueryParameters(t *testing.T) {
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	testCases := []struct {
 		name        string
@@ -127,13 +95,9 @@ func TestRTSPValidationWithQueryParameters(t *testing.T) {
 			_, err := registry.RegisterSource(tc.rtspURL, config)
 
 			if tc.shouldPass {
-				if err != nil {
-					t.Errorf("%s: expected success but got error: %v", tc.description, err)
-				}
+				assert.NoError(t, err, tc.description)
 			} else {
-				if err == nil {
-					t.Errorf("%s: expected error but got success", tc.description)
-				}
+				assert.Error(t, err, tc.description)
 			}
 		})
 	}
@@ -172,50 +136,33 @@ func TestRTSPCredentialSanitization(t *testing.T) {
 				sourceType = SourceTypeAudioCard
 			}
 			source := registry.GetOrCreateSource(tc.input, sourceType)
-			if source == nil {
-				t.Fatalf("Failed to create source for %s", tc.input)
-			}
+			require.NotNil(t, source, "Failed to create source for %s", tc.input)
 
 			if tc.shouldHide {
 				// Should not contain credentials in safe string
-				if strings.Contains(source.SafeString, "secret123") ||
-					strings.Contains(source.SafeString, "admin:secret123") {
-					t.Errorf("Safe string contains credentials: %s", source.SafeString)
-				}
+				assert.NotContains(t, source.SafeString, "secret123", "Safe string should not contain password")
+				assert.NotContains(t, source.SafeString, "admin:secret123", "Safe string should not contain credentials")
 			}
 
 			// Original connection string should always be preserved
 			connStr, err := source.GetConnectionString()
-			if err != nil {
-				t.Fatalf("Failed to get connection string: %v", err)
-			}
-			if connStr != tc.input {
-				t.Errorf("Original connection string not preserved")
-			}
+			require.NoError(t, err, "Failed to get connection string")
+			assert.Equal(t, tc.input, connStr, "Original connection string not preserved")
 		})
 	}
 }
 
 func TestSourceIDGeneration(t *testing.T) {
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	// Test auto-generated IDs
 	source1 := registry.GetOrCreateSource("rtsp://cam1.local/stream", SourceTypeRTSP)
 	source2 := registry.GetOrCreateSource("rtsp://cam2.local/stream", SourceTypeRTSP)
 
-	if source1.ID == source2.ID {
-		t.Errorf("Generated IDs should be unique: %s == %s", source1.ID, source2.ID)
-	}
+	assert.NotEqual(t, source1.ID, source2.ID, "Generated IDs should be unique")
 
 	// IDs should follow the pattern
-	if !strings.HasPrefix(source1.ID, "rtsp_") {
-		t.Errorf("RTSP source ID should start with 'rtsp_': %s", source1.ID)
-	}
+	assert.True(t, strings.HasPrefix(source1.ID, "rtsp_"), "RTSP source ID should start with 'rtsp_'")
 }
 
 func TestConcurrentSourceAccess(t *testing.T) {
@@ -230,9 +177,7 @@ func TestConcurrentSourceAccess(t *testing.T) {
 				fmt.Sprintf("rtsp://cam%d.local/stream", id),
 				SourceTypeRTSP,
 			)
-			if source == nil {
-				t.Errorf("Failed to create source %d", id)
-			}
+			assert.NotNil(t, source, "Failed to create source %d", id)
 			done <- true
 		}(i)
 	}
@@ -244,9 +189,7 @@ func TestConcurrentSourceAccess(t *testing.T) {
 
 	// Verify we have 10 sources
 	sources := registry.ListSources()
-	if len(sources) < 10 {
-		t.Errorf("Expected at least 10 sources, got %d", len(sources))
-	}
+	assert.GreaterOrEqual(t, len(sources), 10, "Expected at least 10 sources")
 }
 
 func TestBackwardCompatibility(t *testing.T) {
@@ -255,20 +198,15 @@ func TestBackwardCompatibility(t *testing.T) {
 
 	// This should auto-register the source
 	source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
-	if source == nil {
-		t.Fatal("GetOrCreateSource returned nil")
-	}
+	require.NotNil(t, source, "GetOrCreateSource returned nil")
 
 	// Should return a source with an ID, not the original URL
-	if source.ID == testURL {
-		t.Errorf("Source should have generated ID, not original URL")
-	}
+	assert.NotEqual(t, testURL, source.ID, "Source should have generated ID, not original URL")
 
 	// Second call should return the same source
 	source2 := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
-	if source2 == nil || source.ID != source2.ID {
-		t.Errorf("GetOrCreateSource should be idempotent: %s != %s", source.ID, source2.ID)
-	}
+	require.NotNil(t, source2)
+	assert.Equal(t, source.ID, source2.ID, "GetOrCreateSource should be idempotent")
 }
 
 func TestSourceMetricsUpdate(t *testing.T) {
@@ -283,24 +221,14 @@ func TestSourceMetricsUpdate(t *testing.T) {
 	registry.UpdateSourceMetrics(source.ID, 2048, true)
 
 	// Verify updates
-	updatedSource, _ := registry.GetSourceByID(source.ID)
-	if updatedSource.TotalBytes != initialBytes+1024+2048 {
-		t.Errorf("Expected total bytes %d, got %d",
-			initialBytes+1024+2048, updatedSource.TotalBytes)
-	}
-	if updatedSource.ErrorCount != initialErrors+1 {
-		t.Errorf("Expected error count %d, got %d",
-			initialErrors+1, updatedSource.ErrorCount)
-	}
+	updatedSource, exists := registry.GetSourceByID(source.ID)
+	require.True(t, exists)
+	assert.Equal(t, initialBytes+1024+2048, updatedSource.TotalBytes, "Expected total bytes to be updated")
+	assert.Equal(t, initialErrors+1, updatedSource.ErrorCount, "Expected error count to be incremented")
 }
 
 func TestSourceStats(t *testing.T) {
-	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
-	}
+	registry := newTestRegistry()
 
 	// Create sources of different types
 	registry.GetOrCreateSource("rtsp://cam1.local/stream", SourceTypeRTSP)
@@ -309,13 +237,7 @@ func TestSourceStats(t *testing.T) {
 
 	stats := registry.GetSourceStats()
 
-	if stats.Total != 3 {
-		t.Errorf("Expected 3 total sources, got %v", stats.Total)
-	}
-	if stats.RTSP != 2 {
-		t.Errorf("Expected 2 RTSP sources, got %v", stats.RTSP)
-	}
-	if stats.Device != 1 {
-		t.Errorf("Expected 1 device source, got %v", stats.Device)
-	}
+	assert.Equal(t, 3, stats.Total, "Expected 3 total sources")
+	assert.Equal(t, 2, stats.RTSP, "Expected 2 RTSP sources")
+	assert.Equal(t, 1, stats.Device, "Expected 1 device source")
 }

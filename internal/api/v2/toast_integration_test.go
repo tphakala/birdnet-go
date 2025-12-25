@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -18,7 +20,7 @@ func awaitNotification(t *testing.T, ch <-chan *notification.Notification, timeo
 	case notif := <-ch:
 		return notif
 	case <-time.After(timeout):
-		t.Fatal("Did not receive notification within timeout")
+		require.Fail(t, "Did not receive notification within timeout")
 		return nil
 	}
 }
@@ -27,13 +29,9 @@ func awaitNotification(t *testing.T, ch <-chan *notification.Notification, timeo
 func checkToastMarking(t *testing.T, notif *notification.Notification) string {
 	t.Helper()
 	isToast, ok := notif.Metadata["isToast"].(bool)
-	if !ok || !isToast {
-		t.Error("Notification should be marked as toast")
-	}
+	assert.True(t, ok && isToast, "Notification should be marked as toast")
 	toastID, ok := notif.Metadata["toastId"].(string)
-	if !ok || toastID == "" {
-		t.Error("Notification should have toastId in metadata")
-	}
+	assert.True(t, ok && toastID != "", "Notification should have toastId in metadata")
 	return toastID
 }
 
@@ -42,12 +40,9 @@ func checkSSEFields(t *testing.T, eventData, expected map[string]any) {
 	t.Helper()
 	for field, expectedValue := range expected {
 		actualValue, exists := eventData[field]
-		if !exists {
-			t.Errorf("SSE event data missing field %q", field)
-			continue
-		}
-		if actualValue != expectedValue {
-			t.Errorf("SSE event data field %q = %v, want %v", field, actualValue, expectedValue)
+		assert.True(t, exists, "SSE event data missing field %q", field)
+		if exists {
+			assert.Equal(t, expectedValue, actualValue, "SSE event data field %q mismatch", field)
 		}
 	}
 }
@@ -56,16 +51,13 @@ func checkSSEFields(t *testing.T, eventData, expected map[string]any) {
 func checkSSERequired(t *testing.T, eventData map[string]any) {
 	t.Helper()
 	for _, field := range []string{"id", "message", "type", "timestamp"} {
-		if _, exists := eventData[field]; !exists {
-			t.Errorf("SSE event data missing required field %q", field)
-		}
+		_, exists := eventData[field]
+		assert.True(t, exists, "SSE event data missing required field %q", field)
 	}
-	if timestamp, ok := eventData["timestamp"].(time.Time); ok {
-		if time.Since(timestamp) > time.Second {
-			t.Error("SSE event timestamp should be recent")
-		}
-	} else {
-		t.Error("SSE event timestamp should be a time.Time")
+	timestamp, ok := eventData["timestamp"].(time.Time)
+	assert.True(t, ok, "SSE event timestamp should be a time.Time")
+	if ok {
+		assert.WithinDuration(t, time.Now(), timestamp, time.Second, "SSE event timestamp should be recent")
 	}
 }
 
@@ -114,9 +106,8 @@ func TestToastIntegrationFlow(t *testing.T) {
 			notifCh, _ := service.Subscribe()
 			defer service.Unsubscribe(notifCh)
 
-			if err := c.SendToast(tc.message, tc.toastType, tc.duration); err != nil {
-				t.Fatalf("SendToast() error = %v", err)
-			}
+			err := c.SendToast(tc.message, tc.toastType, tc.duration)
+			require.NoError(t, err, "SendToast() error")
 
 			capturedNotif := awaitNotification(t, notifCh, 100*time.Millisecond)
 			toastID := checkToastMarking(t, capturedNotif)
@@ -125,9 +116,7 @@ func TestToastIntegrationFlow(t *testing.T) {
 			checkSSEFields(t, sseEventData, tc.expectedSSEFields)
 			checkSSERequired(t, sseEventData)
 
-			if sseEventData["id"] != toastID {
-				t.Errorf("SSE event ID %v should match toast ID %v", sseEventData["id"], toastID)
-			}
+			assert.Equal(t, toastID, sseEventData["id"], "SSE event ID should match toast ID")
 		})
 	}
 }
@@ -196,31 +185,14 @@ func TestToastToSSEEventConsistency(t *testing.T) {
 	eventData := c.createToastEventData(notif)
 
 	// Verify consistency
-	if eventData["message"] != originalToast.Message {
-		t.Errorf("Message inconsistency: SSE=%v, Toast=%v", eventData["message"], originalToast.Message)
-	}
-
-	if eventData["type"] != string(originalToast.Type) {
-		t.Errorf("Type inconsistency: SSE=%v, Toast=%v", eventData["type"], string(originalToast.Type))
-	}
-
-	if eventData["duration"] != originalToast.Duration {
-		t.Errorf("Duration inconsistency: SSE=%v, Toast=%v", eventData["duration"], originalToast.Duration)
-	}
-
-	if eventData["component"] != originalToast.Component {
-		t.Errorf("Component inconsistency: SSE=%v, Toast=%v", eventData["component"], originalToast.Component)
-	}
-
-	if eventData["id"] != originalToast.ID {
-		t.Errorf("ID inconsistency: SSE=%v, Toast=%v", eventData["id"], originalToast.ID)
-	}
+	assert.Equal(t, originalToast.Message, eventData["message"], "Message inconsistency")
+	assert.Equal(t, string(originalToast.Type), eventData["type"], "Type inconsistency")
+	assert.Equal(t, originalToast.Duration, eventData["duration"], "Duration inconsistency")
+	assert.Equal(t, originalToast.Component, eventData["component"], "Component inconsistency")
+	assert.Equal(t, originalToast.ID, eventData["id"], "ID inconsistency")
 
 	// Verify action consistency
-	eventAction := eventData["action"]
-	if eventAction != originalToast.Action {
-		t.Errorf("Action inconsistency: SSE=%v, Toast=%v", eventAction, originalToast.Action)
-	}
+	assert.Equal(t, originalToast.Action, eventData["action"], "Action inconsistency")
 }
 
 // BenchmarkCompleteToastFlow benchmarks the complete toast flow
@@ -244,9 +216,7 @@ func BenchmarkCompleteToastFlow(b *testing.B) {
 	for b.Loop() {
 		// Step 1: Send toast
 		err := c.SendToast("Benchmark message", "info", 3000)
-		if err != nil {
-			b.Fatalf("SendToast error: %v", err)
-		}
+		require.NoError(b, err, "SendToast error")
 
 		// Step 2: Receive notification
 		select {
@@ -254,7 +224,7 @@ func BenchmarkCompleteToastFlow(b *testing.B) {
 			// Step 3: Create SSE event data
 			_ = c.createToastEventData(notif)
 		case <-time.After(10 * time.Millisecond):
-			b.Fatal("Timeout waiting for notification")
+			require.Fail(b, "Timeout waiting for notification")
 		}
 	}
 }

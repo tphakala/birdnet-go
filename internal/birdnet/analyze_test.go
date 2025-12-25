@@ -5,6 +5,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -27,9 +29,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
 				t.Helper()
-				if len(results) != 3 {
-					t.Errorf("Expected 3 results, got %d", len(results))
-				}
+				assert.Len(t, results, 3)
 				expected := []struct {
 					species    string
 					confidence float32
@@ -39,12 +39,8 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 					{"Eagle", 0.5},
 				}
 				for i, exp := range expected {
-					if results[i].Species != exp.species {
-						t.Errorf("Result %d: expected species %s, got %s", i, exp.species, results[i].Species)
-					}
-					if results[i].Confidence != exp.confidence {
-						t.Errorf("Result %d: expected confidence %f, got %f", i, exp.confidence, results[i].Confidence)
-					}
+					assert.Equal(t, exp.species, results[i].Species, "Result %d species mismatch", i)
+					assert.InDelta(t, exp.confidence, results[i].Confidence, 0.0001, "Result %d confidence mismatch", i)
 				}
 			},
 		},
@@ -69,9 +65,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
 				t.Helper()
-				if len(results) != 0 {
-					t.Errorf("Expected 0 results, got %d", len(results))
-				}
+				assert.Empty(t, results)
 			},
 		},
 		{
@@ -81,15 +75,9 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
 				t.Helper()
-				if len(results) != 1 {
-					t.Errorf("Expected 1 result, got %d", len(results))
-				}
-				if results[0].Species != "Robin" {
-					t.Errorf("Expected species Robin, got %s", results[0].Species)
-				}
-				if results[0].Confidence != 0.95 {
-					t.Errorf("Expected confidence 0.95, got %f", results[0].Confidence)
-				}
+				require.Len(t, results, 1)
+				assert.Equal(t, "Robin", results[0].Species)
+				assert.InDelta(t, float32(0.95), results[0].Confidence, 0.0001)
 			},
 		},
 		{
@@ -99,16 +87,10 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
 				t.Helper()
-				if len(results) != 6522 {
-					t.Errorf("Expected 6522 results, got %d", len(results))
-				}
+				require.Len(t, results, 6522)
 				// Verify a few samples
-				if results[0].Species != "Species_000001" {
-					t.Errorf("First species incorrect: %s", results[0].Species)
-				}
-				if results[6521].Species != "Species_006522" {
-					t.Errorf("Last species incorrect: %s", results[6521].Species)
-				}
+				assert.Equal(t, "Species_000001", results[0].Species, "First species incorrect")
+				assert.Equal(t, "Species_006522", results[6521].Species, "Last species incorrect")
 			},
 		},
 		{
@@ -118,12 +100,8 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
 				t.Helper()
-				if results[0].Confidence != 0.0 {
-					t.Errorf("Expected confidence 0.0, got %f", results[0].Confidence)
-				}
-				if results[1].Confidence != 1.0 {
-					t.Errorf("Expected confidence 1.0, got %f", results[1].Confidence)
-				}
+				assert.InDelta(t, float32(0.0), results[0].Confidence, 0.0001)
+				assert.InDelta(t, float32(1.0), results[1].Confidence, 0.0001)
 			},
 		},
 	}
@@ -135,15 +113,12 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			results, err := pairLabelsAndConfidence(tt.labels, tt.confidence)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Expected error containing '%s', got nil", tt.errContains)
-				} else if tt.errContains != "" && err.Error() != tt.errContains {
-					t.Errorf("Expected error '%s', got '%s'", tt.errContains, err.Error())
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Equal(t, tt.errContains, err.Error())
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
+				require.NoError(t, err)
 				if tt.validate != nil {
 					tt.validate(t, results)
 				}
@@ -174,9 +149,7 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			validate: func(t *testing.T, buffer []datastore.Results, results []datastore.Results) {
 				t.Helper()
 				// Results should point to the same buffer
-				if &results[0] != &buffer[0] {
-					t.Error("Results should reference the same buffer")
-				}
+				assert.Same(t, &results[0], &buffer[0], "Results should reference the same buffer")
 				// Check values
 				expected := []struct {
 					species    string
@@ -187,12 +160,8 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 					{"Eagle", 0.5},
 				}
 				for i, exp := range expected {
-					if results[i].Species != exp.species {
-						t.Errorf("Result %d: expected species %s, got %s", i, exp.species, results[i].Species)
-					}
-					if results[i].Confidence != exp.confidence {
-						t.Errorf("Result %d: expected confidence %f, got %f", i, exp.confidence, results[i].Confidence)
-					}
+					assert.Equal(t, exp.species, results[i].Species, "Result %d species mismatch", i)
+					assert.InDelta(t, exp.confidence, results[i].Confidence, 0.0001, "Result %d confidence mismatch", i)
 				}
 			},
 		},
@@ -228,9 +197,7 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			wantErr:    false,
 			validate: func(t *testing.T, buffer []datastore.Results, results []datastore.Results) {
 				t.Helper()
-				if len(results) != 0 {
-					t.Errorf("Expected 0 results, got %d", len(results))
-				}
+				assert.Empty(t, results)
 			},
 		},
 		{
@@ -242,27 +209,22 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			validate: func(t *testing.T, buffer []datastore.Results, results []datastore.Results) {
 				t.Helper()
 				// First use
-				if results[0].Species != "Robin" || results[0].Confidence != 0.9 {
-					t.Errorf("First use failed")
-				}
+				assert.Equal(t, "Robin", results[0].Species)
+				assert.InDelta(t, float32(0.9), results[0].Confidence, 0.0001)
 
 				// Reuse with different values
 				newLabels := []string{"Hawk", "Owl", "Crow"}
 				newConfidence := []float32{0.8, 0.6, 0.4}
 				results2, err := pairLabelsAndConfidenceReuse(newLabels, newConfidence, buffer)
-				if err != nil {
-					t.Errorf("Second use failed: %v", err)
-				}
+				require.NoError(t, err, "Second use failed")
 
 				// Check that buffer was updated
-				if results2[0].Species != "Hawk" || results2[0].Confidence != 0.8 {
-					t.Errorf("Buffer reuse failed: got %s/%f", results2[0].Species, results2[0].Confidence)
-				}
+				assert.Equal(t, "Hawk", results2[0].Species)
+				assert.InDelta(t, float32(0.8), results2[0].Confidence, 0.0001)
 
 				// Original results slice should also be updated (same underlying array)
-				if results[0].Species != "Hawk" || results[0].Confidence != 0.8 {
-					t.Errorf("Buffer update not reflected in original slice")
-				}
+				assert.Equal(t, "Hawk", results[0].Species, "Buffer update not reflected in original slice")
+				assert.InDelta(t, float32(0.8), results[0].Confidence, 0.0001, "Buffer update not reflected in original slice")
 			},
 		},
 	}
@@ -278,15 +240,12 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			results, err := pairLabelsAndConfidenceReuse(tt.labels, tt.confidence, buffer)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Expected error containing '%s', got nil", tt.errContains)
-				} else if tt.errContains != "" && err.Error() != tt.errContains {
-					t.Errorf("Expected error '%s', got '%s'", tt.errContains, err.Error())
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Equal(t, tt.errContains, err.Error())
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
+				require.NoError(t, err)
 				if tt.validate != nil {
 					tt.validate(t, buffer, results)
 				}
@@ -305,9 +264,7 @@ func TestPairLabelsAndConfidenceReuse(t *testing.T) {
 
 	// First call
 	results1, err := pairLabelsAndConfidence(labels, confidence1)
-	if err != nil {
-		t.Fatalf("First call failed: %v", err)
-	}
+	require.NoError(t, err, "First call failed")
 
 	// Save first results
 	saved := make([]datastore.Results, len(results1))
@@ -317,23 +274,18 @@ func TestPairLabelsAndConfidenceReuse(t *testing.T) {
 
 	// Second call
 	results2, err := pairLabelsAndConfidence(labels, confidence2)
-	if err != nil {
-		t.Fatalf("Second call failed: %v", err)
-	}
+	require.NoError(t, err, "Second call failed")
 
 	// Verify first results haven't changed
 	for i, r := range saved {
-		if results1[i].Species != r.Species || results1[i].Confidence != r.Confidence {
-			t.Errorf("First results were modified at index %d", i)
-		}
+		assert.Equal(t, r.Species, results1[i].Species, "First results species modified at index %d", i)
+		assert.InDelta(t, r.Confidence, results1[i].Confidence, 0.0001, "First results confidence modified at index %d", i)
 	}
 
 	// Verify second results are correct
 	expected2 := []float32{0.3, 0.6, 0.8}
 	for i, exp := range expected2 {
-		if results2[i].Confidence != exp {
-			t.Errorf("Second result %d: expected confidence %f, got %f", i, exp, results2[i].Confidence)
-		}
+		assert.InDelta(t, exp, results2[i].Confidence, 0.0001, "Second result %d confidence mismatch", i)
 	}
 }
 
@@ -428,15 +380,13 @@ func TestSortResults(t *testing.T) {
 
 			sortResults(results)
 
-			if len(results) != len(tt.expected) {
-				t.Fatalf("Length mismatch: expected %d, got %d", len(tt.expected), len(results))
-			}
+			assert.Len(t, results, len(tt.expected))
 
 			// For equal confidence values, we just check that they're sorted by confidence
 			for i := range results {
-				if i > 0 && results[i].Confidence > results[i-1].Confidence {
-					t.Errorf("Results not sorted correctly at index %d: %f > %f",
-						i, results[i].Confidence, results[i-1].Confidence)
+				if i > 0 {
+					assert.LessOrEqual(t, results[i].Confidence, results[i-1].Confidence,
+						"Results not sorted correctly at index %d", i)
 				}
 			}
 		})
@@ -507,16 +457,11 @@ func TestTrimResultsToMax(t *testing.T) {
 
 			result := trimResultsToMax(tt.input, tt.maxCount)
 
-			if len(result) != tt.wantCount {
-				t.Errorf("Expected %d results, got %d", tt.wantCount, len(result))
-			}
+			assert.Len(t, result, tt.wantCount)
 
 			// Verify it returns the first N elements
 			for i := range result {
-				if result[i].Species != tt.input[i].Species {
-					t.Errorf("Result %d mismatch: expected %s, got %s",
-						i, tt.input[i].Species, result[i].Species)
-				}
+				assert.Equal(t, tt.input[i].Species, result[i].Species, "Result %d mismatch", i)
 			}
 		})
 	}
@@ -539,9 +484,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			validate: func(t *testing.T, results []float32) {
 				t.Helper()
 				for i, r := range results {
-					if math.Abs(float64(r)-0.5) > 0.0001 {
-						t.Errorf("Index %d: expected 0.5, got %f", i, r)
-					}
+					assert.InDelta(t, 0.5, r, 0.0001, "Index %d", i)
 				}
 			},
 		},
@@ -552,15 +495,9 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			validate: func(t *testing.T, results []float32) {
 				t.Helper()
 				// Sigmoid should be symmetric around 0.5
-				if math.Abs(float64(results[0]+results[4])-1.0) > 0.0001 {
-					t.Errorf("Sigmoid not symmetric: %f + %f != 1.0", results[0], results[4])
-				}
-				if math.Abs(float64(results[1]+results[3])-1.0) > 0.0001 {
-					t.Errorf("Sigmoid not symmetric: %f + %f != 1.0", results[1], results[3])
-				}
-				if math.Abs(float64(results[2])-0.5) > 0.0001 {
-					t.Errorf("Sigmoid(0) should be 0.5, got %f", results[2])
-				}
+				assert.InDelta(t, 1.0, results[0]+results[4], 0.0001, "Sigmoid not symmetric: %f + %f", results[0], results[4])
+				assert.InDelta(t, 1.0, results[1]+results[3], 0.0001, "Sigmoid not symmetric: %f + %f", results[1], results[3])
+				assert.InDelta(t, 0.5, results[2], 0.0001, "Sigmoid(0) should be 0.5")
 			},
 		},
 		{
@@ -572,12 +509,8 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 				// Higher sensitivity should give higher confidence
 				sigmoid1 := 1.0 / (1.0 + math.Exp(-1.0))
 				sigmoid2 := 1.0 / (1.0 + math.Exp(-2.0))
-				if results[0] <= float32(sigmoid1) {
-					t.Errorf("Higher sensitivity should increase confidence: %f <= %f", results[0], sigmoid1)
-				}
-				if math.Abs(float64(results[0])-sigmoid2) > 0.0001 {
-					t.Errorf("Expected %f, got %f", sigmoid2, results[0])
-				}
+				assert.Greater(t, results[0], float32(sigmoid1), "Higher sensitivity should increase confidence")
+				assert.InDelta(t, sigmoid2, results[0], 0.0001)
 			},
 		},
 		{
@@ -586,9 +519,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			sensitivity: 1.0,
 			validate: func(t *testing.T, results []float32) {
 				t.Helper()
-				if len(results) != 0 {
-					t.Errorf("Expected empty result, got %d elements", len(results))
-				}
+				assert.Empty(t, results)
 			},
 		},
 	}
@@ -599,9 +530,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 
 			results := applySigmoidToPredictions(tt.predictions, tt.sensitivity)
 
-			if len(results) != len(tt.predictions) {
-				t.Fatalf("Length mismatch: expected %d, got %d", len(tt.predictions), len(results))
-			}
+			assert.Len(t, results, len(tt.predictions))
 
 			if tt.validate != nil {
 				tt.validate(t, results)
@@ -645,19 +574,13 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			bufferSize:  5,
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
 				t.Helper()
-				if len(original) != len(reuse) {
-					t.Errorf("Length mismatch: %d vs %d", len(original), len(reuse))
-				}
+				assert.Len(t, reuse, len(original))
 				// Results should be identical
 				for i := range original {
-					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
-						t.Errorf("Index %d: original=%f, reuse=%f", i, original[i], reuse[i])
-					}
+					assert.InDelta(t, original[i], reuse[i], 0.0001, "Index %d", i)
 				}
 				// Reuse should return the same buffer
-				if &reuse[0] != &buffer[0] {
-					t.Error("Buffer reuse should return the same buffer")
-				}
+				assert.Same(t, &buffer[0], &reuse[0], "Buffer reuse should return the same buffer")
 			},
 		},
 		{
@@ -667,18 +590,14 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			bufferSize:  2, // Smaller than predictions
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
 				t.Helper()
-				if len(original) != len(reuse) {
-					t.Errorf("Length mismatch: %d vs %d", len(original), len(reuse))
-				}
+				assert.Len(t, reuse, len(original))
 				// Results should be identical even with fallback
 				for i := range original {
-					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
-						t.Errorf("Index %d: original=%f, reuse=%f", i, original[i], reuse[i])
-					}
+					assert.InDelta(t, original[i], reuse[i], 0.0001, "Index %d", i)
 				}
 				// Should not use the buffer due to size mismatch
-				if len(reuse) == len(buffer) && &reuse[0] == &buffer[0] {
-					t.Error("Should have fallen back to allocation, not used buffer")
+				if len(reuse) == len(buffer) {
+					assert.NotSame(t, &buffer[0], &reuse[0], "Should have fallen back to allocation, not used buffer")
 				}
 			},
 		},
@@ -689,9 +608,8 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			bufferSize:  0,
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
 				t.Helper()
-				if len(original) != 0 || len(reuse) != 0 {
-					t.Error("Empty inputs should produce empty outputs")
-				}
+				assert.Empty(t, original)
+				assert.Empty(t, reuse)
 			},
 		},
 		{
@@ -703,9 +621,7 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 				t.Helper()
 				// Should fallback due to size mismatch
 				for i := range original {
-					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
-						t.Errorf("Index %d: original=%f, reuse=%f", i, original[i], reuse[i])
-					}
+					assert.InDelta(t, original[i], reuse[i], 0.0001, "Index %d", i)
 				}
 			},
 		},
@@ -751,22 +667,16 @@ func TestGetTopKResults(t *testing.T) {
 			k: 3,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != k {
-					t.Errorf("Expected %d results, got %d", k, len(results))
-				}
+				assert.Len(t, results, k)
 				// Should be sorted in descending order
 				for i := 1; i < len(results); i++ {
-					if results[i].Confidence > results[i-1].Confidence {
-						t.Errorf("Results not sorted: %f > %f at index %d",
-							results[i].Confidence, results[i-1].Confidence, i)
-					}
+					assert.LessOrEqual(t, results[i].Confidence, results[i-1].Confidence,
+						"Results not sorted at index %d", i)
 				}
 				// Check that we got the highest confidence values
 				expectedOrder := []string{"A", "C", "B"} // 0.9, 0.8, 0.7
 				for i, expected := range expectedOrder {
-					if results[i].Species != expected {
-						t.Errorf("Index %d: expected %s, got %s", i, expected, results[i].Species)
-					}
+					assert.Equal(t, expected, results[i].Species, "Index %d", i)
 				}
 			},
 		},
@@ -780,13 +690,11 @@ func TestGetTopKResults(t *testing.T) {
 			k: 3,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != 3 {
-					t.Errorf("Expected 3 results, got %d", len(results))
-				}
+				require.Len(t, results, 3)
 				// Should be sorted
-				if results[0].Confidence != 0.9 || results[1].Confidence != 0.7 || results[2].Confidence != 0.5 {
-					t.Error("Full array not sorted correctly")
-				}
+				assert.InDelta(t, float32(0.9), results[0].Confidence, 0.0001)
+				assert.InDelta(t, float32(0.7), results[1].Confidence, 0.0001)
+				assert.InDelta(t, float32(0.5), results[2].Confidence, 0.0001)
 			},
 		},
 		{
@@ -798,13 +706,10 @@ func TestGetTopKResults(t *testing.T) {
 			k: 5,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != 2 {
-					t.Errorf("Expected 2 results (input length), got %d", len(results))
-				}
+				require.Len(t, results, 2, "Expected 2 results (input length)")
 				// Should be sorted
-				if results[0].Confidence != 0.9 || results[1].Confidence != 0.8 {
-					t.Error("Results not sorted correctly")
-				}
+				assert.InDelta(t, float32(0.9), results[0].Confidence, 0.0001)
+				assert.InDelta(t, float32(0.8), results[1].Confidence, 0.0001)
 			},
 		},
 		{
@@ -813,9 +718,7 @@ func TestGetTopKResults(t *testing.T) {
 			k:     5,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != 0 {
-					t.Errorf("Expected 0 results for empty input, got %d", len(results))
-				}
+				assert.Empty(t, results, "Expected 0 results for empty input")
 			},
 		},
 		{
@@ -826,9 +729,7 @@ func TestGetTopKResults(t *testing.T) {
 			k: 0,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != 0 {
-					t.Errorf("Expected 0 results for k=0, got %d", len(results))
-				}
+				assert.Empty(t, results, "Expected 0 results for k=0")
 			},
 		},
 		{
@@ -839,9 +740,7 @@ func TestGetTopKResults(t *testing.T) {
 			k: -1,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != 0 {
-					t.Errorf("Expected 0 results for negative k, got %d", len(results))
-				}
+				assert.Empty(t, results, "Expected 0 results for negative k")
 			},
 		},
 		{
@@ -850,20 +749,16 @@ func TestGetTopKResults(t *testing.T) {
 			k:     10,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
-				if len(results) != 10 {
-					t.Errorf("Expected 10 results, got %d", len(results))
-				}
+				require.Len(t, results, 10)
 				// Verify sorted order
 				for i := 1; i < len(results); i++ {
-					if results[i].Confidence > results[i-1].Confidence {
-						t.Errorf("Large dataset not sorted correctly at index %d", i)
-					}
+					assert.LessOrEqual(t, results[i].Confidence, results[i-1].Confidence,
+						"Large dataset not sorted correctly at index %d", i)
 				}
 				// First result should have the highest confidence
 				// In our generated data, confidence decreases from 0.99 down
-				if results[0].Confidence < 0.99 {
-					t.Errorf("Expected highest confidence ~0.99, got %f", results[0].Confidence)
-				}
+				assert.GreaterOrEqual(t, results[0].Confidence, float32(0.99),
+					"Expected highest confidence ~0.99")
 			},
 		},
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
@@ -17,9 +19,7 @@ func getSoxSpectrogramArgsHelper(t *testing.T, ctx context.Context, audioPath, o
 	t.Helper()
 	tempDir := t.TempDir()
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(t, err, "Failed to create SecureFS")
 	gen := spectrogram.NewGenerator(settings, sfs, slog.Default())
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
@@ -29,9 +29,7 @@ func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPa
 	b.Helper()
 	tempDir := b.TempDir()
 	sfs, err := securefs.New(tempDir)
-	if err != nil {
-		b.Fatalf("Failed to create SecureFS: %v", err)
-	}
+	require.NoError(b, err, "Failed to create SecureFS")
 	gen := spectrogram.NewGenerator(settings, sfs, slog.Default())
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
@@ -41,12 +39,9 @@ func checkDurationFlag(t *testing.T, args []string) bool {
 	t.Helper()
 	for i, arg := range args {
 		if arg == "-d" {
+			assert.Less(t, i+1, len(args), "Duration parameter (-d) present but no value follows")
 			if i+1 < len(args) {
-				if args[i+1] == "" {
-					t.Errorf("Duration parameter (-d) present but value is empty")
-				}
-			} else {
-				t.Errorf("Duration parameter (-d) present but no value follows")
+				assert.NotEmpty(t, args[i+1], "Duration parameter (-d) present but value is empty")
 			}
 			return true
 		}
@@ -59,17 +54,15 @@ func checkRequiredSoxParams(t *testing.T, args []string) {
 	t.Helper()
 	requiredParams := []string{"-n", "rate", "24k", "spectrogram", "-x", "-y", "-z", "-o"}
 	for _, param := range requiredParams {
-		if !slices.Contains(args, param) {
-			t.Errorf("Required SoX parameter %q missing from args: %v", param, args)
-		}
+		assert.Contains(t, args, param, "Required SoX parameter %q missing from args", param)
 	}
 }
 
 // checkRawFlag verifies -r flag is present when raw=true.
 func checkRawFlag(t *testing.T, args []string, raw bool) {
 	t.Helper()
-	if raw && !slices.Contains(args, "-r") {
-		t.Errorf("Raw flag (-r) should be present for raw=true, args: %v", args)
+	if raw {
+		assert.Contains(t, args, "-r", "Raw flag (-r) should be present for raw=true")
 	}
 }
 
@@ -149,15 +142,12 @@ func TestGetSoxSpectrogramArgs_DurationParameterRequired(t *testing.T) {
 			args := getSoxSpectrogramArgsHelper(t, ctx, audioPath, absSpectrogramPath, 800, raw, settings)
 			hasDurationFlag := checkDurationFlag(t, args)
 
-			if hasDurationFlag != tt.expectDurationFlag {
-				t.Errorf("Unexpected -d flag presence:\n"+
+			assert.Equal(t, tt.expectDurationFlag, hasDurationFlag,
+				"Unexpected -d flag presence:\n"+
 					"  FFmpeg version: %s (major: %d, minor: %d)\n"+
-					"  Expected -d flag: %v, Got: %v\n"+
 					"  Args: %s\n  Reason: %s",
-					tt.ffmpegVersion, tt.ffmpegMajor, tt.ffmpegMinor,
-					tt.expectDurationFlag, hasDurationFlag,
-					strings.Join(args, " "), tt.description)
-			}
+				tt.ffmpegVersion, tt.ffmpegMajor, tt.ffmpegMinor,
+				strings.Join(args, " "), tt.description)
 
 			checkRequiredSoxParams(t, args)
 			checkRawFlag(t, args, raw)
@@ -189,14 +179,11 @@ func TestGetSoxSpectrogramArgs_ArgumentOrder(t *testing.T) {
 	// Verify the base arguments are in correct order
 	expectedStart := []string{"-n", "rate", "24k", "spectrogram", "-x", "800", "-y", "400"}
 
-	if len(args) < len(expectedStart) {
-		t.Fatalf("Not enough arguments returned, got %d, expected at least %d", len(args), len(expectedStart))
-	}
+	require.GreaterOrEqual(t, len(args), len(expectedStart),
+		"Not enough arguments returned, got %d, expected at least %d", len(args), len(expectedStart))
 
 	for i, expected := range expectedStart {
-		if args[i] != expected {
-			t.Errorf("Argument mismatch at position %d: expected %q, got %q", i, expected, args[i])
-		}
+		assert.Equal(t, expected, args[i], "Argument mismatch at position %d", i)
 	}
 }
 
@@ -268,9 +255,7 @@ func TestGetSoxSpectrogramArgs_NilSettings(t *testing.T) {
 	// If we reach here without panic, verify duration parameter is present (safety fallback)
 	hasDurationFlag := slices.Contains(args, "-d")
 
-	if !hasDurationFlag {
-		t.Errorf("With nil settings, expected safety fallback with -d flag, but it was missing")
-	}
+	assert.True(t, hasDurationFlag, "With nil settings, expected safety fallback with -d flag, but it was missing")
 
 	t.Logf("Function handled nil settings without panic (defensive programming)")
 }
@@ -340,10 +325,8 @@ func TestGetSoxSpectrogramArgs_PartialSettings(t *testing.T) {
 			args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, tt.settings)
 			hasDurationFlag := slices.Contains(args, "-d")
 
-			if hasDurationFlag != tt.expectDurationFlag {
-				t.Errorf("%s:\n  Expected -d flag: %v, Got: %v\n  Args: %v",
-					tt.description, tt.expectDurationFlag, hasDurationFlag, args)
-			}
+			assert.Equal(t, tt.expectDurationFlag, hasDurationFlag,
+				"%s:\n  Args: %v", tt.description, args)
 		})
 	}
 }

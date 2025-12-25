@@ -4,6 +4,9 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConcurrentAccess tests concurrent access to the taxonomy database
@@ -13,9 +16,7 @@ func TestConcurrentAccess(t *testing.T) {
 	t.Attr("category", "concurrency")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	// Test cases to run concurrently
 	testCases := []struct {
@@ -74,9 +75,11 @@ func TestConcurrentAccess(t *testing.T) {
 	close(errChan)
 
 	// Check for errors
+	errors := make([]error, 0, numGoroutines)
 	for err := range errChan {
-		t.Errorf("Concurrent access error: %v", err)
+		errors = append(errors, err)
 	}
+	assert.Empty(t, errors, "Expected no concurrent access errors")
 
 	t.Logf("Successfully completed %d concurrent goroutines with %d lookups each",
 		numGoroutines, lookupsPerGoroutine)
@@ -93,9 +96,7 @@ func TestMemoryLeaks(t *testing.T) {
 	t.Attr("category", "memory")
 
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		t.Fatalf("Failed to load taxonomy database: %v", err)
-	}
+	require.NoError(t, err, "Failed to load taxonomy database")
 
 	// Force GC and get baseline memory stats
 	runtime.GC()
@@ -144,10 +145,10 @@ func TestMemoryLeaks(t *testing.T) {
 
 	// Heap growth should be minimal (less than 1MB for 10k iterations)
 	const maxHeapGrowthMB = 1
-	if heapGrowth > maxHeapGrowthMB*1024*1024 {
-		t.Errorf("Excessive heap growth: %d bytes (%.2f MB). Possible memory leak.",
-			heapGrowth, float64(heapGrowth)/(1024*1024))
-	}
+	const maxHeapGrowthBytes = maxHeapGrowthMB * 1024 * 1024
+	assert.LessOrEqual(t, heapGrowth, int64(maxHeapGrowthBytes),
+		"Excessive heap growth: %d bytes (%.2f MB). Possible memory leak.",
+		heapGrowth, float64(heapGrowth)/(1024*1024))
 }
 
 // TestNilDatabaseReceivers tests methods called on nil database
@@ -210,9 +211,7 @@ func TestNilDatabaseReceivers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.fn()
-			if err == nil {
-				t.Error("Expected error for nil database, got nil")
-			}
+			assert.Error(t, err, "Expected error for nil database")
 		})
 	}
 }
@@ -220,9 +219,7 @@ func TestNilDatabaseReceivers(t *testing.T) {
 // BenchmarkConcurrentLookups benchmarks concurrent lookups
 func BenchmarkConcurrentLookups(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -237,9 +234,7 @@ func BenchmarkConcurrentLookups(b *testing.B) {
 		for pb.Next() {
 			scientificName := species[i%len(species)]
 			_, _, err := db.GetGenusByScientificName(scientificName)
-			if err != nil {
-				b.Fatalf("Lookup failed: %v", err)
-			}
+			require.NoError(b, err, "Lookup failed")
 			i++
 		}
 	})
@@ -248,68 +243,52 @@ func BenchmarkConcurrentLookups(b *testing.B) {
 // BenchmarkGetAllSpeciesInGenus benchmarks retrieving all species in a genus
 func BenchmarkGetAllSpeciesInGenus(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	b.ReportAllocs()
 
 	for b.Loop() {
 		_, err := db.GetAllSpeciesInGenus("turdus")
-		if err != nil {
-			b.Fatalf("GetAllSpeciesInGenus failed: %v", err)
-		}
+		require.NoError(b, err, "GetAllSpeciesInGenus failed")
 	}
 }
 
 // BenchmarkGetAllSpeciesInFamily benchmarks retrieving all species in a family
 func BenchmarkGetAllSpeciesInFamily(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	b.ReportAllocs()
 
 	for b.Loop() {
 		_, err := db.GetAllSpeciesInFamily("strigidae")
-		if err != nil {
-			b.Fatalf("GetAllSpeciesInFamily failed: %v", err)
-		}
+		require.NoError(b, err, "GetAllSpeciesInFamily failed")
 	}
 }
 
 // BenchmarkSearchGenus benchmarks genus search
 func BenchmarkSearchGenus(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	b.ReportAllocs()
 
 	for b.Loop() {
 		matches := db.SearchGenus("corv")
-		if len(matches) == 0 {
-			b.Fatal("Expected matches")
-		}
+		assert.NotEmpty(b, matches, "Expected matches")
 	}
 }
 
 // BenchmarkSearchFamily benchmarks family search
 func BenchmarkSearchFamily(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	b.ReportAllocs()
 
 	for b.Loop() {
 		matches := db.SearchFamily("strig")
-		if len(matches) == 0 {
-			b.Fatal("Expected matches")
-		}
+		assert.NotEmpty(b, matches, "Expected matches")
 	}
 }
 
@@ -324,9 +303,7 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 
 	// Load database
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	// Force GC after loading
 	runtime.GC()
@@ -348,9 +325,7 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 // BenchmarkAllocationPattern analyzes allocation patterns for common operations
 func BenchmarkAllocationPattern(b *testing.B) {
 	db, err := LoadTaxonomyDatabase()
-	if err != nil {
-		b.Fatalf("Failed to load database: %v", err)
-	}
+	require.NoError(b, err, "Failed to load database")
 
 	b.Run("SingleLookup", func(b *testing.B) {
 		b.ReportAllocs()

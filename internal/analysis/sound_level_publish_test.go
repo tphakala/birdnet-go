@@ -847,7 +847,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 		assert.Equal(t, "test-source", published.Source)
 		assert.Equal(t, 5, published.Duration)
 	case <-time.After(1 * time.Second):
-		t.Fatal("No publish when data sent to channel")
+		require.Fail(t, "No publish when data sent to channel")
 	}
 
 	// Test multiple publishes in sequence
@@ -869,7 +869,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 			assert.Equal(t, fmt.Sprintf("sequence-source-%d", i), published.Source)
 			assert.Equal(t, 10, published.Duration)
 		case <-time.After(1 * time.Second):
-			t.Fatalf("No publish for sequence %d", i)
+			require.Fail(t, fmt.Sprintf("No publish for sequence %d", i))
 		}
 	}
 
@@ -974,7 +974,7 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 		assert.InDelta(t, float64(initialInterval*1000), float64(secondInterval.Milliseconds()), 200,
 			"Second publish should still be at ~%d seconds", initialInterval)
 	case <-time.After(6 * time.Second):
-		t.Fatal("No second publish received")
+		require.Fail(t, "No second publish received")
 	}
 
 	// Cleanup
@@ -1449,7 +1449,7 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 	// Wait for either a publish event (which would be an error) or timeout
 	select {
 	case event := <-publishEvents:
-		t.Fatalf("Unexpected MQTT publish without data: %v", event)
+		require.Fail(t, fmt.Sprintf("Unexpected MQTT publish without data: %v", event))
 	case <-timer.C:
 		// Good - no publish occurred within the timeout period
 		t.Log("No publish occurred as expected when no data was sent")
@@ -1530,7 +1530,7 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 	case <-attemptsDone:
 		// All attempts processed
 	case <-time.After(2 * time.Second):
-		t.Fatal("Timeout waiting for all publish attempts")
+		require.Fail(t, "Timeout waiting for all publish attempts")
 	}
 
 	// Verify all data was attempted to be published despite errors

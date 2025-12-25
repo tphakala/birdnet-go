@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -55,31 +57,27 @@ func TestNotificationSuppression(t *testing.T) {
 	now := time.Now()
 
 	// Test 1: First notification should NOT be suppressed
-	if tracker.ShouldSuppressNotification(species1, now) {
-		t.Errorf("First notification should not be suppressed")
-	}
+	assert.False(t, tracker.ShouldSuppressNotification(species1, now),
+		"First notification should not be suppressed")
 
 	// Record that notification was sent
 	tracker.RecordNotificationSent(species1, now)
 
 	// Test 2: Immediate second notification SHOULD be suppressed
-	if !tracker.ShouldSuppressNotification(species1, now.Add(1*time.Minute)) {
-		t.Errorf("Second notification within suppression window should be suppressed")
-	}
+	assert.True(t, tracker.ShouldSuppressNotification(species1, now.Add(1*time.Minute)),
+		"Second notification within suppression window should be suppressed")
 
 	// Test 3: Different species should NOT be suppressed
-	if tracker.ShouldSuppressNotification(species2, now) {
-		t.Errorf("Different species should not be suppressed")
-	}
+	assert.False(t, tracker.ShouldSuppressNotification(species2, now),
+		"Different species should not be suppressed")
 
 	// Record notification for species2
 	tracker.RecordNotificationSent(species2, now)
 
 	// Test 4: After suppression window, notification should NOT be suppressed
 	futureTime := now.Add(2 * time.Hour) // Beyond 1 hour suppression window
-	if tracker.ShouldSuppressNotification(species1, futureTime) {
-		t.Errorf("Notification after suppression window should not be suppressed")
-	}
+	assert.False(t, tracker.ShouldSuppressNotification(species1, futureTime),
+		"Notification after suppression window should not be suppressed")
 
 	// Test 5: Cleanup should remove old records
 	// Add an old record using the public API
@@ -88,19 +86,15 @@ func TestNotificationSuppression(t *testing.T) {
 
 	// Run cleanup
 	cleaned := tracker.CleanupOldNotificationRecords(now)
-	if cleaned != 1 {
-		t.Errorf("Expected to clean 1 old record, got %d", cleaned)
-	}
+	require.Equal(t, 1, cleaned, "Expected to clean 1 old record")
 
 	// Old species should not suppress (because it was cleaned up)
-	if tracker.ShouldSuppressNotification("Old Species", now) {
-		t.Errorf("Old species should have been cleaned up and not suppress")
-	}
+	assert.False(t, tracker.ShouldSuppressNotification("Old Species", now),
+		"Old species should have been cleaned up and not suppress")
 
 	// Recent notifications should still be tracked
-	if !tracker.ShouldSuppressNotification(species1, now.Add(30*time.Minute)) {
-		t.Errorf("Recent notification should still suppress within window")
-	}
+	assert.True(t, tracker.ShouldSuppressNotification(species1, now.Add(30*time.Minute)),
+		"Recent notification should still suppress within window")
 }
 
 // TestNotificationSuppressionThreadSafety tests thread safety of notification suppression
@@ -157,10 +151,8 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 	<-done
 
 	// Verify final state is consistent
-	if tracker.ShouldSuppressNotification("Species1", now.Add(1*time.Hour)) != true {
-		t.Errorf("Species1 should be suppressed after recording")
-	}
-	if tracker.ShouldSuppressNotification("Species2", now.Add(1*time.Hour)) != true {
-		t.Errorf("Species2 should be suppressed after recording")
-	}
+	assert.True(t, tracker.ShouldSuppressNotification("Species1", now.Add(1*time.Hour)),
+		"Species1 should be suppressed after recording")
+	assert.True(t, tracker.ShouldSuppressNotification("Species2", now.Add(1*time.Hour)),
+		"Species2 should be suppressed after recording")
 }

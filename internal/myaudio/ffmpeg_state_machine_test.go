@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -64,9 +66,8 @@ func TestProcessStateString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.state.String(); got != tt.want {
-				t.Errorf("ProcessState.String() = %v, want %v", got, tt.want)
-			}
+			got := tt.state.String()
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -145,10 +146,9 @@ func TestIsValidTransition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isValidTransition(tt.from, tt.to); got != tt.want {
-				t.Errorf("isValidTransition(%s, %s) = %v, want %v",
-					tt.from.String(), tt.to.String(), got, tt.want)
-			}
+			got := isValidTransition(tt.from, tt.to)
+			assert.Equal(t, tt.want, got,
+				"isValidTransition(%s, %s)", tt.from.String(), tt.to.String())
 		})
 	}
 }
@@ -158,37 +158,24 @@ func TestStateTransitionRecording(t *testing.T) {
 	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Initial state should be Idle
-	if got := stream.GetProcessState(); got != StateIdle {
-		t.Errorf("Initial state = %v, want %v", got, StateIdle)
-	}
+	assert.Equal(t, StateIdle, stream.GetProcessState(), "Initial state")
 
 	// Transition to Starting
 	stream.transitionState(StateStarting, "test transition")
 
 	// Verify state changed
-	if got := stream.GetProcessState(); got != StateStarting {
-		t.Errorf("After transition, state = %v, want %v", got, StateStarting)
-	}
+	assert.Equal(t, StateStarting, stream.GetProcessState(), "After transition")
 
 	// Verify transition was recorded
 	history := stream.GetStateHistory()
-	if len(history) != 1 {
-		t.Fatalf("Expected 1 transition in history, got %d", len(history))
-	}
+	require.Len(t, history, 1, "Expected 1 transition in history")
 
 	transition := history[0]
-	if transition.From != StateIdle {
-		t.Errorf("Transition.From = %v, want %v", transition.From, StateIdle)
-	}
-	if transition.To != StateStarting {
-		t.Errorf("Transition.To = %v, want %v", transition.To, StateStarting)
-	}
-	if transition.Reason != "test transition" {
-		t.Errorf("Transition.Reason = %v, want %v", transition.Reason, "test transition")
-	}
-	if time.Since(transition.Timestamp) > time.Second {
-		t.Errorf("Transition timestamp too old: %v", transition.Timestamp)
-	}
+	assert.Equal(t, StateIdle, transition.From, "Transition.From")
+	assert.Equal(t, StateStarting, transition.To, "Transition.To")
+	assert.Equal(t, "test transition", transition.Reason, "Transition.Reason")
+	assert.WithinDuration(t, time.Now(), transition.Timestamp, time.Second,
+		"Transition timestamp should be recent")
 }
 
 // TestStateTransitionHistoryBounded tests that state history is bounded to 100 entries
@@ -207,9 +194,7 @@ func TestStateTransitionHistoryBounded(t *testing.T) {
 
 	// Verify history is bounded to 100
 	history := stream.GetStateHistory()
-	if len(history) != 100 {
-		t.Errorf("History length = %d, want 100", len(history))
-	}
+	assert.Len(t, history, 100, "History should be bounded to 100")
 }
 
 // TestGetStateHistoryConcurrency tests that GetStateHistory returns a copy
@@ -230,12 +215,8 @@ func TestGetStateHistoryConcurrency(t *testing.T) {
 	history2 := stream.GetStateHistory()
 
 	// Verify first history wasn't modified (it should be a copy)
-	if len(history1) != 2 {
-		t.Errorf("history1 length = %d, want 2 (should not be modified)", len(history1))
-	}
-	if len(history2) != 3 {
-		t.Errorf("history2 length = %d, want 3", len(history2))
-	}
+	assert.Len(t, history1, 2, "history1 should not be modified")
+	assert.Len(t, history2, 3, "history2 should have 3 transitions")
 }
 
 // TestInvalidTransitionLenient tests that invalid transitions are applied in lenient mode
@@ -251,23 +232,17 @@ func TestInvalidTransitionLenient(t *testing.T) {
 	stream.transitionState(StateIdle, "invalid transition test - lenient recovery")
 
 	// State should change despite being invalid (lenient behavior for user-friendliness)
-	if got := stream.GetProcessState(); got != StateIdle {
-		t.Errorf("State after invalid transition = %v, want %v (lenient mode should apply transition)", got, StateIdle)
-	}
+	assert.Equal(t, StateIdle, stream.GetProcessState(),
+		"lenient mode should apply transition")
 
 	// Transition should be recorded in history
 	history := stream.GetStateHistory()
-	if len(history) != 1 {
-		t.Fatalf("Expected 1 transition in history (invalid transitions are still recorded), got %d", len(history))
-	}
+	require.Len(t, history, 1,
+		"invalid transitions are still recorded")
 
 	// Verify the transition details
-	if history[0].From != StateRunning {
-		t.Errorf("Transition.From = %v, want %v", history[0].From, StateRunning)
-	}
-	if history[0].To != StateIdle {
-		t.Errorf("Transition.To = %v, want %v", history[0].To, StateIdle)
-	}
+	assert.Equal(t, StateRunning, history[0].From, "Transition.From")
+	assert.Equal(t, StateIdle, history[0].To, "Transition.To")
 }
 
 // TestIdempotentTransitionIgnored tests that idempotent transitions are ignored
@@ -286,16 +261,13 @@ func TestIdempotentTransitionIgnored(t *testing.T) {
 	stream.transitionState(StateRunning, "idempotent transition - should be ignored")
 
 	// State should remain the same (obviously)
-	if got := stream.GetProcessState(); got != StateRunning {
-		t.Errorf("State after idempotent transition = %v, want %v", got, StateRunning)
-	}
+	assert.Equal(t, StateRunning, stream.GetProcessState(),
+		"State after idempotent transition")
 
 	// Idempotent transition should NOT be recorded in history (reduces noise)
 	history := stream.GetStateHistory()
-	if len(history) != initialHistoryLen {
-		t.Errorf("History length after idempotent transition = %d, want %d (idempotent transitions should be ignored)",
-			len(history), initialHistoryLen)
-	}
+	assert.Len(t, history, initialHistoryLen,
+		"idempotent transitions should be ignored")
 }
 
 // TestStreamHealthIncludesState tests that StreamHealth includes process state
@@ -310,14 +282,10 @@ func TestStreamHealthIncludesState(t *testing.T) {
 	health := stream.GetHealth()
 
 	// Verify state is included
-	if health.ProcessState != StateRunning {
-		t.Errorf("Health.ProcessState = %v, want %v", health.ProcessState, StateRunning)
-	}
+	assert.Equal(t, StateRunning, health.ProcessState, "Health.ProcessState")
 
 	// Verify state history is included (last 10)
-	if len(health.StateHistory) != 2 {
-		t.Errorf("Health.StateHistory length = %d, want 2", len(health.StateHistory))
-	}
+	assert.Len(t, health.StateHistory, 2, "Health.StateHistory")
 }
 
 // TestIsRestartingStates tests that IsRestarting correctly identifies restart-related states
@@ -341,10 +309,9 @@ func TestIsRestartingStates(t *testing.T) {
 			stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 			stream.processState = tt.state
 
-			if got := stream.IsRestarting(); got != tt.want {
-				t.Errorf("IsRestarting() with state %s = %v, want %v",
-					tt.state.String(), got, tt.want)
-			}
+			got := stream.IsRestarting()
+			assert.Equal(t, tt.want, got,
+				"IsRestarting() with state %s", tt.state.String())
 		})
 	}
 }
@@ -375,18 +342,17 @@ func TestStateTransitionConcurrency(t *testing.T) {
 	// Note: Due to concurrent execution, some transitions might be skipped if the state
 	// is already at the target (idempotent), or due to race conditions in goroutine scheduling
 	history := stream.GetStateHistory()
-	if len(history) < 5 {
-		t.Errorf("History length = %d, want at least 5 (got too few transitions)", len(history))
-	}
-	if len(history) > 20 {
-		t.Errorf("History length = %d, should not exceed 20", len(history))
-	}
+	assert.GreaterOrEqual(t, len(history), 5,
+		"got too few transitions")
+	assert.LessOrEqual(t, len(history), 20,
+		"history should not exceed 20")
 
 	// Verify thread safety: no panics, state machine still consistent
 	currentState := stream.GetProcessState()
-	if currentState < StateIdle || currentState > StateStopped {
-		t.Errorf("Invalid final state after concurrency: %v", currentState)
-	}
+	assert.GreaterOrEqual(t, currentState, StateIdle,
+		"Invalid final state after concurrency")
+	assert.LessOrEqual(t, currentState, StateStopped,
+		"Invalid final state after concurrency")
 }
 
 // TestStoppedIsTerminal tests that StateStopped is truly terminal
@@ -398,9 +364,8 @@ func TestStoppedIsTerminal(t *testing.T) {
 	stream.transitionState(StateStopped, "stop requested")
 
 	// Verify state is Stopped
-	if got := stream.GetProcessState(); got != StateStopped {
-		t.Fatalf("Initial state after stop = %v, want %v", got, StateStopped)
-	}
+	require.Equal(t, StateStopped, stream.GetProcessState(),
+		"Initial state after stop")
 
 	// Get initial history length
 	historyBeforeAttempt := stream.GetStateHistory()
@@ -410,22 +375,19 @@ func TestStoppedIsTerminal(t *testing.T) {
 	stream.transitionState(StateStarting, "should be blocked")
 
 	// State should still be Stopped (transition blocked)
-	if got := stream.GetProcessState(); got != StateStopped {
-		t.Errorf("State after attempted transition from Stopped = %v, want %v (transition should be blocked)", got, StateStopped)
-	}
+	assert.Equal(t, StateStopped, stream.GetProcessState(),
+		"transition should be blocked")
 
 	// History should not record a Stopped->Starting transition
 	historyAfterAttempt := stream.GetStateHistory()
-	if len(historyAfterAttempt) != initialHistoryLen {
-		t.Errorf("History length changed from %d to %d (blocked transition should not be recorded)",
-			initialHistoryLen, len(historyAfterAttempt))
-	}
+	assert.Len(t, historyAfterAttempt, initialHistoryLen,
+		"blocked transition should not be recorded")
 
 	// Verify no invalid transitions in history
 	for _, tr := range historyAfterAttempt {
 		if tr.From == StateStopped && tr.To != StateStopped {
-			t.Fatalf("Terminal transition recorded in history: %s → %s (this should never happen)",
-				tr.From.String(), tr.To.String())
+			require.FailNow(t, "Terminal transition recorded in history",
+				"%s → %s (this should never happen)", tr.From.String(), tr.To.String())
 		}
 	}
 
@@ -435,24 +397,19 @@ func TestStoppedIsTerminal(t *testing.T) {
 		stream.transitionState(targetState, "attempt to leave stopped state")
 
 		// State should still be Stopped
-		if got := stream.GetProcessState(); got != StateStopped {
-			t.Errorf("State after attempting transition to %s = %v, want %v (should remain stopped)",
-				targetState.String(), got, StateStopped)
-		}
+		assert.Equal(t, StateStopped, stream.GetProcessState(),
+			"should remain stopped after attempting transition to %s", targetState.String())
 	}
 
 	// Only idempotent transition (Stopped -> Stopped) should be allowed
 	stream.transitionState(StateStopped, "idempotent transition")
 
 	// State should still be Stopped (idempotent)
-	if got := stream.GetProcessState(); got != StateStopped {
-		t.Errorf("State after idempotent transition = %v, want %v", got, StateStopped)
-	}
+	assert.Equal(t, StateStopped, stream.GetProcessState(),
+		"State after idempotent transition")
 
 	// History should not change for idempotent transition (they're ignored)
 	finalHistory := stream.GetStateHistory()
-	if len(finalHistory) != initialHistoryLen {
-		t.Errorf("History length after idempotent transition = %d, want %d (idempotent should be ignored)",
-			len(finalHistory), initialHistoryLen)
-	}
+	assert.Len(t, finalHistory, initialHistoryLen,
+		"idempotent should be ignored")
 }

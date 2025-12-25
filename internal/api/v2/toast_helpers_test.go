@@ -8,39 +8,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // assertEventDataNil checks that a field in eventData is nil.
 func assertEventDataNil(t *testing.T, eventData map[string]any, field, context string) {
 	t.Helper()
-	if eventData[field] != nil {
-		t.Errorf("Event data %s should be nil for %s", field, context)
-	}
+	assert.Nil(t, eventData[field], "Event data %s should be nil for %s", field, context)
 }
 
 // assertEventDataEmpty checks that a string field in eventData is empty.
 func assertEventDataEmpty(t *testing.T, eventData map[string]any, field, context string) {
 	t.Helper()
-	if eventData[field] != "" {
-		t.Errorf("Event data %s should be empty string for %s, got %v", field, context, eventData[field])
-	}
+	assert.Empty(t, eventData[field], "Event data %s should be empty string for %s", field, context)
 }
 
 // assertEventDataMissing checks that a field is not present in eventData.
 func assertEventDataMissing(t *testing.T, eventData map[string]any, field string) {
 	t.Helper()
-	if _, exists := eventData[field]; exists {
-		t.Errorf("Event data should not include %s when not set", field)
-	}
+	_, exists := eventData[field]
+	assert.False(t, exists, "Event data should not include %s when not set", field)
 }
 
 // assertEventDataValue checks a specific field value in eventData.
 func assertEventDataValue(t *testing.T, eventData map[string]any, field string, expected any) {
 	t.Helper()
-	if eventData[field] != expected {
-		t.Errorf("Event data %s = %v, want %v", field, eventData[field], expected)
-	}
+	assert.Equal(t, expected, eventData[field], "Event data %s mismatch", field)
 }
 
 // mapStringToToastType converts a string toast type to notification.ToastType.
@@ -62,20 +57,14 @@ func mapStringToToastType(toastType string) notification.ToastType {
 // assertToastTypeMapping verifies toast type string to enum mapping.
 func assertToastTypeMapping(t *testing.T, input string, actual, expected notification.ToastType) {
 	t.Helper()
-	if actual != expected {
-		t.Errorf("Toast type mapping for %q: got %v, want %v", input, actual, expected)
-	}
+	assert.Equal(t, expected, actual, "Toast type mapping for %q mismatch", input)
 }
 
 // assertNotificationMapping verifies notification type and priority mapping.
 func assertNotificationMapping(t *testing.T, toastType string, notif *notification.Notification, expectedType notification.Type, expectedPriority notification.Priority) {
 	t.Helper()
-	if notif.Type != expectedType {
-		t.Errorf("Toast to notification type mapping for %q: got %v, want %v", toastType, notif.Type, expectedType)
-	}
-	if notif.Priority != expectedPriority {
-		t.Errorf("Toast to notification priority mapping for %q: got %v, want %v", toastType, notif.Priority, expectedPriority)
-	}
+	assert.Equal(t, expectedType, notif.Type, "Toast to notification type mapping for %q mismatch", toastType)
+	assert.Equal(t, expectedPriority, notif.Priority, "Toast to notification priority mapping for %q mismatch", toastType)
 }
 
 func TestController_SendToast(t *testing.T) {
@@ -200,23 +189,18 @@ func runSendToastTestIsolated(t *testing.T, c *Controller, service *notification
 	err := service.CreateWithMetadata(toast.ToNotification())
 
 	if tc.wantError {
-		if err == nil {
-			t.Error("CreateWithMetadata() expected error but got none")
-		}
+		assert.Error(t, err, "CreateWithMetadata() expected error but got none")
 		return
 	}
 
-	if err != nil {
-		t.Errorf("CreateWithMetadata() unexpected error = %v", err)
-		return
-	}
+	require.NoError(t, err, "CreateWithMetadata() unexpected error")
 
 	// Verify notification was created and broadcast
 	select {
 	case notif := <-notifCh:
 		verifyToastNotification(t, notif, tc)
 	case <-time.After(100 * time.Millisecond):
-		t.Error("CreateWithMetadata() should have broadcast notification within timeout")
+		require.Fail(t, "CreateWithMetadata() should have broadcast notification within timeout")
 	}
 }
 
@@ -225,18 +209,11 @@ func verifyToastNotification(t *testing.T, notif *notification.Notification, tc 
 	t.Helper()
 	// Verify the notification has toast metadata
 	isToast, ok := notif.Metadata["isToast"].(bool)
-	if !ok || !isToast {
-		t.Error("SendToast() should create notification with isToast=true metadata")
-	}
+	assert.True(t, ok && isToast, "SendToast() should create notification with isToast=true metadata")
 
 	// Verify basic fields
-	if notif.Message != tc.message {
-		t.Errorf("SendToast() notification message = %q, want %q", notif.Message, tc.message)
-	}
-
-	if notif.Component != "api" {
-		t.Errorf("SendToast() notification component = %q, want %q", notif.Component, "api")
-	}
+	assert.Equal(t, tc.message, notif.Message, "SendToast() notification message mismatch")
+	assert.Equal(t, "api", notif.Component, "SendToast() notification component mismatch")
 
 	// Verify toast-specific metadata
 	verifyToastMetadata(t, notif, tc)
@@ -254,21 +231,18 @@ func verifyToastMetadata(t *testing.T, notif *notification.Notification, tc toas
 	}
 
 	toastType, ok := notif.Metadata["toastType"].(string)
-	if !ok || toastType != expectedToastType {
-		t.Errorf("SendToast() toast type = %q, want %q", toastType, expectedToastType)
-	}
+	assert.True(t, ok, "toastType should be string")
+	assert.Equal(t, expectedToastType, toastType, "SendToast() toast type mismatch")
 
 	// Duration should only be present in metadata if greater than 0
 	if tc.duration > 0 {
 		duration, ok := notif.Metadata["duration"].(int)
-		if !ok || duration != tc.duration {
-			t.Errorf("SendToast() duration = %d, want %d", duration, tc.duration)
-		}
+		assert.True(t, ok, "duration should be int")
+		assert.Equal(t, tc.duration, duration, "SendToast() duration mismatch")
 	} else {
 		// Zero duration should not be included in metadata
-		if _, exists := notif.Metadata["duration"]; exists {
-			t.Error("SendToast() should not include zero duration in metadata")
-		}
+		_, exists := notif.Metadata["duration"]
+		assert.False(t, exists, "SendToast() should not include zero duration in metadata")
 	}
 }
 
@@ -294,13 +268,8 @@ func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notificatio
 		expectedPriority = notification.PriorityHigh
 	}
 
-	if notif.Type != expectedNotifType {
-		t.Errorf("SendToast() notification type = %v, want %v", notif.Type, expectedNotifType)
-	}
-
-	if notif.Priority != expectedPriority {
-		t.Errorf("SendToast() notification priority = %v, want %v", notif.Priority, expectedPriority)
-	}
+	assert.Equal(t, expectedNotifType, notif.Type, "SendToast() notification type mismatch")
+	assert.Equal(t, expectedPriority, notif.Priority, "SendToast() notification priority mismatch")
 }
 
 func TestController_SendToast_TypeMapping(t *testing.T) {
@@ -349,8 +318,8 @@ func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 
 	// Since service is likely already initialized from other tests, this may pass
 	// In a real uninitialized scenario, this should return an error
-	if notification.IsInitialized() && err != nil {
-		t.Errorf("SendToast() with initialized service should not error, got: %v", err)
+	if notification.IsInitialized() {
+		assert.NoError(t, err, "SendToast() with initialized service should not error")
 	}
 }
 
@@ -366,9 +335,7 @@ func TestController_SendToast_Integration(t *testing.T) {
 
 	// Send a toast with all features
 	err := c.SendToast("Integration test message", ToastTypeWarning, 4000)
-	if err != nil {
-		t.Fatalf("SendToast() integration test error = %v", err)
-	}
+	require.NoError(t, err, "SendToast() integration test error")
 
 	// Retrieve the notification from the service to verify it was stored
 	// Note: This requires access to the service's store, which might not be public
@@ -390,8 +357,6 @@ func BenchmarkController_SendToast(b *testing.B) {
 	// Use b.Loop() for benchmark iteration (Go 1.25)
 	for b.Loop() {
 		err := c.SendToast("Benchmark toast message", ToastTypeInfo, 1000)
-		if err != nil {
-			b.Fatalf("SendToast() benchmark error = %v", err)
-		}
+		require.NoError(b, err, "SendToast() benchmark error")
 	}
 }

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewManager(t *testing.T) {
@@ -24,15 +27,11 @@ func TestNewManager(t *testing.T) {
 	}
 
 	manager := NewManager(config)
-	if manager == nil {
-		t.Error("NewManager should not return nil")
-	}
+	assert.NotNil(t, manager, "NewManager should not return nil")
 
 	// Test that initial state is correct
 	processes := manager.ListProcesses()
-	if len(processes) != 0 {
-		t.Errorf("Expected 0 processes initially, got %d", len(processes))
-	}
+	assert.Empty(t, processes, "Expected 0 processes initially")
 }
 
 func TestManagerCreateProcess(t *testing.T) {
@@ -58,23 +57,13 @@ func TestManagerCreateProcess(t *testing.T) {
 	}
 
 	process, err := manager.CreateProcess(processConfig)
-	if err != nil {
-		t.Errorf("Failed to create process: %v", err)
-	}
-
-	if process.ID() != processConfig.ID {
-		t.Errorf("Expected process ID %s, got %s", processConfig.ID, process.ID())
-	}
+	require.NoError(t, err, "Failed to create process")
+	assert.Equal(t, processConfig.ID, process.ID(), "Process ID should match config")
 
 	// Test process is in manager
 	retrievedProcess, exists := manager.GetProcess(processConfig.ID)
-	if !exists {
-		t.Error("Process should exist in manager")
-	}
-
-	if retrievedProcess.ID() != processConfig.ID {
-		t.Errorf("Retrieved process has wrong ID: %s", retrievedProcess.ID())
-	}
+	assert.True(t, exists, "Process should exist in manager")
+	assert.Equal(t, processConfig.ID, retrievedProcess.ID(), "Retrieved process should have correct ID")
 }
 
 func TestManagerDuplicateProcess(t *testing.T) {
@@ -99,15 +88,11 @@ func TestManagerDuplicateProcess(t *testing.T) {
 
 	// Create first process
 	_, err := manager.CreateProcess(processConfig)
-	if err != nil {
-		t.Errorf("Failed to create first process: %v", err)
-	}
+	require.NoError(t, err, "Failed to create first process")
 
 	// Try to create duplicate
 	_, err = manager.CreateProcess(processConfig)
-	if err == nil {
-		t.Error("Expected error when creating duplicate process")
-	}
+	assert.Error(t, err, "Expected error when creating duplicate process")
 }
 
 func TestManagerMaxProcessesLimit(t *testing.T) {
@@ -132,9 +117,7 @@ func TestManagerMaxProcessesLimit(t *testing.T) {
 	}
 
 	_, err := manager.CreateProcess(processConfig1)
-	if err != nil {
-		t.Errorf("Failed to create first process: %v", err)
-	}
+	require.NoError(t, err, "Failed to create first process")
 
 	// Try to create second process (should fail)
 	processConfig2 := &ProcessConfig{
@@ -149,9 +132,7 @@ func TestManagerMaxProcessesLimit(t *testing.T) {
 	}
 
 	_, err = manager.CreateProcess(processConfig2)
-	if err == nil {
-		t.Error("Expected error when exceeding max processes limit")
-	}
+	assert.Error(t, err, "Expected error when exceeding max processes limit")
 }
 
 func TestManagerRemoveProcess(t *testing.T) {
@@ -176,21 +157,15 @@ func TestManagerRemoveProcess(t *testing.T) {
 
 	// Create process
 	_, err := manager.CreateProcess(processConfig)
-	if err != nil {
-		t.Errorf("Failed to create process: %v", err)
-	}
+	require.NoError(t, err, "Failed to create process")
 
 	// Remove process
 	err = manager.RemoveProcess(processConfig.ID)
-	if err != nil {
-		t.Errorf("Failed to remove process: %v", err)
-	}
+	require.NoError(t, err, "Failed to remove process")
 
 	// Verify process is gone
 	_, exists := manager.GetProcess(processConfig.ID)
-	if exists {
-		t.Error("Process should not exist after removal")
-	}
+	assert.False(t, exists, "Process should not exist after removal")
 }
 
 func TestManagerRemoveNonexistentProcess(t *testing.T) {
@@ -203,9 +178,7 @@ func TestManagerRemoveNonexistentProcess(t *testing.T) {
 	manager := NewManager(config)
 
 	err := manager.RemoveProcess("nonexistent")
-	if err == nil {
-		t.Error("Expected error when removing nonexistent process")
-	}
+	assert.Error(t, err, "Expected error when removing nonexistent process")
 }
 
 func TestManagerListProcesses(t *testing.T) {
@@ -231,15 +204,11 @@ func TestManagerListProcesses(t *testing.T) {
 		}
 
 		_, err := manager.CreateProcess(processConfig)
-		if err != nil {
-			t.Errorf("Failed to create process %d: %v", i, err)
-		}
+		require.NoError(t, err, "Failed to create process %d", i)
 	}
 
 	processes := manager.ListProcesses()
-	if len(processes) != 3 {
-		t.Errorf("Expected 3 processes, got %d", len(processes))
-	}
+	assert.Len(t, processes, 3, "Expected 3 processes")
 }
 
 func TestManagerStartStop(t *testing.T) {
@@ -258,21 +227,15 @@ func TestManagerStartStop(t *testing.T) {
 
 	// Start manager
 	err := manager.Start(ctx)
-	if err != nil {
-		t.Errorf("Failed to start manager: %v", err)
-	}
+	require.NoError(t, err, "Failed to start manager")
 
 	// Try to start again (should fail)
 	err = manager.Start(ctx)
-	if err == nil {
-		t.Error("Expected error when starting already started manager")
-	}
+	require.Error(t, err, "Expected error when starting already started manager")
 
 	// Stop manager
 	err = manager.Stop()
-	if err != nil {
-		t.Errorf("Failed to stop manager: %v", err)
-	}
+	require.NoError(t, err, "Failed to stop manager")
 }
 
 func TestManagerHealthCheck(t *testing.T) {
@@ -286,9 +249,7 @@ func TestManagerHealthCheck(t *testing.T) {
 
 	// Health check with no processes should pass
 	err := manager.HealthCheck()
-	if err != nil {
-		t.Errorf("Health check failed with no processes: %v", err)
-	}
+	require.NoError(t, err, "Health check failed with no processes")
 
 	// Create a process (it won't be running, so health check should fail)
 	processConfig := &ProcessConfig{
@@ -303,15 +264,11 @@ func TestManagerHealthCheck(t *testing.T) {
 	}
 
 	_, err = manager.CreateProcess(processConfig)
-	if err != nil {
-		t.Errorf("Failed to create process: %v", err)
-	}
+	require.NoError(t, err, "Failed to create process")
 
 	// Health check should now fail because process is not running
 	err = manager.HealthCheck()
-	if err == nil {
-		t.Error("Expected health check to fail with non-running process")
-	}
+	assert.Error(t, err, "Expected health check to fail with non-running process")
 }
 
 func TestRestartPolicy(t *testing.T) {
@@ -347,26 +304,16 @@ func TestRestartPolicy(t *testing.T) {
 
 	// Create process
 	process, err := manager.CreateProcess(processConfig)
-	if err != nil {
-		t.Fatalf("Failed to create process: %v", err)
-	}
+	require.NoError(t, err, "Failed to create process")
 
 	// Verify the process was created
 	retrievedProcess, exists := manager.GetProcess("restart-test")
-	if !exists {
-		t.Error("Process should exist after creation")
-	}
-
-	if retrievedProcess.ID() != process.ID() {
-		t.Errorf("Retrieved process ID should match: expected %s, got %s",
-			process.ID(), retrievedProcess.ID())
-	}
+	assert.True(t, exists, "Process should exist after creation")
+	assert.Equal(t, process.ID(), retrievedProcess.ID(), "Retrieved process ID should match")
 
 	// Verify process appears in list
 	processes := manager.ListProcesses()
-	if len(processes) != 1 {
-		t.Errorf("Expected 1 process in list, got %d", len(processes))
-	}
+	assert.Len(t, processes, 1, "Expected 1 process in list")
 
 	// Test that the restart policy settings are properly configured
 	// by verifying the process behavior (start should fail with the invalid path)
@@ -374,7 +321,5 @@ func TestRestartPolicy(t *testing.T) {
 	defer cancel()
 
 	err = process.Start(ctx)
-	if err == nil {
-		t.Error("Process start should fail with invalid FFmpeg path")
-	}
+	assert.Error(t, err, "Process start should fail with invalid FFmpeg path")
 }
