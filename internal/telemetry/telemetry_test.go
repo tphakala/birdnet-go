@@ -216,7 +216,8 @@ func TestEventSummaries(t *testing.T) {
 	case int:
 		assert.Equal(t, 42, v, "Expected extra count=42")
 	default:
-		t.Errorf("Expected extra count to be numeric, got %T: %v", count, count)
+		assert.Fail(t, "unexpected type for count",
+			"Expected extra count to be numeric, got %T: %v", count, count)
 	}
 }
 

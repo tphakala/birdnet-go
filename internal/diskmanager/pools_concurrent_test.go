@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCurrentPoolSizeConcurrentDecrement verifies that the pool size counter
@@ -52,10 +54,8 @@ func TestCurrentPoolSizeConcurrentDecrement(t *testing.T) {
 	totalAttempts := uint64(numGoroutines * opsPerGoroutine) //nolint:gosec // G115: test constants are small positive values
 
 	// The number of successful decrements should not exceed initial size
-	if successfulDecrements.Load() > initialSize {
-		t.Errorf("Too many successful decrements: %d > %d (initial size)",
-			successfulDecrements.Load(), initialSize)
-	}
+	assert.LessOrEqual(t, successfulDecrements.Load(), initialSize,
+		"too many successful decrements")
 
 	// Final size should be max(0, initialSize - successfulDecrements)
 	var expectedFinal uint64
@@ -63,16 +63,10 @@ func TestCurrentPoolSizeConcurrentDecrement(t *testing.T) {
 		expectedFinal = initialSize - successfulDecrements.Load()
 	}
 
-	if finalSize != expectedFinal {
-		t.Errorf("Final pool size incorrect: got %d, expected %d",
-			finalSize, expectedFinal)
-	}
+	assert.Equal(t, expectedFinal, finalSize, "final pool size incorrect")
 
 	// Most importantly: verify no underflow (would show as huge number)
-	if finalSize > initialSize {
-		t.Errorf("Pool size underflowed! Final: %d > Initial: %d",
-			finalSize, initialSize)
-	}
+	assert.LessOrEqual(t, finalSize, initialSize, "pool size underflowed")
 
 	t.Logf("Test completed: %d decrements attempted, %d succeeded, final size: %d",
 		totalAttempts, successfulDecrements.Load(), finalSize)
@@ -113,9 +107,7 @@ func TestCurrentPoolSizeUnderflowPrevention(t *testing.T) {
 
 	// Final value must be 0 (not underflowed to max uint64)
 	final := poolMetrics.CurrentPoolSize.Load()
-	if final != 0 {
-		t.Errorf("Expected final size to be 0, got %d (possible underflow)", final)
-	}
+	assert.Zero(t, final, "expected final size to be 0 (possible underflow)")
 }
 
 // TestPoolSizeIncrementDecrement tests that increment and decrement operations
@@ -163,9 +155,7 @@ func TestPoolSizeIncrementDecrement(t *testing.T) {
 	final := poolMetrics.CurrentPoolSize.Load()
 
 	// Check for underflow (would be a huge number)
-	if final > 10000 {
-		t.Errorf("Likely underflow detected: final size = %d", final)
-	}
+	assert.LessOrEqual(t, final, uint64(10000), "likely underflow detected")
 
 	t.Logf("Final pool size after balanced operations: %d", final)
 }

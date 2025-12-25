@@ -2,106 +2,69 @@ package suncalc
 
 import (
 	"testing"
-	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewSunCalc(t *testing.T) {
-	latitude, longitude := 60.1699, 24.9384 // Helsinki coordinates
-	sc := NewSunCalc(latitude, longitude)
-	if sc == nil {
-		t.Fatal("NewSunCalc returned nil")
-		return // Explicitly return to make it clear no further checks happen
-	}
+	sc := newTestSunCalc()
+	require.NotNil(t, sc, "NewSunCalc returned nil")
 
-	// Now safe to access sc.observer since we've confirmed sc is not nil
-	if sc.observer.Latitude != latitude {
-		t.Errorf("Expected latitude %v, got %v", latitude, sc.observer.Latitude)
-	}
-
-	if sc.observer.Longitude != longitude {
-		t.Errorf("Expected longitude %v, got %v", longitude, sc.observer.Longitude)
-	}
+	assert.InDelta(t, testLatitude, sc.observer.Latitude, 0.0001, "expected latitude to match")
+	assert.InDelta(t, testLongitude, sc.observer.Longitude, 0.0001, "expected longitude to match")
 }
 
 func TestGetSunEventTimes(t *testing.T) {
-	// Helsinki coordinates
-	sc := NewSunCalc(60.1699, 24.9384)
-
-	// Test date (midsummer in Helsinki)
-	date := time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC)
+	sc := newTestSunCalc()
+	date := midsummerDate()
 
 	// First call to calculate and cache
 	times1, err := sc.GetSunEventTimes(date)
-	if err != nil {
-		t.Fatalf("Failed to get sun event times: %v", err)
-	}
+	require.NoError(t, err, "failed to get sun event times")
 
 	// Verify times are not zero
-	if times1.Sunrise.IsZero() {
-		t.Error("Sunrise time is zero")
-	}
-	if times1.Sunset.IsZero() {
-		t.Error("Sunset time is zero")
-	}
-	if times1.CivilDawn.IsZero() {
-		t.Error("Civil dawn time is zero")
-	}
-	if times1.CivilDusk.IsZero() {
-		t.Error("Civil dusk time is zero")
-	}
+	assert.False(t, times1.Sunrise.IsZero(), "sunrise time is zero")
+	assert.False(t, times1.Sunset.IsZero(), "sunset time is zero")
+	assert.False(t, times1.CivilDawn.IsZero(), "civil dawn time is zero")
+	assert.False(t, times1.CivilDusk.IsZero(), "civil dusk time is zero")
 
 	// Second call to test cache
 	times2, err := sc.GetSunEventTimes(date)
-	if err != nil {
-		t.Fatalf("Failed to get cached sun event times: %v", err)
-	}
+	require.NoError(t, err, "failed to get cached sun event times")
 
 	// Verify cached times match original times
-	if !times1.Sunrise.Equal(times2.Sunrise) {
-		t.Error("Cached sunrise time doesn't match original")
-	}
-	if !times1.Sunset.Equal(times2.Sunset) {
-		t.Error("Cached sunset time doesn't match original")
-	}
+	assert.True(t, times1.Sunrise.Equal(times2.Sunrise), "cached sunrise time doesn't match original")
+	assert.True(t, times1.Sunset.Equal(times2.Sunset), "cached sunset time doesn't match original")
 }
 
 func TestGetSunriseTime(t *testing.T) {
-	sc := NewSunCalc(60.1699, 24.9384)
-	date := time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC)
+	sc := newTestSunCalc()
+	date := midsummerDate()
 
 	sunrise, err := sc.GetSunriseTime(date)
-	if err != nil {
-		t.Fatalf("Failed to get sunrise time: %v", err)
-	}
+	require.NoError(t, err, "failed to get sunrise time")
 
-	if sunrise.IsZero() {
-		t.Error("Sunrise time is zero")
-	}
+	assert.False(t, sunrise.IsZero(), "sunrise time is zero")
 }
 
 func TestGetSunsetTime(t *testing.T) {
-	sc := NewSunCalc(60.1699, 24.9384)
-	date := time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC)
+	sc := newTestSunCalc()
+	date := midsummerDate()
 
 	sunset, err := sc.GetSunsetTime(date)
-	if err != nil {
-		t.Fatalf("Failed to get sunset time: %v", err)
-	}
+	require.NoError(t, err, "failed to get sunset time")
 
-	if sunset.IsZero() {
-		t.Error("Sunset time is zero")
-	}
+	assert.False(t, sunset.IsZero(), "sunset time is zero")
 }
 
 func TestCacheConsistency(t *testing.T) {
-	sc := NewSunCalc(60.1699, 24.9384)
-	date := time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC)
+	sc := newTestSunCalc()
+	date := midsummerDate()
 
 	// Get times twice
 	times1, err := sc.GetSunEventTimes(date)
-	if err != nil {
-		t.Fatalf("Failed to get initial sun event times: %v", err)
-	}
+	require.NoError(t, err, "failed to get initial sun event times")
 
 	// Verify cache entry exists
 	dateKey := date.Format("2006-01-02")
@@ -109,15 +72,9 @@ func TestCacheConsistency(t *testing.T) {
 	entry, exists := sc.cache[dateKey]
 	sc.lock.RUnlock()
 
-	if !exists {
-		t.Error("Cache entry not found after calculation")
-	}
+	assert.True(t, exists, "cache entry not found after calculation")
 
-	if !entry.date.Equal(date) {
-		t.Error("Cached date doesn't match requested date")
-	}
+	assert.True(t, entry.date.Equal(date), "cached date doesn't match requested date")
 
-	if !entry.times.Sunrise.Equal(times1.Sunrise) {
-		t.Error("Cached sunrise time doesn't match calculated time")
-	}
+	assert.True(t, entry.times.Sunrise.Equal(times1.Sunrise), "cached sunrise time doesn't match calculated time")
 }
