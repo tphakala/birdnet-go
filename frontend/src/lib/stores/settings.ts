@@ -300,6 +300,7 @@ export interface SecuritySettings {
   };
   googleAuth: OAuthSettings;
   githubAuth: OAuthSettings;
+  microsoftAuth: OAuthSettings;
   allowSubnetBypass: {
     enabled: boolean;
     subnet: string;
@@ -743,6 +744,12 @@ function createEmptySettings(): SettingsFormData {
         userId: '',
       },
       githubAuth: {
+        enabled: false,
+        clientId: '',
+        clientSecret: '',
+        userId: '',
+      },
+      microsoftAuth: {
         enabled: false,
         clientId: '',
         clientSecret: '',
