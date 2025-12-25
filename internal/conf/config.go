@@ -939,6 +939,7 @@ type Security struct {
 	BasicAuth         BasicAuth         `json:"basicAuth"`         // password authentication configuration
 	GoogleAuth        SocialProvider    `json:"googleAuth"`        // Google OAuth2 configuration
 	GithubAuth        SocialProvider    `json:"githubAuth"`        // Github OAuth2 configuration
+	MicrosoftAuth     SocialProvider    `json:"microsoftAuth"`     // Microsoft Account OAuth2 configuration
 	SessionSecret     string            `json:"sessionSecret"`     // secret for session cookie
 	SessionDuration   time.Duration     `json:"sessionDuration"`   // duration for browser session cookies
 }

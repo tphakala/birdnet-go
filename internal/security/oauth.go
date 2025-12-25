@@ -24,6 +24,7 @@ import (
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/github"
 	gothGoogle "github.com/markbates/goth/providers/google"
+	"github.com/markbates/goth/providers/microsoftonline"
 	"golang.org/x/oauth2"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -286,7 +287,7 @@ func getSessionPath() (string, bool) {
 	return sessionPath, true
 }
 
-// initializeProviders sets up the OAuth providers (Google, GitHub).
+// initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft).
 func initializeProviders(settings *conf.Settings) {
 	logger().Info("Configuring Goth providers")
 	providers := make([]goth.Provider, 0, InitialProviderCapacity)
@@ -315,6 +316,18 @@ func initializeProviders(settings *conf.Settings) {
 		))
 	} else {
 		logger().Info("GitHub Auth provider disabled or not configured")
+	}
+
+	if settings.Security.MicrosoftAuth.Enabled && settings.Security.MicrosoftAuth.ClientID != "" && settings.Security.MicrosoftAuth.ClientSecret != "" {
+		logger().Info("Enabling Microsoft Account Auth provider")
+		providers = append(providers, microsoftonline.New(
+			settings.Security.MicrosoftAuth.ClientID,
+			settings.Security.MicrosoftAuth.ClientSecret,
+			settings.Security.MicrosoftAuth.RedirectURI,
+			"user.read", // Scope for email/profile
+		))
+	} else {
+		logger().Info("Microsoft Account Auth provider disabled or not configured")
 	}
 
 	if len(providers) > 0 {
@@ -385,7 +398,7 @@ func (s *OAuth2Server) checkBasicAuthToken(r *http.Request, log SecurityLogger) 
 	return false
 }
 
-// checkSocialAuthSessions checks for valid Google or GitHub authentication sessions
+// checkSocialAuthSessions checks for valid Google, GitHub, or Microsoft authentication sessions
 func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogger) bool {
 	userId, err := gothic.GetFromSession("userId", r)
 	if err != nil {
@@ -398,7 +411,11 @@ func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogg
 		return true
 	}
 
-	return s.checkGithubAuth(r, userId, log)
+	if s.checkGithubAuth(r, userId, log) {
+		return true
+	}
+
+	return s.checkMicrosoftAuth(r, userId, log)
 }
 
 // checkGoogleAuth validates Google OAuth session
@@ -416,6 +433,15 @@ func (s *OAuth2Server) checkGithubAuth(r *http.Request, userId string, log Secur
 		providerName:   ProviderGitHub,
 		enabled:        s.Settings.Security.GithubAuth.Enabled,
 		allowedUserIds: s.Settings.Security.GithubAuth.UserId,
+	})
+}
+
+// checkMicrosoftAuth validates Microsoft Account OAuth session
+func (s *OAuth2Server) checkMicrosoftAuth(r *http.Request, userId string, log SecurityLogger) bool {
+	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		providerName:   ProviderMicrosoft,
+		enabled:        s.Settings.Security.MicrosoftAuth.Enabled,
+		allowedUserIds: s.Settings.Security.MicrosoftAuth.UserId,
 	})
 }
 
@@ -586,11 +612,12 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 		logger.Info("Authentication bypassed: request from allowed subnet")
 		return false // Authentication not required for allowed subnets
 	}
-	if s.Settings.Security.BasicAuth.Enabled || s.Settings.Security.GoogleAuth.Enabled || s.Settings.Security.GithubAuth.Enabled {
+	if s.Settings.Security.BasicAuth.Enabled || s.Settings.Security.GoogleAuth.Enabled || s.Settings.Security.GithubAuth.Enabled || s.Settings.Security.MicrosoftAuth.Enabled {
 		logger.Info("Authentication required: at least one provider enabled and IP not in allowed subnet",
 			"basic_enabled", s.Settings.Security.BasicAuth.Enabled,
 			"google_enabled", s.Settings.Security.GoogleAuth.Enabled,
 			"github_enabled", s.Settings.Security.GithubAuth.Enabled,
+			"microsoft_enabled", s.Settings.Security.MicrosoftAuth.Enabled,
 		)
 		return true
 	}

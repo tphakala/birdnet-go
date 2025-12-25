@@ -5,8 +5,9 @@ import "time"
 // Security-related constants
 const (
 	// OAuth provider names (used as session keys)
-	ProviderGoogle = "google"
-	ProviderGitHub = "github"
+	ProviderGoogle    = "google"
+	ProviderGitHub    = "github"
+	ProviderMicrosoft = "microsoftonline"
 
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
@@ -34,7 +35,7 @@ const (
 	IPv4TotalAddressBits = 32
 
 	// Provider capacity hint
-	InitialProviderCapacity = 2
+	InitialProviderCapacity = 3
 
 	// Path validation limits
 	MaxSafePathLength = 512
