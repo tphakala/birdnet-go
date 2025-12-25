@@ -126,19 +126,44 @@
   );
 
   // PERFORMANCE OPTIMIZATION: Generate redirect URIs dynamically with $derived
+  // Use window.location.origin for display (what the user sees in browser)
   let currentHost = $derived(
-    typeof window !== 'undefined' 
-      ? window.location.origin 
-      : settings?.host 
-        ? `https://${settings.host}` 
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : settings?.host
+        ? `https://${settings.host}`
         : 'https://your-domain.com'
   );
-  
+
+  // Canonical base URL for saving to config (uses configured host/baseUrl)
+  // This is what gets persisted to config.yaml for OAuth callbacks
+  let configuredBaseUrl = $derived.by(() => {
+    if (settings?.baseUrl) {
+      return settings.baseUrl.replace(/\/$/, ''); // Remove trailing slash
+    }
+    if (settings?.host) {
+      const host = settings.host.replace(/\/$/, '');
+      // If host already has scheme, use as-is
+      if (host.startsWith('http://') || host.startsWith('https://')) {
+        return host;
+      }
+      // Otherwise assume HTTPS
+      return `https://${host}`;
+    }
+    // Fallback to current browser origin
+    return typeof window !== 'undefined' ? window.location.origin : '';
+  });
+
   // Use clean OAuth callback URLs (without /api/v1 prefix) for better UX
   // Backend supports both /auth/:provider/callback and /api/v1/auth/:provider/callback
   let googleRedirectURI = $derived(`${currentHost}/auth/google/callback`);
   let githubRedirectURI = $derived(`${currentHost}/auth/github/callback`);
   let microsoftRedirectURI = $derived(`${currentHost}/auth/microsoftonline/callback`);
+
+  // Computed redirect URIs for saving to config (based on configured host/baseUrl)
+  let googleConfigRedirectURI = $derived(`${configuredBaseUrl}/auth/google/callback`);
+  let githubConfigRedirectURI = $derived(`${configuredBaseUrl}/auth/github/callback`);
+  let microsoftConfigRedirectURI = $derived(`${configuredBaseUrl}/auth/microsoftonline/callback`);
 
   // Server Configuration update handlers
   function updateBaseUrl(baseUrl: string) {
@@ -181,28 +206,28 @@
   function updateGoogleAuthEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
       ...settings,
-      googleAuth: { ...settings.googleAuth, enabled },
+      googleAuth: { ...settings.googleAuth, enabled, redirectURI: googleConfigRedirectURI },
     });
   }
 
   function updateGoogleClientId(clientId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      googleAuth: { ...settings.googleAuth, clientId },
+      googleAuth: { ...settings.googleAuth, clientId, redirectURI: googleConfigRedirectURI },
     });
   }
 
   function updateGoogleClientSecret(clientSecret: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      googleAuth: { ...settings.googleAuth, clientSecret },
+      googleAuth: { ...settings.googleAuth, clientSecret, redirectURI: googleConfigRedirectURI },
     });
   }
 
   function updateGoogleUserId(userId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      googleAuth: { ...settings.googleAuth, userId },
+      googleAuth: { ...settings.googleAuth, userId, redirectURI: googleConfigRedirectURI },
     });
   }
 
@@ -210,28 +235,28 @@
   function updateGithubAuthEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
       ...settings,
-      githubAuth: { ...settings.githubAuth, enabled },
+      githubAuth: { ...settings.githubAuth, enabled, redirectURI: githubConfigRedirectURI },
     });
   }
 
   function updateGithubClientId(clientId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      githubAuth: { ...settings.githubAuth, clientId },
+      githubAuth: { ...settings.githubAuth, clientId, redirectURI: githubConfigRedirectURI },
     });
   }
 
   function updateGithubClientSecret(clientSecret: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      githubAuth: { ...settings.githubAuth, clientSecret },
+      githubAuth: { ...settings.githubAuth, clientSecret, redirectURI: githubConfigRedirectURI },
     });
   }
 
   function updateGithubUserId(userId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      githubAuth: { ...settings.githubAuth, userId },
+      githubAuth: { ...settings.githubAuth, userId, redirectURI: githubConfigRedirectURI },
     });
   }
 
@@ -239,7 +264,7 @@
   function updateMicrosoftAuth(update: Partial<typeof settings.microsoftAuth>) {
     settingsActions.updateSection('security', {
       ...settings,
-      microsoftAuth: { ...settings.microsoftAuth, ...update },
+      microsoftAuth: { ...settings.microsoftAuth, ...update, redirectURI: microsoftConfigRedirectURI },
     });
   }
 

@@ -119,8 +119,6 @@ github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 h1:PwQumkgq4/acIi
 github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3/go.mod h1:autxFIvghDt3jPTLoqZ9OZ7s9qTGNAWmYCjVFWPX/zg=
 github.com/markbates/going v1.0.0 h1:DQw0ZP7NbNlFGcKbcE/IVSOAFzScxRtLpd0rLMzLhq0=
 github.com/markbates/going v1.0.0/go.mod h1:I6mnB4BPnEeqo85ynXIx1ZFLLbtiLHNXVgWeFO9OGOA=
-github.com/markbates/goth v1.82.0 h1:8j/c34AjBSTNzO7zTsOyP5IYCQCMBTRBHAbBt/PI0bQ=
-github.com/markbates/goth v1.82.0/go.mod h1:/DRlcq0pyqkKToyZjsL2KgiA1zbF1HIjE7u2uC79rUk=
 github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHPsaIE=
 github.com/mattn/go-colorable v0.1.14/go.mod h1:6LmQG8QLFO4G5z1gPvYEzlUgJ2wF+stgPZH1UqBm1s8=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
@@ -203,6 +201,8 @@ github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3 h1:hD7Uw+Js4mZXlfLYn
 github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3/go.mod h1:YEoLmuRHr0LG0zHpCWVkdGi4EqeiULta/nNCFntKMuc=
 github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e h1:/qmTC7Fy2iFd0gpLnBTfD11SzfFNpLpUKAcrxqVB/cc=
 github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e/go.mod h1:fDE48JMvNlDtdjhzShuhkEnikhmTvkom1jxuxP28atQ=
+github.com/tphakala/goth v0.0.0-20251225195455-a4b17a573e8f h1:cwFTLlrHXrfzgziEj6LFdpAiAPHrkYUfrRd081++lLc=
+github.com/tphakala/goth v0.0.0-20251225195455-a4b17a573e8f/go.mod h1:KFKsaAp/nxZJ/NY+1cVYnfpjQ+1eeptVkzxQYIPMy+o=
 github.com/tphakala/malgo v0.11.22 h1:3rSnGbCkDFrV04ERDqAlnX/XPGc9IHcN6e71xNA0TyE=
 github.com/tphakala/malgo v0.11.22/go.mod h1:PeoBfxQgha3ifttIUWxd0/FZeD4vot3G5njVldpZyqc=
 github.com/tphakala/simd v1.0.22 h1:3wHL91t4yvhCB0ycyTznvucTHax+QGpYkvOhqfraTYw=

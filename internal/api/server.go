@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/markbates/goth/gothic"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
@@ -305,6 +307,10 @@ func (s *Server) setupMiddleware() {
 func (s *Server) setupRoutes() error {
 	// Health check endpoint at root level
 	s.echo.GET("/health", s.healthCheck)
+
+	// Social OAuth routes (Google, GitHub, Microsoft)
+	// These must be at /auth/:provider to match frontend expectations
+	s.registerOAuthRoutes()
 
 	// Initialize static file server for frontend assets
 	s.staticServer = NewStaticFileServer(s.slogger, s.assetsFS)
@@ -616,4 +622,193 @@ func (s *Server) registerSPARoutes() {
 // getAuthMiddleware returns the authentication middleware owned by the server.
 func (s *Server) getAuthMiddleware() echo.MiddlewareFunc {
 	return s.authMiddleware
+}
+
+// registerOAuthRoutes registers social OAuth provider routes.
+// These routes handle OAuth flow for Google, GitHub, and Microsoft providers.
+func (s *Server) registerOAuthRoutes() {
+	// GET /auth/:provider - Initiates OAuth flow with the provider
+	s.echo.GET("/auth/:provider", s.handleOAuthBegin)
+
+	// GET /auth/:provider/callback - Handles OAuth callback from provider
+	s.echo.GET("/auth/:provider/callback", s.handleOAuthCallback)
+
+	s.slogger.Debug("OAuth routes registered",
+		"begin_route", "/auth/:provider",
+		"callback_route", "/auth/:provider/callback",
+	)
+}
+
+// handleOAuthBegin initiates the OAuth flow with the requested provider.
+// GET /auth/:provider
+func (s *Server) handleOAuthBegin(c echo.Context) error {
+	provider := c.Param("provider")
+
+	s.slogger.Info("OAuth begin request",
+		"provider", provider,
+		"ip", c.RealIP(),
+	)
+
+	// Validate provider is one we support
+	if !s.isValidOAuthProvider(provider) {
+		s.slogger.Warn("Invalid OAuth provider requested",
+			"provider", provider,
+			"ip", c.RealIP(),
+		)
+		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
+	}
+
+	// Add provider to request context for gothic
+	req := gothic.GetContextWithProvider(c.Request(), provider)
+
+	// Try to complete auth if user already has a valid session
+	if user, err := gothic.CompleteUserAuth(c.Response(), req); err == nil {
+		s.slogger.Info("User already authenticated via OAuth",
+			"provider", provider,
+			"user_id", user.UserID,
+			"email", user.Email,
+		)
+		// User is already authenticated, redirect to dashboard
+		return c.Redirect(http.StatusFound, "/ui/dashboard")
+	}
+
+	// Begin OAuth flow - this will redirect to the provider
+	gothic.BeginAuthHandler(c.Response(), req)
+	return nil
+}
+
+// handleOAuthCallback handles the OAuth callback from the provider.
+// GET /auth/:provider/callback
+func (s *Server) handleOAuthCallback(c echo.Context) error {
+	provider := c.Param("provider")
+
+	s.slogger.Info("OAuth callback received",
+		"provider", provider,
+		"ip", c.RealIP(),
+	)
+
+	// Add provider to request context for gothic
+	req := gothic.GetContextWithProvider(c.Request(), provider)
+
+	// Complete the OAuth flow and get user info
+	user, err := gothic.CompleteUserAuth(c.Response(), req)
+	if err != nil {
+		s.slogger.Error("OAuth authentication failed",
+			"provider", provider,
+			"error", err.Error(),
+			"ip", c.RealIP(),
+		)
+		return c.String(http.StatusUnauthorized, "Authentication failed: "+err.Error())
+	}
+
+	s.slogger.Info("OAuth authentication successful",
+		"provider", provider,
+		"user_id", user.UserID,
+		"email", user.Email,
+		"name", user.Name,
+		"ip", c.RealIP(),
+	)
+
+	// Validate user is allowed (check against configured allowed user IDs)
+	if !s.isAllowedOAuthUser(provider, user.UserID, user.Email) {
+		s.slogger.Warn("OAuth user not in allowed list",
+			"provider", provider,
+			"user_id", user.UserID,
+			"email", user.Email,
+			"ip", c.RealIP(),
+		)
+		return c.String(http.StatusForbidden, "Access denied: user not authorized")
+	}
+
+	// Store user info in session
+	// Use email as userId if available, otherwise use provider's UserID
+	userId := user.Email
+	if userId == "" {
+		userId = user.UserID
+	}
+
+	if err := gothic.StoreInSession("userId", userId, req, c.Response()); err != nil {
+		s.slogger.Error("Failed to store userId in session",
+			"error", err.Error(),
+			"provider", provider,
+		)
+	}
+
+	// Store provider name in session for later reference
+	if err := gothic.StoreInSession(provider, user.UserID, req, c.Response()); err != nil {
+		s.slogger.Error("Failed to store provider session",
+			"error", err.Error(),
+			"provider", provider,
+		)
+	}
+
+	s.slogger.Info("OAuth session established, redirecting to dashboard",
+		"provider", provider,
+		"user_id", userId,
+	)
+
+	// Redirect to dashboard after successful authentication
+	return c.Redirect(http.StatusFound, "/ui/dashboard")
+}
+
+// isValidOAuthProvider checks if the provider name is valid.
+func (s *Server) isValidOAuthProvider(provider string) bool {
+	validProviders := []string{
+		security.ProviderGoogle,
+		security.ProviderGitHub,
+		security.ProviderMicrosoft,
+	}
+	for _, p := range validProviders {
+		if strings.EqualFold(provider, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAllowedOAuthUser checks if the OAuth user is in the allowed users list for the provider.
+func (s *Server) isAllowedOAuthUser(provider, userID, email string) bool {
+	if s.settings == nil {
+		return false
+	}
+
+	var allowedUsers string
+	var enabled bool
+
+	switch strings.ToLower(provider) {
+	case security.ProviderGoogle:
+		enabled = s.settings.Security.GoogleAuth.Enabled
+		allowedUsers = s.settings.Security.GoogleAuth.UserId
+	case security.ProviderGitHub:
+		enabled = s.settings.Security.GithubAuth.Enabled
+		allowedUsers = s.settings.Security.GithubAuth.UserId
+	case security.ProviderMicrosoft:
+		enabled = s.settings.Security.MicrosoftAuth.Enabled
+		allowedUsers = s.settings.Security.MicrosoftAuth.UserId
+	default:
+		return false
+	}
+
+	if !enabled {
+		return false
+	}
+
+	// If no allowed users configured, deny access
+	if allowedUsers == "" {
+		return false
+	}
+
+	// Check if user ID or email matches any allowed user
+	for allowed := range strings.SplitSeq(allowedUsers, ",") {
+		trimmed := strings.TrimSpace(allowed)
+		if trimmed == "" {
+			continue
+		}
+		// Case-insensitive comparison for both userID and email
+		if strings.EqualFold(trimmed, userID) || strings.EqualFold(trimmed, email) {
+			return true
+		}
+	}
+
+	return false
 }

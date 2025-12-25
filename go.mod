@@ -118,3 +118,5 @@ require (
 	golang.org/x/time v0.14.0
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/markbates/goth => github.com/tphakala/goth v0.0.0-20251225195455-a4b17a573e8f
