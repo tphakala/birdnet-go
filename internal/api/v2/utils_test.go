@@ -304,21 +304,34 @@ func TestNormalizeClipPathStrict_EdgeCases(t *testing.T) {
 		assert.False(t, ok, "'../' should be rejected as path traversal")
 	})
 
-	// URL-encoded paths are NOT decoded - this is expected behavior
-	// The function normalizes filesystem paths, not URLs
-	t.Run("URL-encoded paths not decoded (expected)", func(t *testing.T) {
+	// URL-encoded paths with potential traversal patterns are rejected for security
+	// Even though %2f is not a filesystem slash, it could be decoded later in the
+	// processing chain, making these paths dangerous. Defense in depth requires rejection.
+	t.Run("URL-encoded traversal patterns rejected", func(t *testing.T) {
 		t.Parallel()
-		result, ok := NormalizeClipPathStrict("..%2f..%2fetc/passwd", "clips/")
-		// This is accepted because %2f is not a slash in filesystem terms
-		assert.True(t, ok, "URL-encoded paths are treated as literal filenames")
-		assert.Equal(t, "..%2f..%2fetc/passwd", result)
+		_, ok := NormalizeClipPathStrict("..%2f..%2fetc/passwd", "clips/")
+		assert.False(t, ok, "URL-encoded paths with '..' should be rejected for security")
 	})
 
-	// Paths with multiple dots are valid directory names, not traversal
-	t.Run("Multiple dots are valid directory names", func(t *testing.T) {
+	// Paths with URL-encoded slashes are rejected as they could enable traversal after decoding
+	t.Run("URL-encoded slashes rejected", func(t *testing.T) {
 		t.Parallel()
-		result, ok := NormalizeClipPathStrict("..../test.wav", "clips/")
-		assert.True(t, ok, "Directory names with multiple dots are valid")
-		assert.Equal(t, "..../test.wav", result)
+		_, ok := NormalizeClipPathStrict("path%2fto%2ffile.wav", "clips/")
+		assert.False(t, ok, "Paths with encoded slashes should be rejected for security")
+	})
+
+	// Paths with multiple dots that look like traversal are rejected
+	t.Run("Paths starting with double dots rejected", func(t *testing.T) {
+		t.Parallel()
+		_, ok := NormalizeClipPathStrict("..../test.wav", "clips/")
+		assert.False(t, ok, "Paths containing '..' anywhere should be rejected")
+	})
+
+	// Valid paths with dots in filenames are still accepted
+	t.Run("Dots in filenames are valid", func(t *testing.T) {
+		t.Parallel()
+		result, ok := NormalizeClipPathStrict("file.name.with.dots.wav", "clips/")
+		assert.True(t, ok, "Dots in filenames are valid")
+		assert.Equal(t, "file.name.with.dots.wav", result)
 	})
 }

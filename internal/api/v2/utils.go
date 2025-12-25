@@ -83,16 +83,72 @@ func stripClipsPrefix(p, clipsPrefix string) string {
 	return p
 }
 
+// dangerousEncodedPatterns contains URL-encoded patterns that indicate path traversal attempts.
+// These patterns are checked against the lowercased path.
+var dangerousEncodedPatterns = []string{
+	// Encoded null bytes
+	"%00", "%2500",
+	// URL-encoded path traversal: %2e = '.'
+	"%2e%2e", "%2e.", ".%2e",
+	// Double-encoded: %25 = '%', so %252e = '%2e' after one decode
+	"%252e",
+	// Triple-encoded (defense in depth)
+	"%25252e",
+	// Encoded slashes that could create traversal after decoding
+	"%2f", "%252f",
+	// Encoded backslashes for Windows-style traversal
+	"%5c", "%255c",
+}
+
+// containsDangerousEncodedPattern checks if a lowercased path contains any dangerous URL-encoded patterns.
+func containsDangerousEncodedPattern(lower string) bool {
+	for _, pattern := range dangerousEncodedPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// minWindowsDrivePathLen is the minimum length for a Windows drive path (e.g., "C:").
+const minWindowsDrivePathLen = 2
+
+// isWindowsAbsolutePath checks for Windows-style absolute paths (e.g., C:, D:).
+func isWindowsAbsolutePath(p string) bool {
+	if len(p) < minWindowsDrivePathLen {
+		return false
+	}
+	firstChar := p[0]
+	return ((firstChar >= 'A' && firstChar <= 'Z') || (firstChar >= 'a' && firstChar <= 'z')) && p[1] == ':'
+}
+
 // isUnsafePath checks if a path would escape the SecureFS root.
 // Uses filepath.IsLocal for robust path validation that handles platform-specific
 // traversal patterns, reserved names, and edge cases.
+// Also checks for URL-encoded attacks and null bytes.
 func isUnsafePath(p string) bool {
-	// filepath.IsLocal returns false for:
-	// - Absolute paths
-	// - Paths with ".." components
-	// - Empty paths
-	// - Windows reserved names (NUL, COM1, etc.)
-	// - Paths starting with "\"
+	// Check for null bytes - do this first as they can bypass other checks
+	if strings.Contains(p, "\x00") {
+		return true
+	}
+
+	// Check for Windows-style absolute paths on any platform
+	if isWindowsAbsolutePath(p) {
+		return true
+	}
+
+	// Check for ".." anywhere in the path - dangerous after URL decoding
+	if strings.Contains(p, "..") {
+		return true
+	}
+
+	// Check for dangerous URL-encoded patterns
+	if containsDangerousEncodedPattern(strings.ToLower(p)) {
+		return true
+	}
+
+	// filepath.IsLocal provides platform-specific validation for:
+	// - Absolute paths, empty paths, Windows reserved names (NUL, COM1, etc.)
 	return !filepath.IsLocal(p)
 }
 
@@ -623,6 +679,10 @@ func parseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 		start, err1 := time.Parse("2006-01-02", startDate)
 		end, err2 := time.Parse("2006-01-02", endDate)
 		if err1 == nil && err2 == nil {
+			// Reject inverted date ranges where start is after end
+			if start.After(end) {
+				return nil
+			}
 			return &DateRangeResult{
 				Start: start,
 				End:   end.AddDate(0, 0, 1).Add(-time.Second),
