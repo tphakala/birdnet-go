@@ -47,9 +47,10 @@ const (
 	NightPartlyCloudyHumidityPercent = 60.0 // Humidity threshold for partly cloudy at night
 	
 	// Unit conversion factors
-	KmhToMs              = 0.277778      // Convert km/h to m/s (divide by 3.6)
-	MphToMs              = 0.44704       // Convert mph to m/s
-	InHgToHPa            = 33.8638866667 // Convert inches of mercury to hectopascals
+	KmhToMs     = 0.277778      // Convert km/h to m/s (divide by 3.6)
+	MphToMs     = 0.44704       // Convert mph to m/s
+	InHgToHPa   = 33.8638866667 // Convert inches of mercury to hectopascals
+	InchesToMm  = 25.4          // Convert inches to millimeters
 	
 	// Feels-like temperature thresholds - Metric
 	MetricHotTempC          = 27.0         // Temperature above which to use heat index
@@ -67,48 +68,54 @@ const (
 
 var stationIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
 
+// inferNightIcon determines cloud cover icon based on humidity during night.
+func inferNightIcon(humidity float64) IconCode {
+	switch {
+	case humidity >= NightCloudyHumidityPercent:
+		return IconCloudy
+	case humidity >= NightPartlyCloudyHumidityPercent:
+		return IconPartlyCloudy
+	default:
+		return IconClearSky
+	}
+}
+
+// inferDaytimeIcon determines cloud cover icon based on solar radiation during day.
+func inferDaytimeIcon(solarRadiation float64) IconCode {
+	switch {
+	case solarRadiation > DayClearSRThreshold:
+		return IconClearSky
+	case solarRadiation >= DayPartlyCloudyLowerSR:
+		return IconPartlyCloudy
+	default:
+		return IconCloudy
+	}
+}
+
 // InferWundergroundIcon infers a standardized icon code from Wunderground measurements.
 // windGustMS must be provided in m/s.
 func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS float64) IconCode {
-	// 1. Thunderstorm: heavy rain + high wind gust (gust normalized to m/s)
+	// 1. Thunderstorm: heavy rain + high wind gust
 	if precipMM > ThunderstormPrecipMM && windGustMS > ThunderstormGustMS {
 		return IconThunderstorm
 	}
-	// 2. Precipitation type: snow vs rain (use temp)
+	// 2. Precipitation type: snow vs rain
 	if precipMM > 0 {
 		if tempC < FreezingPointC {
 			return IconSnow
 		}
 		return IconRain
 	}
-
 	// 3. Fog
 	if humidity > FogHumidityPercent && tempC < FogTempThresholdC {
 		return IconFog
 	}
-
-	// 4. Night handling: when solar radiation is near zero, infer clouds by humidity
+	// 4. Night: infer clouds by humidity
 	if solarRadiation <= NightSolarRadiationThreshold {
-		if humidity >= NightCloudyHumidityPercent {
-			return IconCloudy
-		}
-		if humidity >= NightPartlyCloudyHumidityPercent {
-			return IconPartlyCloudy
-		}
-		return IconClearSky
+		return inferNightIcon(humidity)
 	}
-
-	// 5. Daytime cloud cover: estimate from solarRadiation
-	if solarRadiation > DayClearSRThreshold {
-		return IconClearSky
-	}
-	if solarRadiation >= DayPartlyCloudyLowerSR && solarRadiation <= DayPartlyCloudyUpperSR {
-		return IconPartlyCloudy
-	}
-	if solarRadiation < DayPartlyCloudyLowerSR {
-		return IconCloudy
-	}
-	return IconFair
+	// 5. Daytime: infer clouds by solar radiation
+	return inferDaytimeIcon(solarRadiation)
 }
 
 // wundergroundErrorResponse represents an error response from Weather Underground API
@@ -125,48 +132,42 @@ type wundergroundErrorResponse struct {
 	} `json:"errors"`
 }
 
+// wundergroundMeasurementData holds unit-specific weather measurements from Wunderground API
+type wundergroundMeasurementData struct {
+	Temp        float64 `json:"temp"`
+	HeatIndex   float64 `json:"heatIndex"`
+	Dewpt       float64 `json:"dewpt"`
+	WindChill   float64 `json:"windChill"`
+	WindSpeed   float64 `json:"windSpeed"`
+	WindGust    float64 `json:"windGust"`
+	Pressure    float64 `json:"pressure"`
+	PrecipRate  float64 `json:"precipRate"`
+	PrecipTotal float64 `json:"precipTotal"`
+	Elev        float64 `json:"elev"`
+}
+
+// wundergroundObservation represents a single weather observation from the Weather Underground API
+type wundergroundObservation struct {
+	StationID      string                      `json:"stationID"`
+	ObsTimeUtc     string                      `json:"obsTimeUtc"`
+	ObsTimeLocal   string                      `json:"obsTimeLocal"`
+	Neighborhood   string                      `json:"neighborhood"`
+	SoftwareType   string                      `json:"softwareType"`
+	Country        string                      `json:"country"`
+	SolarRadiation float64                     `json:"solarRadiation"`
+	Lon            float64                     `json:"lon"`
+	Lat            float64                     `json:"lat"`
+	Uv             float64                     `json:"uv"`
+	Winddir        int                         `json:"winddir"`
+	Humidity       float64                     `json:"humidity"`
+	QcStatus       int                         `json:"qcStatus"`
+	Imperial       wundergroundMeasurementData `json:"imperial"`
+	Metric         wundergroundMeasurementData `json:"metric"`
+}
+
 // wundergroundResponse models the JSON observations response from the Weather Underground API.
 type wundergroundResponse struct {
-	Observations []struct {
-		StationID      string  `json:"stationID"`
-		ObsTimeUtc     string  `json:"obsTimeUtc"`
-		ObsTimeLocal   string  `json:"obsTimeLocal"`
-		Neighborhood   string  `json:"neighborhood"`
-		SoftwareType   string  `json:"softwareType"`
-		Country        string  `json:"country"`
-		SolarRadiation float64 `json:"solarRadiation"`
-		Lon            float64 `json:"lon"`
-		Lat            float64 `json:"lat"`
-		Uv             float64 `json:"uv"`
-		Winddir        int     `json:"winddir"`
-		Humidity       float64 `json:"humidity"`
-		QcStatus       int     `json:"qcStatus"`
-		// Optional/extra fields for improved icon inference:
-		Imperial struct {
-			Temp        float64 `json:"temp"`
-			HeatIndex   float64 `json:"heatIndex"`
-			Dewpt       float64 `json:"dewpt"`
-			WindChill   float64 `json:"windChill"`
-			WindSpeed   float64 `json:"windSpeed"`
-			WindGust    float64 `json:"windGust"`
-			Pressure    float64 `json:"pressure"`
-			PrecipRate  float64 `json:"precipRate"`
-			PrecipTotal float64 `json:"precipTotal"`
-			Elev        float64 `json:"elev"`
-		} `json:"imperial"`
-		Metric struct {
-			Temp        float64 `json:"temp"`
-			HeatIndex   float64 `json:"heatIndex"`
-			Dewpt       float64 `json:"dewpt"`
-			WindChill   float64 `json:"windChill"`
-			WindSpeed   float64 `json:"windSpeed"`
-			WindGust    float64 `json:"windGust"`
-			Pressure    float64 `json:"pressure"`
-			PrecipRate  float64 `json:"precipRate"`
-			PrecipTotal float64 `json:"precipTotal"`
-			Elev        float64 `json:"elev"`
-		} `json:"metric"`
-	} `json:"observations"`
+	Observations []wundergroundObservation `json:"observations"`
 }
 
 // parseWundergroundError extracts and formats error messages from Weather Underground API responses
@@ -218,222 +219,191 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 	
 	// Generic error message based on status code
 	switch statusCode {
-	case 401:
+	case http.StatusUnauthorized:
 		return "authentication failed - please check your API key"
-	case 403:
+	case http.StatusForbidden:
 		return "access forbidden - please check your API permissions"
-	case 404:
+	case http.StatusNotFound:
 		return "weather station not found - please verify the station ID"
-	case 429:
+	case http.StatusTooManyRequests:
 		return "rate limit exceeded - please try again later"
-	case 500, 502, 503, 504:
+	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return "Weather Underground service is temporarily unavailable - please try again later"
 	default:
 		return fmt.Sprintf("Weather Underground API error (HTTP %d)", statusCode)
 	}
 }
 
-func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
-	apiKey := settings.Realtime.Weather.Wunderground.APIKey
-	stationId := settings.Realtime.Weather.Wunderground.StationID
-	units := settings.Realtime.Weather.Wunderground.Units
-	endpoint := settings.Realtime.Weather.Wunderground.Endpoint
-	if endpoint == "" {
-		endpoint = wundergroundBaseURL
-	}
-	if units == "" {
-		units = "e"
-	}
-	// Only allow supported units: "e" (English), "m" (Metric), "h" (Hybrid UK)
-	if units != "e" && units != "m" && units != "h" {
-		weatherLogger.Warn("Invalid units value detected, falling back to imperial",
-			"units", units,
-			"station", stationId,
-			"provider", wundergroundProviderName)
-		units = "e"
-	}
-	if apiKey == "" || stationId == "" {
-		return nil, errors.New(fmt.Errorf("wunderground API key or station ID not configured")).
-			Component("weather").
-			Category(errors.CategoryConfiguration).
-			Context("provider", wundergroundProviderName).
-			Build()
+// wundergroundConfig holds validated configuration for Wunderground API requests
+type wundergroundConfig struct {
+	apiKey    string
+	stationID string
+	units     string
+	endpoint  string
+}
+
+// validateWundergroundConfig validates and normalizes Wunderground configuration
+func validateWundergroundConfig(settings *conf.Settings) (*wundergroundConfig, error) {
+	cfg := &wundergroundConfig{
+		apiKey:    settings.Realtime.Weather.Wunderground.APIKey,
+		stationID: settings.Realtime.Weather.Wunderground.StationID,
+		units:     settings.Realtime.Weather.Wunderground.Units,
+		endpoint:  settings.Realtime.Weather.Wunderground.Endpoint,
 	}
 
-	// Validate stationId format: 3-32 chars, letters, digits, hyphen, underscore
-	if !stationIDRegex.MatchString(stationId) {
-		return nil, errors.New(fmt.Errorf("invalid wunderground station ID format")).
-			Component("weather").
-			Category(errors.CategoryConfiguration).
-			Context("provider", wundergroundProviderName).
-			Build()
+	if cfg.endpoint == "" {
+		cfg.endpoint = wundergroundBaseURL
 	}
+	if cfg.units == "" {
+		cfg.units = "e"
+	}
+	if cfg.units != "e" && cfg.units != "m" && cfg.units != "h" {
+		weatherLogger.Warn("Invalid units value, falling back to imperial", "units", cfg.units)
+		cfg.units = "e"
+	}
+	if cfg.apiKey == "" || cfg.stationID == "" {
+		return nil, newWeatherError(
+			fmt.Errorf("wunderground API key or station ID not configured"),
+			errors.CategoryConfiguration, "validate_config", wundergroundProviderName,
+		)
+	}
+	if !stationIDRegex.MatchString(cfg.stationID) {
+		return nil, newWeatherError(
+			fmt.Errorf("invalid wunderground station ID format"),
+			errors.CategoryConfiguration, "validate_station_id", wundergroundProviderName,
+		)
+	}
+	return cfg, nil
+}
 
-	u, err := url.Parse(endpoint)
+// buildWundergroundURL constructs the API URL from configuration
+func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
+	u, err := url.Parse(cfg.endpoint)
 	if err != nil {
-		return nil, errors.New(fmt.Errorf("invalid wunderground endpoint: %w", err)).
-			Component("weather").
-			Category(errors.CategoryConfiguration).
-			Context("provider", wundergroundProviderName).
-			Build()
+		return "", newWeatherError(
+			fmt.Errorf("invalid wunderground endpoint: %w", err),
+			errors.CategoryConfiguration, "parse_endpoint", wundergroundProviderName,
+		)
 	}
 	q := u.Query()
-	q.Set("stationId", stationId)
+	q.Set("stationId", cfg.stationID)
 	q.Set("format", "json")
-	q.Set("units", units)
-	q.Set("apiKey", apiKey)
+	q.Set("units", cfg.units)
+	q.Set("apiKey", cfg.apiKey)
 	q.Set("numericPrecision", "decimal")
 	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
 
-	apiURL := u.String()
+func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+	cfg, err := validateWundergroundConfig(settings)
+	if err != nil {
+		return nil, err
+	}
+
+	apiURL, err := buildWundergroundURL(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	logger := weatherLogger.With("provider", wundergroundProviderName)
 	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "apiKey"))
 
-	// Create a context with timeout for this specific request
+	// Execute request
+	body, err := p.executeRequest(apiURL, cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse and validate response
+	wuResp, err := parseWundergroundResponse(body)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("Successfully received and parsed weather data")
+	return mapWundergroundResponse(wuResp, cfg.units, logger), nil
+}
+
+// executeRequest performs the HTTP request with context timeout
+func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundConfig, logger *slog.Logger) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel() // Ensure resources are freed
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
-		logger.Error("Failed to create HTTP request", "url", maskAPIKey(apiURL, "apiKey"), "error", err)
-		return nil, errors.New(err).
-			Component("weather").
-			Category(errors.CategoryNetwork).
-			Context("operation", "create_http_request").
-			Context("provider", wundergroundProviderName).
-			Build()
+		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", wundergroundProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		weatherLogger.Error("HTTP request failed", "error", err)
-		
-		// Distinguish between context cancellation and deadline errors
-		var category errors.ErrorCategory
-		var contextReason string
-		switch ctx.Err() {
-		case context.Canceled:
-			category = errors.CategoryTimeout
-			contextReason = "canceled"
-		case context.DeadlineExceeded:
-			category = errors.CategoryTimeout
-			contextReason = "timeout"
-		default:
-			category = errors.CategoryNetwork
-			contextReason = "network_error"
-		}
-		
-		return nil, errors.New(err).
-			Component("weather").
-			Category(category).
-			Context("operation", "weather_api_request").
-			Context("provider", wundergroundProviderName).
-			Context("reason", contextReason).
-			Build()
+		return nil, handleWundergroundRequestError(err, ctx)
 	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil {
-			logger.Warn("Failed to close response body", "error", cerr, "operation", "weather_api_close", "provider", wundergroundProviderName)
-		}
-	}()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		// Read response body to extract error details
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		
-		// Parse and format the error message
-		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, stationId, units, logger)
-		
-		return nil, errors.New(fmt.Errorf("%s", errorMessage)).
-			Component("weather").
-			Category(errors.CategoryNetwork).
-			Context("operation", "weather_api_response").
-			Context("provider", wundergroundProviderName).
-			Context("status_code", resp.StatusCode).
-			Context("station", stationId).
-			Context("units", units).
-			Build()
+		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, logger)
+		return nil, newWeatherError(
+			fmt.Errorf("%s", errorMessage),
+			errors.CategoryNetwork, "weather_api_response", wundergroundProviderName,
+		)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("Failed to read response body", "error", err)
-		return nil, errors.New(err).
-			Component("weather").
-			Category(errors.CategoryNetwork).
-			Context("operation", "read_response_body").
-			Context("provider", wundergroundProviderName).
-			Build()
-	}
+	return io.ReadAll(resp.Body)
+}
 
+// handleWundergroundRequestError categorizes HTTP request errors
+func handleWundergroundRequestError(err error, ctx context.Context) error {
+	var category errors.ErrorCategory
+	switch ctx.Err() {
+	case context.Canceled:
+		category = errors.CategoryTimeout
+	case context.DeadlineExceeded:
+		category = errors.CategoryTimeout
+	default:
+		category = errors.CategoryNetwork
+	}
+	return newWeatherError(err, category, "weather_api_request", wundergroundProviderName)
+}
+
+// parseWundergroundResponse parses and validates the JSON response
+func parseWundergroundResponse(body []byte) (*wundergroundResponse, error) {
 	var wuResp wundergroundResponse
 	if err := json.Unmarshal(body, &wuResp); err != nil {
-		// Truncate response body for safe logging
-		const maxPreview = 200
-		responsePreview := string(body)
-		if len(responsePreview) > maxPreview {
-			responsePreview = responsePreview[:maxPreview] + "..."
-		}
-		logger.Error("Failed to unmarshal response JSON", "error", err, "response_preview", responsePreview)
-		return nil, errors.New(err).
-			Component("weather").
-			Category(errors.CategoryValidation).
-			Context("operation", "unmarshal_weather_data").
-			Context("provider", wundergroundProviderName).
-			Build()
+		return nil, newWeatherError(err, errors.CategoryValidation, "unmarshal_weather_data", wundergroundProviderName)
 	}
-
 	if len(wuResp.Observations) == 0 {
-		logger.Error("API response contained no observations")
-		return nil, errors.New(fmt.Errorf("no observations returned from API")).
-			Component("weather").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_weather_response").
-			Context("provider", wundergroundProviderName).
-			Context("station", stationId).
-			Context("units", units).
-			Build()
+		return nil, newWeatherError(
+			fmt.Errorf("no observations returned from API"),
+			errors.CategoryValidation, "validate_weather_response", wundergroundProviderName,
+		)
 	}
+	return &wuResp, nil
+}
 
+// mapWundergroundResponse converts wundergroundResponse to WeatherData
+func mapWundergroundResponse(wuResp *wundergroundResponse, units string, logger *slog.Logger) *WeatherData {
 	obs := wuResp.Observations[0]
+
 	obsTime, err := time.Parse(time.RFC3339, obs.ObsTimeUtc)
 	if err != nil {
-		logger.Warn("Failed to parse observation time; using current UTC", "obs_time_utc", obs.ObsTimeUtc, "error", err, "station", obs.StationID, "index", 0)
+		logger.Warn("Failed to parse observation time; using current UTC", "obs_time_utc", obs.ObsTimeUtc)
 		obsTime = time.Now().UTC()
 	}
 
-	// Extract weather measurements based on units
 	measurements := extractMeasurements(&obs, units)
-	
-	// Calculate feels-like temperature
 	feelsLike := calculateFeelsLike(measurements, units)
-
-	// Normalize wind gust to m/s for icon inference
 	gustMS := normalizeWindGust(measurements.windGustRaw, units)
-
-	// Calculate precipitation rate in mm/h for icon inference
-	var precipMMH float64
-	switch {
-	case obs.Metric.PrecipRate > 0:
-		precipMMH = obs.Metric.PrecipRate
-	case obs.Imperial.PrecipRate > 0:
-		// Convert inches/hour to mm/hour (1 inch = 25.4 mm)
-		precipMMH = obs.Imperial.PrecipRate * 25.4
-	default:
-		precipMMH = 0.0
-	}
+	precipMMH := getPrecipitationRate(&obs)
 
 	iconCode := InferWundergroundIcon(
-		measurements.temp,
-		precipMMH,
-		float64(obs.Humidity),
-		obs.SolarRadiation,
-		gustMS,
+		measurements.temp, precipMMH, float64(obs.Humidity), obs.SolarRadiation, gustMS,
 	)
-	mappedData := &WeatherData{
+
+	return &WeatherData{
 		Time: obsTime,
 		Location: Location{
 			Latitude:  obs.Lat,
@@ -444,24 +414,31 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		Temperature: Temperature{
 			Current:   measurements.temp,
 			FeelsLike: feelsLike,
-			Min:       measurements.temp, // Not provided, fallback to current
-			Max:       measurements.temp, // Not provided, fallback to current
+			Min:       measurements.temp,
+			Max:       measurements.temp,
 		},
 		Wind: Wind{
 			Speed: measurements.windSpeed,
 			Deg:   obs.Winddir,
 			Gust:  measurements.windGust,
 		},
-		Clouds:      0, // Not provided
-		Visibility:  0, // Not provided
 		Pressure:    int(math.Round(measurements.pressure)),
 		Humidity:    int(math.Round(obs.Humidity)),
 		Description: IconDescription[iconCode],
 		Icon:        string(iconCode),
 	}
+}
 
-	logger.Debug("Mapped API response to WeatherData structure", "station", obs.StationID, "temp", mappedData.Temperature.Current)
-	return mappedData, nil
+// getPrecipitationRate extracts precipitation rate in mm/h
+func getPrecipitationRate(obs *wundergroundObservation) float64 {
+	switch {
+	case obs.Metric.PrecipRate > 0:
+		return obs.Metric.PrecipRate
+	case obs.Imperial.PrecipRate > 0:
+		return obs.Imperial.PrecipRate * InchesToMm
+	default:
+		return 0.0
+	}
 }
 
 // isInvalid checks if a float64 value is NaN (invalid for HeatIndex/WindChill logic)
@@ -482,122 +459,73 @@ type weatherMeasurements struct {
 	pressure     float64
 }
 
-// extractMeasurements extracts weather measurements based on units configuration
-func extractMeasurements(obs *struct {
-	StationID      string  `json:"stationID"`
-	ObsTimeUtc     string  `json:"obsTimeUtc"`
-	ObsTimeLocal   string  `json:"obsTimeLocal"`
-	Neighborhood   string  `json:"neighborhood"`
-	SoftwareType   string  `json:"softwareType"`
-	Country        string  `json:"country"`
-	SolarRadiation float64 `json:"solarRadiation"`
-	Lon            float64 `json:"lon"`
-	Lat            float64 `json:"lat"`
-	Uv             float64 `json:"uv"`
-	Winddir        int     `json:"winddir"`
-	Humidity       float64 `json:"humidity"`
-	QcStatus       int     `json:"qcStatus"`
-	Imperial struct {
-		Temp        float64 `json:"temp"`
-		HeatIndex   float64 `json:"heatIndex"`
-		Dewpt       float64 `json:"dewpt"`
-		WindChill   float64 `json:"windChill"`
-		WindSpeed   float64 `json:"windSpeed"`
-		WindGust    float64 `json:"windGust"`
-		Pressure    float64 `json:"pressure"`
-		PrecipRate  float64 `json:"precipRate"`
-		PrecipTotal float64 `json:"precipTotal"`
-		Elev        float64 `json:"elev"`
-	} `json:"imperial"`
-	Metric struct {
-		Temp        float64 `json:"temp"`
-		HeatIndex   float64 `json:"heatIndex"`
-		Dewpt       float64 `json:"dewpt"`
-		WindChill   float64 `json:"windChill"`
-		WindSpeed   float64 `json:"windSpeed"`
-		WindGust    float64 `json:"windGust"`
-		Pressure    float64 `json:"pressure"`
-		PrecipRate  float64 `json:"precipRate"`
-		PrecipTotal float64 `json:"precipTotal"`
-		Elev        float64 `json:"elev"`
-	} `json:"metric"`
-}, units string) weatherMeasurements {
+// extractMeasurements extracts weather measurements based on units configuration.
+// IMPORTANT: All temperatures (temp, heatIndex, windChill) are ALWAYS returned in Celsius
+// regardless of the API units setting. This ensures consistent storage and display.
+func extractMeasurements(obs *wundergroundObservation, units string) weatherMeasurements {
 	m := weatherMeasurements{}
-	
+
+	// Always use Metric struct for temperature values (already in Celsius)
+	// This ensures consistent storage regardless of API units setting.
+	// Wind speed and pressure handling varies by units for optimal API data usage.
+	m.temp = obs.Metric.Temp
+	m.heatIndex = obs.Metric.HeatIndex
+	m.windChill = obs.Metric.WindChill
+
 	switch units {
 	case "m":
-		// Metric units
-		m.temp = obs.Metric.Temp
-		m.heatIndex = obs.Metric.HeatIndex
-		m.windChill = obs.Metric.WindChill
-		// Convert km/h -> m/s for WeatherData
+		// Metric units: km/h wind, hPa pressure
 		m.windSpeed = obs.Metric.WindSpeed * KmhToMs
 		m.windGust = obs.Metric.WindGust * KmhToMs
-		// Keep raw gust (km/h) for icon inference conversion later
 		m.windGustRaw = obs.Metric.WindGust
 		m.pressure = obs.Metric.Pressure
 	case "h":
-		// Hybrid (UK): use Metric for temp, Imperial wind converted to m/s
-		m.temp = obs.Metric.Temp
-		m.heatIndex = obs.Metric.HeatIndex
-		m.windChill = obs.Metric.WindChill
-		// Convert mph -> m/s for WeatherData
+		// Hybrid (UK): Celsius temp (already set above), mph wind
 		m.windSpeed = obs.Imperial.WindSpeed * MphToMs
 		m.windGust = obs.Imperial.WindGust * MphToMs
-		// Keep raw gust (mph) for icon inference conversion later
 		m.windGustRaw = obs.Imperial.WindGust
 		m.pressure = obs.Metric.Pressure
 	default:
-		// Imperial units (default)
-		m.temp = obs.Imperial.Temp
-		m.heatIndex = obs.Imperial.HeatIndex
-		m.windChill = obs.Imperial.WindChill
-		// Convert mph -> m/s for WeatherData consistency
+		// Imperial units (default): Use imperial wind/pressure but metric temp
 		m.windSpeed = obs.Imperial.WindSpeed * MphToMs
 		m.windGust = obs.Imperial.WindGust * MphToMs
-		// Keep raw values (mph) for feels-like calculation and icon inference
 		m.windSpeedRaw = obs.Imperial.WindSpeed
 		m.windGustRaw = obs.Imperial.WindGust
 		m.pressure = obs.Imperial.Pressure * InHgToHPa
 	}
-	
+
 	return m
 }
 
-// calculateFeelsLike calculates the feels-like temperature based on conditions
+// calculateFeelsLike calculates the feels-like temperature based on conditions.
+// NOTE: All temperatures (temp, heatIndex, windChill) are in Celsius.
+// The units parameter only affects wind speed threshold comparison.
 func calculateFeelsLike(m weatherMeasurements, units string) float64 {
+	// All temperature thresholds are in Celsius since extractMeasurements
+	// now always returns temperatures in Celsius.
+	// Hot threshold: >=27°C, Cold threshold: <=10°C
+
+	// Determine wind threshold based on API units (for threshold comparison only)
+	var windExceedsThreshold bool
 	switch units {
 	case "m":
-		// Thresholds in metric: hot >=27°C, cold <=10°C, wind >1.333 m/s (4.8 km/h)
-		switch {
-		case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
-			return m.heatIndex
-		case m.temp <= MetricColdTempC && m.windSpeed > MetricWindThresholdMs && !isInvalid(m.windChill):
-			return m.windChill
-		default:
-			return m.temp
-		}
+		// Metric: wind threshold 4.8 km/h = 1.333 m/s
+		windExceedsThreshold = m.windSpeed > MetricWindThresholdMs
 	case "h":
-		// Use metric temp thresholds, wind threshold 3 mph => 1.34112 m/s
-		switch {
-		case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
-			return m.heatIndex
-		case m.temp <= MetricColdTempC && m.windSpeed > HybridWindThresholdMs && !isInvalid(m.windChill):
-			return m.windChill
-		default:
-			return m.temp
-		}
+		// Hybrid UK: wind threshold 3 mph = 1.34112 m/s
+		windExceedsThreshold = m.windSpeed > HybridWindThresholdMs
 	default:
-		// Thresholds in imperial: hot >=80°F, cold <=50°F, wind >3 mph
-		// Use raw wind speed (mph) for threshold comparison
-		switch {
-		case m.temp >= ImperialHotTempF && !isInvalid(m.heatIndex):
-			return m.heatIndex
-		case m.temp <= ImperialColdTempF && m.windSpeedRaw > ImperialWindThresholdMph && !isInvalid(m.windChill):
-			return m.windChill
-		default:
-			return m.temp
-		}
+		// Imperial: use raw wind speed (mph) for threshold comparison
+		windExceedsThreshold = m.windSpeedRaw > ImperialWindThresholdMph
+	}
+
+	switch {
+	case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
+		return m.heatIndex
+	case m.temp <= MetricColdTempC && windExceedsThreshold && !isInvalid(m.windChill):
+		return m.windChill
+	default:
+		return m.temp
 	}
 }
 

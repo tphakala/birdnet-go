@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+// DefaultHTTPClientTimeout is the default timeout for HTTP clients when not specified
+const DefaultHTTPClientTimeout = 30 * time.Second
+
 // NewYrNoProvider creates a new Yr.no weather provider
 func NewYrNoProvider() Provider {
 	return &YrNoProvider{}
@@ -25,7 +28,7 @@ type OpenWeatherProvider struct{}
 func NewWundergroundProvider(client *http.Client) Provider {
 	if client == nil {
 		client = &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: DefaultHTTPClientTimeout,
 		}
 	}
 	return &WundergroundProvider{

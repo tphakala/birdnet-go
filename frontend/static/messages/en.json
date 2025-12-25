@@ -556,11 +556,25 @@
       "showing": "Showing {from} to {to} of {total} results"
     },
     "weather": {
+      "title": "Weather Information",
       "noData": "No weather data",
+      "noDataAvailable": "No weather data available",
+      "loading": "Loading weather information...",
+      "labels": {
+        "temperature": "Temperature",
+        "weather": "Weather",
+        "wind": "Wind",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+        "cloudCover": "Cloud Cover"
+      },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Clear Sky",
@@ -1761,6 +1775,14 @@
           "apiKeyRequired": "API key must be specified",
           "inProgress": "Test in progress...",
           "description": "Test weather provider connection"
+        },
+        "temperatureUnit": {
+          "label": "Temperature Display Unit",
+          "helpText": "Choose how temperatures are displayed throughout the application.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
         }
       }
     },

@@ -31,8 +31,10 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte';
   import { Thermometer, Sun, Wind, Droplets, Gauge, Cloud, XCircle } from '@lucide/svelte';
+  import { formatTemperature, type TemperatureUnit } from '$lib/utils/formatters';
 
   interface WeatherData {
     hourly?: {
@@ -53,6 +55,7 @@
   interface Props {
     detectionId?: string;
     weatherData?: WeatherData;
+    units?: TemperatureUnit;
     compact?: boolean;
     showTitle?: boolean;
     autoFetch?: boolean;
@@ -67,6 +70,7 @@
   let {
     detectionId,
     weatherData,
+    units = 'metric',
     compact = false,
     showTitle = true,
     autoFetch = true,
@@ -107,12 +111,6 @@
     }
   }
 
-  // Helper function to format temperature
-  function formatTemperature(temp: number | undefined): string {
-    if (temp === undefined) return 'N/A';
-    return `${temp}°C`;
-  }
-
   // Helper function to format percentage
   function formatPercentage(value: number | undefined): string {
     if (value === undefined) return 'N/A';
@@ -149,7 +147,7 @@
 <div class={cn('weather-info', className)}>
   {#if showTitle}
     <h3 class={cn('text-lg font-semibold text-base-content mb-3', titleClassName)}>
-      Weather Information
+      {t('detections.weather.title')}
     </h3>
   {/if}
 
@@ -157,7 +155,7 @@
     <!-- Loading state -->
     <div class="py-4 flex justify-center" role="status" aria-live="polite">
       <span class="loading loading-spinner loading-md text-primary"></span>
-      <span class="sr-only">Loading weather information...</span>
+      <span class="sr-only">{t('detections.weather.loading')}</span>
     </div>
   {:else if error}
     <!-- Error state -->
@@ -184,8 +182,8 @@
         <div class="flex items-center">
           <Thermometer class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">Temperature</div>
-            <div class="font-medium">{formatTemperature(weather.hourly?.temperature)}</div>
+            <div class="text-base-content/70">{t('detections.weather.labels.temperature')}</div>
+            <div class="font-medium">{formatTemperature(weather.hourly?.temperature, units)}</div>
           </div>
         </div>
 
@@ -193,7 +191,7 @@
         <div class="flex items-center">
           <Sun class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">Weather</div>
+            <div class="text-base-content/70">{t('detections.weather.labels.weather')}</div>
             <div class="font-medium">{weather.hourly?.weatherMain || 'N/A'}</div>
           </div>
         </div>
@@ -202,7 +200,7 @@
         <div class="flex items-center">
           <Wind class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">Wind</div>
+            <div class="text-base-content/70">{t('detections.weather.labels.wind')}</div>
             <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed)}</div>
           </div>
         </div>
@@ -211,7 +209,7 @@
         <div class="flex items-center">
           <Droplets class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">Humidity</div>
+            <div class="text-base-content/70">{t('detections.weather.labels.humidity')}</div>
             <div class="font-medium">{formatPercentage(weather.hourly?.humidity)}</div>
           </div>
         </div>
@@ -221,8 +219,11 @@
           <div class="flex items-center">
             <Gauge class="size-5 mr-2" />
             <div>
-              <div class="text-base-content/70">Pressure</div>
-              <div class="font-medium">{weather.hourly.pressure} hPa</div>
+              <div class="text-base-content/70">{t('detections.weather.labels.pressure')}</div>
+              <div class="font-medium">
+                {weather.hourly.pressure}
+                {t('detections.weather.units.pressure')}
+              </div>
             </div>
           </div>
         {/if}
@@ -232,7 +233,7 @@
           <div class="flex items-center">
             <Cloud class="size-5 mr-2" />
             <div>
-              <div class="text-base-content/70">Cloud Cover</div>
+              <div class="text-base-content/70">{t('detections.weather.labels.cloudCover')}</div>
               <div class="font-medium">{formatPercentage(weather.hourly.clouds)}</div>
             </div>
           </div>
@@ -241,6 +242,8 @@
     {/if}
   {:else}
     <!-- No data state -->
-    <div class="py-4 text-center text-base-content/60">No weather data available</div>
+    <div class="py-4 text-center text-base-content/60">
+      {t('detections.weather.noDataAvailable')}
+    </div>
   {/if}
 </div>

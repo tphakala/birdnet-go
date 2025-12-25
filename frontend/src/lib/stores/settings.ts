@@ -410,6 +410,7 @@ export interface Dashboard {
   summaryLimit: number;
   locale?: string; // UI locale setting
   spectrogram?: SpectrogramPreRender; // Spectrogram pre-rendering settings
+  temperatureUnit?: string; // Temperature display unit: "celsius" or "fahrenheit"
 }
 
 export interface Thumbnails {
@@ -722,6 +723,7 @@ function createEmptySettings(): SettingsFormData {
         },
         summaryLimit: 100,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
+        temperatureUnit: 'celsius',
       },
     },
     webServer: {},

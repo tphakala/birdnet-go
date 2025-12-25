@@ -1424,36 +1424,23 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 	}
 }
 
-// getWeatherUnits returns the weather units based on the provider and configuration.
+// getWeatherUnits returns the temperature display unit based on user preference.
+// All temperatures are stored in Celsius internally; this determines display format.
 // Returns "imperial" for Fahrenheit or "metric" for Celsius to match frontend expectations.
 func (c *Controller) getWeatherUnits() string {
 	// Read settings with mutex
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	// Check the weather provider
-	switch c.Settings.Realtime.Weather.Provider {
-	case WeatherProviderOpenWeather:
-		// Return the configured units for OpenWeather
-		return c.Settings.Realtime.Weather.OpenWeather.Units
-	case WeatherProviderWunderground:
-		// Map Wunderground units to frontend-compatible values
-		// "e" = imperial (Fahrenheit), "m" = metric (Celsius), "h" = hybrid (Celsius temp, mph wind)
-		switch c.Settings.Realtime.Weather.Wunderground.Units {
-		case "e":
-			return "imperial"
-		case "m", "h":
-			// Both metric and hybrid use Celsius for temperature
-			return WeatherUnitMetric
-		default:
-			// Default to imperial if unknown (Wunderground defaults to "e")
-			return "imperial"
-		}
-	case WeatherProviderYrno:
-		// yr.no always provides metric units
+	// Use dashboard temperature unit preference for display
+	// All temperatures are now stored in Celsius internally
+	switch c.Settings.Realtime.Dashboard.TemperatureUnit {
+	case conf.TemperatureUnitFahrenheit:
+		return "imperial"
+	case conf.TemperatureUnitCelsius:
 		return WeatherUnitMetric
 	default:
-		// Default to metric if provider is unknown
+		// Default to Celsius if not set
 		return WeatherUnitMetric
 	}
 }
