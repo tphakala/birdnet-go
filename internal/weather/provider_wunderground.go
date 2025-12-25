@@ -132,48 +132,42 @@ type wundergroundErrorResponse struct {
 	} `json:"errors"`
 }
 
+// wundergroundMeasurementData holds unit-specific weather measurements from Wunderground API
+type wundergroundMeasurementData struct {
+	Temp        float64 `json:"temp"`
+	HeatIndex   float64 `json:"heatIndex"`
+	Dewpt       float64 `json:"dewpt"`
+	WindChill   float64 `json:"windChill"`
+	WindSpeed   float64 `json:"windSpeed"`
+	WindGust    float64 `json:"windGust"`
+	Pressure    float64 `json:"pressure"`
+	PrecipRate  float64 `json:"precipRate"`
+	PrecipTotal float64 `json:"precipTotal"`
+	Elev        float64 `json:"elev"`
+}
+
+// wundergroundObservation represents a single weather observation from the Weather Underground API
+type wundergroundObservation struct {
+	StationID      string                      `json:"stationID"`
+	ObsTimeUtc     string                      `json:"obsTimeUtc"`
+	ObsTimeLocal   string                      `json:"obsTimeLocal"`
+	Neighborhood   string                      `json:"neighborhood"`
+	SoftwareType   string                      `json:"softwareType"`
+	Country        string                      `json:"country"`
+	SolarRadiation float64                     `json:"solarRadiation"`
+	Lon            float64                     `json:"lon"`
+	Lat            float64                     `json:"lat"`
+	Uv             float64                     `json:"uv"`
+	Winddir        int                         `json:"winddir"`
+	Humidity       float64                     `json:"humidity"`
+	QcStatus       int                         `json:"qcStatus"`
+	Imperial       wundergroundMeasurementData `json:"imperial"`
+	Metric         wundergroundMeasurementData `json:"metric"`
+}
+
 // wundergroundResponse models the JSON observations response from the Weather Underground API.
 type wundergroundResponse struct {
-	Observations []struct {
-		StationID      string  `json:"stationID"`
-		ObsTimeUtc     string  `json:"obsTimeUtc"`
-		ObsTimeLocal   string  `json:"obsTimeLocal"`
-		Neighborhood   string  `json:"neighborhood"`
-		SoftwareType   string  `json:"softwareType"`
-		Country        string  `json:"country"`
-		SolarRadiation float64 `json:"solarRadiation"`
-		Lon            float64 `json:"lon"`
-		Lat            float64 `json:"lat"`
-		Uv             float64 `json:"uv"`
-		Winddir        int     `json:"winddir"`
-		Humidity       float64 `json:"humidity"`
-		QcStatus       int     `json:"qcStatus"`
-		// Optional/extra fields for improved icon inference:
-		Imperial struct {
-			Temp        float64 `json:"temp"`
-			HeatIndex   float64 `json:"heatIndex"`
-			Dewpt       float64 `json:"dewpt"`
-			WindChill   float64 `json:"windChill"`
-			WindSpeed   float64 `json:"windSpeed"`
-			WindGust    float64 `json:"windGust"`
-			Pressure    float64 `json:"pressure"`
-			PrecipRate  float64 `json:"precipRate"`
-			PrecipTotal float64 `json:"precipTotal"`
-			Elev        float64 `json:"elev"`
-		} `json:"imperial"`
-		Metric struct {
-			Temp        float64 `json:"temp"`
-			HeatIndex   float64 `json:"heatIndex"`
-			Dewpt       float64 `json:"dewpt"`
-			WindChill   float64 `json:"windChill"`
-			WindSpeed   float64 `json:"windSpeed"`
-			WindGust    float64 `json:"windGust"`
-			Pressure    float64 `json:"pressure"`
-			PrecipRate  float64 `json:"precipRate"`
-			PrecipTotal float64 `json:"precipTotal"`
-			Elev        float64 `json:"elev"`
-		} `json:"metric"`
-	} `json:"observations"`
+	Observations []wundergroundObservation `json:"observations"`
 }
 
 // parseWundergroundError extracts and formats error messages from Weather Underground API responses
@@ -436,45 +430,7 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, units string, logger 
 }
 
 // getPrecipitationRate extracts precipitation rate in mm/h
-func getPrecipitationRate(obs *struct {
-	StationID      string  `json:"stationID"`
-	ObsTimeUtc     string  `json:"obsTimeUtc"`
-	ObsTimeLocal   string  `json:"obsTimeLocal"`
-	Neighborhood   string  `json:"neighborhood"`
-	SoftwareType   string  `json:"softwareType"`
-	Country        string  `json:"country"`
-	SolarRadiation float64 `json:"solarRadiation"`
-	Lon            float64 `json:"lon"`
-	Lat            float64 `json:"lat"`
-	Uv             float64 `json:"uv"`
-	Winddir        int     `json:"winddir"`
-	Humidity       float64 `json:"humidity"`
-	QcStatus       int     `json:"qcStatus"`
-	Imperial       struct {
-		Temp        float64 `json:"temp"`
-		HeatIndex   float64 `json:"heatIndex"`
-		Dewpt       float64 `json:"dewpt"`
-		WindChill   float64 `json:"windChill"`
-		WindSpeed   float64 `json:"windSpeed"`
-		WindGust    float64 `json:"windGust"`
-		Pressure    float64 `json:"pressure"`
-		PrecipRate  float64 `json:"precipRate"`
-		PrecipTotal float64 `json:"precipTotal"`
-		Elev        float64 `json:"elev"`
-	} `json:"imperial"`
-	Metric struct {
-		Temp        float64 `json:"temp"`
-		HeatIndex   float64 `json:"heatIndex"`
-		Dewpt       float64 `json:"dewpt"`
-		WindChill   float64 `json:"windChill"`
-		WindSpeed   float64 `json:"windSpeed"`
-		WindGust    float64 `json:"windGust"`
-		Pressure    float64 `json:"pressure"`
-		PrecipRate  float64 `json:"precipRate"`
-		PrecipTotal float64 `json:"precipTotal"`
-		Elev        float64 `json:"elev"`
-	} `json:"metric"`
-}) float64 {
+func getPrecipitationRate(obs *wundergroundObservation) float64 {
 	switch {
 	case obs.Metric.PrecipRate > 0:
 		return obs.Metric.PrecipRate
@@ -506,45 +462,7 @@ type weatherMeasurements struct {
 // extractMeasurements extracts weather measurements based on units configuration.
 // IMPORTANT: All temperatures (temp, heatIndex, windChill) are ALWAYS returned in Celsius
 // regardless of the API units setting. This ensures consistent storage and display.
-func extractMeasurements(obs *struct {
-	StationID      string  `json:"stationID"`
-	ObsTimeUtc     string  `json:"obsTimeUtc"`
-	ObsTimeLocal   string  `json:"obsTimeLocal"`
-	Neighborhood   string  `json:"neighborhood"`
-	SoftwareType   string  `json:"softwareType"`
-	Country        string  `json:"country"`
-	SolarRadiation float64 `json:"solarRadiation"`
-	Lon            float64 `json:"lon"`
-	Lat            float64 `json:"lat"`
-	Uv             float64 `json:"uv"`
-	Winddir        int     `json:"winddir"`
-	Humidity       float64 `json:"humidity"`
-	QcStatus       int     `json:"qcStatus"`
-	Imperial struct {
-		Temp        float64 `json:"temp"`
-		HeatIndex   float64 `json:"heatIndex"`
-		Dewpt       float64 `json:"dewpt"`
-		WindChill   float64 `json:"windChill"`
-		WindSpeed   float64 `json:"windSpeed"`
-		WindGust    float64 `json:"windGust"`
-		Pressure    float64 `json:"pressure"`
-		PrecipRate  float64 `json:"precipRate"`
-		PrecipTotal float64 `json:"precipTotal"`
-		Elev        float64 `json:"elev"`
-	} `json:"imperial"`
-	Metric struct {
-		Temp        float64 `json:"temp"`
-		HeatIndex   float64 `json:"heatIndex"`
-		Dewpt       float64 `json:"dewpt"`
-		WindChill   float64 `json:"windChill"`
-		WindSpeed   float64 `json:"windSpeed"`
-		WindGust    float64 `json:"windGust"`
-		Pressure    float64 `json:"pressure"`
-		PrecipRate  float64 `json:"precipRate"`
-		PrecipTotal float64 `json:"precipTotal"`
-		Elev        float64 `json:"elev"`
-	} `json:"metric"`
-}, units string) weatherMeasurements {
+func extractMeasurements(obs *wundergroundObservation, units string) weatherMeasurements {
 	m := weatherMeasurements{}
 
 	// Always use Metric struct for temperature values (already in Celsius)
