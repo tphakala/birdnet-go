@@ -813,7 +813,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 				}
 
 				jsonData, err := json.Marshal(compactData)
-				require.NoError(t, err, "Failed to marshal compact data")
+				assert.NoError(t, err, "Failed to marshal compact data") // nolint:testifylint // require.NoError would call runtime.Goexit in goroutine
 				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
 					// In test context, we expect the mock to handle the publish
 					// Log error but don't fail since mock behavior is controlled by test
@@ -911,7 +911,7 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 					Dur:  soundData.Duration,
 				}
 				jsonData, err := json.Marshal(compactData)
-				require.NoError(t, err, "Failed to marshal compact data")
+				assert.NoError(t, err, "Failed to marshal compact data") // nolint:testifylint // require.NoError would call runtime.Goexit in goroutine
 				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
 					t.Logf("Mock publish returned error (expected in some tests): %v", err)
 				}
@@ -1198,7 +1198,7 @@ func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockP
 
 	compactData := convertToCompactFormat(soundData)
 	jsonData, err := json.Marshal(compactData)
-	require.NoError(t, err, "Failed to marshal compact data")
+	assert.NoError(t, err, "Failed to marshal compact data") // nolint:testifylint // require.NoError would call runtime.Goexit in goroutine
 
 	if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
 		t.Logf("Mock publish returned error (expected in some tests): %v", err)
@@ -1304,7 +1304,7 @@ func startMockMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan <-chan st
 					}
 				}
 				jsonData, err := json.Marshal(compactData)
-				require.NoError(t, err, "Failed to marshal compact data")
+				assert.NoError(t, err, "Failed to marshal compact data") // nolint:testifylint // require.NoError would call runtime.Goexit in goroutine
 				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
 					t.Logf("Mock publish returned error (expected in some tests): %v", err)
 				}
@@ -1419,7 +1419,7 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 					Bands: make(map[string]CompactBandData),
 				}
 				jsonData, err := json.Marshal(compactData)
-				require.NoError(t, err, "Failed to marshal compact data")
+				assert.NoError(t, err, "Failed to marshal compact data") // nolint:testifylint // require.NoError would call runtime.Goexit in goroutine
 				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
 					t.Logf("Mock publish returned error (expected in some tests): %v", err)
 				}
