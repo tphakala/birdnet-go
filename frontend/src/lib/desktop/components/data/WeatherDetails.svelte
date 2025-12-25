@@ -46,7 +46,7 @@
     temperature?: number;
     windSpeed?: number;
     windGust?: number;
-    units?: 'metric' | 'imperial' | 'standard';
+    units?: TemperatureUnit;
     size?: 'md' | 'lg' | 'xl';
     className?: string;
     loading?: boolean;
@@ -68,12 +68,12 @@
   }: Props = $props();
 
   // Get the appropriate unit label based on the units setting
-  const temperatureUnit = $derived(getTemperatureSymbol(units as TemperatureUnit));
+  const temperatureUnit = $derived(getTemperatureSymbol(units));
 
   // Convert temperature from Celsius (internal storage) to display unit
   const displayTemperature = $derived.by(() => {
     if (temperature === undefined) return undefined;
-    return convertTemperature(temperature, units as TemperatureUnit);
+    return convertTemperature(temperature, units);
   });
 
   const windSpeedUnit = $derived.by(() => {
