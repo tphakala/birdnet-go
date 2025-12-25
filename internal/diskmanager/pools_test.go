@@ -4,24 +4,15 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPooledSliceReleaseMemoryLeak verifies that oversized slices properly
 // release their memory references when not pooled
 func TestPooledSliceReleaseMemoryLeak(t *testing.T) {
-	// Save original config and restore after test
-	originalConfig := loadPoolConfig()
-	defer func() {
-		poolConfig.Store(originalConfig)
-	}()
-
-	// Set a small max pool capacity to trigger the oversized path
-	testConfig := &PoolConfig{
-		InitialCapacity: 10,
-		MaxPoolCapacity: 100,
-		MaxParseErrors:  100,
-	}
-	poolConfig.Store(testConfig)
+	withTestPoolConfig(t, smallPoolConfig())
 
 	// Create a large slice that exceeds MaxPoolCapacity
 	largeSlice := getPooledSlice()
@@ -39,9 +30,7 @@ func TestPooledSliceReleaseMemoryLeak(t *testing.T) {
 	largeSlice.SetData(largeData)
 
 	// Verify the slice has data
-	if len(*largeSlice.Data()) != 200 {
-		t.Errorf("Expected slice length 200, got %d", len(*largeSlice.Data()))
-	}
+	assert.Len(t, *largeSlice.Data(), 200, "expected slice length 200")
 
 	// Store a reference to check if it gets cleared
 	slicePtr := largeSlice.Data()
@@ -50,40 +39,22 @@ func TestPooledSliceReleaseMemoryLeak(t *testing.T) {
 	largeSlice.Release()
 
 	// Verify that the slice reference is cleared
-	if largeSlice.slice != nil {
-		t.Error("Expected slice reference to be nil after release of oversized slice")
-	}
+	assert.Nil(t, largeSlice.slice, "expected slice reference to be nil after release of oversized slice")
 
 	// The original slice should have been cleared
-	if len(*slicePtr) != 0 {
-		t.Error("Expected original slice to be cleared (length 0)")
-	}
+	assert.Empty(t, *slicePtr, "expected original slice to be cleared (length 0)")
 
 	// Force garbage collection to ensure memory can be freed
 	runtime.GC()
 	runtime.GC()
 
 	// Verify metrics show the skip
-	if poolMetrics.SkipCount.Load() == 0 {
-		t.Error("Expected SkipCount to be incremented for oversized slice")
-	}
+	assert.NotZero(t, poolMetrics.SkipCount.Load(), "expected SkipCount to be incremented for oversized slice")
 }
 
 // TestPooledSliceNormalPooling verifies normal pooling behavior still works
 func TestPooledSliceNormalPooling(t *testing.T) {
-	// Save original config and restore after test
-	originalConfig := loadPoolConfig()
-	defer func() {
-		poolConfig.Store(originalConfig)
-	}()
-
-	// Set config with reasonable pool capacity
-	testConfig := &PoolConfig{
-		InitialCapacity: 10,
-		MaxPoolCapacity: 1000,
-		MaxParseErrors:  100,
-	}
-	poolConfig.Store(testConfig)
+	withTestPoolConfig(t, normalPoolConfig())
 
 	// Reset metrics for clean test
 	poolMetrics.PutCount.Store(0)
@@ -103,20 +74,14 @@ func TestPooledSliceNormalPooling(t *testing.T) {
 	slice1.Release()
 
 	// Verify it was pooled, not skipped
-	if poolMetrics.PutCount.Load() == 0 {
-		t.Error("Expected PutCount to be incremented for normal-sized slice")
-	}
-	if poolMetrics.SkipCount.Load() != 0 {
-		t.Error("Expected SkipCount to remain 0 for normal-sized slice")
-	}
+	assert.NotZero(t, poolMetrics.PutCount.Load(), "expected PutCount to be incremented for normal-sized slice")
+	assert.Zero(t, poolMetrics.SkipCount.Load(), "expected SkipCount to remain 0 for normal-sized slice")
 
 	// Get another slice - should reuse from pool
 	slice2 := getPooledSlice()
 
 	// Verify it's been reset
-	if len(*slice2.Data()) != 0 {
-		t.Error("Expected reused slice to have length 0")
-	}
+	assert.Empty(t, *slice2.Data(), "expected reused slice to have length 0")
 
 	slice2.Release()
 }
@@ -132,9 +97,7 @@ func TestPooledSliceDoubleRelease(t *testing.T) {
 	slice.Release()
 
 	// Verify slice is still nil
-	if slice.slice != nil {
-		t.Error("Expected slice to remain nil after double release")
-	}
+	assert.Nil(t, slice.slice, "expected slice to remain nil after double release")
 }
 
 // TestPooledSliceTakeOwnership verifies ownership transfer
@@ -150,17 +113,11 @@ func TestPooledSliceTakeOwnership(t *testing.T) {
 	owned := slice.TakeOwnership()
 
 	// Verify data was copied
-	if len(owned) != 1 {
-		t.Errorf("Expected owned slice length 1, got %d", len(owned))
-	}
-	if owned[0].Path != "/test.wav" {
-		t.Errorf("Expected path /test.wav, got %s", owned[0].Path)
-	}
+	require.Len(t, owned, 1, "expected owned slice length 1")
+	assert.Equal(t, "/test.wav", owned[0].Path, "expected path /test.wav")
 
 	// Original should be released
-	if slice.slice != nil {
-		t.Error("Expected original slice to be nil after ownership transfer")
-	}
+	assert.Nil(t, slice.slice, "expected original slice to be nil after ownership transfer")
 }
 
 // BenchmarkPooledSliceRelease benchmarks the release operation
