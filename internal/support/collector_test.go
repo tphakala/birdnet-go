@@ -71,9 +71,7 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := lfc.isLogFile(tt.filename); got != tt.want {
-				t.Errorf("isLogFile(%q) = %v, want %v", tt.filename, got, tt.want)
-			}
+			assert.Equal(t, tt.want, lfc.isLogFile(tt.filename), "isLogFile(%q)", tt.filename)
 		})
 	}
 }
@@ -100,9 +98,7 @@ func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock FileInfo
 			info := &mockFileInfo{modTime: tt.modTime}
-			if got := lfc.isFileWithinTimeRange(info); got != tt.want {
-				t.Errorf("isFileWithinTimeRange() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, lfc.isFileWithinTimeRange(info), "isFileWithinTimeRange()")
 		})
 	}
 }
@@ -129,9 +125,7 @@ func TestLogFileCollector_canAddFile(t *testing.T) {
 				totalSize: tt.totalSize,
 				maxSize:   tt.maxSize,
 			}
-			if got := lfc.canAddFile(tt.fileSize); got != tt.want {
-				t.Errorf("canAddFile(%d) = %v, want %v", tt.fileSize, got, tt.want)
-			}
+			assert.Equal(t, tt.want, lfc.canAddFile(tt.fileSize), "canAddFile(%d)", tt.fileSize)
 		})
 	}
 }
@@ -175,9 +169,7 @@ func TestCollector_getUniqueLogPaths(t *testing.T) {
 
 	// Change to temp directory to test relative path resolution
 	oldWd, _ := os.Getwd()
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	require.NoError(t, os.Chdir(tempDir), "Failed to change directory")
 	t.Cleanup(func() {
 		if err := os.Chdir(oldWd); err != nil {
 			t.Logf("Warning: Failed to restore working directory: %v", err)
@@ -195,9 +187,7 @@ func TestCollector_getUniqueLogPaths(t *testing.T) {
 
 	// Check that no path appears more than once
 	for path, count := range pathCount {
-		if count > 1 {
-			t.Errorf("Path %q appears %d times, expected 1", path, count)
-		}
+		assert.Equal(t, 1, count, "Path %q appears %d times, expected 1", path, count)
 	}
 }
 
@@ -211,15 +201,11 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 	lfc.addNoLogsNote(w)
 
 	// Close the writer to finalize
-	if err := w.Close(); err != nil {
-		t.Fatalf("Failed to close zip writer: %v", err)
-	}
+	require.NoError(t, w.Close(), "Failed to close zip writer")
 
 	// Read the zip content
 	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
-	if err != nil {
-		t.Fatalf("Failed to read zip: %v", err)
-	}
+	require.NoError(t, err, "Failed to read zip")
 
 	// Look for README.txt
 	found := false
@@ -232,29 +218,19 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 
 		// Check content
 		rc, err := f.Open()
-		if err != nil {
-			t.Fatalf("Failed to open README: %v", err)
-		}
+		require.NoError(t, err, "Failed to open README")
 
 		content, err := io.ReadAll(rc)
-		if closeErr := rc.Close(); closeErr != nil {
-			t.Errorf("Failed to close README reader: %v", closeErr)
-		} // Close immediately after reading, not deferred
+		assert.NoError(t, rc.Close(), "Failed to close README reader") // Close immediately after reading, not deferred
 
-		if err != nil {
-			t.Fatalf("Failed to read README: %v", err)
-		}
+		require.NoError(t, err, "Failed to read README")
 
 		expected := "No log files were found or all logs were older than the specified duration."
-		if string(content) != expected {
-			t.Errorf("README content = %q, want %q", string(content), expected)
-		}
+		assert.Equal(t, expected, string(content), "README content mismatch")
 		break
 	}
 
-	if !found {
-		t.Error("README.txt not found in archive")
-	}
+	assert.True(t, found, "README.txt not found in archive")
 }
 
 // TestCollector_scrubConfig tests sensitive data scrubbing
@@ -320,9 +296,7 @@ func TestCollector_scrubConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := c.scrubConfig(tt.config)
-			if !compareConfigs(got, tt.want) {
-				t.Errorf("scrubConfig() = %v, want %v", got, tt.want)
-			}
+			assert.True(t, compareConfigs(got, tt.want), "scrubConfig() = %v, want %v", got, tt.want)
 		})
 	}
 }

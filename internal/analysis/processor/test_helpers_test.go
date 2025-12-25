@@ -6,10 +6,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // --- Audio Source Helpers ---
@@ -342,4 +346,52 @@ type MockSettings struct {
 
 func (s *MockSettings) IsDebug() bool {
 	return s.Debug
+}
+
+// --- Processor Setup Helpers ---
+
+// setupTestProcessor creates a processor with a real job queue and registers cleanup.
+// The queue is automatically stopped when the test completes.
+func setupTestProcessor(t *testing.T) *Processor {
+	t.Helper()
+	queue := jobqueue.NewJobQueue()
+	queue.Start()
+	t.Cleanup(func() {
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
+	})
+
+	return &Processor{
+		JobQueue: queue,
+		Settings: &conf.Settings{Debug: true},
+	}
+}
+
+// setupTestProcessorWithInterval creates a processor with a custom processing interval.
+func setupTestProcessorWithInterval(t *testing.T, interval time.Duration) *Processor {
+	t.Helper()
+	queue := jobqueue.NewJobQueue()
+	queue.SetProcessingInterval(interval)
+	queue.Start()
+	t.Cleanup(func() {
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
+	})
+
+	return &Processor{
+		JobQueue: queue,
+		Settings: &conf.Settings{Debug: true},
+	}
+}
+
+// --- Channel Wait Helpers ---
+
+// waitForChannel waits for a signal on the channel or fails after timeout.
+func waitForChannel(t *testing.T, ch <-chan struct{}, timeout time.Duration, msg string) {
+	t.Helper()
+	testutil.WaitForChannel(t, ch, timeout, msg)
+}
+
+// waitForChannelWithLog waits for a signal and logs on success.
+func waitForChannelWithLog(t *testing.T, ch <-chan struct{}, timeout time.Duration, failMsg, successMsg string) {
+	t.Helper()
+	testutil.WaitForChannelWithLog(t, ch, timeout, failMsg, successMsg)
 }

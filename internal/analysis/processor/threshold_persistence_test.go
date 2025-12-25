@@ -548,7 +548,7 @@ func TestThresholdGoroutineLifecycle(t *testing.T) {
 		case <-p.thresholdsCtx.Done():
 			// Context is properly cancelled
 		default:
-			t.Error("Context should be cancelled")
+			assert.Fail(t, "Context should be cancelled")
 		}
 	})
 }

@@ -301,7 +301,7 @@ func TestMultipleJobs(t *testing.T) {
 	case <-done:
 		// All jobs completed
 	case <-timeoutCtx.Done():
-		t.Fatal("Timed out waiting for jobs to complete")
+		require.Fail(t, "Timed out waiting for jobs to complete")
 	}
 
 	// Wait a bit more to ensure stats are updated
@@ -340,10 +340,7 @@ func TestRetryProcess(t *testing.T) {
 		ExecuteFunc: func(data any) error {
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryProcess: Attempt %d of %d", count, failCount+1)
-			// Safely convert failCount to int32 to match atomic counter type
-			if failCount > math.MaxInt32 {
-				t.Fatalf("failCount %d exceeds int32 range", failCount)
-			}
+			// failCount is a small test constant, safe to convert to int32
 			if count <= int32(failCount) { //nolint:gosec // G115: test values small, safe conversion
 				// Return failure for the first N attempts
 				return errors.New("simulated failure")
@@ -403,7 +400,7 @@ func TestRetryProcess(t *testing.T) {
 		case <-done:
 			t.Logf("TestRetryProcess: Job completed successfully after %d attempts", attemptCount.Load())
 		case <-retryCtx.Done():
-			t.Fatalf("Timed out waiting for job to succeed. Current attempt count: %d", attemptCount.Load())
+			require.Fail(t, "Timed out waiting for job to succeed", "Current attempt count: %d", attemptCount.Load())
 		}
 	}
 	// Check that the action was executed the expected number of times
@@ -585,9 +582,7 @@ func TestRetryBackoff(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 
 	// Stop the queue to ensure all goroutines complete
-	if err := queue.Stop(); err != nil {
-		t.Errorf("Failed to stop queue: %v", err)
-	}
+	require.NoError(t, queue.Stop(), "Failed to stop queue")
 
 	// Close the channel and collect execution times
 	close(executionTimes)
@@ -713,12 +708,7 @@ func TestJobExpiration(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// All successful jobs completed
-	case <-time.After(5 * time.Second):
-		t.Fatal("Timed out waiting for jobs to complete")
-	}
+	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for jobs to complete")
 
 	// Wait for the cleanup to happen (cleanup happens on the 1-second ticker)
 	time.Sleep(3 * time.Second)
@@ -784,12 +774,7 @@ func TestArchiveLimit(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// All jobs completed
-	case <-time.After(5 * time.Second):
-		t.Fatal("Timed out waiting for jobs to complete")
-	}
+	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for jobs to complete")
 
 	// Wait for the cleanup to happen (cleanup happens on the 1-second ticker)
 	time.Sleep(3 * time.Second)
@@ -856,12 +841,7 @@ func TestQueueOverflow(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for the blocking job to start (up to 1 second)
-	select {
-	case <-jobStarted:
-		t.Log("Blocking job started successfully")
-	case <-time.After(1 * time.Second):
-		t.Fatal("Timed out waiting for blocking job to start")
-	}
+	waitForChannelWithLog(t, jobStarted, ShortTestTimeout, "Timed out waiting for blocking job to start", "Blocking job started successfully")
 
 	// Now fill the rest of the queue with additional jobs
 	// The queue capacity is queueCapacity, and one job is already running,
@@ -944,9 +924,7 @@ func TestDropOldestJob(t *testing.T) {
 	queue := NewJobQueueWithOptions(queueCapacity, 10, false)
 	queue.Start()
 	defer func() {
-		if err := queue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
 	}()
 
 	// Enable job dropping for this test
@@ -986,12 +964,7 @@ func TestDropOldestJob(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for the blocking job to start (up to 1 second)
-	select {
-	case <-jobStarted:
-		t.Log("Blocking job started successfully")
-	case <-time.After(1 * time.Second):
-		t.Fatal("Timed out waiting for blocking job to start")
-	}
+	waitForChannelWithLog(t, jobStarted, ShortTestTimeout, "Timed out waiting for blocking job to start", "Blocking job started successfully")
 
 	// Now fill the rest of the queue with pending jobs
 	pendingJobIDs := []string{
@@ -1095,12 +1068,7 @@ func TestHangingJobTimeout(t *testing.T) {
 	}()
 
 	// Wait for the job to be enqueued
-	select {
-	case <-done:
-		// Job enqueued successfully
-	case <-time.After(1 * time.Second):
-		t.Fatal("Timed out waiting for job to be enqueued")
-	}
+	waitForChannel(t, done, ShortTestTimeout, "Timed out waiting for job to be enqueued")
 
 	// Wait for the job to be picked up for processing
 	time.Sleep(2 * time.Second)
@@ -1165,12 +1133,7 @@ func TestContextCancellation(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Wait for the job to start executing
-	select {
-	case <-executionStarted:
-		// Job execution has started
-	case <-time.After(3 * time.Second):
-		t.Fatal("Timed out waiting for job execution to start")
-	}
+	waitForChannel(t, executionStarted, 3*time.Second, "Timed out waiting for job execution to start")
 
 	// Stop the queue, which should cancel all running jobs
 	err = queue.StopWithTimeout(500 * time.Millisecond)
@@ -1315,8 +1278,8 @@ func TestStressTest(t *testing.T) {
 	case <-done:
 		// All jobs completed
 	case <-time.After(5 * time.Second): // Reduced timeout
-		t.Fatalf("Timed out waiting for jobs to complete. Completed: %d, Failed: %d, Total: %d",
-			completedJobs.Load(), failedJobs.Load(), numJobs)
+		require.Fail(t, "Timed out waiting for jobs to complete",
+			"Completed: %d, Failed: %d, Total: %d", completedJobs.Load(), failedJobs.Load(), numJobs)
 	}
 
 	// Wait a bit more to ensure stats are updated
@@ -1465,13 +1428,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for job to start
-	select {
-	case <-jobStarted:
-		// Job started
-		t.Log("Job started successfully")
-	case <-time.After(2 * time.Second):
-		t.Fatal("Job didn't start in time")
-	}
+	waitForChannelWithLog(t, jobStarted, 2*time.Second, "Job didn't start in time", "Job started successfully")
 
 	// Initiate graceful shutdown with a reasonable timeout
 	shutdownErr := make(chan error, 1)
@@ -1490,7 +1447,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	case err := <-shutdownErr:
 		require.NoError(t, err, "Graceful shutdown should complete without error")
 	case <-time.After(3 * time.Second):
-		t.Fatal("Shutdown didn't complete in time")
+		require.Fail(t, "Shutdown didn't complete in time")
 	}
 }
 
@@ -1524,7 +1481,7 @@ func TestRateLimiting(t *testing.T) {
 		case errors.Is(err, ErrQueueFull):
 			rejectionCount.Add(1)
 		default:
-			t.Errorf("Unexpected error: %v", err)
+			assert.Fail(t, "Unexpected error", "%v", err)
 		}
 
 		// Don't sleep to simulate high submission rate
@@ -1542,9 +1499,7 @@ func TestJobCancellation(t *testing.T) {
 	queue.SetProcessingInterval(10 * time.Millisecond)
 	queue.StartWithContext(ctx)
 	defer func() {
-		if err := queue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, queue.Stop(), "Failed to stop queue")
 	}()
 
 	longJobStarted := make(chan struct{})
@@ -1567,13 +1522,7 @@ func TestJobCancellation(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 
 	// Wait for job to start
-	select {
-	case <-longJobStarted:
-		// Job started
-		t.Log("Long job started successfully")
-	case <-time.After(2 * time.Second):
-		t.Fatal("Job didn't start in time")
-	}
+	waitForChannelWithLog(t, longJobStarted, 2*time.Second, "Job didn't start in time", "Long job started successfully")
 
 	// Cancel the context
 	cancel()
@@ -1869,12 +1818,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// All jobs completed
-	case <-time.After(30 * time.Second):
-		t.Fatal("Timed out waiting for jobs to complete")
-	}
+	waitForChannel(t, done, LongTestTimeout, "Timed out waiting for jobs to complete")
 
 	// Force cleanup and GC
 	queue.cleanupStaleJobs(context.Background())

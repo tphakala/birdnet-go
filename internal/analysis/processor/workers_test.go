@@ -78,27 +78,18 @@ func TestSanitizeError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if tt.err == nil {
-				if sanitizeError(tt.err) != nil {
-					t.Errorf("sanitizeError(nil) should return nil")
-				}
+				assert.NoError(t, sanitizeError(tt.err), "sanitizeError(nil) should return nil")
 				return
 			}
 
 			sanitized := sanitizeError(tt.err)
-			if sanitized == nil {
-				t.Errorf("sanitizeError() returned nil for non-nil error")
-				return
-			}
+			require.Error(t, sanitized, "sanitizeError() returned nil for non-nil error")
 
 			// Check that the sanitized error message matches the expected value
-			if sanitized.Error() != tt.expected {
-				t.Errorf("sanitizeError() = %q, want %q", sanitized.Error(), tt.expected)
-			}
+			assert.Equal(t, tt.expected, sanitized.Error(), "sanitizeError() message mismatch")
 
 			// Check that the original error is preserved
-			if !errors.Is(sanitized, tt.err) {
-				t.Errorf("errors.Is(sanitized, original) = false, want true")
-			}
+			assert.ErrorIs(t, sanitized, tt.err, "errors.Is(sanitized, original) = false, want true")
 		})
 	}
 }
@@ -115,19 +106,13 @@ func TestSanitizeErrorWrapped(t *testing.T) {
 
 	// Check that the sensitive information was removed
 	expected := "operation failed: password=[REDACTED]"
-	if sanitized.Error() != expected {
-		t.Errorf("sanitizeError() = %q, want %q", sanitized.Error(), expected)
-	}
+	assert.Equal(t, expected, sanitized.Error(), "sanitizeError() message mismatch")
 
 	// Check that the original error is preserved
-	if !errors.Is(sanitized, wrappedErr) {
-		t.Errorf("errors.Is(sanitized, wrappedErr) = false, want true")
-	}
+	require.ErrorIs(t, sanitized, wrappedErr, "errors.Is(sanitized, wrappedErr) = false, want true")
 
 	// Check that we can still access the base error
-	if !errors.Is(sanitized, baseErr) {
-		t.Errorf("errors.Is(sanitized, baseErr) = false, want true")
-	}
+	require.ErrorIs(t, sanitized, baseErr, "errors.Is(sanitized, baseErr) = false, want true")
 }
 
 // TestStartWorkerPool tests the startWorkerPool function
@@ -281,9 +266,7 @@ func TestEnqueueTask(t *testing.T) {
 		realQueue := jobqueue.NewJobQueue()
 		realQueue.Start()
 		defer func() {
-			if err := realQueue.Stop(); err != nil {
-				t.Errorf("Failed to stop queue: %v", err)
-			}
+			assert.NoError(t, realQueue.Stop(), "Failed to stop queue")
 		}()
 
 		// Create a processor with the real queue
@@ -351,9 +334,7 @@ func TestEnqueueTask(t *testing.T) {
 		// Create a new queue that we'll stop immediately
 		stoppedQueue := jobqueue.NewJobQueue()
 		stoppedQueue.Start()
-		if err := stoppedQueue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		require.NoError(t, stoppedQueue.Stop(), "Failed to stop queue")
 
 		// Create a processor with the stopped queue
 		stoppedProcessor := &Processor{
@@ -392,9 +373,7 @@ func TestEnqueueTask(t *testing.T) {
 		tinyQueue := jobqueue.NewJobQueueWithOptions(2, 1, false)
 		tinyQueue.Start()
 		defer func() {
-			if err := tinyQueue.Stop(); err != nil {
-				t.Errorf("Failed to stop queue: %v", err)
-			}
+			assert.NoError(t, tinyQueue.Stop(), "Failed to stop queue")
 		}()
 
 		// Create a processor with the tiny queue
@@ -449,9 +428,7 @@ func TestEnqueueTask(t *testing.T) {
 		realQueue := jobqueue.NewJobQueue()
 		realQueue.Start()
 		defer func() {
-			if err := realQueue.Stop(); err != nil {
-				t.Errorf("Failed to stop queue: %v", err)
-			}
+			assert.NoError(t, realQueue.Stop(), "Failed to stop queue")
 		}()
 
 		// Create a processor with the real queue
@@ -548,9 +525,7 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.Start()
 	defer func() {
-		if err := realQueue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, realQueue.Stop(), "Failed to stop queue")
 	}()
 
 	// Create a processor with the real queue
@@ -682,9 +657,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
 	realQueue.Start()
 	defer func() {
-		if err := realQueue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, realQueue.Stop(), "Failed to stop queue")
 	}()
 
 	// Create a processor with the real queue
@@ -810,9 +783,7 @@ func TestRetryLogic(t *testing.T) {
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
 	realQueue.StartWithContext(ctx)
 	defer func() {
-		if err := realQueue.Stop(); err != nil {
-			t.Errorf("Failed to stop queue: %v", err)
-		}
+		assert.NoError(t, realQueue.Stop(), "Failed to stop queue")
 	}()
 
 	// Create a counter for tracking attempts
@@ -1111,9 +1082,7 @@ func TestEdgeCases(t *testing.T) {
 			if tt.name == "Nil processor" {
 				// Use defer/recover to catch the expected panic
 				defer func() {
-					if r := recover(); r == nil {
-						t.Errorf("Expected panic but none occurred")
-					}
+					assert.NotNil(t, recover(), "Expected panic but none occurred")
 				}()
 			}
 
@@ -1122,9 +1091,7 @@ func TestEdgeCases(t *testing.T) {
 			// Clean up job queue if it exists
 			if p != nil && p.JobQueue != nil {
 				defer func() {
-					if err := p.JobQueue.Stop(); err != nil {
-						t.Errorf("Failed to stop queue: %v", err)
-					}
+					assert.NoError(t, p.JobQueue.Stop(), "Failed to stop queue")
 				}()
 			}
 

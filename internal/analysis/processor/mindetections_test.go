@@ -793,9 +793,7 @@ func TestWarnAboutHardwareRequirements(t *testing.T) {
 					tt.level, tt.overlap, maxInferenceTime)
 
 				// Sanity check the calculation
-				if maxInferenceTime <= 0 {
-					t.Errorf("Invalid max inference time calculation: %.0fms", maxInferenceTime)
-				}
+				assert.Greater(t, maxInferenceTime, 0.0, "Invalid max inference time calculation: %.0fms", maxInferenceTime)
 			}
 		})
 	}
