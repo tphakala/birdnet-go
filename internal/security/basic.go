@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net"
@@ -158,7 +159,12 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Missing or malformed Authorization header"})
 	}
 
-	if clientID != s.Settings.Security.BasicAuth.ClientID || clientSecret != s.Settings.Security.BasicAuth.ClientSecret {
+	// Use constant-time comparison to prevent timing attacks on credentials.
+	// Both comparisons are performed and combined with bitwise AND to prevent
+	// short-circuit evaluation from leaking timing information about valid IDs.
+	clientIDMatch := subtle.ConstantTimeCompare([]byte(clientID), []byte(s.Settings.Security.BasicAuth.ClientID))
+	clientSecretMatch := subtle.ConstantTimeCompare([]byte(clientSecret), []byte(s.Settings.Security.BasicAuth.ClientSecret))
+	if (clientIDMatch & clientSecretMatch) != 1 {
 		logger.Warn("Invalid client credentials provided")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid client id or secret"})
 	}

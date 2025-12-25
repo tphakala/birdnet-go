@@ -35,4 +35,7 @@ const (
 
 	// Provider capacity hint
 	InitialProviderCapacity = 2
+
+	// Path validation limits
+	MaxSafePathLength = 512
 )

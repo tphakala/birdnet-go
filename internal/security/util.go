@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // normalizePort returns the port string, substituting the default port if empty.
@@ -90,17 +92,86 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 // - Path starting with '/'
 // - No double slashes '//' or backslashes '\\'
 // - No protocol specifiers '://'
-// - No directory traversal '..'
-// - No null bytes '\x00'
+// - No directory traversal '..' (including URL-encoded variants and Unicode equivalents)
+// - No null bytes '\x00' (including URL-encoded variants)
 // - Reasonable length limit
 func IsSafePath(pathStr string) bool {
-	return strings.HasPrefix(pathStr, "/") &&
-		!strings.Contains(pathStr, "//") &&
-		!strings.Contains(pathStr, "\\") &&
-		!strings.Contains(pathStr, "://") &&
-		!strings.Contains(pathStr, "..") &&
-		!strings.Contains(pathStr, "\x00") &&
-		len(pathStr) < 512 // Prevent excessively long paths
+	if !strings.HasPrefix(pathStr, "/") {
+		return false
+	}
+	if len(pathStr) >= MaxSafePathLength {
+		return false
+	}
+
+	// Normalize Unicode to NFKC form to prevent bypass using full-width or
+	// other compatibility characters (e.g., U+FF0E "．" → U+002E ".")
+	pathStr = norm.NFKC.String(pathStr)
+
+	// Check both raw string and lowercased version for encoded patterns
+	lower := strings.ToLower(pathStr)
+
+	// Check for dangerous patterns in raw form
+	if strings.Contains(pathStr, "//") ||
+		strings.Contains(pathStr, "\\") ||
+		strings.Contains(pathStr, "://") ||
+		strings.Contains(pathStr, "..") ||
+		strings.Contains(pathStr, "\x00") {
+		return false
+	}
+
+	// Check for URL-encoded directory traversal (%2e = '.')
+	// %2e%2e = "..", %2e%2e%2f = "../", %2f%2e%2e = "/.."
+	if strings.Contains(lower, "%2e%2e") || // encoded ..
+		strings.Contains(lower, "%2e.") || // mixed encoding
+		strings.Contains(lower, ".%2e") { // mixed encoding
+		return false
+	}
+
+	// Check for double-encoded directory traversal (%252e = double-encoded '.')
+	// After one decode: %252e becomes %2e, so %252e%252e becomes %2e%2e
+	if strings.Contains(lower, "%252e") {
+		return false
+	}
+
+	// Check for triple-encoded directory traversal (%25252e = triple-encoded '.')
+	if strings.Contains(lower, "%25252e") {
+		return false
+	}
+
+	// Check for URL-encoded null byte (%00)
+	if strings.Contains(lower, "%00") {
+		return false
+	}
+
+	// Check for double-encoded null byte (%2500)
+	if strings.Contains(lower, "%2500") {
+		return false
+	}
+
+	// Check for URL-encoded backslash (%5c)
+	if strings.Contains(lower, "%5c") {
+		return false
+	}
+
+	// Check for double-encoded backslash (%255c)
+	if strings.Contains(lower, "%255c") {
+		return false
+	}
+
+	// Check for URL-encoded forward slash that could bypass checks (%2f)
+	// Double slash via encoding: %2f%2f or /%2f or %2f/
+	if strings.Contains(lower, "%2f%2f") ||
+		strings.Contains(lower, "/%2f") ||
+		strings.Contains(lower, "%2f/") {
+		return false
+	}
+
+	// Check for double-encoded forward slash (%252f)
+	if strings.Contains(lower, "%252f") {
+		return false
+	}
+
+	return true
 }
 
 // IsValidRedirect ensures the redirect path is safe and internal by checking IsSafePath.
@@ -177,10 +248,23 @@ func isValidRelativePath(parsedURL *url.URL) bool {
 }
 
 // containsCRLF checks if a string contains CR/LF characters or their percent-encoded forms.
+// Also checks for double-encoding attacks (e.g., %250d decodes to %0d).
 func containsCRLF(s string) bool {
 	if strings.ContainsAny(s, "\r\n") {
 		return true
 	}
 	lower := strings.ToLower(s)
-	return strings.Contains(lower, "%0d") || strings.Contains(lower, "%0a")
+	// Check for single-encoded CRLF
+	if strings.Contains(lower, "%0d") || strings.Contains(lower, "%0a") {
+		return true
+	}
+	// Check for double-encoded CRLF (%250d decodes to %0d, %250a decodes to %0a)
+	if strings.Contains(lower, "%250d") || strings.Contains(lower, "%250a") {
+		return true
+	}
+	// Check for triple-encoded CRLF (defense in depth)
+	if strings.Contains(lower, "%25250d") || strings.Contains(lower, "%25250a") {
+		return true
+	}
+	return false
 }
