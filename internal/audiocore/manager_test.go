@@ -321,11 +321,11 @@ func TestManagerAudioOutput(t *testing.T) {
 		assert.Equal(t, testData.SourceID, received.SourceID)
 		assert.Equal(t, testData.Buffer, received.Buffer)
 	case err := <-errChan:
-		t.Fatal(err)
+		require.NoError(t, err)
 	case <-testCtx.Done():
 		goroutineCancel() // Cancel the goroutine
 		<-done            // Wait for goroutine to finish
-		t.Fatal("timeout waiting for test to complete")
+		require.Fail(t, "timeout waiting for test to complete")
 	}
 
 	// Clean up

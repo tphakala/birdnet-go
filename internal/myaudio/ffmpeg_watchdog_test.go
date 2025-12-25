@@ -39,7 +39,7 @@ func TestFFmpegManager_WatchdogNilAudioChan(t *testing.T) {
 	case <-done:
 		// Success - shutdown completed quickly
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Shutdown took too long - monitoring may have started despite nil audioChan")
+		require.Fail(t, "Shutdown took too long - monitoring may have started despite nil audioChan")
 	}
 }
 

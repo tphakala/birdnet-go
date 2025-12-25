@@ -110,9 +110,8 @@ func TestSeasonalPeriodInitialization(t *testing.T) {
 	// Verify all season maps are initialized using public methods
 	for season := range settings.SeasonalTracking.Seasons {
 		// Check that season maps are properly initialized
-		if !tracker.IsSeasonMapInitialized(season) {
-			t.Errorf("Season map for '%s' is not initialized - this would cause panics", season)
-		}
+		assert.True(t, tracker.IsSeasonMapInitialized(season),
+			"Season map for '%s' is not initialized - this would cause panics", season)
 	}
 }
 

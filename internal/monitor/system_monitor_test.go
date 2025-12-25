@@ -248,7 +248,7 @@ func TestSystemMonitorLifecycle(t *testing.T) {
 	case <-started:
 		// Monitor started
 	case <-time.After(1 * time.Second):
-		t.Fatal("Monitor failed to start within timeout")
+		require.Fail(t, "Monitor failed to start within timeout")
 	}
 
 	// Give the monitor loop a chance to run at least once
@@ -274,7 +274,7 @@ func TestSystemMonitorLifecycle(t *testing.T) {
 	case <-done:
 		// Monitor stopped successfully
 	case <-time.After(2 * time.Second):
-		t.Fatal("Monitor failed to stop within timeout")
+		require.Fail(t, "Monitor failed to stop within timeout")
 	}
 
 	// Verify context is cancelled
@@ -282,6 +282,6 @@ func TestSystemMonitorLifecycle(t *testing.T) {
 	case <-monitor.ctx.Done():
 		// Context should be cancelled
 	default:
-		t.Fatal("Monitor context should be cancelled after Stop()")
+		require.Fail(t, "Monitor context should be cancelled after Stop()")
 	}
 }

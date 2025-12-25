@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,9 +21,7 @@ func withTempWorkDir(t *testing.T, fn func(tempDir string)) {
 	
 	// Register cleanup to restore working directory
 	t.Cleanup(func() {
-		if err := os.Chdir(originalWd); err != nil {
-			t.Errorf("Failed to restore working directory: %v", err)
-		}
+		assert.NoError(t, os.Chdir(originalWd), "Failed to restore working directory")
 	})
 	
 	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")

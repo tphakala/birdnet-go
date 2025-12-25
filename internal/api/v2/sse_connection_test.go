@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -51,7 +52,7 @@ func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, 
 
 	req, err := http.NewRequest("GET", serverURL+"/api/v2"+endpoint, http.NoBody)
 	if err != nil {
-		t.Errorf("Connection %d: Failed to create request: %v", connID, err)
+		assert.NoErrorf(t, err, "Connection %d: Failed to create request", connID)
 		return false
 	}
 	req.Header.Set("Accept", "text/event-stream")
@@ -232,7 +233,7 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 	case <-done:
 		// Expected - connection should close due to context cancellation
 	case <-time.After(500 * time.Millisecond):
-		t.Error("Connection did not close within expected time after context cancellation")
+		assert.Fail(t, "Connection did not close within expected time after context cancellation")
 	}
 
 	// Response body will be closed by defer
@@ -425,7 +426,7 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
 		case <-controller.goroutinesStarted:
 			// Controller is ready
 		case <-time.After(2 * time.Second):
-			t.Fatal("Controller failed to start within timeout")
+			require.Fail(t, "Controller failed to start within timeout")
 		}
 	}
 

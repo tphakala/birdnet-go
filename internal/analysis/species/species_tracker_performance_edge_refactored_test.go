@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -256,7 +257,7 @@ func TestPerformanceUnderSustainedLoadRefactored(t *testing.T) {
 			case <-done:
 				// Normal completion
 			case <-ctx.Done():
-				t.Fatalf("Test timed out or was cancelled")
+				require.Fail(t, "Test timed out or was cancelled")
 			}
 
 			wg.Wait()

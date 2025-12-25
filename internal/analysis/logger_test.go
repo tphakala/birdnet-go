@@ -119,8 +119,7 @@ func TestConcurrentLoggerAccess(t *testing.T) {
 
 	// Collect results from all goroutines
 	for range 10 {
-		if err := <-errCh; err != nil {
-			t.Error(err)
-		}
+		err := <-errCh
+		assert.NoError(t, err)
 	}
 }

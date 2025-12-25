@@ -321,14 +321,10 @@ func assertNoZombieProcess(t *testing.T, pid int) {
 	stat := string(data)
 	// Find the last ')' to skip the command name which might contain spaces/parentheses
 	lastParen := strings.LastIndex(stat, ")")
-	if lastParen == -1 {
-		t.Fatalf("Invalid stat format for PID %d", pid)
-	}
+	require.NotEqual(t, -1, lastParen, "Invalid stat format for PID %d", pid)
 
 	fields := strings.Fields(stat[lastParen+1:])
-	if len(fields) < 1 {
-		t.Fatalf("Invalid stat format for PID %d", pid)
-	}
+	require.NotEmpty(t, fields, "Invalid stat format for PID %d", pid)
 
 	state := fields[0]
 	assert.NotEqual(t, "Z", state, "Process %d is a zombie", pid)

@@ -164,9 +164,9 @@ func TestConcurrentAccessFixValidation(t *testing.T) {
 	// Analyze results to ensure they make sense
 	negativeCount := 0
 	for i, result := range results {
-		if result.days < 0 {
+		if !assert.GreaterOrEqual(t, result.days, 0,
+			"Operation %d returned negative days: %d", i, result.days) {
 			negativeCount++
-			t.Errorf("Operation %d returned negative days: %d", i, result.days)
 		}
 	}
 

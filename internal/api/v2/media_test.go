@@ -409,9 +409,7 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	tempDir, err := os.MkdirTemp("", "media_env_test")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Errorf("Failed to remove temp dir: %v", err)
-		}
+		assert.NoError(t, os.RemoveAll(tempDir), "Failed to remove temp dir")
 	})
 
 	// Use the standard test setup which now initializes SFS
@@ -421,18 +419,14 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	// --- Crucially: Re-initialize SFS in the controller to use the *media test* tempDir ---
 	// Close the SFS created by setupTestEnvironment (if any)
 	if controller.SFS != nil {
-		if err := controller.SFS.Close(); err != nil {
-			t.Errorf("Failed to close SFS: %v", err)
-		}
+		require.NoError(t, controller.SFS.Close(), "Failed to close SFS")
 	}
 	// Create and assign the new SFS rooted in our tempDir
 	newSFS, err := securefs.New(tempDir)
 	require.NoError(t, err, "Failed to create SecureFS for media test environment")
 	controller.SFS = newSFS
 	t.Cleanup(func() {
-		if err := controller.SFS.Close(); err != nil {
-			t.Errorf("Failed to close SFS: %v", err)
-		}
+		assert.NoError(t, controller.SFS.Close(), "Failed to close SFS")
 	}) // Ensure this one is closed too
 
 	// Assign the tempDir to settings just in case any *other* part relies on it
@@ -517,9 +511,7 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			resp, err := client.Get(server.URL + tc.endpoint)
 			require.NoError(t, err)
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					t.Errorf("Failed to close response body: %v", err)
-				}
+				assert.NoError(t, resp.Body.Close(), "Failed to close response body")
 			}()
 
 			// Check status code
@@ -762,9 +754,7 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 			handlerErr := controller.ServeAudioClip(c)
 
 			// Check for handler error
-			if handlerErr != nil {
-				t.Fatalf("Error serving Unicode filename %s: %v", name, handlerErr)
-			}
+			require.NoErrorf(t, handlerErr, "Error serving Unicode filename %s", name)
 
 			// Check response
 			assert.Equal(t, http.StatusOK, rec.Code)

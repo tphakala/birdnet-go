@@ -71,7 +71,7 @@ func decodePaginated(t *testing.T, body []byte) ([]map[string]any, PaginatedResp
 	// Extract the detections data
 	detectionsIface, ok := response.Data.([]any)
 	if !ok {
-		t.Fatalf("Expected Data to be an array, got %T", response.Data)
+		require.Failf(t, "Expected Data to be an array", "got %T", response.Data)
 	}
 
 	// Convert to []map[string]interface{} for easier access
@@ -80,7 +80,7 @@ func decodePaginated(t *testing.T, body []byte) ([]map[string]any, PaginatedResp
 		if m, ok := d.(map[string]any); ok {
 			result[i] = m
 		} else {
-			t.Fatalf("Expected detection element to be object, got %T", d)
+			require.Failf(t, "Expected detection element to be object", "got %T", d)
 		}
 	}
 
@@ -1795,7 +1795,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	case <-done:
 		// Test completed normally
 	case <-time.After(10 * time.Second):
-		t.Fatal("Test timed out")
+		require.Fail(t, "Test timed out")
 	}
 
 	// Verify results with platform-specific considerations

@@ -51,7 +51,7 @@ func TestFFmpegStream_Stop(t *testing.T) {
 	case <-stream.stopChan:
 		// Expected - channel should be closed
 	default:
-		t.Fatal("Stop channel should be closed")
+		require.Fail(t, "Stop channel should be closed")
 	}
 }
 
@@ -70,7 +70,7 @@ func TestFFmpegStream_Restart(t *testing.T) {
 	case <-stream.restartChan:
 		// Expected - restart signal received
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Restart signal not received")
+		require.Fail(t, "Restart signal not received")
 	}
 
 	// Verify restart count was reset
@@ -303,7 +303,7 @@ func TestFFmpegStream_HandleAudioData(t *testing.T) {
 		assert.NotNil(t, data.AudioLevel)
 		assert.WithinDuration(t, time.Now(), data.Timestamp, time.Second)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("No data received on audio channel")
+		require.Fail(t, "No data received on audio channel")
 	}
 }
 
@@ -429,7 +429,7 @@ func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
 		case <-done:
 			// Completed
 		case <-time.After(2 * time.Second):
-			t.Fatal("Concurrent test timed out")
+			require.Fail(t, "Concurrent test timed out")
 		}
 	}
 
@@ -482,7 +482,7 @@ func TestFFmpegStream_DroppedDataLogging(t *testing.T) {
 	case audioChan <- UnifiedAudioData{}:
 		// Channel filled
 	default:
-		t.Fatal("Expected to be able to fill the channel")
+		require.Fail(t, "Expected to be able to fill the channel")
 	}
 
 	// Test rate limiting - first call should log
@@ -1017,7 +1017,7 @@ func TestFFmpegStream_ConcurrentLastDataTimeAccess(t *testing.T) {
 		case <-done:
 			// Completed
 		case <-time.After(5 * time.Second):
-			t.Fatal("Concurrent test timed out - possible deadlock")
+			require.Fail(t, "Concurrent test timed out - possible deadlock")
 		}
 	}
 

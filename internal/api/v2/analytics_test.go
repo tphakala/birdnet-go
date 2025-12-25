@@ -521,9 +521,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	}
 	mockImageCache := imageprovider.InitCache("test", stubProvider, testMetrics, mockDS)
 	t.Cleanup(func() {
-		if err := mockImageCache.Close(); err != nil {
-			t.Errorf("Failed to close image cache: %v", err)
-		}
+		assert.NoError(t, mockImageCache.Close(), "Failed to close image cache")
 	})
 
 	for _, tc := range testCases {
@@ -679,9 +677,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
 	imageCache := imageprovider.InitCache("test", mockImageProvider, testMetrics, mockDS)
 	t.Cleanup(func() {
-		if err := imageCache.Close(); err != nil {
-			t.Errorf("Failed to close image cache: %v", err)
-		}
+		assert.NoError(t, imageCache.Close(), "Failed to close image cache")
 	})
 
 	// Create a controller with our mocks
@@ -875,9 +871,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	}
 
 	// Close the image cache to clean up resources
-	if err := imageCache.Close(); err != nil {
-		t.Errorf("Failed to close image cache: %v", err)
-	}
+	require.NoError(t, imageCache.Close(), "Failed to close image cache")
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)

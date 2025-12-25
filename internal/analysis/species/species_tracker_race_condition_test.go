@@ -132,9 +132,8 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 
 		// Allow up to 1% error rate for documentation purposes
 		errorRate := float64(negativeResults) / float64(totalOps)
-		if errorRate > 0.01 {
-			t.Errorf("Race condition error rate %.4f%% exceeds 1%% threshold", errorRate*100)
-		}
+		assert.LessOrEqual(t, errorRate, 0.01,
+			"Race condition error rate %.4f%% exceeds 1%% threshold", errorRate*100)
 	}
 
 	// Verify the tracker is still functional after race conditions
