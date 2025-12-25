@@ -110,9 +110,12 @@ func containsDangerousEncodedPattern(lower string) bool {
 	return false
 }
 
+// minWindowsDrivePathLen is the minimum length for a Windows drive path (e.g., "C:").
+const minWindowsDrivePathLen = 2
+
 // isWindowsAbsolutePath checks for Windows-style absolute paths (e.g., C:, D:).
 func isWindowsAbsolutePath(p string) bool {
-	if len(p) < 2 {
+	if len(p) < minWindowsDrivePathLen {
 		return false
 	}
 	firstChar := p[0]
