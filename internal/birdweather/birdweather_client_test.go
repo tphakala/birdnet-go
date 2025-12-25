@@ -252,7 +252,7 @@ func TestUploadSoundscape(t *testing.T) {
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if _, err := fmt.Fprint(w, `{
+		_, err := fmt.Fprint(w, `{
 			"success": true,
 			"soundscape": {
 				"id": 12345,
@@ -263,9 +263,8 @@ func TestUploadSoundscape(t *testing.T) {
 				"extension": "flac",
 				"duration": 3.0
 			}
-		}`); err != nil {
-			t.Errorf("Failed to write response: %v", err)
-		}
+		}`)
+		assert.NoError(t, err, "Failed to write response")
 	}))
 	defer server.Close()
 
@@ -330,9 +329,8 @@ func TestUploadSoundscape_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		if _, err := fmt.Fprint(w, `{"success": false, "error": "Server error"}`); err != nil {
-			t.Errorf("Failed to write response: %v", err)
-		}
+		_, err := fmt.Fprint(w, `{"success": false, "error": "Server error"}`)
+		assert.NoError(t, err, "Failed to write response")
 	}))
 	defer server.Close()
 
@@ -370,8 +368,8 @@ func TestPostDetection(t *testing.T) {
 		// Check request body
 		var reqBody map[string]any
 		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&reqBody); err != nil {
-			t.Errorf("Failed to decode request body: %v", err)
+		err := decoder.Decode(&reqBody)
+		if !assert.NoError(t, err, "Failed to decode request body") {
 			return
 		}
 
@@ -474,8 +472,7 @@ func TestPublish(t *testing.T) {
 	// Setup mock server for both upload and post
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// All requests should be POST
-		if r.Method != "POST" {
-			t.Errorf("Expected POST request, got %s", r.Method)
+		if !assert.Equal(t, "POST", r.Method, "Expected POST request") {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -487,7 +484,7 @@ func TestPublish(t *testing.T) {
 			// This is a soundscape upload
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			if _, err := fmt.Fprint(w, `{
+			_, err := fmt.Fprint(w, `{
 				"success": true,
 				"soundscape": {
 					"id": 12345,
@@ -498,19 +495,17 @@ func TestPublish(t *testing.T) {
 					"extension": "flac",
 					"duration": 3.0
 				}
-			}`); err != nil {
-				t.Errorf("Failed to write response: %v", err)
-			}
+			}`)
+			assert.NoError(t, err, "Failed to write response")
 		case "application/json":
 			// This is a detection post
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			if _, err := fmt.Fprint(w, `{"success": true}`); err != nil {
-				t.Errorf("Failed to write response: %v", err)
-			}
+			_, err := fmt.Fprint(w, `{"success": true}`)
+			assert.NoError(t, err, "Failed to write response")
 		default:
 			// Unexpected content type
-			t.Errorf("Unexpected Content-Type: %s", contentType)
+			assert.Failf(t, "Unexpected Content-Type", "got: %s", contentType)
 			w.WriteHeader(http.StatusBadRequest)
 		}
 	}))

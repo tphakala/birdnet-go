@@ -779,8 +779,7 @@ func TestGenerateTestPCMData(t *testing.T) {
 
 	// Data should be all zeros (silence)
 	for i, b := range data {
-		if b != 0 {
-			t.Errorf("Expected silence (0) at index %d, got %d", i, b)
+		if !assert.Equal(t, byte(0), b, "Expected silence (0) at index %d", i) {
 			break
 		}
 	}
