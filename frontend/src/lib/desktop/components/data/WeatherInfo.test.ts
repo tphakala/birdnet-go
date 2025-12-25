@@ -37,7 +37,8 @@ describe('WeatherInfo', () => {
       },
     });
 
-    expect(screen.getByText('Weather Information')).toBeInTheDocument();
+    // Note: In test environment, t() returns the translation key
+    expect(screen.getByText('detections.weather.title')).toBeInTheDocument();
     expect(screen.getByText('22.5°C')).toBeInTheDocument();
     expect(screen.getByText('Clear')).toBeInTheDocument();
     expect(screen.getByText('15 km/h')).toBeInTheDocument();
@@ -60,7 +61,7 @@ describe('WeatherInfo', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toBeInTheDocument();
-      expect(screen.getByText('Loading weather information...')).toBeInTheDocument();
+      expect(screen.getByText('detections.weather.loading')).toBeInTheDocument();
     });
   });
 
@@ -137,7 +138,7 @@ describe('WeatherInfo', () => {
 
     await waitFor(() => {
       expect(mockFetch).not.toHaveBeenCalled();
-      expect(screen.getByText('No weather data available')).toBeInTheDocument();
+      expect(screen.getByText('detections.weather.noDataAvailable')).toBeInTheDocument();
     });
   });
 
@@ -154,8 +155,8 @@ describe('WeatherInfo', () => {
     expect(grid).toHaveClass('grid', 'grid-cols-2', 'sm:grid-cols-4');
 
     // Should not show pressure and clouds in compact mode
-    expect(screen.queryByText('Pressure')).not.toBeInTheDocument();
-    expect(screen.queryByText('Cloud Cover')).not.toBeInTheDocument();
+    expect(screen.queryByText('detections.weather.labels.pressure')).not.toBeInTheDocument();
+    expect(screen.queryByText('detections.weather.labels.cloudCover')).not.toBeInTheDocument();
   });
 
   it('shows all fields in non-compact mode', () => {
@@ -167,9 +168,10 @@ describe('WeatherInfo', () => {
       },
     });
 
-    expect(screen.getByText('Pressure')).toBeInTheDocument();
-    expect(screen.getByText('1013 hPa')).toBeInTheDocument();
-    expect(screen.getByText('Cloud Cover')).toBeInTheDocument();
+    expect(screen.getByText('detections.weather.labels.pressure')).toBeInTheDocument();
+    // Pressure value is followed by the translated unit key
+    expect(screen.getByText(/1013/)).toBeInTheDocument();
+    expect(screen.getByText('detections.weather.labels.cloudCover')).toBeInTheDocument();
     expect(screen.getByText('20%')).toBeInTheDocument();
   });
 
@@ -182,7 +184,7 @@ describe('WeatherInfo', () => {
       },
     });
 
-    expect(screen.queryByText('Weather Information')).not.toBeInTheDocument();
+    expect(screen.queryByText('detections.weather.title')).not.toBeInTheDocument();
   });
 
   it('handles missing data gracefully', () => {
@@ -237,7 +239,7 @@ describe('WeatherInfo', () => {
     const weatherDiv = container.querySelector('.weather-info');
     expect(weatherDiv).toHaveClass('custom-weather');
 
-    const title = screen.getByText('Weather Information');
+    const title = screen.getByText('detections.weather.title');
     expect(title).toHaveClass('custom-title');
 
     const grid = document.querySelector('[aria-live="polite"]');
@@ -281,7 +283,7 @@ describe('WeatherInfo', () => {
     });
 
     // Initially no data
-    expect(screen.getByText('No weather data available')).toBeInTheDocument();
+    expect(screen.getByText('detections.weather.noDataAvailable')).toBeInTheDocument();
 
     // Set weather data
     component.setWeatherData(mockWeatherData);
@@ -350,7 +352,7 @@ describe('WeatherInfo', () => {
 
     // Wait for updated data to display
     await waitFor(() => {
-      expect(screen.getByText('25°C')).toBeInTheDocument();
+      expect(screen.getByText('25.0°C')).toBeInTheDocument();
     });
   });
 });

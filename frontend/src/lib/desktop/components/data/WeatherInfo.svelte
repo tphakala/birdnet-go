@@ -34,6 +34,7 @@
   import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte';
   import { Thermometer, Sun, Wind, Droplets, Gauge, Cloud, XCircle } from '@lucide/svelte';
+  import { formatTemperature, type TemperatureUnit } from '$lib/utils/formatters';
 
   interface WeatherData {
     hourly?: {
@@ -54,6 +55,7 @@
   interface Props {
     detectionId?: string;
     weatherData?: WeatherData;
+    units?: TemperatureUnit;
     compact?: boolean;
     showTitle?: boolean;
     autoFetch?: boolean;
@@ -68,6 +70,7 @@
   let {
     detectionId,
     weatherData,
+    units = 'metric',
     compact = false,
     showTitle = true,
     autoFetch = true,
@@ -106,14 +109,6 @@
     } finally {
       loading = false;
     }
-  }
-
-  // Note: Temperature from API is always in Celsius.
-  // This component receives data from API which already includes the display unit preference.
-  // For now, we display as Celsius. Future enhancement: pass unit preference to this component.
-  function formatTemperatureDisplay(temp: number | undefined): string {
-    if (temp === undefined) return 'N/A';
-    return `${temp.toFixed(1)}°C`;
   }
 
   // Helper function to format percentage
@@ -188,7 +183,7 @@
           <Thermometer class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">{t('detections.weather.labels.temperature')}</div>
-            <div class="font-medium">{formatTemperatureDisplay(weather.hourly?.temperature)}</div>
+            <div class="font-medium">{formatTemperature(weather.hourly?.temperature, units)}</div>
           </div>
         </div>
 
