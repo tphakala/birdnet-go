@@ -207,9 +207,14 @@ Source: MIT
 License: https://github.com/labstack/gommon/blob/v0.4.2/LICENSE
 Source: MIT
 
+### github.com/markbates/going/defaults
+
+License: https://github.com/markbates/going/blob/v1.0.0/LICENSE.txt
+Source: MIT
+
 ### github.com/markbates/goth
 
-License: https://github.com/markbates/goth/blob/v1.82.0/LICENSE.txt
+License: https://github.com/tphakala/goth/blob/a4b17a573e8f/LICENSE.txt
 Source: MIT
 
 ### github.com/mattn/go-colorable
