@@ -2440,6 +2440,7 @@
     "or": "of",
     "loginWithGoogle": "Aanmelden met Google",
     "loginWithGithub": "Aanmelden met GitHub",
+    "loginWithMicrosoft": "Inloggen met Microsoft",
     "errors": {
       "loginFailed": "Aanmelding mislukt. Controleer je wachtwoord en probeer het opnieuw.",
       "passwordRequired": "Wachtwoord is verplicht.",

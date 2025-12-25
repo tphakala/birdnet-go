@@ -2443,6 +2443,7 @@
     "or": "or",
     "loginWithGoogle": "Login with Google",
     "loginWithGithub": "Login with GitHub",
+    "loginWithMicrosoft": "Login with Microsoft",
     "errors": {
       "loginFailed": "Login failed. Please check your password and try again.",
       "passwordRequired": "Password is required.",

@@ -2440,6 +2440,7 @@
     "or": "o",
     "loginWithGoogle": "Iniciar sesión con Google",
     "loginWithGithub": "Iniciar sesión con GitHub",
+    "loginWithMicrosoft": "Iniciar sesión con Microsoft",
     "errors": {
       "loginFailed": "Error al iniciar sesión. Por favor verifica tu contraseña e inténtalo de nuevo.",
       "passwordRequired": "La contraseña es requerida.",

@@ -2443,6 +2443,7 @@
     "or": "ou",
     "loginWithGoogle": "Entrar com Google",
     "loginWithGithub": "Entrar com GitHub",
+    "loginWithMicrosoft": "Entrar com a Microsoft",
     "errors": {
       "loginFailed": "Falha no login. Por favor, verifique sua senha e tente novamente.",
       "passwordRequired": "A senha é obrigatória.",

@@ -42,6 +42,7 @@ Performance Optimizations:
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
   import { sidebar } from '$lib/stores/sidebar';
+  import type { AuthConfig } from '../../../app.d';
   import {
     LayoutDashboard,
     BarChart3,
@@ -70,11 +71,7 @@ Performance Optimizations:
     currentRoute?: string;
     onNavigate?: (_url: string) => void;
     className?: string;
-    authConfig?: {
-      basicEnabled: boolean;
-      googleEnabled: boolean;
-      githubEnabled: boolean;
-    };
+    authConfig?: AuthConfig;
   }
 
   let {
@@ -84,7 +81,12 @@ Performance Optimizations:
     currentRoute = '/ui/dashboard',
     onNavigate,
     className = '',
-    authConfig = { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+    authConfig = {
+      basicEnabled: true,
+      googleEnabled: false,
+      githubEnabled: false,
+      microsoftEnabled: false,
+    },
   }: Props = $props();
 
   // State for login modal and collapsible sections

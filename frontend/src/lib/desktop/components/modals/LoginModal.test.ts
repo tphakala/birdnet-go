@@ -268,8 +268,8 @@ describe('LoginModal', () => {
         },
       });
 
-      const googleButton = screen.getByRole('button', { name: /login with google/i });
-      const githubButton = screen.getByRole('button', { name: /login with github/i });
+      const googleButton = screen.getByRole('button', { name: /loginWithGoogle/i });
+      const githubButton = screen.getByRole('button', { name: /loginWithGithub/i });
 
       expect(googleButton).toBeDefined();
       expect(githubButton).toBeDefined();
@@ -290,8 +290,8 @@ describe('LoginModal', () => {
         },
       });
 
-      const googleButton = screen.getByRole('button', { name: /login with google/i });
-      const githubButton = screen.getByRole('button', { name: /login with github/i });
+      const googleButton = screen.getByRole('button', { name: /loginWithGoogle/i });
+      const githubButton = screen.getByRole('button', { name: /loginWithGithub/i });
 
       expect(googleButton).toBeDefined();
       expect(githubButton).toBeDefined();
@@ -313,7 +313,7 @@ describe('LoginModal', () => {
         },
       });
 
-      const googleButton = screen.getByRole('button', { name: /login with google/i });
+      const googleButton = screen.getByRole('button', { name: /loginWithGoogle/i });
 
       // Click the button
       await fireEvent.click(googleButton);
@@ -881,8 +881,8 @@ describe('LoginModal', () => {
       });
 
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /login with google/i })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /login with github/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /loginWithGoogle/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /loginWithGithub/i })).not.toBeInTheDocument();
     });
   });
 });
