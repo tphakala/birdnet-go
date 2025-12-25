@@ -316,7 +316,7 @@ Performance Optimizations:
     </div>
 
     <!-- Navigation Menu -->
-    <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
+    <div class={cn('flex-1 overflow-y-auto overflow-x-hidden py-4', isCollapsed ? 'px-2' : 'px-3')}>
       <div class="flex flex-col gap-1" role="navigation">
         <!-- Dashboard -->
         <div class="relative group">
