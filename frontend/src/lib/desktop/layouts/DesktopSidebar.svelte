@@ -130,6 +130,7 @@ Performance Optimizations:
 
   // Toggle flyout with position calculation
   function toggleAnalyticsFlyout() {
+    hideTooltip(); // Hide tooltip when opening flyout
     if (!analyticsFlyoutOpen && analyticsButtonRef) {
       const rect = analyticsButtonRef.getBoundingClientRect();
       analyticsFlyoutPosition = {
@@ -142,6 +143,7 @@ Performance Optimizations:
   }
 
   function toggleSettingsFlyout() {
+    hideTooltip(); // Hide tooltip when opening flyout
     if (!settingsFlyoutOpen && settingsButtonRef) {
       const rect = settingsButtonRef.getBoundingClientRect();
       settingsFlyoutPosition = {
