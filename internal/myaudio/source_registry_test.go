@@ -104,7 +104,7 @@ func TestRTSPValidationWithQueryParameters(t *testing.T) {
 }
 
 func TestRTSPCredentialSanitization(t *testing.T) {
-	registry := GetRegistry()
+	registry := newTestRegistry()
 
 	testCases := []struct {
 		name       string
@@ -166,7 +166,7 @@ func TestSourceIDGeneration(t *testing.T) {
 }
 
 func TestConcurrentSourceAccess(t *testing.T) {
-	registry := GetRegistry()
+	registry := newTestRegistry()
 
 	// Test concurrent registration
 	done := make(chan bool, 10)
@@ -187,9 +187,9 @@ func TestConcurrentSourceAccess(t *testing.T) {
 		<-done
 	}
 
-	// Verify we have 10 sources
+	// Verify we have exactly 10 sources
 	sources := registry.ListSources()
-	assert.GreaterOrEqual(t, len(sources), 10, "Expected at least 10 sources")
+	assert.Len(t, sources, 10, "Expected exactly 10 sources")
 }
 
 func TestBackwardCompatibility(t *testing.T) {
@@ -212,7 +212,7 @@ func TestBackwardCompatibility(t *testing.T) {
 }
 
 func TestSourceMetricsUpdate(t *testing.T) {
-	registry := GetRegistry()
+	registry := newTestRegistry()
 
 	source := registry.GetOrCreateSource("rtsp://metrics.test/stream", SourceTypeRTSP)
 	initialBytes := source.TotalBytes

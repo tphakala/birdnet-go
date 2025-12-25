@@ -208,6 +208,7 @@ func BenchmarkCompleteToastFlow(b *testing.B) {
 	notifCh, _ := service.Subscribe()
 	defer service.Unsubscribe(notifCh)
 
+	b.ReportAllocs()
 	b.ResetTimer()
 
 	// Use b.Loop() for benchmark iteration (Go 1.25)

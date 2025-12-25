@@ -51,7 +51,7 @@ func TestLoggerOutput(t *testing.T) {
 	// Check output contains expected fields
 	assert.Equal(t, "test message", logEntry["msg"], "Expected message 'test message'")
 	assert.Equal(t, "value", logEntry["key"], "Expected key 'value'")
-	assert.InDelta(t, float64(42), logEntry["number"], 0, "Expected number 42")
+	assert.InDelta(t, float64(42), logEntry["number"], 0.0001, "Expected number 42")
 }
 
 // TestLoggerLevels tests that log levels work correctly
