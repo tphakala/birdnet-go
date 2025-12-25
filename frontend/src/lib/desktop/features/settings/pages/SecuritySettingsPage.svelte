@@ -207,62 +207,77 @@
     });
   }
 
+  // Helper to build OAuth update object, handling redirectURI correctly:
+  // - When hasExplicitBaseUrl is true: use computed redirectURI
+  // - When false: explicitly remove redirectURI so backend auto-generates it
+  // This prevents stale redirectURI values from persisting when baseUrl is removed
+  function buildOAuthUpdate<T extends { redirectURI?: string }>(
+    currentSettings: T,
+    updates: Partial<T>,
+    computedRedirectURI: string
+  ): T {
+    const result = { ...currentSettings, ...updates };
+    if (hasExplicitBaseUrl) {
+      result.redirectURI = computedRedirectURI;
+    } else {
+      delete result.redirectURI;
+    }
+    return result;
+  }
+
   // Google OAuth update handlers
-  // Only include redirectURI when we have explicit baseUrl/host configuration
-  // Otherwise let the backend auto-generate it from its own config
   function updateGoogleAuthEnabled(enabled: boolean) {
-    const googleUpdate = { ...settings.googleAuth, enabled };
-    if (hasExplicitBaseUrl) googleUpdate.redirectURI = googleConfigRedirectURI;
+    const googleUpdate = buildOAuthUpdate(settings.googleAuth, { enabled }, googleConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
   }
 
   function updateGoogleClientId(clientId: string) {
-    const googleUpdate = { ...settings.googleAuth, clientId };
-    if (hasExplicitBaseUrl) googleUpdate.redirectURI = googleConfigRedirectURI;
+    const googleUpdate = buildOAuthUpdate(settings.googleAuth, { clientId }, googleConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
   }
 
   function updateGoogleClientSecret(clientSecret: string) {
-    const googleUpdate = { ...settings.googleAuth, clientSecret };
-    if (hasExplicitBaseUrl) googleUpdate.redirectURI = googleConfigRedirectURI;
+    const googleUpdate = buildOAuthUpdate(
+      settings.googleAuth,
+      { clientSecret },
+      googleConfigRedirectURI
+    );
     settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
   }
 
   function updateGoogleUserId(userId: string) {
-    const googleUpdate = { ...settings.googleAuth, userId };
-    if (hasExplicitBaseUrl) googleUpdate.redirectURI = googleConfigRedirectURI;
+    const googleUpdate = buildOAuthUpdate(settings.googleAuth, { userId }, googleConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
   }
 
   // GitHub OAuth update handlers
   function updateGithubAuthEnabled(enabled: boolean) {
-    const githubUpdate = { ...settings.githubAuth, enabled };
-    if (hasExplicitBaseUrl) githubUpdate.redirectURI = githubConfigRedirectURI;
+    const githubUpdate = buildOAuthUpdate(settings.githubAuth, { enabled }, githubConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
   }
 
   function updateGithubClientId(clientId: string) {
-    const githubUpdate = { ...settings.githubAuth, clientId };
-    if (hasExplicitBaseUrl) githubUpdate.redirectURI = githubConfigRedirectURI;
+    const githubUpdate = buildOAuthUpdate(settings.githubAuth, { clientId }, githubConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
   }
 
   function updateGithubClientSecret(clientSecret: string) {
-    const githubUpdate = { ...settings.githubAuth, clientSecret };
-    if (hasExplicitBaseUrl) githubUpdate.redirectURI = githubConfigRedirectURI;
+    const githubUpdate = buildOAuthUpdate(
+      settings.githubAuth,
+      { clientSecret },
+      githubConfigRedirectURI
+    );
     settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
   }
 
   function updateGithubUserId(userId: string) {
-    const githubUpdate = { ...settings.githubAuth, userId };
-    if (hasExplicitBaseUrl) githubUpdate.redirectURI = githubConfigRedirectURI;
+    const githubUpdate = buildOAuthUpdate(settings.githubAuth, { userId }, githubConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
   }
 
   // Microsoft OAuth update handlers
   function updateMicrosoftAuth(update: Partial<typeof settings.microsoftAuth>) {
-    const microsoftUpdate = { ...settings.microsoftAuth, ...update };
-    if (hasExplicitBaseUrl) microsoftUpdate.redirectURI = microsoftConfigRedirectURI;
+    const microsoftUpdate = buildOAuthUpdate(settings.microsoftAuth, update, microsoftConfigRedirectURI);
     settingsActions.updateSection('security', { ...settings, microsoftAuth: microsoftUpdate });
   }
 
