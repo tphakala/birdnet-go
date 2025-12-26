@@ -2108,7 +2108,8 @@
           "addButton": "Add Provider",
           "enableToggle": "Toggle provider enabled state",
           "editButton": "Edit provider settings",
-          "deleteButton": "Delete provider"
+          "deleteButton": "Delete provider",
+          "deleteConfirm": "Are you sure you want to delete the {provider} OAuth provider?"
         },
         "noProviders": "No OAuth providers configured",
         "noProvidersDescription": "Add a provider to enable social login with Google, GitHub, or Microsoft accounts.",

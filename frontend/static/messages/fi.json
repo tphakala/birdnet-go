@@ -2385,7 +2385,8 @@
           "addButton": "Lisää tarjoaja",
           "enableToggle": "Vaihda tarjoajan tilaa",
           "editButton": "Muokkaa tarjoajan asetuksia",
-          "deleteButton": "Poista tarjoaja"
+          "deleteButton": "Poista tarjoaja",
+          "deleteConfirm": "Haluatko varmasti poistaa {provider} OAuth-tarjoajan?"
         },
         "noProviders": "OAuth-tarjoajia ei ole määritetty",
         "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön sosiaalisen kirjautumisen Google-, GitHub- tai Microsoft-tilillä.",

@@ -43,7 +43,8 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-  import { GoogleIcon, GithubIcon, MicrosoftIcon, AUTH_PROVIDERS } from '$lib/auth';
+  import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
+  import type { Component } from 'svelte';
 
   // Provider type for OAuth providers
   type OAuthProviderType = 'google' | 'github' | 'microsoft';
@@ -183,42 +184,33 @@
 
   // Helper function to get redirect URI for a provider (for display)
   function getRedirectURI(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
     const provider = AUTH_PROVIDERS[providerType];
     return `${currentHost}${provider?.settings.callbackPath || `/auth/${providerType}/callback`}`;
   }
 
   // Helper function to get config redirect URI for a provider (for saving)
   function getConfigRedirectURI(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
     const provider = AUTH_PROVIDERS[providerType];
     return `${configuredBaseUrl}${provider?.settings.callbackPath || `/auth/${providerType}/callback`}`;
   }
 
-  // Helper to get provider icon component
-  function getProviderIcon(providerType: OAuthProviderType): typeof GoogleIcon {
-    switch (providerType) {
-      case 'google':
-        return GoogleIcon;
-      case 'github':
-        return GithubIcon;
-      case 'microsoft':
-        return MicrosoftIcon;
-    }
+  // Helper to get provider icon component from AUTH_PROVIDERS registry
+  function getProviderIcon(providerType: OAuthProviderType): Component {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    return AUTH_PROVIDERS[providerType]?.icon ?? GoogleIcon;
   }
 
-  // Helper to get provider display name
+  // Helper to get provider display name from AUTH_PROVIDERS registry
   function getProviderDisplayName(providerType: OAuthProviderType): string {
-    switch (providerType) {
-      case 'google':
-        return 'Google';
-      case 'github':
-        return 'GitHub';
-      case 'microsoft':
-        return 'Microsoft';
-    }
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    return AUTH_PROVIDERS[providerType]?.name ?? providerType;
   }
 
   // Helper to get credentials URL for a provider
   function getCredentialsUrl(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
     const provider = AUTH_PROVIDERS[providerType];
     return provider?.settings.credentialsUrl || '';
   }
@@ -275,6 +267,7 @@
   }
 
   function openEditProviderForm(index: number) {
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated below
     const provider = oauthProviders[index];
     if (!provider) return;
 
@@ -310,6 +303,7 @@
     const updatedProviders = [...oauthProviders];
     if (editingProviderIndex !== null) {
       // Update existing provider
+      // eslint-disable-next-line security/detect-object-injection -- editingProviderIndex is from our state, validated as not null
       updatedProviders[editingProviderIndex] = newProvider;
     } else {
       // Add new provider
@@ -326,11 +320,13 @@
   }
 
   function deleteProvider(index: number) {
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated below
     const provider = oauthProviders[index];
     if (!provider) return;
 
+    const providerName = getProviderDisplayName(provider.provider as OAuthProviderType);
     const confirmDelete = window.confirm(
-      `Are you sure you want to delete the ${getProviderDisplayName(provider.provider as OAuthProviderType)} OAuth provider?`
+      t('settings.security.oauth.providers.deleteConfirm', { provider: providerName })
     );
 
     if (confirmDelete) {
@@ -343,10 +339,12 @@
   }
 
   function toggleProviderEnabled(index: number) {
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated below
     const provider = oauthProviders[index];
     if (!provider) return;
 
     const updatedProviders = [...oauthProviders];
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated above
     updatedProviders[index] = {
       ...provider,
       enabled: !provider.enabled,
@@ -559,7 +557,6 @@
                     helpText={t('settings.security.oauth.form.providerHelpText')}
                     variant="select"
                     groupBy={false}
-                    onChange={(value) => (selectedProvider = value as OAuthProviderType)}
                   >
                     {#snippet renderOption(option)}
                       {@const providerOption = option as OAuthProviderOption}
@@ -717,6 +714,7 @@
                         onclick={() => openEditProviderForm(index)}
                         class="btn btn-ghost btn-xs btn-square"
                         title={t('settings.security.oauth.providers.editButton')}
+                        aria-label={t('settings.security.oauth.providers.editButton')}
                         disabled={showProviderForm}
                       >
                         <Pencil class="size-3.5" />
@@ -725,6 +723,7 @@
                         onclick={() => deleteProvider(index)}
                         class="btn btn-ghost btn-xs btn-square text-error"
                         title={t('settings.security.oauth.providers.deleteButton')}
+                        aria-label={t('settings.security.oauth.providers.deleteButton')}
                         disabled={showProviderForm}
                       >
                         <Trash2 class="size-3.5" />

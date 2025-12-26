@@ -2385,7 +2385,8 @@
           "addButton": "Añadir proveedor",
           "enableToggle": "Activar/desactivar proveedor",
           "editButton": "Editar configuración del proveedor",
-          "deleteButton": "Eliminar proveedor"
+          "deleteButton": "Eliminar proveedor",
+          "deleteConfirm": "¿Está seguro de que desea eliminar el proveedor OAuth de {provider}?"
         },
         "noProviders": "No hay proveedores OAuth configurados",
         "noProvidersDescription": "Añade un proveedor para habilitar el inicio de sesión social con cuentas de Google, GitHub o Microsoft.",

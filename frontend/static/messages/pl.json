@@ -2105,7 +2105,8 @@
           "addButton": "Dodaj dostawcę",
           "enableToggle": "Przełącz stan dostawcy",
           "editButton": "Edytuj ustawienia dostawcy",
-          "deleteButton": "Usuń dostawcę"
+          "deleteButton": "Usuń dostawcę",
+          "deleteConfirm": "Czy na pewno chcesz usunąć dostawcę OAuth {provider}?"
         },
         "noProviders": "Brak skonfigurowanych dostawców OAuth",
         "noProvidersDescription": "Dodaj dostawcę, aby włączyć logowanie społecznościowe za pomocą kont Google, GitHub lub Microsoft.",

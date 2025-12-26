@@ -2385,7 +2385,8 @@
           "addButton": "Anbieter hinzufügen",
           "enableToggle": "Anbieterstatus umschalten",
           "editButton": "Anbietereinstellungen bearbeiten",
-          "deleteButton": "Anbieter löschen"
+          "deleteButton": "Anbieter löschen",
+          "deleteConfirm": "Möchten Sie den {provider}-OAuth-Anbieter wirklich löschen?"
         },
         "noProviders": "Keine OAuth-Anbieter konfiguriert",
         "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um die soziale Anmeldung mit Google-, GitHub- oder Microsoft-Konten zu aktivieren.",

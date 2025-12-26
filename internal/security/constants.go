@@ -4,10 +4,17 @@ import "time"
 
 // Security-related constants
 const (
-	// OAuth provider names (used as session keys)
-	ProviderGoogle    = "google"
-	ProviderGitHub    = "github"
-	ProviderMicrosoft = "microsoftonline"
+	// Config provider IDs (used in OAuthProviderConfig.Provider)
+	// These match what the frontend sends and what's stored in config
+	ConfigGoogle    = "google"
+	ConfigGitHub    = "github"
+	ConfigMicrosoft = "microsoft"
+
+	// Goth provider names (used for session keys and goth registration)
+	// These match the goth library provider names
+	ProviderGoogle    = "google"       // Same as config
+	ProviderGitHub    = "github"       // Same as config
+	ProviderMicrosoft = "microsoftonline" // Different from config!
 
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7

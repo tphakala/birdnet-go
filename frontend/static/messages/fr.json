@@ -2099,7 +2099,8 @@
           "addButton": "Ajouter un fournisseur",
           "enableToggle": "Activer/désactiver le fournisseur",
           "editButton": "Modifier les paramètres du fournisseur",
-          "deleteButton": "Supprimer le fournisseur"
+          "deleteButton": "Supprimer le fournisseur",
+          "deleteConfirm": "Êtes-vous sûr de vouloir supprimer le fournisseur OAuth {provider} ?"
         },
         "noProviders": "Aucun fournisseur OAuth configuré",
         "noProvidersDescription": "Ajoutez un fournisseur pour activer la connexion sociale avec les comptes Google, GitHub ou Microsoft.",

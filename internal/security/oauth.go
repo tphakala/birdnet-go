@@ -338,9 +338,10 @@ func initializeProviders(settings *conf.Settings) {
 				"provider", providerConfig.Provider)
 		}
 
-		// Create the appropriate goth provider based on provider name
+		// Create the appropriate goth provider based on config provider ID
+		// Note: Config uses "microsoft" but goth uses "microsoftonline"
 		switch providerConfig.Provider {
-		case ProviderGoogle:
+		case ConfigGoogle:
 			logger().Info("Enabling Google Auth provider", "redirect_uri", redirectURI)
 			googleProvider := gothGoogle.New(
 				providerConfig.ClientID,
@@ -351,7 +352,7 @@ func initializeProviders(settings *conf.Settings) {
 			googleProvider.SetAccessType("offline")
 			providers = append(providers, googleProvider)
 
-		case ProviderGitHub:
+		case ConfigGitHub:
 			logger().Info("Enabling GitHub Auth provider", "redirect_uri", redirectURI)
 			providers = append(providers, github.New(
 				providerConfig.ClientID,
@@ -360,7 +361,7 @@ func initializeProviders(settings *conf.Settings) {
 				"user:email", // Scope for email
 			))
 
-		case ProviderMicrosoft:
+		case ConfigMicrosoft:
 			logger().Info("Enabling Microsoft Account Auth provider", "redirect_uri", redirectURI)
 			providers = append(providers, microsoftonline.New(
 				providerConfig.ClientID,
@@ -458,11 +459,13 @@ func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogg
 
 // checkGoogleAuth validates Google OAuth session
 func (s *OAuth2Server) checkGoogleAuth(r *http.Request, userId string, log SecurityLogger) bool {
-	provider := s.Settings.GetOAuthProvider(ProviderGoogle)
+	// Use ConfigGoogle for config lookup (matches what's stored in OAuthProviderConfig.Provider)
+	provider := s.Settings.GetOAuthProvider(ConfigGoogle)
 	if provider == nil {
 		return false
 	}
 	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		// Use ProviderGoogle for session lookup (matches goth provider name)
 		providerName:   ProviderGoogle,
 		enabled:        provider.Enabled,
 		allowedUserIds: provider.UserID,
@@ -471,11 +474,13 @@ func (s *OAuth2Server) checkGoogleAuth(r *http.Request, userId string, log Secur
 
 // checkGithubAuth validates GitHub OAuth session
 func (s *OAuth2Server) checkGithubAuth(r *http.Request, userId string, log SecurityLogger) bool {
-	provider := s.Settings.GetOAuthProvider(ProviderGitHub)
+	// Use ConfigGitHub for config lookup (matches what's stored in OAuthProviderConfig.Provider)
+	provider := s.Settings.GetOAuthProvider(ConfigGitHub)
 	if provider == nil {
 		return false
 	}
 	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		// Use ProviderGitHub for session lookup (matches goth provider name)
 		providerName:   ProviderGitHub,
 		enabled:        provider.Enabled,
 		allowedUserIds: provider.UserID,
@@ -484,11 +489,13 @@ func (s *OAuth2Server) checkGithubAuth(r *http.Request, userId string, log Secur
 
 // checkMicrosoftAuth validates Microsoft Account OAuth session
 func (s *OAuth2Server) checkMicrosoftAuth(r *http.Request, userId string, log SecurityLogger) bool {
-	provider := s.Settings.GetOAuthProvider(ProviderMicrosoft)
+	// Use ConfigMicrosoft ("microsoft") for config lookup
+	provider := s.Settings.GetOAuthProvider(ConfigMicrosoft)
 	if provider == nil {
 		return false
 	}
 	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		// Use ProviderMicrosoft ("microsoftonline") for session lookup (goth's provider name)
 		providerName:   ProviderMicrosoft,
 		enabled:        provider.Enabled,
 		allowedUserIds: provider.UserID,

@@ -2099,7 +2099,8 @@
           "addButton": "Provider toevoegen",
           "enableToggle": "Providerstatus omschakelen",
           "editButton": "Providerinstellingen bewerken",
-          "deleteButton": "Provider verwijderen"
+          "deleteButton": "Provider verwijderen",
+          "deleteConfirm": "Weet u zeker dat u de {provider} OAuth-provider wilt verwijderen?"
         },
         "noProviders": "Geen OAuth-providers geconfigureerd",
         "noProvidersDescription": "Voeg een provider toe om sociale aanmelding met Google-, GitHub- of Microsoft-accounts in te schakelen.",

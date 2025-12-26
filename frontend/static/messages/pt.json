@@ -2375,7 +2375,8 @@
           "addButton": "Adicionar provedor",
           "enableToggle": "Alternar estado do provedor",
           "editButton": "Editar configurações do provedor",
-          "deleteButton": "Excluir provedor"
+          "deleteButton": "Excluir provedor",
+          "deleteConfirm": "Tem certeza de que deseja excluir o provedor OAuth {provider}?"
         },
         "noProviders": "Nenhum provedor OAuth configurado",
         "noProvidersDescription": "Adicione um provedor para habilitar login social com contas do Google, GitHub ou Microsoft.",
