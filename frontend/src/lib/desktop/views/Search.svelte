@@ -105,9 +105,9 @@
       }
 
       const data = await api.post<SearchResponse>('/api/v2/search', requestBody);
-      results = data.results || [];
-      totalResults = data.total || 0;
-      totalPages = data.pages || 1;
+      results = data.results ?? [];
+      totalResults = data.total ?? 0;
+      totalPages = data.pages ?? 1;
       formSubmitted = true;
     } catch (error: unknown) {
       // Handle search error silently

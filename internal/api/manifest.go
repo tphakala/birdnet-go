@@ -9,7 +9,8 @@ import (
 const manifestPath = ".vite/manifest.json"
 
 // ManifestExistsOnDisk checks if the Vite manifest exists in the given dist directory.
-// This is used to detect dev mode - if the manifest exists on disk, we're in dev mode.
+// The manifest is generated during production builds. If it exists on disk alongside
+// index.html, we serve the built frontend from disk rather than embedded assets.
 func ManifestExistsOnDisk(distDir string) bool {
 	path := filepath.Join(distDir, manifestPath)
 	info, err := os.Stat(path)

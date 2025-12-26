@@ -7,7 +7,7 @@
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
   import { t } from './lib/i18n';
-  import { appState, initApp } from './lib/stores/appState.svelte';
+  import { appState, initApp, MAX_RETRIES } from './lib/stores/appState.svelte';
 
   const logger = getLogger('app');
 
@@ -376,7 +376,7 @@
       <p class="text-base-content/70">{t('common.loading')}</p>
       {#if appState.retryCount > 0}
         <p class="text-sm text-warning">
-          {t('common.retrying')} ({appState.retryCount}/{3})...
+          {t('common.retrying')} ({appState.retryCount}/{MAX_RETRIES})...
         </p>
       {/if}
     </div>

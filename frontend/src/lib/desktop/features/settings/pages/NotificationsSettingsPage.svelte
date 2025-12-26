@@ -15,7 +15,6 @@
   Props: None - This is a page component that uses global settings stores
 
   Performance Optimizations:
-  - Cached CSRF token to avoid repeated DOM queries
   - API state management for notification testing
   - Reactive change detection with $derived
   - Progress tracking for test notification generation

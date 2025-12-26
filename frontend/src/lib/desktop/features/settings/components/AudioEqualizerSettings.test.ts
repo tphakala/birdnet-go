@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor, cleanup } from '@testing-library/svelte';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 
 // Mock dependencies
@@ -73,6 +73,7 @@ describe('AudioEqualizerSettings', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
   });
 

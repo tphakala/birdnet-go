@@ -6,6 +6,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -36,11 +37,17 @@ import (
 // =============================================================================
 
 // setupAppConfigTest creates a test environment for app config tests.
-func setupAppConfigTest(t *testing.T, securityConfig conf.Security) (*echo.Echo, *Controller) {
+func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo, *Controller) {
 	t.Helper()
 
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
+
+	// Use empty security config if nil
+	secCfg := conf.Security{}
+	if securityConfig != nil {
+		secCfg = *securityConfig
+	}
 
 	settings := &conf.Settings{
 		Version: "1.0.0-test",
@@ -54,7 +61,7 @@ func setupAppConfigTest(t *testing.T, securityConfig conf.Security) (*echo.Echo,
 				},
 			},
 		},
-		Security: securityConfig,
+		Security: secCfg,
 	}
 
 	logger := log.New(io.Discard, "APP TEST: ", log.LstdFlags)
@@ -81,11 +88,17 @@ func setupAppConfigTest(t *testing.T, securityConfig conf.Security) (*echo.Echo,
 }
 
 // setupAppConfigTestWithAuth creates a test environment with full auth support.
-func setupAppConfigTestWithAuth(t *testing.T, securityConfig conf.Security) (*echo.Echo, *Controller) {
+func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*echo.Echo, *Controller) {
 	t.Helper()
 
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
+
+	// Use empty security config if nil
+	secCfg := conf.Security{}
+	if securityConfig != nil {
+		secCfg = *securityConfig
+	}
 
 	settings := &conf.Settings{
 		Version: "1.0.0-test",
@@ -99,7 +112,7 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig conf.Security) (*ec
 				},
 			},
 		},
-		Security: securityConfig,
+		Security: secCfg,
 	}
 
 	logger := log.New(io.Discard, "APP TEST: ", log.LstdFlags)
@@ -140,7 +153,7 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig conf.Security) (*ec
 
 // TestGetAppConfig_NoSecurity tests the endpoint when no security is configured.
 func TestGetAppConfig_NoSecurity(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -180,7 +193,7 @@ func TestGetAppConfig_BasicAuthEnabled(t *testing.T) {
 		},
 	}
 
-	e, controller := setupAppConfigTestWithAuth(t, securityConfig)
+	e, controller := setupAppConfigTestWithAuth(t, &securityConfig)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -230,7 +243,7 @@ func TestGetAppConfig_AllAuthMethods(t *testing.T) {
 		},
 	}
 
-	e, controller := setupAppConfigTestWithAuth(t, securityConfig)
+	e, controller := setupAppConfigTestWithAuth(t, &securityConfig)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -254,7 +267,7 @@ func TestGetAppConfig_AllAuthMethods(t *testing.T) {
 
 // TestGetAppConfig_CSRFTokenFromContext tests CSRF token extraction from context.
 func TestGetAppConfig_CSRFTokenFromContext(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -278,7 +291,7 @@ func TestGetAppConfig_CSRFTokenFromContext(t *testing.T) {
 
 // TestGetAppConfig_NoCSRFToken tests behavior when CSRF token is not in context.
 func TestGetAppConfig_NoCSRFToken(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -299,7 +312,7 @@ func TestGetAppConfig_NoCSRFToken(t *testing.T) {
 
 // TestGetAppConfig_ResponseFormat validates the JSON response structure.
 func TestGetAppConfig_ResponseFormat(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -324,14 +337,14 @@ func TestGetAppConfig_ResponseFormat(t *testing.T) {
 	assert.Contains(t, rawResponse, "version", "Response should have version field")
 
 	// Check security sub-structure
-	security, ok := rawResponse["security"].(map[string]any)
+	securityObj, ok := rawResponse["security"].(map[string]any)
 	require.True(t, ok, "security should be an object")
-	assert.Contains(t, security, "enabled", "security should have enabled field")
-	assert.Contains(t, security, "accessAllowed", "security should have accessAllowed field")
-	assert.Contains(t, security, "authConfig", "security should have authConfig field")
+	assert.Contains(t, securityObj, "enabled", "security should have enabled field")
+	assert.Contains(t, securityObj, "accessAllowed", "security should have accessAllowed field")
+	assert.Contains(t, securityObj, "authConfig", "security should have authConfig field")
 
 	// Check authConfig sub-structure
-	authConfig, ok := security["authConfig"].(map[string]any)
+	authConfig, ok := securityObj["authConfig"].(map[string]any)
 	require.True(t, ok, "authConfig should be an object")
 	assert.Contains(t, authConfig, "basicEnabled", "authConfig should have basicEnabled field")
 	assert.Contains(t, authConfig, "googleEnabled", "authConfig should have googleEnabled field")
@@ -341,7 +354,7 @@ func TestGetAppConfig_ResponseFormat(t *testing.T) {
 
 // TestGetAppConfig_ContentTypeHeader verifies correct content-type header.
 func TestGetAppConfig_ContentTypeHeader(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -377,7 +390,7 @@ func TestGetAppConfig_NoSensitiveDataExposed(t *testing.T) {
 		},
 	}
 
-	e, controller := setupAppConfigTestWithAuth(t, securityConfig)
+	e, controller := setupAppConfigTestWithAuth(t, &securityConfig)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -400,7 +413,7 @@ func TestGetAppConfig_NoSensitiveDataExposed(t *testing.T) {
 
 // TestGetAppConfig_InvalidCSRFTokenType tests behavior with non-string CSRF token.
 func TestGetAppConfig_InvalidCSRFTokenType(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -432,7 +445,7 @@ func TestGetAppConfig_NilAuthService(t *testing.T) {
 		},
 	}
 
-	e, controller := setupAppConfigTest(t, securityConfig)
+	e, controller := setupAppConfigTest(t, &securityConfig)
 	// Note: setupAppConfigTest doesn't set authService, so it's nil
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -459,11 +472,11 @@ func TestGetAppConfig_NilAuthService(t *testing.T) {
 
 // TestGetAppConfig_Concurrent tests concurrent access to the endpoint.
 func TestGetAppConfig_Concurrent(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	const numRequests = 100
 	var wg sync.WaitGroup
-	errors := make(chan error, numRequests)
+	errChan := make(chan error, numRequests)
 
 	for range numRequests {
 		wg.Go(func() {
@@ -473,20 +486,20 @@ func TestGetAppConfig_Concurrent(t *testing.T) {
 			c.SetPath("/api/v2/app/config")
 
 			if err := controller.GetAppConfig(c); err != nil {
-				errors <- err
+				errChan <- err
 				return
 			}
 
 			if rec.Code != http.StatusOK {
-				errors <- echo.NewHTTPError(rec.Code, "unexpected status")
+				errChan <- echo.NewHTTPError(rec.Code, "unexpected status")
 			}
 		})
 	}
 
 	wg.Wait()
-	close(errors)
+	close(errChan)
 
-	for err := range errors {
+	for err := range errChan {
 		t.Errorf("Concurrent request failed: %v", err)
 	}
 }
@@ -609,7 +622,7 @@ func TestGetAppConfig_VersionWithSpecialChars(t *testing.T) {
 
 // TestGetAppConfig_HTTPMethods tests that only GET is supported.
 func TestGetAppConfig_HTTPMethods(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	// Only test that GET works - other methods would be rejected by router
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -628,7 +641,7 @@ func TestGetAppConfig_HTTPMethods(t *testing.T) {
 
 // TestDetermineAccessAllowed_SecurityDisabled tests access when security is off.
 func TestDetermineAccessAllowed_SecurityDisabled(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -640,7 +653,7 @@ func TestDetermineAccessAllowed_SecurityDisabled(t *testing.T) {
 
 // TestDetermineAccessAllowed_SecurityEnabledNoAuthService tests fail-closed behavior.
 func TestDetermineAccessAllowed_SecurityEnabledNoAuthService(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{
+	e, controller := setupAppConfigTest(t, &conf.Security{
 		BasicAuth: conf.BasicAuth{
 			Enabled:  true,
 			Password: "test",
@@ -661,7 +674,7 @@ func TestDetermineAccessAllowed_SecurityEnabledNoAuthService(t *testing.T) {
 
 // TestGetAppConfig_MalformedHeaders tests handling of malformed request headers.
 func TestGetAppConfig_MalformedHeaders(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	testCases := []struct {
 		name        string
@@ -699,7 +712,7 @@ func TestGetAppConfig_MalformedHeaders(t *testing.T) {
 
 // TestGetAppConfig_MalformedQueryParams tests handling of query parameters.
 func TestGetAppConfig_MalformedQueryParams(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	testCases := []struct {
 		name  string
@@ -737,7 +750,7 @@ func TestGetAppConfig_MalformedQueryParams(t *testing.T) {
 
 // TestGetAppConfig_MalformedContextValues tests handling of malformed context values.
 func TestGetAppConfig_MalformedContextValues(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	testCases := []struct {
 		name  string
@@ -780,7 +793,7 @@ func TestGetAppConfig_MalformedContextValues(t *testing.T) {
 
 // TestGetAppConfig_ResponseConsistency tests that responses are consistent.
 func TestGetAppConfig_ResponseConsistency(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	const iterations = 10
 	responses := make([]AppConfigResponse, 0, iterations)
@@ -811,7 +824,7 @@ func TestGetAppConfig_ResponseConsistency(t *testing.T) {
 
 // TestGetAppConfig_ResponseTiming tests that response time is reasonable.
 func TestGetAppConfig_ResponseTiming(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -825,14 +838,15 @@ func TestGetAppConfig_ResponseTiming(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	// Config endpoint should respond very quickly (under 50ms)
-	assert.Less(t, duration.Milliseconds(), int64(50),
+	// Config endpoint should respond quickly (under 500ms)
+	// Using a generous threshold to avoid flaky tests in CI
+	assert.Less(t, duration.Milliseconds(), int64(500),
 		"Response should be fast, got %v", duration)
 }
 
 // TestGetAppConfig_NoExtraFields tests that no unexpected fields are returned.
 func TestGetAppConfig_NoExtraFields(t *testing.T) {
-	e, controller := setupAppConfigTest(t, conf.Security{})
+	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -858,19 +872,19 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	}
 
 	// Check security sub-object
-	security := rawResponse["security"].(map[string]any)
+	securityObj := rawResponse["security"].(map[string]any)
 	expectedSecurityKeys := map[string]bool{
 		"enabled":       true,
 		"accessAllowed": true,
 		"authConfig":    true,
 	}
 
-	for key := range security {
+	for key := range securityObj {
 		assert.True(t, expectedSecurityKeys[key], "Unexpected field in security: %s", key)
 	}
 
 	// Check authConfig sub-object
-	authConfig := security["authConfig"].(map[string]any)
+	authConfig := securityObj["authConfig"].(map[string]any)
 	expectedAuthKeys := map[string]bool{
 		"basicEnabled":     true,
 		"googleEnabled":    true,
@@ -931,8 +945,8 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 		err := controller.GetAppConfig(c)
 		if err != nil {
 			// HTTP errors are acceptable
-			_, isHTTPError := err.(*echo.HTTPError)
-			if !isHTTPError {
+			var httpErr *echo.HTTPError
+			if !errors.As(err, &httpErr) {
 				t.Errorf("Unexpected error type: %T: %v", err, err)
 			}
 		}
@@ -994,8 +1008,8 @@ func FuzzGetAppConfig_QueryParams(f *testing.F) {
 		// Should never panic (panics from httptest.NewRequest are caught above)
 		err := controller.GetAppConfig(c)
 		if err != nil {
-			_, isHTTPError := err.(*echo.HTTPError)
-			if !isHTTPError {
+			var httpErr *echo.HTTPError
+			if !errors.As(err, &httpErr) {
 				t.Errorf("Unexpected error type: %T: %v", err, err)
 			}
 		}

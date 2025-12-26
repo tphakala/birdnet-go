@@ -32,7 +32,7 @@ const logger = getLogger('appState');
 const CONFIG_ENDPOINT = '/api/v2/app/config';
 
 /** Maximum number of retry attempts for config fetch */
-const MAX_RETRIES = 3;
+export const MAX_RETRIES = 3;
 
 /** Retry delays in milliseconds (exponential backoff) */
 const RETRY_DELAYS = [1000, 2000, 4000];

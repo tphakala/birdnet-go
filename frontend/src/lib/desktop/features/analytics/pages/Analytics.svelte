@@ -504,18 +504,23 @@
       const data = await api.get<ApiDetection[]>('/api/v2/detections/recent?limit=10');
       const detections = Array.isArray(data) ? data : [];
 
-      recentDetections = detections.map(detection => ({
-        id: detection.id,
-        timestamp:
+      recentDetections = detections.map(detection => {
+        // Compute timestamp once to avoid 'undefined undefined' edge case
+        const computedTimestamp =
           detection.timestamp ||
-          (detection.date && detection.time ? `${detection.date} ${detection.time}` : null),
-        commonName: detection.commonName,
-        scientificName: detection.scientificName,
-        confidence: detection.confidence,
-        timeOfDay:
-          detection.timeOfDay ||
-          calculateTimeOfDay(detection.timestamp || `${detection.date} ${detection.time}`),
-      }));
+          (detection.date && detection.time ? `${detection.date} ${detection.time}` : null);
+
+        return {
+          id: detection.id,
+          timestamp: computedTimestamp,
+          commonName: detection.commonName,
+          scientificName: detection.scientificName,
+          confidence: detection.confidence,
+          timeOfDay:
+            detection.timeOfDay ||
+            (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : 'Unknown'),
+        };
+      });
     } catch (err) {
       logger.error('Error fetching recent detections:', err);
       recentDetections = [];

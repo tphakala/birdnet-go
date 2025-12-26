@@ -203,8 +203,15 @@
     abortController = new AbortController();
 
     try {
+      // Build headers, only including CSRF token if available
+      const headers: Record<string, string> = {};
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+
       const response = await fetch('/api/v2/system/audio/equalizer/config', {
-        headers: { 'X-CSRF-Token': getCsrfToken() || '' },
+        headers,
         signal: abortController.signal,
       });
 
