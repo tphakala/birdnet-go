@@ -2095,6 +2095,32 @@
       "oauth": {
         "title": "OAuth2 Social Authentication",
         "description": "Single sign-on to log in with your existing account",
+        "form": {
+          "editTitle": "Edit OAuth Provider",
+          "addTitle": "Add OAuth Provider",
+          "providerLabel": "Provider",
+          "providerHelpText": "Select the OAuth provider to configure",
+          "cancelButton": "Cancel",
+          "saveButton": "Save"
+        },
+        "providers": {
+          "title": "Configured Providers",
+          "addButton": "Add Provider",
+          "enableToggle": "Toggle provider enabled state",
+          "editButton": "Edit provider settings",
+          "deleteButton": "Delete provider"
+        },
+        "noProviders": "No OAuth providers configured",
+        "noProvidersDescription": "Add a provider to enable social login with Google, GitHub, or Microsoft accounts.",
+        "enableProviderLabel": "Enable this provider",
+        "getCredentialsLabel": "Get your credentials from {provider}",
+        "redirectUriTitle": "Redirect URI:",
+        "clientIdLabel": "Client ID",
+        "clientIdHelpText": "The OAuth 2.0 Client ID from your provider's developer console",
+        "clientSecretLabel": "Client Secret",
+        "clientSecretHelpText": "The OAuth 2.0 Client Secret from your provider's developer console",
+        "userIdLabel": "User ID (optional)",
+        "userIdHelpText": "Restrict access to a specific user account by email or ID",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Allow OAuth2 Login via Google",

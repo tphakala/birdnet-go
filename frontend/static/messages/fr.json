@@ -2086,6 +2086,32 @@
       "oauth": {
         "title": "Authentification sociale OAuth2",
         "description": "Authentification unique pour vous connecter avec votre compte existant",
+        "form": {
+          "editTitle": "Modifier le fournisseur OAuth",
+          "addTitle": "Ajouter un fournisseur OAuth",
+          "providerLabel": "Fournisseur",
+          "providerHelpText": "Sélectionnez le fournisseur OAuth à configurer",
+          "cancelButton": "Annuler",
+          "saveButton": "Enregistrer"
+        },
+        "providers": {
+          "title": "Fournisseurs configurés",
+          "addButton": "Ajouter un fournisseur",
+          "enableToggle": "Activer/désactiver le fournisseur",
+          "editButton": "Modifier les paramètres du fournisseur",
+          "deleteButton": "Supprimer le fournisseur"
+        },
+        "noProviders": "Aucun fournisseur OAuth configuré",
+        "noProvidersDescription": "Ajoutez un fournisseur pour activer la connexion sociale avec les comptes Google, GitHub ou Microsoft.",
+        "enableProviderLabel": "Activer ce fournisseur",
+        "getCredentialsLabel": "Obtenez vos identifiants depuis {provider}",
+        "redirectUriTitle": "URI de redirection :",
+        "clientIdLabel": "ID client",
+        "clientIdHelpText": "L'ID client OAuth 2.0 de la console développeur de votre fournisseur",
+        "clientSecretLabel": "Secret client",
+        "clientSecretHelpText": "Le secret client OAuth 2.0 de la console développeur de votre fournisseur",
+        "userIdLabel": "ID utilisateur (optionnel)",
+        "userIdHelpText": "Restreindre l'accès à un compte utilisateur spécifique par e-mail ou ID",
         "google": {
           "title": "OAuth Google",
           "enableLabel": "Autoriser la connexion OAuth2 via Google",

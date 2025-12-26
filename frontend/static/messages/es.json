@@ -2372,6 +2372,32 @@
       "oauth": {
         "title": "Autenticación social OAuth2",
         "description": "Inicio de sesión único para acceder con tu cuenta existente",
+        "form": {
+          "editTitle": "Editar proveedor OAuth",
+          "addTitle": "Añadir proveedor OAuth",
+          "providerLabel": "Proveedor",
+          "providerHelpText": "Selecciona el proveedor OAuth a configurar",
+          "cancelButton": "Cancelar",
+          "saveButton": "Guardar"
+        },
+        "providers": {
+          "title": "Proveedores configurados",
+          "addButton": "Añadir proveedor",
+          "enableToggle": "Activar/desactivar proveedor",
+          "editButton": "Editar configuración del proveedor",
+          "deleteButton": "Eliminar proveedor"
+        },
+        "noProviders": "No hay proveedores OAuth configurados",
+        "noProvidersDescription": "Añade un proveedor para habilitar el inicio de sesión social con cuentas de Google, GitHub o Microsoft.",
+        "enableProviderLabel": "Habilitar este proveedor",
+        "getCredentialsLabel": "Obtén tus credenciales de {provider}",
+        "redirectUriTitle": "URI de redirección:",
+        "clientIdLabel": "ID de cliente",
+        "clientIdHelpText": "El ID de cliente OAuth 2.0 de la consola de desarrollador de tu proveedor",
+        "clientSecretLabel": "Secreto de cliente",
+        "clientSecretHelpText": "El secreto de cliente OAuth 2.0 de la consola de desarrollador de tu proveedor",
+        "userIdLabel": "ID de usuario (opcional)",
+        "userIdHelpText": "Restringir el acceso a una cuenta de usuario específica por correo electrónico o ID",
         "google": {
           "title": "OAuth de Google",
           "enableLabel": "Permitir inicio de sesión OAuth2 a través de Google",

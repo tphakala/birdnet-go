@@ -2362,6 +2362,32 @@
       "oauth": {
         "title": "OAuth2 - Autenticação social",
         "description": "Login único com sua conta existente",
+        "form": {
+          "editTitle": "Editar provedor OAuth",
+          "addTitle": "Adicionar provedor OAuth",
+          "providerLabel": "Provedor",
+          "providerHelpText": "Selecione o provedor OAuth a configurar",
+          "cancelButton": "Cancelar",
+          "saveButton": "Salvar"
+        },
+        "providers": {
+          "title": "Provedores configurados",
+          "addButton": "Adicionar provedor",
+          "enableToggle": "Alternar estado do provedor",
+          "editButton": "Editar configurações do provedor",
+          "deleteButton": "Excluir provedor"
+        },
+        "noProviders": "Nenhum provedor OAuth configurado",
+        "noProvidersDescription": "Adicione um provedor para habilitar login social com contas do Google, GitHub ou Microsoft.",
+        "enableProviderLabel": "Habilitar este provedor",
+        "getCredentialsLabel": "Obtenha suas credenciais de {provider}",
+        "redirectUriTitle": "URI de redirecionamento:",
+        "clientIdLabel": "ID do cliente",
+        "clientIdHelpText": "O ID do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
+        "clientSecretLabel": "Segredo do cliente",
+        "clientSecretHelpText": "O segredo do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
+        "userIdLabel": "ID do usuário (opcional)",
+        "userIdHelpText": "Restringir acesso a uma conta de usuário específica por e-mail ou ID",
         "google": {
           "title": "OAuth do Google",
           "enableLabel": "Permitir login OAuth2 via Google",

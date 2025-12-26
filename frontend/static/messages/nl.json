@@ -2086,6 +2086,32 @@
       "oauth": {
         "title": "OAuth2 Sociale Authenticatie",
         "description": "Eenmalige aanmelding om in te loggen met uw bestaande account",
+        "form": {
+          "editTitle": "OAuth-provider bewerken",
+          "addTitle": "OAuth-provider toevoegen",
+          "providerLabel": "Provider",
+          "providerHelpText": "Selecteer de OAuth-provider om te configureren",
+          "cancelButton": "Annuleren",
+          "saveButton": "Opslaan"
+        },
+        "providers": {
+          "title": "Geconfigureerde Providers",
+          "addButton": "Provider toevoegen",
+          "enableToggle": "Providerstatus omschakelen",
+          "editButton": "Providerinstellingen bewerken",
+          "deleteButton": "Provider verwijderen"
+        },
+        "noProviders": "Geen OAuth-providers geconfigureerd",
+        "noProvidersDescription": "Voeg een provider toe om sociale aanmelding met Google-, GitHub- of Microsoft-accounts in te schakelen.",
+        "enableProviderLabel": "Deze provider inschakelen",
+        "getCredentialsLabel": "Verkrijg uw inloggegevens van {provider}",
+        "redirectUriTitle": "Redirect URI:",
+        "clientIdLabel": "Client-ID",
+        "clientIdHelpText": "De OAuth 2.0 Client-ID van de ontwikkelaarsconsole van uw provider",
+        "clientSecretLabel": "Client Secret",
+        "clientSecretHelpText": "Het OAuth 2.0 Client Secret van de ontwikkelaarsconsole van uw provider",
+        "userIdLabel": "Gebruikers-ID (optioneel)",
+        "userIdHelpText": "Beperk toegang tot een specifiek gebruikersaccount via e-mail of ID",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Sta OAuth2 Inloggen via Google toe",

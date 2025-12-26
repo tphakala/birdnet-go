@@ -2372,6 +2372,32 @@
       "oauth": {
         "title": "OAuth2-sosiaalinen tunnistautuminen",
         "description": "Kertakirjautuminen olemassa olevalla tililläsi",
+        "form": {
+          "editTitle": "Muokkaa OAuth-tarjoajaa",
+          "addTitle": "Lisää OAuth-tarjoaja",
+          "providerLabel": "Tarjoaja",
+          "providerHelpText": "Valitse määritettävä OAuth-tarjoaja",
+          "cancelButton": "Peruuta",
+          "saveButton": "Tallenna"
+        },
+        "providers": {
+          "title": "Määritetyt tarjoajat",
+          "addButton": "Lisää tarjoaja",
+          "enableToggle": "Vaihda tarjoajan tilaa",
+          "editButton": "Muokkaa tarjoajan asetuksia",
+          "deleteButton": "Poista tarjoaja"
+        },
+        "noProviders": "OAuth-tarjoajia ei ole määritetty",
+        "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön sosiaalisen kirjautumisen Google-, GitHub- tai Microsoft-tilillä.",
+        "enableProviderLabel": "Ota tämä tarjoaja käyttöön",
+        "getCredentialsLabel": "Hae tunnuksesi palvelusta {provider}",
+        "redirectUriTitle": "Uudelleenohjaus-URI:",
+        "clientIdLabel": "Asiakastunnus",
+        "clientIdHelpText": "OAuth 2.0 -asiakastunnus tarjoajasi kehittäjäkonsolista",
+        "clientSecretLabel": "Asiakassalaisuus",
+        "clientSecretHelpText": "OAuth 2.0 -asiakassalaisuus tarjoajasi kehittäjäkonsolista",
+        "userIdLabel": "Käyttäjätunnus (valinnainen)",
+        "userIdHelpText": "Rajoita pääsy tiettyyn käyttäjätiliin sähköpostiosoitteen tai tunnuksen perusteella",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Salli OAuth2-kirjautuminen Googlen kautta",
