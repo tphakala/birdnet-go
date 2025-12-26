@@ -65,7 +65,8 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
 
 	// Build list of enabled OAuth providers
-	var enabledProviders []string
+	// Initialize to empty slice so JSON serializes as [] instead of null
+	enabledProviders := []string{}
 	if c.Settings.Security.GoogleAuth.Enabled {
 		enabledProviders = append(enabledProviders, "google")
 	}
