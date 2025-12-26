@@ -512,7 +512,7 @@
               <a
                 href={AUTH_PROVIDERS.google.settings.credentialsUrl}
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.google.getCredentialsLabel')}
@@ -579,7 +579,7 @@
               <a
                 href={AUTH_PROVIDERS.github.settings.credentialsUrl}
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.github.getCredentialsLabel')}
