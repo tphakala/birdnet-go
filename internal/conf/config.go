@@ -1448,6 +1448,22 @@ func GetSettings() *Settings {
 	return settingsInstance
 }
 
+// migrateLegacyProvider converts a legacy SocialProvider to the new OAuthProviderConfig format.
+// Returns nil if the legacy provider is not configured (no ClientID).
+func migrateLegacyProvider(providerName string, legacy SocialProvider) *OAuthProviderConfig {
+	if legacy.ClientID == "" {
+		return nil
+	}
+	return &OAuthProviderConfig{
+		Provider:     providerName,
+		Enabled:      legacy.Enabled,
+		ClientID:     legacy.ClientID,
+		ClientSecret: legacy.ClientSecret,
+		RedirectURI:  legacy.RedirectURI,
+		UserID:       legacy.UserId,
+	}
+}
+
 // MigrateOAuthConfig migrates legacy OAuth configuration (GoogleAuth, GithubAuth, MicrosoftAuth)
 // to the new OAuthProviders array format. This migration:
 // - Skips if OAuthProviders already has entries (already migrated)
@@ -1460,48 +1476,23 @@ func (s *Settings) MigrateOAuthConfig() bool {
 		return false
 	}
 
+	// Define legacy providers to migrate
+	legacyProviders := []struct {
+		name   string
+		config SocialProvider
+	}{
+		{"google", s.Security.GoogleAuth},
+		{"github", s.Security.GithubAuth},
+		{"microsoft", s.Security.MicrosoftAuth},
+	}
+
 	var migrated bool
-
-	// Migrate Google OAuth if configured
-	if s.Security.GoogleAuth.ClientID != "" {
-		s.Security.OAuthProviders = append(s.Security.OAuthProviders, OAuthProviderConfig{
-			Provider:     "google",
-			Enabled:      s.Security.GoogleAuth.Enabled,
-			ClientID:     s.Security.GoogleAuth.ClientID,
-			ClientSecret: s.Security.GoogleAuth.ClientSecret,
-			RedirectURI:  s.Security.GoogleAuth.RedirectURI,
-			UserID:       s.Security.GoogleAuth.UserId,
-		})
-		migrated = true
-		log.Printf("Migrated Google OAuth configuration to new format")
-	}
-
-	// Migrate GitHub OAuth if configured
-	if s.Security.GithubAuth.ClientID != "" {
-		s.Security.OAuthProviders = append(s.Security.OAuthProviders, OAuthProviderConfig{
-			Provider:     "github",
-			Enabled:      s.Security.GithubAuth.Enabled,
-			ClientID:     s.Security.GithubAuth.ClientID,
-			ClientSecret: s.Security.GithubAuth.ClientSecret,
-			RedirectURI:  s.Security.GithubAuth.RedirectURI,
-			UserID:       s.Security.GithubAuth.UserId,
-		})
-		migrated = true
-		log.Printf("Migrated GitHub OAuth configuration to new format")
-	}
-
-	// Migrate Microsoft OAuth if configured
-	if s.Security.MicrosoftAuth.ClientID != "" {
-		s.Security.OAuthProviders = append(s.Security.OAuthProviders, OAuthProviderConfig{
-			Provider:     "microsoft",
-			Enabled:      s.Security.MicrosoftAuth.Enabled,
-			ClientID:     s.Security.MicrosoftAuth.ClientID,
-			ClientSecret: s.Security.MicrosoftAuth.ClientSecret,
-			RedirectURI:  s.Security.MicrosoftAuth.RedirectURI,
-			UserID:       s.Security.MicrosoftAuth.UserId,
-		})
-		migrated = true
-		log.Printf("Migrated Microsoft OAuth configuration to new format")
+	for _, legacy := range legacyProviders {
+		if cfg := migrateLegacyProvider(legacy.name, legacy.config); cfg != nil {
+			s.Security.OAuthProviders = append(s.Security.OAuthProviders, *cfg)
+			migrated = true
+			log.Printf("Migrated %s OAuth configuration to new format", legacy.name)
+		}
 	}
 
 	if migrated {

@@ -679,7 +679,7 @@
         <!-- Providers List -->
         {#if oauthProviders.length > 0}
           <div class="space-y-2">
-            {#each oauthProviders as provider, index (`${provider.provider}:${index}`)}
+            {#each oauthProviders as provider, index (provider.provider)}
               {@const providerType = provider.provider as OAuthProviderType}
               {@const IconComponent = getProviderIcon(providerType)}
               <div

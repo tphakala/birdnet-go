@@ -328,10 +328,11 @@ func initializeProviders(settings *conf.Settings) {
 			continue
 		}
 
-		// Build redirect URI
+		// Build redirect URI using goth provider name (e.g., "microsoftonline" for Microsoft)
 		redirectURI := providerConfig.RedirectURI
 		if redirectURI == "" && baseURL != "" {
-			redirectURI = baseURL + "/auth/" + providerConfig.Provider + "/callback"
+			gothProviderName := GetGothProviderName(providerConfig.Provider)
+			redirectURI = baseURL + "/auth/" + gothProviderName + "/callback"
 		}
 		if redirectURI == "" {
 			logger().Warn("OAuth provider enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI.",

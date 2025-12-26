@@ -47,3 +47,20 @@ const (
 	// Path validation limits
 	MaxSafePathLength = 512
 )
+
+// ConfigToGothProvider maps config provider IDs to goth provider names.
+// Most providers use the same name, but Microsoft is different.
+var ConfigToGothProvider = map[string]string{
+	ConfigGoogle:    ProviderGoogle,
+	ConfigGitHub:    ProviderGitHub,
+	ConfigMicrosoft: ProviderMicrosoft,
+}
+
+// GetGothProviderName converts a config provider ID to the goth provider name.
+// Falls back to the config ID if no mapping exists.
+func GetGothProviderName(configProvider string) string {
+	if gothName, ok := ConfigToGothProvider[configProvider]; ok {
+		return gothName
+	}
+	return configProvider
+}
