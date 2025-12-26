@@ -473,6 +473,7 @@ func (c *Controller) initRoutes() {
 		name string
 		fn   func()
 	}{
+		{"app routes", c.initAppRoutes},
 		{"search routes", c.initSearchRoutes},
 		{"detection routes", c.initDetectionRoutes},
 		{"analytics routes", c.initAnalyticsRoutes},

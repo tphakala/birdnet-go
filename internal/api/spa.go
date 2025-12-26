@@ -1,136 +1,153 @@
 package api
 
 import (
-	"bytes"
-	"embed"
-	"html/template"
+	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/api/auth"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/frontend"
 )
 
-//go:embed templates/spa.html
-var spaTemplateFS embed.FS
+// SPA handler constants
+const (
+	// indexHTMLPath is the path to the index.html file within the dist directory
+	indexHTMLPath = "index.html"
+
+	// contentTypeHTML is the Content-Type header value for HTML responses
+	contentTypeHTML = "text/html; charset=utf-8"
+
+	// cacheControlNoCache disables caching for the HTML shell
+	// This ensures users always get the latest version with updated asset references
+	cacheControlNoCache = "no-cache, no-store, must-revalidate"
+)
 
 // SPAHandler handles serving the Single Page Application HTML shell.
+// It serves Vite's generated index.html directly, with the frontend
+// fetching configuration from /api/v2/app/config at runtime.
 type SPAHandler struct {
-	settings    *conf.Settings
-	template    *template.Template
-	authService auth.Service
-	assetPaths  *AssetPaths
-	logger      *slog.Logger
-}
-
-// spaTemplateData holds the data passed to the SPA template.
-type spaTemplateData struct {
-	CSRFToken            string
-	SecurityEnabled      bool
-	AccessAllowed        bool
-	Version              string
-	BasicAuthEnabled     bool
-	GoogleAuthEnabled    bool
-	GithubAuthEnabled    bool
-	MicrosoftAuthEnabled bool
-	EntryJS              string
-	EntryCSS             []string // Supports multiple CSS files from Vite manifest
+	logger     *slog.Logger
+	devMode    bool
+	devModePath string
 }
 
 // NewSPAHandler creates a new SPA handler.
-func NewSPAHandler(settings *conf.Settings, assetPaths *AssetPaths, logger *slog.Logger) *SPAHandler {
-	// Parse the embedded template
-	tmpl := template.Must(template.ParseFS(spaTemplateFS, "templates/spa.html"))
-
+// devMode indicates whether to serve from disk (true) or embedded FS (false).
+// devModePath is the path to the frontend/dist directory when in dev mode.
+func NewSPAHandler(logger *slog.Logger, devMode bool, devModePath string) *SPAHandler {
 	return &SPAHandler{
-		settings:   settings,
-		template:   tmpl,
-		assetPaths: assetPaths,
-		logger:     logger,
+		logger:      logger,
+		devMode:     devMode,
+		devModePath: devModePath,
 	}
-}
-
-// SetAuthService sets the auth service for determining access status.
-// This should be called after auth is initialized at server level.
-func (h *SPAHandler) SetAuthService(svc auth.Service) {
-	h.authService = svc
 }
 
 // ServeApp serves the SPA HTML shell for all frontend routes.
+// The HTML is served directly from Vite's build output.
+// Configuration is fetched by the frontend from /api/v2/app/config.
 func (h *SPAHandler) ServeApp(c echo.Context) error {
-	// Get CSRF token from context if available
-	csrfToken := ""
-	if token, ok := c.Get("csrf").(string); ok {
-		csrfToken = token
+	if h.devMode {
+		return h.serveFromDisk(c)
 	}
-
-	// Determine security state
-	securityEnabled := h.settings.Security.BasicAuth.Enabled ||
-		h.settings.Security.GoogleAuth.Enabled ||
-		h.settings.Security.GithubAuth.Enabled ||
-		h.settings.Security.MicrosoftAuth.Enabled
-
-	// Determine access status using auth service
-	accessAllowed := h.determineAccessAllowed(c, securityEnabled)
-
-	// Get asset paths with fallback for safety
-	entryJS, entryCSS := h.getAssetPaths()
-
-	// Prepare template data
-	data := spaTemplateData{
-		CSRFToken:            csrfToken,
-		SecurityEnabled:      securityEnabled,
-		AccessAllowed:        accessAllowed,
-		Version:              h.settings.Version,
-		BasicAuthEnabled:     h.settings.Security.BasicAuth.Enabled,
-		GoogleAuthEnabled:    h.settings.Security.GoogleAuth.Enabled,
-		GithubAuthEnabled:    h.settings.Security.GithubAuth.Enabled,
-		MicrosoftAuthEnabled: h.settings.Security.MicrosoftAuth.Enabled,
-		EntryJS:              entryJS,
-		EntryCSS:             entryCSS,
-	}
-
-	// Render template to buffer
-	var buf bytes.Buffer
-	if err := h.template.Execute(&buf, data); err != nil {
-		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to render page")
-		httpErr.Internal = err
-		return httpErr
-	}
-
-	return c.HTML(http.StatusOK, buf.String())
+	return h.serveFromEmbed(c)
 }
 
-// determineAccessAllowed checks if the current request is authenticated.
-// Returns true if:
-// - Security is disabled (no auth required)
-// - Auth service says the request is authenticated (session, token, or subnet bypass)
-func (h *SPAHandler) determineAccessAllowed(c echo.Context, securityEnabled bool) bool {
-	// If security is not enabled, allow access
-	if !securityEnabled {
-		return true
+// serveFromDisk serves index.html from the local filesystem (dev mode).
+// This allows hot-reloading of the frontend during development.
+func (h *SPAHandler) serveFromDisk(c echo.Context) error {
+	// Use os.OpenRoot for secure sandboxed access (Go 1.24+)
+	root, err := os.OpenRoot(h.devModePath)
+	if err != nil {
+		h.logError("Failed to open frontend dist directory", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to open dist directory")
+	}
+	defer h.closeWithLog(root, "root handle")
+
+	file, err := root.Open(indexHTMLPath)
+	if err != nil {
+		h.logError("Failed to open index.html", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to load page")
+	}
+	defer h.closeFileWithLog(file, indexHTMLPath)
+
+	// Read file content
+	content, err := io.ReadAll(file)
+	if err != nil {
+		h.logError("Failed to read index.html", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to read page")
 	}
 
-	// If auth service is not configured, deny access (fail closed)
-	if h.authService == nil {
-		return false
-	}
+	// Set headers for dev mode (no caching)
+	c.Response().Header().Set(echo.HeaderContentType, contentTypeHTML)
+	c.Response().Header().Set(echo.HeaderCacheControl, cacheControlNoCache)
+	c.Response().Header().Set("Pragma", "no-cache")
+	c.Response().Header().Set("Expires", "0")
 
-	// Use auth service to check authentication status
-	// This checks: subnet bypass, token auth, and session auth
-	return h.authService.IsAuthenticated(c)
+	return c.HTMLBlob(http.StatusOK, content)
 }
 
-// getAssetPaths returns the JS and CSS entry points from the manifest.
-// Returns empty values if asset paths are not configured (should not happen in production).
-func (h *SPAHandler) getAssetPaths() (entryJS string, entryCSS []string) {
-	if h.assetPaths == nil {
-		if h.logger != nil {
-			h.logger.Error("Asset paths not configured - manifest may not have been loaded")
-		}
-		return "", nil
+// serveFromEmbed serves index.html from the embedded filesystem (production mode).
+func (h *SPAHandler) serveFromEmbed(c echo.Context) error {
+	file, err := frontend.DistFS.Open(indexHTMLPath)
+	if err != nil {
+		h.logError("Failed to open embedded index.html", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to load page")
+	}
+	defer h.closeEmbedFileWithLog(file, indexHTMLPath)
+
+	// Read file content
+	content, err := io.ReadAll(file)
+	if err != nil {
+		h.logError("Failed to read embedded index.html", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to read page")
 	}
 
-	return h.assetPaths.EntryJS, h.assetPaths.EntryCSS
+	// Set headers - still no caching for the HTML shell even in production
+	// This ensures users always get the latest version after deployments
+	// The JS/CSS assets are cached via their content hashes
+	c.Response().Header().Set(echo.HeaderContentType, contentTypeHTML)
+	c.Response().Header().Set(echo.HeaderCacheControl, cacheControlNoCache)
+	c.Response().Header().Set("Pragma", "no-cache")
+	c.Response().Header().Set("Expires", "0")
+
+	return c.HTMLBlob(http.StatusOK, content)
+}
+
+// logError logs an error if the logger is available.
+func (h *SPAHandler) logError(msg string, err error) {
+	if h.logger != nil {
+		h.logger.Error(msg, "error", err)
+	}
+}
+
+// closeWithLog closes an io.Closer and logs any error.
+func (h *SPAHandler) closeWithLog(c io.Closer, name string) {
+	if err := c.Close(); err != nil && h.logger != nil {
+		h.logger.Warn("Error closing "+name, "error", err)
+	}
+}
+
+// closeFileWithLog closes a file and logs any error with the path.
+func (h *SPAHandler) closeFileWithLog(f *os.File, path string) {
+	if err := f.Close(); err != nil && h.logger != nil {
+		h.logger.Warn("Error closing file", "path", path, "error", err)
+	}
+}
+
+// closeEmbedFileWithLog closes an embedded file and logs any error.
+func (h *SPAHandler) closeEmbedFileWithLog(f fs.File, path string) {
+	if err := f.Close(); err != nil && h.logger != nil {
+		h.logger.Warn("Error closing embedded file", "path", path, "error", err)
+	}
+}
+
+// DevModeStatus returns a human-readable status of the SPA handler mode.
+func (h *SPAHandler) DevModeStatus() string {
+	if h.devMode {
+		return "Dev mode (disk): " + filepath.Join(h.devModePath, indexHTMLPath)
+	}
+	return "Production mode (embedded)"
 }

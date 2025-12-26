@@ -10,6 +10,7 @@
  */
 
 import { loggers } from '$lib/utils/logger';
+import { getCsrfToken as getConfigCsrfToken } from '$lib/services/configService';
 
 const logger = loggers.api;
 
@@ -39,19 +40,26 @@ export class ApiError extends Error {
 
 /**
  * SECURITY: Enhanced CSRF token retrieval with validation
+ * Tries multiple sources in order of preference:
+ * 1. Config service (from /api/v2/app/config)
+ * 2. Meta tag (legacy fallback)
  */
 export function getCsrfToken(): string | null {
   try {
-    // First try meta tag (primary source)
+    // First try config service (preferred source for new architecture)
+    const configToken = getConfigCsrfToken();
+    if (configToken && configToken.length > 0) {
+      return configToken;
+    }
+
+    // Fallback to meta tag (for backwards compatibility during migration)
     const metaTag = document.querySelector('meta[name="csrf-token"]');
     if (metaTag) {
       const token = metaTag.getAttribute('content');
       if (token && token.length > 0) {
-        return token; // Trust meta tag content, basic validation removed for compatibility
+        return token;
       }
     }
-
-    // Note: Cookie fallback removed as HttpOnly cookies are inaccessible to JavaScript
   } catch (error) {
     logger.warn('Error retrieving CSRF token:', error);
   }

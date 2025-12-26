@@ -3,11 +3,18 @@
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
-  import type { AuthConfig, BirdnetConfig } from './app.d';
+  import type { AuthConfig } from './app.d';
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
   import { t } from './lib/i18n';
+  import {
+    initAppConfig,
+    isSecurityEnabled as getSecurityEnabled,
+    isAccessAllowed as getAccessAllowed,
+    getVersion,
+    getAuthConfig,
+  } from './lib/services/configService';
 
   const logger = getLogger('app');
 
@@ -36,8 +43,7 @@
   let dynamicErrorCode = $state<string | null>(null);
   let detectionId = $state<string | null>(null);
 
-  // Get configuration from server
-  let config = $state<BirdnetConfig | null>(null);
+  // Configuration state (fetched from API via config service)
   let securityEnabled = $state<boolean>(false);
   let accessAllowed = $state<boolean>(true);
   let version = $state<string>('Development Build');
@@ -337,22 +343,15 @@
     }
   }
 
-  onMount(() => {
-    // Get server configuration
-    config = window.BIRDNET_CONFIG || null;
-    securityEnabled = config?.security?.enabled || false;
-    accessAllowed = config?.security?.accessAllowed !== false; // Default to true unless explicitly false
-    version = config?.version || 'Development Build';
+  onMount(async () => {
+    // Fetch configuration from API endpoint
+    await initAppConfig();
 
-    // Get auth configuration from server
-    if (config?.security?.authConfig) {
-      authConfig = {
-        basicEnabled: config.security.authConfig.basicEnabled ?? true,
-        googleEnabled: config.security.authConfig.googleEnabled ?? false,
-        githubEnabled: config.security.authConfig.githubEnabled ?? false,
-        microsoftEnabled: config.security.authConfig.microsoftEnabled ?? false,
-      };
-    }
+    // Get values from config service
+    securityEnabled = getSecurityEnabled();
+    accessAllowed = getAccessAllowed();
+    version = getVersion();
+    authConfig = getAuthConfig();
 
     // Ensure SSE notifications manager is connected (it auto-connects on import)
     // This prevents tree-shaking and ensures toast messages work properly
