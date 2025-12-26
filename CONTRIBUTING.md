@@ -176,15 +176,17 @@ air realtime      # Realtime mode with hot reload
 
 **Alternative Workflow (Active Frontend Development):**
 
-If you're actively developing the frontend and need live updates:
+For frontend-focused development with instant HMR:
 
 ```bash
-# Terminal 1: Watch and rebuild frontend on changes
-task frontend-watch
-
-# Terminal 2: Run Go server with hot reload
+# Terminal 1: Run Go server
 air realtime
+
+# Terminal 2: Run Vite dev server with HMR
+cd frontend && npm run dev
 ```
+
+Then open `http://localhost:5173/ui/` for instant hot module replacement.
 
 **Note:** The devcontainer automatically builds the frontend during setup. If you need to rebuild manually, run `task frontend-build`.
 
@@ -215,13 +217,35 @@ task dev_server       # Full development server
 
 ### Frontend Development
 
-⚠️ **Important:** Frontend is **embedded** in Go binary at build time. Use `air` or `task dev_server` for development.
+The frontend can be developed in two modes:
 
-**DO NOT use Vite dev server** (`npm run dev`) for normal development - changes won't appear.
+**Option A: Embedded Mode (Recommended for backend changes)**
 
-**Only use `task frontend-dev` for:**
+Use `air` or `task dev_server` - frontend is rebuilt and embedded in Go binary:
 
-- Rapid UI prototyping with HMR
+```bash
+air realtime          # Hot reload for Go + frontend rebuild
+task dev_server       # Full development server
+```
+
+**Option B: Vite HMR Mode (Recommended for frontend-only changes)**
+
+Run Vite dev server alongside Go backend for instant HMR:
+
+```bash
+# Terminal 1: Start Go backend
+air realtime
+
+# Terminal 2: Start Vite dev server with HMR
+cd frontend && npm run dev
+```
+
+Then open `http://localhost:5173/ui/` for HMR. Vite proxies `/api` requests to the Go backend.
+
+**Use Vite HMR for:**
+
+- Rapid UI prototyping with instant updates
+- Component styling and layout changes
 - Testing components in isolation
 - Running frontend tests
 

@@ -20,8 +20,6 @@ internal/api/
 │   ├── csrf.go            - CSRF token validation middleware
 │   ├── logging.go         - Structured request logging middleware
 │   └── security.go        - CORS, HSTS, secure headers middleware
-├── templates/             - HTML templates
-│   └── spa.html           - SPA shell template with CSRF token
 └── v2/                    - API v2 handlers and routes
     ├── api.go             - API controller and route initialization
     ├── analytics.go       - Analytics and statistics endpoints
