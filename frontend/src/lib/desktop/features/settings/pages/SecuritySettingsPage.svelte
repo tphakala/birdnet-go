@@ -40,7 +40,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-  import { GoogleIcon, GithubIcon, MicrosoftIcon, getProvider } from '$lib/auth';
+  import { GoogleIcon, GithubIcon, MicrosoftIcon, AUTH_PROVIDERS } from '$lib/auth';
 
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
@@ -162,14 +162,14 @@
 
   // Use OAuth callback paths from provider registry for consistency
   // Backend supports both /auth/:provider/callback and /api/v1/auth/:provider/callback
-  let googleRedirectURI = $derived(`${currentHost}${getProvider('google')?.settings.callbackPath ?? '/auth/google/callback'}`);
-  let githubRedirectURI = $derived(`${currentHost}${getProvider('github')?.settings.callbackPath ?? '/auth/github/callback'}`);
-  let microsoftRedirectURI = $derived(`${currentHost}${getProvider('microsoft')?.settings.callbackPath ?? '/auth/microsoftonline/callback'}`);
+  let googleRedirectURI = $derived(`${currentHost}${AUTH_PROVIDERS.google.settings.callbackPath}`);
+  let githubRedirectURI = $derived(`${currentHost}${AUTH_PROVIDERS.github.settings.callbackPath}`);
+  let microsoftRedirectURI = $derived(`${currentHost}${AUTH_PROVIDERS.microsoft.settings.callbackPath}`);
 
   // Computed redirect URIs for saving to config (based on configured host/baseUrl)
-  let googleConfigRedirectURI = $derived(`${configuredBaseUrl}${getProvider('google')?.settings.callbackPath ?? '/auth/google/callback'}`);
-  let githubConfigRedirectURI = $derived(`${configuredBaseUrl}${getProvider('github')?.settings.callbackPath ?? '/auth/github/callback'}`);
-  let microsoftConfigRedirectURI = $derived(`${configuredBaseUrl}${getProvider('microsoft')?.settings.callbackPath ?? '/auth/microsoftonline/callback'}`);
+  let googleConfigRedirectURI = $derived(`${configuredBaseUrl}${AUTH_PROVIDERS.google.settings.callbackPath}`);
+  let githubConfigRedirectURI = $derived(`${configuredBaseUrl}${AUTH_PROVIDERS.github.settings.callbackPath}`);
+  let microsoftConfigRedirectURI = $derived(`${configuredBaseUrl}${AUTH_PROVIDERS.microsoft.settings.callbackPath}`);
 
   // Server Configuration update handlers
   function updateBaseUrl(baseUrl: string) {
@@ -510,7 +510,7 @@
                 <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{googleRedirectURI}</code>
               </div>
               <a
-                href={getProvider('google')?.settings.credentialsUrl}
+                href={AUTH_PROVIDERS.google.settings.credentialsUrl}
                 target="_blank"
                 rel="noopener"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
@@ -577,7 +577,7 @@
                 <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{githubRedirectURI}</code>
               </div>
               <a
-                href={getProvider('github')?.settings.credentialsUrl}
+                href={AUTH_PROVIDERS.github.settings.credentialsUrl}
                 target="_blank"
                 rel="noopener"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
@@ -644,7 +644,7 @@
                 <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{microsoftRedirectURI}</code>
               </div>
               <a
-                href={getProvider('microsoft')?.settings.credentialsUrl}
+                href={AUTH_PROVIDERS.microsoft.settings.credentialsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
