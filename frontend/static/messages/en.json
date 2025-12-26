@@ -2112,7 +2112,7 @@
           "deleteConfirm": "Are you sure you want to delete the {provider} OAuth provider?"
         },
         "noProviders": "No OAuth providers configured",
-        "noProvidersDescription": "Add a provider to enable social login with Google, GitHub, or Microsoft accounts.",
+        "noProvidersDescription": "Add a provider to enable social login with Google, GitHub, Microsoft, LINE, or Kakao accounts.",
         "enableProviderLabel": "Enable this provider",
         "getCredentialsLabel": "Get your credentials from {provider}",
         "redirectUriTitle": "Redirect URI:",
@@ -2153,6 +2153,28 @@
           "clientIdHelpText": "The Application (client) ID obtained from Azure App Registration.",
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "The client secret value obtained from Azure App Registration.",
+          "userIdLabel": "User ID"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Allow OAuth2 Login via LINE",
+          "redirectUriTitle": "Redirect URI for LINE Developers Console:",
+          "getCredentialsLabel": "Get your credentials from LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "The Channel ID obtained from LINE Developers Console when setting up LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "The Channel Secret obtained from LINE Developers Console when setting up LINE Login.",
+          "userIdLabel": "User ID"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Allow OAuth2 Login via Kakao",
+          "redirectUriTitle": "Redirect URI for Kakao Developers Console:",
+          "getCredentialsLabel": "Get your credentials from Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "The REST API Key obtained from Kakao Developers Console when setting up Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The Client Secret obtained from Kakao Developers Console when setting up Kakao Login.",
           "userIdLabel": "User ID"
         }
       },
@@ -2477,6 +2499,8 @@
     "continueWithGoogle": "Continue with Google",
     "continueWithGithub": "Continue with GitHub",
     "continueWithMicrosoft": "Continue with Microsoft",
+    "continueWithLine": "Continue with LINE",
+    "continueWithKakao": "Continue with Kakao",
     "errors": {
       "loginFailed": "Login failed. Please check your password and try again.",
       "passwordRequired": "Password is required.",

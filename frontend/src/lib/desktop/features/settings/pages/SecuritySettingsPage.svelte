@@ -47,7 +47,7 @@
   import type { Component } from 'svelte';
 
   // Provider type for OAuth providers
-  type OAuthProviderType = 'google' | 'github' | 'microsoft';
+  type OAuthProviderType = 'google' | 'github' | 'microsoft' | 'line' | 'kakao';
 
   // OAuth provider option for dropdown
   interface OAuthProviderOption extends SelectOption {
@@ -59,6 +59,8 @@
     { value: 'google', label: 'Google', providerId: 'google' },
     { value: 'github', label: 'GitHub', providerId: 'github' },
     { value: 'microsoft', label: 'Microsoft', providerId: 'microsoft' },
+    { value: 'line', label: 'LINE', providerId: 'line' },
+    { value: 'kakao', label: 'Kakao', providerId: 'kakao' },
   ];
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults

@@ -291,7 +291,7 @@ export interface WeatherSettings {
 
 // New array-based OAuth provider configuration
 export interface OAuthProviderConfig {
-  provider: 'google' | 'github' | 'microsoft';
+  provider: 'google' | 'github' | 'microsoft' | 'line' | 'kakao';
   enabled: boolean;
   clientId: string;
   clientSecret: string;

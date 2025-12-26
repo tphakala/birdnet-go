@@ -2431,6 +2431,28 @@
           "clientSecretLabel": "Client-Geheimnis",
           "clientSecretHelpText": "Das Client-Geheimnis aus der Azure-App-Registrierung.",
           "userIdLabel": "Benutzer-ID"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "OAuth2-Anmeldung über LINE erlauben",
+          "redirectUriTitle": "Umleitungs-URI für LINE Developers Console:",
+          "getCredentialsLabel": "Zugangsdaten aus der LINE Developers Console abrufen",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "Die Channel ID aus der LINE Developers Console bei der Einrichtung von LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "Das Channel Secret aus der LINE Developers Console bei der Einrichtung von LINE Login.",
+          "userIdLabel": "Benutzer-ID"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "OAuth2-Anmeldung über Kakao erlauben",
+          "redirectUriTitle": "Umleitungs-URI für Kakao Developers Console:",
+          "getCredentialsLabel": "Zugangsdaten aus der Kakao Developers Console abrufen",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "Der REST API Key aus der Kakao Developers Console bei der Einrichtung von Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "Das Client Secret aus der Kakao Developers Console bei der Einrichtung von Kakao Login.",
+          "userIdLabel": "Benutzer-ID"
         }
       },
       "bypassAuthentication": {
@@ -2474,6 +2496,8 @@
     "continueWithGoogle": "Weiter mit Google",
     "continueWithGithub": "Weiter mit GitHub",
     "continueWithMicrosoft": "Weiter mit Microsoft",
+    "continueWithLine": "Weiter mit LINE",
+    "continueWithKakao": "Weiter mit Kakao",
     "errors": {
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihr Passwort und versuchen Sie es erneut.",
       "passwordRequired": "Passwort ist erforderlich.",

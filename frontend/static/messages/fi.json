@@ -2431,6 +2431,28 @@
           "clientSecretLabel": "Asiakassalaisuus",
           "clientSecretHelpText": "Azure-sovellusrekisteröinnistä saatu asiakassalaisuuden arvo.",
           "userIdLabel": "Käyttäjätunnus"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Salli OAuth2-kirjautuminen LINE:llä",
+          "redirectUriTitle": "Uudelleenohjaus-URI LINE Developers Consolea varten:",
+          "getCredentialsLabel": "Hae tunnukset LINE Developers Consolesta",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "LINE Developers Consolesta saatu Channel ID LINE Login -määrityksen yhteydessä.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "LINE Developers Consolesta saatu Channel Secret LINE Login -määrityksen yhteydessä.",
+          "userIdLabel": "Käyttäjätunnus"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Salli OAuth2-kirjautuminen Kakaolla",
+          "redirectUriTitle": "Uudelleenohjaus-URI Kakao Developers Consolea varten:",
+          "getCredentialsLabel": "Hae tunnukset Kakao Developers Consolesta",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "Kakao Developers Consolesta saatu REST API Key Kakao Login -määrityksen yhteydessä.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "Kakao Developers Consolesta saatu Client Secret Kakao Login -määrityksen yhteydessä.",
+          "userIdLabel": "Käyttäjätunnus"
         }
       },
       "bypassAuthentication": {
@@ -2474,6 +2496,8 @@
     "continueWithGoogle": "Jatka Googlella",
     "continueWithGithub": "Jatka GitHubilla",
     "continueWithMicrosoft": "Jatka Microsoftilla",
+    "continueWithLine": "Jatka LINE:llä",
+    "continueWithKakao": "Jatka Kakaolla",
     "errors": {
       "loginFailed": "Kirjautuminen epäonnistui. Tarkista salasanasi ja yritä uudelleen.",
       "passwordRequired": "Salasana vaaditaan.",

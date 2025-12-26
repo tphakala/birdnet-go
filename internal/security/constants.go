@@ -9,12 +9,16 @@ const (
 	ConfigGoogle    = "google"
 	ConfigGitHub    = "github"
 	ConfigMicrosoft = "microsoft"
+	ConfigLine      = "line"
+	ConfigKakao     = "kakao"
 
 	// Goth provider names (used for session keys and goth registration)
 	// These match the goth library provider names
-	ProviderGoogle    = "google"       // Same as config
-	ProviderGitHub    = "github"       // Same as config
+	ProviderGoogle    = "google"          // Same as config
+	ProviderGitHub    = "github"          // Same as config
 	ProviderMicrosoft = "microsoftonline" // Different from config!
+	ProviderLine      = "line"            // Same as config
+	ProviderKakao     = "kakao"           // Same as config
 
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
@@ -42,7 +46,7 @@ const (
 	IPv4TotalAddressBits = 32
 
 	// Provider capacity hint
-	InitialProviderCapacity = 3
+	InitialProviderCapacity = 5
 
 	// Path validation limits
 	MaxSafePathLength = 512
@@ -54,6 +58,8 @@ var ConfigToGothProvider = map[string]string{
 	ConfigGoogle:    ProviderGoogle,
 	ConfigGitHub:    ProviderGitHub,
 	ConfigMicrosoft: ProviderMicrosoft,
+	ConfigLine:      ProviderLine,
+	ConfigKakao:     ProviderKakao,
 }
 
 // GetGothProviderName converts a config provider ID to the goth provider name.
