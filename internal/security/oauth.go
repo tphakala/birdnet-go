@@ -24,6 +24,8 @@ import (
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/github"
 	gothGoogle "github.com/markbates/goth/providers/google"
+	"github.com/markbates/goth/providers/kakao"
+	"github.com/markbates/goth/providers/line"
 	"github.com/markbates/goth/providers/microsoftonline"
 	"golang.org/x/oauth2"
 
@@ -371,6 +373,25 @@ func initializeProviders(settings *conf.Settings) {
 				"user.read", // Scope for email/profile
 			))
 
+		case ConfigLine:
+			logger().Info("Enabling LINE Auth provider", "redirect_uri", redirectURI)
+			providers = append(providers, line.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+				"profile", "openid", "email", // LINE login scopes
+			))
+
+		case ConfigKakao:
+			logger().Info("Enabling Kakao Auth provider", "redirect_uri", redirectURI)
+			// Kakao requires scopes to be configured in the Kakao Developer Console,
+			// not passed via OAuth request. No scopes parameter needed here.
+			providers = append(providers, kakao.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+			))
+
 		default:
 			logger().Warn("Unknown OAuth provider type, skipping", "provider", providerConfig.Provider)
 		}
@@ -444,7 +465,8 @@ func (s *OAuth2Server) checkBasicAuthToken(r *http.Request, log SecurityLogger) 
 	return false
 }
 
-// checkSocialAuthSessions checks for valid Google, GitHub, or Microsoft authentication sessions
+// checkSocialAuthSessions checks for valid OAuth authentication sessions.
+// It iterates over all configured OAuth providers to find a valid session.
 func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogger) bool {
 	userId, err := gothic.GetFromSession("userId", r)
 	if err != nil {
@@ -453,58 +475,27 @@ func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogg
 		log.Debug("Found userId in session, checking provider sessions")
 	}
 
-	return s.checkGoogleAuth(r, userId, log) ||
-		s.checkGithubAuth(r, userId, log) ||
-		s.checkMicrosoftAuth(r, userId, log)
-}
+	// Iterate over all configured providers to check for a valid session
+	for configProvider, gothProvider := range ConfigToGothProvider {
+		provider := s.Settings.GetOAuthProvider(configProvider)
+		if provider == nil || !provider.Enabled {
+			continue
+		}
 
-// checkGoogleAuth validates Google OAuth session
-func (s *OAuth2Server) checkGoogleAuth(r *http.Request, userId string, log SecurityLogger) bool {
-	// Use ConfigGoogle for config lookup (matches what's stored in OAuthProviderConfig.Provider)
-	provider := s.Settings.GetOAuthProvider(ConfigGoogle)
-	if provider == nil {
-		return false
+		if s.checkProviderAuth(r, userId, log, providerAuthConfig{
+			providerName:   gothProvider,
+			enabled:        provider.Enabled,
+			allowedUserIds: provider.UserID,
+		}) {
+			return true
+		}
 	}
-	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
-		// Use ProviderGoogle for session lookup (matches goth provider name)
-		providerName:   ProviderGoogle,
-		enabled:        provider.Enabled,
-		allowedUserIds: provider.UserID,
-	})
-}
 
-// checkGithubAuth validates GitHub OAuth session
-func (s *OAuth2Server) checkGithubAuth(r *http.Request, userId string, log SecurityLogger) bool {
-	// Use ConfigGitHub for config lookup (matches what's stored in OAuthProviderConfig.Provider)
-	provider := s.Settings.GetOAuthProvider(ConfigGitHub)
-	if provider == nil {
-		return false
-	}
-	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
-		// Use ProviderGitHub for session lookup (matches goth provider name)
-		providerName:   ProviderGitHub,
-		enabled:        provider.Enabled,
-		allowedUserIds: provider.UserID,
-	})
-}
-
-// checkMicrosoftAuth validates Microsoft Account OAuth session
-func (s *OAuth2Server) checkMicrosoftAuth(r *http.Request, userId string, log SecurityLogger) bool {
-	// Use ConfigMicrosoft ("microsoft") for config lookup
-	provider := s.Settings.GetOAuthProvider(ConfigMicrosoft)
-	if provider == nil {
-		return false
-	}
-	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
-		// Use ProviderMicrosoft ("microsoftonline") for session lookup (goth's provider name)
-		providerName:   ProviderMicrosoft,
-		enabled:        provider.Enabled,
-		allowedUserIds: provider.UserID,
-	})
+	return false
 }
 
 // checkProviderAuth validates an OAuth provider session generically.
-// This is the shared implementation used by checkGoogleAuth and checkGithubAuth.
+// This is the shared implementation used by all OAuth provider auth checks.
 func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log SecurityLogger, cfg providerAuthConfig) bool {
 	if !cfg.enabled {
 		return false

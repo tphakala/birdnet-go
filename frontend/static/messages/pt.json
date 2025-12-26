@@ -2421,6 +2421,28 @@
           "clientSecretLabel": "Segredo do cliente",
           "clientSecretHelpText": "O valor do segredo do cliente obtido do registro de aplicativo do Azure.",
           "userIdLabel": "ID do usuário"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Permitir login OAuth2 via LINE",
+          "redirectUriTitle": "URI de redirecionamento para LINE Developers Console:",
+          "getCredentialsLabel": "Obter credenciais no LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "O Channel ID obtido do LINE Developers Console ao configurar o LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "O Channel Secret obtido do LINE Developers Console ao configurar o LINE Login.",
+          "userIdLabel": "ID do usuário"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Permitir login OAuth2 via Kakao",
+          "redirectUriTitle": "URI de redirecionamento para Kakao Developers Console:",
+          "getCredentialsLabel": "Obter credenciais no Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "O REST API Key obtido do Kakao Developers Console ao configurar o Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "O Client Secret obtido do Kakao Developers Console ao configurar o Kakao Login.",
+          "userIdLabel": "ID do usuário"
         }
       },
       "bypassAuthentication": {
@@ -2477,6 +2499,8 @@
     "continueWithGoogle": "Continuar com Google",
     "continueWithGithub": "Continuar com GitHub",
     "continueWithMicrosoft": "Continuar com Microsoft",
+    "continueWithLine": "Continuar com LINE",
+    "continueWithKakao": "Continuar com Kakao",
     "errors": {
       "loginFailed": "Falha no login. Por favor, verifique sua senha e tente novamente.",
       "passwordRequired": "A senha é obrigatória.",

@@ -10,6 +10,8 @@ import type { Component } from 'svelte';
 import GoogleIcon from './icons/GoogleIcon.svelte';
 import GithubIcon from './icons/GithubIcon.svelte';
 import MicrosoftIcon from './icons/MicrosoftIcon.svelte';
+import LineIcon from './icons/LineIcon.svelte';
+import KakaoIcon from './icons/KakaoIcon.svelte';
 
 /**
  * OAuth provider definition with all metadata needed for
@@ -117,6 +119,46 @@ export const AUTH_PROVIDERS: Record<string, AuthProvider> = {
       clientSecretLabelKey: 'settings.security.oauth.microsoft.clientSecretLabel',
       clientSecretHelpTextKey: 'settings.security.oauth.microsoft.clientSecretHelpText',
       userIdLabelKey: 'settings.security.oauth.microsoft.userIdLabel',
+    },
+  },
+  line: {
+    id: 'line',
+    name: 'LINE',
+    icon: LineIcon,
+    loginButtonKey: 'auth.continueWithLine',
+    authEndpoint: '/auth/line',
+    settings: {
+      titleKey: 'settings.security.oauth.line.title',
+      enableLabelKey: 'settings.security.oauth.line.enableLabel',
+      redirectUriTitleKey: 'settings.security.oauth.line.redirectUriTitle',
+      getCredentialsLabelKey: 'settings.security.oauth.line.getCredentialsLabel',
+      credentialsUrl: 'https://developers.line.biz/console/',
+      callbackPath: '/auth/line/callback',
+      clientIdLabelKey: 'settings.security.oauth.line.clientIdLabel',
+      clientIdHelpTextKey: 'settings.security.oauth.line.clientIdHelpText',
+      clientSecretLabelKey: 'settings.security.oauth.line.clientSecretLabel',
+      clientSecretHelpTextKey: 'settings.security.oauth.line.clientSecretHelpText',
+      userIdLabelKey: 'settings.security.oauth.line.userIdLabel',
+    },
+  },
+  kakao: {
+    id: 'kakao',
+    name: 'Kakao',
+    icon: KakaoIcon,
+    loginButtonKey: 'auth.continueWithKakao',
+    authEndpoint: '/auth/kakao',
+    settings: {
+      titleKey: 'settings.security.oauth.kakao.title',
+      enableLabelKey: 'settings.security.oauth.kakao.enableLabel',
+      redirectUriTitleKey: 'settings.security.oauth.kakao.redirectUriTitle',
+      getCredentialsLabelKey: 'settings.security.oauth.kakao.getCredentialsLabel',
+      credentialsUrl: 'https://developers.kakao.com/console/app',
+      callbackPath: '/auth/kakao/callback',
+      clientIdLabelKey: 'settings.security.oauth.kakao.clientIdLabel',
+      clientIdHelpTextKey: 'settings.security.oauth.kakao.clientIdHelpText',
+      clientSecretLabelKey: 'settings.security.oauth.kakao.clientSecretLabel',
+      clientSecretHelpTextKey: 'settings.security.oauth.kakao.clientSecretHelpText',
+      userIdLabelKey: 'settings.security.oauth.kakao.userIdLabel',
     },
   },
 };

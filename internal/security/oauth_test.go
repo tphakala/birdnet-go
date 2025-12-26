@@ -920,111 +920,47 @@ func TestCheckBasicAuthToken(t *testing.T) {
 	}
 }
 
-// TestCheckSocialAuth tests both Google and GitHub OAuth validation helpers
-func TestCheckSocialAuth(t *testing.T) {
-	type socialAuthTest struct {
-		name           string
-		enabled        bool
-		userId         string
-		allowedUserId  string
-		expectedResult bool
-	}
-
-	// Common test cases for both providers
-	commonTests := []socialAuthTest{
-		{
-			name:           "disabled returns false",
-			enabled:        false,
-			userId:         "user@example.com",
-			allowedUserId:  "user@example.com",
-			expectedResult: false,
-		},
-		{
-			name:           "enabled but no session returns false",
-			enabled:        true,
-			userId:         "",
-			allowedUserId:  "user@example.com",
-			expectedResult: false,
-		},
-	}
-
-	t.Run("Google", func(t *testing.T) {
-		for _, tt := range commonTests {
-			t.Run(tt.name, func(t *testing.T) {
-				gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-				server := &OAuth2Server{
-					Settings: &conf.Settings{
-						Security: conf.Security{
-							GoogleAuth: conf.SocialProvider{
-								Enabled: tt.enabled,
-								UserId:  tt.allowedUserId,
-							},
-						},
-					},
-				}
-
-				req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-				result := server.checkGoogleAuth(req, tt.userId, testLogger{})
-				assert.Equal(t, tt.expectedResult, result)
-			})
-		}
-	})
-
-	t.Run("GitHub", func(t *testing.T) {
-		for _, tt := range commonTests {
-			t.Run(tt.name, func(t *testing.T) {
-				gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-				server := &OAuth2Server{
-					Settings: &conf.Settings{
-						Security: conf.Security{
-							GithubAuth: conf.SocialProvider{
-								Enabled: tt.enabled,
-								UserId:  tt.allowedUserId,
-							},
-						},
-					},
-				}
-
-				req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-				result := server.checkGithubAuth(req, tt.userId, testLogger{})
-				assert.Equal(t, tt.expectedResult, result)
-			})
-		}
-	})
-}
-
-// TestCheckSocialAuthSessions tests the social auth sessions validation helper
+// TestCheckSocialAuthSessions tests the social auth sessions validation helper.
+// It verifies that checkSocialAuthSessions iterates over configured OAuth providers.
 func TestCheckSocialAuthSessions(t *testing.T) {
 	tests := []struct {
 		name           string
-		googleEnabled  bool
-		githubEnabled  bool
+		providers      []conf.OAuthProviderConfig
 		expectedResult bool
 	}{
 		{
-			name:           "no social auth enabled returns false",
-			googleEnabled:  false,
-			githubEnabled:  false,
+			name:           "no providers configured returns false",
+			providers:      nil,
 			expectedResult: false,
 		},
 		{
-			name:           "google enabled but no session returns false",
-			googleEnabled:  true,
-			githubEnabled:  false,
+			name: "google enabled but no session returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
+			},
 			expectedResult: false,
 		},
 		{
-			name:           "github enabled but no session returns false",
-			googleEnabled:  false,
-			githubEnabled:  true,
+			name: "github enabled but no session returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
+			},
 			expectedResult: false,
 		},
 		{
-			name:           "both enabled but no session returns false",
-			googleEnabled:  true,
-			githubEnabled:  true,
+			name: "multiple providers enabled but no session returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
+				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
+				{Provider: ConfigMicrosoft, Enabled: true, UserID: "user@example.com"},
+			},
+			expectedResult: false,
+		},
+		{
+			name: "provider disabled returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: false, UserID: "user@example.com"},
+			},
 			expectedResult: false,
 		},
 	}
@@ -1036,14 +972,7 @@ func TestCheckSocialAuthSessions(t *testing.T) {
 			server := &OAuth2Server{
 				Settings: &conf.Settings{
 					Security: conf.Security{
-						GoogleAuth: conf.SocialProvider{
-							Enabled: tt.googleEnabled,
-							UserId:  "user@example.com",
-						},
-						GithubAuth: conf.SocialProvider{
-							Enabled: tt.githubEnabled,
-							UserId:  "user@example.com",
-						},
+						OAuthProviders: tt.providers,
 					},
 				},
 			}

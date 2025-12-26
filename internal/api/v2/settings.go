@@ -958,6 +958,8 @@ var validOAuthProviders = map[string]bool{
 	"google":    true,
 	"github":    true,
 	"microsoft": true,
+	"line":      true,
+	"kakao":     true,
 }
 
 // getValidOAuthProviderNames returns sorted list of valid provider names for error messages

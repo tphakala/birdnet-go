@@ -2145,6 +2145,28 @@
           "clientSecretLabel": "Secret client",
           "clientSecretHelpText": "La valeur du secret client obtenue lors de l'inscription d'application Azure.",
           "userIdLabel": "ID utilisateur"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Autoriser la connexion OAuth2 via LINE",
+          "redirectUriTitle": "URI de redirection pour LINE Developers Console:",
+          "getCredentialsLabel": "Obtenir vos identifiants depuis LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "Le Channel ID obtenu depuis LINE Developers Console lors de la configuration de LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "Le Channel Secret obtenu depuis LINE Developers Console lors de la configuration de LINE Login.",
+          "userIdLabel": "ID utilisateur"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Autoriser la connexion OAuth2 via Kakao",
+          "redirectUriTitle": "URI de redirection pour Kakao Developers Console:",
+          "getCredentialsLabel": "Obtenir vos identifiants depuis Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "Le REST API Key obtenu depuis Kakao Developers Console lors de la configuration de Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "Le Client Secret obtenu depuis Kakao Developers Console lors de la configuration de Kakao Login.",
+          "userIdLabel": "ID utilisateur"
         }
       },
       "bypassAuthentication": {
@@ -2474,6 +2496,8 @@
     "continueWithGoogle": "Continuer avec Google",
     "continueWithGithub": "Continuer avec GitHub",
     "continueWithMicrosoft": "Continuer avec Microsoft",
+    "continueWithLine": "Continuer avec LINE",
+    "continueWithKakao": "Continuer avec Kakao",
     "errors": {
       "loginFailed": "Échec de la connexion. Veuillez vérifier votre mot de passe et réessayer.",
       "passwordRequired": "Le mot de passe est requis.",

@@ -2431,6 +2431,28 @@
           "clientSecretLabel": "Secreto de cliente",
           "clientSecretHelpText": "El valor del secreto de cliente obtenido del registro de aplicaciones de Azure.",
           "userIdLabel": "ID de usuario"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Permitir inicio de sesión OAuth2 con LINE",
+          "redirectUriTitle": "URI de redirección para LINE Developers Console:",
+          "getCredentialsLabel": "Obtener credenciales desde LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "El Channel ID obtenido de LINE Developers Console al configurar LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "El Channel Secret obtenido de LINE Developers Console al configurar LINE Login.",
+          "userIdLabel": "ID de usuario"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Permitir inicio de sesión OAuth2 con Kakao",
+          "redirectUriTitle": "URI de redirección para Kakao Developers Console:",
+          "getCredentialsLabel": "Obtener credenciales desde Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "El REST API Key obtenido de Kakao Developers Console al configurar Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "El Client Secret obtenido de Kakao Developers Console al configurar Kakao Login.",
+          "userIdLabel": "ID de usuario"
         }
       },
       "bypassAuthentication": {
@@ -2474,6 +2496,8 @@
     "continueWithGoogle": "Continuar con Google",
     "continueWithGithub": "Continuar con GitHub",
     "continueWithMicrosoft": "Continuar con Microsoft",
+    "continueWithLine": "Continuar con LINE",
+    "continueWithKakao": "Continuar con Kakao",
     "errors": {
       "loginFailed": "Error al iniciar sesión. Por favor verifica tu contraseña e inténtalo de nuevo.",
       "passwordRequired": "La contraseña es requerida.",

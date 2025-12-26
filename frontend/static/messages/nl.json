@@ -2145,6 +2145,28 @@
           "clientSecretLabel": "Clientgeheim",
           "clientSecretHelpText": "De waarde van het clientgeheim verkregen uit de Azure-app-registratie.",
           "userIdLabel": "Gebruikers-ID"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "OAuth2-aanmelding via LINE toestaan",
+          "redirectUriTitle": "Omleidings-URI voor LINE Developers Console:",
+          "getCredentialsLabel": "Haal uw referenties op uit de LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "De Channel ID verkregen uit LINE Developers Console bij het instellen van LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "Het Channel Secret verkregen uit LINE Developers Console bij het instellen van LINE Login.",
+          "userIdLabel": "Gebruikers-ID"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "OAuth2-aanmelding via Kakao toestaan",
+          "redirectUriTitle": "Omleidings-URI voor Kakao Developers Console:",
+          "getCredentialsLabel": "Haal uw referenties op uit de Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "De REST API Key verkregen uit Kakao Developers Console bij het instellen van Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "Het Client Secret verkregen uit Kakao Developers Console bij het instellen van Kakao Login.",
+          "userIdLabel": "Gebruikers-ID"
         }
       },
       "bypassAuthentication": {
@@ -2474,6 +2496,8 @@
     "continueWithGoogle": "Doorgaan met Google",
     "continueWithGithub": "Doorgaan met GitHub",
     "continueWithMicrosoft": "Doorgaan met Microsoft",
+    "continueWithLine": "Doorgaan met LINE",
+    "continueWithKakao": "Doorgaan met Kakao",
     "errors": {
       "loginFailed": "Aanmelding mislukt. Controleer je wachtwoord en probeer het opnieuw.",
       "passwordRequired": "Wachtwoord is verplicht.",
