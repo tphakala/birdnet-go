@@ -9,6 +9,7 @@
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
+  import { api } from '$lib/utils/api';
   import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('app');
@@ -30,11 +31,23 @@
 
   interface Detection {
     id: string;
-    timestamp: string;
+    timestamp: string | null;
     commonName: string;
     scientificName: string;
     confidence: number;
     timeOfDay: string;
+  }
+
+  // API response type (may have date/time instead of timestamp)
+  interface ApiDetection {
+    id: string;
+    timestamp?: string;
+    date?: string;
+    time?: string;
+    commonName: string;
+    scientificName: string;
+    confidence: number;
+    timeOfDay?: string;
   }
 
   interface SpeciesData {
@@ -395,19 +408,7 @@
       const url = `/api/v2/analytics/species/summary?${params}`;
       logger.debug('Fetching summary data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Summary API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const speciesData = await response.json();
+      const speciesData = await api.get<SpeciesData[]>(url);
       const speciesArray = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Summary API response:', {
@@ -458,19 +459,7 @@
       const url = `/api/v2/analytics/species/summary?${params}`;
       logger.debug('Fetching species chart data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Species chart API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const speciesData = await response.json();
+      const speciesData = await api.get<SpeciesData[]>(url);
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Species chart API response:', {
@@ -488,24 +477,25 @@
   // Fetch recent detections
   async function fetchRecentDetections() {
     try {
-      const response = await fetch('/api/v2/detections/recent?limit=10');
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-
-      const data = await response.json();
+      const data = await api.get<ApiDetection[]>('/api/v2/detections/recent?limit=10');
       const detections = Array.isArray(data) ? data : [];
 
-      recentDetections = detections.map(detection => ({
-        id: detection.id,
-        timestamp:
+      recentDetections = detections.map(detection => {
+        // Compute timestamp once to avoid 'undefined undefined' edge case
+        const computedTimestamp =
           detection.timestamp ||
-          (detection.date && detection.time ? `${detection.date} ${detection.time}` : null),
-        commonName: detection.commonName,
-        scientificName: detection.scientificName,
-        confidence: detection.confidence,
-        timeOfDay:
-          detection.timeOfDay ||
-          calculateTimeOfDay(detection.timestamp || `${detection.date} ${detection.time}`),
-      }));
+          (detection.date && detection.time ? `${detection.date} ${detection.time}` : null);
+
+        return {
+          id: detection.id,
+          timestamp: computedTimestamp,
+          commonName: detection.commonName,
+          scientificName: detection.scientificName,
+          confidence: detection.confidence,
+          timeOfDay:
+            detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
+        };
+      });
     } catch (err) {
       logger.error('Error fetching recent detections:', err);
       recentDetections = [];
@@ -533,20 +523,8 @@
       const url = `/api/v2/analytics/time/distribution/hourly?${params}`;
       logger.debug('Fetching time of day data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Time of day API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const timeData = await response.json();
-      chartData.timeOfDay = timeData;
+      const timeData = await api.get<TimeOfDayData[]>(url);
+      chartData.timeOfDay = Array.isArray(timeData) ? timeData : [];
 
       logger.debug('Time of day API response:', {
         url,
@@ -581,20 +559,8 @@
       const url = `/api/v2/analytics/time/daily?${params}`;
       logger.debug('Fetching trend data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Trend API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const trendData = await response.json();
-      chartData.trend = trendData;
+      const trendData = await api.get<TrendData>(url);
+      chartData.trend = trendData ?? { data: [] };
 
       logger.debug('Trend API response:', {
         url,
@@ -617,19 +583,7 @@
       const url = `/api/v2/analytics/species/detections/new?${params}`;
       logger.debug('Fetching new species data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('New species API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await api.get<NewSpeciesData[]>(url);
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
 
@@ -1391,7 +1345,7 @@
             <tbody>
               {#each recentDetections as detection, index (detection.id ?? index)}
                 <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
-                  <td>{formatDateTime(detection.timestamp)}</td>
+                  <td>{detection.timestamp ? formatDateTime(detection.timestamp) : '-'}</td>
                   <td>
                     <div class="flex items-center gap-2">
                       <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">

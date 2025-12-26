@@ -48,7 +48,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { api } from '$lib/utils/api';
+  import { api, ApiError } from '$lib/utils/api';
   import { getLocalDateString } from '$lib/utils/date';
   import {
     ChevronRight,
@@ -138,15 +138,8 @@
     return value !== null && typeof value === 'object' && !Array.isArray(value);
   }
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token once at component initialization
-  let csrfToken = '';
-
-  // Initialize CSRF token once on mount - prevents stale values across hot-reloads
+  // Load species data on mount
   onMount(() => {
-    const metaElement = document.querySelector('meta[name="csrf-token"]');
-    csrfToken = (metaElement as HTMLMetaElement | null)?.getAttribute('content') || '';
-
-    // Load species data after CSRF token is available
     loadSpeciesData();
   });
 
@@ -514,46 +507,38 @@
     speciesListState.error = null;
 
     try {
-      const headers = new Headers();
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      interface SpeciesListResponse {
+        species?: Array<{ commonName?: string; label: string }>;
       }
-
-      const response = await fetch('/api/v2/range/species/list', {
-        headers,
-        credentials: 'same-origin',
-      });
-
-      if (!response.ok) {
-        let errorMessage = '';
-        switch (response.status) {
-          case 404:
-            errorMessage = 'Species data not found';
-            break;
-          case 500:
-          case 502:
-          case 503:
-            errorMessage = 'Server error occurred while loading species data';
-            break;
-          case 401:
-            errorMessage = 'Unauthorized access to species data';
-            break;
-          case 403:
-            errorMessage = 'Access to species data is forbidden';
-            break;
-          default:
-            errorMessage = `Failed to load species (Error ${response.status})`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
+      const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
       speciesListState.data =
         data.species?.map((s: { commonName?: string; label: string }) => s.commonName || s.label) ||
         [];
     } catch (error) {
       logger.error('Failed to load species data:', error);
-      speciesListState.error = t('settings.species.errors.speciesLoadFailed');
+      // Provide specific error messages based on status code
+      if (error instanceof ApiError) {
+        switch (error.status) {
+          case 404:
+            speciesListState.error = 'Species data not found';
+            break;
+          case 500:
+          case 502:
+          case 503:
+            speciesListState.error = 'Server error occurred while loading species data';
+            break;
+          case 401:
+            speciesListState.error = 'Unauthorized access to species data';
+            break;
+          case 403:
+            speciesListState.error = 'Access to species data is forbidden';
+            break;
+          default:
+            speciesListState.error = t('settings.species.errors.speciesLoadFailed');
+        }
+      } else {
+        speciesListState.error = t('settings.species.errors.speciesLoadFailed');
+      }
       speciesListState.data = [];
     } finally {
       speciesListState.loading = false;

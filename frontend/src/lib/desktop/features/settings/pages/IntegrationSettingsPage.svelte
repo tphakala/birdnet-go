@@ -50,14 +50,9 @@
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { getCsrfToken } from '$lib/utils/api';
 
   const logger = loggers.settings;
-
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -271,8 +266,9 @@
         'Content-Type': 'application/json',
       });
 
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      const token = getCsrfToken();
+      if (token) {
+        headers.set('X-CSRF-Token', token);
       }
 
       logger.debug('Sending BirdWeather test request with payload:', testPayload);
@@ -487,8 +483,9 @@
         'Content-Type': 'application/json',
       });
 
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      const token = getCsrfToken();
+      if (token) {
+        headers.set('X-CSRF-Token', token);
       }
 
       logger.debug('Sending MQTT test request with payload:', testPayload);

@@ -15,7 +15,6 @@
   Props: None - This is a page component that uses global settings stores
 
   Performance Optimizations:
-  - Cached CSRF token to avoid repeated DOM queries
   - API state management for notification testing
   - Reactive change detection with $derived
   - Progress tracking for test notification generation
@@ -54,9 +53,7 @@
     WebhookAuthConfig,
   } from '$lib/stores/settings';
   import { safeArrayAccess, safeRegexTest } from '$lib/utils/security';
-
-  // CSRF token - cached once on mount since it doesn't change during session
-  let csrfToken = $state('');
+  import { api, ApiError } from '$lib/utils/api';
 
   // Template settings state
   let templateConfig = $state<{
@@ -381,34 +378,31 @@
     loadingPush = true;
 
     try {
-      const response = await fetch('/api/v2/settings/notification');
-      if (response.ok) {
-        const data: NotificationSettings = await response.json();
+      const data = await api.get<NotificationSettings>('/api/v2/settings/notification');
 
-        // Load template settings
-        if (data.templates?.newSpecies) {
-          templateConfig = {
-            title: data.templates.newSpecies.title ?? defaultTemplate.title,
-            message: data.templates.newSpecies.message ?? defaultTemplate.message,
-          };
-          editedTitle = templateConfig.title;
-          editedMessage = templateConfig.message;
-        } else {
-          templateConfig = { ...defaultTemplate };
-          editedTitle = templateConfig.title;
-          editedMessage = templateConfig.message;
-        }
+      // Load template settings
+      if (data.templates?.newSpecies) {
+        templateConfig = {
+          title: data.templates.newSpecies.title ?? defaultTemplate.title,
+          message: data.templates.newSpecies.message ?? defaultTemplate.message,
+        };
+        editedTitle = templateConfig.title;
+        editedMessage = templateConfig.message;
+      } else {
+        templateConfig = { ...defaultTemplate };
+        editedTitle = templateConfig.title;
+        editedMessage = templateConfig.message;
+      }
 
-        // Load push settings
-        if (data.push) {
-          pushSettings = {
-            enabled: data.push.enabled ?? false,
-            providers: data.push.providers ?? [],
-            minConfidenceThreshold: data.push.minConfidenceThreshold ?? 0,
-            speciesCooldownMinutes: data.push.speciesCooldownMinutes ?? 0,
-          };
-          originalPushSettings = JSON.parse(JSON.stringify(pushSettings));
-        }
+      // Load push settings
+      if (data.push) {
+        pushSettings = {
+          enabled: data.push.enabled ?? false,
+          providers: data.push.providers ?? [],
+          minConfidenceThreshold: data.push.minConfidenceThreshold ?? 0,
+          speciesCooldownMinutes: data.push.speciesCooldownMinutes ?? 0,
+        };
+        originalPushSettings = JSON.parse(JSON.stringify(pushSettings));
       }
     } catch {
       templateConfig = { ...defaultTemplate };
@@ -425,31 +419,14 @@
     templateStatusMessage = '';
 
     try {
-      const headers = new Headers({
-        'Content-Type': 'application/json',
-      });
-
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-
-      const response = await fetch('/api/v2/settings/notification', {
-        method: 'PATCH',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          templates: {
-            newSpecies: {
-              title: editedTitle,
-              message: editedMessage,
-            },
+      await api.patch('/api/v2/settings/notification', {
+        templates: {
+          newSpecies: {
+            title: editedTitle,
+            message: editedMessage,
           },
-        }),
+        },
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save: ${response.status} ${response.statusText}`);
-      }
 
       if (templateConfig) {
         templateConfig.title = editedTitle;
@@ -503,30 +480,12 @@
     updateStatus(t('settings.notifications.testNotification.statusMessages.sending'), 'info');
 
     try {
-      const headers = new Headers({
-        'Content-Type': 'application/json',
-      });
-
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      interface TestNotificationResponse {
+        title?: string;
       }
-
-      const response = await fetch('/api/v2/notifications/test/new-species', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-      });
-
-      if (!response.ok) {
-        if (response.status === 503) {
-          throw new Error(
-            t('settings.notifications.testNotification.statusMessages.serviceUnavailable')
-          );
-        }
-        throw new Error(`Server error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await api.post<TestNotificationResponse>(
+        '/api/v2/notifications/test/new-species'
+      );
       generating = false;
 
       updateStatus(
@@ -542,12 +501,20 @@
       }, 5000);
     } catch (error) {
       generating = false;
-      updateStatus(
-        t('settings.notifications.testNotification.statusMessages.error', {
-          message: (error as Error).message,
-        }),
-        'error'
-      );
+      // Handle 503 specifically
+      if (error instanceof ApiError && error.status === 503) {
+        updateStatus(
+          t('settings.notifications.testNotification.statusMessages.serviceUnavailable'),
+          'error'
+        );
+      } else {
+        updateStatus(
+          t('settings.notifications.testNotification.statusMessages.error', {
+            message: (error as Error).message,
+          }),
+          'error'
+        );
+      }
 
       setTimeout(() => {
         statusMessage = '';
@@ -801,26 +768,9 @@
     pushStatusMessage = '';
 
     try {
-      const headers = new Headers({
-        'Content-Type': 'application/json',
+      await api.patch('/api/v2/settings/notification', {
+        push: pushSettings,
       });
-
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-
-      const response = await fetch('/api/v2/settings/notification', {
-        method: 'PATCH',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          push: pushSettings,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save: ${response.status} ${response.statusText}`);
-      }
 
       originalPushSettings = JSON.parse(JSON.stringify(pushSettings));
 
@@ -858,23 +808,7 @@
     testingProvider = true;
 
     try {
-      const headers = new Headers({
-        'Content-Type': 'application/json',
-      });
-
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-
-      const response = await fetch('/api/v2/notifications/test/new-species', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status} ${response.statusText}`);
-      }
+      await api.post('/api/v2/notifications/test/new-species');
 
       pushStatusMessage = t('settings.notifications.push.test.success');
       pushStatusType = 'success';
@@ -906,9 +840,6 @@
   }
 
   onMount(() => {
-    // Cache CSRF token once - it doesn't change during session
-    const meta = document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null;
-    csrfToken = meta?.content ?? '';
     loadNotificationSettings();
   });
 

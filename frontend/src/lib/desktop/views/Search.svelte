@@ -7,6 +7,7 @@
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { toastActions } from '$lib/stores/toast';
   import { Search, ArrowDownUp, XCircle, Music, Eye, ChevronDown, FrownIcon } from '@lucide/svelte';
+  import { api } from '$lib/utils/api';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -63,13 +64,6 @@
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived to avoid repeated DOM queries
-  // In Svelte 5, $derived creates reactive computed values that only recalculate when dependencies change
-  // This prevents expensive DOM queries on every form submission
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as any)?.content || ''
-  );
-
   // Form validation
   function validateForm() {
     hasConfidenceError = false;
@@ -104,25 +98,16 @@
         sortBy: sortBy,
       };
 
-      // Debug: Search parameters submitted
-
-      const response = await fetch('/api/v2/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
+      interface SearchResponse {
+        results: SearchResult[];
+        total: number;
+        pages: number;
       }
 
-      const data = await response.json();
-      results = data.results || [];
-      totalResults = data.total || 0;
-      totalPages = data.pages || 1;
+      const data = await api.post<SearchResponse>('/api/v2/search', requestBody);
+      results = data.results ?? [];
+      totalResults = data.total ?? 0;
+      totalPages = data.pages ?? 1;
       formSubmitted = true;
     } catch (error: unknown) {
       // Handle search error silently

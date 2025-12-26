@@ -3,11 +3,11 @@
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
-  import type { AuthConfig, BirdnetConfig } from './app.d';
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
   import { t } from './lib/i18n';
+  import { appState, initApp, MAX_RETRIES } from './lib/stores/appState.svelte';
 
   const logger = getLogger('app');
 
@@ -36,17 +36,16 @@
   let dynamicErrorCode = $state<string | null>(null);
   let detectionId = $state<string | null>(null);
 
-  // Get configuration from server
-  let config = $state<BirdnetConfig | null>(null);
-  let securityEnabled = $state<boolean>(false);
-  let accessAllowed = $state<boolean>(true);
-  let version = $state<string>('Development Build');
-  let authConfig = $state<AuthConfig>({
-    basicEnabled: true,
-    googleEnabled: false,
-    githubEnabled: false,
-    microsoftEnabled: false,
-  });
+  // Configuration derived from centralized appState
+  let securityEnabled = $derived(appState.security.enabled);
+  let accessAllowed = $derived(appState.security.accessAllowed);
+  let version = $derived(appState.version);
+  let authConfig = $derived(appState.security.authConfig);
+
+  // App initialization state
+  let appInitialized = $derived(appState.initialized);
+  let appLoading = $derived(appState.loading);
+  let appError = $derived(appState.error);
 
   // Route configuration for better maintainability
   interface RouteConfig {
@@ -337,21 +336,17 @@
     }
   }
 
-  onMount(() => {
-    // Get server configuration
-    config = window.BIRDNET_CONFIG || null;
-    securityEnabled = config?.security?.enabled || false;
-    accessAllowed = config?.security?.accessAllowed !== false; // Default to true unless explicitly false
-    version = config?.version || 'Development Build';
+  onMount(async () => {
+    // Initialize application configuration from API with retry logic
+    const success = await initApp();
 
-    // Get auth configuration from server
-    if (config?.security?.authConfig) {
-      authConfig = {
-        basicEnabled: config.security.authConfig.basicEnabled ?? true,
-        googleEnabled: config.security.authConfig.googleEnabled ?? false,
-        githubEnabled: config.security.authConfig.githubEnabled ?? false,
-        microsoftEnabled: config.security.authConfig.microsoftEnabled ?? false,
-      };
+    if (!success) {
+      // Fatal initialization error - appState.error will contain the message
+      logger.error('App initialization failed after all retries', {
+        error: appState.error,
+      });
+      // The template will show the error page based on appError state
+      return;
     }
 
     // Ensure SSE notifications manager is connected (it auto-connects on import)
@@ -373,51 +368,85 @@
   {/if}
 {/snippet}
 
-<RootLayout
-  title={pageTitle}
-  {currentPage}
-  {securityEnabled}
-  {accessAllowed}
-  {version}
-  {authConfig}
->
-  {#if currentRoute === 'dashboard'}
-    <DashboardPage />
-  {:else if currentRoute === 'notifications'}
-    {@render renderRoute(Notifications)}
-  {:else if currentRoute === 'analytics'}
-    {@render renderRoute(Analytics)}
-  {:else if currentRoute === 'advanced-analytics'}
-    {@render renderRoute(AdvancedAnalytics)}
-  {:else if currentRoute === 'species'}
-    {@render renderRoute(Species)}
-  {:else if currentRoute === 'search'}
-    {@render renderRoute(Search)}
-  {:else if currentRoute === 'about'}
-    {@render renderRoute(About)}
-  {:else if currentRoute === 'system'}
-    {@render renderRoute(System)}
-  {:else if currentRoute === 'settings'}
-    {@render renderRoute(Settings)}
-  {:else if currentRoute === 'detections'}
-    {@render renderRoute(Detections)}
-  {:else if currentRoute === 'detection-detail'}
-    {#if DetectionDetail}
-      {@const Component = DetectionDetail}
-      <Component {detectionId} />
+<!-- Show loading screen during initialization -->
+{#if appLoading || (!appInitialized && !appError)}
+  <div class="flex h-screen w-full items-center justify-center bg-base-200">
+    <div class="flex flex-col items-center gap-4">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+      <p class="text-base-content/70">{t('common.loading')}</p>
+      {#if appState.retryCount > 0}
+        <p class="text-sm text-warning">
+          {t('common.retrying')} ({appState.retryCount}/{MAX_RETRIES})...
+        </p>
+      {/if}
+    </div>
+  </div>
+  <!-- Show fatal error page if initialization failed -->
+{:else if appError}
+  <div class="flex min-h-screen flex-col items-center justify-center bg-base-200 p-4">
+    <div class="card max-w-lg bg-base-100 shadow-xl">
+      <div class="card-body items-center text-center">
+        <div class="mb-4 text-6xl text-error">500</div>
+        <h2 class="card-title text-error">{t('error.server.title')}</h2>
+        <p class="text-base-content/70">{t('error.server.description')}</p>
+        <div class="mt-4 rounded-lg bg-base-200 p-4 text-left">
+          <p class="font-mono text-sm text-error">{appError}</p>
+        </div>
+        <div class="card-actions mt-6">
+          <button class="btn btn-primary" onclick={() => window.location.reload()}>
+            {t('common.retry')}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{:else}
+  <RootLayout
+    title={pageTitle}
+    {currentPage}
+    {securityEnabled}
+    {accessAllowed}
+    {version}
+    {authConfig}
+  >
+    {#if currentRoute === 'dashboard'}
+      <DashboardPage />
+    {:else if currentRoute === 'notifications'}
+      {@render renderRoute(Notifications)}
+    {:else if currentRoute === 'analytics'}
+      {@render renderRoute(Analytics)}
+    {:else if currentRoute === 'advanced-analytics'}
+      {@render renderRoute(AdvancedAnalytics)}
+    {:else if currentRoute === 'species'}
+      {@render renderRoute(Species)}
+    {:else if currentRoute === 'search'}
+      {@render renderRoute(Search)}
+    {:else if currentRoute === 'about'}
+      {@render renderRoute(About)}
+    {:else if currentRoute === 'system'}
+      {@render renderRoute(System)}
+    {:else if currentRoute === 'settings'}
+      {@render renderRoute(Settings)}
+    {:else if currentRoute === 'detections'}
+      {@render renderRoute(Detections)}
+    {:else if currentRoute === 'detection-detail'}
+      {#if DetectionDetail}
+        {@const Component = DetectionDetail}
+        <Component {detectionId} />
+      {/if}
+    {:else if currentRoute === 'error-404'}
+      {@render renderRoute(ErrorPage)}
+    {:else if currentRoute === 'error-500'}
+      {@render renderRoute(ServerErrorPage)}
+    {:else if currentRoute === 'error-generic'}
+      {#if GenericErrorPage}
+        {@const ErrorComponent = GenericErrorPage}
+        <ErrorComponent
+          code={dynamicErrorCode || '500'}
+          title={t('error.generic.componentLoadError')}
+          message={t('error.generic.failedToLoadComponent')}
+        />
+      {/if}
     {/if}
-  {:else if currentRoute === 'error-404'}
-    {@render renderRoute(ErrorPage)}
-  {:else if currentRoute === 'error-500'}
-    {@render renderRoute(ServerErrorPage)}
-  {:else if currentRoute === 'error-generic'}
-    {#if GenericErrorPage}
-      {@const ErrorComponent = GenericErrorPage}
-      <ErrorComponent
-        code={dynamicErrorCode || '500'}
-        title={t('error.generic.componentLoadError')}
-        message={t('error.generic.failedToLoadComponent')}
-      />
-    {/if}
-  {/if}
-</RootLayout>
+  </RootLayout>
+{/if}

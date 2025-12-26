@@ -52,6 +52,7 @@
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
   import { Volume2, Radio, SlidersHorizontal, FileAudio, Clock, RefreshCw } from '@lucide/svelte';
+  import { api } from '$lib/utils/api';
 
   const logger = loggers.audio;
 
@@ -263,12 +264,6 @@
     data: [],
   });
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
-
   // PERFORMANCE OPTIMIZATION: Load audio devices with proper state management
   $effect(() => {
     loadAudioDevices();
@@ -279,14 +274,12 @@
     audioDevices.error = null;
 
     try {
-      const response = await fetch('/api/v2/system/audio/devices', {
-        headers: { 'X-CSRF-Token': csrfToken },
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to load audio devices: ${response.status}`);
+      interface AudioDevice {
+        index: number;
+        name: string;
+        id: string;
       }
-      const data = await response.json();
+      const data = await api.get<AudioDevice[]>('/api/v2/system/audio/devices');
       audioDevices.data = data || [];
     } catch (error) {
       logger.error('Error fetching audio devices:', error);

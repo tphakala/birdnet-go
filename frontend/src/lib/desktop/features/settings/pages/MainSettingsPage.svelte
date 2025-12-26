@@ -84,12 +84,6 @@
   // Tab state
   let activeTab = $state('general');
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
-
   // Extended option type for locale with typed locale code
   interface LocaleOption extends SelectOption {
     localeCode: FlagLocale;
@@ -953,9 +947,10 @@
 
   async function loadRangeFilterCount() {
     try {
-      const response = await fetch('/api/v2/range/species/count');
-      if (!response.ok) throw new Error('Failed to load range filter count');
-      const data = await response.json();
+      interface CountResponse {
+        count: number;
+      }
+      const data = await api.get<CountResponse>('/api/v2/range/species/count');
       rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load range filter count:', error);
@@ -1274,8 +1269,9 @@
         'Content-Type': 'application/json',
       });
 
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      const token = getCsrfToken();
+      if (token) {
+        headers.set('X-CSRF-Token', token);
       }
 
       const response = await fetch('/api/v2/integrations/weather/test', {

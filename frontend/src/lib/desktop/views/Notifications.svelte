@@ -26,6 +26,7 @@
   import NotificationGroup from '$lib/desktop/components/ui/NotificationGroup.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import { toastActions } from '$lib/stores/toast';
+  import { api } from '$lib/utils/api';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -92,12 +93,6 @@
     return groupNotifications(notifications);
   });
 
-  // Get CSRF token
-  function getCSRFToken() {
-    const metaTag = document.querySelector('meta[name="csrf-token"]');
-    return metaTag ? metaTag.getAttribute('content') : '';
-  }
-
   // Load notifications from API
   async function loadNotifications() {
     loading = true;
@@ -116,25 +111,22 @@
       if (filters.type) params.append('type', filters.type);
       if (filters.priority) params.append('priority', filters.priority);
 
-      const response = await fetch(`/api/v2/notifications?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        // Apply deduplication to remove duplicate notifications
-        const rawNotifications = data.notifications || [];
-        notifications = deduplicateNotifications(rawNotifications, {
-          excludeToasts: false, // Show all notifications in the full view
-        });
-        hasUnread = notifications.some(n => !n.read);
+      const data = await api.get(`/api/v2/notifications?${params}`);
+      // Apply deduplication to remove duplicate notifications
+      const rawNotifications = data.notifications || [];
+      notifications = deduplicateNotifications(rawNotifications, {
+        excludeToasts: false, // Show all notifications in the full view
+      });
+      hasUnread = notifications.some(n => !n.read);
 
-        // Calculate total pages using the raw total from the API for a stable page count.
-        // Client-side deduplication may result in fewer items on some pages, but the
-        // total remains consistent for better UX.
-        if (data.total !== undefined) {
-          totalPages = Math.ceil(data.total / pageSize) || 1;
-        } else {
-          // Fallback when total is not available
-          totalPages = notifications.length < pageSize ? currentPage : currentPage + 1;
-        }
+      // Calculate total pages using the raw total from the API for a stable page count.
+      // Client-side deduplication may result in fewer items on some pages, but the
+      // total remains consistent for better UX.
+      if (data.total !== undefined) {
+        totalPages = Math.ceil(data.total / pageSize) || 1;
+      } else {
+        // Fallback when total is not available
+        totalPages = notifications.length < pageSize ? currentPage : currentPage + 1;
       }
     } catch {
       // Handle error silently for now
@@ -155,20 +147,12 @@
       event.stopPropagation();
     }
     try {
-      const response = await fetch(`/api/v2/notifications/${id}/read`, {
-        method: 'PUT',
-        headers: {
-          'X-CSRF-Token': getCSRFToken(),
-        },
-      });
-
-      if (response.ok) {
-        const notification = notifications.find(n => n.id === id);
-        if (notification) {
-          notification.read = true;
-          notification.status = 'read';
-          hasUnread = notifications.some(n => !n.read);
-        }
+      await api.put(`/api/v2/notifications/${id}/read`);
+      const notification = notifications.find(n => n.id === id);
+      if (notification) {
+        notification.read = true;
+        notification.status = 'read';
+        hasUnread = notifications.some(n => !n.read);
       }
     } catch {
       // Handle error silently for now
@@ -220,13 +204,12 @@
       // Delete all notifications in parallel
       const results = await Promise.all(
         ids.map(async id => {
-          const response = await fetch(`/api/v2/notifications/${id}`, {
-            method: 'DELETE',
-            headers: {
-              'X-CSRF-Token': getCSRFToken(),
-            },
-          });
-          return { id, ok: response.ok };
+          try {
+            await api.delete(`/api/v2/notifications/${id}`);
+            return { id, ok: true };
+          } catch {
+            return { id, ok: false };
+          }
         })
       );
 
@@ -265,18 +248,10 @@
       event.stopPropagation();
     }
     try {
-      const response = await fetch(`/api/v2/notifications/${id}/acknowledge`, {
-        method: 'PUT',
-        headers: {
-          'X-CSRF-Token': getCSRFToken(),
-        },
-      });
-
-      if (response.ok) {
-        const notification = notifications.find(n => n.id === id);
-        if (notification) {
-          notification.status = 'acknowledged';
-        }
+      await api.put(`/api/v2/notifications/${id}/acknowledge`);
+      const notification = notifications.find(n => n.id === id);
+      if (notification) {
+        notification.status = 'acknowledged';
       }
     } catch {
       // Handle error silently for now
@@ -300,44 +275,34 @@
     pendingDeleteId = null;
 
     try {
-      const response = await fetch(`/api/v2/notifications/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-Token': getCSRFToken(),
-        },
-      });
-
-      if (response.ok) {
-        deleteModal?.close();
-
-        const index = notifications.findIndex(n => n.id === id);
-        if (index !== -1) {
-          const notification = safeArrayAccess(notifications, index);
-          const wasUnread = notification ? !notification.read : false;
-          notifications.splice(index, 1);
-          hasUnread = notifications.some(n => !n.read);
-
-          // Dispatch event for notification bell update
-          window.dispatchEvent(
-            new CustomEvent('notification-deleted', {
-              detail: { id, wasUnread },
-            })
-          );
-
-          // If page is empty, go to previous page
-          if (notifications.length === 0 && currentPage > 1) {
-            currentPage--;
-            await loadNotifications();
-          }
-        }
-      } else {
-        deleteModal?.close();
-        const errorData = await response.json().catch(() => ({}));
-        toastActions.error(errorData.error || t('notifications.errors.deleteFailed'));
-      }
-    } catch {
+      await api.delete(`/api/v2/notifications/${id}`);
       deleteModal?.close();
-      toastActions.error(t('notifications.errors.networkError'));
+
+      const index = notifications.findIndex(n => n.id === id);
+      if (index !== -1) {
+        const notification = safeArrayAccess(notifications, index);
+        const wasUnread = notification ? !notification.read : false;
+        notifications.splice(index, 1);
+        hasUnread = notifications.some(n => !n.read);
+
+        // Dispatch event for notification bell update
+        window.dispatchEvent(
+          new CustomEvent('notification-deleted', {
+            detail: { id, wasUnread },
+          })
+        );
+
+        // If page is empty, go to previous page
+        if (notifications.length === 0 && currentPage > 1) {
+          currentPage--;
+          await loadNotifications();
+        }
+      }
+    } catch (error) {
+      deleteModal?.close();
+      const errorMessage =
+        error instanceof Error ? error.message : t('notifications.errors.deleteFailed');
+      toastActions.error(errorMessage);
     }
   }
 

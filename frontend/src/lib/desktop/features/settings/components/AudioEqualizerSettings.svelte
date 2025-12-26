@@ -27,6 +27,7 @@
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { getCsrfToken } from '$lib/utils/api';
   import type { EqualizerFilterType } from '$lib/stores/settings';
 
   const logger = loggers.settings;
@@ -202,13 +203,15 @@
     abortController = new AbortController();
 
     try {
-      const csrfToken =
-        (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute(
-          'content'
-        ) || '';
+      // Build headers, only including CSRF token if available
+      const headers: Record<string, string> = {};
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
 
       const response = await fetch('/api/v2/system/audio/equalizer/config', {
-        headers: { 'X-CSRF-Token': csrfToken },
+        headers,
         signal: abortController.signal,
       });
 
