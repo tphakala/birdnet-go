@@ -6,7 +6,6 @@
   import Header from './DesktopHeader.svelte';
   import Sidebar from './DesktopSidebar.svelte';
   import { auth as authStore } from '$lib/stores/auth';
-  import { csrf as csrfStore } from '$lib/stores/csrf';
   import { sidebar } from '$lib/stores/sidebar';
   import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
 
@@ -45,10 +44,7 @@
 
   // Initialize stores on mount
   onMount(() => {
-    // Initialize CSRF token
-    csrfStore.init();
-
-    // Initialize auth state
+    // Initialize auth state (CSRF is now handled by appState in App.svelte)
     authStore.init(securityEnabled, accessAllowed);
 
     // SSE notifications are auto-initialized when imported

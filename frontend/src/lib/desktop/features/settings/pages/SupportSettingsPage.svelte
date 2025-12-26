@@ -37,14 +37,9 @@
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { api } from '$lib/utils/api';
 
   const logger = loggers.settings;
-
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
 
   // Tab state
   let activeTab = $state('diagnostics');
@@ -110,21 +105,10 @@
     systemIdState.error = null;
 
     try {
-      const headers = new Headers();
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      interface SystemIdResponse {
+        systemID?: string;
       }
-
-      const response = await fetch('/api/v2/settings/systemid', {
-        headers,
-        credentials: 'same-origin',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to load system ID: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await api.get<SystemIdResponse>('/api/v2/settings/systemid');
       systemIdState.data = data.systemID || '';
     } catch (error) {
       logger.error('Failed to fetch system ID:', error);
@@ -155,35 +139,23 @@
     updateStatus(t('settings.support.supportReport.statusMessages.preparing'), 'info', 10);
 
     try {
-      const headers = new Headers({
-        'Content-Type': 'application/json',
-      });
-
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
+      interface SupportDumpResponse {
+        success?: boolean;
+        uploaded_at?: string;
+        dump_id?: string;
+        download_url?: string;
+        message?: string;
       }
-
-      const response = await fetch('/api/v2/support/generate', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          include_logs: supportDump.includeLogs,
-          include_config: supportDump.includeConfig,
-          include_system_info: supportDump.includeSystemInfo,
-          github_issue_number: supportDump.githubIssueNumber
-            ? supportDump.githubIssueNumber.replace('#', '')
-            : '',
-          user_message: supportDump.userMessage,
-          upload_to_sentry: supportDump.uploadToSentry,
-        }),
+      const data = await api.post<SupportDumpResponse>('/api/v2/support/generate', {
+        include_logs: supportDump.includeLogs,
+        include_config: supportDump.includeConfig,
+        include_system_info: supportDump.includeSystemInfo,
+        github_issue_number: supportDump.githubIssueNumber
+          ? supportDump.githubIssueNumber.replace('#', '')
+          : '',
+        user_message: supportDump.userMessage,
+        upload_to_sentry: supportDump.uploadToSentry,
       });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
       generating = false;
 
       if (data.success) {
@@ -209,8 +181,9 @@
             'success',
             100
           );
+          const downloadUrl = data.download_url;
           setTimeout(() => {
-            window.location.href = data.download_url;
+            window.location.href = downloadUrl;
           }, 500);
         } else {
           updateStatus(

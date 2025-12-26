@@ -49,6 +49,30 @@ vi.mock('$lib/utils/settingsChanges', () => ({
 // Mock RTSPUrlInput component
 vi.mock('$lib/desktop/components/forms/RTSPUrlInput.svelte');
 
+// Mock appState for CSRF token
+vi.mock('$lib/stores/appState.svelte', () => ({
+  appState: {
+    csrfToken: 'test-csrf-token',
+    initialized: true,
+    loading: false,
+    error: null,
+    retryCount: 0,
+    version: 'test',
+    security: {
+      enabled: false,
+      accessAllowed: true,
+      authConfig: {
+        basicEnabled: false,
+        googleEnabled: false,
+        githubEnabled: false,
+        microsoftEnabled: false,
+      },
+    },
+  },
+  getCsrfToken: vi.fn().mockReturnValue('test-csrf-token'),
+  initApp: vi.fn().mockResolvedValue(true),
+}));
+
 // Mock the settings module at the test level
 vi.mock('$lib/stores/settings', async () => {
   const { writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
@@ -270,9 +294,6 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
         },
       } as unknown as SettingsFormData,
     });
-
-    // Mock CSRF token
-    document.head.innerHTML = '<meta name="csrf-token" content="test-csrf-token">';
 
     // Mock successful audio devices fetch
     global.fetch = vi.fn().mockResolvedValue({

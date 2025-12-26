@@ -3,6 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Unmock the logger module for API tests since API depends on logger
 vi.unmock('$lib/utils/logger');
 
+// Mock appState module to control CSRF token in tests
+let mockCsrfToken = '';
+vi.mock('$lib/stores/appState.svelte', () => ({
+  getCsrfToken: () => mockCsrfToken,
+}));
+
 import { getCsrfToken, fetchWithCSRF, api } from './api';
 
 describe('API utilities', () => {
@@ -13,64 +19,37 @@ describe('API utilities', () => {
     vi.clearAllMocks();
 
     // Set up a default CSRF token for all tests to prevent warning logs
-    const meta = document.createElement('meta');
-    meta.name = 'csrf-token';
-    meta.content = 'test-csrf-token-default';
-    document.head.appendChild(meta);
+    mockCsrfToken = 'test-csrf-token-default';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    // Clean up any meta tags added during tests
-    const metaTags = document.querySelectorAll('meta[name="csrf-token"]');
-    metaTags.forEach(tag => tag.remove());
+    mockCsrfToken = '';
   });
 
   describe('getCsrfToken', () => {
     beforeEach(() => {
-      // Remove the default token set by parent beforeEach for getCsrfToken specific tests
-      const existingMeta = document.querySelector('meta[name="csrf-token"]');
-      if (existingMeta) {
-        existingMeta.remove();
-      }
-    });
-
-    afterEach(() => {
-      // Clean up meta tags after each test
-      const existingMeta = document.querySelector('meta[name="csrf-token"]');
-      if (existingMeta) {
-        existingMeta.remove();
-      }
+      // Reset token for getCsrfToken specific tests
+      mockCsrfToken = '';
     });
 
     it('returns null when no csrf token exists', () => {
+      mockCsrfToken = '';
       expect(getCsrfToken()).toBeNull();
     });
 
-    it('returns csrf token from meta tag', () => {
-      const meta = document.createElement('meta');
-      meta.name = 'csrf-token';
-      meta.content = 'test-token';
-      document.head.appendChild(meta);
-
+    it('returns csrf token from appState', () => {
+      mockCsrfToken = 'test-token';
       expect(getCsrfToken()).toBe('test-token');
     });
 
-    it('handles encoded csrf token in meta tag', () => {
-      const meta = document.createElement('meta');
-      meta.name = 'csrf-token';
-      meta.content = 'test/token=value';
-      document.head.appendChild(meta);
-
+    it('handles special characters in csrf token', () => {
+      mockCsrfToken = 'test/token=value';
       expect(getCsrfToken()).toBe('test/token=value');
     });
 
-    it('returns null when meta tag has empty content', () => {
-      const meta = document.createElement('meta');
-      meta.name = 'csrf-token';
-      meta.content = '';
-      document.head.appendChild(meta);
-
+    it('returns null when token is empty string', () => {
+      mockCsrfToken = '';
       expect(getCsrfToken()).toBeNull();
     });
   });
@@ -106,16 +85,8 @@ describe('API utilities', () => {
     });
 
     it('includes CSRF token in headers', async () => {
-      // Replace default token with a specific test token
-      const existingMeta = document.querySelector('meta[name="csrf-token"]');
-      if (existingMeta) {
-        existingMeta.remove();
-      }
-
-      const meta = document.createElement('meta');
-      meta.name = 'csrf-token';
-      meta.content = 'test-csrf-token-specific';
-      document.head.appendChild(meta);
+      // Set a specific test token via mock
+      mockCsrfToken = 'test-csrf-token-specific';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,

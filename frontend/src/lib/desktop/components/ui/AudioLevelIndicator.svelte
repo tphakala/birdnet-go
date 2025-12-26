@@ -265,17 +265,12 @@
       if (!isPlaying || !playingSource) return;
 
       try {
-        const response = await fetch('/api/v2/streams/hls/heartbeat', {
+        await fetchWithCSRF('/api/v2/streams/hls/heartbeat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source_id: playingSource }),
+          body: { source_id: playingSource },
         });
-
-        if (!response.ok) {
-          // Heartbeat failed
-        }
       } catch {
-        // Failed to send heartbeat
+        // Failed to send heartbeat - ignore
       }
     };
 
@@ -292,10 +287,9 @@
 
     // Send disconnect notification
     if (playingSource) {
-      fetch('/api/v2/streams/hls/heartbeat?disconnect=true', {
+      fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_id: playingSource }),
+        body: { source_id: playingSource },
       }).catch(() => {
         // Ignore errors during disconnect
       });

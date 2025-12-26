@@ -10,7 +10,7 @@
  */
 
 import { loggers } from '$lib/utils/logger';
-import { getCsrfToken as getConfigCsrfToken } from '$lib/services/configService';
+import { getCsrfToken as getAppStateCsrfToken } from '$lib/stores/appState.svelte';
 
 const logger = loggers.api;
 
@@ -39,35 +39,16 @@ export class ApiError extends Error {
 }
 
 /**
- * SECURITY: Enhanced CSRF token retrieval with validation
- * Tries multiple sources in order of preference:
- * 1. Config service (from /api/v2/app/config)
- * 2. Meta tag (legacy fallback)
+ * SECURITY: CSRF token retrieval from centralized app state.
+ * The token is fetched from /api/v2/app/config during app initialization
+ * and stored in appState.
+ *
+ * @returns The CSRF token or null if not available
  */
 export function getCsrfToken(): string | null {
-  try {
-    // First try config service (preferred source for new architecture)
-    const configToken = getConfigCsrfToken();
-    if (configToken && configToken.length > 0) {
-      return configToken;
-    }
-
-    // Fallback to meta tag (for backwards compatibility during migration)
-    const metaTag = document.querySelector('meta[name="csrf-token"]');
-    if (metaTag) {
-      const token = metaTag.getAttribute('content');
-      if (token && token.length > 0) {
-        return token;
-      }
-    }
-  } catch (error) {
-    logger.warn('Error retrieving CSRF token:', error);
-  }
-
-  return null;
+  const token = getAppStateCsrfToken();
+  return token && token.length > 0 ? token : null;
 }
-
-// Note: CSRF token validation removed for broader compatibility - trusting meta tag content
 
 /**
  * SECURITY: Enhanced default headers with validation

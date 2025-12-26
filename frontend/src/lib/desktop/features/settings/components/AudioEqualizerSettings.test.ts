@@ -6,6 +6,30 @@ import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 // Common mocks are now handled globally in src/test/setup.ts
 // ($lib/i18n, $lib/utils/security, $lib/utils/logger)
 
+// Mock appState for CSRF token
+vi.mock('$lib/stores/appState.svelte', () => ({
+  appState: {
+    csrfToken: 'mock-csrf-token',
+    initialized: true,
+    loading: false,
+    error: null,
+    retryCount: 0,
+    version: 'test',
+    security: {
+      enabled: false,
+      accessAllowed: true,
+      authConfig: {
+        basicEnabled: false,
+        googleEnabled: false,
+        githubEnabled: false,
+        microsoftEnabled: false,
+      },
+    },
+  },
+  getCsrfToken: vi.fn().mockReturnValue('mock-csrf-token'),
+  initApp: vi.fn().mockResolvedValue(true),
+}));
+
 // Mock FilterResponseGraph to avoid canvas issues
 vi.mock('./FilterResponseGraph.svelte', () => {
   return {
@@ -46,14 +70,6 @@ describe('AudioEqualizerSettings', () => {
         json: () => Promise.resolve({}),
       } as unknown as Response)
     ) as typeof global.fetch;
-
-    // Mock CSRF token
-    document.querySelector = vi.fn((selector: string): Element | null => {
-      if (selector === 'meta[name="csrf-token"]') {
-        return { getAttribute: () => 'mock-csrf-token' } as unknown as Element;
-      }
-      return null;
-    }) as typeof document.querySelector;
   });
 
   afterEach(() => {

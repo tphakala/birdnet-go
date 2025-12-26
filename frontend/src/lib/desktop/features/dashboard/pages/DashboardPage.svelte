@@ -58,6 +58,7 @@ Performance Optimizations:
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
+  import { api } from '$lib/utils/api';
 
   const logger = getLogger('app');
 
@@ -329,11 +330,11 @@ Performance Optimizations:
 
   async function fetchDashboardConfig() {
     try {
-      const response = await fetch('/api/v2/settings/dashboard');
-      if (!response.ok) {
-        throw new Error(t('dashboard.errors.configFetch', { status: response.statusText }));
+      interface DashboardConfig {
+        thumbnails?: { summary?: boolean };
+        summaryLimit?: number;
       }
-      const config = await response.json();
+      const config = await api.get<DashboardConfig>('/api/v2/settings/dashboard');
       // API returns lowercase field names matching Go JSON tags
       showThumbnails = config.thumbnails?.summary ?? true;
       summaryLimit = config.summaryLimit ?? 30;

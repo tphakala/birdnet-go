@@ -32,6 +32,7 @@
  */
 import { writable } from 'svelte/store';
 import { loggers } from '$lib/utils/logger';
+import { getCsrfToken } from '$lib/utils/api';
 
 const logger = loggers.auth;
 
@@ -96,13 +97,19 @@ function createAuthStore() {
      */
     logout: async (): Promise<void> => {
       try {
-        // Use the v2 logout endpoint
+        // Use the v2 logout endpoint with CSRF protection
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+        const token = getCsrfToken();
+        if (token) {
+          headers['X-CSRF-Token'] = token;
+        }
+
         const response = await fetch('/api/v2/auth/logout', {
           method: 'POST',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
         });
 
         // The v2 logout endpoint returns 200 OK on success

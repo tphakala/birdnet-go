@@ -9,6 +9,7 @@
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
+  import { api } from '$lib/utils/api';
   import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('app');
@@ -30,11 +31,23 @@
 
   interface Detection {
     id: string;
-    timestamp: string;
+    timestamp: string | null;
     commonName: string;
     scientificName: string;
     confidence: number;
     timeOfDay: string;
+  }
+
+  // API response type (may have date/time instead of timestamp)
+  interface ApiDetection {
+    id: string;
+    timestamp?: string;
+    date?: string;
+    time?: string;
+    commonName: string;
+    scientificName: string;
+    confidence: number;
+    timeOfDay?: string;
   }
 
   interface SpeciesData {
@@ -488,10 +501,7 @@
   // Fetch recent detections
   async function fetchRecentDetections() {
     try {
-      const response = await fetch('/api/v2/detections/recent?limit=10');
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-
-      const data = await response.json();
+      const data = await api.get<ApiDetection[]>('/api/v2/detections/recent?limit=10');
       const detections = Array.isArray(data) ? data : [];
 
       recentDetections = detections.map(detection => ({
@@ -1391,7 +1401,7 @@
             <tbody>
               {#each recentDetections as detection, index (detection.id ?? index)}
                 <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
-                  <td>{formatDateTime(detection.timestamp)}</td>
+                  <td>{detection.timestamp ? formatDateTime(detection.timestamp) : '-'}</td>
                   <td>
                     <div class="flex items-center gap-2">
                       <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">

@@ -4,6 +4,7 @@
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
   import { t } from '$lib/i18n';
   import { RefreshCw } from '@lucide/svelte';
+  import { api, ApiError } from '$lib/utils/api';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -94,13 +95,6 @@
   // Toggle for showing all processes
   let showAllProcesses = $state<boolean>(false);
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived to avoid repeated DOM queries
-  // In Svelte 5, $derived creates reactive computed values that only recalculate when dependencies change
-  // This prevents expensive DOM queries on every API call (5 functions were querying the same token)
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as any)?.content || ''
-  );
-
   // PERFORMANCE OPTIMIZATION: Reactive computed properties using $derived
   // $derived automatically tracks dependencies and only recalculates when they change
   // This is more efficient than manual state tracking or effects
@@ -146,17 +140,7 @@
     systemInfo.error = null;
 
     try {
-      const response = await fetch('/api/v2/system/info', {
-        headers: {
-          'X-CSRF-Token': csrfToken,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      systemInfo.data = await response.json();
+      systemInfo.data = await api.get<SystemInfo>('/api/v2/system/info');
     } catch (error: unknown) {
       // Handle system info fetch error silently
       systemInfo.error = t('system.errors.systemInfo', {
@@ -173,17 +157,7 @@
     diskUsage.error = null;
 
     try {
-      const response = await fetch('/api/v2/system/disks', {
-        headers: {
-          'X-CSRF-Token': csrfToken,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      diskUsage.data = await response.json();
+      diskUsage.data = await api.get<DiskInfo[]>('/api/v2/system/disks');
     } catch (error: unknown) {
       // Handle disk usage fetch error silently
       diskUsage.error = t('system.errors.diskUsage', {
@@ -201,17 +175,16 @@
     memoryUsage.error = null;
 
     try {
-      const response = await fetch('/api/v2/system/resources', {
-        headers: {
-          'X-CSRF-Token': csrfToken,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
+      interface ResourcesResponse {
+        memory_total: number;
+        memory_used: number;
+        memory_free: number;
+        memory_available: number;
+        memory_buffers: number;
+        memory_cached: number;
+        memory_usage_percent: number;
       }
-
-      const data = await response.json();
+      const data = await api.get<ResourcesResponse>('/api/v2/system/resources');
       // Map the API response to our UI data model
       memoryUsage.data = {
         total: data.memory_total,
@@ -238,22 +211,13 @@
     systemTemperature.error = null;
 
     try {
-      const response = await fetch('/api/v2/system/temperature/cpu', {
-        headers: {
-          'X-CSRF-Token': csrfToken,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          systemTemperature.data = { is_available: false };
-          return;
-        }
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      systemTemperature.data = await response.json();
+      systemTemperature.data = await api.get<TemperatureInfo>('/api/v2/system/temperature/cpu');
     } catch (error: unknown) {
+      // Handle 404 as "temperature not available" (not an error)
+      if (error instanceof ApiError && error.status === 404) {
+        systemTemperature.data = { is_available: false };
+        return;
+      }
       // Handle temperature fetch error silently
       systemTemperature.error = t('system.errors.temperature', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -273,17 +237,7 @@
       const url = showAllProcesses
         ? '/api/v2/system/processes?all=true'
         : '/api/v2/system/processes';
-      const response = await fetch(url, {
-        headers: {
-          'X-CSRF-Token': csrfToken,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      processes.data = await response.json();
+      processes.data = await api.get<ProcessInfo[]>(url);
     } catch (error: unknown) {
       // Handle processes fetch error silently
       processes.error = t('system.errors.processes', {
