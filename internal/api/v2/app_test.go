@@ -872,7 +872,10 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	}
 
 	// Check security sub-object
-	securityObj := rawResponse["security"].(map[string]any)
+	securityRaw, ok := rawResponse["security"]
+	require.True(t, ok, "security field should exist")
+	securityObj, ok := securityRaw.(map[string]any)
+	require.True(t, ok, "security should be a map")
 	expectedSecurityKeys := map[string]bool{
 		"enabled":       true,
 		"accessAllowed": true,
@@ -884,7 +887,10 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	}
 
 	// Check authConfig sub-object
-	authConfig := securityObj["authConfig"].(map[string]any)
+	authConfigRaw, ok := securityObj["authConfig"]
+	require.True(t, ok, "authConfig field should exist")
+	authConfig, ok := authConfigRaw.(map[string]any)
+	require.True(t, ok, "authConfig should be a map")
 	expectedAuthKeys := map[string]bool{
 		"basicEnabled":     true,
 		"googleEnabled":    true,

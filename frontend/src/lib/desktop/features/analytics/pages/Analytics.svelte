@@ -408,19 +408,7 @@
       const url = `/api/v2/analytics/species/summary?${params}`;
       logger.debug('Fetching summary data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Summary API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const speciesData = await response.json();
+      const speciesData = await api.get<SpeciesData[]>(url);
       const speciesArray = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Summary API response:', {
@@ -471,19 +459,7 @@
       const url = `/api/v2/analytics/species/summary?${params}`;
       logger.debug('Fetching species chart data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Species chart API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const speciesData = await response.json();
+      const speciesData = await api.get<SpeciesData[]>(url);
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Species chart API response:', {
@@ -517,8 +493,7 @@
           scientificName: detection.scientificName,
           confidence: detection.confidence,
           timeOfDay:
-            detection.timeOfDay ||
-            (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : 'Unknown'),
+            detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
         };
       });
     } catch (err) {
@@ -548,20 +523,8 @@
       const url = `/api/v2/analytics/time/distribution/hourly?${params}`;
       logger.debug('Fetching time of day data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Time of day API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const timeData = await response.json();
-      chartData.timeOfDay = timeData;
+      const timeData = await api.get<TimeOfDayData[]>(url);
+      chartData.timeOfDay = Array.isArray(timeData) ? timeData : [];
 
       logger.debug('Time of day API response:', {
         url,
@@ -596,20 +559,8 @@
       const url = `/api/v2/analytics/time/daily?${params}`;
       logger.debug('Fetching trend data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('Trend API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const trendData = await response.json();
-      chartData.trend = trendData;
+      const trendData = await api.get<TrendData>(url);
+      chartData.trend = trendData ?? { data: [] };
 
       logger.debug('Trend API response:', {
         url,
@@ -632,19 +583,7 @@
       const url = `/api/v2/analytics/species/detections/new?${params}`;
       logger.debug('Fetching new species data:', { url, startDate, endDate });
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        logger.error('New species API request failed', new Error(`HTTP ${response.status}`), {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          startDate,
-          endDate,
-        });
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await api.get<NewSpeciesData[]>(url);
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
 
