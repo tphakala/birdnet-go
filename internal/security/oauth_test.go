@@ -549,7 +549,9 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 			name: "google auth enabled",
 			settings: &conf.Settings{
 				Security: conf.Security{
-					GoogleAuth: conf.SocialProvider{Enabled: true},
+					OAuthProviders: []conf.OAuthProviderConfig{
+						{Provider: "google", Enabled: true, ClientID: "test", ClientSecret: "test"},
+					},
 				},
 			},
 			ip:       "192.168.1.100",
@@ -559,7 +561,9 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 			name: "github auth enabled",
 			settings: &conf.Settings{
 				Security: conf.Security{
-					GithubAuth: conf.SocialProvider{Enabled: true},
+					OAuthProviders: []conf.OAuthProviderConfig{
+						{Provider: "github", Enabled: true, ClientID: "test", ClientSecret: "test"},
+					},
 				},
 			},
 			ip:       "192.168.1.100",

@@ -802,10 +802,13 @@ func validateRTSPSection(data json.RawMessage) error {
 // securitySectionAllowedFields defines which fields in the security section can be updated via API
 var securitySectionAllowedFields = map[string]bool{
 	"host":              true, // Server hostname for TLS
+	"baseUrl":           true, // Base URL for OAuth redirects
 	"autoTls":           true, // AutoTLS setting
 	"basicAuth":         true, // Basic authentication settings
-	"googleAuth":        true, // Google OAuth settings
-	"githubAuth":        true, // GitHub OAuth settings
+	"oauthProviders":    true, // New array-based OAuth provider configuration
+	"googleAuth":        true, // Legacy Google OAuth settings (deprecated)
+	"githubAuth":        true, // Legacy GitHub OAuth settings (deprecated)
+	"microsoftAuth":     true, // Legacy Microsoft OAuth settings (deprecated)
 	"allowSubnetBypass": true, // Subnet bypass settings
 	"redirectToHttps":   true, // HTTPS redirect setting
 	// sessionSecret is NOT allowed - it's generated internally
@@ -839,7 +842,12 @@ func validateSecuritySectionValues(updateMap map[string]any) error {
 		return err
 	}
 
-	// Validate OAuth settings
+	// Validate new array-based OAuth providers
+	if err := validateOAuthProvidersArray(updateMap); err != nil {
+		return err
+	}
+
+	// Validate legacy OAuth settings (deprecated, but still supported)
 	if err := validateOAuthSettings("googleAuth", updateMap); err != nil {
 		return err
 	}
@@ -940,6 +948,93 @@ func validateSubnetBypassField(updateMap map[string]any) error {
 		if str != "" && !strings.Contains(str, "/") {
 			return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
 		}
+	}
+
+	return nil
+}
+
+// validOAuthProviders defines the valid OAuth provider names
+var validOAuthProviders = map[string]bool{
+	"google":    true,
+	"github":    true,
+	"microsoft": true,
+}
+
+// validateOAuthProvidersArray validates the new array-based OAuth providers configuration
+func validateOAuthProvidersArray(updateMap map[string]any) error {
+	providers, exists := updateMap["oauthProviders"]
+	if !exists {
+		return nil
+	}
+
+	providersArray, ok := providers.([]any)
+	if !ok {
+		return fmt.Errorf("oauthProviders must be an array")
+	}
+
+	// Track configured providers to detect duplicates
+	configuredProviders := make(map[string]bool)
+
+	for i, item := range providersArray {
+		providerMap, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("oauthProviders[%d] must be an object", i)
+		}
+
+		// Validate provider name
+		providerName, ok := providerMap["provider"].(string)
+		if !ok || providerName == "" {
+			return fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", i)
+		}
+
+		if !validOAuthProviders[providerName] {
+			return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: google, github, microsoft)", i, providerName)
+		}
+
+		// Check for duplicate providers
+		if configuredProviders[providerName] {
+			return fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
+		}
+		configuredProviders[providerName] = true
+
+		// Validate enabled field
+		enabled := false
+		if enabledVal, exists := providerMap["enabled"]; exists {
+			if enabledBool, ok := enabledVal.(bool); ok {
+				enabled = enabledBool
+			} else {
+				return fmt.Errorf("oauthProviders[%d].enabled must be a boolean", i)
+			}
+		}
+
+		// If enabled, validate required fields
+		if enabled {
+			if err := validateRequiredStringInProvider(providerMap, "clientId", i); err != nil {
+				return err
+			}
+			if err := validateRequiredStringInProvider(providerMap, "clientSecret", i); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateRequiredStringInProvider validates a required string field in an OAuth provider config
+func validateRequiredStringInProvider(providerMap map[string]any, fieldName string, index int) error {
+	val, exists := providerMap[fieldName]
+	if !exists {
+		return fmt.Errorf("oauthProviders[%d].%s is required when enabled", index, fieldName)
+	}
+
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("oauthProviders[%d].%s must be a string", index, fieldName)
+	}
+
+	if str == "" {
+		return fmt.Errorf("oauthProviders[%d].%s cannot be empty when enabled", index, fieldName)
 	}
 
 	return nil

@@ -312,6 +312,8 @@ func computeBaseURL(settings *conf.Settings) string {
 }
 
 // initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft).
+// It uses the new OAuthProviders array which is populated either from new config
+// or from migration of legacy provider fields.
 func initializeProviders(settings *conf.Settings) {
 	logger().Info("Configuring Goth providers")
 	providers := make([]goth.Provider, 0, InitialProviderCapacity)
@@ -319,63 +321,57 @@ func initializeProviders(settings *conf.Settings) {
 	// Compute base URL for redirect URIs if not explicitly configured
 	baseURL := computeBaseURL(settings)
 
-	if settings.Security.GoogleAuth.Enabled && settings.Security.GoogleAuth.ClientID != "" && settings.Security.GoogleAuth.ClientSecret != "" {
-		redirectURI := settings.Security.GoogleAuth.RedirectURI
-		if redirectURI == "" && baseURL != "" {
-			redirectURI = baseURL + "/auth/" + ProviderGoogle + "/callback"
+	// Iterate over the OAuthProviders array
+	for _, providerConfig := range settings.Security.OAuthProviders {
+		if !providerConfig.Enabled || providerConfig.ClientID == "" || providerConfig.ClientSecret == "" {
+			logger().Info("OAuth provider disabled or not configured", "provider", providerConfig.Provider)
+			continue
 		}
-		if redirectURI == "" {
-			logger().Warn("Google OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for Google OAuth.")
-		}
-		logger().Info("Enabling Google Auth provider", "redirect_uri", redirectURI)
-		googleProvider := gothGoogle.New(
-			settings.Security.GoogleAuth.ClientID,
-			settings.Security.GoogleAuth.ClientSecret,
-			redirectURI,
-			"https://www.googleapis.com/auth/userinfo.email", // Scope for email
-		)
-		googleProvider.SetAccessType("offline")
-		providers = append(providers, googleProvider)
-	} else {
-		logger().Info("Google Auth provider disabled or not configured")
-	}
 
-	if settings.Security.GithubAuth.Enabled && settings.Security.GithubAuth.ClientID != "" && settings.Security.GithubAuth.ClientSecret != "" {
-		redirectURI := settings.Security.GithubAuth.RedirectURI
+		// Build redirect URI
+		redirectURI := providerConfig.RedirectURI
 		if redirectURI == "" && baseURL != "" {
-			redirectURI = baseURL + "/auth/" + ProviderGitHub + "/callback"
+			redirectURI = baseURL + "/auth/" + providerConfig.Provider + "/callback"
 		}
 		if redirectURI == "" {
-			logger().Warn("GitHub OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for GitHub OAuth.")
+			logger().Warn("OAuth provider enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI.",
+				"provider", providerConfig.Provider)
 		}
-		logger().Info("Enabling GitHub Auth provider", "redirect_uri", redirectURI)
-		providers = append(providers, github.New(
-			settings.Security.GithubAuth.ClientID,
-			settings.Security.GithubAuth.ClientSecret,
-			redirectURI,
-			"user:email", // Scope for email
-		))
-	} else {
-		logger().Info("GitHub Auth provider disabled or not configured")
-	}
 
-	if settings.Security.MicrosoftAuth.Enabled && settings.Security.MicrosoftAuth.ClientID != "" && settings.Security.MicrosoftAuth.ClientSecret != "" {
-		redirectURI := settings.Security.MicrosoftAuth.RedirectURI
-		if redirectURI == "" && baseURL != "" {
-			redirectURI = baseURL + "/auth/" + ProviderMicrosoft + "/callback"
+		// Create the appropriate goth provider based on provider name
+		switch providerConfig.Provider {
+		case ProviderGoogle:
+			logger().Info("Enabling Google Auth provider", "redirect_uri", redirectURI)
+			googleProvider := gothGoogle.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+				"https://www.googleapis.com/auth/userinfo.email", // Scope for email
+			)
+			googleProvider.SetAccessType("offline")
+			providers = append(providers, googleProvider)
+
+		case ProviderGitHub:
+			logger().Info("Enabling GitHub Auth provider", "redirect_uri", redirectURI)
+			providers = append(providers, github.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+				"user:email", // Scope for email
+			))
+
+		case ProviderMicrosoft:
+			logger().Info("Enabling Microsoft Account Auth provider", "redirect_uri", redirectURI)
+			providers = append(providers, microsoftonline.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+				"user.read", // Scope for email/profile
+			))
+
+		default:
+			logger().Warn("Unknown OAuth provider type, skipping", "provider", providerConfig.Provider)
 		}
-		if redirectURI == "" {
-			logger().Warn("Microsoft OAuth enabled but redirect URI not configured. Set BaseURL or Host in security settings, or configure explicit RedirectURI for Microsoft OAuth.")
-		}
-		logger().Info("Enabling Microsoft Account Auth provider", "redirect_uri", redirectURI)
-		providers = append(providers, microsoftonline.New(
-			settings.Security.MicrosoftAuth.ClientID,
-			settings.Security.MicrosoftAuth.ClientSecret,
-			redirectURI,
-			"user.read", // Scope for email/profile
-		))
-	} else {
-		logger().Info("Microsoft Account Auth provider disabled or not configured")
 	}
 
 	if len(providers) > 0 {
@@ -462,28 +458,40 @@ func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogg
 
 // checkGoogleAuth validates Google OAuth session
 func (s *OAuth2Server) checkGoogleAuth(r *http.Request, userId string, log SecurityLogger) bool {
+	provider := s.Settings.GetOAuthProvider(ProviderGoogle)
+	if provider == nil {
+		return false
+	}
 	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
 		providerName:   ProviderGoogle,
-		enabled:        s.Settings.Security.GoogleAuth.Enabled,
-		allowedUserIds: s.Settings.Security.GoogleAuth.UserId,
+		enabled:        provider.Enabled,
+		allowedUserIds: provider.UserID,
 	})
 }
 
 // checkGithubAuth validates GitHub OAuth session
 func (s *OAuth2Server) checkGithubAuth(r *http.Request, userId string, log SecurityLogger) bool {
+	provider := s.Settings.GetOAuthProvider(ProviderGitHub)
+	if provider == nil {
+		return false
+	}
 	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
 		providerName:   ProviderGitHub,
-		enabled:        s.Settings.Security.GithubAuth.Enabled,
-		allowedUserIds: s.Settings.Security.GithubAuth.UserId,
+		enabled:        provider.Enabled,
+		allowedUserIds: provider.UserID,
 	})
 }
 
 // checkMicrosoftAuth validates Microsoft Account OAuth session
 func (s *OAuth2Server) checkMicrosoftAuth(r *http.Request, userId string, log SecurityLogger) bool {
+	provider := s.Settings.GetOAuthProvider(ProviderMicrosoft)
+	if provider == nil {
+		return false
+	}
 	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
 		providerName:   ProviderMicrosoft,
-		enabled:        s.Settings.Security.MicrosoftAuth.Enabled,
-		allowedUserIds: s.Settings.Security.MicrosoftAuth.UserId,
+		enabled:        provider.Enabled,
+		allowedUserIds: provider.UserID,
 	})
 }
 
@@ -654,12 +662,18 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 		logger.Info("Authentication bypassed: request from allowed subnet")
 		return false // Authentication not required for allowed subnets
 	}
-	if s.Settings.Security.BasicAuth.Enabled || s.Settings.Security.GoogleAuth.Enabled || s.Settings.Security.GithubAuth.Enabled || s.Settings.Security.MicrosoftAuth.Enabled {
+
+	// Check if basic auth is enabled
+	basicEnabled := s.Settings.Security.BasicAuth.Enabled
+
+	// Check if any OAuth provider is enabled using the new array
+	enabledOAuthProviders := s.Settings.GetEnabledOAuthProviders()
+	oauthEnabled := len(enabledOAuthProviders) > 0
+
+	if basicEnabled || oauthEnabled {
 		logger.Info("Authentication required: at least one provider enabled and IP not in allowed subnet",
-			"basic_enabled", s.Settings.Security.BasicAuth.Enabled,
-			"google_enabled", s.Settings.Security.GoogleAuth.Enabled,
-			"github_enabled", s.Settings.Security.GithubAuth.Enabled,
-			"microsoft_enabled", s.Settings.Security.MicrosoftAuth.Enabled,
+			"basic_enabled", basicEnabled,
+			"oauth_providers", enabledOAuthProviders,
 		)
 		return true
 	}
