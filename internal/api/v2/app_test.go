@@ -223,20 +223,26 @@ func TestGetAppConfig_AllAuthMethods(t *testing.T) {
 			AuthCodeExp:    5 * time.Minute,
 			AccessTokenExp: 24 * time.Hour,
 		},
-		GoogleAuth: conf.SocialProvider{
-			Enabled:      true,
-			ClientID:     "google-client-id",
-			ClientSecret: "google-secret",
-		},
-		GithubAuth: conf.SocialProvider{
-			Enabled:      true,
-			ClientID:     "github-client-id",
-			ClientSecret: "github-secret",
-		},
-		MicrosoftAuth: conf.SocialProvider{
-			Enabled:      true,
-			ClientID:     "microsoft-client-id",
-			ClientSecret: "microsoft-secret",
+		// Use new array-based OAuth provider configuration
+		OAuthProviders: []conf.OAuthProviderConfig{
+			{
+				Provider:     "google",
+				Enabled:      true,
+				ClientID:     "google-client-id",
+				ClientSecret: "google-secret",
+			},
+			{
+				Provider:     "github",
+				Enabled:      true,
+				ClientID:     "github-client-id",
+				ClientSecret: "github-secret",
+			},
+			{
+				Provider:     "microsoft",
+				Enabled:      true,
+				ClientID:     "microsoft-client-id",
+				ClientSecret: "microsoft-secret",
+			},
 		},
 	}
 
@@ -1153,21 +1159,41 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 		e := echo.New()
 		mockDS := mocks.NewMockInterface(t)
 
+		// Build OAuth providers array from fuzz input
+		// Note: GetEnabledOAuthProviders() requires ClientID and ClientSecret to be set
+		var oauthProviders []conf.OAuthProviderConfig
+		if googleEnabled {
+			oauthProviders = append(oauthProviders, conf.OAuthProviderConfig{
+				Provider:     "google",
+				Enabled:      true,
+				ClientID:     "fuzz-google-client",
+				ClientSecret: "fuzz-google-secret",
+			})
+		}
+		if githubEnabled {
+			oauthProviders = append(oauthProviders, conf.OAuthProviderConfig{
+				Provider:     "github",
+				Enabled:      true,
+				ClientID:     "fuzz-github-client",
+				ClientSecret: "fuzz-github-secret",
+			})
+		}
+		if microsoftEnabled {
+			oauthProviders = append(oauthProviders, conf.OAuthProviderConfig{
+				Provider:     "microsoft",
+				Enabled:      true,
+				ClientID:     "fuzz-microsoft-client",
+				ClientSecret: "fuzz-microsoft-secret",
+			})
+		}
+
 		// Construct security config from fuzzed values
 		securityConfig := conf.Security{
 			BasicAuth: conf.BasicAuth{
 				Enabled: basicEnabled,
 			},
-			GoogleAuth: conf.SocialProvider{
-				Enabled: googleEnabled,
-			},
-			GithubAuth: conf.SocialProvider{
-				Enabled: githubEnabled,
-			},
-			MicrosoftAuth: conf.SocialProvider{
-				Enabled: microsoftEnabled,
-			},
-			Host: host,
+			OAuthProviders: oauthProviders,
+			Host:           host,
 		}
 
 		settings := &conf.Settings{
