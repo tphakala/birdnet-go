@@ -960,6 +960,16 @@ var validOAuthProviders = map[string]bool{
 	"microsoft": true,
 }
 
+// getValidOAuthProviderNames returns sorted list of valid provider names for error messages
+func getValidOAuthProviderNames() string {
+	names := make([]string, 0, len(validOAuthProviders))
+	for name := range validOAuthProviders {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
 // validateOAuthProvidersArray validates the new array-based OAuth providers configuration
 func validateOAuthProvidersArray(updateMap map[string]any) error {
 	providers, exists := updateMap["oauthProviders"]
@@ -1014,7 +1024,7 @@ func validateOAuthProviderName(providerMap map[string]any, index int, configured
 	}
 
 	if !validOAuthProviders[providerName] {
-		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: google, github, microsoft)", index, providerName)
+		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
 	}
 
 	if configuredProviders[providerName] {
