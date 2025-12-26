@@ -2,6 +2,8 @@
   "common": {
     "loading": "Loading...",
     "error": "Error",
+    "retry": "Retry",
+    "retrying": "Retrying",
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -417,6 +419,10 @@
       "title": "Internal Server Error",
       "defaultMessage": "An internal server error occurred.",
       "goToDashboard": "Go to Dashboard"
+    },
+    "server": {
+      "title": "Server Connection Error",
+      "description": "Unable to connect to the server. Please check your connection and try again."
     },
     "generic": {
       "errorDetails": "Error Details",

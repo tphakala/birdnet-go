@@ -2,6 +2,8 @@
   "common": {
     "loading": "Ładowanie...",
     "error": "Błąd",
+    "retry": "Ponów próbę",
+    "retrying": "Ponawianie próby",
     "save": "Zapisz",
     "cancel": "Anuluj",
     "confirm": "Potwierdź",
@@ -417,6 +419,10 @@
       "title": "Wewnętrzny Błąd Serwera",
       "defaultMessage": "Wystąpił wewnętrzny błąd serwera.",
       "goToDashboard": "Przejdź do Panelu"
+    },
+    "server": {
+      "title": "Błąd połączenia z serwerem",
+      "description": "Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie."
     },
     "generic": {
       "errorDetails": "Szczegóły Błędu",

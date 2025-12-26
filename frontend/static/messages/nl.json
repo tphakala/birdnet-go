@@ -2,6 +2,8 @@
   "common": {
     "loading": "Inlezen ...",
     "error": "Fout",
+    "retry": "Opnieuw proberen",
+    "retrying": "Opnieuw aan het proberen",
     "save": "Bewaren",
     "cancel": "Annuleren",
     "confirm": "Bevestigen",
@@ -417,6 +419,10 @@
       "title": "Interne server fout",
       "defaultMessage": "Er is een interne server fout opgetreden.",
       "goToDashboard": "Ga naar het Overzicht"
+    },
+    "server": {
+      "title": "Serververbindingsfout",
+      "description": "Kan geen verbinding maken met de server. Controleer uw verbinding en probeer het opnieuw."
     },
     "generic": {
       "errorDetails": "Fout details",

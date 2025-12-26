@@ -2,6 +2,8 @@
   "common": {
     "loading": "Ladataan...",
     "error": "Virhe",
+    "retry": "Yritä uudelleen",
+    "retrying": "Yritetään uudelleen",
     "save": "Tallenna",
     "cancel": "Peruuta",
     "confirm": "Vahvista",
@@ -417,6 +419,10 @@
       "title": "Sisäinen palvelinvirhe",
       "defaultMessage": "Tapahtui sisäinen palvelinvirhe.",
       "goToDashboard": "Siirry etusivulle"
+    },
+    "server": {
+      "title": "Palvelinyhteysvirhe",
+      "description": "Yhteyttä palvelimeen ei saada. Tarkista yhteytesi ja yritä uudelleen."
     },
     "generic": {
       "errorDetails": "Virhetiedot",

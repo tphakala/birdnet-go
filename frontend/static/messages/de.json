@@ -2,6 +2,8 @@
   "common": {
     "loading": "Wird geladen...",
     "error": "Fehler",
+    "retry": "Erneut versuchen",
+    "retrying": "Wird erneut versucht",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "confirm": "Bestätigen",
@@ -417,6 +419,10 @@
       "title": "Interner Serverfehler",
       "defaultMessage": "Ein interner Serverfehler ist aufgetreten.",
       "goToDashboard": "Zur Übersicht"
+    },
+    "server": {
+      "title": "Server-Verbindungsfehler",
+      "description": "Verbindung zum Server nicht möglich. Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut."
     },
     "generic": {
       "errorDetails": "Fehlerdetails",

@@ -12,6 +12,8 @@
   "common": {
     "loading": "Carregando...",
     "error": "Erro",
+    "retry": "Tentar novamente",
+    "retrying": "Tentando novamente",
     "save": "Salvar",
     "cancel": "Cancelar",
     "confirm": "Confirmar",
@@ -417,6 +419,10 @@
       "title": "Erro interno do servidor",
       "defaultMessage": "Ocorreu um erro interno do servidor.",
       "goToDashboard": "Ir para o painel"
+    },
+    "server": {
+      "title": "Erro de conexão com o servidor",
+      "description": "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."
     },
     "generic": {
       "errorDetails": "Detalhes do erro",
