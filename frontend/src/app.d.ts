@@ -15,10 +15,11 @@ export interface AuthEndpoints {
  * Shared type used by App.svelte, RootLayout, DesktopSidebar, and LoginModal.
  */
 export interface AuthConfig {
+  /** Whether basic (password) authentication is enabled */
   basicEnabled: boolean;
-  googleEnabled: boolean;
-  githubEnabled: boolean;
-  microsoftEnabled: boolean;
+  /** Array of enabled OAuth provider IDs (e.g., ['google', 'github', 'microsoft']) */
+  enabledProviders: string[];
+  /** Custom OAuth endpoint overrides (optional) */
   endpoints?: AuthEndpoints;
 }
 

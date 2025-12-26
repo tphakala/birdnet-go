@@ -30,9 +30,7 @@
     className = '',
     authConfig = {
       basicEnabled: true,
-      googleEnabled: false,
-      githubEnabled: false,
-      microsoftEnabled: false,
+      enabledProviders: [],
     },
   }: Props = $props();
 

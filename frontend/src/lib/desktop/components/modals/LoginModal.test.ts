@@ -177,7 +177,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -198,7 +198,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -229,7 +229,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -242,7 +242,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -263,8 +263,7 @@ describe('LoginModal', () => {
         onClose: vi.fn(),
         authConfig: {
           basicEnabled: false,
-          googleEnabled: true,
-          githubEnabled: true,
+          enabledProviders: ['google', 'github'],
         },
       });
 
@@ -281,8 +280,7 @@ describe('LoginModal', () => {
         onClose: vi.fn(),
         authConfig: {
           basicEnabled: false,
-          googleEnabled: true,
-          githubEnabled: true,
+          enabledProviders: ['google', 'github'],
           endpoints: {
             google: '/api/v1/auth/custom-google',
             github: '/api/v1/auth/custom-github',
@@ -305,8 +303,7 @@ describe('LoginModal', () => {
         onClose: vi.fn(),
         authConfig: {
           basicEnabled: false,
-          googleEnabled: true,
-          githubEnabled: false,
+          enabledProviders: ['google'],
           endpoints: {
             google: '/malicious/endpoint',
           },
@@ -398,7 +395,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/dashboard', // Full path with base
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -431,7 +428,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/analytics/species',
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -462,7 +459,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/settings/main',
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -493,7 +490,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/custom/path', // Different from base path
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -524,7 +521,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/', // Exactly matches base path
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -555,7 +552,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/app/settings',
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -588,7 +585,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/dashboard',
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -624,7 +621,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       // Submit form by clicking the submit button since form role may not be recognized
@@ -649,7 +646,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -677,7 +674,7 @@ describe('LoginModal', () => {
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -710,7 +707,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: onCloseMock,
         redirectUrl: '/ui/analytics/species', // User was on analytics/species page
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -759,7 +756,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/settings/main', // User was on settings page
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -795,7 +792,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/', // User on root UI path
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -826,7 +823,7 @@ describe('LoginModal', () => {
         isOpen: true,
         onClose: vi.fn(),
         redirectUrl: '/ui/detections/12345', // Detection detail page
-        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+        authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
       const passwordInput = screen.getByLabelText('auth.password');
@@ -875,8 +872,7 @@ describe('LoginModal', () => {
         onClose: vi.fn(),
         authConfig: {
           basicEnabled: false,
-          googleEnabled: true,
-          githubEnabled: false,
+          enabledProviders: ['google'],
         },
       });
 

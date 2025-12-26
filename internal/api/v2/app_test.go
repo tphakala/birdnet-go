@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -175,9 +176,7 @@ func TestGetAppConfig_NoSecurity(t *testing.T) {
 
 	// All auth methods should be disabled
 	assert.False(t, response.Security.AuthConfig.BasicEnabled)
-	assert.False(t, response.Security.AuthConfig.GoogleEnabled)
-	assert.False(t, response.Security.AuthConfig.GithubEnabled)
-	assert.False(t, response.Security.AuthConfig.MicrosoftEnabled)
+	assert.Empty(t, response.Security.AuthConfig.EnabledProviders, "No OAuth providers should be enabled")
 }
 
 // TestGetAppConfig_BasicAuthEnabled tests the endpoint with BasicAuth enabled.
@@ -210,9 +209,7 @@ func TestGetAppConfig_BasicAuthEnabled(t *testing.T) {
 
 	assert.True(t, response.Security.Enabled, "Security should be enabled")
 	assert.True(t, response.Security.AuthConfig.BasicEnabled, "BasicAuth should be enabled")
-	assert.False(t, response.Security.AuthConfig.GoogleEnabled)
-	assert.False(t, response.Security.AuthConfig.GithubEnabled)
-	assert.False(t, response.Security.AuthConfig.MicrosoftEnabled)
+	assert.Empty(t, response.Security.AuthConfig.EnabledProviders, "No OAuth providers should be enabled")
 }
 
 // TestGetAppConfig_AllAuthMethods tests with all auth methods enabled.
@@ -260,9 +257,9 @@ func TestGetAppConfig_AllAuthMethods(t *testing.T) {
 
 	assert.True(t, response.Security.Enabled)
 	assert.True(t, response.Security.AuthConfig.BasicEnabled)
-	assert.True(t, response.Security.AuthConfig.GoogleEnabled)
-	assert.True(t, response.Security.AuthConfig.GithubEnabled)
-	assert.True(t, response.Security.AuthConfig.MicrosoftEnabled)
+	assert.Contains(t, response.Security.AuthConfig.EnabledProviders, "google")
+	assert.Contains(t, response.Security.AuthConfig.EnabledProviders, "github")
+	assert.Contains(t, response.Security.AuthConfig.EnabledProviders, "microsoft")
 }
 
 // TestGetAppConfig_CSRFTokenFromContext tests CSRF token extraction from context.
@@ -347,9 +344,7 @@ func TestGetAppConfig_ResponseFormat(t *testing.T) {
 	authConfig, ok := securityObj["authConfig"].(map[string]any)
 	require.True(t, ok, "authConfig should be an object")
 	assert.Contains(t, authConfig, "basicEnabled", "authConfig should have basicEnabled field")
-	assert.Contains(t, authConfig, "googleEnabled", "authConfig should have googleEnabled field")
-	assert.Contains(t, authConfig, "githubEnabled", "authConfig should have githubEnabled field")
-	assert.Contains(t, authConfig, "microsoftEnabled", "authConfig should have microsoftEnabled field")
+	assert.Contains(t, authConfig, "enabledProviders", "authConfig should have enabledProviders field")
 }
 
 // TestGetAppConfig_ContentTypeHeader verifies correct content-type header.
@@ -893,9 +888,7 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	require.True(t, ok, "authConfig should be a map")
 	expectedAuthKeys := map[string]bool{
 		"basicEnabled":     true,
-		"googleEnabled":    true,
-		"githubEnabled":    true,
-		"microsoftEnabled": true,
+		"enabledProviders": true,
 	}
 
 	for key := range authConfig {
@@ -1217,16 +1210,21 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 			t.Errorf("BasicEnabled mismatch: expected %v, got %v", basicEnabled, response.Security.AuthConfig.BasicEnabled)
 		}
 
-		if response.Security.AuthConfig.GoogleEnabled != googleEnabled {
-			t.Errorf("GoogleEnabled mismatch: expected %v, got %v", googleEnabled, response.Security.AuthConfig.GoogleEnabled)
+		// Helper to check if provider is in EnabledProviders
+		hasProvider := func(provider string) bool {
+			return slices.Contains(response.Security.AuthConfig.EnabledProviders, provider)
 		}
 
-		if response.Security.AuthConfig.GithubEnabled != githubEnabled {
-			t.Errorf("GithubEnabled mismatch: expected %v, got %v", githubEnabled, response.Security.AuthConfig.GithubEnabled)
+		if hasProvider("google") != googleEnabled {
+			t.Errorf("GoogleEnabled mismatch: expected %v, got %v", googleEnabled, hasProvider("google"))
 		}
 
-		if response.Security.AuthConfig.MicrosoftEnabled != microsoftEnabled {
-			t.Errorf("MicrosoftEnabled mismatch: expected %v, got %v", microsoftEnabled, response.Security.AuthConfig.MicrosoftEnabled)
+		if hasProvider("github") != githubEnabled {
+			t.Errorf("GithubEnabled mismatch: expected %v, got %v", githubEnabled, hasProvider("github"))
+		}
+
+		if hasProvider("microsoft") != microsoftEnabled {
+			t.Errorf("MicrosoftEnabled mismatch: expected %v, got %v", microsoftEnabled, hasProvider("microsoft"))
 		}
 
 		// Verify sensitive data is not exposed

@@ -50,9 +50,7 @@ interface AppConfigResponse {
     accessAllowed: boolean;
     authConfig: {
       basicEnabled: boolean;
-      googleEnabled: boolean;
-      githubEnabled: boolean;
-      microsoftEnabled: boolean;
+      enabledProviders: string[];
     };
   };
   version: string;
@@ -97,9 +95,7 @@ const DEFAULT_STATE: AppState = {
     accessAllowed: true,
     authConfig: {
       basicEnabled: false,
-      googleEnabled: false,
-      githubEnabled: false,
-      microsoftEnabled: false,
+      enabledProviders: [],
     },
   },
 };
@@ -180,9 +176,7 @@ export async function initApp(): Promise<boolean> {
         accessAllowed: config.security.accessAllowed,
         authConfig: {
           basicEnabled: config.security.authConfig.basicEnabled,
-          googleEnabled: config.security.authConfig.googleEnabled,
-          githubEnabled: config.security.authConfig.githubEnabled,
-          microsoftEnabled: config.security.authConfig.microsoftEnabled,
+          enabledProviders: config.security.authConfig.enabledProviders,
         },
       };
 

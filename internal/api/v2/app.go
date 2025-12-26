@@ -30,10 +30,8 @@ type SecurityConfigDTO struct {
 
 // AuthConfigDTO represents the authentication provider configuration.
 type AuthConfigDTO struct {
-	BasicEnabled     bool `json:"basicEnabled"`
-	GoogleEnabled    bool `json:"googleEnabled"`
-	GithubEnabled    bool `json:"githubEnabled"`
-	MicrosoftEnabled bool `json:"microsoftEnabled"`
+	BasicEnabled     bool     `json:"basicEnabled"`
+	EnabledProviders []string `json:"enabledProviders"`
 }
 
 // initAppRoutes registers application-level API endpoints
@@ -66,6 +64,18 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// Determine if access is currently allowed
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
 
+	// Build list of enabled OAuth providers
+	var enabledProviders []string
+	if c.Settings.Security.GoogleAuth.Enabled {
+		enabledProviders = append(enabledProviders, "google")
+	}
+	if c.Settings.Security.GithubAuth.Enabled {
+		enabledProviders = append(enabledProviders, "github")
+	}
+	if c.Settings.Security.MicrosoftAuth.Enabled {
+		enabledProviders = append(enabledProviders, "microsoft")
+	}
+
 	// Build response
 	response := AppConfigResponse{
 		CSRFToken: csrfToken,
@@ -74,9 +84,7 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 			AccessAllowed: accessAllowed,
 			AuthConfig: AuthConfigDTO{
 				BasicEnabled:     c.Settings.Security.BasicAuth.Enabled,
-				GoogleEnabled:    c.Settings.Security.GoogleAuth.Enabled,
-				GithubEnabled:    c.Settings.Security.GithubAuth.Enabled,
-				MicrosoftEnabled: c.Settings.Security.MicrosoftAuth.Enabled,
+				EnabledProviders: enabledProviders,
 			},
 		},
 		Version: c.Settings.Version,
