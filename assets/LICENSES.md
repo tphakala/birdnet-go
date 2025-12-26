@@ -117,6 +117,11 @@ Source: MPL-2.0
 License: https://github.com/go-viper/mapstructure/blob/v2.4.0/LICENSE
 Source: MIT
 
+### github.com/golang-jwt/jwt/v5
+
+License: https://github.com/golang-jwt/jwt/blob/v5.3.0/LICENSE
+Source: MIT
+
 ### github.com/google/s2a-go
 
 License: https://github.com/google/s2a-go/blob/v0.1.9/LICENSE.md
