@@ -976,49 +976,75 @@ func validateOAuthProvidersArray(updateMap map[string]any) error {
 	configuredProviders := make(map[string]bool)
 
 	for i, item := range providersArray {
-		providerMap, ok := item.(map[string]any)
-		if !ok {
-			return fmt.Errorf("oauthProviders[%d] must be an object", i)
-		}
-
-		// Validate provider name
-		providerName, ok := providerMap["provider"].(string)
-		if !ok || providerName == "" {
-			return fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", i)
-		}
-
-		if !validOAuthProviders[providerName] {
-			return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: google, github, microsoft)", i, providerName)
-		}
-
-		// Check for duplicate providers
-		if configuredProviders[providerName] {
-			return fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
+		providerName, err := validateOAuthProviderEntry(item, i, configuredProviders)
+		if err != nil {
+			return err
 		}
 		configuredProviders[providerName] = true
-
-		// Validate enabled field
-		enabled := false
-		if enabledVal, exists := providerMap["enabled"]; exists {
-			if enabledBool, ok := enabledVal.(bool); ok {
-				enabled = enabledBool
-			} else {
-				return fmt.Errorf("oauthProviders[%d].enabled must be a boolean", i)
-			}
-		}
-
-		// If enabled, validate required fields
-		if enabled {
-			if err := validateRequiredStringInProvider(providerMap, "clientId", i); err != nil {
-				return err
-			}
-			if err := validateRequiredStringInProvider(providerMap, "clientSecret", i); err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil
+}
+
+// validateOAuthProviderEntry validates a single OAuth provider entry in the array.
+// Returns the provider name if valid, or an error if validation fails.
+func validateOAuthProviderEntry(item any, index int, configuredProviders map[string]bool) (string, error) {
+	providerMap, ok := item.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("oauthProviders[%d] must be an object", index)
+	}
+
+	providerName, err := validateOAuthProviderName(providerMap, index, configuredProviders)
+	if err != nil {
+		return "", err
+	}
+
+	if err := validateOAuthProviderEnabled(providerMap, index); err != nil {
+		return "", err
+	}
+
+	return providerName, nil
+}
+
+// validateOAuthProviderName validates the provider name field and checks for duplicates.
+func validateOAuthProviderName(providerMap map[string]any, index int, configuredProviders map[string]bool) (string, error) {
+	providerName, ok := providerMap["provider"].(string)
+	if !ok || providerName == "" {
+		return "", fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
+	}
+
+	if !validOAuthProviders[providerName] {
+		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: google, github, microsoft)", index, providerName)
+	}
+
+	if configuredProviders[providerName] {
+		return "", fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
+	}
+
+	return providerName, nil
+}
+
+// validateOAuthProviderEnabled validates the enabled field and required credentials.
+func validateOAuthProviderEnabled(providerMap map[string]any, index int) error {
+	enabledVal, exists := providerMap["enabled"]
+	if !exists {
+		return nil
+	}
+
+	enabledBool, ok := enabledVal.(bool)
+	if !ok {
+		return fmt.Errorf("oauthProviders[%d].enabled must be a boolean", index)
+	}
+
+	if !enabledBool {
+		return nil
+	}
+
+	// Provider is enabled, validate required fields
+	if err := validateRequiredStringInProvider(providerMap, "clientId", index); err != nil {
+		return err
+	}
+	return validateRequiredStringInProvider(providerMap, "clientSecret", index)
 }
 
 // validateRequiredStringInProvider validates a required string field in an OAuth provider config

@@ -1145,6 +1145,92 @@ func FuzzGetAppConfig_Version(f *testing.F) {
 	})
 }
 
+// fuzzSecurityInput holds the fuzz test input parameters for security config testing.
+type fuzzSecurityInput struct {
+	basicEnabled     bool
+	googleEnabled    bool
+	githubEnabled    bool
+	microsoftEnabled bool
+	host             string
+}
+
+// buildFuzzOAuthProviders constructs an OAuth providers array from fuzz input flags.
+func buildFuzzOAuthProviders(input fuzzSecurityInput) []conf.OAuthProviderConfig {
+	var providers []conf.OAuthProviderConfig
+
+	if input.googleEnabled {
+		providers = append(providers, conf.OAuthProviderConfig{
+			Provider:     "google",
+			Enabled:      true,
+			ClientID:     "fuzz-google-client",
+			ClientSecret: "fuzz-google-secret",
+		})
+	}
+	if input.githubEnabled {
+		providers = append(providers, conf.OAuthProviderConfig{
+			Provider:     "github",
+			Enabled:      true,
+			ClientID:     "fuzz-github-client",
+			ClientSecret: "fuzz-github-secret",
+		})
+	}
+	if input.microsoftEnabled {
+		providers = append(providers, conf.OAuthProviderConfig{
+			Provider:     "microsoft",
+			Enabled:      true,
+			ClientID:     "fuzz-microsoft-client",
+			ClientSecret: "fuzz-microsoft-secret",
+		})
+	}
+
+	return providers
+}
+
+// verifyFuzzSecurityResponse verifies the response matches expected security configuration.
+func verifyFuzzSecurityResponse(t *testing.T, response AppConfigResponse, input fuzzSecurityInput, bodyStr string) {
+	t.Helper()
+
+	expectedEnabled := input.basicEnabled || input.googleEnabled || input.githubEnabled || input.microsoftEnabled
+	if response.Security.Enabled != expectedEnabled {
+		t.Errorf("Security.Enabled mismatch: expected %v, got %v", expectedEnabled, response.Security.Enabled)
+	}
+
+	if response.Security.AuthConfig.BasicEnabled != input.basicEnabled {
+		t.Errorf("BasicEnabled mismatch: expected %v, got %v", input.basicEnabled, response.Security.AuthConfig.BasicEnabled)
+	}
+
+	verifyFuzzOAuthProviders(t, response, input)
+	verifyFuzzHostNotExposed(t, bodyStr, input.host)
+}
+
+// verifyFuzzOAuthProviders checks that OAuth provider flags in response match input.
+func verifyFuzzOAuthProviders(t *testing.T, response AppConfigResponse, input fuzzSecurityInput) {
+	t.Helper()
+
+	hasProvider := func(provider string) bool {
+		return slices.Contains(response.Security.AuthConfig.EnabledProviders, provider)
+	}
+
+	if hasProvider("google") != input.googleEnabled {
+		t.Errorf("GoogleEnabled mismatch: expected %v, got %v", input.googleEnabled, hasProvider("google"))
+	}
+	if hasProvider("github") != input.githubEnabled {
+		t.Errorf("GithubEnabled mismatch: expected %v, got %v", input.githubEnabled, hasProvider("github"))
+	}
+	if hasProvider("microsoft") != input.microsoftEnabled {
+		t.Errorf("MicrosoftEnabled mismatch: expected %v, got %v", input.microsoftEnabled, hasProvider("microsoft"))
+	}
+}
+
+// verifyFuzzHostNotExposed checks that the host is not exposed in the response body.
+func verifyFuzzHostNotExposed(t *testing.T, bodyStr, host string) {
+	t.Helper()
+
+	if host != "" && strings.Contains(bodyStr, host) {
+		t.Errorf("Host should not be exposed in response: %s", host)
+	}
+}
+
 // FuzzGetAppConfig_SecurityConfig fuzzes the security configuration.
 // Run with: go test -fuzz=FuzzGetAppConfig_SecurityConfig -fuzztime=30s
 func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
@@ -1156,49 +1242,24 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 	f.Add(true, true, true, true, "<script>evil</script>")
 
 	f.Fuzz(func(t *testing.T, basicEnabled, googleEnabled, githubEnabled, microsoftEnabled bool, host string) {
+		input := fuzzSecurityInput{
+			basicEnabled:     basicEnabled,
+			googleEnabled:    googleEnabled,
+			githubEnabled:    githubEnabled,
+			microsoftEnabled: microsoftEnabled,
+			host:             host,
+		}
+
 		e := echo.New()
 		mockDS := mocks.NewMockInterface(t)
 
-		// Build OAuth providers array from fuzz input
-		// Note: GetEnabledOAuthProviders() requires ClientID and ClientSecret to be set
-		var oauthProviders []conf.OAuthProviderConfig
-		if googleEnabled {
-			oauthProviders = append(oauthProviders, conf.OAuthProviderConfig{
-				Provider:     "google",
-				Enabled:      true,
-				ClientID:     "fuzz-google-client",
-				ClientSecret: "fuzz-google-secret",
-			})
-		}
-		if githubEnabled {
-			oauthProviders = append(oauthProviders, conf.OAuthProviderConfig{
-				Provider:     "github",
-				Enabled:      true,
-				ClientID:     "fuzz-github-client",
-				ClientSecret: "fuzz-github-secret",
-			})
-		}
-		if microsoftEnabled {
-			oauthProviders = append(oauthProviders, conf.OAuthProviderConfig{
-				Provider:     "microsoft",
-				Enabled:      true,
-				ClientID:     "fuzz-microsoft-client",
-				ClientSecret: "fuzz-microsoft-secret",
-			})
-		}
-
-		// Construct security config from fuzzed values
-		securityConfig := conf.Security{
-			BasicAuth: conf.BasicAuth{
-				Enabled: basicEnabled,
-			},
-			OAuthProviders: oauthProviders,
-			Host:           host,
-		}
-
 		settings := &conf.Settings{
-			Version:  "1.0.0-fuzz",
-			Security: securityConfig,
+			Version: "1.0.0-fuzz",
+			Security: conf.Security{
+				BasicAuth:      conf.BasicAuth{Enabled: input.basicEnabled},
+				OAuthProviders: buildFuzzOAuthProviders(input),
+				Host:           input.host,
+			},
 		}
 
 		controller := &Controller{
@@ -1212,8 +1273,7 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 		c := e.NewContext(req, rec)
 		c.SetPath("/api/v2/app/config")
 
-		err := controller.GetAppConfig(c)
-		if err != nil {
+		if err := controller.GetAppConfig(c); err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
 
@@ -1226,37 +1286,6 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 			t.Errorf("Response is not valid JSON: %v", jsonErr)
 		}
 
-		// Verify security flags match input
-		expectedEnabled := basicEnabled || googleEnabled || githubEnabled || microsoftEnabled
-		if response.Security.Enabled != expectedEnabled {
-			t.Errorf("Security.Enabled mismatch: expected %v, got %v", expectedEnabled, response.Security.Enabled)
-		}
-
-		if response.Security.AuthConfig.BasicEnabled != basicEnabled {
-			t.Errorf("BasicEnabled mismatch: expected %v, got %v", basicEnabled, response.Security.AuthConfig.BasicEnabled)
-		}
-
-		// Helper to check if provider is in EnabledProviders
-		hasProvider := func(provider string) bool {
-			return slices.Contains(response.Security.AuthConfig.EnabledProviders, provider)
-		}
-
-		if hasProvider("google") != googleEnabled {
-			t.Errorf("GoogleEnabled mismatch: expected %v, got %v", googleEnabled, hasProvider("google"))
-		}
-
-		if hasProvider("github") != githubEnabled {
-			t.Errorf("GithubEnabled mismatch: expected %v, got %v", githubEnabled, hasProvider("github"))
-		}
-
-		if hasProvider("microsoft") != microsoftEnabled {
-			t.Errorf("MicrosoftEnabled mismatch: expected %v, got %v", microsoftEnabled, hasProvider("microsoft"))
-		}
-
-		// Verify sensitive data is not exposed
-		bodyStr := rec.Body.String()
-		if host != "" && strings.Contains(bodyStr, host) {
-			t.Errorf("Host should not be exposed in response: %s", host)
-		}
+		verifyFuzzSecurityResponse(t, response, input, rec.Body.String())
 	})
 }
