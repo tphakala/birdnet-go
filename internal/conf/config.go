@@ -909,6 +909,17 @@ type AllowSubnetBypass struct {
 	Subnet  string `json:"subnet"`  // disable OAuth2 in subnet
 }
 
+// OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format.
+// This replaces the individual GoogleAuth, GithubAuth, MicrosoftAuth fields.
+type OAuthProviderConfig struct {
+	Provider     string `yaml:"provider" json:"provider"`                       // Provider ID: "google", "github", "microsoft"
+	Enabled      bool   `yaml:"enabled" json:"enabled"`                         // true to enable this provider
+	ClientID     string `yaml:"clientId" json:"clientId"`                       // OAuth2 client ID
+	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`               // OAuth2 client secret
+	RedirectURI  string `yaml:"redirectUri,omitempty" json:"redirectUri"`       // OAuth2 redirect URI (optional, auto-generated if empty)
+	UserID       string `yaml:"userId,omitempty" json:"userId"`                 // Allowed user ID/email for this provider
+}
+
 // SecurityConfig handles all security-related settings and validations
 // for the application, including authentication, TLS, and access control.
 type Security struct {
@@ -937,11 +948,20 @@ type Security struct {
 	RedirectToHTTPS   bool              `json:"redirectToHttps"`   // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"` // subnet bypass configuration
 	BasicAuth         BasicAuth         `json:"basicAuth"`         // password authentication configuration
-	GoogleAuth        SocialProvider    `json:"googleAuth"`        // Google OAuth2 configuration
-	GithubAuth        SocialProvider    `json:"githubAuth"`        // Github OAuth2 configuration
-	MicrosoftAuth     SocialProvider    `json:"microsoftAuth"`     // Microsoft Account OAuth2 configuration
-	SessionSecret     string            `json:"sessionSecret"`     // secret for session cookie
-	SessionDuration   time.Duration     `json:"sessionDuration"`   // duration for browser session cookies
+
+	// OAuthProviders is the new array-based OAuth configuration.
+	// This is the preferred format for configuring OAuth providers.
+	OAuthProviders []OAuthProviderConfig `yaml:"oauthProviders,omitempty" json:"oauthProviders"`
+
+	// Legacy OAuth fields - kept for backwards compatibility.
+	// These are migrated to OAuthProviders on startup and ignored thereafter.
+	// Will be removed in a future version.
+	GoogleAuth    SocialProvider `yaml:"googleAuth,omitempty" json:"googleAuth,omitempty"`       //nolint:modernize // Deprecated: use OAuthProviders, yaml.v3 doesn't support omitzero
+	GithubAuth    SocialProvider `yaml:"githubAuth,omitempty" json:"githubAuth,omitempty"`       //nolint:modernize // Deprecated: use OAuthProviders, yaml.v3 doesn't support omitzero
+	MicrosoftAuth SocialProvider `yaml:"microsoftAuth,omitempty" json:"microsoftAuth,omitempty"` //nolint:modernize // Deprecated: use OAuthProviders, yaml.v3 doesn't support omitzero
+
+	SessionSecret   string        `json:"sessionSecret"`   // secret for session cookie
+	SessionDuration time.Duration `json:"sessionDuration"` // duration for browser session cookies
 }
 
 type WebServerSettings struct {
@@ -1224,6 +1244,20 @@ func Load() (*Settings, error) {
 			Build()
 	}
 
+	// Migrate legacy OAuth configuration to new array format
+	// This must happen before validation and saving
+	if settings.MigrateOAuthConfig() {
+		// Save the migrated config back to file
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				log.Printf("Warning: Failed to save migrated OAuth config: %v", err)
+			} else {
+				log.Printf("Saved migrated OAuth configuration to %s", configFile)
+			}
+		}
+	}
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
@@ -1412,6 +1446,88 @@ func GetSettings() *Settings {
 	settingsMutex.RLock()
 	defer settingsMutex.RUnlock()
 	return settingsInstance
+}
+
+// migrateLegacyProvider converts a legacy SocialProvider to the new OAuthProviderConfig format.
+// Returns nil if the legacy provider is not configured (no ClientID).
+func migrateLegacyProvider(providerName string, legacy SocialProvider) *OAuthProviderConfig {
+	if legacy.ClientID == "" {
+		return nil
+	}
+	return &OAuthProviderConfig{
+		Provider:     providerName,
+		Enabled:      legacy.Enabled,
+		ClientID:     legacy.ClientID,
+		ClientSecret: legacy.ClientSecret,
+		RedirectURI:  legacy.RedirectURI,
+		UserID:       legacy.UserId,
+	}
+}
+
+// MigrateOAuthConfig migrates legacy OAuth configuration (GoogleAuth, GithubAuth, MicrosoftAuth)
+// to the new OAuthProviders array format. This migration:
+// - Skips if OAuthProviders already has entries (already migrated)
+// - Only migrates providers that have a ClientID configured
+// - Preserves all settings from the legacy format
+// - Returns true if migration occurred, false if skipped
+func (s *Settings) MigrateOAuthConfig() bool {
+	// Skip if already migrated (new array has entries)
+	if len(s.Security.OAuthProviders) > 0 {
+		return false
+	}
+
+	// Define legacy providers to migrate
+	legacyProviders := []struct {
+		name   string
+		config SocialProvider
+	}{
+		{"google", s.Security.GoogleAuth},
+		{"github", s.Security.GithubAuth},
+		{"microsoft", s.Security.MicrosoftAuth},
+	}
+
+	var migrated bool
+	for _, legacy := range legacyProviders {
+		if cfg := migrateLegacyProvider(legacy.name, legacy.config); cfg != nil {
+			s.Security.OAuthProviders = append(s.Security.OAuthProviders, *cfg)
+			migrated = true
+			log.Printf("Migrated %s OAuth configuration to new format", legacy.name)
+		}
+	}
+
+	if migrated {
+		log.Printf("OAuth configuration migration complete. Legacy fields will be ignored.")
+	}
+
+	return migrated
+}
+
+// GetOAuthProvider returns the OAuth provider configuration for the given provider ID.
+// Returns nil if the provider is not configured.
+func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
+	for i := range s.Security.OAuthProviders {
+		if s.Security.OAuthProviders[i].Provider == providerID {
+			return &s.Security.OAuthProviders[i]
+		}
+	}
+	return nil
+}
+
+// IsOAuthProviderEnabled returns true if the specified OAuth provider is enabled.
+func (s *Settings) IsOAuthProviderEnabled(providerID string) bool {
+	provider := s.GetOAuthProvider(providerID)
+	return provider != nil && provider.Enabled && provider.ClientID != "" && provider.ClientSecret != ""
+}
+
+// GetEnabledOAuthProviders returns a list of provider IDs that are enabled.
+func (s *Settings) GetEnabledOAuthProviders() []string {
+	var enabled []string
+	for _, p := range s.Security.OAuthProviders {
+		if p.Enabled && p.ClientID != "" && p.ClientSecret != "" {
+			enabled = append(enabled, p.Provider)
+		}
+	}
+	return enabled
 }
 
 // prepareSettingsForSave applies data transformations to settings before saving.

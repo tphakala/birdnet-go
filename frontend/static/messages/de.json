@@ -2372,6 +2372,33 @@
       "oauth": {
         "title": "OAuth2 Social-Authentifizierung",
         "description": "Single Sign-On zur Anmeldung mit Ihrem bestehenden Konto",
+        "form": {
+          "editTitle": "OAuth-Anbieter bearbeiten",
+          "addTitle": "OAuth-Anbieter hinzufügen",
+          "providerLabel": "Anbieter",
+          "providerHelpText": "Wählen Sie den zu konfigurierenden OAuth-Anbieter",
+          "cancelButton": "Abbrechen",
+          "saveButton": "Speichern"
+        },
+        "providers": {
+          "title": "Konfigurierte Anbieter",
+          "addButton": "Anbieter hinzufügen",
+          "enableToggle": "Anbieterstatus umschalten",
+          "editButton": "Anbietereinstellungen bearbeiten",
+          "deleteButton": "Anbieter löschen",
+          "deleteConfirm": "Möchten Sie den {provider}-OAuth-Anbieter wirklich löschen?"
+        },
+        "noProviders": "Keine OAuth-Anbieter konfiguriert",
+        "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um die soziale Anmeldung mit Google-, GitHub- oder Microsoft-Konten zu aktivieren.",
+        "enableProviderLabel": "Diesen Anbieter aktivieren",
+        "getCredentialsLabel": "Holen Sie sich Ihre Anmeldedaten von {provider}",
+        "redirectUriTitle": "Umleitungs-URI:",
+        "clientIdLabel": "Client-ID",
+        "clientIdHelpText": "Die OAuth 2.0 Client-ID aus der Entwicklerkonsole Ihres Anbieters",
+        "clientSecretLabel": "Client-Geheimnis",
+        "clientSecretHelpText": "Das OAuth 2.0 Client-Geheimnis aus der Entwicklerkonsole Ihres Anbieters",
+        "userIdLabel": "Benutzer-ID (optional)",
+        "userIdHelpText": "Zugriff auf ein bestimmtes Benutzerkonto per E-Mail oder ID beschränken",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "OAuth2-Anmeldung über Google erlauben",

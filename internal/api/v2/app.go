@@ -55,27 +55,19 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		csrfToken = token
 	}
 
+	// Get enabled OAuth providers from the new array-based config
+	// This returns provider IDs for all enabled providers with valid credentials
+	enabledProviders := c.Settings.GetEnabledOAuthProviders()
+	// Ensure we always return an array (not null) for JSON serialization
+	if enabledProviders == nil {
+		enabledProviders = []string{}
+	}
+
 	// Determine if any security method is enabled
-	securityEnabled := c.Settings.Security.BasicAuth.Enabled ||
-		c.Settings.Security.GoogleAuth.Enabled ||
-		c.Settings.Security.GithubAuth.Enabled ||
-		c.Settings.Security.MicrosoftAuth.Enabled
+	securityEnabled := c.Settings.Security.BasicAuth.Enabled || len(enabledProviders) > 0
 
 	// Determine if access is currently allowed
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
-
-	// Build list of enabled OAuth providers
-	// Initialize to empty slice so JSON serializes as [] instead of null
-	enabledProviders := []string{}
-	if c.Settings.Security.GoogleAuth.Enabled {
-		enabledProviders = append(enabledProviders, "google")
-	}
-	if c.Settings.Security.GithubAuth.Enabled {
-		enabledProviders = append(enabledProviders, "github")
-	}
-	if c.Settings.Security.MicrosoftAuth.Enabled {
-		enabledProviders = append(enabledProviders, "microsoft")
-	}
 
 	// Build response
 	response := AppConfigResponse{

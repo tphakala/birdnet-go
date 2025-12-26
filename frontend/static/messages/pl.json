@@ -2092,6 +2092,33 @@
       "oauth": {
         "title": "Uwierzytelnianie Społecznościowe OAuth2",
         "description": "Pojedyncze logowanie za pomocą istniejącego konta",
+        "form": {
+          "editTitle": "Edytuj dostawcę OAuth",
+          "addTitle": "Dodaj dostawcę OAuth",
+          "providerLabel": "Dostawca",
+          "providerHelpText": "Wybierz dostawcę OAuth do skonfigurowania",
+          "cancelButton": "Anuluj",
+          "saveButton": "Zapisz"
+        },
+        "providers": {
+          "title": "Skonfigurowani dostawcy",
+          "addButton": "Dodaj dostawcę",
+          "enableToggle": "Przełącz stan dostawcy",
+          "editButton": "Edytuj ustawienia dostawcy",
+          "deleteButton": "Usuń dostawcę",
+          "deleteConfirm": "Czy na pewno chcesz usunąć dostawcę OAuth {provider}?"
+        },
+        "noProviders": "Brak skonfigurowanych dostawców OAuth",
+        "noProvidersDescription": "Dodaj dostawcę, aby włączyć logowanie społecznościowe za pomocą kont Google, GitHub lub Microsoft.",
+        "enableProviderLabel": "Włącz tego dostawcę",
+        "getCredentialsLabel": "Uzyskaj swoje poświadczenia z {provider}",
+        "redirectUriTitle": "URI przekierowania:",
+        "clientIdLabel": "ID klienta",
+        "clientIdHelpText": "ID klienta OAuth 2.0 z konsoli deweloperskiej dostawcy",
+        "clientSecretLabel": "Sekret klienta",
+        "clientSecretHelpText": "Sekret klienta OAuth 2.0 z konsoli deweloperskiej dostawcy",
+        "userIdLabel": "ID użytkownika (opcjonalnie)",
+        "userIdHelpText": "Ogranicz dostęp do określonego konta użytkownika według adresu e-mail lub ID",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Zezwalaj na Logowanie OAuth2 przez Google",

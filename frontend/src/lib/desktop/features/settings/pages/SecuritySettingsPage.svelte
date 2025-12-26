@@ -1,33 +1,35 @@
 <!--
   Security Settings Page Component
-  
+
   Purpose: Configure authentication and access control for BirdNET-Go including
   HTTPS/TLS settings, basic authentication, OAuth2 social login providers, and
   subnet-based authentication bypass.
-  
+
   Features:
   - Server configuration with automatic TLS via Let's Encrypt
   - Basic authentication with password protection
-  - OAuth2 integration (Google, GitHub) with user restrictions
+  - OAuth2 integration (Google, GitHub, Microsoft) with dynamic provider management
   - Subnet-based authentication bypass for local networks
   - Dynamic redirect URI generation based on host settings
   - Real-time validation and change detection
-  
+
   Props: None - This is a page component that uses global settings stores
-  
+
   Performance Optimizations:
   - Removed page-level loading spinner to prevent flickering
   - Reactive settings with $derived instead of $state + $effect
   - Cached CSRF token to avoid repeated DOM queries
   - Reactive change detection with $derived
   - Dynamic redirect URI generation based on current host
-  
+
   @component
 -->
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -36,12 +38,28 @@
     settingsStore,
     settingsActions,
     securitySettings,
+    type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network } from '@lucide/svelte';
+  import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-  import { GoogleIcon, GithubIcon, MicrosoftIcon, AUTH_PROVIDERS } from '$lib/auth';
+  import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
+  import type { Component } from 'svelte';
 
+  // Provider type for OAuth providers
+  type OAuthProviderType = 'google' | 'github' | 'microsoft';
+
+  // OAuth provider option for dropdown
+  interface OAuthProviderOption extends SelectOption {
+    providerId: OAuthProviderType;
+  }
+
+  // All available OAuth providers
+  const allOAuthProviders: OAuthProviderOption[] = [
+    { value: 'google', label: 'Google', providerId: 'google' },
+    { value: 'github', label: 'GitHub', providerId: 'github' },
+    { value: 'microsoft', label: 'Microsoft', providerId: 'microsoft' },
+  ];
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -54,30 +72,16 @@
         username: '',
         password: '',
       },
-      googleAuth: {
-        enabled: false,
-        clientId: '',
-        clientSecret: '',
-        userId: '',
-      },
-      githubAuth: {
-        enabled: false,
-        clientId: '',
-        clientSecret: '',
-        userId: '',
-      },
-      microsoftAuth: {
-        enabled: false,
-        clientId: '',
-        clientSecret: '',
-        userId: '',
-      },
+      oauthProviders: [],
       allowSubnetBypass: {
         enabled: false,
         subnet: '',
       },
     }
   );
+
+  // OAuth providers from settings
+  let oauthProviders = $derived(settings?.oauthProviders ?? []);
 
   let store = $derived($settingsStore);
 
@@ -106,18 +110,36 @@
 
   let oauthHasChanges = $derived(
     hasSettingsChanged(
-      {
-        googleAuth: store.originalData.security?.googleAuth,
-        githubAuth: store.originalData.security?.githubAuth,
-        microsoftAuth: store.originalData.security?.microsoftAuth,
-      },
-      {
-        googleAuth: store.formData.security?.googleAuth,
-        githubAuth: store.formData.security?.githubAuth,
-        microsoftAuth: store.formData.security?.microsoftAuth,
-      }
+      store.originalData.security?.oauthProviders,
+      store.formData.security?.oauthProviders
     )
   );
+
+  // OAuth provider form state
+  let showProviderForm = $state(false);
+  let editingProviderIndex = $state<number | null>(null);
+  let selectedProvider = $state<OAuthProviderType>('google');
+  let providerFormData = $state<{
+    clientId: string;
+    clientSecret: string;
+    userId: string;
+    enabled: boolean;
+  }>({
+    clientId: '',
+    clientSecret: '',
+    userId: '',
+    enabled: true,
+  });
+
+  // Available providers (filter out already configured ones)
+  let availableProviders = $derived(
+    allOAuthProviders.filter(
+      p => !oauthProviders.some(configured => configured.provider === p.providerId)
+    )
+  );
+
+  // Disable "Add" button when all providers are configured
+  let canAddProvider = $derived(availableProviders.length > 0);
 
   let subnetBypassHasChanges = $derived(
     hasSettingsChanged(
@@ -160,16 +182,38 @@
   // Whether we have explicit base URL configuration for redirect URIs
   let hasExplicitBaseUrl = $derived(configuredBaseUrl !== '');
 
-  // Use OAuth callback paths from provider registry for consistency
-  // Backend supports both /auth/:provider/callback and /api/v1/auth/:provider/callback
-  let googleRedirectURI = $derived(`${currentHost}${AUTH_PROVIDERS.google.settings.callbackPath}`);
-  let githubRedirectURI = $derived(`${currentHost}${AUTH_PROVIDERS.github.settings.callbackPath}`);
-  let microsoftRedirectURI = $derived(`${currentHost}${AUTH_PROVIDERS.microsoft.settings.callbackPath}`);
+  // Helper function to get redirect URI for a provider (for display)
+  function getRedirectURI(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    const provider = AUTH_PROVIDERS[providerType];
+    return `${currentHost}${provider?.settings.callbackPath || `/auth/${providerType}/callback`}`;
+  }
 
-  // Computed redirect URIs for saving to config (based on configured host/baseUrl)
-  let googleConfigRedirectURI = $derived(`${configuredBaseUrl}${AUTH_PROVIDERS.google.settings.callbackPath}`);
-  let githubConfigRedirectURI = $derived(`${configuredBaseUrl}${AUTH_PROVIDERS.github.settings.callbackPath}`);
-  let microsoftConfigRedirectURI = $derived(`${configuredBaseUrl}${AUTH_PROVIDERS.microsoft.settings.callbackPath}`);
+  // Helper function to get config redirect URI for a provider (for saving)
+  function getConfigRedirectURI(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    const provider = AUTH_PROVIDERS[providerType];
+    return `${configuredBaseUrl}${provider?.settings.callbackPath || `/auth/${providerType}/callback`}`;
+  }
+
+  // Helper to get provider icon component from AUTH_PROVIDERS registry
+  function getProviderIcon(providerType: OAuthProviderType): Component {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    return AUTH_PROVIDERS[providerType]?.icon ?? GoogleIcon;
+  }
+
+  // Helper to get provider display name from AUTH_PROVIDERS registry
+  function getProviderDisplayName(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    return AUTH_PROVIDERS[providerType]?.name ?? providerType;
+  }
+
+  // Helper to get credentials URL for a provider
+  function getCredentialsUrl(providerType: OAuthProviderType): string {
+    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
+    const provider = AUTH_PROVIDERS[providerType];
+    return provider?.settings.credentialsUrl || '';
+  }
 
   // Server Configuration update handlers
   function updateBaseUrl(baseUrl: string) {
@@ -208,94 +252,108 @@
     });
   }
 
-  // Helper to build OAuth update object, handling redirectURI correctly:
-  // - When hasExplicitBaseUrl is true: use computed redirectURI
-  // - When false: explicitly remove redirectURI so backend auto-generates it
-  // This prevents stale redirectURI values from persisting when baseUrl is removed
-  function buildOAuthUpdate<T extends { redirectURI?: string }>(
-    currentSettings: T,
-    updates: Partial<T>,
-    computedRedirectURI: string
-  ): T {
-    const result = { ...currentSettings, ...updates };
-    if (hasExplicitBaseUrl) {
-      result.redirectURI = computedRedirectURI;
+  // OAuth Provider management functions
+  function openAddProviderForm() {
+    if (!canAddProvider) return;
+    editingProviderIndex = null;
+    selectedProvider = availableProviders[0]?.providerId ?? 'google';
+    providerFormData = {
+      clientId: '',
+      clientSecret: '',
+      userId: '',
+      enabled: true,
+    };
+    showProviderForm = true;
+  }
+
+  function openEditProviderForm(index: number) {
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated below
+    const provider = oauthProviders[index];
+    if (!provider) return;
+
+    editingProviderIndex = index;
+    selectedProvider = provider.provider as OAuthProviderType;
+    providerFormData = {
+      clientId: provider.clientId,
+      clientSecret: provider.clientSecret,
+      userId: provider.userId ?? '',
+      enabled: provider.enabled,
+    };
+    showProviderForm = true;
+  }
+
+  function closeProviderForm() {
+    showProviderForm = false;
+    editingProviderIndex = null;
+  }
+
+  function saveProvider() {
+    // Build the provider config
+    const newProvider: OAuthProviderConfig = {
+      provider: selectedProvider,
+      enabled: providerFormData.enabled,
+      clientId: providerFormData.clientId,
+      clientSecret: providerFormData.clientSecret,
+      userId: providerFormData.userId || undefined,
+      // Set redirectUri only if we have explicit base URL configuration
+      redirectUri: hasExplicitBaseUrl ? getConfigRedirectURI(selectedProvider) : undefined,
+    };
+
+    // Update the providers array
+    const updatedProviders = [...oauthProviders];
+    if (editingProviderIndex !== null) {
+      // Update existing provider
+      // eslint-disable-next-line security/detect-object-injection -- editingProviderIndex is from our state, validated as not null
+      updatedProviders[editingProviderIndex] = newProvider;
     } else {
-      delete result.redirectURI;
+      // Add new provider
+      updatedProviders.push(newProvider);
     }
-    return result;
+
+    // Update settings
+    settingsActions.updateSection('security', {
+      ...settings,
+      oauthProviders: updatedProviders,
+    });
+
+    closeProviderForm();
   }
 
-  // Google OAuth update handlers
-  function updateGoogleAuthEnabled(enabled: boolean) {
-    const googleUpdate = buildOAuthUpdate(settings.googleAuth, { enabled }, googleConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
-  }
+  function deleteProvider(index: number) {
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated below
+    const provider = oauthProviders[index];
+    if (!provider) return;
 
-  function updateGoogleClientId(clientId: string) {
-    const googleUpdate = buildOAuthUpdate(settings.googleAuth, { clientId }, googleConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
-  }
-
-  function updateGoogleClientSecret(clientSecret: string) {
-    const googleUpdate = buildOAuthUpdate(
-      settings.googleAuth,
-      { clientSecret },
-      googleConfigRedirectURI
+    const providerName = getProviderDisplayName(provider.provider as OAuthProviderType);
+    const confirmDelete = window.confirm(
+      t('settings.security.oauth.providers.deleteConfirm', { provider: providerName })
     );
-    settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
+
+    if (confirmDelete) {
+      const updatedProviders = oauthProviders.filter((_, i) => i !== index);
+      settingsActions.updateSection('security', {
+        ...settings,
+        oauthProviders: updatedProviders,
+      });
+    }
   }
 
-  function updateGoogleUserId(userId: string) {
-    const googleUpdate = buildOAuthUpdate(settings.googleAuth, { userId }, googleConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, googleAuth: googleUpdate });
-  }
+  function toggleProviderEnabled(index: number) {
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated below
+    const provider = oauthProviders[index];
+    if (!provider) return;
 
-  // GitHub OAuth update handlers
-  function updateGithubAuthEnabled(enabled: boolean) {
-    const githubUpdate = buildOAuthUpdate(settings.githubAuth, { enabled }, githubConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
-  }
+    const updatedProviders = [...oauthProviders];
+    // eslint-disable-next-line security/detect-object-injection -- index is derived from array iteration, validated above
+    updatedProviders[index] = {
+      ...provider,
+      enabled: !provider.enabled,
+    };
 
-  function updateGithubClientId(clientId: string) {
-    const githubUpdate = buildOAuthUpdate(settings.githubAuth, { clientId }, githubConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
-  }
-
-  function updateGithubClientSecret(clientSecret: string) {
-    const githubUpdate = buildOAuthUpdate(
-      settings.githubAuth,
-      { clientSecret },
-      githubConfigRedirectURI
-    );
-    settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
-  }
-
-  function updateGithubUserId(userId: string) {
-    const githubUpdate = buildOAuthUpdate(settings.githubAuth, { userId }, githubConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, githubAuth: githubUpdate });
-  }
-
-  // Microsoft OAuth update handlers
-  function updateMicrosoftAuth(update: Partial<typeof settings.microsoftAuth>) {
-    const microsoftUpdate = buildOAuthUpdate(settings.microsoftAuth, update, microsoftConfigRedirectURI);
-    settingsActions.updateSection('security', { ...settings, microsoftAuth: microsoftUpdate });
-  }
-
-  function updateMicrosoftAuthEnabled(enabled: boolean) {
-    updateMicrosoftAuth({ enabled });
-  }
-
-  function updateMicrosoftClientId(clientId: string) {
-    updateMicrosoftAuth({ clientId });
-  }
-
-  function updateMicrosoftClientSecret(clientSecret: string) {
-    updateMicrosoftAuth({ clientSecret });
-  }
-
-  function updateMicrosoftUserId(userId: string) {
-    updateMicrosoftAuth({ userId });
+    settingsActions.updateSection('security', {
+      ...settings,
+      oauthProviders: updatedProviders,
+    });
   }
 
   // Subnet Bypass update handlers
@@ -475,219 +533,217 @@
     <SettingsSection
       title={t('settings.security.oauth.title')}
       description={t('settings.security.oauth.description')}
-      originalData={{
-        googleAuth: store.originalData.security?.googleAuth,
-        githubAuth: store.originalData.security?.githubAuth,
-        microsoftAuth: store.originalData.security?.microsoftAuth,
-      }}
-      currentData={{
-        googleAuth: store.formData.security?.googleAuth,
-        githubAuth: store.formData.security?.githubAuth,
-        microsoftAuth: store.formData.security?.microsoftAuth,
-      }}
+      originalData={store.originalData.security?.oauthProviders}
+      currentData={store.formData.security?.oauthProviders}
     >
-    <div class="space-y-6">
-      <!-- Google Auth -->
-      <div class="border border-base-300 rounded-lg p-4">
-        <h4 class="text-lg font-medium mb-4 flex items-center gap-3">
-          <GoogleIcon class="w-6 h-6" />
-          {t('settings.security.oauth.google.title')}
-        </h4>
+      <div class="space-y-4">
+        <!-- Provider Form (shown when adding or editing) -->
+        {#if showProviderForm}
+          <div class="card bg-base-200 border border-primary">
+            <div class="card-body">
+              <h3 class="card-title text-base">
+                {editingProviderIndex !== null
+                  ? t('settings.security.oauth.form.editTitle')
+                  : t('settings.security.oauth.form.addTitle')}
+              </h3>
 
-        <Checkbox
-          checked={settings.googleAuth.enabled}
-          label={t('settings.security.oauth.google.enableLabel')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateGoogleAuthEnabled}
-        />
+              <div class="space-y-4">
+                <!-- Provider Selector (only for add mode) -->
+                {#if editingProviderIndex === null}
+                  <SelectDropdown
+                    options={availableProviders}
+                    bind:value={selectedProvider}
+                    label={t('settings.security.oauth.form.providerLabel')}
+                    helpText={t('settings.security.oauth.form.providerHelpText')}
+                    variant="select"
+                    groupBy={false}
+                  >
+                    {#snippet renderOption(option)}
+                      {@const providerOption = option as OAuthProviderOption}
+                      {@const IconComponent = getProviderIcon(providerOption.providerId)}
+                      <div class="flex items-center gap-2">
+                        <IconComponent class="size-4" />
+                        <span>{providerOption.label}</span>
+                      </div>
+                    {/snippet}
+                    {#snippet renderSelected(options)}
+                      {@const providerOption = options[0] as OAuthProviderOption}
+                      {@const IconComponent = getProviderIcon(providerOption.providerId)}
+                      <span class="flex items-center gap-2">
+                        <IconComponent class="size-4" />
+                        <span>{providerOption.label}</span>
+                      </span>
+                    {/snippet}
+                  </SelectDropdown>
+                {:else}
+                  <!-- Show provider name when editing (not editable) -->
+                  {@const IconComponent = getProviderIcon(selectedProvider)}
+                  <div class="flex items-center gap-2 text-lg font-medium">
+                    <IconComponent class="size-5" />
+                    <span>{getProviderDisplayName(selectedProvider)}</span>
+                  </div>
+                {/if}
 
-        {#if settings.googleAuth?.enabled}
-          <form class="mt-4 space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
-            <!-- Redirect URI Information -->
-            <div class="bg-base-200 p-3 rounded-lg">
-              <div class="text-sm">
-                <p class="font-medium mb-1">{t('settings.security.oauth.google.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{googleRedirectURI}</code>
+                <!-- Redirect URI Information -->
+                <div class="bg-base-300 p-3 rounded-lg">
+                  <div class="text-sm">
+                    <p class="font-medium mb-1">{t('settings.security.oauth.redirectUriTitle')}</p>
+                    <code class="text-xs bg-base-200 px-2 py-1 rounded-sm break-all">{getRedirectURI(selectedProvider)}</code>
+                  </div>
+                  <a
+                    href={getCredentialsUrl(selectedProvider)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
+                  >
+                    {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
+                    <ExternalLink class="size-4" />
+                  </a>
+                </div>
+
+                <!-- Credentials Fields -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <PasswordField
+                    label={t('settings.security.oauth.clientIdLabel')}
+                    value={providerFormData.clientId}
+                    onUpdate={(value) => (providerFormData.clientId = value)}
+                    placeholder=""
+                    helpText={t('settings.security.oauth.clientIdHelpText')}
+                    disabled={store.isLoading || store.isSaving}
+                    allowReveal={true}
+                  />
+
+                  <PasswordField
+                    label={t('settings.security.oauth.clientSecretLabel')}
+                    value={providerFormData.clientSecret}
+                    onUpdate={(value) => (providerFormData.clientSecret = value)}
+                    placeholder=""
+                    helpText={t('settings.security.oauth.clientSecretHelpText')}
+                    disabled={store.isLoading || store.isSaving}
+                    allowReveal={true}
+                  />
+                </div>
+
+                <TextInput
+                  id="oauth-user-id"
+                  value={providerFormData.userId}
+                  label={t('settings.security.oauth.userIdLabel')}
+                  placeholder={t('settings.security.placeholders.allowedUsers')}
+                  helpText={t('settings.security.oauth.userIdHelpText')}
+                  disabled={store.isLoading || store.isSaving}
+                  onchange={(value) => (providerFormData.userId = value)}
+                />
+
+                <Checkbox
+                  checked={providerFormData.enabled}
+                  label={t('settings.security.oauth.enableProviderLabel')}
+                  disabled={store.isLoading || store.isSaving}
+                  onchange={(enabled) => (providerFormData.enabled = enabled)}
+                />
+
+                <!-- Form Actions -->
+                <div class="flex gap-2 justify-end pt-2">
+                  <button
+                    onclick={closeProviderForm}
+                    class="btn btn-ghost btn-sm"
+                    disabled={store.isLoading || store.isSaving}
+                  >
+                    {t('settings.security.oauth.form.cancelButton')}
+                  </button>
+                  <button
+                    onclick={saveProvider}
+                    class="btn btn-primary btn-sm"
+                    disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret}
+                  >
+                    {t('settings.security.oauth.form.saveButton')}
+                  </button>
+                </div>
               </div>
-              <a
-                href={AUTH_PROVIDERS.google.settings.credentialsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
+            </div>
+          </div>
+        {/if}
+
+        <!-- Providers List Header -->
+        <div class="flex items-center justify-between">
+          <h3 class="font-semibold text-sm">
+            {t('settings.security.oauth.providers.title')}
+          </h3>
+          {#if !showProviderForm && canAddProvider}
+            <button onclick={openAddProviderForm} class="btn btn-sm btn-primary gap-1">
+              <Plus class="size-4" />
+              {t('settings.security.oauth.providers.addButton')}
+            </button>
+          {/if}
+        </div>
+
+        <!-- Providers List -->
+        {#if oauthProviders.length > 0}
+          <div class="space-y-2">
+            {#each oauthProviders as provider, index (provider.provider)}
+              {@const providerType = provider.provider as OAuthProviderType}
+              {@const IconComponent = getProviderIcon(providerType)}
+              <div
+                class="card bg-base-200"
+                class:opacity-50={!provider.enabled}
               >
-                {t('settings.security.oauth.google.getCredentialsLabel')}
-                <ExternalLink class="size-4" />
-              </a>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <PasswordField
-                label={t('settings.security.oauth.google.clientIdLabel')}
-                value={settings.googleAuth.clientId}
-                onUpdate={updateGoogleClientId}
-                placeholder=""
-                helpText={t('settings.security.oauth.google.clientIdHelpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
-
-              <PasswordField
-                label={t('settings.security.oauth.google.clientSecretLabel')}
-                value={settings.googleAuth.clientSecret}
-                onUpdate={updateGoogleClientSecret}
-                placeholder=""
-                helpText={t('settings.security.oauth.google.clientSecretHelpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
-            </div>
-
-            <TextInput
-              id="google-user-id"
-              value={settings.googleAuth.userId ?? ''}
-              label={t('settings.security.oauth.google.userIdLabel')}
-              placeholder={t('settings.security.placeholders.allowedUsers')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateGoogleUserId}
-            />
-          </form>
+                <div class="card-body py-3 px-4">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <input
+                        type="checkbox"
+                        class="toggle toggle-sm toggle-primary"
+                        checked={provider.enabled}
+                        onchange={() => toggleProviderEnabled(index)}
+                        aria-label={t('settings.security.oauth.providers.enableToggle')}
+                        disabled={showProviderForm}
+                      />
+                      <div class="flex items-center gap-2 min-w-0">
+                        <IconComponent class="size-5 shrink-0" />
+                        <div class="min-w-0">
+                          <div class="font-medium truncate">{getProviderDisplayName(providerType)}</div>
+                          {#if provider.userId}
+                            <div class="text-xs text-[color:var(--color-base-content)] opacity-60 truncate">
+                              {provider.userId}
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button
+                        onclick={() => openEditProviderForm(index)}
+                        class="btn btn-ghost btn-xs btn-square"
+                        title={t('settings.security.oauth.providers.editButton')}
+                        aria-label={t('settings.security.oauth.providers.editButton')}
+                        disabled={showProviderForm}
+                      >
+                        <Pencil class="size-3.5" />
+                      </button>
+                      <button
+                        onclick={() => deleteProvider(index)}
+                        class="btn btn-ghost btn-xs btn-square text-error"
+                        title={t('settings.security.oauth.providers.deleteButton')}
+                        aria-label={t('settings.security.oauth.providers.deleteButton')}
+                        disabled={showProviderForm}
+                      >
+                        <Trash2 class="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else if !showProviderForm}
+          <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-60 bg-base-200 rounded-lg">
+            <Users class="size-10 mx-auto mb-3 opacity-50" />
+            <p class="text-sm font-medium">{t('settings.security.oauth.noProviders')}</p>
+            <p class="text-xs mt-1">
+              {t('settings.security.oauth.noProvidersDescription')}
+            </p>
+          </div>
         {/if}
       </div>
-
-      <!-- GitHub Auth -->
-      <div class="border border-base-300 rounded-lg p-4">
-        <h4 class="text-lg font-medium mb-4 flex items-center gap-3">
-          <GithubIcon class="w-6 h-6" />
-          {t('settings.security.oauth.github.title')}
-        </h4>
-
-        <Checkbox
-          checked={settings.githubAuth.enabled}
-          label={t('settings.security.oauth.github.enableLabel')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateGithubAuthEnabled}
-        />
-
-        {#if settings.githubAuth?.enabled}
-          <form class="mt-4 space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
-            <!-- Redirect URI Information -->
-            <div class="bg-base-200 p-3 rounded-lg">
-              <div class="text-sm">
-                <p class="font-medium mb-1">{t('settings.security.oauth.github.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{githubRedirectURI}</code>
-              </div>
-              <a
-                href={AUTH_PROVIDERS.github.settings.credentialsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
-              >
-                {t('settings.security.oauth.github.getCredentialsLabel')}
-                <ExternalLink class="size-4" />
-              </a>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <PasswordField
-                label={t('settings.security.oauth.github.clientIdLabel')}
-                value={settings.githubAuth.clientId}
-                onUpdate={updateGithubClientId}
-                placeholder=""
-                helpText={t('settings.security.oauth.github.clientIdHelpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
-
-              <PasswordField
-                label={t('settings.security.oauth.github.clientSecretLabel')}
-                value={settings.githubAuth.clientSecret}
-                onUpdate={updateGithubClientSecret}
-                placeholder=""
-                helpText={t('settings.security.oauth.github.clientSecretHelpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
-            </div>
-
-            <TextInput
-              id="github-user-id"
-              value={settings.githubAuth.userId ?? ''}
-              label={t('settings.security.oauth.github.userIdLabel')}
-              placeholder={t('settings.security.placeholders.allowedUsers')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateGithubUserId}
-            />
-          </form>
-        {/if}
-      </div>
-
-      <!-- Microsoft Auth -->
-      <div class="border border-base-300 rounded-lg p-4">
-        <h4 class="text-lg font-medium mb-4 flex items-center gap-3">
-          <MicrosoftIcon class="w-6 h-6" />
-          {t('settings.security.oauth.microsoft.title')}
-        </h4>
-
-        <Checkbox
-          checked={settings.microsoftAuth.enabled}
-          label={t('settings.security.oauth.microsoft.enableLabel')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateMicrosoftAuthEnabled}
-        />
-
-        {#if settings.microsoftAuth?.enabled}
-          <form class="mt-4 space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
-            <!-- Redirect URI Information -->
-            <div class="bg-base-200 p-3 rounded-lg">
-              <div class="text-sm">
-                <p class="font-medium mb-1">{t('settings.security.oauth.microsoft.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{microsoftRedirectURI}</code>
-              </div>
-              <a
-                href={AUTH_PROVIDERS.microsoft.settings.credentialsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
-              >
-                {t('settings.security.oauth.microsoft.getCredentialsLabel')}
-                <ExternalLink class="size-4" />
-              </a>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <PasswordField
-                label={t('settings.security.oauth.microsoft.clientIdLabel')}
-                value={settings.microsoftAuth.clientId}
-                onUpdate={updateMicrosoftClientId}
-                placeholder=""
-                helpText={t('settings.security.oauth.microsoft.clientIdHelpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
-
-              <PasswordField
-                label={t('settings.security.oauth.microsoft.clientSecretLabel')}
-                value={settings.microsoftAuth.clientSecret}
-                onUpdate={updateMicrosoftClientSecret}
-                placeholder=""
-                helpText={t('settings.security.oauth.microsoft.clientSecretHelpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
-            </div>
-
-            <TextInput
-              id="microsoft-user-id"
-              value={settings.microsoftAuth.userId ?? ''}
-              label={t('settings.security.oauth.microsoft.userIdLabel')}
-              placeholder={t('settings.security.placeholders.allowedUsers')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateMicrosoftUserId}
-            />
-          </form>
-        {/if}
-      </div>
-    </div>
     </SettingsSection>
   </div>
 {/snippet}

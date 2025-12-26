@@ -289,6 +289,16 @@ export interface WeatherSettings {
   wunderground: WundergroundSettings;
 }
 
+// New array-based OAuth provider configuration
+export interface OAuthProviderConfig {
+  provider: 'google' | 'github' | 'microsoft';
+  enabled: boolean;
+  clientId: string;
+  clientSecret: string;
+  redirectUri?: string;
+  userId?: string;
+}
+
 export interface SecuritySettings {
   baseUrl: string;
   host: string;
@@ -298,15 +308,19 @@ export interface SecuritySettings {
     username: string;
     password: string;
   };
-  googleAuth: OAuthSettings;
-  githubAuth: OAuthSettings;
-  microsoftAuth: OAuthSettings;
+  // New array-based OAuth provider configuration
+  oauthProviders?: OAuthProviderConfig[];
+  // Legacy OAuth settings (deprecated, kept for backwards compatibility)
+  googleAuth?: OAuthSettings;
+  githubAuth?: OAuthSettings;
+  microsoftAuth?: OAuthSettings;
   allowSubnetBypass: {
     enabled: boolean;
     subnet: string;
   };
 }
 
+// Legacy OAuth settings interface (deprecated)
 export interface OAuthSettings {
   enabled: boolean;
   clientId: string;
@@ -737,24 +751,8 @@ function createEmptySettings(): SettingsFormData {
         username: '',
         password: '',
       },
-      googleAuth: {
-        enabled: false,
-        clientId: '',
-        clientSecret: '',
-        userId: '',
-      },
-      githubAuth: {
-        enabled: false,
-        clientId: '',
-        clientSecret: '',
-        userId: '',
-      },
-      microsoftAuth: {
-        enabled: false,
-        clientId: '',
-        clientSecret: '',
-        userId: '',
-      },
+      // New array-based OAuth providers (replaces legacy individual provider fields)
+      oauthProviders: [],
       allowSubnetBypass: {
         enabled: false,
         subnet: '',
