@@ -98,7 +98,6 @@ type AudioSettings struct {
 	StreamTransport string             `json:"streamTransport"`                                              // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings     `json:"export"`                                                       // export settings
 	SoundLevel      SoundLevelSettings `json:"soundLevel"`                                                   // sound level monitoring settings
-	UseAudioCore    bool               `yaml:"useaudiocore" mapstructure:"useaudiocore" json:"useAudioCore"` // true to use new audiocore package instead of myaudio
 
 	Equalizer EqualizerSettings `json:"equalizer"` // equalizer settings
 }

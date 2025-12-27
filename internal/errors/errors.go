@@ -401,7 +401,6 @@ func init() {
 	RegisterComponent("telemetry", "telemetry")
 	RegisterComponent("birdweather", "birdweather")
 	RegisterComponent("backup", "backup")
-	RegisterComponent("audiocore", "audiocore")
 	RegisterComponent("api", "api")
 
 	// Analysis package components - use slash-separated paths for subpackages

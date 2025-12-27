@@ -153,7 +153,6 @@ jobs:
                 # Map package paths to labels
                 case "$package" in
                   "internal/analysis"*) PACKAGE_LABELS+=",pkg:analysis" ;;
-                  "internal/audiocore"*) PACKAGE_LABELS+=",pkg:audiocore" ;;
                   "internal/api"*) PACKAGE_LABELS+=",pkg:api" ;;
                   "internal/birdnet"*) PACKAGE_LABELS+=",pkg:birdnet" ;;
                   "internal/myaudio"*) PACKAGE_LABELS+=",pkg:myaudio" ;;
