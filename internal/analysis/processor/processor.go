@@ -47,6 +47,7 @@ type Processor struct {
 	Settings            *conf.Settings
 	Ds                  datastore.Interface
 	Bn                  *birdnet.BirdNET
+	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
 	BwClient            *birdweather.BwClient
 	bwClientMutex       sync.RWMutex // Mutex to protect BwClient access
 	MqttClient          mqtt.Client
@@ -256,12 +257,24 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	}
 }
 
-// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *observability.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
+// New creates a new Processor with the given dependencies.
+// The parentLog parameter should be the analysis package logger, which will be used to create
+// a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+	// Create child logger from parent for hierarchical logging
+	var procLog logger.Logger
+	if parentLog != nil {
+		procLog = parentLog.Module("processor")
+	} else {
+		// Fallback to global logger if parent not provided
+		procLog = logger.Global().Module("analysis.processor")
+	}
+
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,
 		Bn:             bn,
+		log:            procLog,
 		BirdImageCache: birdImageCache,
 		EventTracker: NewEventTrackerWithConfig(
 			time.Duration(settings.Realtime.Interval)*time.Second,
@@ -1824,7 +1837,8 @@ func (p *Processor) initPreRenderer() {
 		ctx := context.Background()
 
 		// Create and start pre-renderer
-		pr := spectrogram.NewPreRenderer(ctx, p.Settings, sfs, GetLogger())
+		// Pass nil for logger to use slog.Default() - spectrogram package not yet migrated to Logger interface
+		pr := spectrogram.NewPreRenderer(ctx, p.Settings, sfs, nil)
 		pr.Start()
 
 		p.preRenderer = pr

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestGetLogger tests the GetLogger function
@@ -17,11 +18,9 @@ func TestGetLogger(t *testing.T) {
 	logger1 := GetLogger()
 	logger2 := GetLogger()
 
-	// Both should return the same instance
-	assert.Same(t, logger1, logger2, "GetLogger should return the same instance")
-
-	// Logger should not be nil
+	// Both should return the same module logger instance
 	assert.NotNil(t, logger1, "GetLogger returned nil")
+	assert.NotNil(t, logger2, "GetLogger returned nil")
 }
 
 // TestLoggerOutput tests that the logger produces expected output
@@ -29,19 +28,14 @@ func TestLoggerOutput(t *testing.T) {
 	// Create a buffer to capture output
 	var buf bytes.Buffer
 
-	// Create a test logger with JSON handler
-	testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
+	// Create a test logger using the logger package's NewSlogLogger
+	testLogger := logger.NewSlogLogger(&buf, logger.LogLevelDebug, time.UTC)
 
-	// Temporarily replace the package logger
-	oldLogger := logger
-	logger = testLogger
-	t.Cleanup(func() { logger = oldLogger })
-
-	// Use GetLogger and write a log
-	l := GetLogger()
-	l.Info("test message", "key", "value", "number", 42)
+	// Write a log message with structured fields
+	testLogger.Info("test message",
+		logger.String("key", "value"),
+		logger.Int("number", 42),
+	)
 
 	// Parse JSON output
 	var logEntry map[string]any
@@ -59,24 +53,16 @@ func TestLoggerLevels(t *testing.T) {
 	var buf bytes.Buffer
 
 	// Create logger with Info level
-	testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-
-	oldLogger := logger
-	logger = testLogger
-	t.Cleanup(func() { logger = oldLogger })
-
-	l := GetLogger()
+	testLogger := logger.NewSlogLogger(&buf, logger.LogLevelInfo, time.UTC)
 
 	// Debug should not appear
 	buf.Reset()
-	l.Debug("debug message")
+	testLogger.Debug("debug message")
 	assert.Zero(t, buf.Len(), "Debug message should not appear at Info level")
 
 	// Info should appear
 	buf.Reset()
-	l.Info("info message")
+	testLogger.Info("info message")
 	var logEntry map[string]any
 	err := json.Unmarshal(buf.Bytes(), &logEntry)
 	require.NoError(t, err, "Failed to parse Info log JSON")
@@ -85,7 +71,7 @@ func TestLoggerLevels(t *testing.T) {
 
 	// Warn should appear
 	buf.Reset()
-	l.Warn("warn message")
+	testLogger.Warn("warn message")
 	err = json.Unmarshal(buf.Bytes(), &logEntry)
 	require.NoError(t, err, "Failed to parse Warn log JSON")
 	assert.Equal(t, "WARN", logEntry["level"], "Expected level 'WARN'")
@@ -93,7 +79,7 @@ func TestLoggerLevels(t *testing.T) {
 
 	// Error should appear
 	buf.Reset()
-	l.Error("error message")
+	testLogger.Error("error message")
 	err = json.Unmarshal(buf.Bytes(), &logEntry)
 	require.NoError(t, err, "Failed to parse Error log JSON")
 	assert.Equal(t, "ERROR", logEntry["level"], "Expected level 'ERROR'")

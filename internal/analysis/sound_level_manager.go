@@ -2,7 +2,6 @@ package analysis
 
 import (
 	"log"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -109,10 +108,8 @@ func (m *SoundLevelManager) Stop() {
 	settings := conf.Setting()
 	unregisterAllSoundLevelProcessors(settings)
 
-	// Close the sound level logger to release file handles
-	if err := CloseSoundLevelLogger(); err != nil {
-		log.Printf("Warning: Failed to close sound level logger: %v", err)
-	}
+	// Note: With the centralized logger, file handle cleanup is managed by the central logger
+	// No explicit close is needed here
 
 	m.isRunning = false
 	m.doneChan = nil
@@ -136,14 +133,10 @@ func (m *SoundLevelManager) IsRunning() bool {
 // updateSoundLevelDebugSettings updates the debug log levels for sound level components
 func updateSoundLevelDebugSettings() {
 	settings := conf.Setting()
-	
-	// Update the analysis sound level logger
-	if settings.Realtime.Audio.SoundLevel.Debug {
-		getSoundLevelServiceLevelVar().Set(slog.LevelDebug)
-	} else {
-		getSoundLevelServiceLevelVar().Set(slog.LevelInfo)
-	}
-	
+
+	// Note: With the centralized logger, log levels are managed via configuration.
+	// Debug checks happen at call sites using conf.Setting().Realtime.Audio.SoundLevel.Debug
+
 	// Update the myaudio sound level logger
 	myaudio.UpdateSoundLevelDebugSetting(settings.Realtime.Audio.SoundLevel.Debug)
 }

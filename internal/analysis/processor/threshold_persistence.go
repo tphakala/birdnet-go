@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 // This is called during processor initialization to restore learned thresholds across restarts
 func (p *Processor) loadDynamicThresholdsFromDB() error {
 	GetLogger().Info("Loading dynamic thresholds from database",
-		"operation", "load_dynamic_thresholds")
+		logger.String("operation", "load_dynamic_thresholds"))
 
 	thresholds, err := p.Ds.GetAllDynamicThresholds()
 	if err != nil {
@@ -38,15 +39,15 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 			strings.Contains(errStr, "no such table") ||
 			strings.Contains(errStr, "doesn't exist") {
 			GetLogger().Debug("No existing dynamic thresholds found (first run)",
-				"reason", errStr,
-				"operation", "load_dynamic_thresholds")
+				logger.String("reason", errStr),
+				logger.String("operation", "load_dynamic_thresholds"))
 			return nil // Normal condition, not an error
 		}
 
 		// Actual database error - log as warning
 		GetLogger().Warn("Database error loading dynamic thresholds",
-			"error", err,
-			"operation", "load_dynamic_thresholds")
+			logger.Error(err),
+			logger.String("operation", "load_dynamic_thresholds"))
 		return err
 	}
 
@@ -64,9 +65,9 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 			expiredCount++
 			if p.Settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Skipping expired threshold",
-					"species", dbThreshold.SpeciesName,
-					"expires_at", dbThreshold.ExpiresAt,
-					"operation", "load_dynamic_thresholds")
+					logger.String("species", dbThreshold.SpeciesName),
+					logger.Time("expires_at", dbThreshold.ExpiresAt),
+					logger.String("operation", "load_dynamic_thresholds"))
 			}
 			continue
 		}
@@ -83,19 +84,19 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 
 		if p.Settings.Realtime.DynamicThreshold.Debug {
 			GetLogger().Debug("Loaded dynamic threshold",
-				"species", dbThreshold.SpeciesName,
-				"threshold_level", dbThreshold.Level,
-				"current_value", dbThreshold.CurrentValue,
-				"expires_at", dbThreshold.ExpiresAt,
-				"operation", "load_dynamic_thresholds")
+				logger.String("species", dbThreshold.SpeciesName),
+				logger.Int("threshold_level", dbThreshold.Level),
+				logger.Float64("current_value", dbThreshold.CurrentValue),
+				logger.Time("expires_at", dbThreshold.ExpiresAt),
+				logger.String("operation", "load_dynamic_thresholds"))
 		}
 	}
 
 	GetLogger().Info("Dynamic thresholds loaded from database",
-		"loaded_count", loadedCount,
-		"expired_count", expiredCount,
-		"total_retrieved", len(thresholds),
-		"operation", "load_dynamic_thresholds")
+		logger.Int("loaded_count", loadedCount),
+		logger.Int("expired_count", expiredCount),
+		logger.Int("total_retrieved", len(thresholds)),
+		logger.String("operation", "load_dynamic_thresholds"))
 
 	return nil
 }
@@ -124,9 +125,9 @@ func (p *Processor) persistDynamicThresholds() error {
 			expiredSpecies = append(expiredSpecies, speciesName)
 			if p.Settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Found expired threshold during persistence",
-					"species", speciesName,
-					"expires_at", threshold.Timer,
-					"operation", "persist_dynamic_thresholds")
+					logger.String("species", speciesName),
+					logger.Time("expires_at", threshold.Timer),
+					logger.String("operation", "persist_dynamic_thresholds"))
 			}
 			continue
 		}
@@ -159,8 +160,8 @@ func (p *Processor) persistDynamicThresholds() error {
 		p.thresholdsMutex.Unlock()
 
 		GetLogger().Info("Cleaned expired thresholds from memory",
-			"count", len(expiredSpecies),
-			"operation", "persist_dynamic_thresholds")
+			logger.Int("count", len(expiredSpecies)),
+			logger.String("operation", "persist_dynamic_thresholds"))
 	}
 
 	// Nothing to persist after filtering expired thresholds
@@ -188,21 +189,21 @@ func (p *Processor) persistDynamicThresholds() error {
 		if !isLockError || attempt == maxRetries-1 {
 			// Not a lock error or exhausted retries
 			GetLogger().Error("Failed to persist dynamic thresholds",
-				"error", err,
-				"threshold_count", len(dbThresholds),
-				"attempt", attempt+1,
-				"max_retries", maxRetries,
-				"operation", "persist_dynamic_thresholds")
+				logger.Error(err),
+				logger.Int("threshold_count", len(dbThresholds)),
+				logger.Int("attempt", attempt+1),
+				logger.Int("max_retries", maxRetries),
+				logger.String("operation", "persist_dynamic_thresholds"))
 			return err
 		}
 
 		// Exponential backoff: 100ms, 200ms, 400ms
 		backoffDuration := baseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt is bounded by maxRetries (3), no overflow risk
 		GetLogger().Warn("Database locked, retrying after backoff",
-			"attempt", attempt+1,
-			"max_retries", maxRetries,
-			"backoff_ms", backoffDuration.Milliseconds(),
-			"operation", "persist_dynamic_thresholds")
+			logger.Int("attempt", attempt+1),
+			logger.Int("max_retries", maxRetries),
+			logger.Int64("backoff_ms", backoffDuration.Milliseconds()),
+			logger.String("operation", "persist_dynamic_thresholds"))
 
 		// Context-aware sleep - allows early exit on shutdown
 		select {
@@ -210,15 +211,15 @@ func (p *Processor) persistDynamicThresholds() error {
 			// Continue to retry
 		case <-p.thresholdsCtx.Done():
 			GetLogger().Info("Retry aborted due to shutdown",
-				"operation", "persist_dynamic_thresholds")
+				logger.String("operation", "persist_dynamic_thresholds"))
 			return p.thresholdsCtx.Err()
 		}
 	}
 
 	if p.Settings.Realtime.DynamicThreshold.Debug {
 		GetLogger().Debug("Persisted dynamic thresholds to database",
-			"count", len(dbThresholds),
-			"operation", "persist_dynamic_thresholds")
+			logger.Int("count", len(dbThresholds)),
+			logger.String("operation", "persist_dynamic_thresholds"))
 	}
 
 	return nil
@@ -238,21 +239,21 @@ func (p *Processor) startThresholdPersistence() {
 		defer ticker.Stop()
 
 		GetLogger().Info("Starting dynamic threshold persistence",
-			"persist_interval_seconds", int(DefaultPersistInterval.Seconds()),
-			"operation", "threshold_persistence_startup")
+			logger.Int("persist_interval_seconds", int(DefaultPersistInterval.Seconds())),
+			logger.String("operation", "threshold_persistence_startup"))
 
 		for {
 			select {
 			case <-ticker.C:
 				if err := p.persistDynamicThresholds(); err != nil {
 					GetLogger().Error("Failed to persist dynamic thresholds",
-						"error", err,
-						"operation", "persist_dynamic_thresholds")
+						logger.Error(err),
+						logger.String("operation", "persist_dynamic_thresholds"))
 				}
 			case <-p.thresholdsCtx.Done():
 				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold persistence stopped",
-					"operation", "threshold_persistence_shutdown")
+					logger.String("operation", "threshold_persistence_shutdown"))
 				return
 			}
 		}
@@ -270,8 +271,8 @@ func (p *Processor) startThresholdCleanup() {
 		defer ticker.Stop()
 
 		GetLogger().Info("Starting dynamic threshold cleanup",
-			"cleanup_interval_hours", int(DefaultCleanupInterval.Hours()),
-			"operation", "threshold_cleanup_startup")
+			logger.Int("cleanup_interval_hours", int(DefaultCleanupInterval.Hours())),
+			logger.String("operation", "threshold_cleanup_startup"))
 
 		for {
 			select {
@@ -279,17 +280,17 @@ func (p *Processor) startThresholdCleanup() {
 				deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
 				if err != nil {
 					GetLogger().Error("Failed to clean expired thresholds",
-						"error", err,
-						"operation", "cleanup_dynamic_thresholds")
+						logger.Error(err),
+						logger.String("operation", "cleanup_dynamic_thresholds"))
 				} else if deleted > 0 {
 					GetLogger().Info("Cleaned expired dynamic thresholds",
-						"count", deleted,
-						"operation", "cleanup_dynamic_thresholds")
+						logger.Int64("count", deleted),
+						logger.String("operation", "cleanup_dynamic_thresholds"))
 				}
 			case <-p.thresholdsCtx.Done():
 				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold cleanup stopped",
-					"operation", "threshold_cleanup_shutdown")
+					logger.String("operation", "threshold_cleanup_shutdown"))
 				return
 			}
 		}
@@ -300,16 +301,16 @@ func (p *Processor) startThresholdCleanup() {
 // This is useful during graceful shutdown to ensure no data loss
 func (p *Processor) FlushDynamicThresholds() error {
 	GetLogger().Info("Flushing dynamic thresholds to database",
-		"operation", "flush_dynamic_thresholds")
+		logger.String("operation", "flush_dynamic_thresholds"))
 
 	if err := p.persistDynamicThresholds(); err != nil {
 		GetLogger().Error("Failed to flush dynamic thresholds",
-			"error", err,
-			"operation", "flush_dynamic_thresholds")
+			logger.Error(err),
+			logger.String("operation", "flush_dynamic_thresholds"))
 		return err
 	}
 
 	GetLogger().Info("Dynamic thresholds flushed successfully",
-		"operation", "flush_dynamic_thresholds")
+		logger.String("operation", "flush_dynamic_thresholds"))
 	return nil
 }
