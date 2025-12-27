@@ -4,7 +4,6 @@ package spectrogram
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -42,7 +42,7 @@ const (
 type PreRenderer struct {
 	settings  *conf.Settings
 	sfs       *securefs.SecureFS
-	logger    *slog.Logger
+	logger    logger.Logger
 	generator *Generator // Shared generator for actual generation
 
 	// Lifecycle management
@@ -83,18 +83,18 @@ type Stats struct {
 
 // NewPreRenderer creates a new pre-renderer instance.
 // The parentCtx is used for lifecycle management and cancellation.
-// If logger is nil, slog.Default() is used to prevent nil pointer panics.
-func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.Logger) *PreRenderer {
-	if logger == nil {
-		logger = slog.Default()
+// If logger is nil, logger.Global() is used to prevent nil pointer panics.
+func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *securefs.SecureFS, log logger.Logger) *PreRenderer {
+	if log == nil {
+		log = logger.Global().Module("spectrogram.prerenderer")
 	}
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	return &PreRenderer{
 		settings:  settings,
 		sfs:       sfs,
-		logger:    logger,
-		generator: NewGenerator(settings, sfs, logger), // Initialize shared generator
+		logger:    log,
+		generator: NewGenerator(settings, sfs, log), // Initialize shared generator
 		ctx:       ctx,
 		cancel:    cancel,
 		jobs:      make(chan *Job, defaultQueueSize),
@@ -105,10 +105,10 @@ func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *sec
 // Start initializes the worker pool and begins processing jobs.
 func (pr *PreRenderer) Start() {
 	pr.logger.Info("Starting spectrogram pre-renderer",
-		"workers", pr.workers,
-		"queue_size", defaultQueueSize,
-		"size", pr.settings.Realtime.Dashboard.Spectrogram.Size,
-		"raw", pr.settings.Realtime.Dashboard.Spectrogram.Raw)
+		logger.Int("workers", pr.workers),
+		logger.Int("queue_size", defaultQueueSize),
+		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+		logger.Bool("raw", pr.settings.Realtime.Dashboard.Spectrogram.Raw))
 
 	for i := 0; i < pr.workers; i++ {
 		pr.wg.Add(1)
@@ -148,16 +148,16 @@ func (pr *PreRenderer) Stop() {
 		pr.logger.Info("Spectrogram pre-renderer stopped gracefully")
 	case <-time.After(shutdownTimeout):
 		pr.logger.Warn("Spectrogram pre-renderer shutdown timeout",
-			"timeout", shutdownTimeout)
+			logger.Duration("timeout", shutdownTimeout))
 	}
 
 	// Log final stats
 	stats := pr.GetStats()
 	pr.logger.Info("Spectrogram pre-renderer final stats",
-		"queued", stats.Queued,
-		"completed", stats.Completed,
-		"failed", stats.Failed,
-		"skipped", stats.Skipped)
+		logger.Int64("queued", stats.Queued),
+		logger.Int64("completed", stats.Completed),
+		logger.Int64("failed", stats.Failed),
+		logger.Int64("skipped", stats.Skipped))
 }
 
 // Submit queues a job for background processing.
@@ -186,9 +186,9 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Invalid clip path, rejecting job",
-			"note_id", job.NoteID,
-			"clip_path", job.ClipPath,
-			"error", err)
+			logger.Any("note_id", job.NoteID),
+			logger.String("clip_path", job.ClipPath),
+			logger.Error(err))
 		// Increment Failed stat for validation errors
 		pr.mu.Lock()
 		pr.stats.Failed++
@@ -208,9 +208,9 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	absRoot, err := filepath.Abs(exportPath)
 	if err != nil {
 		pr.logger.Error("Failed to resolve export path to absolute",
-			"note_id", job.NoteID,
-			"export_path", exportPath,
-			"error", err)
+			logger.Any("note_id", job.NoteID),
+			logger.String("export_path", exportPath),
+			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -226,9 +226,9 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	absOut, err := filepath.Abs(spectrogramPath)
 	if err != nil {
 		pr.logger.Error("Failed to resolve spectrogram path to absolute",
-			"note_id", job.NoteID,
-			"spectrogram_path", spectrogramPath,
-			"error", err)
+			logger.Any("note_id", job.NoteID),
+			logger.String("spectrogram_path", spectrogramPath),
+			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -244,11 +244,11 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	relPath, err := filepath.Rel(absRoot, absOut)
 	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
 		pr.logger.Error("Path traversal attempt detected, rejecting job",
-			"note_id", job.NoteID,
-			"clip_path", job.ClipPath,
-			"spectrogram_path", absOut,
-			"export_path", absRoot,
-			"relative_path", relPath)
+			logger.Any("note_id", job.NoteID),
+			logger.String("clip_path", job.ClipPath),
+			logger.String("spectrogram_path", absOut),
+			logger.String("export_path", absRoot),
+			logger.String("relative_path", relPath))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -270,8 +270,8 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		pr.stats.Skipped++
 		pr.mu.Unlock()
 		pr.logger.Debug("Spectrogram already exists, skipping queue",
-			"note_id", job.NoteID,
-			"spectrogram_path", spectrogramPath)
+			logger.Any("note_id", job.NoteID),
+			logger.String("spectrogram_path", spectrogramPath))
 		return nil
 	}
 
@@ -279,8 +279,8 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	defer func() {
 		if r := recover(); r != nil {
 			pr.logger.Error("Panic during job submission (channel likely closed)",
-				"note_id", job.NoteID,
-				"panic", r)
+				logger.Any("note_id", job.NoteID),
+				logger.Any("panic", r))
 			pr.mu.Lock()
 			pr.stats.Failed++
 			pr.mu.Unlock()
@@ -301,7 +301,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	case <-pr.ctx.Done():
 		// Context cancelled, don't attempt to send
 		pr.logger.Debug("Pre-renderer context cancelled, rejecting job",
-			"note_id", job.NoteID)
+			logger.Any("note_id", job.NoteID))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -329,16 +329,16 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		// Log at INFO level when spectrogram generation is queued (BG-18)
 		// This provides visibility into the pre-rendering pipeline without debug mode
 		pr.logger.Info("Spectrogram generation queued",
-			"note_id", job.NoteID,
-			"queue_depth", currentQueueDepth,     // Current backlog (0-3 for default queue size)
-			"total_queued", totalQueued,          // Lifetime counter
-			"operation", "spectrogram_queued")
+			logger.Any("note_id", job.NoteID),
+			logger.Int("queue_depth", currentQueueDepth),     // Current backlog (0-3 for default queue size)
+			logger.Int64("total_queued", totalQueued),        // Lifetime counter
+			logger.String("operation", "spectrogram_queued"))
 		return nil
 	default:
 		pr.logger.Warn("Pre-render queue full, dropping job",
-			"note_id", job.NoteID,
-			"clip_path", job.ClipPath,
-			"queue_size", defaultQueueSize)
+			logger.Any("note_id", job.NoteID),
+			logger.String("clip_path", job.ClipPath),
+			logger.Int("queue_size", defaultQueueSize))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -356,16 +356,16 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 func (pr *PreRenderer) worker(id int) {
 	defer pr.wg.Done()
 
-	pr.logger.Debug("Pre-render worker started", "worker_id", id)
+	pr.logger.Debug("Pre-render worker started", logger.Int("worker_id", id))
 
 	for {
 		select {
 		case <-pr.ctx.Done():
-			pr.logger.Debug("Pre-render worker stopping", "worker_id", id)
+			pr.logger.Debug("Pre-render worker stopping", logger.Int("worker_id", id))
 			return
 		case job, ok := <-pr.jobs:
 			if !ok {
-				pr.logger.Debug("Pre-render worker channel closed", "worker_id", id)
+				pr.logger.Debug("Pre-render worker channel closed", logger.Int("worker_id", id))
 				return
 			}
 			pr.processJob(job, id)
@@ -378,19 +378,19 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	start := time.Now()
 
 	pr.logger.Debug("Processing pre-render job",
-		"worker_id", workerID,
-		"note_id", job.NoteID,
-		"clip_path", job.ClipPath,
-		"pcm_bytes", len(job.PCMData))
+		logger.Int("worker_id", workerID),
+		logger.Any("note_id", job.NoteID),
+		logger.String("clip_path", job.ClipPath),
+		logger.Int("pcm_bytes", len(job.PCMData)))
 
 	// Build spectrogram path from clip path
 	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Failed to build spectrogram path",
-			"worker_id", workerID,
-			"note_id", job.NoteID,
-			"clip_path", job.ClipPath,
-			"error", err)
+			logger.Int("worker_id", workerID),
+			logger.Any("note_id", job.NoteID),
+			logger.String("clip_path", job.ClipPath),
+			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -405,9 +405,9 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	// Impact: Job skipped instead of caught in Submit() - no functional difference
 	if _, err := os.Stat(spectrogramPath); err == nil {
 		pr.logger.Debug("Spectrogram already exists, skipping",
-			"worker_id", workerID,
-			"note_id", job.NoteID,
-			"spectrogram_path", spectrogramPath)
+			logger.Int("worker_id", workerID),
+			logger.Any("note_id", job.NoteID),
+			logger.String("spectrogram_path", spectrogramPath))
 		pr.mu.Lock()
 		pr.stats.Skipped++
 		pr.mu.Unlock()
@@ -418,10 +418,10 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	width, err := SizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
 	if err != nil {
 		pr.logger.Error("Invalid spectrogram size",
-			"worker_id", workerID,
-			"note_id", job.NoteID,
-			"size", pr.settings.Realtime.Dashboard.Spectrogram.Size,
-			"error", err)
+			logger.Int("worker_id", workerID),
+			logger.Any("note_id", job.NoteID),
+			logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -435,10 +435,10 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	// Log at INFO level when generation starts (BG-18)
 	// This provides visibility into the generation pipeline
 	pr.logger.Info("Spectrogram generation started",
-		"note_id", job.NoteID,
-		"audio_path", job.ClipPath,
-		"size", pr.settings.Realtime.Dashboard.Spectrogram.Size,
-		"operation", "spectrogram_generation_start")
+		logger.Any("note_id", job.NoteID),
+		logger.String("audio_path", job.ClipPath),
+		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+		logger.String("operation", "spectrogram_generation_start"))
 
 	// Generate spectrogram using shared generator
 	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
@@ -451,23 +451,23 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		if isOperationalError {
 			// Log at Debug level for expected operational events
 			pr.logger.Debug("Spectrogram generation canceled or interrupted",
-				"worker_id", workerID,
-				"note_id", job.NoteID,
-				"clip_path", job.ClipPath,
-				"spectrogram_path", spectrogramPath,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds(),
-				"operation", "spectrogram_generation_canceled")
+				logger.Int("worker_id", workerID),
+				logger.Any("note_id", job.NoteID),
+				logger.String("clip_path", job.ClipPath),
+				logger.String("spectrogram_path", spectrogramPath),
+				logger.Error(err),
+				logger.Int64("duration_ms", time.Since(start).Milliseconds()),
+				logger.String("operation", "spectrogram_generation_canceled"))
 		} else {
 			// Log at Error level for unexpected failures
 			pr.logger.Error("Failed to generate spectrogram",
-				"worker_id", workerID,
-				"note_id", job.NoteID,
-				"clip_path", job.ClipPath,
-				"spectrogram_path", spectrogramPath,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds(),
-				"operation", "spectrogram_generation_failed")
+				logger.Int("worker_id", workerID),
+				logger.Any("note_id", job.NoteID),
+				logger.String("clip_path", job.ClipPath),
+				logger.String("spectrogram_path", spectrogramPath),
+				logger.Error(err),
+				logger.Int64("duration_ms", time.Since(start).Milliseconds()),
+				logger.String("operation", "spectrogram_generation_failed"))
 		}
 		pr.mu.Lock()
 		pr.stats.Failed++
@@ -483,19 +483,19 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	} else {
 		// Debug log if we can't stat the file (shouldn't happen after successful generation)
 		pr.logger.Debug("Failed to stat spectrogram file for size logging",
-			"note_id", job.NoteID,
-			"error", err,
-			"path", spectrogramPath)
+			logger.Any("note_id", job.NoteID),
+			logger.Error(err),
+			logger.String("path", spectrogramPath))
 	}
 
 	// Log at INFO level when generation succeeds (BG-18)
 	// This provides confirmation that spectrograms are being created successfully
 	pr.logger.Info("Spectrogram generated successfully",
-		"note_id", job.NoteID,
-		"output_path", spectrogramPath,
-		"file_size_bytes", fileSize,
-		"duration_ms", time.Since(start).Milliseconds(),
-		"operation", "spectrogram_generation_success")
+		logger.Any("note_id", job.NoteID),
+		logger.String("output_path", spectrogramPath),
+		logger.Int64("file_size_bytes", fileSize),
+		logger.Int64("duration_ms", time.Since(start).Milliseconds()),
+		logger.String("operation", "spectrogram_generation_success"))
 
 	// Allow GC to reclaim PCM buffer promptly
 	job.PCMData = nil

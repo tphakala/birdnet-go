@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -101,20 +101,19 @@ const (
 type Generator struct {
 	settings *conf.Settings
 	sfs      *securefs.SecureFS
-	logger   *slog.Logger
+	logger   logger.Logger
 }
 
 // NewGenerator creates a new generator instance.
-// If logger is nil, slog.Default() is used to prevent nil pointer panics.
-func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.Logger) *Generator {
-	if logger == nil {
-		logger = slog.Default()
+// If logger is nil, logger.Global() is used to prevent nil pointer panics.
+func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, log logger.Logger) *Generator {
+	if log == nil {
+		log = logger.Global().Module("spectrogram")
 	}
-	logger = logger.With("component", "spectrogram")
 	return &Generator{
 		settings: settings,
 		sfs:      sfs,
-		logger:   logger,
+		logger:   log,
 	}
 }
 
@@ -135,10 +134,10 @@ func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.
 func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
 	start := time.Now()
 	g.logger.Debug("Starting spectrogram generation from file",
-		"audio_path", audioPath,
-		"output_path", outputPath,
-		"width", width,
-		"raw", raw)
+		logger.String("audio_path", audioPath),
+		logger.String("output_path", outputPath),
+		logger.Int("width", width),
+		logger.Bool("raw", raw))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {
@@ -177,8 +176,8 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	// Try Sox first (faster, direct processing)
 	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw); err != nil {
 		g.logger.Debug("Sox generation failed, trying FFmpeg fallback",
-			"audio_path", audioPath,
-			"sox_error", err.Error())
+			logger.String("audio_path", audioPath),
+			logger.Error(err))
 
 		// Create FRESH context for FFmpeg fallback with full timeout.
 		// This ensures FFmpeg has adequate time even if Sox consumed most of the
@@ -190,16 +189,16 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		// Fallback to FFmpeg pipeline with fresh context
 		if ffmpegErr := g.generateWithFFmpeg(ffmpegCtx, audioPath, outputPath, width, raw); ffmpegErr != nil {
 			g.logger.Error("Both Sox and FFmpeg generation failed",
-				"audio_path", audioPath,
-				"sox_error", err.Error(),
-				"ffmpeg_error", ffmpegErr.Error())
+				logger.String("audio_path", audioPath),
+				logger.String("sox_error", err.Error()),
+				logger.String("ffmpeg_error", ffmpegErr.Error()))
 			return ffmpegErr
 		}
 	}
 
 	g.logger.Debug("Spectrogram generation completed successfully",
-		"audio_path", audioPath,
-		"duration_ms", time.Since(start).Milliseconds())
+		logger.String("audio_path", audioPath),
+		logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 
 	return nil
 }
@@ -216,10 +215,10 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
 	start := time.Now()
 	g.logger.Debug("Starting spectrogram generation from PCM",
-		"output_path", outputPath,
-		"pcm_bytes", len(pcmData),
-		"width", width,
-		"raw", raw)
+		logger.String("output_path", outputPath),
+		logger.Int("pcm_bytes", len(pcmData)),
+		logger.Int("width", width),
+		logger.Bool("raw", raw))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {
@@ -268,8 +267,8 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	}
 
 	g.logger.Debug("Spectrogram generation from PCM completed successfully",
-		"output_path", outputPath,
-		"duration_ms", time.Since(start).Milliseconds())
+		logger.String("output_path", outputPath),
+		logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 
 	return nil
 }
@@ -324,9 +323,9 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	soxArgs := g.getSoxArgs(ctx, audioPath, outputPath, width, raw, SoxInputFile)
 
 	g.logger.Debug("Executing SoX command directly",
-		"sox_binary", soxBinary,
-		"audio_path", audioPath,
-		"output_path", outputPath)
+		logger.String("sox_binary", soxBinary),
+		logger.String("audio_path", audioPath),
+		logger.String("output_path", outputPath))
 
 	cmd := createCommandWithNice(ctx, soxBinary, soxArgs)
 
@@ -369,8 +368,8 @@ func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
 	}
 	if killErr := soxCmd.Process.Kill(); killErr != nil {
 		g.logger.Debug("Failed to kill Sox process after FFmpeg failure",
-			"error", killErr.Error(),
-			"sox_pid", soxPid)
+			logger.Error(killErr),
+			logger.Int("sox_pid", soxPid))
 	}
 }
 
@@ -639,8 +638,8 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 		captureLength := g.settings.Realtime.Audio.Export.Length
 		duration = float64(captureLength)
 		g.logger.Warn("FFprobe failed, using configured fallback duration",
-			"fallback_duration_seconds", duration,
-			"audio_path", audioPath)
+			logger.Float64("fallback_duration_seconds", duration),
+			logger.String("audio_path", audioPath))
 	}
 
 	// Convert duration to string, rounding to nearest integer
@@ -703,20 +702,20 @@ func (g *Generator) waitWithTimeout(cmd *exec.Cmd, timeout time.Duration) {
 	case err := <-done:
 		if err != nil {
 			g.logger.Debug("Process wait completed with error",
-				"pid", pid,
-				"error", err.Error())
+				logger.Int("pid", pid),
+				logger.Error(err))
 		}
 	case <-time.After(timeout):
 		g.logger.Warn("Process wait timed out",
-			"pid", pid,
-			"timeout_seconds", timeout.Seconds())
+			logger.Int("pid", pid),
+			logger.Float64("timeout_seconds", timeout.Seconds()))
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 			select {
 			case <-done:
 			case <-time.After(1 * time.Second):
 				g.logger.Error("Failed to reap process after kill",
-					"pid", pid)
+					logger.Int("pid", pid))
 			}
 		}
 	}
@@ -739,8 +738,8 @@ func (g *Generator) waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration) err
 		return err
 	case <-time.After(timeout):
 		g.logger.Warn("Process wait timed out",
-			"pid", pid,
-			"timeout_seconds", timeout.Seconds())
+			logger.Int("pid", pid),
+			logger.Float64("timeout_seconds", timeout.Seconds()))
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 			select {

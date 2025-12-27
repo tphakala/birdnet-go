@@ -2,7 +2,6 @@ package spectrogram
 
 import (
 	"context"
-	"log/slog"
 	"math"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -98,7 +98,7 @@ func createTestPreRenderer(t *testing.T, opts *PreRendererTestOptions) (*PreRend
 	env := setupTestEnv(t)
 	configurePreRendererSettings(env.Settings, opts)
 
-	pr := NewPreRenderer(env.Ctx, env.Settings, env.SFS, slog.Default())
+	pr := NewPreRenderer(env.Ctx, env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	return pr, env
 }
@@ -192,7 +192,7 @@ func createMinimalPreRenderer(t *testing.T, queueSize int) (*PreRenderer, *testE
 	pr := &PreRenderer{
 		settings: env.Settings,
 		sfs:      env.SFS,
-		logger:   slog.Default(),
+		logger:   logger.Global().Module("spectrogram.test"),
 		ctx:      env.Ctx,
 		cancel:   env.Cancel,
 		jobs:     make(chan *Job, queueSize),
@@ -234,7 +234,7 @@ func createIntegrationPreRenderer(t *testing.T, soxPath, audioDirName string) *i
 	env.Settings.Realtime.Dashboard.Spectrogram.Size = "sm"
 	env.Settings.Realtime.Dashboard.Spectrogram.Raw = true
 
-	pr := NewPreRenderer(env.Ctx, env.Settings, env.SFS, slog.Default())
+	pr := NewPreRenderer(env.Ctx, env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 	pr.Start()
 
 	// Create audio output directory
