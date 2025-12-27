@@ -4,15 +4,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"errors"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -531,7 +528,6 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 				DS:             mockDS,
 				Settings:       appSettings,
 				BirdImageCache: mockImageCache,
-				logger:         log.New(io.Discard, "", 0),
 				// sunCalc and controlChan might be needed depending on handlers tested
 			}
 
@@ -684,7 +680,6 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	controller := &Controller{
 		DS:             mockDS,
 		BirdImageCache: imageCache,
-		logger:         log.New(io.Discard, "", 0), // Use discarded logger for tests
 	}
 
 	// Create a request with the date we want to test
@@ -840,7 +835,6 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	controller := &Controller{
 		DS:             mockDS,
 		BirdImageCache: imageCache,
-		logger:         log.New(io.Discard, "", 0), // Add logger
 	}
 
 	// Create a request with the date we want to test
@@ -894,8 +888,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 
 	// Create a controller with our mock
 	controller := &Controller{
-		DS:     mockDS,
-		logger: log.New(io.Discard, "", 0), // Add logger
+		DS: mockDS,
 	}
 
 	// Create a request with the date we want to test
@@ -977,8 +970,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 
 	// Create a controller with our mock
 	controller := &Controller{
-		DS:     mockDS,
-		logger: log.New(io.Discard, "", 0), // Add logger
+		DS: mockDS,
 	}
 
 	// Create a request with the date we want to test
@@ -1062,8 +1054,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 
 	// Create a controller with our mock
 	controller := &Controller{
-		DS:     mockDS,
-		logger: log.New(io.Discard, "", 0), // Add logger
+		DS: mockDS,
 	}
 
 	// Test with a confidence threshold of "70"
@@ -1157,8 +1148,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 
 	// Create a controller with our mock
 	controller := &Controller{
-		DS:     mockDS,
-		logger: log.New(io.Discard, "", 0), // Add logger
+		DS: mockDS,
 	}
 
 	// Create a request with a limit of 2

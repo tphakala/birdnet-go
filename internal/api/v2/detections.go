@@ -3,7 +3,6 @@ package api
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -280,16 +280,22 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 	// Validate individual date formats
 	for _, dp := range []struct{ value, name string }{{startDateStr, "start_date"}, {endDateStr, "end_date"}} {
 		if err := validateDateParam(dp.value, dp.name); err != nil {
-			c.logErrorIfEnabled("Invalid date parameter", "parameter", dp.name, "value", dp.value,
-				"path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+			c.logErrorIfEnabled("Invalid date parameter",
+				logger.String("parameter", dp.name),
+				logger.String("value", dp.value),
+				logger.String("path", ctx.Request().URL.Path),
+				logger.String("ip", ctx.RealIP()))
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 	}
 
 	// Check date order
 	if err := validateDateOrder(startDateStr, endDateStr); err != nil {
-		c.logErrorIfEnabled("Invalid date range", "start_date", startDateStr, "end_date", endDateStr,
-			"path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+		c.logErrorIfEnabled("Invalid date range",
+			logger.String("start_date", startDateStr),
+			logger.String("end_date", endDateStr),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()))
 		return echo.NewHTTPError(http.StatusBadRequest, "start_date cannot be after end_date")
 	}
 
@@ -302,10 +308,15 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 		return defaultNumResults, nil // Default value
 	}
 
-	log.Printf("[DEBUG] GetDetections: Raw numResults string: '%s'", numResultsStr)
+	c.logDebugIfEnabled("GetDetections: Raw numResults string",
+		logger.String("value", numResultsStr),
+	)
 	numResults, err := strconv.Atoi(numResultsStr)
 	if err != nil {
-		log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
+		c.logDebugIfEnabled("GetDetections: Invalid numResults string",
+			logger.String("value", numResultsStr),
+			logger.Error(err),
+		)
 		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
 		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
 		_ = errors.Newf("invalid numeric value for numResults: %v", err).
@@ -317,9 +328,13 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 		return 0, fmt.Errorf("Invalid numeric value for numResults: %w", err) //nolint:staticcheck // matches test expectations
 	}
 
-	log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
+	c.logDebugIfEnabled("GetDetections: Parsed numResults value",
+		logger.Int("value", numResults),
+	)
 	if numResults <= 0 {
-		log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
+		c.logDebugIfEnabled("GetDetections: Zero or negative numResults value",
+			logger.Int("value", numResults),
+		)
 		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
 		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
 		_ = errors.New(errors.NewStd("numResults must be greater than zero")).
@@ -332,7 +347,9 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	}
 
 	if numResults > maxNumResults {
-		log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
+		c.logDebugIfEnabled("GetDetections: Too large numResults value",
+			logger.Int("value", numResults),
+		)
 		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
 		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
 		_ = errors.New(errors.NewStd("numResults exceeds maximum allowed value (1000)")).
@@ -353,10 +370,15 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 		return 0, nil // Default value
 	}
 
-	log.Printf("[DEBUG] GetDetections: Raw offset string: '%s'", offsetStr)
+	c.logDebugIfEnabled("GetDetections: Raw offset string",
+		logger.String("value", offsetStr),
+	)
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
-		log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
+		c.logDebugIfEnabled("GetDetections: Invalid offset string",
+			logger.String("value", offsetStr),
+			logger.Error(err),
+		)
 		// Log the enhanced error for telemetry
 		_ = errors.Newf("invalid numeric value for offset: %v", err).
 			Component("api").
@@ -367,9 +389,13 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 		return 0, fmt.Errorf("Invalid numeric value for offset: %w", err) //nolint:staticcheck // matches test expectations
 	}
 
-	log.Printf("[DEBUG] GetDetections: Parsed offset value: %d", offset)
+	c.logDebugIfEnabled("GetDetections: Parsed offset value",
+		logger.Int("value", offset),
+	)
 	if offset < 0 {
-		log.Printf("[DEBUG] GetDetections: Negative offset value: %d", offset)
+		c.logDebugIfEnabled("GetDetections: Negative offset value",
+			logger.Int("value", offset),
+		)
 		// Log the enhanced error for telemetry
 		_ = errors.New(errors.NewStd("offset cannot be negative")).
 			Component("api").
@@ -382,7 +408,9 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 
 	const maxOffset = 1000000
 	if offset > maxOffset {
-		log.Printf("[DEBUG] GetDetections: Too large offset value: %d", offset)
+		c.logDebugIfEnabled("GetDetections: Too large offset value",
+			logger.Int("value", offset),
+		)
 		// Log the enhanced error for telemetry
 		_ = errors.Newf("offset exceeds maximum allowed value (%d)", maxOffset).
 			Component("api").
@@ -403,37 +431,37 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	params, err := c.parseDetectionQueryParams(ctx)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to parse query parameters",
-			"error", err.Error(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
+			logger.String("error", err.Error()),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
 		)
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	// Log the retrieval attempt
 	c.logInfoIfEnabled("Retrieving detections",
-		"queryType", params.QueryType,
-		"date", params.Date,
-		"hour", params.Hour,
-		"duration", params.Duration,
-		"species", params.Species,
-		"search", params.Search,
-		"start_date", params.StartDate,
-		"end_date", params.EndDate,
-		"limit", params.NumResults,
-		"offset", params.Offset,
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.String("queryType", params.QueryType),
+		logger.String("date", params.Date),
+		logger.String("hour", params.Hour),
+		logger.Int("duration", params.Duration),
+		logger.String("species", params.Species),
+		logger.String("search", params.Search),
+		logger.String("start_date", params.StartDate),
+		logger.String("end_date", params.EndDate),
+		logger.Int("limit", params.NumResults),
+		logger.Int("offset", params.Offset),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	// Get notes based on query type
 	notes, totalResults, err := c.getDetectionsByQueryType(params)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to retrieve detections",
-			"queryType", params.QueryType,
-			"error", err.Error(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
+			logger.String("queryType", params.QueryType),
+			logger.String("error", err.Error()),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
 		)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -446,13 +474,13 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 
 	// Log the successful response
 	c.logInfoIfEnabled("Detections retrieved successfully",
-		"queryType", params.QueryType,
-		"count", len(detections),
-		"total", response.Total,
-		"pages", response.TotalPages,
-		"currentPage", response.CurrentPage,
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.String("queryType", params.QueryType),
+		logger.Int("count", len(detections)),
+		logger.Int64("total", response.Total),
+		logger.Int("pages", response.TotalPages),
+		logger.Int("currentPage", response.CurrentPage),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	return ctx.JSON(http.StatusOK, response)
@@ -667,12 +695,12 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	notes, err := c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get hourly detections",
-			"date", date,
-			"hour", hour,
-			"duration", duration,
-			"limit", numResults,
-			"offset", offset,
-			"error", err.Error(),
+			logger.String("date", date),
+			logger.String("hour", hour),
+			logger.Int("duration", duration),
+			logger.Int("limit", numResults),
+			logger.Int("offset", offset),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -680,10 +708,10 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	totalCount, err := c.DS.CountHourlyDetections(date, hour, duration)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to count hourly detections",
-			"date", date,
-			"hour", hour,
-			"duration", duration,
-			"error", err.Error(),
+			logger.String("date", date),
+			logger.String("hour", hour),
+			logger.Int("duration", duration),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -695,11 +723,11 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	}{notes, totalCount}, cache.DefaultExpiration)
 
 	c.logInfoIfEnabled("Retrieved hourly detections",
-		"date", date,
-		"hour", hour,
-		"duration", duration,
-		"count", len(notes),
-		"total", totalCount,
+		logger.String("date", date),
+		logger.String("hour", hour),
+		logger.Int("duration", duration),
+		logger.Int("count", len(notes)),
+		logger.Int64("total", totalCount),
 	)
 
 	return notes, totalCount, nil
@@ -723,13 +751,13 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	notes, err := c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get species detections",
-			"species", species,
-			"date", date,
-			"hour", hour,
-			"duration", duration,
-			"limit", numResults,
-			"offset", offset,
-			"error", err.Error(),
+			logger.String("species", species),
+			logger.String("date", date),
+			logger.String("hour", hour),
+			logger.Int("duration", duration),
+			logger.Int("limit", numResults),
+			logger.Int("offset", offset),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -737,11 +765,11 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	totalCount, err := c.DS.CountSpeciesDetections(species, date, hour, duration)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to count species detections",
-			"species", species,
-			"date", date,
-			"hour", hour,
-			"duration", duration,
-			"error", err.Error(),
+			logger.String("species", species),
+			logger.String("date", date),
+			logger.String("hour", hour),
+			logger.Int("duration", duration),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -753,12 +781,12 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	}{notes, totalCount}, cache.DefaultExpiration)
 
 	c.logInfoIfEnabled("Retrieved species detections",
-		"species", species,
-		"date", date,
-		"hour", hour,
-		"duration", duration,
-		"count", len(notes),
-		"total", totalCount,
+		logger.String("species", species),
+		logger.String("date", date),
+		logger.String("hour", hour),
+		logger.Int("duration", duration),
+		logger.Int("count", len(notes)),
+		logger.Int64("total", totalCount),
 	)
 
 	return notes, totalCount, nil
@@ -772,8 +800,8 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to perform advanced search",
-			"filters", fmt.Sprintf("%+v", filters),
-			"error", err.Error(),
+			logger.String("filters", fmt.Sprintf("%+v", filters)),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -868,10 +896,10 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	notes, err := c.DS.SearchNotes(search, false, numResults, offset)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to search notes",
-			"query", search,
-			"limit", numResults,
-			"offset", offset,
-			"error", err.Error(),
+			logger.String("query", search),
+			logger.Int("limit", numResults),
+			logger.Int("offset", offset),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -879,8 +907,8 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	totalCount, err := c.DS.CountSearchResults(search)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to count search results",
-			"query", search,
-			"error", err.Error(),
+			logger.String("query", search),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -892,9 +920,9 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	}{notes, totalCount}, cache.DefaultExpiration)
 
 	c.logInfoIfEnabled("Retrieved search results",
-		"query", search,
-		"count", len(notes),
-		"total", totalCount,
+		logger.String("query", search),
+		logger.Int("count", len(notes)),
+		logger.Int64("total", totalCount),
 	)
 
 	return notes, totalCount, nil
@@ -918,9 +946,9 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	notes, err := c.DS.SearchNotes("", false, numResults, offset)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get all detections",
-			"limit", numResults,
-			"offset", offset,
-			"error", err.Error(),
+			logger.Int("limit", numResults),
+			logger.Int("offset", offset),
+			logger.String("error", err.Error()),
 		)
 		return nil, 0, err
 	}
@@ -939,8 +967,8 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	}{notes, totalResults}, cache.DefaultExpiration)
 
 	c.logInfoIfEnabled("Retrieved all detections",
-		"count", len(notes),
-		"total", totalResults,
+		logger.Int("count", len(notes)),
+		logger.Int64("total", totalResults),
 	)
 
 	return notes, totalResults, nil
@@ -1098,20 +1126,20 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	// Handle lock/unlock request separately
 	if req.LockDetection != note.Locked {
 		c.logInfoIfEnabled("Updating lock status",
-			"detection_id", idStr,
-			"current_locked", note.Locked,
-			"new_locked", req.LockDetection,
-			"ip", ctx.RealIP(),
+			logger.String("detection_id", idStr),
+			logger.Bool("current_locked", note.Locked),
+			logger.Bool("new_locked", req.LockDetection),
+			logger.String("ip", ctx.RealIP()),
 		)
 
 		err = c.AddLock(note.ID, req.LockDetection)
 		if err != nil {
 			// Log the lock operation failure
 			c.logErrorIfEnabled("Failed to update lock status",
-				"detection_id", idStr,
-				"attempted_lock_state", req.LockDetection,
-				"error", err.Error(),
-				"ip", ctx.RealIP(),
+				logger.String("detection_id", idStr),
+				logger.Bool("attempted_lock_state", req.LockDetection),
+				logger.String("error", err.Error()),
+				logger.String("ip", ctx.RealIP()),
 			)
 			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)
 		}
@@ -1193,10 +1221,10 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 
 	// Log the action
 	c.logInfoIfEnabled("Species exclusion toggled",
-		"species", req.CommonName,
-		"action", action,
-		"is_excluded", isExcluded,
-		"ip", ctx.RealIP(),
+		logger.String("species", req.CommonName),
+		logger.String("action", action),
+		logger.Bool("is_excluded", isExcluded),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	return ctx.JSON(http.StatusOK, IgnoreSpeciesResponse{

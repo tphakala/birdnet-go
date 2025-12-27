@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -48,18 +49,18 @@ type DebugSystemStatus struct {
 func (c *Controller) initDebugRoutes() {
 	// Only register debug routes if debug mode is enabled
 	if !c.Settings.Debug {
-		c.logger.Println("Debug mode not enabled, skipping debug routes")
+		GetLogger().Debug("Debug mode not enabled, skipping debug routes")
 		return
 	}
 
 	// Debug endpoints require authentication
 	debugGroup := c.Group.Group("/debug", c.authMiddleware)
-	
+
 	debugGroup.POST("/trigger-error", c.DebugTriggerError)
 	debugGroup.POST("/trigger-notification", c.DebugTriggerNotification)
 	debugGroup.GET("/status", c.DebugSystemStatus)
-	
-	c.logger.Println("Debug routes initialized")
+
+	GetLogger().Info("Debug routes initialized")
 }
 
 // DebugTriggerError triggers a test error for telemetry testing
@@ -109,9 +110,9 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 
 	// Log the error which will trigger telemetry if enabled
 	c.logErrorIfEnabled("Debug error triggered",
-		"error", err,
-		"component", req.Component,
-		"category", req.Category)
+		logger.Error(err),
+		logger.String("component", req.Component),
+		logger.String("category", req.Category))
 
 	response := DebugResponse{
 		Success: true,

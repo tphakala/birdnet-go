@@ -2,20 +2,19 @@
 package middleware
 
 import (
-	"log/slog"
-
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // NewRequestLogger creates a request logging middleware using Echo 4.14.0+ RequestLoggerWithConfig.
 // This replaces the deprecated middleware.Logger().
-func NewRequestLogger(logger *slog.Logger) echo.MiddlewareFunc {
-	return NewRequestLoggerWithSkipper(logger, nil)
+func NewRequestLogger() echo.MiddlewareFunc {
+	return NewRequestLoggerWithSkipper(nil)
 }
 
 // NewRequestLoggerWithSkipper creates a request logging middleware with a custom skipper.
-func NewRequestLoggerWithSkipper(logger *slog.Logger, skipper middleware.Skipper) echo.MiddlewareFunc {
+func NewRequestLoggerWithSkipper(skipper middleware.Skipper) echo.MiddlewareFunc {
 	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		Skipper:     skipper,
 		LogStatus:   true,
@@ -25,23 +24,24 @@ func NewRequestLoggerWithSkipper(logger *slog.Logger, skipper middleware.Skipper
 		LogRemoteIP: true,
 		LogError:    true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			if logger == nil {
-				return nil
-			}
-
-			attrs := []slog.Attr{
-				slog.String("method", v.Method),
-				slog.String("uri", v.URI),
-				slog.Int("status", v.Status),
-				slog.String("ip", v.RemoteIP),
-				slog.Duration("latency", v.Latency),
-			}
+			log := GetLogger()
 
 			if v.Error != nil {
-				attrs = append(attrs, slog.String("error", v.Error.Error()))
+				log.Info("request",
+					logger.String("method", v.Method),
+					logger.String("uri", v.URI),
+					logger.Int("status", v.Status),
+					logger.String("ip", v.RemoteIP),
+					logger.Duration("latency", v.Latency),
+					logger.String("error", v.Error.Error()))
+			} else {
+				log.Info("request",
+					logger.String("method", v.Method),
+					logger.String("uri", v.URI),
+					logger.Int("status", v.Status),
+					logger.String("ip", v.RemoteIP),
+					logger.Duration("latency", v.Latency))
 			}
-
-			logger.LogAttrs(c.Request().Context(), slog.LevelInfo, "request", attrs...)
 			return nil
 		},
 	})

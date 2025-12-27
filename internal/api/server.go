@@ -5,8 +5,6 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"log"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -51,12 +49,7 @@ type Server struct {
 	echo     *echo.Echo
 	config   *Config
 	settings *conf.Settings
-	logger   *log.Logger
-	slogger  logger.Logger
-
-	// Temporary slog logger for components not yet migrated to logger.Logger
-	// TODO: Remove once all middleware and auth components are migrated
-	legacySlogger *slog.Logger
+	slogger  logger.Logger // Centralized structured logger
 
 	// Dependencies
 	dataStore      datastore.Interface
@@ -88,13 +81,6 @@ type Server struct {
 
 // ServerOption is a functional option for configuring the Server.
 type ServerOption func(*Server)
-
-// WithLogger sets the standard logger for the server.
-func WithLogger(logger *log.Logger) ServerOption {
-	return func(s *Server) {
-		s.logger = logger
-	}
-}
 
 // WithDataStore sets the datastore for the server.
 func WithDataStore(ds datastore.Interface) ServerOption {
@@ -161,7 +147,9 @@ func WithAssetsFS(assets embed.FS) ServerOption {
 		if err != nil {
 			// If extraction fails, use the root FS and log a warning
 			// This can happen if the assets directory structure changes
-			log.Printf("Warning: could not extract assets subdirectory: %v (using root FS)", err)
+			// Note: slogger not yet initialized at option apply time, use package logger
+			GetLogger().Warn("Could not extract assets subdirectory, using root FS",
+				logger.Error(err))
 			s.assetsFS = assets
 		} else {
 			s.assetsFS = subFS
@@ -189,17 +177,8 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 		opt(s)
 	}
 
-	// Set default logger if not provided
-	if s.logger == nil {
-		s.logger = log.Default()
-	}
-
 	// Initialize structured logger
-	s.slogger = logger.Global().Module("webserver")
-
-	// Create legacy slog logger for components not yet migrated
-	// TODO: Remove once all middleware and auth components use logger.Logger
-	s.legacySlogger = slog.Default().With("service", "webserver")
+	s.slogger = GetLogger() // Uses Module("api")
 
 	// Initialize Echo
 	s.echo = echo.New()
@@ -240,11 +219,11 @@ func (s *Server) initAuth() {
 		return
 	}
 
-	// Create auth service adapter
-	s.authService = auth.NewSecurityAdapter(s.oauth2Server, s.legacySlogger)
+	// Create auth service adapter (uses centralized logger internally)
+	s.authService = auth.NewSecurityAdapter(s.oauth2Server)
 
-	// Create auth middleware
-	authMw := auth.NewMiddleware(s.authService, s.legacySlogger)
+	// Create auth middleware (uses centralized logger internally)
+	authMw := auth.NewMiddleware(s.authService)
 	s.authMiddleware = authMw.Authenticate
 
 	s.slogger.Info("Auth middleware initialized at server level")
@@ -255,8 +234,8 @@ func (s *Server) setupMiddleware() {
 	// Recovery middleware - should be first
 	s.echo.Use(echomw.Recover())
 
-	// Request logging using custom middleware package
-	s.echo.Use(mw.NewRequestLogger(s.legacySlogger))
+	// Request logging using custom middleware package (uses centralized logger)
+	s.echo.Use(mw.NewRequestLogger())
 
 	// Security middleware configuration
 	securityConfig := mw.SecurityConfig{
@@ -270,8 +249,8 @@ func (s *Server) setupMiddleware() {
 	// CORS middleware
 	s.echo.Use(mw.NewCORS(securityConfig))
 
-	// CSRF protection middleware
-	s.echo.Use(mw.NewCSRFWithLogger(s.legacySlogger))
+	// CSRF protection middleware (uses centralized logger)
+	s.echo.Use(mw.NewCSRF(nil))
 
 	// Body limit middleware
 	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))
@@ -292,15 +271,15 @@ func (s *Server) setupRoutes() error {
 	// These must be at /auth/:provider to match frontend expectations
 	s.registerOAuthRoutes()
 
-	// Initialize static file server for frontend assets
-	s.staticServer = NewStaticFileServer(s.legacySlogger, s.assetsFS)
+	// Initialize static file server for frontend assets (uses centralized logger)
+	s.staticServer = NewStaticFileServer(s.assetsFS)
 	s.staticServer.RegisterRoutes(s.echo)
 
 	// Initialize SPA handler - serves Vite's index.html directly
 	// Configuration is fetched by frontend from /api/v2/app/config
 	devMode := s.staticServer.IsDevMode()
 	devModePath := s.staticServer.DevModePath()
-	s.spaHandler = NewSPAHandler(s.legacySlogger, devMode, devModePath)
+	s.spaHandler = NewSPAHandler(devMode, devModePath)
 
 	s.slogger.Info("Static file server initialized",
 		logger.String("mode", s.staticServer.DevModeStatus()),
@@ -315,7 +294,6 @@ func (s *Server) setupRoutes() error {
 		s.birdImageCache,
 		s.sunCalc,
 		s.controlChan,
-		s.logger,
 		s.metrics,
 		apiv2.WithAuthMiddleware(s.authMiddleware),
 		apiv2.WithAuthService(s.authService),
@@ -376,11 +354,11 @@ func (s *Server) Start() {
 	addr := s.config.Address()
 	switch {
 	case s.config.AutoTLS:
-		s.logger.Printf("🌐 HTTPS server starting with AutoTLS on %s", addr)
+		s.slogger.Info("HTTPS server starting with AutoTLS", logger.String("address", addr))
 	case s.config.TLSEnabled:
-		s.logger.Printf("🌐 HTTPS server starting on %s", addr)
+		s.slogger.Info("HTTPS server starting", logger.String("address", addr))
 	default:
-		s.logger.Printf("🌐 HTTP server starting on %s", addr)
+		s.slogger.Info("HTTP server starting", logger.String("address", addr))
 	}
 }
 
@@ -425,8 +403,7 @@ func (s *Server) StartWithGracefulShutdown() error {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	s.slogger.Info("Shutdown signal received, initiating graceful shutdown...")
-	s.logger.Println("🛑 Shutdown signal received")
+	s.slogger.Info("Shutdown signal received, initiating graceful shutdown")
 
 	return s.Shutdown()
 }
@@ -450,7 +427,6 @@ func (s *Server) Shutdown() error {
 
 	// Log completion and flush
 	s.slogger.Info("Server shutdown complete")
-	s.logger.Println("✅ Server shutdown complete")
 
 	// Flush logger to ensure all messages are written
 	if err := s.slogger.Flush(); err != nil {

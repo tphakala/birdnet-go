@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
@@ -313,7 +314,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	response.Parameters.InputDate = req.Date
 	response.Parameters.InputWeek = req.Week
 
-	c.logAPIRequest(ctx, 1, "Range filter test completed", "species_count", len(speciesList))
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter test completed", logger.Int("species_count", len(speciesList)))
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -431,8 +432,8 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	ctx.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	ctx.Response().Header().Set("Pragma", "no-cache")
 	ctx.Response().Header().Set("Expires", "0")
-	
-	c.logAPIRequest(ctx, 1, "Range filter species CSV exported", "species_count", len(speciesList))
+
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter species CSV exported", logger.Int("species_count", len(speciesList)))
 	return ctx.Blob(http.StatusOK, "text/csv; charset=utf-8", csvBytes)
 }
 
@@ -602,6 +603,6 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		"lastUpdated": c.Settings.BirdNET.RangeFilter.LastUpdated,
 	}
 
-	c.logAPIRequest(ctx, 1, "Range filter rebuilt successfully", "species_count", len(includedSpecies))
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter rebuilt successfully", logger.Int("species_count", len(includedSpecies)))
 	return ctx.JSON(http.StatusOK, response)
 }

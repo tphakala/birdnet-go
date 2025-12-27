@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
@@ -528,9 +529,9 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 
 	// Log the request if API logger is available
 	c.logDebugIfEnabled("Retrieving thumbnail for species code",
-		"species_code", speciesCode,
-		"ip", ctx.RealIP(),
-		"path", ctx.Request().URL.Path,
+		logger.String("species_code", speciesCode),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
 	)
 
 	// Check if BirdNET processor is available
@@ -595,11 +596,11 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 
 	// Log successful retrieval
 	c.logInfoIfEnabled("Successfully retrieved thumbnail",
-		"species_code", speciesCode,
-		"scientific_name", scientificName,
-		"image_url", birdImage.URL,
-		"ip", ctx.RealIP(),
-		"path", ctx.Request().URL.Path,
+		logger.String("species_code", speciesCode),
+		logger.String("scientific_name", scientificName),
+		logger.String("image_url", birdImage.URL),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
 	)
 
 	// Redirect to the image URL

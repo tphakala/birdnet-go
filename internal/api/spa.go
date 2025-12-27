@@ -3,13 +3,13 @@ package api
 import (
 	"io"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/frontend"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // SPA handler constants
@@ -29,17 +29,15 @@ const (
 // It serves Vite's generated index.html directly, with the frontend
 // fetching configuration from /api/v2/app/config at runtime.
 type SPAHandler struct {
-	logger     *slog.Logger
-	devMode    bool
+	devMode     bool
 	devModePath string
 }
 
 // NewSPAHandler creates a new SPA handler.
 // devMode indicates whether to serve from disk (true) or embedded FS (false).
 // devModePath is the path to the frontend/dist directory when in dev mode.
-func NewSPAHandler(logger *slog.Logger, devMode bool, devModePath string) *SPAHandler {
+func NewSPAHandler(devMode bool, devModePath string) *SPAHandler {
 	return &SPAHandler{
-		logger:      logger,
 		devMode:     devMode,
 		devModePath: devModePath,
 	}
@@ -116,31 +114,35 @@ func (h *SPAHandler) serveFromEmbed(c echo.Context) error {
 	return c.HTMLBlob(http.StatusOK, content)
 }
 
-// logError logs an error if the logger is available.
+// logError logs an error using the centralized logger.
 func (h *SPAHandler) logError(msg string, err error) {
-	if h.logger != nil {
-		h.logger.Error(msg, "error", err)
-	}
+	GetLogger().Error(msg, logger.Error(err))
 }
 
 // closeWithLog closes an io.Closer and logs any error.
 func (h *SPAHandler) closeWithLog(c io.Closer, name string) {
-	if err := c.Close(); err != nil && h.logger != nil {
-		h.logger.Warn("Error closing "+name, "error", err)
+	if err := c.Close(); err != nil {
+		GetLogger().Warn("Error closing resource",
+			logger.String("name", name),
+			logger.Error(err))
 	}
 }
 
 // closeFileWithLog closes a file and logs any error with the path.
 func (h *SPAHandler) closeFileWithLog(f *os.File, path string) {
-	if err := f.Close(); err != nil && h.logger != nil {
-		h.logger.Warn("Error closing file", "path", path, "error", err)
+	if err := f.Close(); err != nil {
+		GetLogger().Warn("Error closing file",
+			logger.String("path", path),
+			logger.Error(err))
 	}
 }
 
 // closeEmbedFileWithLog closes an embedded file and logs any error.
 func (h *SPAHandler) closeEmbedFileWithLog(f fs.File, path string) {
-	if err := f.Close(); err != nil && h.logger != nil {
-		h.logger.Warn("Error closing embedded file", "path", path, "error", err)
+	if err := f.Close(); err != nil {
+		GetLogger().Warn("Error closing embedded file",
+			logger.String("path", path),
+			logger.Error(err))
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // FileSystemItem represents a file or directory for the frontend file browser
@@ -98,9 +99,9 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	var req BrowseRequest
 	if err := ctx.Bind(&req); err != nil {
 		c.logErrorIfEnabled("Failed to bind browse request",
-			"error", err.Error(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
+			logger.String("error", err.Error()),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, err, "Invalid request parameters", http.StatusBadRequest)
 	}
@@ -115,9 +116,9 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 			status = http.StatusForbidden
 		}
 		c.logWarnIfEnabled("Path validation failed",
-			"requested_path", req.Path,
-			"error", err.Error(),
-			"ip", ctx.RealIP(),
+			logger.String("requested_path", req.Path),
+			logger.String("error", err.Error()),
+			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, err, err.Error(), status)
 	}
@@ -126,9 +127,9 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	entries, err := c.SFS.ReadDir(pathResult.browsePath)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to read directory",
-			"path", pathResult.browsePath,
-			"error", err.Error(),
-			"ip", ctx.RealIP(),
+			logger.String("path", pathResult.browsePath),
+			logger.String("error", err.Error()),
+			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, err, "Unable to read directory", http.StatusForbidden)
 	}
@@ -139,9 +140,9 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 		item, err := c.convertDirEntryToItem(pathResult.browsePath, entry)
 		if err != nil {
 			c.logDebugIfEnabled("Skipping file due to error",
-				"file", entry.Name(),
-				"directory", pathResult.browsePath,
-				"error", err.Error(),
+				logger.String("file", entry.Name()),
+				logger.String("directory", pathResult.browsePath),
+				logger.String("error", err.Error()),
 			)
 			continue
 		}
@@ -151,7 +152,9 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	// Determine parent path securely using SecureFS
 	parentPath, err := c.SFS.ParentPath(pathResult.browsePath)
 	if err != nil {
-		c.logDebugIfEnabled("Failed to get parent path", "path", pathResult.browsePath, "error", err.Error())
+		c.logDebugIfEnabled("Failed to get parent path",
+			logger.String("path", pathResult.browsePath),
+			logger.String("error", err.Error()))
 		parentPath = ""
 	}
 
@@ -168,9 +171,9 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Successfully browsed directory",
-		"path", currentPath,
-		"item_count", len(items),
-		"ip", ctx.RealIP(),
+		logger.String("path", currentPath),
+		logger.Int("item_count", len(items)),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	return ctx.JSON(http.StatusOK, response)

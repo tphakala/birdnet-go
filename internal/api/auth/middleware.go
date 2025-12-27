@@ -2,12 +2,12 @@
 package auth
 
 import (
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -29,14 +29,12 @@ const (
 // Middleware provides authentication middleware with the Service
 type Middleware struct {
 	AuthService Service
-	logger      *slog.Logger
 }
 
 // NewMiddleware creates a new auth middleware
-func NewMiddleware(service Service, logger *slog.Logger) *Middleware {
+func NewMiddleware(service Service) *Middleware {
 	return &Middleware{
 		AuthService: service,
-		logger:      logger,
 	}
 }
 
@@ -78,8 +76,9 @@ type authResult struct {
 // validateAuthService checks if AuthService is configured and returns an error response if not.
 func (m *Middleware) validateAuthService(c echo.Context) error {
 	if m.AuthService == nil {
-		m.logError("Authentication middleware called with nil AuthService",
-			"path", c.Request().URL.Path, "ip", c.RealIP())
+		m.log().Error("Authentication middleware called with nil AuthService",
+			logger.String("path", c.Request().URL.Path),
+			logger.String("ip", c.RealIP()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Internal configuration error: authentication service not available",
 		})
@@ -92,8 +91,9 @@ func (m *Middleware) validateAuthService(c echo.Context) error {
 // for data access purposes, matching the behavior of IsAuthenticated().
 func (m *Middleware) shouldBypassAuth(c echo.Context) bool {
 	if !m.AuthService.IsAuthRequired(c) {
-		m.logDebug("Authentication not required for this client",
-			"ip", c.RealIP(), "path", c.Request().URL.Path)
+		m.log().Debug("Authentication not required for this client",
+			logger.String("ip", c.RealIP()),
+			logger.String("path", c.Request().URL.Path))
 		c.Set(CtxKeyIsAuthenticated, true) // Bypassed = effectively authenticated
 		c.Set(CtxKeyAuthMethod, AuthMethodNone)
 		return true
@@ -114,7 +114,10 @@ func (m *Middleware) tryTokenAuth(c echo.Context) authResult {
 
 	path := c.Request().URL.Path
 	ip := c.RealIP()
-	m.logDebug("Attempting token authentication", "path", path, "ip", ip)
+	log := m.log()
+	log.Debug("Attempting token authentication",
+		logger.String("path", path),
+		logger.String("ip", ip))
 
 	parts := strings.SplitN(authHeader, " ", bearerTokenParts)
 	if len(parts) != bearerTokenParts || !strings.EqualFold(parts[0], "bearer") {
@@ -126,7 +129,9 @@ func (m *Middleware) tryTokenAuth(c echo.Context) authResult {
 		return m.handleInvalidToken(c, path, ip)
 	}
 
-	m.logDebug("Token authentication successful", "path", path, "ip", ip)
+	log.Debug("Token authentication successful",
+		logger.String("path", path),
+		logger.String("ip", ip))
 	c.Set(CtxKeyIsAuthenticated, true)
 	// Note: Username is not available for token auth as tokens don't store user identity.
 	// The current AccessToken struct only contains token string and expiry.
@@ -138,7 +143,9 @@ func (m *Middleware) tryTokenAuth(c echo.Context) authResult {
 
 // handleMalformedAuthHeader returns an error response for malformed Authorization headers.
 func (m *Middleware) handleMalformedAuthHeader(c echo.Context, path, ip string) authResult {
-	m.logWarn("Malformed Authorization header", "path", path, "ip", ip)
+	m.log().Warn("Malformed Authorization header",
+		logger.String("path", path),
+		logger.String("ip", ip))
 	c.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 	return authResult{
 		handled: true,
@@ -150,7 +157,9 @@ func (m *Middleware) handleMalformedAuthHeader(c echo.Context, path, ip string) 
 
 // handleInvalidToken returns an error response for invalid tokens.
 func (m *Middleware) handleInvalidToken(c echo.Context, path, ip string) authResult {
-	m.logWarn("Token validation failed", "path", path, "ip", ip)
+	m.log().Warn("Token validation failed",
+		logger.String("path", path),
+		logger.String("ip", ip))
 	c.Response().Header().Set("WWW-Authenticate",
 		`Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
 	return authResult{
@@ -165,45 +174,27 @@ func (m *Middleware) handleInvalidToken(c echo.Context, path, ip string) authRes
 func (m *Middleware) trySessionAuth(c echo.Context) bool {
 	path := c.Request().URL.Path
 	ip := c.RealIP()
-	m.logDebug("Attempting session authentication", "path", path, "ip", ip)
+	log := m.log()
+	log.Debug("Attempting session authentication",
+		logger.String("path", path),
+		logger.String("ip", ip))
 
 	if err := m.AuthService.CheckAccess(c); err != nil {
 		return false
 	}
 
-	m.logDebug("Session authentication successful", "path", path, "ip", ip)
+	log.Debug("Session authentication successful",
+		logger.String("path", path),
+		logger.String("ip", ip))
 	c.Set(CtxKeyIsAuthenticated, true)
 	c.Set(CtxKeyAuthMethod, m.AuthService.GetAuthMethod(c))
 	c.Set(CtxKeyUsername, m.AuthService.GetUsername(c))
 	return true
 }
 
-// logDebug logs a debug message if logger is available.
-func (m *Middleware) logDebug(msg string, args ...any) {
-	if m.logger != nil {
-		m.logger.Debug(msg, args...)
-	}
-}
-
-// logWarn logs a warning message if logger is available.
-func (m *Middleware) logWarn(msg string, args ...any) {
-	if m.logger != nil {
-		m.logger.Warn(msg, args...)
-	}
-}
-
-// logError logs an error message if logger is available.
-func (m *Middleware) logError(msg string, args ...any) {
-	if m.logger != nil {
-		m.logger.Error(msg, args...)
-	}
-}
-
-// logInfo logs an info message if logger is available.
-func (m *Middleware) logInfo(msg string, args ...any) {
-	if m.logger != nil {
-		m.logger.Info(msg, args...)
-	}
+// log returns the auth package logger.
+func (m *Middleware) log() logger.Logger {
+	return GetLogger()
 }
 
 // handleUnauthenticated determines the appropriate response for unauthenticated requests
@@ -211,7 +202,9 @@ func (m *Middleware) handleUnauthenticated(c echo.Context) error {
 	ip := c.RealIP()
 	path := c.Request().URL.Path
 
-	m.logInfo("Authentication required but not provided/valid", "path", path, "ip", ip)
+	m.log().Info("Authentication required but not provided/valid",
+		logger.String("path", path),
+		logger.String("ip", ip))
 
 	if m.isBrowserRequest(c) {
 		return m.redirectToLogin(c, path, ip)
@@ -228,8 +221,9 @@ func (m *Middleware) isBrowserRequest(c echo.Context) bool {
 
 // redirectToLogin handles browser requests by redirecting to the login page.
 func (m *Middleware) redirectToLogin(c echo.Context, path, ip string) error {
-	m.logInfo("Redirecting unauthenticated browser client to login page",
-		"path", path, "ip", ip)
+	m.log().Info("Redirecting unauthenticated browser client to login page",
+		logger.String("path", path),
+		logger.String("ip", ip))
 
 	finalLoginPath := m.buildLoginRedirectURL(c, ip)
 	return c.Redirect(http.StatusFound, finalLoginPath)
@@ -254,8 +248,9 @@ func (m *Middleware) getSafeRedirectPath(originPath, originQuery, loginPath, ip 
 	}
 
 	if !security.IsValidRedirect(originPath) {
-		m.logWarn("Invalid redirect path detected during unauthenticated request, defaulting to '/'",
-			"invalid_path", originPath, "ip", ip)
+		m.log().Warn("Invalid redirect path detected during unauthenticated request, defaulting to '/'",
+			logger.String("invalid_path", originPath),
+			logger.String("ip", ip))
 		return "/"
 	}
 
@@ -268,8 +263,10 @@ func (m *Middleware) getSafeRedirectPath(originPath, originQuery, loginPath, ip 
 // returnAPIUnauthorized returns a JSON error response for API clients.
 func (m *Middleware) returnAPIUnauthorized(c echo.Context, path, ip string) error {
 	acceptHeader := c.Request().Header.Get("Accept")
-	m.logInfo("Returning 401 Unauthorized for unauthenticated API client",
-		"path", path, "ip", ip, "accept_header", acceptHeader)
+	m.log().Info("Returning 401 Unauthorized for unauthenticated API client",
+		logger.String("path", path),
+		logger.String("ip", ip),
+		logger.String("accept_header", acceptHeader))
 
 	return c.JSON(http.StatusUnauthorized, map[string]string{
 		"error": "Authentication required",

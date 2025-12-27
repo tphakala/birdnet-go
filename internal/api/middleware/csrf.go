@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // CSRFContextKey is the key used to store CSRF token in the context.
@@ -15,9 +15,6 @@ const CSRFContextKey = "csrf"
 
 // CSRFConfig holds configuration for the CSRF middleware.
 type CSRFConfig struct {
-	// Logger for structured logging of CSRF errors.
-	Logger *slog.Logger
-
 	// Skipper defines a function to skip the middleware.
 	// If nil, the default skipper is used which exempts common safe routes.
 	Skipper middleware.Skipper
@@ -112,39 +109,25 @@ func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
 		cookieMaxAge = 1800 // 30 minutes
 	}
 
-	logger := config.Logger
-
 	return middleware.CSRFWithConfig(middleware.CSRFConfig{
-		Skipper:      skipper,
-		TokenLength:  tokenLength,
-		TokenLookup:  tokenLookup,
-		ContextKey:   CSRFContextKey,
-		CookieName:   cookieName,
-		CookiePath:   "/",
+		Skipper:        skipper,
+		TokenLength:    tokenLength,
+		TokenLookup:    tokenLookup,
+		ContextKey:     CSRFContextKey,
+		CookieName:     cookieName,
+		CookiePath:     "/",
 		CookieHTTPOnly: false, // Allow JavaScript to read the cookie for hobby/LAN use
 		CookieSecure:   false, // Allow cookies over HTTP for non-HTTPS deployments
 		CookieSameSite: http.SameSiteLaxMode,
 		CookieMaxAge:   cookieMaxAge,
 		ErrorHandler: func(err error, c echo.Context) error {
-			// Log the CSRF error with structured logging if logger is available
-			if logger != nil {
-				logger.Warn("CSRF validation failed",
-					"method", c.Request().Method,
-					"path", c.Request().URL.Path,
-					"remote_ip", c.RealIP(),
-					"error", err.Error(),
-				)
-			}
+			GetLogger().Warn("CSRF validation failed",
+				logger.String("method", c.Request().Method),
+				logger.String("path", c.Request().URL.Path),
+				logger.String("remote_ip", c.RealIP()),
+				logger.String("error", err.Error()))
 
 			return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
 		},
-	})
-}
-
-// NewCSRFWithLogger creates a CSRF middleware with default configuration and the given logger.
-// This is a convenience function for the most common use case.
-func NewCSRFWithLogger(logger *slog.Logger) echo.MiddlewareFunc {
-	return NewCSRF(&CSRFConfig{
-		Logger: logger,
 	})
 }

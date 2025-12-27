@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
@@ -20,7 +20,7 @@ func getSoxSpectrogramArgsHelper(t *testing.T, ctx context.Context, audioPath, o
 	tempDir := t.TempDir()
 	sfs, err := securefs.New(tempDir)
 	require.NoError(t, err, "Failed to create SecureFS")
-	gen := spectrogram.NewGenerator(settings, sfs, slog.Default())
+	gen := spectrogram.NewGenerator(settings, sfs, logger.Global().Module("spectrogram.test"))
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
 
@@ -30,7 +30,7 @@ func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPa
 	tempDir := b.TempDir()
 	sfs, err := securefs.New(tempDir)
 	require.NoError(b, err, "Failed to create SecureFS")
-	gen := spectrogram.NewGenerator(settings, sfs, slog.Default())
+	gen := spectrogram.NewGenerator(settings, sfs, logger.Global().Module("spectrogram.test"))
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
 

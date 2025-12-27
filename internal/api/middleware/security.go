@@ -5,7 +5,13 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// GetLogger returns the access logging package logger.
+func GetLogger() logger.Logger {
+	return logger.Global().Module("access")
+}
 
 // Security configuration constants.
 const (

@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"golang.org/x/time/rate"
@@ -189,9 +189,9 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	// Find the matching stream (case-sensitive exact match)
 	health, exists := healthData[decodedURL]
 	if !exists {
-		c.logAPIRequest(ctx, slog.LevelWarn, "Stream not found",
-			"requested_url", privacy.SanitizeRTSPUrl(decodedURL),
-			"active_streams", len(healthData))
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
+			logger.String("requested_url", privacy.SanitizeRTSPUrl(decodedURL)),
+			logger.Int("active_streams", len(healthData)))
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
@@ -351,8 +351,8 @@ func convertErrorContextToResponse(errCtx *myaudio.ErrorContext) *ErrorContextRe
 func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
 	if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
 		c.logDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
-			"client_id", clientID,
-			"error", err.Error())
+			logger.String("client_id", clientID),
+			logger.String("error", err.Error()))
 		return err
 	}
 	return nil
@@ -494,9 +494,9 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
 				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
-					"url", privacy.SanitizeRTSPUrl(rawURL),
-					"client_id", clientID,
-					"error", err.Error())
+					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("client_id", clientID),
+					logger.String("error", err.Error()))
 				return err
 			}
 		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
@@ -504,12 +504,12 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			eventType := determineEventType(previousSnapshot, currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
 				c.logDebugIfEnabled("Failed to send health update, client disconnected",
-					"url", privacy.SanitizeRTSPUrl(rawURL),
-					"event_type", eventType,
-					"client_id", clientID,
-					"previous_state", previousSnapshot.ProcessState,
-					"current_state", currentSnapshot.ProcessState,
-					"error", err.Error())
+					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("event_type", eventType),
+					logger.String("client_id", clientID),
+					logger.String("previous_state", previousSnapshot.ProcessState),
+					logger.String("current_state", currentSnapshot.ProcessState),
+					logger.String("error", err.Error()))
 				return err
 			}
 		}
@@ -544,8 +544,8 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 		delete(previousState, prevURL)
 
 		c.logInfoIfEnabled("Stream removed",
-			"url", sanitizedURL,
-			"client_id", clientID)
+			logger.String("url", sanitizedURL),
+			logger.String("client_id", clientID))
 	}
 
 	return nil
@@ -564,10 +564,10 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 	}
 
 	c.logDebugIfEnabled("Stream health update sent",
-		"url", privacy.SanitizeRTSPUrl(rawURL),
-		"event_type", eventType,
-		"is_healthy", health.IsHealthy,
-		"state", health.ProcessState.String())
+		logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+		logger.String("event_type", eventType),
+		logger.Bool("is_healthy", health.IsHealthy),
+		logger.String("state", health.ProcessState.String()))
 
 	return nil
 }

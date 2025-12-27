@@ -1,31 +1,34 @@
-// internal/api/v2/auth/adapter.go
+// internal/api/auth/adapter.go
 package auth
 
 import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"log/slog"
 	"reflect"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // SecurityAdapter adapts the security package to our API auth interface
 type SecurityAdapter struct {
 	OAuth2Server *security.OAuth2Server
-	logger       *slog.Logger
 }
 
 // NewSecurityAdapter creates a new adapter for the security package
-func NewSecurityAdapter(oauth2Server *security.OAuth2Server, logger *slog.Logger) *SecurityAdapter {
+func NewSecurityAdapter(oauth2Server *security.OAuth2Server) *SecurityAdapter {
 	return &SecurityAdapter{
 		OAuth2Server: oauth2Server,
-		logger:       logger,
 	}
+}
+
+// log returns the auth package logger.
+func (a *SecurityAdapter) log() logger.Logger {
+	return GetLogger()
 }
 
 // CheckAccess validates if a request has access to protected resources
@@ -57,17 +60,17 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 	//    If authentication succeeded, the username should already be in the context.
 	userId, err := gothic.GetFromSession("userId", c.Request())
 	if err == nil && userId != "" {
-		if a.logger != nil {
-			a.logger.Debug("Retrieved username from session as fallback", "path", c.Request().URL.Path, "ip", c.RealIP())
-		}
+		a.log().Debug("Retrieved username from session as fallback",
+			logger.String("path", c.Request().URL.Path),
+			logger.String("ip", c.RealIP()))
 		return userId
 	}
 
 	// No username found in context or session - this is expected for LAN bypass
 	// where users are authenticated by IP without going through login flow
-	if a.logger != nil {
-		a.logger.Debug("No username in context or session (expected for subnet bypass)", "path", c.Request().URL.Path, "ip", c.RealIP())
-	}
+	a.log().Debug("No username in context or session (expected for subnet bypass)",
+		logger.String("path", c.Request().URL.Path),
+		logger.String("ip", c.RealIP()))
 	return ""
 }
 
@@ -92,9 +95,9 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 		}
 
 		// If type assertion or conversion fails, log it but fall through to other checks
-		if a.logger != nil {
-			a.logger.Warn("Context value for auth method has unexpected type or invalid string value", slog.Any("type", reflect.TypeOf(authMethodCtx)), "value", authMethodCtx)
-		}
+		a.log().Warn("Context value for auth method has unexpected type or invalid string value",
+			logger.Any("type", reflect.TypeOf(authMethodCtx)),
+			logger.Any("value", authMethodCtx))
 	}
 
 	// 2. Check subnet bypass (if context wasn't set or middleware didn't handle)
@@ -160,7 +163,7 @@ func (a *SecurityAdapter) ValidateToken(token string) error {
 //
 // Returns auth code on success, error on failure.
 func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) (string, error) {
-	security.LogInfo("Basic authentication login attempt", "username", username)
+	a.log().Info("Basic authentication login attempt", logger.String("username", username))
 
 	if err := a.validateBasicAuthEnabled(username); err != nil {
 		return "", err
@@ -184,8 +187,8 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 // validateBasicAuthEnabled checks if basic auth is enabled.
 func (a *SecurityAdapter) validateBasicAuthEnabled(username string) error {
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
-		a.logDebug("Basic auth is not enabled")
-		security.LogWarn("Basic authentication failed: Basic auth not enabled", "username", username)
+		a.log().Warn("Basic authentication failed: Basic auth not enabled",
+			logger.String("username", username))
 		return ErrBasicAuthDisabled
 	}
 	return nil
@@ -193,17 +196,17 @@ func (a *SecurityAdapter) validateBasicAuthEnabled(username string) error {
 
 // logDebugAuthConfig logs debug information about auth configuration.
 func (a *SecurityAdapter) logDebugAuthConfig(username, storedClientID string) {
-	a.logDebug("BasicAuth configuration check",
-		"provided_username", username,
-		"configured_clientid", storedClientID,
-		"clientid_empty", storedClientID == "",
-		"clientid_match", username == storedClientID)
+	a.log().Debug("BasicAuth configuration check",
+		logger.String("provided_username", username),
+		logger.String("configured_clientid", storedClientID),
+		logger.Bool("clientid_empty", storedClientID == ""),
+		logger.Bool("clientid_match", username == storedClientID))
 }
 
 // validateUsername checks if the provided username matches the stored ClientID.
 func (a *SecurityAdapter) validateUsername(username, storedClientID string) bool {
 	if storedClientID == "" {
-		a.logDebug("ClientID is empty, skipping username validation (V1 compatible mode)")
+		a.log().Debug("ClientID is empty, skipping username validation (V1 compatible mode)")
 		return true
 	}
 
@@ -222,49 +225,34 @@ func (a *SecurityAdapter) validatePassword(password, storedPassword string) bool
 // handleAuthFailure logs the appropriate failure message and returns an error.
 func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) error {
 	if !userMatch {
-		security.LogWarn("Basic authentication failed: Invalid username", "username", username)
+		a.log().Warn("Basic authentication failed: Invalid username",
+			logger.String("username", username))
 	} else {
-		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
+		a.log().Warn("Basic authentication failed: Invalid password",
+			logger.String("username", username))
 	}
 	return ErrInvalidCredentials
 }
 
 // generateAuthCodeOnSuccess generates an auth code after successful authentication.
 func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, error) {
-	a.logInfo("Credentials validated successfully", "username", username)
+	log := a.log()
+	log.Info("Credentials validated successfully", logger.String("username", username))
 
 	authCode, err := a.OAuth2Server.GenerateAuthCode()
 	if err != nil {
-		a.logError("Failed to generate auth code during basic auth", "error", err.Error())
-		security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code generation failed")
+		log.Error("Failed to generate auth code during basic auth",
+			logger.String("username", username),
+			logger.Error(err))
 		return "", ErrAuthCodeGeneration
 	}
 
-	a.logInfo("Auth code generated successfully", "username", username, "auth_code_length", len(authCode))
-	security.LogInfo("Basic authentication successful", "username", username)
+	log.Info("Basic authentication successful",
+		logger.String("username", username),
+		logger.Int("auth_code_length", len(authCode)))
 	return authCode, nil
 }
 
-// logDebug logs a debug message if logger is available.
-func (a *SecurityAdapter) logDebug(msg string, args ...any) {
-	if a.logger != nil {
-		a.logger.Debug(msg, args...)
-	}
-}
-
-// logInfo logs an info message if logger is available.
-func (a *SecurityAdapter) logInfo(msg string, args ...any) {
-	if a.logger != nil {
-		a.logger.Info(msg, args...)
-	}
-}
-
-// logError logs an error message if logger is available.
-func (a *SecurityAdapter) logError(msg string, args ...any) {
-	if a.logger != nil {
-		a.logger.Error(msg, args...)
-	}
-}
 
 // Logout invalidates the current session/token
 func (a *SecurityAdapter) Logout(c echo.Context) error {
@@ -287,30 +275,23 @@ func (a *SecurityAdapter) ExchangeAuthCode(ctx context.Context, code string) (st
 // EstablishSession creates a new session with the given access token.
 // Handles session fixation mitigation by clearing old session first.
 func (a *SecurityAdapter) EstablishSession(c echo.Context, accessToken string) error {
+	log := a.log()
 	// Session fixation mitigation: clear old session first
 	// This regenerates the session ID to prevent session fixation attacks
 	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
-		if a.logger != nil {
-			a.logger.Warn("Error during session regeneration (session fixation mitigation)", "error", err)
-		}
+		log.Warn("Error during session regeneration (session fixation mitigation)", logger.Error(err))
 		// Continue anyway - StoreInSession might still create a new session
 	} else {
-		if a.logger != nil {
-			a.logger.Info("Successfully cleared old session before storing new token (session fixation mitigation)")
-		}
+		log.Info("Successfully cleared old session before storing new token (session fixation mitigation)")
 	}
 
 	// Store access token in new session
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
-		if a.logger != nil {
-			a.logger.Error("Failed to store access token in new session after logout/regeneration", "error", err)
-		}
+		log.Error("Failed to store access token in new session after logout/regeneration", logger.Error(err))
 		return err
 	}
 
-	if a.logger != nil {
-		a.logger.Info("Successfully stored access token in new session")
-	}
+	log.Info("Successfully stored access token in new session")
 	return nil
 }
 

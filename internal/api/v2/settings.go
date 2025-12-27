@@ -4,7 +4,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -19,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -68,8 +68,8 @@ func (c *Controller) initSettingsRoutes() {
 // GetAllSettings handles GET /api/v2/settings
 func (c *Controller) GetAllSettings(ctx echo.Context) error {
 	c.logInfoIfEnabled("Getting all settings",
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	// Acquire read lock to ensure settings aren't being modified during read
@@ -82,16 +82,16 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 		settings = conf.Setting()
 		if settings == nil {
 			c.logErrorIfEnabled("Settings not initialized when trying to get all settings",
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
+				logger.String("path", ctx.Request().URL.Path),
+				logger.String("ip", ctx.RealIP()),
 			)
 			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 		}
 	}
 
 	c.logInfoIfEnabled("Retrieved all settings successfully",
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	// Return a copy of the settings
@@ -101,14 +101,14 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 // GetSectionSettings handles GET /api/v2/settings/:section
 func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 	section := ctx.Param("section")
-	c.logAPIRequest(ctx, slog.LevelInfo, "Getting settings for section", "section", section)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting settings for section", logger.String("section", section))
 
 	// Acquire read lock to ensure settings aren't being modified during read
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
 	if section == "" {
-		c.logAPIRequest(ctx, slog.LevelError, "Missing section parameter")
+		c.logAPIRequest(ctx, logger.LogLevelError, "Missing section parameter")
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
@@ -117,7 +117,7 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 		// Fallback to global settings if controller settings not set
 		settings = conf.Setting()
 		if settings == nil {
-			c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get section settings", "section", section)
+			c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get section settings", logger.String("section", section))
 			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 		}
 	}
@@ -125,18 +125,18 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 	// Get the settings section
 	sectionValue, err := getSettingsSection(settings, section)
 	if err != nil {
-		c.logAPIRequest(ctx, slog.LevelError, "Failed to get settings section", "section", section, "error", err.Error())
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to get settings section", logger.String("section", section), logger.String("error", err.Error()))
 		return c.HandleError(ctx, err, "Failed to get settings section", http.StatusNotFound)
 	}
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved settings section successfully", "section", section)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Retrieved settings section successfully", logger.String("section", section))
 
 	return ctx.JSON(http.StatusOK, sectionValue)
 }
 
 // UpdateSettings handles PUT /api/v2/settings
 func (c *Controller) UpdateSettings(ctx echo.Context) error {
-	c.logAPIRequest(ctx, slog.LevelInfo, "Attempting to update settings")
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Attempting to update settings")
 	// Acquire write lock to prevent concurrent settings updates
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
@@ -146,7 +146,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// Fallback to global settings if controller settings not set
 		settings = conf.Setting()
 		if settings == nil {
-			c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized during update attempt")
+			c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
 			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 		}
 	}
@@ -158,13 +158,13 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	var updatedSettings conf.Settings
 	if err := ctx.Bind(&updatedSettings); err != nil {
 		// Log binding error
-		c.logAPIRequest(ctx, slog.LevelError, "Failed to bind request body for settings update", "error", err.Error())
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to bind request body for settings update", logger.String("error", err.Error()))
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
 	// Verify the request body contains valid data
 	if err := validateSettingsData(&updatedSettings); err != nil {
-		c.logAPIRequest(ctx, slog.LevelError, "Invalid settings data received", "error", err.Error())
+		c.logAPIRequest(ctx, logger.LogLevelError, "Invalid settings data received", logger.String("error", err.Error()))
 		return c.HandleError(ctx, err, "Invalid settings data", http.StatusBadRequest)
 	}
 
@@ -172,19 +172,19 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
 	if err != nil {
 		// Log error during field update attempt
-		c.logAPIRequest(ctx, slog.LevelError, "Error updating allowed settings fields", "error", err.Error(), "skipped_fields", skippedFields)
+		c.logAPIRequest(ctx, logger.LogLevelError, "Error updating allowed settings fields", logger.String("error", err.Error()), logger.Any("skipped_fields", skippedFields))
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 	}
 	if len(skippedFields) > 0 {
 		// Log skipped fields at Debug level
-		c.logAPIRequest(ctx, slog.LevelDebug, "Skipped protected fields during settings update", "skipped_fields", skippedFields)
+		c.logAPIRequest(ctx, logger.LogLevelDebug, "Skipped protected fields during settings update", logger.Any("skipped_fields", skippedFields))
 	}
 
 	// Check if any important settings have changed and trigger actions as needed
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
 		// Attempt to rollback changes if applying them failed
 		*settings = oldSettings
-		c.logAPIRequest(ctx, slog.LevelError, "Failed to apply settings changes, rolling back", "error", err.Error())
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.String("error", err.Error()))
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
@@ -192,14 +192,14 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	if err := conf.SaveSettings(); err != nil {
 		// Attempt to rollback changes if saving failed
 		*settings = oldSettings
-		c.logAPIRequest(ctx, slog.LevelError, "Failed to save settings to disk, rolling back", "error", err.Error())
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.String("error", err.Error()))
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	// Update the cached telemetry state after settings change
 	telemetry.UpdateTelemetryEnabled()
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Settings updated and saved successfully", "skipped_fields_count", len(skippedFields))
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully", logger.Int("skipped_fields_count", len(skippedFields)))
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       "Settings updated successfully",
 		"skippedFields": skippedFields,
@@ -1729,14 +1729,14 @@ type ImageProviderOption struct {
 
 // GetLocales handles GET /api/v2/settings/locales
 func (c *Controller) GetLocales(ctx echo.Context) error {
-	c.logAPIRequest(ctx, slog.LevelInfo, "Getting available locales")
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting available locales")
 
 	// Return locales in the same format as v1 for compatibility
 	// This matches the client-side expectation of key-value pairs
 	locales := make(map[string]string)
 	maps.Copy(locales, conf.LocaleCodes)
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved locales successfully", "count", len(locales))
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Retrieved locales successfully", logger.Int("count", len(locales)))
 
 	return ctx.JSON(http.StatusOK, locales)
 }
@@ -1755,13 +1755,13 @@ func (c *Controller) collectImageProviders(ctx echo.Context) (providers []ImageP
 	providers = []ImageProviderOption{{Value: "auto", Display: "Auto (Default)"}}
 
 	if c.BirdImageCache == nil {
-		c.logAPIRequest(ctx, slog.LevelWarn, "BirdImageCache is nil, cannot get provider names")
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "BirdImageCache is nil, cannot get provider names")
 		return providers, count
 	}
 
 	registry := c.BirdImageCache.GetRegistry()
 	if registry == nil {
-		c.logAPIRequest(ctx, slog.LevelWarn, "ImageProviderRegistry is nil, cannot get provider names")
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "ImageProviderRegistry is nil, cannot get provider names")
 		return providers, count
 	}
 
@@ -1782,18 +1782,18 @@ func (c *Controller) collectImageProviders(ctx echo.Context) (providers []ImageP
 
 // GetImageProviders handles GET /api/v2/settings/imageproviders
 func (c *Controller) GetImageProviders(ctx echo.Context) error {
-	c.logAPIRequest(ctx, slog.LevelInfo, "Getting available image providers")
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting available image providers")
 
 	providers, providerCount := c.collectImageProviders(ctx)
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved image providers successfully", "count", len(providers), "provider_count", providerCount)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Retrieved image providers successfully", logger.Int("count", len(providers)), logger.Int("provider_count", providerCount))
 
 	return ctx.JSON(http.StatusOK, map[string]any{"providers": providers})
 }
 
 // GetSystemID handles GET /api/v2/settings/systemid
 func (c *Controller) GetSystemID(ctx echo.Context) error {
-	c.logAPIRequest(ctx, slog.LevelInfo, "Getting system ID")
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting system ID")
 
 	// Acquire read lock to ensure settings aren't being modified during read
 	c.settingsMutex.RLock()
@@ -1804,12 +1804,12 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 		// Fallback to global settings if controller settings not set
 		settings = conf.Setting()
 		if settings == nil {
-			c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get system ID", "endpoint", "GetSystemID")
+			c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get system ID", logger.String("endpoint", "GetSystemID"))
 			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 		}
 	}
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", settings.SystemID)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Retrieved system ID successfully", logger.String("system_id", settings.SystemID))
 
 	// Return system ID in the format expected by the frontend
 	response := map[string]string{
