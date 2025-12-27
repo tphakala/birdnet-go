@@ -6,7 +6,6 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
-	"log"
 	"maps"
 	"os"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	tflite "github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
@@ -499,7 +499,9 @@ func (bn *BirdNET) loadExternalLabels() error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close label file: %v", err)
+			GetLogger().Warn("Failed to close label file",
+				logger.Error(err),
+				logger.String("path", bn.Settings.BirdNET.LabelPath))
 		}
 	}()
 
@@ -970,14 +972,11 @@ func (bn *BirdNET) GetSpeciesWithScientificAndCommonName(label string) (scientif
 	return SplitSpeciesName(label)
 }
 
-// Debug prints debug messages if debug mode is enabled
+// Debug prints debug messages if debug mode is enabled.
+// Uses the centralized logger for structured logging.
 func (bn *BirdNET) Debug(format string, v ...any) {
 	if bn.Settings.BirdNET.Debug {
-		if len(v) == 0 {
-			log.Print("[birdnet] " + format)
-		} else {
-			log.Printf("[birdnet] "+format, v...)
-		}
+		GetLogger().Debug(fmt.Sprintf(format, v...))
 	}
 }
 
