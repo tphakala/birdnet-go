@@ -36,34 +36,34 @@ const (
 	// Daytime solar radiation range for partly cloudy (inclusive).
 	DayPartlyCloudyLowerSR = 200.0
 	DayPartlyCloudyUpperSR = 600.0
-	
+
 	// Temperature thresholds for weather conditions
 	FreezingPointC     = 0.0  // Celsius freezing point for snow/rain determination
 	FogTempThresholdC  = 5.0  // Maximum temperature for fog formation
 	FogHumidityPercent = 90.0 // Minimum humidity for fog formation
-	
+
 	// Night humidity thresholds for cloud inference
 	NightCloudyHumidityPercent       = 85.0 // Humidity threshold for cloudy conditions at night
 	NightPartlyCloudyHumidityPercent = 60.0 // Humidity threshold for partly cloudy at night
-	
+
 	// Unit conversion factors
-	KmhToMs     = 0.277778      // Convert km/h to m/s (divide by 3.6)
-	MphToMs     = 0.44704       // Convert mph to m/s
-	InHgToHPa   = 33.8638866667 // Convert inches of mercury to hectopascals
-	InchesToMm  = 25.4          // Convert inches to millimeters
-	
+	KmhToMs    = 0.277778      // Convert km/h to m/s (divide by 3.6)
+	MphToMs    = 0.44704       // Convert mph to m/s
+	InHgToHPa  = 33.8638866667 // Convert inches of mercury to hectopascals
+	InchesToMm = 25.4          // Convert inches to millimeters
+
 	// Feels-like temperature thresholds - Metric
-	MetricHotTempC          = 27.0         // Temperature above which to use heat index
-	MetricColdTempC         = 10.0         // Temperature below which to use wind chill
-	MetricWindThresholdMs   = 1.3333333333 // Wind speed threshold for wind chill (4.8 km/h)
-	
+	MetricHotTempC        = 27.0         // Temperature above which to use heat index
+	MetricColdTempC       = 10.0         // Temperature below which to use wind chill
+	MetricWindThresholdMs = 1.3333333333 // Wind speed threshold for wind chill (4.8 km/h)
+
 	// Feels-like temperature thresholds - Hybrid (UK)
-	HybridWindThresholdMs   = 1.34112      // Wind speed threshold for wind chill (3 mph)
-	
+	HybridWindThresholdMs = 1.34112 // Wind speed threshold for wind chill (3 mph)
+
 	// Feels-like temperature thresholds - Imperial
-	ImperialHotTempF        = 80.0         // Temperature above which to use heat index
-	ImperialColdTempF       = 50.0         // Temperature below which to use wind chill
-	ImperialWindThresholdMph = 3.0         // Wind speed threshold for wind chill
+	ImperialHotTempF         = 80.0 // Temperature above which to use heat index
+	ImperialColdTempF        = 50.0 // Temperature below which to use wind chill
+	ImperialWindThresholdMph = 3.0  // Wind speed threshold for wind chill
 )
 
 var stationIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
@@ -174,20 +174,20 @@ type wundergroundResponse struct {
 func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units string, logger *slog.Logger) string {
 	// Try to parse Weather Underground error response
 	var errorResp wundergroundErrorResponse
-	
+
 	if err := json.Unmarshal(bodyBytes, &errorResp); err == nil && len(errorResp.Errors) > 0 {
 		// Extract the first error message
 		errorMessage := errorResp.Errors[0].Error.Message
 		errorCode := errorResp.Errors[0].Error.Code
-		
+
 		// Log the structured error
-		logger.Error("Weather Underground API error", 
+		logger.Error("Weather Underground API error",
 			"status_code", statusCode,
 			"error_code", errorCode,
 			"error_message", errorMessage,
 			"station", stationId,
 			"units", units)
-		
+
 		// Provide user-friendly error messages based on error code
 		switch errorCode {
 		case "CDN-0001":
@@ -205,7 +205,7 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 			return errorMessage
 		}
 	}
-	
+
 	// Fallback for non-standard error responses
 	const maxBodyPreview = 512
 	var bodyPreview string
@@ -214,9 +214,9 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 	} else {
 		bodyPreview = strings.ReplaceAll(string(bodyBytes), "\n", " ")
 	}
-	
+
 	logger.Error("Received non-OK status code", "status_code", statusCode, "response_preview", bodyPreview)
-	
+
 	// Generic error message based on status code
 	switch statusCode {
 	case http.StatusUnauthorized:
@@ -534,7 +534,7 @@ func normalizeWindGust(windGustRaw float64, units string) float64 {
 	if math.IsNaN(windGustRaw) || windGustRaw == 0 {
 		return 0.0
 	}
-	
+
 	switch units {
 	case "m":
 		// WU metric wind is in km/h

@@ -22,19 +22,19 @@ const (
 // Complete list from https://nrkno.github.io/yr-weather-symbols/
 var YrNoSymbolToIcon = map[string]IconCode{
 	// Clear sky
-	"clearsky_day":            IconClearSky,
-	"clearsky_night":          IconClearSky,
-	"clearsky_polartwilight":  IconClearSky,
+	"clearsky_day":           IconClearSky,
+	"clearsky_night":         IconClearSky,
+	"clearsky_polartwilight": IconClearSky,
 
 	// Fair (few clouds)
-	"fair_day":            IconFair,
-	"fair_night":          IconFair,
-	"fair_polartwilight":  IconFair,
+	"fair_day":           IconFair,
+	"fair_night":         IconFair,
+	"fair_polartwilight": IconFair,
 
 	// Partly cloudy
-	"partlycloudy_day":            IconPartlyCloudy,
-	"partlycloudy_night":          IconPartlyCloudy,
-	"partlycloudy_polartwilight":  IconPartlyCloudy,
+	"partlycloudy_day":           IconPartlyCloudy,
+	"partlycloudy_night":         IconPartlyCloudy,
+	"partlycloudy_polartwilight": IconPartlyCloudy,
 
 	// Cloudy
 	"cloudy": IconCloudy,
@@ -43,19 +43,19 @@ var YrNoSymbolToIcon = map[string]IconCode{
 	"fog": IconFog,
 
 	// Light rain showers
-	"lightrainshowers_day":            IconRainShowers,
-	"lightrainshowers_night":          IconRainShowers,
-	"lightrainshowers_polartwilight":  IconRainShowers,
+	"lightrainshowers_day":           IconRainShowers,
+	"lightrainshowers_night":         IconRainShowers,
+	"lightrainshowers_polartwilight": IconRainShowers,
 
 	// Rain showers
-	"rainshowers_day":            IconRainShowers,
-	"rainshowers_night":          IconRainShowers,
-	"rainshowers_polartwilight":  IconRainShowers,
+	"rainshowers_day":           IconRainShowers,
+	"rainshowers_night":         IconRainShowers,
+	"rainshowers_polartwilight": IconRainShowers,
 
 	// Heavy rain showers
-	"heavyrainshowers_day":            IconRainShowers,
-	"heavyrainshowers_night":          IconRainShowers,
-	"heavyrainshowers_polartwilight":  IconRainShowers,
+	"heavyrainshowers_day":           IconRainShowers,
+	"heavyrainshowers_night":         IconRainShowers,
+	"heavyrainshowers_polartwilight": IconRainShowers,
 
 	// Light rain
 	"lightrain": IconRain,
@@ -67,19 +67,19 @@ var YrNoSymbolToIcon = map[string]IconCode{
 	"heavyrain": IconRain,
 
 	// Light rain showers and thunder
-	"lightrainshowersandthunder_day":            IconThunderstorm,
-	"lightrainshowersandthunder_night":          IconThunderstorm,
-	"lightrainshowersandthunder_polartwilight":  IconThunderstorm,
+	"lightrainshowersandthunder_day":           IconThunderstorm,
+	"lightrainshowersandthunder_night":         IconThunderstorm,
+	"lightrainshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Rain showers and thunder
-	"rainshowersandthunder_day":            IconThunderstorm,
-	"rainshowersandthunder_night":          IconThunderstorm,
-	"rainshowersandthunder_polartwilight":  IconThunderstorm,
+	"rainshowersandthunder_day":           IconThunderstorm,
+	"rainshowersandthunder_night":         IconThunderstorm,
+	"rainshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Heavy rain showers and thunder
-	"heavyrainshowersandthunder_day":            IconThunderstorm,
-	"heavyrainshowersandthunder_night":          IconThunderstorm,
-	"heavyrainshowersandthunder_polartwilight":  IconThunderstorm,
+	"heavyrainshowersandthunder_day":           IconThunderstorm,
+	"heavyrainshowersandthunder_night":         IconThunderstorm,
+	"heavyrainshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Light rain and thunder
 	"lightrainandthunder": IconThunderstorm,
@@ -91,19 +91,19 @@ var YrNoSymbolToIcon = map[string]IconCode{
 	"heavyrainandthunder": IconThunderstorm,
 
 	// Light sleet showers
-	"lightsleetshowers_day":            IconSleet,
-	"lightsleetshowers_night":          IconSleet,
-	"lightsleetshowers_polartwilight":  IconSleet,
+	"lightsleetshowers_day":           IconSleet,
+	"lightsleetshowers_night":         IconSleet,
+	"lightsleetshowers_polartwilight": IconSleet,
 
 	// Sleet showers
-	"sleetshowers_day":            IconSleet,
-	"sleetshowers_night":          IconSleet,
-	"sleetshowers_polartwilight":  IconSleet,
+	"sleetshowers_day":           IconSleet,
+	"sleetshowers_night":         IconSleet,
+	"sleetshowers_polartwilight": IconSleet,
 
 	// Heavy sleet showers
-	"heavysleetshowers_day":            IconSleet,
-	"heavysleetshowers_night":          IconSleet,
-	"heavysleetshowers_polartwilight":  IconSleet,
+	"heavysleetshowers_day":           IconSleet,
+	"heavysleetshowers_night":         IconSleet,
+	"heavysleetshowers_polartwilight": IconSleet,
 
 	// Light sleet
 	"lightsleet": IconSleet,
@@ -115,19 +115,19 @@ var YrNoSymbolToIcon = map[string]IconCode{
 	"heavysleet": IconSleet,
 
 	// Light sleet showers and thunder (note: yr.no has typo "lightssleet" with extra 's')
-	"lightssleetshowersandthunder_day":            IconThunderstorm,
-	"lightssleetshowersandthunder_night":          IconThunderstorm,
-	"lightssleetshowersandthunder_polartwilight":  IconThunderstorm,
+	"lightssleetshowersandthunder_day":           IconThunderstorm,
+	"lightssleetshowersandthunder_night":         IconThunderstorm,
+	"lightssleetshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Sleet showers and thunder
-	"sleetshowersandthunder_day":            IconThunderstorm,
-	"sleetshowersandthunder_night":          IconThunderstorm,
-	"sleetshowersandthunder_polartwilight":  IconThunderstorm,
+	"sleetshowersandthunder_day":           IconThunderstorm,
+	"sleetshowersandthunder_night":         IconThunderstorm,
+	"sleetshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Heavy sleet showers and thunder
-	"heavysleetshowersandthunder_day":            IconThunderstorm,
-	"heavysleetshowersandthunder_night":          IconThunderstorm,
-	"heavysleetshowersandthunder_polartwilight":  IconThunderstorm,
+	"heavysleetshowersandthunder_day":           IconThunderstorm,
+	"heavysleetshowersandthunder_night":         IconThunderstorm,
+	"heavysleetshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Light sleet and thunder
 	"lightsleetandthunder": IconThunderstorm,
@@ -139,19 +139,19 @@ var YrNoSymbolToIcon = map[string]IconCode{
 	"heavysleetandthunder": IconThunderstorm,
 
 	// Light snow showers
-	"lightsnowshowers_day":            IconSnow,
-	"lightsnowshowers_night":          IconSnow,
-	"lightsnowshowers_polartwilight":  IconSnow,
+	"lightsnowshowers_day":           IconSnow,
+	"lightsnowshowers_night":         IconSnow,
+	"lightsnowshowers_polartwilight": IconSnow,
 
 	// Snow showers
-	"snowshowers_day":            IconSnow,
-	"snowshowers_night":          IconSnow,
-	"snowshowers_polartwilight":  IconSnow,
+	"snowshowers_day":           IconSnow,
+	"snowshowers_night":         IconSnow,
+	"snowshowers_polartwilight": IconSnow,
 
 	// Heavy snow showers
-	"heavysnowshowers_day":            IconSnow,
-	"heavysnowshowers_night":          IconSnow,
-	"heavysnowshowers_polartwilight":  IconSnow,
+	"heavysnowshowers_day":           IconSnow,
+	"heavysnowshowers_night":         IconSnow,
+	"heavysnowshowers_polartwilight": IconSnow,
 
 	// Light snow
 	"lightsnow": IconSnow,
@@ -163,19 +163,19 @@ var YrNoSymbolToIcon = map[string]IconCode{
 	"heavysnow": IconSnow,
 
 	// Light snow showers and thunder (note: yr.no has typo "lightssnow" with extra 's')
-	"lightssnowshowersandthunder_day":            IconThunderstorm,
-	"lightssnowshowersandthunder_night":          IconThunderstorm,
-	"lightssnowshowersandthunder_polartwilight":  IconThunderstorm,
+	"lightssnowshowersandthunder_day":           IconThunderstorm,
+	"lightssnowshowersandthunder_night":         IconThunderstorm,
+	"lightssnowshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Snow showers and thunder
-	"snowshowersandthunder_day":            IconThunderstorm,
-	"snowshowersandthunder_night":          IconThunderstorm,
-	"snowshowersandthunder_polartwilight":  IconThunderstorm,
+	"snowshowersandthunder_day":           IconThunderstorm,
+	"snowshowersandthunder_night":         IconThunderstorm,
+	"snowshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Heavy snow showers and thunder
-	"heavysnowshowersandthunder_day":            IconThunderstorm,
-	"heavysnowshowersandthunder_night":          IconThunderstorm,
-	"heavysnowshowersandthunder_polartwilight":  IconThunderstorm,
+	"heavysnowshowersandthunder_day":           IconThunderstorm,
+	"heavysnowshowersandthunder_night":         IconThunderstorm,
+	"heavysnowshowersandthunder_polartwilight": IconThunderstorm,
 
 	// Light snow and thunder
 	"lightsnowandthunder": IconThunderstorm,
