@@ -31,7 +31,7 @@
 //	defer centralLogger.Close()
 //
 //	// Create module-scoped logger
-//	appLogger := centralLogger.Module("main")
+//	appLogger := centralLogger.Module("birdnet")
 //
 //	// Use structured logging
 //	appLogger.Info("Application started",
@@ -42,9 +42,9 @@
 //
 // Create hierarchical loggers for different components:
 //
-//	storageLogger := centralLogger.Module("storage")
-//	sqliteLogger := storageLogger.Module("sqlite")
-//	sqliteLogger.Debug("Query executed")  // Output includes: module="storage.sqlite"
+//	analysisLogger := centralLogger.Module("analysis")
+//	processorLogger := analysisLogger.Module("processor")
+//	processorLogger.Debug("Detection processed")  // Output includes: module="analysis.processor"
 //
 // # Context-Aware Logging
 //

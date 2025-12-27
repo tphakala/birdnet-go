@@ -120,7 +120,7 @@ func TestSlogLogger_Module(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logger := NewSlogLogger(buf, LogLevelInfo, time.UTC)
 
-		moduleLogger := logger.Module("webhook")
+		moduleLogger := logger.Module("notifications")
 
 		require.NotNil(t, moduleLogger)
 		assert.IsType(t, &SlogLogger{}, moduleLogger)
@@ -130,14 +130,14 @@ func TestSlogLogger_Module(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logger := NewSlogLogger(buf, LogLevelInfo, time.UTC)
 
-		level1 := logger.Module("webhook")
-		level2 := level1.Module("handler")
+		level1 := logger.Module("notifications")
+		level2 := level1.Module("provider")
 
 		buf.Reset()
 		level2.Info("test message")
 
 		output := buf.String()
-		assert.Contains(t, output, "webhook.handler")
+		assert.Contains(t, output, "notifications.provider")
 	})
 
 	t.Run("nil logger returns nil module", func(t *testing.T) {
