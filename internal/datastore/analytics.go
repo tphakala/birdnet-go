@@ -73,7 +73,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 
 	// Debug logging for query start
 	if isDebugLoggingEnabled() {
-		getLogger().Debug("GetSpeciesSummaryData: Starting query",
+		log.Debug("GetSpeciesSummaryData: Starting query",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate))
 	}
@@ -136,7 +136,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	// For SQLite with WAL mode: provides a consistent snapshot view even during concurrent writes
 	// For MySQL: uses default REPEATABLE READ isolation level for snapshot consistency
 	if isDebugLoggingEnabled() {
-		getLogger().Debug("GetSpeciesSummaryData: Executing query with snapshot isolation",
+		log.Debug("GetSpeciesSummaryData: Executing query with snapshot isolation",
 			logger.String("query", queryStr),
 			logger.Any("args", args))
 	}
@@ -161,7 +161,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		}
 		defer func() {
 			if err := rows.Close(); err != nil {
-				getLogger().Error("Failed to close rows",
+				log.Error("Failed to close rows",
 					logger.Error(err),
 					logger.String("operation", "get_species_summary_data"))
 			}
@@ -169,7 +169,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 
 		queryExecutionTime := time.Since(queryStart)
 		if isDebugLoggingEnabled() {
-			getLogger().Debug("GetSpeciesSummaryData: Query executed, scanning rows",
+			log.Debug("GetSpeciesSummaryData: Query executed, scanning rows",
 				logger.Int64("query_duration_ms", queryExecutionTime.Milliseconds()))
 		}
 		rowCount := 0
@@ -204,7 +204,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 				if err == nil {
 					summary.FirstSeen = firstSeen
 				} else if isDebugLoggingEnabled() {
-					getLogger().Debug("Failed to parse firstSeen time",
+					log.Debug("Failed to parse firstSeen time",
 						logger.String("species", summary.ScientificName),
 						logger.String("firstSeenStr", firstSeenStr),
 						logger.Error(err))
@@ -216,7 +216,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 				if err == nil {
 					summary.LastSeen = lastSeen
 				} else if isDebugLoggingEnabled() {
-					getLogger().Debug("Failed to parse lastSeen time",
+					log.Debug("Failed to parse lastSeen time",
 						logger.String("species", summary.ScientificName),
 						logger.String("lastSeenStr", lastSeenStr),
 						logger.Error(err))
@@ -235,7 +235,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		// Log transaction metrics
 		txDuration := time.Since(txStart)
 		if isDebugLoggingEnabled() {
-			getLogger().Debug("GetSpeciesSummaryData: Transaction completed",
+			log.Debug("GetSpeciesSummaryData: Transaction completed",
 				logger.Int64("tx_duration_ms", txDuration.Milliseconds()),
 				logger.Int("rows_processed", rowCount))
 		}
@@ -249,7 +249,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 
 	totalDuration := time.Since(queryStart)
 	if isDebugLoggingEnabled() {
-		getLogger().Debug("GetSpeciesSummaryData: Completed",
+		log.Debug("GetSpeciesSummaryData: Completed",
 			logger.Int64("total_duration_ms", totalDuration.Milliseconds()),
 			logger.Int("rows_processed", len(summaries)))
 	}
@@ -658,7 +658,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 			})
 		} else {
 			// Log if a record surprisingly had an empty date after SQL filtering
-			getLogger().Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
+			log.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
 				logger.String("scientific_name", raw.ScientificName),
 				logger.String("operation", "get_new_species_detections"))
 		}

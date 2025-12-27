@@ -121,7 +121,7 @@ func (ds *DataStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, er
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Cleaned up expired dynamic thresholds",
+		log.Info("Cleaned up expired dynamic thresholds",
 			logger.Int64("count", result.RowsAffected),
 			logger.String("before", before.Format(time.RFC3339)))
 	}
@@ -228,7 +228,7 @@ func (ds *DataStore) DeleteAllDynamicThresholds() (int64, error) {
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Reset all dynamic thresholds",
+		log.Info("Reset all dynamic thresholds",
 			logger.Int64("count", result.RowsAffected))
 	}
 
@@ -331,7 +331,7 @@ func (ds *DataStore) DeleteAllThresholdEvents() (int64, error) {
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Deleted all threshold events",
+		log.Info("Deleted all threshold events",
 			logger.Int64("count", result.RowsAffected))
 	}
 

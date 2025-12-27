@@ -95,7 +95,7 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 		logFields = append(logFields, logger.String("resource_summary", context.ResourceSnapshot.FormatResourceSummary()))
 	}
 
-	getLogger().Error("Database error with context", logFields...)
+	log.Error("Database error with context", logFields...)
 
 	// Send to telemetry based on severity
 	if severity == SeverityCritical || severity == SeverityHigh {
@@ -120,7 +120,7 @@ func (dt *DatastoreTelemetry) gatherErrorContext(err error, operation string, st
 		context.Recommendations = snapshot.GetResourceRecommendations()
 		context.Severity = dt.calculateSeverity(err, context)
 	} else {
-		getLogger().Warn("Failed to capture resource snapshot for error context", logger.Error(captureErr))
+		log.Warn("Failed to capture resource snapshot for error context", logger.Error(captureErr))
 	}
 
 	// Capture database health if store interface supports it

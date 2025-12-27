@@ -123,28 +123,28 @@ func CaptureResourceSnapshot(dbPath string) (*ResourceSnapshot, error) {
 	if diskInfo, err := captureDiskSpaceWithManager(dbPath); err == nil {
 		snapshot.DiskSpace = diskInfo
 	} else {
-		getLogger().Warn("Failed to capture disk space info", logger.Error(err))
+		log.Warn("Failed to capture disk space info", logger.Error(err))
 	}
 
 	// Capture database file information
 	if dbInfo, err := captureDatabaseFileInfo(dbPath); err == nil {
 		snapshot.DatabaseFile = dbInfo
 	} else {
-		getLogger().Warn("Failed to capture database file info", logger.Error(err))
+		log.Warn("Failed to capture database file info", logger.Error(err))
 	}
 
 	// Capture system memory information
 	if memInfo, err := captureMemoryInfo(); err == nil {
 		snapshot.SystemMemory = memInfo
 	} else {
-		getLogger().Warn("Failed to capture memory info", logger.Error(err))
+		log.Warn("Failed to capture memory info", logger.Error(err))
 	}
 
 	// Capture process information
 	if procInfo, err := captureProcessInfo(); err == nil {
 		snapshot.ProcessInfo = procInfo
 	} else {
-		getLogger().Warn("Failed to capture process info", logger.Error(err))
+		log.Warn("Failed to capture process info", logger.Error(err))
 	}
 
 	return snapshot, nil
@@ -336,7 +336,7 @@ func ValidateStartupDiskSpace(dbPath string) error {
 			Build()
 	}
 
-	getLogger().Info("Startup disk space validation passed",
+	log.Info("Startup disk space validation passed",
 		logger.Int64("available_mb", int64(availableMB)),
 		logger.Int64("required_mb", MinDiskSpaceStartup),
 		logger.String("path", dir))
