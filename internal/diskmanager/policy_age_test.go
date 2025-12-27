@@ -2,7 +2,6 @@ package diskmanager
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Define variables for mocking
@@ -566,7 +566,9 @@ func simulateAgeBasedCleanup(
 		if err := os.Remove(file.Path); err != nil && !os.IsNotExist(err) {
 			// Log the error if it's something other than the file not existing
 			// This shouldn't fail the test, but indicates potential issues.
-			log.Printf("[Test Helper Warning] Failed to remove simulated audio file %s: %v", file.Path, err)
+			GetLogger().Warn("Test helper: failed to remove simulated audio file",
+				logger.String("path", file.Path),
+				logger.Error(err))
 		}
 		deletedCount++
 
@@ -576,7 +578,9 @@ func simulateAgeBasedCleanup(
 			if err := os.Remove(pngPath); err != nil && !os.IsNotExist(err) {
 				// Log the error if it's something other than the file not existing
 				// This shouldn't fail the test, but indicates potential issues.
-				log.Printf("[Test Helper Warning] Failed to remove simulated PNG %s: %v", pngPath, err)
+				GetLogger().Warn("Test helper: failed to remove simulated PNG",
+					logger.String("path", pngPath),
+					logger.Error(err))
 			}
 		}
 

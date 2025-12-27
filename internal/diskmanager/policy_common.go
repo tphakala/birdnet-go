@@ -3,9 +3,6 @@ package diskmanager
 
 import (
 	"fmt"
-	"io"
-	"log"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,45 +11,21 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
-// Package-level logger specific to diskmanager service
+// Package-level metrics with explicit synchronization
 var (
-	serviceLogger   *slog.Logger
-	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
-	closeLogger     func() error
-	
 	// Thread-safe diskMetrics with explicit synchronization
 	diskMetrics     *metrics.DiskManagerMetrics // Package-level metrics
 	diskMetricsMu   sync.RWMutex                // Protects diskMetrics access
 	metricsInitOnce sync.Once                   // Ensures SetMetrics is called only once
 )
 
-func init() {
-	var err error
-	// Define log file path relative to working directory
-	logFilePath := filepath.Join("logs", "diskmanager.log")
-	initialLevel := slog.LevelDebug // Set desired initial level
-	serviceLevelVar.Set(initialLevel)
-
-	// Initialize the service-specific file logger
-	// Using Debug level for file logging to capture more detail
-	serviceLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "diskmanager", serviceLevelVar)
-	if err != nil {
-		// Fallback: Log error to standard log and disable service logging
-		log.Printf("FATAL: Failed to initialize diskmanager file logger at %s: %v. Service logging disabled.", logFilePath, err)
-		// Set logger to a disabled handler to prevent nil panics, but respects level var
-		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
-		serviceLogger = slog.New(fbHandler).With("service", "diskmanager")
-		closeLogger = func() error { return nil } // No-op closer
-	}
-}
-
-// GetLogger returns the package-level logger for the diskmanager service.
-func GetLogger() *slog.Logger {
-	return serviceLogger
+// GetLogger returns the package logger for the diskmanager module
+func GetLogger() logger.Logger {
+	return logger.Global().Module("diskmanager")
 }
 
 // SetMetrics sets the metrics instance for the diskmanager package.
@@ -83,9 +56,9 @@ func updateDiskUsageMetrics(info DiskSpaceInfo) {
 
 // buildSpeciesSubDirCountMap creates a map to track the number of files per species per subdirectory.
 func buildSpeciesSubDirCountMap(files []FileInfo) map[string]map[string]int {
-	serviceLogger.Debug("Building species subdirectory count map",
-		"policy", "diskmanager", // Generic policy name since this function is called by both policies
-		"file_count", len(files))
+	GetLogger().Debug("Building species subdirectory count map",
+		logger.String("policy", "diskmanager"), // Generic policy name since this function is called by both policies
+		logger.Int("file_count", len(files)))
 	speciesCount := make(map[string]map[string]int)
 	for _, file := range files {
 		subDir := filepath.Dir(file.Path)
@@ -94,36 +67,35 @@ func buildSpeciesSubDirCountMap(files []FileInfo) map[string]map[string]int {
 		}
 		speciesCount[file.Species][subDir]++
 	}
-	serviceLogger.Debug("Species subdirectory count map built",
-		"policy", "diskmanager",
-		"species_count", len(speciesCount))
+	GetLogger().Debug("Species subdirectory count map built",
+		logger.String("policy", "diskmanager"),
+		logger.Int("species_count", len(speciesCount)))
 	return speciesCount
 }
 
 // buildSpeciesTotalCountMap creates a map to track the total number of files per species across all subdirectories.
 func buildSpeciesTotalCountMap(files []FileInfo) map[string]int {
-	serviceLogger.Debug("Building species total count map",
-		"policy", "diskmanager",
-		"file_count", len(files))
+	GetLogger().Debug("Building species total count map",
+		logger.String("policy", "diskmanager"),
+		logger.Int("file_count", len(files)))
 	speciesTotalCount := make(map[string]int)
 	for _, file := range files {
 		speciesTotalCount[file.Species]++
 	}
-	serviceLogger.Debug("Species total count map built",
-		"policy", "diskmanager",
-		"species_count", len(speciesTotalCount))
+	GetLogger().Debug("Species total count map built",
+		logger.String("policy", "diskmanager"),
+		logger.Int("species_count", len(speciesTotalCount)))
 	return speciesTotalCount
 }
 
 // checkLocked checks if a file should be skipped because it's locked.
 func checkLocked(file *FileInfo, debug bool) bool {
 	if file.Locked {
-		if debug {
-			log.Printf("Skipping locked file: %s", file.Path)
-		}
-		serviceLogger.Debug("Skipping locked file",
-			"path", file.Path,
-			"species", file.Species)
+		// Debug flag is now handled by log level configuration
+		log := GetLogger()
+		log.Debug("Skipping locked file",
+			logger.String("path", file.Path),
+			logger.String("species", file.Species))
 		return true // Indicates the file should be skipped
 	}
 	return false // Indicates the file should NOT be skipped
@@ -134,44 +106,36 @@ func checkLocked(file *FileInfo, debug bool) bool {
 func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[string]int,
 	minClipsPerSpecies int, debug bool, policy string) bool {
 
+	log := GetLogger()
+
 	// Ensure the species and subdirectory exist in the map
 	if speciesMap, ok := speciesCount[file.Species]; ok {
 		if count, ok := speciesMap[subDir]; ok {
 			if count <= minClipsPerSpecies {
-				if debug {
-					log.Printf("Species clip count for %s in %s is at the minimum threshold (%d). Skipping file deletion.",
-						file.Species, subDir, minClipsPerSpecies)
-				}
-				serviceLogger.Debug("Species count at minimum threshold, skipping deletion",
-					"policy", policy,
-					"species", file.Species,
-					"subdirectory", subDir,
-					"count", count,
-					"min_threshold", minClipsPerSpecies,
-					"path", file.Path)
+				log.Debug("Species count at minimum threshold, skipping deletion",
+					logger.String("policy", policy),
+					logger.String("species", file.Species),
+					logger.String("subdirectory", subDir),
+					logger.Int("count", count),
+					logger.Int("min_threshold", minClipsPerSpecies),
+					logger.String("path", file.Path))
 				return false // Cannot delete
 			}
 		} else {
 			// Should not happen if map is built correctly, but handle defensively
-			if debug {
-				log.Printf("Warning: Subdirectory %s not found in species count map for species %s.", subDir, file.Species)
-			}
-			serviceLogger.Warn("Subdirectory not found in species count map",
-				"policy", policy,
-				"subdirectory", subDir,
-				"species", file.Species,
-				"path", file.Path)
+			log.Warn("Subdirectory not found in species count map",
+				logger.String("policy", policy),
+				logger.String("subdirectory", subDir),
+				logger.String("species", file.Species),
+				logger.String("path", file.Path))
 			return false // Cannot determine count, safer not to delete
 		}
 	} else {
 		// Should not happen if map is built correctly, but handle defensively
-		if debug {
-			log.Printf("Warning: Species %s not found in species count map.", file.Species)
-		}
-		serviceLogger.Warn("Species not found in count map",
-			"policy", policy,
-			"species", file.Species,
-			"path", file.Path)
+		log.Warn("Species not found in count map",
+			logger.String("policy", policy),
+			logger.String("species", file.Species),
+			logger.String("path", file.Path))
 		return false // Cannot determine count, safer not to delete
 	}
 
@@ -180,11 +144,13 @@ func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[st
 
 // deleteAudioFile removes a file from the filesystem with enhanced error handling and metrics.
 func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
-	serviceLogger.Info("Deleting audio file",
-		"policy", policy,
-		"path", file.Path,
-		"size", file.Size,
-		"species", file.Species)
+	log := GetLogger()
+
+	log.Info("Deleting audio file",
+		logger.String("policy", policy),
+		logger.String("path", file.Path),
+		logger.Int64("size", file.Size),
+		logger.String("species", file.Species))
 
 	// Record metrics before attempting deletion
 	if m := getMetrics(); m != nil {
@@ -204,11 +170,11 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 			FileContext(file.Path, file.Size).
 			Build()
 
-		serviceLogger.Error("Failed to delete audio file",
-			"policy", policy,
-			"path", file.Path,
-			"error", enhancedErr,
-			"error_category", enhancedErr.GetCategory())
+		log.Error("Failed to delete audio file",
+			logger.String("policy", policy),
+			logger.String("path", file.Path),
+			logger.Error(enhancedErr),
+			logger.String("error_category", enhancedErr.GetCategory()))
 
 		// Record error metrics
 		if m := getMetrics(); m != nil {
@@ -219,12 +185,9 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 		return enhancedErr
 	}
 
-	if debug {
-		log.Printf("File %s deleted", file.Path)
-	}
-	serviceLogger.Info("Audio file deleted successfully",
-		"policy", policy,
-		"path", file.Path)
+	log.Info("Audio file deleted successfully",
+		logger.String("policy", policy),
+		logger.String("path", file.Path))
 
 	// Record successful deletion metrics
 	if m := getMetrics(); m != nil {
@@ -239,6 +202,8 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 // deleteFileAndOptionalSpectrogram handles the deletion of the audio file
 // and its associated spectrogram with enhanced error handling, metrics, and timing.
 func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms, debug bool, policy string) error {
+	log := GetLogger()
+
 	// Start timing the operation
 	startTime := time.Now()
 
@@ -246,16 +211,13 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 	time.Sleep(100 * time.Millisecond)
 
 	// Log intent before deleting
-	if debug {
-		log.Printf("Deleting file based on policy (%s): %s (Size: %d)", reason, file.Path, file.Size)
-	}
-	serviceLogger.Info("Deleting file based on policy",
-		"policy", policy,
-		"reason", reason,
-		"path", file.Path,
-		"size", file.Size,
-		"species", file.Species,
-		"keep_spectrograms", keepSpectrograms)
+	log.Info("Deleting file based on policy",
+		logger.String("policy", policy),
+		logger.String("reason", reason),
+		logger.String("path", file.Path),
+		logger.Int64("size", file.Size),
+		logger.String("species", file.Species),
+		logger.Bool("keep_spectrograms", keepSpectrograms))
 
 	// Delete the audio file (reuse common helper)
 	if err := deleteAudioFile(file, debug, policy); err != nil {
@@ -276,10 +238,10 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 		pngPathLower := basePath + ".png"
 		pngPathUpper := basePath + ".PNG"
 
-		serviceLogger.Debug("Checking for associated spectrograms",
-			"policy", policy,
-			"lower_case", pngPathLower,
-			"upper_case", pngPathUpper)
+		log.Debug("Checking for associated spectrograms",
+			logger.String("policy", policy),
+			logger.String("lower_case", pngPathLower),
+			logger.String("upper_case", pngPathUpper))
 
 		// Attempt to remove lowercase variant
 		if pngErrLower := os.Remove(pngPathLower); pngErrLower != nil {
@@ -295,14 +257,11 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 					FileContext(pngPathLower, 0).
 					Build()
 
-				if debug {
-					log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPathLower, enhancedErr)
-				}
-				serviceLogger.Warn("Failed to remove associated spectrogram (lowercase)",
-					"policy", policy,
-					"path", pngPathLower,
-					"error", enhancedErr,
-					"error_category", enhancedErr.GetCategory())
+				log.Warn("Failed to remove associated spectrogram (lowercase)",
+					logger.String("policy", policy),
+					logger.String("path", pngPathLower),
+					logger.Error(enhancedErr),
+					logger.String("error_category", enhancedErr.GetCategory()))
 
 				// Record spectrogram deletion error
 				if m := getMetrics(); m != nil {
@@ -311,12 +270,9 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 			}
 		} else {
 			spectrogramsDeleted++
-			if debug {
-				log.Printf("Deleted associated spectrogram %s", pngPathLower)
-			}
-			serviceLogger.Info("Deleted associated spectrogram (lowercase)",
-				"policy", policy,
-				"path", pngPathLower)
+			log.Info("Deleted associated spectrogram (lowercase)",
+				logger.String("policy", policy),
+				logger.String("path", pngPathLower))
 		}
 
 		// Attempt to remove uppercase variant (handles cases like .WAV -> .PNG)
@@ -333,14 +289,11 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 					FileContext(pngPathUpper, 0).
 					Build()
 
-				if debug {
-					log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPathUpper, enhancedErr)
-				}
-				serviceLogger.Warn("Failed to remove associated spectrogram (uppercase)",
-					"policy", policy,
-					"path", pngPathUpper,
-					"error", enhancedErr,
-					"error_category", enhancedErr.GetCategory())
+				log.Warn("Failed to remove associated spectrogram (uppercase)",
+					logger.String("policy", policy),
+					logger.String("path", pngPathUpper),
+					logger.Error(enhancedErr),
+					logger.String("error_category", enhancedErr.GetCategory()))
 
 				// Record spectrogram deletion error
 				if m := getMetrics(); m != nil {
@@ -351,12 +304,9 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 			// Only count if lowercase didn't already delete the same file on case-insensitive FS
 			if _, statErr := os.Stat(pngPathLower); os.IsNotExist(statErr) {
 				spectrogramsDeleted++
-				if debug {
-					log.Printf("Deleted associated spectrogram %s", pngPathUpper)
-				}
-				serviceLogger.Info("Deleted associated spectrogram (uppercase)",
-					"policy", policy,
-					"path", pngPathUpper)
+				log.Info("Deleted associated spectrogram (uppercase)",
+					logger.String("policy", policy),
+					logger.String("path", pngPathUpper))
 			}
 		}
 
@@ -373,12 +323,12 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 		m.RecordCleanupDuration(policy, duration)
 	}
 
-	serviceLogger.Info("File deletion completed",
-		"policy", policy,
-		"path", file.Path,
-		"reason", reason,
-		"spectrograms_deleted", spectrogramsDeleted,
-		"duration_ms", time.Since(startTime).Milliseconds())
+	log.Info("File deletion completed",
+		logger.String("policy", policy),
+		logger.String("path", file.Path),
+		logger.String("reason", reason),
+		logger.Int("spectrograms_deleted", spectrogramsDeleted),
+		logger.Int64("duration_ms", time.Since(startTime).Milliseconds()))
 
 	return nil // Deletion successful
 }
@@ -386,6 +336,8 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 // handleDeletionErrorInLoop manages error counting and logging for deletion errors within processing loops
 // with enhanced error handling and metrics collection.
 func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, maxErrors int, policy string) (shouldStop bool, loopErr error) {
+	log := GetLogger()
+
 	*errorCount++ // Increment the error count via pointer
 
 	// Extract error category if it's an enhanced error
@@ -395,14 +347,13 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 		errorCategory = enhancedErr.GetCategory()
 	}
 
-	log.Printf("Failed to remove %s: %s\n", filePath, delErr)
-	serviceLogger.Error("Failed to remove file during cleanup loop",
-		"policy", policy,
-		"path", filePath,
-		"error", delErr,
-		"error_category", errorCategory,
-		"error_count", *errorCount,
-		"max_errors", maxErrors)
+	log.Error("Failed to remove file during cleanup loop",
+		logger.String("policy", policy),
+		logger.String("path", filePath),
+		logger.Error(delErr),
+		logger.String("error_category", errorCategory),
+		logger.Int("error_count", *errorCount),
+		logger.Int("max_errors", maxErrors))
 
 	// Record error metrics
 	if m := getMetrics(); m != nil {
@@ -429,12 +380,12 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 			categoryForLog = enhancedLoopErr.GetCategory()
 		}
 
-		serviceLogger.Error("Cleanup loop stopping due to too many errors",
-			"policy", policy,
-			"error_count", *errorCount,
-			"max_errors", maxErrors,
-			"last_error", delErr,
-			"enhanced_error_category", categoryForLog)
+		log.Error("Cleanup loop stopping due to too many errors",
+			logger.String("policy", policy),
+			logger.Int("error_count", *errorCount),
+			logger.Int("max_errors", maxErrors),
+			logger.Error(delErr),
+			logger.String("enhanced_error_category", categoryForLog))
 
 		// Record critical error metric
 		if m := getMetrics(); m != nil {
@@ -479,22 +430,17 @@ func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir stri
 	if err == nil {
 		updateDiskUsageMetrics(spaceInfo)
 	} else {
-		serviceLogger.Warn("Failed to get detailed disk usage for metrics",
-			"base_dir", baseDir,
-			"error", err)
+		GetLogger().Warn("Failed to get detailed disk usage for metrics",
+			logger.String("base_dir", baseDir),
+			logger.Error(err))
 	}
 
 	// Check if below threshold
 	if currentUsage < usageThresholdFloat {
-		serviceLogger.Info("Disk usage below threshold, skipping cleanup",
-			"current_usage", utilization,
-			"threshold", int(usageThresholdFloat),
-			"base_dir", baseDir)
-
-		if debug {
-			log.Printf("Disk usage (%.1f%%) below threshold (%.1f%%), skipping cleanup",
-				currentUsage, usageThresholdFloat)
-		}
+		GetLogger().Info("Disk usage below threshold, skipping cleanup",
+			logger.Int("current_usage", utilization),
+			logger.Int("threshold", int(usageThresholdFloat)),
+			logger.String("base_dir", baseDir))
 		return true, utilization, nil
 	}
 
@@ -510,20 +456,20 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 	baseDir = settings.Realtime.Audio.Export.Path
 	retention = settings.Realtime.Audio.Export.Retention // Return the whole retention struct
 
-	serviceLogger.Info("Preparing initial cleanup",
-		"base_dir", baseDir,
-		"policy", retention.Policy,
-		"debug", debug)
+	GetLogger().Info("Preparing initial cleanup",
+		logger.String("base_dir", baseDir),
+		logger.String("policy", retention.Policy),
+		logger.Bool("debug", debug))
 
 	// OPTIMIZATION: For usage-based policy, check disk usage BEFORE scanning all files
 	// This avoids wasting CPU/IO scanning thousands of files when cleanup isn't needed
 	if retention.Policy == "usage" {
 		skip, utilization, err := ShouldSkipUsageBasedCleanup(&retention, baseDir, debug)
 		if err != nil {
-			serviceLogger.Warn("Failed to check disk usage for early exit",
-				"policy", "usage",
-				"error", err,
-				"continuing_with_scan", true)
+			GetLogger().Warn("Failed to check disk usage for early exit",
+				logger.String("policy", "usage"),
+				logger.Error(err),
+				logger.Bool("continuing_with_scan", true))
 		} else if skip {
 			result = CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
 			return nil, baseDir, retention, false, result
@@ -540,23 +486,20 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 		}
 		result = CleanupResult{Err: fmt.Errorf("failed to get audio files for cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: utilization}
 
-		serviceLogger.Error("Failed to get audio files for cleanup",
-			"policy", retention.Policy,
-			"base_dir", baseDir,
-			"error", err,
-			"disk_utilization", utilization)
+		GetLogger().Error("Failed to get audio files for cleanup",
+			logger.String("policy", retention.Policy),
+			logger.String("base_dir", baseDir),
+			logger.Error(err),
+			logger.Int("disk_utilization", utilization))
 		return nil, baseDir, retention, false, result
 	}
 
-	serviceLogger.Info("Retrieved audio files for cleanup consideration",
-		"policy", retention.Policy,
-		"file_count", len(files),
-		"base_dir", baseDir)
+	GetLogger().Info("Retrieved audio files for cleanup consideration",
+		logger.String("policy", retention.Policy),
+		logger.Int("file_count", len(files)),
+		logger.String("base_dir", baseDir))
 
 	if len(files) == 0 {
-		if debug {
-			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
-		}
 		// Get current disk utilization even if no files were processed
 		currentUsage, diskErr := GetDiskUsage(baseDir)
 		utilization := 0
@@ -565,18 +508,18 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 		}
 		result = CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
 
-		serviceLogger.Info("No eligible audio files found for cleanup",
-			"policy", retention.Policy,
-			"base_dir", baseDir,
-			"disk_utilization", utilization)
+		GetLogger().Info("No eligible audio files found for cleanup",
+			logger.String("policy", retention.Policy),
+			logger.String("base_dir", baseDir),
+			logger.Int("disk_utilization", utilization))
 		return nil, baseDir, retention, false, result
 	}
 
 	// If we got here, proceed with cleanup
-	serviceLogger.Info("Proceeding with cleanup process",
-		"policy", retention.Policy,
-		"file_count", len(files),
-		"base_dir", baseDir)
+	GetLogger().Info("Proceeding with cleanup process",
+		logger.String("policy", retention.Policy),
+		logger.Int("file_count", len(files)),
+		logger.String("base_dir", baseDir))
 	return files, baseDir, retention, true, CleanupResult{}
 }
 
@@ -587,14 +530,8 @@ type CleanupResult struct {
 	DiskUtilization int   // Current disk utilization percentage after cleanup
 }
 
-// CloseLogger closes the diskmanager service logger
+// CloseLogger is a no-op for backwards compatibility.
+// The central logger manages its own lifecycle.
 func CloseLogger() error {
-	if closeLogger != nil {
-		serviceLogger.Debug("Closing diskmanager log file",
-			"policy", "diskmanager")
-		err := closeLogger()
-		closeLogger = nil // Prevent multiple closes
-		return err
-	}
 	return nil
 }

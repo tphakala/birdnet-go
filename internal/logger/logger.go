@@ -303,6 +303,20 @@ func Int64(key string, value int64) Field {
 	return Field{Key: internKey(key), Value: value}
 }
 
+// Uint64 creates an unsigned 64-bit integer field for structured logging.
+//
+// Use this for file sizes, byte counts, and other unsigned large numbers.
+// The key is interned for memory efficiency across repeated log calls.
+//
+// Example:
+//
+//	log.Info("Disk usage",
+//	    logger.Uint64("total_bytes", diskInfo.TotalBytes),
+//	    logger.Uint64("used_bytes", diskInfo.UsedBytes))
+func Uint64(key string, value uint64) Field {
+	return Field{Key: internKey(key), Value: value}
+}
+
 // Float32 creates a 32-bit float field for structured logging.
 //
 // Use this for decimal numbers, percentages, confidence scores, etc.
