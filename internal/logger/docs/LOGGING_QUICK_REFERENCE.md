@@ -8,11 +8,11 @@ centralLogger, _ := logger.NewCentralLogger(&cfg.Logging)
 defer centralLogger.Close()
 
 // 2. Create module loggers
-appLogger := centralLogger.Module("main")
-storageLogger := centralLogger.Module("storage")
+appLogger := centralLogger.Module("birdnet")
+datastoreLogger := centralLogger.Module("datastore")
 
 // 3. Inject into components
-storage := NewStorage(storageLogger)
+storage := NewStorage(datastoreLogger)
 ```
 
 ## Basic Usage
@@ -74,11 +74,11 @@ requestLogger.Info("Completed")
 
 ```go
 // Create nested modules
-storageLogger := centralLogger.Module("storage")
-sqliteLogger := storageLogger.Module("sqlite")
+datastoreLogger := centralLogger.Module("datastore")
+sqliteLogger := datastoreLogger.Module("sqlite")
 
 sqliteLogger.Info("Query executed")
-// Output: module="storage.sqlite"
+// Output: module="datastore.sqlite"
 ```
 
 ## Configuration (config.yaml)

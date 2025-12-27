@@ -88,7 +88,7 @@ centralLogger, _ := logger.NewCentralLogger(cfg)
 defer centralLogger.Close()
 
 // Create module-scoped logger
-log := centralLogger.Module("main")
+log := centralLogger.Module("birdnet")
 
 // Use structured logging
 log.Info("Application started",
@@ -100,7 +100,7 @@ log.Info("Application started",
 
 ```go
 // Module scoping
-storageLog := centralLogger.Module("storage")
+storageLog := centralLogger.Module("datastore")
 sqliteLog := storageLog.Module("sqlite")
 sqliteLog.Debug("Query executed", logger.String("query", sql))
 
@@ -310,11 +310,11 @@ func NewHandler(log logger.Logger) *Handler {
 
 ```go
 // Hierarchical loggers
-main := centralLogger.Module("main")
-storage := centralLogger.Module("storage")
+main := centralLogger.Module("birdnet")
+storage := centralLogger.Module("datastore")
 sqlite := storage.Module("sqlite")
 
-// Output: module="storage.sqlite"
+// Output: module="datastore.sqlite"
 ```
 
 ### Fluent Interface
@@ -433,15 +433,15 @@ The logger is used throughout HookRelay:
 ```go
 // cmd/hookrelay/main.go
 centralLogger, _ := logger.NewCentralLogger(&cfg.Logging)
-appLogger := centralLogger.Module("main")
-storageLogger := centralLogger.Module("storage")
+appLogger := centralLogger.Module("birdnet")
+datastoreLogger := centralLogger.Module("datastore")
 authLogger := centralLogger.Module("auth")
 
 // Pass to components
-storage := storagefactory.NewStorage(cfg, storageLogger)
+storage := storagefactory.NewStorage(cfg, datastoreLogger)
 auth := auth.NewMiddleware(cfg, authLogger)
 handler := server.NewHandler(&server.HandlerConfig{
-    Logger: centralLogger.Module("webhook"),
+    Logger: centralLogger.Module("notifications"),
     // ...
 })
 ```
@@ -450,7 +450,7 @@ handler := server.NewHandler(&server.HandlerConfig{
 
 ```json
 {"time":"2025-01-12T10:30:00Z","level":"INFO","msg":"Server started","module":"main","address":"0.0.0.0:8080","version":"1.0.0"}
-{"time":"2025-01-12T10:30:01Z","level":"DEBUG","msg":"Database connected","module":"storage.sqlite","path":"data/hookrelay.db"}
+{"time":"2025-01-12T10:30:01Z","level":"DEBUG","msg":"Database connected","module":"datastore.sqlite","path":"data/hookrelay.db"}
 {"time":"2025-01-12T10:30:05Z","level":"INFO","msg":"Webhook received","module":"webhook","trace_id":"abc-123","source":"github"}
 {"time":"2025-01-12T10:30:05Z","level":"INFO","msg":"Webhook processed","module":"webhook","trace_id":"abc-123","duration":"150ms"}
 ```

@@ -104,7 +104,7 @@ type Logger interface {
 ```
 
 **Key features**:
-- Module scoping for hierarchical loggers (e.g., `main.storage.sqlite`)
+- Module scoping for hierarchical loggers (e.g., `main.datastore.sqlite`)
 - Structured fields via type-safe constructors
 - Context propagation for trace IDs and request correlation
 - Explicit log levels: `trace`, `debug`, `info`, `warn`, `error`
@@ -259,15 +259,15 @@ func main() {
     defer centralLogger.Close()
 
     // 3. Create module-scoped loggers
-    appLogger := centralLogger.Module("main")
-    storageLogger := centralLogger.Module("storage")
+    appLogger := centralLogger.Module("birdnet")
+    datastoreLogger := centralLogger.Module("datastore")
 
     // 4. Use structured logging
     appLogger.Info("Application starting",
         logger.String("version", "1.0.0"),
         logger.Int("workers", 10))
 
-    storageLogger.Debug("Connecting to database",
+    datastoreLogger.Debug("Connecting to database",
         logger.String("host", "localhost"),
         logger.Int("port", 5432))
 
@@ -388,13 +388,13 @@ func main() {
     }()
 
     // Create module-scoped loggers
-    appLogger := centralLogger.Module("main")
+    appLogger := centralLogger.Module("birdnet")
 
     appLogger.Info("Application starting",
         logger.String("version", version))
 
     // Pass module loggers to components
-    storage, err := NewStorage(cfg, centralLogger.Module("storage"))
+    storage, err := NewStorage(cfg, centralLogger.Module("datastore"))
     authHandler := NewAuthHandler(cfg, centralLogger.Module("auth"))
     apiServer := NewAPIServer(cfg, centralLogger.Module("api"))
 
@@ -625,20 +625,20 @@ logger.Info("User logged in",
 
 ```go
 // In main.go
-appLogger := centralLogger.Module("main")
-storageLogger := centralLogger.Module("storage")
+appLogger := centralLogger.Module("birdnet")
+datastoreLogger := centralLogger.Module("datastore")
 authLogger := centralLogger.Module("auth")
 
 // Pass to components
-storage := NewStorage(storageLogger)
+storage := NewStorage(datastoreLogger)
 auth := NewAuthHandler(authLogger)
 
 // In storage component
-s.logger.Info("Connected to database")  // Output: module="storage"
+s.logger.Info("Connected to database")  // Output: module="datastore"
 
 // Nested modules
-sqliteLogger := storageLogger.Module("sqlite")
-sqliteLogger.Debug("Executing query")  // Output: module="storage.sqlite"
+sqliteLogger := datastoreLogger.Module("sqlite")
+sqliteLogger.Debug("Executing query")  // Output: module="datastore.sqlite"
 ```
 
 ### 3. Context-Aware Logging (Trace IDs)
@@ -984,11 +984,11 @@ type Handler struct {
 
 ```go
 // ✅ GOOD - Clear log source
-appLogger := centralLogger.Module("main")
-storageLogger := centralLogger.Module("storage")
+appLogger := centralLogger.Module("birdnet")
+datastoreLogger := centralLogger.Module("datastore")
 authLogger := centralLogger.Module("auth")
 
-storage := NewStorage(storageLogger)
+storage := NewStorage(datastoreLogger)
 auth := NewAuth(authLogger)
 
 // ❌ BAD - All logs from "main" module
