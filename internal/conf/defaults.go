@@ -24,29 +24,37 @@ func setDefaultConfig() {
 	viper.SetDefault("logging.file_output.max_backups", 10)
 	viper.SetDefault("logging.file_output.compress", true)
 
-	// Per-module log files (all enabled by default)
-	setModuleLogDefaults("main", true)    // Application lifecycle, console_also=true
-	setModuleLogDefaults("birdnet", true) // BirdNET analysis
-	setModuleLogDefaults("audio", true)   // Audio capture/processing
-	setModuleLogDefaults("api", true)     // HTTP server and API (internal/api/)
-	setModuleLogDefaults("access", true)  // HTTP access logs (request/response)
-	setModuleLogDefaults("mqtt", true)    // MQTT client
-	setModuleLogDefaults("weather", true) // Weather providers
-	setModuleLogDefaults("notifications", true)
-	setModuleLogDefaults("telemetry", true)
-	setModuleLogDefaults("events", true)
-	setModuleLogDefaults("datastore", true)
-	setModuleLogDefaults("birdweather", true)
-	setModuleLogDefaults("auth", true)
-	setModuleLogDefaults("config", true)
-	setModuleLogDefaults("diskmanager", true)
-	setModuleLogDefaults("backup", true)
-	setModuleLogDefaults("spectrogram", true)
-	setModuleLogDefaults("imageprovider", true)
-	setModuleLogDefaults("securefs", true) // Secure filesystem operations
+	// Per-module log files
+	// Core processing modules
+	setModuleLogDefaults("analysis", true)    // Bird detection analysis
+	setModuleLogDefaults("birdnet", true)     // BirdNET model inference
+	setModuleLogDefaults("audio", true)       // Audio capture/processing
+	setModuleLogDefaults("datastore", true)   // Database operations
+	setModuleLogDefaults("spectrogram", true) // Spectrogram generation
 
-	// Main module special: always log to console for start/stop visibility
-	viper.SetDefault("logging.modules.main.console_also", true)
+	// API and web modules
+	setModuleLogDefaults("api", true)      // HTTP server and API (internal/api/)
+	setModuleLogDefaults("access", true)   // HTTP access logs (request/response)
+	setModuleLogDefaults("auth", true)     // Authentication
+	setModuleLogDefaults("security", true) // Security operations
+
+	// Integration modules
+	setModuleLogDefaults("mqtt", false)        // MQTT client (disabled by default)
+	setModuleLogDefaults("birdweather", false) // BirdWeather integration (disabled by default)
+	setModuleLogDefaults("weather", false)     // Weather providers (disabled by default)
+	setModuleLogDefaults("ebird", false)       // eBird integration (disabled by default)
+
+	// System and support modules
+	setModuleLogDefaults("backup", true)        // Backup operations
+	setModuleLogDefaults("config", true)        // Configuration management
+	setModuleLogDefaults("diskmanager", true)   // Disk management
+	setModuleLogDefaults("events", true)        // Event bus
+	setModuleLogDefaults("imageprovider", true) // Bird image provider
+	setModuleLogDefaults("monitor", true)       // System monitoring
+	setModuleLogDefaults("notifications", true) // Push notifications
+	setModuleLogDefaults("securefs", true)      // Secure filesystem operations
+	setModuleLogDefaults("support", true)       // Support/diagnostics
+	setModuleLogDefaults("telemetry", true)     // Telemetry/metrics
 
 	// Main configuration
 	viper.SetDefault("main.name", "BirdNET-Go")
