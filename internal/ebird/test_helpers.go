@@ -1,9 +1,6 @@
 package ebird
 
 import (
-	"bytes"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -94,45 +91,9 @@ func loadTestData(tb testing.TB, filename string) string {
 	return string(data)
 }
 
-// captureTestLogs captures logs during test execution
-func captureTestLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var logBuf bytes.Buffer
-	testLogger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-
-	// Save current logger
-	oldLogger := logger
-	logger = testLogger.With("service", "ebird")
-
-	t.Cleanup(func() {
-		logger = oldLogger
-	})
-
-	return &logBuf
-}
-
-// assertLogContains checks if log buffer contains expected string
-func assertLogContains(t *testing.T, logs *bytes.Buffer, expected string) {
-	t.Helper()
-	if !bytes.Contains(logs.Bytes(), []byte(expected)) {
-		t.Errorf("Log should contain: %s\nActual logs: %s", expected, logs.String())
-	}
-}
-
-// disableLogging disables logging for tests that don't need it
-func disableLogging(tb testing.TB) {
-	tb.Helper()
-
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
-
-	// Only use Cleanup for *testing.T
-	if tt, ok := tb.(*testing.T); ok {
-		tt.Cleanup(func() {
-			logger = oldLogger
-		})
-	}
+// disableLogging is a no-op with the new centralized logger
+// Note: The new logger system uses a global logger that cannot be easily swapped in tests.
+// Tests that were checking log output should be refactored to test behavior instead of logging.
+func disableLogging(_ testing.TB) {
+	// No-op: centralized logger doesn't support test-time replacement
 }

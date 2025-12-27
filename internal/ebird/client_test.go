@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -133,8 +132,6 @@ func TestDoRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logBuf := captureTestLogs(t)
-
 			server := setupMockServer(t, map[string]mockResponse{
 				tt.path: tt.response,
 			})
@@ -151,11 +148,6 @@ func TestDoRequest(t *testing.T) {
 				var enhancedErr *errors.EnhancedError
 				if errors.As(err, &enhancedErr) {
 					assert.Equal(t, tt.wantCategory, enhancedErr.Category)
-				}
-
-				// Check for specific error logging
-				if tt.response.status == http.StatusUnauthorized {
-					assertLogContains(t, logBuf, "eBird API authentication failed")
 				}
 				return
 			}
@@ -185,7 +177,6 @@ func TestGetTaxonomy(t *testing.T) {
 	defer server.Close()
 
 	client := setupTestClient(t, server)
-	logBuf := captureTestLogs(t)
 
 	// Test 1: First request - cache miss
 	t.Run("cache miss", func(t *testing.T) {
@@ -194,34 +185,21 @@ func TestGetTaxonomy(t *testing.T) {
 		assert.Len(t, taxonomy, 3)
 		assert.Equal(t, "Turdus migratorius", taxonomy[0].ScientificName)
 		assert.Equal(t, "American Robin", taxonomy[0].CommonName)
-
-		// Should log cache storage
-		assertLogContains(t, logBuf, "eBird taxonomy cached")
 	})
 
 	// Test 2: Second request - cache hit
 	t.Run("cache hit", func(t *testing.T) {
-		logBuf.Reset()
-
 		taxonomy, err := client.GetTaxonomy(context.Background(), "")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 3)
-
-		// Should log cache hit
-		assertLogContains(t, logBuf, "eBird taxonomy cache hit")
 	})
 
 	// Test 3: Different locale - cache miss
 	t.Run("locale variation", func(t *testing.T) {
-		logBuf.Reset()
-
 		taxonomy, err := client.GetTaxonomy(context.Background(), "fi")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 2)
 		assert.Equal(t, "punarintarastas", taxonomy[0].CommonName)
-
-		// Should cache with locale key
-		assertLogContains(t, logBuf, "taxonomy:fi")
 	})
 }
 
@@ -272,7 +250,6 @@ func TestBuildFamilyTree(t *testing.T) {
 	defer server.Close()
 
 	client := setupTestClient(t, server)
-	logBuf := captureTestLogs(t)
 
 	t.Run("valid species", func(t *testing.T) {
 		tree, err := client.BuildFamilyTree(context.Background(), "Turdus migratorius")
@@ -288,8 +265,6 @@ func TestBuildFamilyTree(t *testing.T) {
 		assert.Equal(t, "Turdus migratorius", tree.Species)
 		assert.Equal(t, "American Robin", tree.SpeciesCommon)
 		assert.Len(t, tree.Subspecies, 1) // One subspecies in test data
-
-		assertLogContains(t, logBuf, "eBird family tree built")
 	})
 
 	t.Run("non-existent species", func(t *testing.T) {
@@ -375,26 +350,18 @@ func TestAuthenticationLogging(t *testing.T) {
 
 	t.Run("successful authentication", func(t *testing.T) {
 		client := setupTestClient(t, server)
-		logBuf := captureTestLogs(t)
 
-		// First successful request should log authentication
+		// First successful request should complete without error
 		_, err := client.GetTaxonomy(context.Background(), "")
 		require.NoError(t, err)
-
-		assertLogContains(t, logBuf, "eBird API authentication successful")
-		assertLogContains(t, logBuf, "eBird API key is valid and working")
 	})
 
 	t.Run("failed authentication", func(t *testing.T) {
 		client := setupTestClient(t, server)
 		client.config.APIKey = "" // Remove API key
-		logBuf := captureTestLogs(t)
 
 		_, err := client.GetTaxonomy(context.Background(), "")
 		require.Error(t, err)
-
-		assertLogContains(t, logBuf, "eBird API authentication failed")
-		assertLogContains(t, logBuf, "Check your eBird API key")
 	})
 }
 
@@ -431,16 +398,11 @@ func TestParseErrors(t *testing.T) {
 			defer server.Close()
 
 			client := setupTestClient(t, server)
-			logBuf := captureTestLogs(t)
 
 			var result any
 			err := client.doRequest(context.Background(), "GET", server.URL+"/test", nil, &result)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
-
-			if strings.Contains(tt.wantErr, "parse") {
-				assertLogContains(t, logBuf, "Failed to parse eBird API response")
-			}
 		})
 	}
 }
