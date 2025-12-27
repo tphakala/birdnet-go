@@ -1,10 +1,11 @@
 package conf
 
 import (
-	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 var (
@@ -66,9 +67,9 @@ func (s *Settings) ShouldUpdateRangeFilterToday() bool {
 
 		// Log the update decision for debugging
 		if s.Debug {
-			log.Printf("[range_filter] Scheduled range filter update for %s (last updated: %s)",
-				today.Format("2006-01-02"),
-				s.BirdNET.RangeFilter.LastUpdated.Format("2006-01-02 15:04:05"))
+			log.Debug("Scheduled range filter update",
+				logger.String("date", today.Format("2006-01-02")),
+				logger.String("last_updated", s.BirdNET.RangeFilter.LastUpdated.Format("2006-01-02 15:04:05")))
 		}
 
 		return true
