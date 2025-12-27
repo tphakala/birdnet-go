@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Audio file constants
@@ -22,6 +22,8 @@ const (
 // saveBufferToFile writes a bytes.Buffer containing audio data to a file, along with
 // timestamp and format information for debugging purposes.
 func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime time.Time) error {
+	log := GetLogger()
+
 	// Validate input parameters
 	if buffer == nil {
 		return errors.New(fmt.Errorf("buffer is nil")).
@@ -60,7 +62,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close audio file: %v", err)
+			log.Warn("Failed to close audio file", logger.Error(err))
 		}
 	}()
 
@@ -77,7 +79,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	// Get the actual file size from the filesystem
 	fileInfo, err := os.Stat(cleanFilename)
 	if err != nil {
-		log.Printf("Warning: couldn't get file size: %v", err)
+		log.Warn("Couldn't get file size", logger.Error(err))
 	}
 	actualFileSize := int64(0)
 	if fileInfo != nil {
@@ -88,12 +90,12 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	metaFilename := filepath.Clean(cleanFilename[:len(cleanFilename)-len(filepath.Ext(cleanFilename))] + ".txt")
 	metaFile, err := os.Create(metaFilename) //nolint:gosec // G304: filename is cleaned above
 	if err != nil {
-		log.Printf("Warning: could not create metadata file: %v", err)
+		log.Warn("Could not create metadata file", logger.Error(err))
 		return nil // Continue even if metadata file creation fails
 	}
 	defer func() {
 		if err := metaFile.Close(); err != nil {
-			log.Printf("Failed to close metadata file: %v", err)
+			log.Warn("Failed to close metadata file", logger.Error(err))
 		}
 	}()
 
@@ -112,7 +114,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	metaInfo += "Channels: 1\n"
 
 	if _, err := metaFile.WriteString(metaInfo); err != nil {
-		log.Printf("Warning: could not write to metadata file: %v", err)
+		log.Warn("Could not write to metadata file", logger.Error(err))
 	}
 
 	return nil
