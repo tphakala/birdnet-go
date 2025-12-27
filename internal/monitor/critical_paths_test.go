@@ -254,7 +254,7 @@ func TestGetMonitoredPaths(t *testing.T) {
 
 	monitor := &SystemMonitor{
 		config: config,
-		logger: logger,
+		log:    GetLogger(),
 	}
 
 	paths := monitor.GetMonitoredPaths()
