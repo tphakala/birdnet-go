@@ -1,7 +1,6 @@
 package myaudio
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -51,6 +51,7 @@ func GetTotalChunks(sampleRate, totalSamples int, overlap float64) int {
 }
 
 func GetAudioInfo(filePath string) (AudioInfo, error) {
+	log := GetLogger()
 	start := time.Now()
 
 	// Validate input
@@ -104,7 +105,9 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close audio file: %v", err)
+			log.Warn("failed to close audio file",
+				logger.Error(err),
+				logger.String("file_path", filePath))
 		}
 	}()
 
@@ -160,6 +163,7 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 
 // ReadAudioFileBuffered reads and processes audio data in chunks
 func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback) error {
+	log := GetLogger()
 	start := time.Now()
 
 	// Validate input
@@ -227,7 +231,9 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close audio file: %v", err)
+			log.Warn("failed to close audio file",
+				logger.Error(err),
+				logger.String("file_path", settings.Input.Path))
 		}
 	}()
 

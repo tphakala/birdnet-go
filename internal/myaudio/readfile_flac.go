@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/flac"
 )
 
@@ -41,9 +42,11 @@ func readFLACBuffered(file *os.File, settings *conf.Settings, callback AudioChun
 	}
 
 	if settings.Debug {
-		fmt.Println("Sample rate:", decoder.SampleRate)
-		fmt.Println("Bits per sample:", decoder.BitsPerSample)
-		fmt.Println("Channels:", decoder.NChannels)
+		log := GetLogger()
+		log.Debug("FLAC file info",
+			logger.Int("sample_rate", decoder.SampleRate),
+			logger.Int("bits_per_sample", decoder.BitsPerSample),
+			logger.Int("channels", decoder.NChannels))
 	}
 
 	doResample := false

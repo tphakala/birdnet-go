@@ -3,7 +3,6 @@ package myaudio
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -68,6 +68,7 @@ func ReturnFloat32Buffer(buffer []float32) {
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
 func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source string) error {
+	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
 
@@ -105,10 +106,13 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 		}
 
 		if hasHighConfidenceResults {
-			log.Println("[birdnet] results:")
+			log.Debug("birdnet results",
+				logger.String("source", source))
 			for _, result := range results {
 				if result.Confidence > debugThreshold {
-					log.Printf("[birdnet] %.2f %s\n", result.Confidence, result.Species)
+					log.Debug("birdnet result",
+						logger.Float64("confidence", float64(result.Confidence)),
+						logger.String("species", result.Species))
 				}
 			}
 		}
@@ -124,8 +128,10 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 
 	// Check if processing time exceeds effective buffer duration
 	if elapsedTime > effectiveBufferDuration {
-		log.Printf("WARNING: BirdNET processing time (%v) exceeded buffer length (%v) for source %s",
-			elapsedTime, effectiveBufferDuration, source)
+		log.Warn("BirdNET processing time exceeded buffer length",
+			logger.Duration("elapsed_time", elapsedTime),
+			logger.Duration("buffer_length", effectiveBufferDuration),
+			logger.String("source", source))
 	}
 
 	// Get AudioSource struct from registry for the Results message
@@ -178,7 +184,8 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	case birdnet.ResultsQueue <- resultsMessage:
 		// Results enqueued successfully
 	default:
-		log.Println("❌ Results queue is full!")
+		log.Error("results queue is full",
+			logger.String("source", source))
 		// Queue is full
 	}
 	return nil

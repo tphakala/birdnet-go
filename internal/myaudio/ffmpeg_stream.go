@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"os/exec"
 	"slices"
@@ -423,7 +422,9 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 	var source *AudioSource
 
 	if registry == nil {
-		log.Printf("⚠️ Registry not available during startup, creating fallback source: %s", privacy.SanitizeRTSPUrl(url))
+		streamLogger.Warn("registry not available during startup, creating fallback source",
+			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.String("operation", "new_ffmpeg_stream"))
 		// Create fallback source when registry is unavailable
 		fallbackID := generateUniqueFallbackID()
 		source = &AudioSource{
@@ -438,7 +439,9 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 	} else {
 		source = registry.GetOrCreateSource(url, SourceTypeRTSP)
 		if source == nil {
-			log.Printf("❌ Failed to register RTSP source: %s", privacy.SanitizeRTSPUrl(url))
+			streamLogger.Error("failed to register RTSP source",
+				logger.String("url", privacy.SanitizeRTSPUrl(url)),
+				logger.String("operation", "new_ffmpeg_stream"))
 			// Create a fallback source for robustness with unique ID
 			fallbackID := generateUniqueFallbackID()
 			source = &AudioSource{
@@ -514,31 +517,20 @@ func (s *FFmpegStream) transitionState(to ProcessState, reason string) {
 			logger.String("reason", reason),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "state_transition_blocked"))
-		if conf.Setting().Debug {
-			log.Printf("🚫 Blocked transition out of terminal state for %s: %s → %s (reason: %s)",
-				privacy.SanitizeRTSPUrl(s.source.SafeString),
-				from.String(), to.String(), reason)
-		}
 		return
 	}
 
 	// Validate transition (lenient: warn in debug mode but still apply)
-	if !isValidTransition(from, to) {
+	if !isValidTransition(from, to) && conf.Setting().Debug {
 		// Only log in debug mode to avoid noise in production
-		if conf.Setting().Debug {
-			streamLogger.Warn("invalid state transition detected (applying anyway for robustness)",
-				logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
-				logger.String("source_id", s.source.ID),
-				logger.String("from", from.String()),
-				logger.String("to", to.String()),
-				logger.String("reason", reason),
-				logger.String("component", "ffmpeg-stream"),
-				logger.String("operation", "state_transition_invalid"))
-
-			log.Printf("⚠️ Invalid state transition for %s: %s → %s (reason: %s) - applying anyway",
-				privacy.SanitizeRTSPUrl(s.source.SafeString),
-				from.String(), to.String(), reason)
-		}
+		streamLogger.Warn("invalid state transition detected (applying anyway for robustness)",
+			logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
+			logger.String("source_id", s.source.ID),
+			logger.String("from", from.String()),
+			logger.String("to", to.String()),
+			logger.String("reason", reason),
+			logger.String("component", "ffmpeg-stream"),
+			logger.String("operation", "state_transition_invalid"))
 	}
 
 	s.processState = to
@@ -570,13 +562,6 @@ func (s *FFmpegStream) transitionState(to ProcessState, reason string) {
 		logger.String("reason", reason),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "state_transition"))
-
-	// Also log with emoji for console visibility
-	if conf.Setting().Debug {
-		log.Printf("🔄 State transition for %s: %s → %s (%s)",
-			privacy.SanitizeRTSPUrl(s.source.SafeString),
-			from.String(), to.String(), reason)
-	}
 }
 
 // GetProcessState returns the current process state (thread-safe)
@@ -602,7 +587,9 @@ func (s *FFmpegStream) GetStateHistory() []StateTransition {
 func (s *FFmpegStream) Run(parentCtx context.Context) {
 	// Nil check for critical fields
 	if s.source == nil {
-		log.Printf("❌ Cannot start FFmpeg stream: source is nil")
+		streamLogger.Error("cannot start FFmpeg stream: source is nil",
+			logger.String("component", "ffmpeg-stream"),
+			logger.String("operation", "run"))
 		return
 	}
 
@@ -654,7 +641,6 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 					logger.Error(err),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "start_process"))
-				log.Printf("❌ Failed to start FFmpeg for %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), err)
 				s.recordFailure(0) // No runtime for startup failure
 				// STATE TRANSITION: starting → backoff (start failed, entering backoff)
 				// Apply backoff UNLESS circuit breaker was opened
@@ -710,7 +696,6 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 					logger.Float64("runtime_seconds", runtime.Seconds()),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "process_ended"))
-				log.Printf("⚠️ FFmpeg process ended for %s after %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), FormatDuration(runtime), sanitizedError)
 
 				// Reset restart count for silence timeouts as they're expected
 				if isSilenceTimeout {
@@ -735,7 +720,6 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 					logger.Float64("runtime_seconds", runtime.Seconds()),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "process_ended"))
-				log.Printf("✅ FFmpeg process ended normally for %s after %s", privacy.SanitizeRTSPUrl(s.source.SafeString), FormatDuration(runtime))
 				// Reset failure count on successful run
 				s.resetFailures()
 			}
@@ -937,8 +921,6 @@ func (s *FFmpegStream) startProcess() error {
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "start_process"))
 
-	log.Printf("✅ FFmpeg started for %s (source_id: %s, PID: %d, Process #%d, Restart #%d)",
-		privacy.SanitizeRTSPUrl(s.source.SafeString), s.source.ID, s.cmd.Process.Pid, currentTotal, s.restartCount)
 	return nil
 }
 
@@ -975,8 +957,6 @@ func (s *FFmpegStream) handleSilenceTimeout(startTime time.Time) error {
 			logger.Float64("process_runtime_seconds", time.Since(startTime).Seconds()),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "silence_detected"))
-		log.Printf("⚠️ No data from %s (last data: %s, timeout: %s), restarting stream",
-			privacy.SanitizeRTSPUrl(s.source.SafeString), lastDataDesc, FormatDuration(effectiveAge))
 		s.cleanupProcess()
 		return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 			Category(errors.CategoryRTSP).
@@ -1002,9 +982,6 @@ func (s *FFmpegStream) handleEarlyErrorDetection() error {
 
 	// Record error context
 	s.recordErrorContext(errCtx)
-
-	// Log user-friendly message to console
-	log.Printf("⚠️ %s", errCtx.FormatForConsole())
 
 	// Take action based on error type
 	if errCtx.ShouldOpenCircuit() {
@@ -1067,9 +1044,6 @@ func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
 	if errCtx != nil {
 		// Record error context for diagnostics
 		s.recordErrorContext(errCtx)
-
-		// Log user-friendly message
-		log.Printf("⚠️ %s", errCtx.FormatForConsole())
 
 		// If this is a permanent failure, open circuit breaker
 		if errCtx.ShouldOpenCircuit() {
@@ -1209,7 +1183,11 @@ func (s *FFmpegStream) processAudio() error {
 
 			// Process the audio data
 			if err := s.handleAudioData(buf[:n]); err != nil {
-				log.Printf("⚠️ Error processing audio data for %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), err)
+				streamLogger.Warn("error processing audio data",
+					logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
+					logger.Error(err),
+					logger.String("component", "ffmpeg-stream"),
+					logger.String("operation", "process_audio_data"))
 			}
 		}
 
@@ -1220,7 +1198,6 @@ func (s *FFmpegStream) processAudio() error {
 				logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
 				logger.String("component", "ffmpeg-stream"),
 				logger.String("operation", "restart_requested"))
-			log.Printf("🔄 Restart requested for %s", privacy.SanitizeRTSPUrl(s.source.SafeString))
 			s.cleanupProcess()
 
 			// Clear restart in progress flag
@@ -1318,21 +1295,17 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 				now := time.Now()
 				if now.Sub(s.lastSoundLevelNotRegisteredLog) >= dropLogInterval {
 					s.lastSoundLevelNotRegisteredLog = now
-					streamLogger.Warn("sound level processor not registered",
+					streamLogger.Warn("sound level processor not registered (further messages suppressed)",
 						logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
 						logger.Error(err),
 						logger.String("operation", "process_sound_level"))
-					log.Printf("⚠️ Sound level processor not registered for %s: %v (further messages suppressed)", privacy.SanitizeRTSPUrl(s.source.SafeString), err)
 				}
 				s.soundLevelNotRegisteredLogMu.Unlock()
-			} else if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
-				if conf.Setting().Debug {
-					streamLogger.Debug("failed to process sound level data",
-						logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
-						logger.Error(err),
-						logger.String("operation", "process_sound_level"))
-				}
-				log.Printf("⚠️ Error processing sound level for %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), err)
+			} else if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) && conf.Setting().Debug {
+				streamLogger.Debug("failed to process sound level data",
+					logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
+					logger.Error(err),
+					logger.String("operation", "process_sound_level"))
 			}
 		} else if soundLevel != nil {
 			unifiedData.SoundLevel = soundLevel
@@ -1364,8 +1337,6 @@ func (s *FFmpegStream) logDroppedData() {
 			logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "audio_data_drop"))
-
-		log.Printf("⚠️ Audio data dropped for %s - channel full", privacy.SanitizeRTSPUrl(s.source.SafeString))
 
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("audio processing channel full, data being dropped").
@@ -1449,15 +1420,12 @@ func (s *FFmpegStream) cleanupProcess() {
 
 	// Close stdout
 	if stdout != nil {
-		if err := stdout.Close(); err != nil {
+		if err := stdout.Close(); err != nil && conf.Setting().Debug {
 			// Log but don't fail - process cleanup is more important
-			if conf.Setting().Debug {
-				streamLogger.Debug("failed to close stdout",
-					logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
-					logger.Error(err),
-					logger.String("operation", "cleanup_process"))
-			}
-			log.Printf("⚠️ Error closing stdout for %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), err)
+			streamLogger.Debug("failed to close stdout",
+				logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
+				logger.Error(err),
+				logger.String("operation", "cleanup_process"))
 		}
 	}
 
@@ -1478,7 +1446,6 @@ func (s *FFmpegStream) cleanupProcess() {
 				logger.Int("pid", pid),
 				logger.Error(killErr),
 				logger.String("operation", "cleanup_process_kill_direct"))
-			log.Printf("⚠️ Error killing process for %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), killErr)
 		}
 	} else if conf.Setting().Debug {
 		streamLogger.Debug("process group killed successfully",
@@ -1553,14 +1520,12 @@ func (s *FFmpegStream) cleanupProcess() {
 				logger.Int("pid", pid),
 				logger.String("component", "ffmpeg-stream"),
 				logger.String("operation", "process_wait"))
-			log.Printf("⚠️ Process wait error for %s (PID: %d): %v", privacy.SanitizeRTSPUrl(s.source.SafeString), pid, err)
 		}
 		streamLogger.Info("FFmpeg process stopped",
 			logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
 			logger.Int("pid", pid),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "cleanup_process"))
-		log.Printf("🛑 FFmpeg process stopped for %s (PID: %d)", privacy.SanitizeRTSPUrl(s.source.SafeString), pid)
 
 	case <-time.After(processCleanupTimeout):
 		// Timeout occurred, but the goroutine will continue and eventually reap the process
@@ -1570,7 +1535,6 @@ func (s *FFmpegStream) cleanupProcess() {
 			logger.Float64("timeout_seconds", processCleanupTimeout.Seconds()),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "cleanup_process_timeout"))
-		log.Printf("⚠️ FFmpeg process cleanup timeout for %s (PID: %d) - reaping asynchronously", privacy.SanitizeRTSPUrl(s.source.SafeString), pid)
 
 		// Important: We do NOT return here - we continue to clean up our state
 		// The goroutine will eventually call Wait() and reap the zombie
@@ -1657,7 +1621,6 @@ func (s *FFmpegStream) handleRestartBackoff() {
 		logger.Int("restart_count", currentRestartCount),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "restart_wait"))
-	log.Printf("⏳ Waiting %s before restart attempt #%d for %s", FormatDuration(wait), currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
 
 	select {
 	case <-time.After(wait):
@@ -1982,8 +1945,6 @@ func (s *FFmpegStream) logStreamHealth() {
 			logger.Float64("last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived)),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "health_check"))
-		log.Printf("✅ Stream %s is healthy and receiving data (%.1f KB/s)",
-			privacy.SanitizeRTSPUrl(s.source.SafeString), dataRate/1024)
 	} else {
 		streamLogger.Warn("stream health check - no data received",
 			logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
@@ -1993,7 +1954,6 @@ func (s *FFmpegStream) logStreamHealth() {
 			logger.Float64("last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived)),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "health_check"))
-		log.Printf("⚠️ Stream %s is not receiving data", privacy.SanitizeRTSPUrl(s.source.SafeString))
 	}
 }
 
@@ -2168,8 +2128,6 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 			logger.String("reason", reason),
 			logger.String("cooldown_period", FormatDuration(circuitBreakerCooldown)),
 			logger.String("component", "ffmpeg-stream"))
-		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %s, cooldown: %s)",
-			privacy.SanitizeRTSPUrl(s.source.SafeString), currentFailures, reason, FormatDuration(runtime), FormatDuration(circuitBreakerCooldown))
 
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("RTSP stream circuit breaker opened: %s (runtime: %v)", reason, runtime).

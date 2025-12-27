@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TempExt is the temporary file extension used when exporting audio with FFmpeg.
@@ -279,6 +279,7 @@ func finalizeOutput(tempFilePath string) error {
 // runFFmpegCommand executes the FFmpeg command to process the audio
 // This version includes a context timeout to prevent hangs.
 func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, settings *conf.AudioSettings) error {
+	log := GetLogger()
 	// Build the FFmpeg command arguments
 	args := buildFFmpegArgs(tempFilePath, settings)
 
@@ -313,7 +314,9 @@ func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, se
 	go func() {
 		defer func() {
 			if err := stdin.Close(); err != nil {
-				log.Printf("Failed to close FFmpeg stdin: %v", err)
+				log.Warn("failed to close FFmpeg stdin",
+					logger.Error(err),
+					logger.String("output_path", tempFilePath))
 			}
 		}() // Close stdin when writing is done
 
@@ -582,6 +585,7 @@ func ExportAudioWithCustomFFmpegArgsContext(ctx context.Context, pcmData []byte,
 // runCustomFFmpegCommandToBufferWithContext executes FFmpeg, piping PCM input and capturing codec output to a buffer.
 // This version accepts a context to allow for timeout/cancellation.
 func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath string, pcmData []byte, customArgs []string) (*bytes.Buffer, error) {
+	log := GetLogger()
 	// Get standard input format arguments
 	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
 
@@ -628,7 +632,9 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 	go func() {
 		defer func() {
 			if err := stdin.Close(); err != nil {
-				log.Printf("Failed to close FFmpeg stdin: %v", err)
+				log.Warn("failed to close FFmpeg stdin",
+					logger.Error(err),
+					logger.String("operation", "custom_ffmpeg_to_buffer"))
 			}
 		}() // Close stdin when writing is done
 
@@ -753,6 +759,7 @@ func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, er
 // AnalyzeAudioLoudnessWithContext analyzes audio loudness using FFmpeg's loudnorm filter in analyze mode
 // This is the context-aware version of AnalyzeAudioLoudness that allows timeout/cancellation
 func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
+	log := GetLogger()
 	// Assume ffmpegPath is valid (validated by caller, usually via conf.ValidateAudioSettings)
 	if ffmpegPath == "" {
 		return nil, fmt.Errorf("FFmpeg path provided is empty")
@@ -797,7 +804,9 @@ func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpeg
 	go func() {
 		defer func() {
 			if err := stdin.Close(); err != nil {
-				log.Printf("Failed to close FFmpeg stdin: %v", err)
+				log.Warn("failed to close FFmpeg stdin",
+					logger.Error(err),
+					logger.String("operation", "analyze_loudness"))
 			}
 		}() // Close stdin when done
 

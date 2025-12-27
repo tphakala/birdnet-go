@@ -3,13 +3,13 @@ package myaudio
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -211,11 +211,13 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 		return enhancedErr
 	}
 
+	log := GetLogger()
 	// Check if buffer already exists (caller must hold cbMutex)
 	// Note: source parameter is now expected to be a migrated sourceID
 	if _, exists := captureBuffers[source]; exists {
 		// Log repeated allocation attempt
-		log.Printf("⚠️ Buffer allocation blocked: buffer already exists for source %s", source)
+		log.Warn("buffer allocation blocked: buffer already exists",
+			logger.String("source", source))
 
 		enhancedErr := errors.Newf("capture buffer already exists for source: %s", source).
 			Component("myaudio").
@@ -240,7 +242,8 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 	if registry != nil {
 		registry.AcquireSourceReference(source)
 	} else {
-		log.Printf("⚠️ Registry not available during buffer allocation, skipping source reference for: %s", source)
+		log.Warn("registry not available during buffer allocation, skipping source reference",
+			logger.String("source", source))
 	}
 
 	// Record successful allocation metrics
@@ -260,6 +263,7 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 
 // RemoveCaptureBuffer safely removes and cleans up an audio buffer for a single source.
 func RemoveCaptureBuffer(sourceID string) error {
+	log := GetLogger()
 
 	cbMutex.Lock()
 	if _, exists := captureBuffers[sourceID]; !exists {
@@ -277,11 +281,14 @@ func RemoveCaptureBuffer(sourceID string) error {
 		if err := registry.ReleaseSourceReference(sourceID); err != nil {
 			// Log but don't fail - buffer removal succeeded
 			if !errors.Is(err, ErrSourceNotFound) {
-				log.Printf("⚠️ Failed to release source reference: %v", err)
+				log.Warn("failed to release source reference",
+					logger.Error(err),
+					logger.String("source_id", sourceID))
 			}
 		}
 	} else {
-		log.Printf("⚠️ Registry not available during buffer cleanup, skipping source reference release for: %s", sourceID)
+		log.Warn("registry not available during buffer cleanup, skipping source reference release",
+			logger.String("source_id", sourceID))
 	}
 
 	return nil
@@ -370,6 +377,7 @@ func NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, source st
 // Write adds PCM audio data to the buffer, ensuring thread safety and accurate timekeeping.
 func (cb *CaptureBuffer) Write(data []byte) {
 	start := time.Now()
+	log := GetLogger()
 
 	// Lock the buffer to prevent concurrent writes or reads from interfering with the update process.
 	cb.lock.Lock()
@@ -385,8 +393,10 @@ func (cb *CaptureBuffer) Write(data []byte) {
 		// Data length is not aligned with sample size, which might indicate corrupted data
 		// Only log occasionally to avoid flooding logs
 		if time.Now().Second()%10 == 0 {
-			log.Printf("⚠️ Warning: Audio data length (%d) is not aligned with sample size (%d)",
-				len(data), cb.bytesPerSample)
+			log.Warn("audio data length is not aligned with sample size",
+				logger.Int("data_length", len(data)),
+				logger.Int("bytes_per_sample", cb.bytesPerSample),
+				logger.String("source", cb.source))
 		}
 
 		// Record audio data validation error
@@ -428,7 +438,9 @@ func (cb *CaptureBuffer) Write(data []byte) {
 		// If old data has been overwritten, adjust startTime to maintain accurate timekeeping.
 		cb.startTime = time.Now().Add(-cb.bufferDuration)
 		if conf.Setting().Realtime.Audio.Export.Debug {
-			log.Printf("Buffer wrapped during write, adjusting start time to %v", cb.startTime)
+			log.Debug("buffer wrapped during write, adjusting start time",
+				logger.Time("start_time", cb.startTime),
+				logger.String("source", cb.source))
 		}
 
 		// Record buffer wraparound
@@ -442,6 +454,7 @@ func (cb *CaptureBuffer) Write(data []byte) {
 // It waits until the current time is past the requested end time.
 func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int) ([]byte, error) {
 	operationStart := time.Now()
+	log := GetLogger()
 	requestedEndTime := requestedStartTime.Add(time.Duration(duration) * time.Second)
 
 	for {
@@ -505,14 +518,20 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 			var segment []byte
 			if startIndex < endIndex {
 				if conf.Setting().Realtime.Audio.Export.Debug {
-					log.Printf("Reading segment from %d to %d", startIndex, endIndex)
+					log.Debug("reading segment",
+						logger.Int("start_index", startIndex),
+						logger.Int("end_index", endIndex),
+						logger.String("source", cb.source))
 				}
 				segmentSize := endIndex - startIndex
 				segment = make([]byte, segmentSize)
 				copy(segment, cb.data[startIndex:endIndex])
 			} else {
 				if conf.Setting().Realtime.Audio.Export.Debug {
-					log.Printf("Buffer wrapped during read, reading segment from %d to %d", startIndex, endIndex)
+					log.Debug("buffer wrapped during read, reading segment",
+						logger.Int("start_index", startIndex),
+						logger.Int("end_index", endIndex),
+						logger.String("source", cb.source))
 				}
 				segmentSize := (cb.bufferSize - startIndex) + endIndex
 				segment = make([]byte, segmentSize)
@@ -535,7 +554,8 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 		}
 
 		if conf.Setting().Realtime.Audio.Export.Debug {
-			log.Printf("Buffer is not filled yet, waiting for data to be available")
+			log.Debug("buffer is not filled yet, waiting for data to be available",
+				logger.String("source", cb.source))
 		}
 		cb.lock.Unlock()
 		time.Sleep(1 * time.Second) // Sleep briefly to avoid busy waiting

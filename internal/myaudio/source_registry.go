@@ -68,7 +68,7 @@ var (
 // GetRegistry returns the singleton registry instance
 func GetRegistry() *AudioSourceRegistry {
 	registryOnce.Do(func() {
-		log := logger.Global().Module("audio")
+		log := GetLogger()
 		registry = &AudioSourceRegistry{
 			sources:       make(map[string]*AudioSource),
 			connectionMap: make(map[string]string),

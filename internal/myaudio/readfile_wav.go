@@ -11,6 +11,7 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 func readWAVInfo(file *os.File) (AudioInfo, error) {
@@ -56,10 +57,12 @@ func readWAVBuffered(file *os.File, settings *conf.Settings, callback AudioChunk
 	}
 
 	if settings.Debug {
-		fmt.Println("File is valid wav: ", decoder.IsValidFile())
-		fmt.Println("Sample rate:", decoder.SampleRate)
-		fmt.Println("Bits per sample:", decoder.BitDepth)
-		fmt.Println("Channels:", decoder.NumChans)
+		log := GetLogger()
+		log.Debug("WAV file info",
+			logger.Bool("valid", decoder.IsValidFile()),
+			logger.Int("sample_rate", int(decoder.SampleRate)),
+			logger.Int("bits_per_sample", int(decoder.BitDepth)),
+			logger.Int("channels", int(decoder.NumChans)))
 	}
 
 	doResample := false
@@ -91,9 +94,14 @@ func readWAVBuffered(file *os.File, settings *conf.Settings, callback AudioChunk
 	isLargeFile := fileSize > 1*1024*1024*1024 // 1GB threshold
 
 	if settings.Debug {
-		fmt.Printf("DEBUG: File size: %.2f GB, using %s approach\n",
-			float64(fileSize)/(1024*1024*1024),
-			map[bool]string{true: "direct byte reading", false: "buffered decoder"}[isLargeFile])
+		log := GetLogger()
+		approach := "buffered decoder"
+		if isLargeFile {
+			approach = "direct byte reading"
+		}
+		log.Debug("WAV processing approach",
+			logger.Float64("file_size_gb", float64(fileSize)/(1024*1024*1024)),
+			logger.String("approach", approach))
 	}
 
 	if isLargeFile {
@@ -191,10 +199,13 @@ func readWAVDirectBytes(file *os.File, decoder *wav.Decoder, settings *conf.Sett
 	var currentChunk []float32
 
 	if settings.Debug {
-		fmt.Printf("DEBUG: Processing extremely large WAV file with blockSize=%d bytes\n", blockSize)
-		fmt.Printf("DEBUG: Bytes per sample: %d, bytes per frame: %d\n", bytesPerSample, bytesPerFrame)
-		fmt.Printf("DEBUG: Sample rate: %d, chunking %d seconds at a time\n",
-			decoder.SampleRate, int(chunkDuration.Seconds()))
+		log := GetLogger()
+		log.Debug("processing large WAV file",
+			logger.Int("block_size_bytes", blockSize),
+			logger.Int("bytes_per_sample", bytesPerSample),
+			logger.Int("bytes_per_frame", bytesPerFrame),
+			logger.Int("sample_rate", int(decoder.SampleRate)),
+			logger.Int("chunk_duration_seconds", int(chunkDuration.Seconds())))
 	}
 
 	for {
@@ -212,7 +223,10 @@ func readWAVDirectBytes(file *os.File, decoder *wav.Decoder, settings *conf.Sett
 		}
 
 		if settings.Debug && bytesRead < blockSize {
-			fmt.Printf("DEBUG: Read partial block: %d bytes\n", bytesRead)
+			log := GetLogger()
+			log.Debug("read partial block",
+				logger.Int("bytes_read", bytesRead),
+				logger.Int("block_size", blockSize))
 		}
 
 		// Convert raw bytes to float32 samples

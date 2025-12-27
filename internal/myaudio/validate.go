@@ -417,8 +417,8 @@ func QuickValidateAudioFile(audioPath string) (bool, error) {
 	defer func() {
 		if err := file.Close(); err != nil {
 			// Log the close error for debugging purposes
-			log := logger.Global().Module("audio")
-			log.Debug("Failed to close audio file during validation",
+			log := GetLogger()
+			log.Debug("failed to close audio file during validation",
 				logger.String("path", audioPath),
 				logger.Error(err))
 		}

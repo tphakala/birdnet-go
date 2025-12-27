@@ -1,7 +1,6 @@
 package myaudio
 
 import (
-	"log"
 	"sync"
 	"time"
 
@@ -133,7 +132,6 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 	if audioChan == nil {
 		integrationLogger.Error("cannot start monitoring - audioChan is nil",
 			logger.String("operation", "start_monitoring_once"))
-		log.Printf("❌ Cannot start FFmpeg monitoring - audio channel is nil")
 		return
 	}
 
@@ -155,9 +153,6 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 			logger.Float64("watchdog_interval_seconds", watchdogCheckInterval.Seconds()),
 			logger.String("operation", "start_monitoring_once"))
 
-		log.Printf("🩺 Starting FFmpeg stream monitoring (health check: %v, watchdog: %v)",
-			monitoringInterval, watchdogCheckInterval)
-
 		manager.StartMonitoring(monitoringInterval, audioChan)
 	})
 }
@@ -176,7 +171,6 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 		integrationLogger.Error("FFmpeg not available",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("operation", "capture_audio_rtsp"))
-		log.Printf("❌ FFmpeg is not available, cannot capture audio from %s", url)
 		return
 	}
 
@@ -186,7 +180,6 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 		integrationLogger.Error("FFmpeg manager is not available",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("operation", "capture_audio_rtsp"))
-		log.Printf("❌ FFmpeg manager is not available for %s", url)
 		return
 	}
 
@@ -201,7 +194,6 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 			logger.Error(err),
 			logger.String("transport", transport),
 			logger.String("operation", "capture_audio_rtsp"))
-		log.Printf("❌ Failed to start stream for %s: %v", url, err)
 		return
 	}
 
@@ -216,7 +208,6 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 						logger.String("url", privacy.SanitizeRTSPUrl(url)),
 						logger.Error(err),
 						logger.String("operation", "quit_signal"))
-					log.Printf("⚠️ Error stopping stream %s: %v", url, err)
 				}
 				return
 			case <-restartChan:
@@ -226,7 +217,6 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 						logger.String("url", privacy.SanitizeRTSPUrl(url)),
 						logger.Error(err),
 						logger.String("operation", "restart_signal"))
-					log.Printf("⚠️ Error restarting stream %s: %v", url, err)
 				}
 			}
 		}
