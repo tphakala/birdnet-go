@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	tflite "github.com/tphakala/go-tflite"
 )
@@ -70,12 +70,10 @@ func BuildRangeFilter(bn *BirdNET) error {
 		}
 		if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
 			// Don't fail the operation, just log the error
-			err = errors.New(err).
-				Category(errors.CategoryFileIO).
-				Context("debug_file", debugFile).
-				Context("species_count", len(includedSpecies)).
-				Build()
-			log.Printf("❌ [range_filter/rebuild] Warning: Failed to write included species file: %v\n", err)
+			GetLogger().Warn("Failed to write included species debug file",
+				logger.Error(err),
+				logger.String("debug_file", debugFile),
+				logger.Int("species_count", len(includedSpecies)))
 		}
 	}
 
@@ -115,7 +113,9 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
 	if bn.Settings.BirdNET.RangeFilter.Threshold < 0 ||
 		bn.Settings.BirdNET.RangeFilter.Threshold > 1 {
-		fmt.Println("Invalid LocationFilterThreshold value, using default value of 0.01")
+		GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
+			logger.Float64("invalid_value", float64(bn.Settings.BirdNET.RangeFilter.Threshold)),
+			logger.Float64("default_value", 0.01))
 		bn.Settings.BirdNET.RangeFilter.Threshold = 0.01
 	}
 
@@ -328,7 +328,9 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close species config file: %v", err)
+			GetLogger().Warn("Failed to close species config file",
+				logger.Error(err),
+				logger.String("file", fileName))
 		}
 	}()
 
@@ -344,7 +346,9 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 			break
 		}
 		if err != nil {
-			log.Printf("error reading CSV file: %v", err)
+			GetLogger().Warn("Error reading CSV file record",
+				logger.Error(err),
+				logger.String("file", fileName))
 			continue // Skip this record and continue with the next
 		}
 
