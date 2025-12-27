@@ -5,7 +5,6 @@ package securefs
 import (
 	"crypto/sha1"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sys/windows"
 )
 
@@ -46,7 +46,9 @@ func createFIFOPlatform(path string) (string, error) {
 	// Remove any existing file at the path location
 	if _, err := os.Stat(path); err == nil {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Printf("Warning: Error removing existing file at FIFO path: %v", err)
+			log.Warn("Error removing existing file at FIFO path",
+				logger.String("path", path),
+				logger.Error(err))
 		}
 	}
 
@@ -85,7 +87,7 @@ func createFIFOPlatform(path string) (string, error) {
 		)
 
 		if createErr == nil && pipeHandle != windows.InvalidHandle {
-			log.Printf("Successfully created Windows named pipe: %s", fullPipeName)
+			log.Debug("Successfully created Windows named pipe", logger.String("pipe", fullPipeName))
 
 			// Create a placeholder file at the original path location with metadata
 			// This helps us track the named pipe location
@@ -93,11 +95,15 @@ func createFIFOPlatform(path string) (string, error) {
 
 			// Ensure the parent directory exists
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				log.Printf("Warning: Failed to create parent directory for named pipe placeholder: %v", err)
+				log.Warn("Failed to create parent directory for named pipe placeholder",
+					logger.String("path", filepath.Dir(path)),
+					logger.Error(err))
 			}
 
 			if err := os.WriteFile(path, []byte(placeholderInfo), 0o666); err != nil {
-				log.Printf("Warning: Failed to create named pipe placeholder file: %v", err)
+				log.Warn("Failed to create named pipe placeholder file",
+					logger.String("path", path),
+					logger.Error(err))
 			}
 
 			// Track the handle for later cleanup with proper synchronization
@@ -108,7 +114,9 @@ func createFIFOPlatform(path string) (string, error) {
 			return fullPipeName, nil
 		}
 
-		log.Printf("Retry %d: Failed to create Windows named pipe: %v", retry+1, createErr)
+		log.Debug("Failed to create Windows named pipe, retrying",
+			logger.Int("retry", retry+1),
+			logger.Error(createErr))
 		if pipeHandle != windows.InvalidHandle {
 			_ = windows.CloseHandle(pipeHandle)
 		}

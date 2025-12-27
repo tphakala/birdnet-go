@@ -43,6 +43,7 @@ func setDefaultConfig() {
 	setModuleLogDefaults("backup", true)
 	setModuleLogDefaults("spectrogram", true)
 	setModuleLogDefaults("imageprovider", true)
+	setModuleLogDefaults("securefs", true)    // Secure filesystem operations
 
 	// Main module special: always log to console for start/stop visibility
 	viper.SetDefault("logging.modules.main.console_also", true)

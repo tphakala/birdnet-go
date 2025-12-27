@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -14,7 +13,11 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// Package-level cached logger instance
+var log = logger.Global().Module("securefs")
 
 // SecureFS provides filesystem operations with path validation
 // using Go 1.24's os.Root for OS-level filesystem sandboxing.
@@ -325,7 +328,9 @@ func (sfs *SecureFS) removeDirContents(relPath string) error {
 
 	entries, err := dir.ReadDir(0)
 	if closeErr := dir.Close(); closeErr != nil {
-		log.Printf("SecureFS: warning: failed to close directory %s: %v", relPath, closeErr)
+		log.Warn("Failed to close directory",
+			logger.String("path", relPath),
+			logger.Error(closeErr))
 	}
 	if err != nil {
 		return err
@@ -485,7 +490,9 @@ func (sfs *SecureFS) Exists(path string) (bool, error) {
 func (sfs *SecureFS) ExistsNoErr(path string) bool {
 	exists, err := sfs.Exists(path)
 	if err != nil {
-		log.Printf("Security warning: Failed to validate path in Exists check: %v", err)
+		log.Warn("Failed to validate path in Exists check",
+			logger.String("path", path),
+			logger.Error(err))
 		return false
 	}
 	return exists
@@ -516,7 +523,7 @@ func (sfs *SecureFS) ReadFile(path string) ([]byte, error) {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("SecureFS: warning: failed to close file: %v", err)
+			log.Warn("Failed to close file", logger.Error(err))
 		}
 	}()
 
@@ -545,7 +552,7 @@ func (sfs *SecureFS) WriteFile(path string, data []byte, perm os.FileMode) error
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("SecureFS: warning: failed to close file: %v", err)
+			log.Warn("Failed to close file", logger.Error(err))
 		}
 	}()
 
@@ -566,7 +573,9 @@ func mapOpenErrorToHTTP(err error, effectivePath string) *echo.HTTPError {
 	case errors.Is(err, ErrNotRegularFile):
 		return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
 	default:
-		log.Printf("SecureFS: Unhandled error serving file for path %s: %v", effectivePath, err)
+		log.Error("Unhandled error serving file",
+			logger.String("path", effectivePath),
+			logger.Error(err))
 		return echo.NewHTTPError(http.StatusInternalServerError, "Error serving file").SetInternal(err)
 	}
 }
@@ -586,18 +595,22 @@ func getContentType(path string) string {
 func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, string, error)) error {
 	f, effectivePath, err := opener()
 	if err != nil {
-		log.Printf("SecureFS: Error opening file via opener for path %s: %v", effectivePath, err)
+		log.Error("Error opening file via opener",
+			logger.String("path", effectivePath),
+			logger.Error(err))
 		return mapOpenErrorToHTTP(err, effectivePath)
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Printf("SecureFS: warning: failed to close file: %v", err)
+			log.Warn("Failed to close file", logger.Error(err))
 		}
 	}()
 
 	stat, err := f.Stat()
 	if err != nil {
-		log.Printf("Serve Internal: Stat Error: %v for relPath %s", err, effectivePath)
+		log.Error("Stat error",
+			logger.String("path", effectivePath),
+			logger.Error(err))
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info").SetInternal(err)
 	}
 
@@ -737,7 +750,7 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	}
 	defer func() {
 		if err := dirFile.Close(); err != nil {
-			log.Printf("SecureFS: warning: failed to close directory: %v", err)
+			log.Warn("Failed to close directory", logger.Error(err))
 		}
 	}()
 
