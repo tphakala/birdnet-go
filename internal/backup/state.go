@@ -3,13 +3,13 @@ package backup
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // BackupState represents the persistent state of the backup system
@@ -54,11 +54,11 @@ type StateManager struct {
 	state     *BackupState
 	statePath string
 	mu        sync.RWMutex
-	logger    *slog.Logger
+	logger    logger.Logger
 }
 
 // NewStateManager creates a new state manager
-func NewStateManager(logger *slog.Logger) (*StateManager, error) {
+func NewStateManager(log logger.Logger) (*StateManager, error) {
 	// Get config directory
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
@@ -71,9 +71,9 @@ func NewStateManager(logger *slog.Logger) (*StateManager, error) {
 	// Create state file path
 	statePath := filepath.Join(configPaths[0], "backup-state.json")
 
-	// Initialize logger if nil (fallback)
-	if logger == nil {
-		logger = slog.Default()
+	// Initialize logger if nil (fallback to package logger)
+	if log == nil {
+		log = logger.Global().Module("backup")
 	}
 
 	sm := &StateManager{
@@ -84,19 +84,19 @@ func NewStateManager(logger *slog.Logger) (*StateManager, error) {
 			Stats:      make(map[string]BackupStats),
 			MissedRuns: make([]MissedBackup, 0),
 		},
-		logger: logger.With("service", "backup_statemanager"),
+		logger: log.Module("statemanager"),
 	}
 
 	// Load existing state if available
 	if err := sm.loadState(); err != nil {
 		// If file doesn't exist, that's fine - we'll create it on first save
 		if !os.IsNotExist(err) {
-			sm.logger.Error("Failed to load existing backup state file", "path", statePath, "error", err)
+			sm.logger.Error("Failed to load existing backup state file", logger.String("path", statePath), logger.Error(err))
 		} else {
-			sm.logger.Info("No existing backup state file found, creating new one", "path", statePath)
+			sm.logger.Info("No existing backup state file found, creating new one", logger.String("path", statePath))
 		}
 	} else {
-		sm.logger.Info("Successfully loaded existing backup state", "path", statePath)
+		sm.logger.Info("Successfully loaded existing backup state", logger.String("path", statePath))
 	}
 
 	return sm, nil
@@ -130,34 +130,34 @@ func (sm *StateManager) saveState() error {
 	// Create state directory if it doesn't exist (internal config path)
 	dirPath := filepath.Dir(sm.statePath)
 	if err := os.MkdirAll(dirPath, DefaultDirectoryPermissions()); err != nil {
-		sm.logger.Error("Failed to create state directory", "path", dirPath, "error", err)
+		sm.logger.Error("Failed to create state directory", logger.String("path", dirPath), logger.Error(err))
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
 	// Marshal state to JSON with pretty printing
 	data, err := json.MarshalIndent(stateSnapshot, "", "  ")
 	if err != nil {
-		sm.logger.Error("Failed to marshal backup state to JSON", "error", err)
+		sm.logger.Error("Failed to marshal backup state to JSON", logger.Error(err))
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
 	// Write to temporary file first
 	tempFile := sm.statePath + ".tmp"
 	if err := os.WriteFile(tempFile, data, PermSecureFile); err != nil {
-		sm.logger.Error("Failed to write temporary state file", "path", tempFile, "error", err)
+		sm.logger.Error("Failed to write temporary state file", logger.String("path", tempFile), logger.Error(err))
 		return fmt.Errorf("failed to write temporary state file: %w", err)
 	}
 
 	// Rename temporary file to actual state file (atomic operation)
 	if err := os.Rename(tempFile, sm.statePath); err != nil {
 		if removeErr := os.Remove(tempFile); removeErr != nil {
-			sm.logger.Warn("Failed to clean up temp file after rename failure", "temp_path", tempFile, "error", removeErr)
+			sm.logger.Warn("Failed to clean up temp file after rename failure", logger.String("temp_path", tempFile), logger.Error(removeErr))
 		}
-		sm.logger.Error("Failed to save state file (rename failed)", "temp_path", tempFile, "final_path", sm.statePath, "error", err)
+		sm.logger.Error("Failed to save state file (rename failed)", logger.String("temp_path", tempFile), logger.String("final_path", sm.statePath), logger.Error(err))
 		return fmt.Errorf("failed to save state file: %w", err)
 	}
 
-	sm.logger.Debug("Backup state saved successfully", "path", sm.statePath, "duration_ms", time.Since(start).Milliseconds())
+	sm.logger.Debug("Backup state saved successfully", logger.String("path", sm.statePath), logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 	return nil
 }
 
@@ -171,7 +171,7 @@ func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful
 	if schedule.IsWeekly {
 		key = fmt.Sprintf("weekly-%s", schedule.Weekday)
 	}
-	sm.logger.Debug("Updating schedule state", "schedule_key", key, "successful", successful)
+	sm.logger.Debug("Updating schedule state", logger.String("schedule_key", key), logger.Bool("successful", successful))
 
 	state := sm.state.Schedules[key]
 	state.LastAttempted = time.Now()
@@ -187,7 +187,7 @@ func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful
 
 	// Save state changes
 	if err := sm.saveState(); err != nil {
-		sm.logger.Error("Failed to save state after updating schedule", "schedule_key", key, "error", err)
+		sm.logger.Error("Failed to save state after updating schedule", logger.String("schedule_key", key), logger.Error(err))
 		return err
 	}
 	return nil
@@ -207,11 +207,15 @@ func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, reason string)
 		missed.Weekday = schedule.Weekday.String()
 	}
 
-	sm.logger.Warn("Recording missed backup", "scheduled_time", missed.ScheduledTime, "reason", reason, "is_weekly", missed.IsWeekly, "weekday", missed.Weekday)
+	sm.logger.Warn("Recording missed backup",
+		logger.Time("scheduled_time", missed.ScheduledTime),
+		logger.String("reason", reason),
+		logger.Bool("is_weekly", missed.IsWeekly),
+		logger.String("weekday", missed.Weekday))
 	sm.state.MissedRuns = append(sm.state.MissedRuns, missed)
 
 	if err := sm.saveState(); err != nil {
-		sm.logger.Error("Failed to save state after adding missed backup", "error", err)
+		sm.logger.Error("Failed to save state after adding missed backup", logger.Error(err))
 		return err
 	}
 	return nil
@@ -221,7 +225,10 @@ func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, reason string)
 func (sm *StateManager) UpdateTargetState(targetName string, metadata *Metadata, status string) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	sm.logger.Debug("Updating target state", "target_name", targetName, "backup_id", metadata.ID, "status", status)
+	sm.logger.Debug("Updating target state",
+		logger.String("target_name", targetName),
+		logger.String("backup_id", metadata.ID),
+		logger.String("status", status))
 
 	state := sm.state.Targets[targetName]
 	state.LastBackupID = metadata.ID
@@ -236,7 +243,7 @@ func (sm *StateManager) UpdateTargetState(targetName string, metadata *Metadata,
 	sm.state.Targets[targetName] = state
 
 	if err := sm.saveState(); err != nil {
-		sm.logger.Error("Failed to save state after updating target state", "target_name", targetName, "error", err)
+		sm.logger.Error("Failed to save state after updating target state", logger.String("target_name", targetName), logger.Error(err))
 		return err
 	}
 	return nil
@@ -251,7 +258,7 @@ func (sm *StateManager) UpdateStats(stats map[string]BackupStats) error {
 	sm.state.Stats = stats
 
 	if err := sm.saveState(); err != nil {
-		sm.logger.Error("Failed to save state after updating stats", "error", err)
+		sm.logger.Error("Failed to save state after updating stats", logger.Error(err))
 		return err
 	}
 	return nil
@@ -293,12 +300,12 @@ func (sm *StateManager) GetMissedBackups() []MissedBackup {
 func (sm *StateManager) ClearMissedBackups() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	sm.logger.Info("Clearing missed backups list", "previous_count", len(sm.state.MissedRuns))
+	sm.logger.Info("Clearing missed backups list", logger.Int("previous_count", len(sm.state.MissedRuns)))
 
 	sm.state.MissedRuns = make([]MissedBackup, 0)
 
 	if err := sm.saveState(); err != nil {
-		sm.logger.Error("Failed to save state after clearing missed backups", "error", err)
+		sm.logger.Error("Failed to save state after clearing missed backups", logger.Error(err))
 		return err
 	}
 	return nil

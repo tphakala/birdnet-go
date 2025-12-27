@@ -13,5 +13,7 @@ var (
 	logString = logger.String
 	logError  = logger.Error
 	logInt    = logger.Int
+	logInt64  = logger.Int64
 	logBool   = logger.Bool
+	logAny    = logger.Any
 )

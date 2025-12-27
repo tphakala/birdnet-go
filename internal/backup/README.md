@@ -76,7 +76,7 @@ type Target interface {
 
 ### `Manager`
 
-- **Initialization:** `NewManager(fullConfig *conf.Settings, logger *slog.Logger, stateManager *StateManager, appVersion string) (*Manager, error)` (Note: accepts `*slog.Logger` for compatibility)
+- **Initialization:** `NewManager(fullConfig *conf.Settings, lg logger.Logger, stateManager *StateManager, appVersion string) (*Manager, error)` - accepts a `logger.Logger` interface from the centralized logging package
 - **Registration:** `RegisterSource(source Source)`, `RegisterTarget(target Target)`
 - **Execution:** `RunBackup(ctx context.Context)` performs an immediate backup of all registered sources to all registered targets.
 - **Listing:** `ListBackups(ctx context.Context)` lists backups across all targets.
@@ -87,7 +87,7 @@ type Target interface {
 
 ### `Scheduler`
 
-- **Initialization:** `NewScheduler(manager *Manager, logger *log.Logger)`
+- **Initialization:** `NewScheduler(manager *Manager, lg logger.Logger)` - accepts a `logger.Logger` interface
 - **Configuration:** `LoadFromConfig(config *conf.BackupConfig)` reads schedule settings (daily time, weekly day/time) from the main configuration.
 - **Lifecycle:** `Start()`, `Stop()`, `IsRunning()`
 - **Execution:** Periodically checks schedules and calls `manager.RunBackup` when a backup is due.
@@ -95,7 +95,7 @@ type Target interface {
 
 ### `StateManager`
 
-- **Initialization:** `NewStateManager()` automatically loads state from `<config_dir>/backup-state.json`.
+- **Initialization:** `NewStateManager(lg logger.Logger)` - accepts a `logger.Logger` interface and automatically loads state from `<config_dir>/backup-state.json`.
 - **Persistence:** Automatically saves state changes to the JSON file atomically.
 - **State Tracking:** Provides methods to update schedule status (`UpdateScheduleState`), target status (`UpdateTargetState`), record missed runs (`AddMissedBackup`), and update overall statistics (`UpdateStats`).
 - **State Retrieval:** Offers methods to get the current state for schedules (`GetScheduleState`), targets (`GetTargetState`), missed runs (`GetMissedBackups`), and stats (`GetStats`).
@@ -151,7 +151,7 @@ The package defines custom error types for better classification and handling:
 - **`backup.ErrorCode`:** An enum defining specific error categories.
 - **Helper Functions:** `NewError()`, `IsErrorCode()`, `IsMediaError()`, `IsTimeoutError()`, etc., are provided for creating and checking specific error types.
 
-Errors are logged with appropriate severity indicators (e.g., ❌, ⚠️, 🚨). `ErrMedia` is specifically used to identify potential issues with storage media like SD cards.
+Errors are logged using structured fields with appropriate log levels (Error, Warn, Info, Debug). `ErrMedia` is specifically used to identify potential issues with storage media like SD cards.
 
 ## Encryption
 
@@ -195,16 +195,53 @@ Errors are logged with appropriate severity indicators (e.g., ❌, ⚠️, 🚨)
 - **Error Handling:** The `isMediaError` function (found in `sources/sqlite.go`, but the concept might be relevant elsewhere) uses `runtime.GOOS` and platform-specific `syscall.Errno` values to detect media issues (like SD card errors) on Windows, Linux, and macOS.
 - **File Metadata:** Uses `metadata_unix.go` and `metadata_windows.go` with build tags (`//go:build`) to handle platform-specific file attributes (like UID/GID on Unix) when potentially needed (though the current core `backup.go` doesn't seem to _actively_ use `FileMetadata` for archive creation, the capability exists).
 
+## Logging
+
+The backup package uses the centralized `logger.Logger` interface from `internal/logger`. This provides:
+
+- **Structured logging** with typed field constructors
+- **Module-scoped loggers** for hierarchical log organization
+- **Consistent logging format** across all backup components
+
+### Logger Interface
+
+All components accept a `logger.Logger` interface. If `nil` is passed, they default to `logger.Global().Module("backup")`.
+
+### Structured Field Constructors
+
+Use the typed field constructors for structured logging:
+
+```go
+import "github.com/tphakala/birdnet-go/internal/logger"
+
+log.Info("Backup completed",
+    logger.String("target", "local"),
+    logger.Int64("size_bytes", fileSize),
+    logger.Int("file_count", count),
+    logger.Bool("encrypted", true),
+    logger.Error(err),
+    logger.Any("metadata", metadata))
+```
+
+### Module Hierarchy
+
+Each component creates a sub-module logger:
+
+```go
+// Manager creates: backup
+// Scheduler creates: backup.scheduler
+// StateManager creates: backup.state
+// Targets create: backup.local, backup.sftp, backup.gdrive, backup.rsync, backup.ftp
+// Sources create: backup.sqlite
+```
+
 ## Usage Example (Conceptual)
 
 ```go
 package main
 
 import (
-    "context"
     "fmt"
-    "log/slog"
-    "os"
 
     "github.com/tphakala/birdnet-go/internal/backup"
     "github.com/tphakala/birdnet-go/internal/backup/sources"
@@ -214,6 +251,7 @@ import (
 )
 
 func initializeBackup(config *conf.Settings) error {
+    // Get a module-scoped logger
     log := logger.Global().Module("backup")
 
     // Check if backups are enabled
@@ -222,24 +260,21 @@ func initializeBackup(config *conf.Settings) error {
         return nil
     }
 
-    // The backup package uses *slog.Logger for compatibility
-    slogLogger := slog.Default()
-
-    // Initialize state manager
-    stateManager, err := backup.NewStateManager(slogLogger)
+    // Initialize state manager with logger
+    stateManager, err := backup.NewStateManager(log)
     if err != nil {
         return fmt.Errorf("failed to initialize state manager: %w", err)
     }
 
-    // Create Backup Manager
-    backupManager, err := backup.NewManager(config, slogLogger, stateManager, "1.0.0")
+    // Create Backup Manager with logger
+    backupManager, err := backup.NewManager(config, log, stateManager, "1.0.0")
     if err != nil {
         return fmt.Errorf("failed to create backup manager: %w", err)
     }
 
     // --- Register Sources (Example: SQLite) ---
     if config.Output.SQLite.Enabled {
-        sqliteSource := sources.NewSQLiteSource(config)
+        sqliteSource := sources.NewSQLiteSource(config, log)
         if err := backupManager.RegisterSource(sqliteSource); err != nil {
             log.Warn("failed to register SQLite source", logger.Error(err))
         } else {
@@ -249,7 +284,7 @@ func initializeBackup(config *conf.Settings) error {
 
     // --- Register Targets (Example: Local Disk) ---
     if config.Backup.Targets.Local.Enabled {
-        localTarget, err := targets.NewLocalTarget(config.Backup.Targets.Local)
+        localTarget, err := targets.NewLocalTarget(config.Backup.Targets.Local, log)
         if err != nil {
             return fmt.Errorf("failed to create local target: %w", err)
         }
@@ -265,8 +300,8 @@ func initializeBackup(config *conf.Settings) error {
         return fmt.Errorf("failed to start backup manager: %w", err)
     }
 
-    // Create and start the Scheduler
-    scheduler, err := backup.NewScheduler(backupManager, slogLogger)
+    // Create and start the Scheduler with logger
+    scheduler, err := backup.NewScheduler(backupManager, log)
     if err != nil {
         return fmt.Errorf("failed to create scheduler: %w", err)
     }

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +16,7 @@ import (
 	"github.com/mattn/go-sqlite3"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Linux-specific errno constants for media error detection
@@ -29,17 +29,17 @@ const (
 // SQLiteSource implements the backup.Source interface for SQLite databases
 type SQLiteSource struct {
 	config *conf.Settings
-	logger *slog.Logger
+	log    logger.Logger
 }
 
 // NewSQLiteSource creates a new SQLite backup source
-func NewSQLiteSource(config *conf.Settings, logger *slog.Logger) *SQLiteSource {
-	if logger == nil {
-		logger = slog.Default()
+func NewSQLiteSource(config *conf.Settings, log logger.Logger) *SQLiteSource {
+	if log == nil {
+		log = logger.Global().Module("backup")
 	}
 	return &SQLiteSource{
 		config: config,
-		logger: logger.With("backup_source", "sqlite"),
+		log:    log.Module("sqlite"),
 	}
 }
 
@@ -246,7 +246,7 @@ func (s *SQLiteSource) withDatabase(dbPath string, readOnly bool, fn func(*Datab
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			s.logger.Debug("Failed to close database connection", "error", err)
+			s.log.Debug("Failed to close database connection", logger.Error(err))
 		}
 	}()
 
@@ -328,10 +328,10 @@ func (s *SQLiteSource) getDatabaseInfo(db *sql.DB) (pageSize, pageCount int, jou
 		return
 	}
 
-	s.logger.Debug("Retrieved database info",
-		"page_size", pageSize,
-		"page_count", pageCount,
-		"journal_mode", journalMode,
+	s.log.Debug("Retrieved database info",
+		logger.Int("page_size", pageSize),
+		logger.Int("page_count", pageCount),
+		logger.String("journal_mode", journalMode),
 	)
 	return
 }
@@ -429,7 +429,7 @@ func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			s.logger.Debug("Failed to close backup file", "path", tempPath, "error", err)
+			s.log.Debug("Failed to close backup file", logger.String("path", tempPath), logger.Error(err))
 		}
 	}()
 
@@ -456,16 +456,16 @@ func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
 func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w io.Writer) error {
 	start := time.Now()
 	defer func() {
-		s.logger.Debug("Finished streamBackupToWriter", "duration_ms", time.Since(start).Milliseconds())
+		s.log.Debug("Finished streamBackupToWriter", logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 	}()
-	s.logger.Debug("Starting streamBackupToWriter")
+	s.log.Debug("Starting streamBackupToWriter")
 
 	// Get database info needed later
 	_, pageCount, _, err := s.getDatabaseInfo(db)
 	if err != nil {
 		return fmt.Errorf("failed to get database info before backup: %w", err)
 	}
-	s.logger.Debug("Retrieved database info for backup", "page_count", pageCount)
+	s.log.Debug("Retrieved database info for backup", logger.Int("page_count", pageCount))
 
 	// Create a temporary file for the backup
 	tempFile, err := os.CreateTemp("", "birdnet-go-backup-*.db")
@@ -477,15 +477,15 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 			Build()
 	}
 	tempPath := tempFile.Name()
-	s.logger.Debug("Created temporary backup file", "temp_path", tempPath)
+	s.log.Debug("Created temporary backup file", logger.String("temp_path", tempPath))
 	// Close the handle immediately, it's just needed for the path
 	if errClose := tempFile.Close(); errClose != nil {
-		s.logger.Warn("Failed to close temporary file handle after creation (continuing)", "temp_path", tempPath, "error", errClose)
+		s.log.Warn("Failed to close temporary file handle after creation (continuing)", logger.String("temp_path", tempPath), logger.Error(errClose))
 	}
 	defer func() {
-		s.logger.Debug("Removing temporary backup file", "temp_path", tempPath)
+		s.log.Debug("Removing temporary backup file", logger.String("temp_path", tempPath))
 		if errRemove := os.Remove(tempPath); errRemove != nil {
-			s.logger.Warn("Failed to remove temporary backup file", "temp_path", tempPath, "error", errRemove)
+			s.log.Warn("Failed to remove temporary backup file", logger.String("temp_path", tempPath), logger.Error(errRemove))
 		}
 	}()
 
@@ -500,7 +500,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := destDB.Close(); err != nil {
-			s.logger.Debug("Failed to close destination database", "error", err)
+			s.log.Debug("Failed to close destination database", logger.Error(err))
 		}
 	}()
 
@@ -515,7 +515,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := srcConn.Close(); err != nil {
-			s.logger.Debug("Failed to close source connection", "error", err)
+			s.log.Debug("Failed to close source connection", logger.Error(err))
 		}
 	}()
 
@@ -529,7 +529,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := dstConn.Close(); err != nil {
-			s.logger.Debug("Failed to close destination connection", "error", err)
+			s.log.Debug("Failed to close destination connection", logger.Error(err))
 		}
 	}()
 
@@ -582,10 +582,10 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := backupConn.Close(); err != nil {
-			s.logger.Debug("Failed to close backup connection", "error", err)
+			s.log.Debug("Failed to close backup connection", logger.Error(err))
 		}
 	}()
-	s.logger.Debug("Initialized SQLite backup connection", "total_pages", totalPages)
+	s.log.Debug("Initialized SQLite backup connection", logger.Int("total_pages", totalPages))
 
 	// Validate and adjust page counts
 	// Use pageCount from getDatabaseInfo as the sourcePages reference
@@ -593,7 +593,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	if err != nil {
 		return err // Return the error from validatePageCount
 	}
-	s.logger.Debug("Validated page count for backup", "validated_total_pages", validatedTotal)
+	s.log.Debug("Validated page count for backup", logger.Int("validated_total_pages", validatedTotal))
 
 	// Perform the backup in chunks
 	if err := s.performBackupSteps(ctx, backupConn, validatedTotal); err != nil {
@@ -612,7 +612,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			s.logger.Debug("Failed to close backup file for reading", "path", tempPath, "error", err)
+			s.log.Debug("Failed to close backup file for reading", logger.String("path", tempPath), logger.Error(err))
 		}
 	}()
 
@@ -627,28 +627,28 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 			Build()
 	}
 
-	s.logger.Debug("Successfully copied backup data to writer", "bytes_copied", copiedBytes)
+	s.log.Debug("Successfully copied backup data to writer", logger.Int64("bytes_copied", copiedBytes))
 	return nil
 }
 
 // Backup performs a streaming backup of the SQLite database
 func (s *SQLiteSource) Backup(ctx context.Context) (io.ReadCloser, error) {
 	start := time.Now()
-	s.logger.Info("Starting SQLite streaming backup operation")
+	s.log.Info("Starting SQLite streaming backup operation")
 
 	// Validate configuration and get database path
 	dbPath, err := s.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
-	s.logger.Info("Validated configuration", "db_path", dbPath)
+	s.log.Info("Validated configuration", logger.String("db_path", dbPath))
 
 	// Verify source database exists and is accessible before proceeding
-	s.logger.Info("Verifying source database", "db_path", dbPath)
+	s.log.Info("Verifying source database", logger.String("db_path", dbPath))
 	if err := s.verifyDatabase(dbPath, false); err != nil {
 		return nil, fmt.Errorf("database verification failed: %w", err)
 	}
-	s.logger.Info("Source database verified successfully", "db_path", dbPath)
+	s.log.Info("Source database verified successfully", logger.String("db_path", dbPath))
 
 	// Create pipe for streaming
 	pr, pw := io.Pipe()
@@ -658,7 +658,7 @@ func (s *SQLiteSource) Backup(ctx context.Context) (io.ReadCloser, error) {
 		// Ensure pipe writer is closed eventually
 		defer func() {
 			if err := pw.Close(); err != nil {
-				s.logger.Warn("Error closing pipe writer in goroutine", "error", err)
+				s.log.Warn("Error closing pipe writer in goroutine", logger.Error(err))
 			}
 		}()
 
@@ -667,14 +667,14 @@ func (s *SQLiteSource) Backup(ctx context.Context) (io.ReadCloser, error) {
 		})
 
 		if backupErr != nil {
-			s.logger.Error("SQLite backup failed in goroutine", "error", backupErr, "duration_ms", time.Since(start).Milliseconds())
+			s.log.Error("SQLite backup failed in goroutine", logger.Error(backupErr), logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 			if closeErr := pw.CloseWithError(backupErr); closeErr != nil {
-				s.logger.Warn("Error closing pipe writer with error", "error", closeErr)
+				s.log.Warn("Error closing pipe writer with error", logger.Error(closeErr))
 			}
 			return // Exit goroutine on error
 		}
 
-		s.logger.Info("SQLite backup completed successfully", "duration_ms", time.Since(start).Milliseconds())
+		s.log.Info("SQLite backup completed successfully", logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 		// pw.Close() is handled by defer
 	}()
 
@@ -688,15 +688,15 @@ func (s *SQLiteSource) Validate() error {
 	if err != nil {
 		return err
 	}
-	s.logger.Debug("Validating SQLite source configuration", "db_path", dbPath)
+	s.log.Debug("Validating SQLite source configuration", logger.String("db_path", dbPath))
 
 	// Verify database with read-only access
 	if err := s.verifyDatabase(dbPath, true); err != nil {
-		s.logger.Error("SQLite source validation failed", "db_path", dbPath, "error", err)
+		s.log.Error("SQLite source validation failed", logger.String("db_path", dbPath), logger.Error(err))
 		return err
 	}
 
-	s.logger.Info("SQLite source validation successful", "db_path", dbPath)
+	s.log.Info("SQLite source validation successful", logger.String("db_path", dbPath))
 	return nil
 }
 
