@@ -1,17 +1,113 @@
 # Logger Package
 
-Centralized, module-aware logging system for Vainu² built on Go's standard `log/slog`.
+Centralized, module-aware logging system for BirdNET-Go built on Go's standard `log/slog`.
 
 ## Features
 
 - **Dual Output Formats**:
   - **Console**: Human-readable text for development
   - **Files**: JSON for production log aggregation
-- **Module-Scoped Logging**: Routes logs to module-specific files (`ai.log`, `cmdb.log`, etc.)
+- **Module-Scoped Logging**: Routes logs to module-specific files (`audio.log`, `analysis.log`, etc.)
 - **Type-Safe Fields**: Structured logging with compile-time safety
 - **Zero External Dependencies**: Built on Go standard library only
 - **Echo Integration**: Adapter for Echo framework's internal logging
 - **Finnish Locale**: Date/time formatting in DD.MM.YYYY HH:MM format
+
+## Package Migration Quick Reference
+
+When converting a package to use the centralized logger, follow this pattern:
+
+### 1. Create Package Logger (logging.go)
+
+```go
+package mypackage
+
+import "github.com/tphakala/birdnet-go/internal/logger"
+
+// GetLogger returns the mypackage logger.
+func GetLogger() logger.Logger {
+    return logger.Global().Module("mypackage")
+}
+
+// Optional: Type alias for backwards compatibility
+type MyPackageLogger = logger.Logger
+
+// Optional: No-op for backwards compatibility
+func CloseLogger() error {
+    return nil
+}
+```
+
+### 2. Usage Pattern in Functions
+
+```go
+func SomeFunction() error {
+    log := GetLogger()  // ✅ Cache at function start
+
+    log.Info("Starting operation", logger.String("key", "value"))
+
+    // Use cached 'log' throughout the function
+    for _, item := range items {
+        log.Debug("Processing", logger.String("item", item))  // ✅ Reuses cached logger
+    }
+
+    return nil
+}
+
+// ❌ WRONG: Don't call GetLogger() inside loops
+func BadFunction() {
+    for _, item := range items {
+        log := GetLogger()  // ❌ Creates new logger each iteration
+        log.Info("Processing", logger.String("item", item))
+    }
+}
+```
+
+### 3. Closures Must Capture Logger
+
+```go
+func FunctionWithClosure() {
+    log := GetLogger()  // Cache before closure
+
+    handler := func(data string) {
+        log.Info("Handled", logger.String("data", data))  // ✅ Uses captured logger
+    }
+
+    handler("test")
+}
+```
+
+### 4. Test Files
+
+```go
+package mypackage
+
+import (
+    "github.com/tphakala/birdnet-go/internal/logger"
+)
+
+func cleanupTestArtifacts() {
+    log := GetLogger()
+
+    if err := os.RemoveAll("debug"); err != nil {
+        log.Warn("Failed to remove debug directory", logger.Error(err))
+    }
+}
+```
+
+### 5. Checklist
+
+- [ ] Remove `import "log"` and `import "log/slog"`
+- [ ] Add `import "github.com/tphakala/birdnet-go/internal/logger"`
+- [ ] Create `GetLogger()` function returning `logger.Global().Module("pkgname")`
+- [ ] Replace `log.Printf(...)` with `log.Info(..., logger.String(...))` etc.
+- [ ] Cache logger at function start: `log := GetLogger()`
+- [ ] Never call `GetLogger()` inside loops
+- [ ] Use structured fields: `logger.String()`, `logger.Int()`, `logger.Error()`, etc.
+- [ ] Run `golangci-lint run ./internal/mypackage/...`
+- [ ] Run `go test ./internal/mypackage/...`
+
+---
 
 ## Quick Start
 
@@ -109,18 +205,21 @@ Route logs to dedicated files based on functionality:
 // Main application logger
 mainLogger := centralLogger.Module("main")
 
-// AI/ML operations -> ai.log
-aiLogger := centralLogger.Module("ai")
+// Audio processing operations -> audio.log
+audioLogger := centralLogger.Module("audio")
 
-// Analysis operations -> analyzer.log
-analyzerLogger := centralLogger.Module("analyzer")
+// Bird detection analysis -> analysis.log
+analysisLogger := centralLogger.Module("analysis")
 
-// CMDB operations -> cmdb.log
-cmdbLogger := centralLogger.Module("cmdb")
+// MQTT operations -> mqtt.log
+mqttLogger := centralLogger.Module("mqtt")
+
+// BirdWeather integration -> birdweather.log
+birdweatherLogger := centralLogger.Module("birdweather")
 
 // Nested modules (hierarchy)
-sqliteLogger := mainLogger.Module("sqlite")
-// Logs with module="main.sqlite"
+realtimeLogger := analysisLogger.Module("realtime")
+// Logs with module="analysis.realtime"
 ```
 
 ### Configuration for Module Files
@@ -133,14 +232,18 @@ logging:
     enabled: true
     level: "info"
   modules:
-    ai:
+    analysis:
       enabled: true
-      file_path: "logs/ai.log"
+      file_path: "logs/analysis.log"
       level: "debug"
       console_also: false  # Don't duplicate to console
-    cmdb:
+    mqtt:
       enabled: true
-      file_path: "logs/cmdb.log"
+      file_path: "logs/mqtt.log"
+      level: "info"
+    birdweather:
+      enabled: true
+      file_path: "logs/birdweather.log"
       level: "info"
 ```
 
@@ -362,18 +465,23 @@ logging:
     compress: true
 
   module_levels:
-    storage: "debug"
+    datastore: "debug"
     api: "info"
+    analysis: "debug"
 
   modules:
-    ai:
+    analysis:
       enabled: true
-      file_path: "logs/ai.log"
+      file_path: "logs/analysis.log"
       level: "debug"
       console_also: false
-    cmdb:
+    mqtt:
       enabled: true
-      file_path: "logs/cmdb.log"
+      file_path: "logs/mqtt.log"
+      level: "info"
+    birdweather:
+      enabled: true
+      file_path: "logs/birdweather.log"
       level: "info"
 ```
 
@@ -541,5 +649,4 @@ e.Logger = logger.NewEchoLoggerAdapter(appLogger.Module("echo"))
 ## See Also
 
 - [Go slog documentation](https://pkg.go.dev/log/slog)
-- [CLAUDE.md Logging Architecture](../../CLAUDE.md#logging-architecture)
-- [pkg/logger godoc](https://pkg.go.dev/github.com/tphakala/birdnet-go/internal/logger)
+- [internal/logger godoc](https://pkg.go.dev/github.com/tphakala/birdnet-go/internal/logger)
