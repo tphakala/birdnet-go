@@ -169,12 +169,12 @@ func isConnectionError(err error) bool {
 		"network is unreachable",
 		"network unreachable",
 		"host is down",
-		"no such host",        // DNS resolution failure
-		"lookup ",             // DNS lookup failure pattern
-		"dial tcp",            // General TCP dial failures
-		"dial udp",            // UDP dial failures
-		"i/o timeout",         // Network timeout at socket level
-		"broken pipe",         // Connection broken
+		"no such host",         // DNS resolution failure
+		"lookup ",              // DNS lookup failure pattern
+		"dial tcp",             // General TCP dial failures
+		"dial udp",             // UDP dial failures
+		"i/o timeout",          // Network timeout at socket level
+		"broken pipe",          // Connection broken
 		"connection timed out", // TCP connection timeout
 	}
 

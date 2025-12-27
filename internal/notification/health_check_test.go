@@ -148,7 +148,7 @@ func TestNewHealthChecker(t *testing.T) {
 	t.Parallel()
 
 	config := DefaultHealthCheckConfig()
-	log := getFileLogger(false)
+	log := GetLogger()
 
 	hc := NewHealthChecker(config, log, nil)
 

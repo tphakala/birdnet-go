@@ -3,11 +3,11 @@ package notification
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -31,7 +31,7 @@ type HealthChecker struct {
 	providers map[string]*healthCheckEntry
 	interval  time.Duration
 	timeout   time.Duration
-	log       *slog.Logger
+	log       logger.Logger
 	metrics   *metrics.NotificationMetrics
 	mu        sync.RWMutex
 	cancel    context.CancelFunc
@@ -76,7 +76,7 @@ func (c HealthCheckConfig) Validate() error {
 }
 
 // NewHealthChecker creates a new HealthChecker.
-func NewHealthChecker(config HealthCheckConfig, log *slog.Logger, notificationMetrics *metrics.NotificationMetrics) *HealthChecker {
+func NewHealthChecker(config HealthCheckConfig, log logger.Logger, notificationMetrics *metrics.NotificationMetrics) *HealthChecker {
 	return &HealthChecker{
 		providers: make(map[string]*healthCheckEntry),
 		interval:  config.Interval,
@@ -104,7 +104,7 @@ func (hc *HealthChecker) RegisterProvider(provider Provider, circuitBreaker *Pus
 	}
 
 	if hc.log != nil {
-		hc.log.Debug("registered provider for health checking", "provider", name)
+		hc.log.Debug("registered provider for health checking", logger.String("provider", name))
 	}
 }
 
@@ -136,7 +136,9 @@ func (hc *HealthChecker) Start(ctx context.Context) error {
 	}()
 
 	if hc.log != nil {
-		hc.log.Info("health checker started", "interval", hc.interval, "providers", len(hc.providers))
+		hc.log.Info("health checker started",
+			logger.Duration("interval", hc.interval),
+			logger.Int("providers", len(hc.providers)))
 	}
 
 	return nil
@@ -255,9 +257,9 @@ func (hc *HealthChecker) recordHealthFailure(entry *healthCheckEntry, providerNa
 
 	if hc.log != nil {
 		hc.log.Warn("provider health check failed",
-			"provider", providerName,
-			"error", err,
-			"consecutive_failures", entry.health.ConsecutiveFailures)
+			logger.String("provider", providerName),
+			logger.Error(err),
+			logger.Int("consecutive_failures", entry.health.ConsecutiveFailures))
 	}
 }
 
@@ -272,9 +274,9 @@ func (hc *HealthChecker) updateCircuitBreakerState(entry *healthCheckEntry, circ
 func (hc *HealthChecker) logHealthCheckResult(entry *healthCheckEntry, providerName string) {
 	if entry.health.Healthy && hc.log != nil {
 		hc.log.Debug("provider health check passed",
-			"provider", providerName,
-			"total_successes", entry.health.TotalSuccesses,
-			"total_failures", entry.health.TotalFailures)
+			logger.String("provider", providerName),
+			logger.Int("total_successes", entry.health.TotalSuccesses),
+			logger.Int("total_failures", entry.health.TotalFailures))
 	}
 }
 

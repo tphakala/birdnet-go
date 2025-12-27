@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // CreateWithMetadata creates a notification with full metadata support
@@ -20,9 +21,9 @@ func (s *Service) CreateWithMetadata(notification *Notification) error {
 	if !s.rateLimiter.Allow() {
 		if s.config.Debug {
 			s.logger.Debug("notification rate limit exceeded",
-				"type", notification.Type,
-				"priority", notification.Priority,
-				"title_length", len(notification.Title))
+				logger.String("type", string(notification.Type)),
+				logger.String("priority", string(notification.Priority)),
+				logger.Int("title_length", len(notification.Title)))
 		}
 		return errors.Newf("rate limit exceeded").
 			Component("notification").
@@ -32,12 +33,12 @@ func (s *Service) CreateWithMetadata(notification *Notification) error {
 
 	if s.config.Debug {
 		s.logger.Debug("creating notification with metadata",
-			"id", notification.ID,
-			"type", notification.Type,
-			"priority", notification.Priority,
-			"title_length", len(notification.Title),
-			"message_length", len(notification.Message),
-			"metadata_keys", len(notification.Metadata))
+			logger.String("id", notification.ID),
+			logger.String("type", string(notification.Type)),
+			logger.String("priority", string(notification.Priority)),
+			logger.Int("title_length", len(notification.Title)),
+			logger.Int("message_length", len(notification.Message)),
+			logger.Int("metadata_keys", len(notification.Metadata)))
 	}
 
 	// Save to store
@@ -54,8 +55,8 @@ func (s *Service) CreateWithMetadata(notification *Notification) error {
 
 	if s.config.Debug {
 		s.logger.Debug("notification created and broadcast",
-			"id", notification.ID,
-			"subscriber_count", len(s.subscribers))
+			logger.String("id", notification.ID),
+			logger.Int("subscriber_count", len(s.subscribers)))
 	}
 
 	return nil
