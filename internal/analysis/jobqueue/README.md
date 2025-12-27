@@ -91,7 +91,7 @@ data := MyDataType{...}
 config := jobqueue.GetDefaultRetryConfig(true)
 job, err := queue.Enqueue(action, data, config)
 if err != nil {
-    log.Fatalf("Failed to enqueue job: %v", err)
+    return fmt.Errorf("failed to enqueue job: %w", err)
 }
 
 // Access the UUID-based job ID
@@ -125,7 +125,7 @@ data := MyDataType{...}
 config := jobqueue.GetDefaultRetryConfig(true)
 job, err := queue.EnqueueTyped(action, data, config)
 if err != nil {
-    log.Fatalf("Failed to enqueue job: %v", err)
+    return fmt.Errorf("failed to enqueue job: %w", err)
 }
 ```
 
@@ -254,14 +254,14 @@ Jobs are assigned unique IDs using UUIDs to ensure uniqueness even in high-throu
 // Enqueue a job and get its ID
 job, err := queue.Enqueue(action, data, config)
 if err != nil {
-    log.Fatalf("Failed to enqueue job: %v", err)
+    return fmt.Errorf("failed to enqueue job: %w", err)
 }
 
 // The ID uses the format "job-xxxxxxx" where xxxxxxx is a 12-character UUID v4
-fmt.Printf("Job ID: %s\n", job.ID)  // e.g., "job-1a2b3c4d5e6f"
+// e.g., "job-1a2b3c4d5e6f"
 
 // Jobs can be referenced by ID in logs, making debugging easier
-log.Printf("Processing job %s", job.ID)
+logger.Debug("processing job", logger.String("job_id", job.ID))
 ```
 
 ### Statistics Tracking
@@ -306,7 +306,7 @@ The job queue statistics can be exposed through the JSON API:
 // Get stats in JSON format
 jsonStats, err := stats.ToJSON()
 if err != nil {
-    log.Fatalf("Failed to convert stats to JSON: %v", err)
+    return fmt.Errorf("failed to convert stats to JSON: %w", err)
 }
 
 // The JSON structure includes:

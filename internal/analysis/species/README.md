@@ -275,12 +275,12 @@ All public methods use read-write mutex for safe concurrent access:
 
 ### Logging
 
-**Dedicated Logger**:
+**Centralized Logger**:
 
-- File: `logs/species-tracking.log`
-- Level: Debug (configurable via `slog.LevelVar`)
-- Service tag: `species-tracking`
-- Fallback: Uses `slog.Default()` if file logger fails
+- Uses `internal/logger` package
+- Module path: `analysis.processor`
+- Level: Debug (configurable via settings)
+- Structured logging with type-safe field constructors
 
 ## Usage Examples
 
@@ -315,7 +315,7 @@ tracker := species.NewTrackerFromSettings(datastore, settings)
 
 // Initialize from database
 if err := tracker.InitFromDatabase(); err != nil {
-    log.Fatal(err)
+    return fmt.Errorf("failed to initialize species tracker: %w", err)
 }
 defer tracker.Close()
 ```
@@ -362,7 +362,8 @@ currentTime := time.Now()
 
 // Check if we should suppress notification
 if tracker.ShouldSuppressNotification(scientificName, currentTime) {
-    log.Printf("Suppressing duplicate notification for %s", scientificName)
+    log.Debug("suppressing duplicate notification",
+        logger.String("species", scientificName))
     return
 }
 
@@ -377,19 +378,20 @@ tracker.RecordNotificationSent(scientificName, currentTime)
 ```go
 // Background maintenance goroutine
 go func() {
+    log := GetLogger()
     ticker := time.NewTicker(1 * time.Hour)
     defer ticker.Stop()
 
     for range ticker.C {
         // Sync with database
         if err := tracker.SyncIfNeeded(); err != nil {
-            log.Printf("Sync error: %v", err)
+            log.Error("sync failed", logger.Error(err))
         }
 
         // Prune old entries
         pruned := tracker.PruneOldEntries()
         if pruned > 0 {
-            log.Printf("Pruned %d old entries", pruned)
+            log.Debug("pruned old entries", logger.Int("count", pruned))
         }
     }
 }()
@@ -549,7 +551,7 @@ Common error categories:
 - `internal/conf` - Configuration settings
 - `internal/datastore` - Database operations
 - `internal/errors` - Structured error handling
-- `internal/logging` - File logging
+- `internal/logger` - Centralized logging
 
 ### Used By
 
@@ -1339,11 +1341,13 @@ assert.True(t, status.IsNewThisSeason, "Seasonal")
 
 ### Enable Debug Logging
 
-The package uses a dedicated logger at `logs/species-tracking.log`:
+The package uses the centralized logger:
 
 ```go
-// In test setup
-logger.SetLevel(slog.LevelDebug)
+// Use debug level for verbose output
+log := GetLogger()
+log.Debug("debugging tracker state",
+    logger.Int("species_count", tracker.GetSpeciesCount()))
 ```
 
 ### Use Race Detector Output

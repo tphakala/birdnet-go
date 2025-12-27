@@ -89,10 +89,10 @@ This package serves as the MQTT integration layer for BirdNET-Go, allowing:
 
 ### Logging
 
-- **Dedicated Log File**: `logs/mqtt.log`
+- **Centralized Logger**: Uses `internal/logger` package with module path `mqtt`
 - **Dynamic Log Levels**: Can be changed at runtime
 - **Debug Mode**: Detailed logging for troubleshooting
-- **Structured Logging**: Uses slog for consistent formatting
+- **Structured Logging**: Type-safe field constructors (`logger.String()`, `logger.Error()`, etc.)
 
 ## Configuration
 
@@ -129,38 +129,53 @@ type Config struct {
 ### Basic Usage
 
 ```go
-// Create client
-client, err := mqtt.NewClient(settings, metrics)
-if err != nil {
-    log.Fatal(err)
-}
+import "github.com/tphakala/birdnet-go/internal/logger"
 
-// Connect
-ctx := context.Background()
-if err := client.Connect(ctx); err != nil {
-    log.Printf("Connection failed: %v", err)
-}
+func setupMQTT(settings *conf.Settings, metrics *observability.Metrics) error {
+    log := logger.Global().Module("mqtt")
 
-// Publish message
-if err := client.Publish(ctx, "birdnet/detections", jsonPayload); err != nil {
-    log.Printf("Publish failed: %v", err)
-}
+    // Create client
+    client, err := mqtt.NewClient(settings, metrics)
+    if err != nil {
+        return fmt.Errorf("failed to create MQTT client: %w", err)
+    }
 
-// Disconnect when done
-defer client.Disconnect()
+    // Connect
+    ctx := context.Background()
+    if err := client.Connect(ctx); err != nil {
+        log.Warn("connection failed", logger.Error(err))
+        return err
+    }
+
+    // Publish message
+    if err := client.Publish(ctx, "birdnet/detections", jsonPayload); err != nil {
+        log.Error("publish failed", logger.Error(err))
+        return err
+    }
+
+    // Disconnect when done
+    defer client.Disconnect()
+    return nil
+}
 ```
 
 ### Connection Testing
 
 ```go
 // Run comprehensive connection test
+log := logger.Global().Module("mqtt")
 resultChan := make(chan mqtt.TestResult, 10)
 go client.TestConnection(ctx, resultChan)
 
 for result := range resultChan {
-    log.Printf("%s: %s", result.Stage, result.Message)
-    if !result.Success {
-        log.Printf("Error: %s", result.Error)
+    if result.Success {
+        log.Info("test stage completed",
+            logger.String("stage", result.Stage),
+            logger.String("message", result.Message))
+    } else {
+        log.Error("test stage failed",
+            logger.String("stage", result.Stage),
+            logger.String("error", result.Error))
     }
 }
 ```
@@ -295,7 +310,7 @@ BirdNET-Go provides a secure certificate management system:
 ### For LLMs
 
 1. **Error Handling**: Always use the enhanced error system from `internal/errors`
-2. **Logging**: Use the package-level `mqttLogger` for consistency
+2. **Logging**: Use the package-level `GetLogger()` for consistency (returns cached `logger.Logger`)
 3. **Thread Safety**: Protect shared state with appropriate locking
 4. **Metrics**: Update relevant metrics for all operations
 5. **Context**: Respect context cancellation in all blocking operations

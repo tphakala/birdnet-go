@@ -2,32 +2,52 @@
 
 ## Overview
 
-This document describes the structured logging infrastructure implemented for the analysis package and its subpackages. Each package has its own dedicated logger with consistent patterns and defensive initialization.
+This document describes the structured logging infrastructure for the analysis package and its subpackages. All packages use the centralized `internal/logger` package with module-scoped loggers and `sync.Once` caching for efficiency.
 
 ## Logger Structure
 
 ### Package Loggers
 
-| Package              | Service Name        | Logger File              | Purpose                         |
-| -------------------- | ------------------- | ------------------------ | ------------------------------- |
-| `analysis`           | `analysis`          | `logger.go`              | Main analysis operations        |
-| `analysis.processor` | `species-tracking`  | `new_species_tracker.go` | Processor operations (existing) |
-| `analysis.jobqueue`  | `analysis-jobqueue` | `logger.go`              | Job queue operations            |
+| Package              | Module Path                        | Logger File              |
+| -------------------- | ---------------------------------- | ------------------------ |
+| `analysis`           | `analysis`                         | `logger.go`              |
+| `analysis.processor` | `analysis.processor`               | `processor/logger.go`    |
+| `analysis.soundlevel`| `analysis.soundlevel`              | `sound_level.go`         |
+| `analysis.soundlevel.metrics` | `analysis.soundlevel.metrics` | `sound_level_metrics.go` |
 
 ### Logger Initialization Pattern
 
-All loggers follow this pattern:
+All package loggers use `sync.Once` to ensure efficient initialization:
 
 ```go
-var logger *slog.Logger
+import (
+    "sync"
+    "github.com/tphakala/birdnet-go/internal/logger"
+)
 
-func init() {
-    logger = logging.ForService("service-name")
+var (
+    serviceLogger logger.Logger
+    initOnce      sync.Once
+)
 
-    // Defensive initialization
-    if logger == nil {
-        logger = slog.Default().With("service", "service-name")
-    }
+// GetLogger returns the package logger scoped to the module.
+// Uses sync.Once to ensure the logger is only initialized once.
+func GetLogger() logger.Logger {
+    initOnce.Do(func() {
+        serviceLogger = logger.Global().Module("analysis")
+    })
+    return serviceLogger
+}
+```
+
+For sub-modules, use hierarchical scoping:
+
+```go
+func getSoundLevelLogger() logger.Logger {
+    soundLevelLoggerOnce.Do(func() {
+        soundLevelLogger = logger.Global().Module("analysis").Module("soundlevel")
+    })
+    return soundLevelLogger
 }
 ```
 
@@ -35,105 +55,118 @@ func init() {
 
 ### Basic Logging
 
+Use type-safe field constructors from the logger package:
+
 ```go
-logger.Info("Operation completed",
-    "duration_ms", elapsed.Milliseconds(),
-    "items_processed", count)
+log := GetLogger()
+log.Info("operation completed",
+    logger.Duration("duration", elapsed),
+    logger.Int("items_processed", count))
 ```
 
-### Error Logging with Enhanced Errors
+### Error Logging
 
 ```go
 if err := operation(); err != nil {
-    enhancedErr := errors.New(err).
-        Component("analysis").
-        Category(errors.CategoryAudioAnalysis).
-        Context("operation", "predict").
-        Build()
-    logger.Error("Operation failed", "error", enhancedErr)
+    GetLogger().Error("operation failed",
+        logger.Error(err),
+        logger.String("operation", "predict"))
 }
 ```
 
-### Performance Metrics
+### Debug Logging with Conditional Fields
 
 ```go
-start := time.Now()
-// ... do work ...
-logger.Debug("Processing completed",
-    "duration_ms", time.Since(start).Milliseconds(),
-    "chunks_processed", count)
+log := GetLogger()
+log.Debug("processing chunk",
+    logger.Int("current", current),
+    logger.Int("total", total))
 ```
+
+### Function-Level Caching
+
+For functions with multiple log statements, cache the logger at function start:
+
+```go
+func processData(data []byte) error {
+    log := GetLogger()  // Cache once at function start
+
+    log.Debug("starting data processing",
+        logger.Int("data_size", len(data)))
+
+    // ... processing ...
+
+    log.Info("data processing completed",
+        logger.Duration("duration", elapsed))
+
+    return nil
+}
+```
+
+## Available Field Constructors
+
+The `logger` package provides type-safe field constructors:
+
+| Constructor | Usage |
+|-------------|-------|
+| `logger.String(key, value)` | String fields |
+| `logger.Int(key, value)` | Integer fields |
+| `logger.Int64(key, value)` | 64-bit integer fields |
+| `logger.Float64(key, value)` | Float fields |
+| `logger.Bool(key, value)` | Boolean fields |
+| `logger.Duration(key, value)` | Duration fields |
+| `logger.Time(key, value)` | Time fields |
+| `logger.Error(err)` | Error fields (uses "error" key) |
+| `logger.Any(key, value)` | Any type (use sparingly) |
 
 ## Helper Functions
 
-### Analysis Package
+The analysis package provides helper functions for common logging patterns:
 
-- `GetLogger()` - Returns the package logger for use by other packages
-
-### Processor Package
-
-- Note: Processor logging is handled directly in `new_species_tracker.go` using the package-level logger
-
-### JobQueue Package
-
-- `GetLogger()` - Returns the jobqueue logger
-- `LogJobEnqueued()` - Logs job enqueue
-- `LogJobStarted()` - Logs job start
-- `LogJobCompleted()` - Logs job completion
-- `LogJobFailed()` - Logs job failure
-- `LogQueueStats()` - Logs queue statistics
-
-## Log Files
-
-Based on the logging service configuration, logs will be written to:
-
-- `logs/analysis.log` - Main analysis operations
-- `logs/species-tracking.log` - Species tracking (existing)
-- `logs/analysis-jobqueue.log` - Job queue operations
-
-## Integration Notes
-
-### Processor Package
-
-The processor package already had a logger initialized in `new_species_tracker.go`. We've maintained compatibility by:
-
-1. Keeping the existing logger setup
-2. Adding helper functions in `logger.go`
-3. Using the existing logger for all processor operations
-
-### Error Integration
-
-All loggers integrate with the enhanced error system:
-
-- Errors logged will trigger telemetry if configured
-- Error context is preserved in structured logs
-- Component identification is automatic via error system
+```go
+// In logger.go
+LogSoundLevelMQTTPublished(topic, source string, bandCount int)
+LogSoundLevelProcessorRegistered(source, sourceType, component string)
+LogSoundLevelProcessorRegistrationFailed(source, sourceType, component string, err error)
+LogSoundLevelProcessorUnregistered(source, sourceType, component string)
+LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams int, partialSuccess bool, errors []error)
+```
 
 ## Testing
 
-When testing packages that use these loggers:
+When testing code that uses logging:
 
 ```go
-func TestWithLogger(t *testing.T) {
-    var buf bytes.Buffer
-    testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-        Level: slog.LevelDebug,
-    }))
+import (
+    "bytes"
+    "io"
+    "testing"
+    "time"
 
-    // Replace package logger for testing
-    oldLogger := logger
-    logger = testLogger
-    defer func() { logger = oldLogger }()
+    "github.com/tphakala/birdnet-go/internal/logger"
+)
 
-    // Run test...
+func TestWithLogging(t *testing.T) {
+    // Option 1: Buffer logger to verify output
+    buf := &bytes.Buffer{}
+    testLogger := logger.NewSlogLogger(buf, logger.LogLevelDebug, time.UTC)
+
+    // Use testLogger in your component...
 
     // Verify logs
     logs := buf.String()
     assert.Contains(t, logs, "expected message")
 }
+
+func TestSilentLogging(t *testing.T) {
+    // Option 2: Discard logger for silent tests
+    testLogger := logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)
+
+    // Use testLogger in your component...
+}
 ```
 
-## Migration Notes
+## Migration from Old Patterns
 
 ### From fmt.Printf
 
@@ -142,9 +175,9 @@ func TestWithLogger(t *testing.T) {
 fmt.Printf("Processing chunk %d/%d\n", current, total)
 
 // After
-logger.Debug("Processing chunk",
-    "current", current,
-    "total", total)
+GetLogger().Debug("processing chunk",
+    logger.Int("current", current),
+    logger.Int("total", total))
 ```
 
 ### From log Package
@@ -154,23 +187,30 @@ logger.Debug("Processing chunk",
 log.Printf("Error: %v", err)
 
 // After
-logger.Error("Operation failed", "error", err)
+GetLogger().Error("operation failed", logger.Error(err))
 ```
+
+### From slog Direct Usage
+
+```go
+// Before
+slog.Info("message", "key", value)
+
+// After
+GetLogger().Info("message", logger.String("key", value))
+```
+
+## Best Practices
+
+1. **Use lowercase messages** - Log messages should be lowercase without trailing punctuation
+2. **Cache loggers in functions** - For functions with multiple log calls, cache `GetLogger()` at the start
+3. **Use type-safe constructors** - Always use `logger.String()`, `logger.Int()`, etc. instead of raw key-value pairs
+4. **Module hierarchy** - Use `.Module()` chains for sub-components: `logger.Global().Module("analysis").Module("soundlevel")`
+5. **Avoid emojis** - Keep log messages clean and professional
+6. **Structured fields** - Use key-value pairs for all variable data, not string interpolation
 
 ## Performance Considerations
 
-1. **Log Levels**: Use appropriate levels (Debug for detailed info, Info for important events)
-2. **Conditional Logging**: For expensive operations, check log level first:
-   ```go
-   if logger.Enabled(context.Background(), slog.LevelDebug) {
-       logger.Debug("Expensive debug info", "data", expensiveOperation())
-   }
-   ```
-3. **Structured Fields**: Use key-value pairs consistently for easy parsing
-
-## Future Enhancements
-
-- [ ] Log rotation configuration per package
-- [ ] Dynamic log level adjustment
-- [ ] Centralized log aggregation
-- [ ] Metrics extraction from logs
+1. **sync.Once caching**: All `GetLogger()` functions use `sync.Once` for efficient repeated calls
+2. **Log levels**: Use appropriate levels (Debug for verbose info, Info for important events, Warn/Error for issues)
+3. **Avoid expensive operations in log calls**: Don't call expensive functions for log field values unless the log level is enabled
