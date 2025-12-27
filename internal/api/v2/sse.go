@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -99,14 +99,12 @@ type SSEClient struct {
 type SSEManager struct {
 	clients map[string]*SSEClient
 	mutex   sync.RWMutex
-	logger  *log.Logger
 }
 
 // NewSSEManager creates a new SSE manager
-func NewSSEManager(logger *log.Logger) *SSEManager {
+func NewSSEManager() *SSEManager {
 	return &SSEManager{
 		clients: make(map[string]*SSEClient),
-		logger:  logger,
 	}
 }
 
@@ -115,9 +113,10 @@ func (m *SSEManager) AddClient(client *SSEClient) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.clients[client.ID] = client
-	if m.logger != nil {
-		m.logger.Printf("SSE client connected: %s (total: %d)", client.ID, len(m.clients))
-	}
+	GetLogger().Debug("SSE client connected",
+		logger.String("client_id", client.ID),
+		logger.Int("total_clients", len(m.clients)),
+	)
 }
 
 // RemoveClient removes an SSE client
@@ -131,9 +130,10 @@ func (m *SSEManager) RemoveClient(clientID string) {
 		}
 		close(client.Done)
 		delete(m.clients, clientID)
-		if m.logger != nil {
-			m.logger.Printf("SSE client disconnected: %s (total: %d)", clientID, len(m.clients))
-		}
+		GetLogger().Debug("SSE client disconnected",
+			logger.String("client_id", clientID),
+			logger.Int("total_clients", len(m.clients)),
+		)
 	}
 }
 
@@ -163,9 +163,10 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 
 			// Only log when reaching disconnect threshold to avoid log spam
 			if drops >= maxConsecutiveDrops {
-				if m.logger != nil {
-					m.logger.Printf("SSE client %s disconnected after %d consecutive drops", clientID, drops)
-				}
+				GetLogger().Info("SSE client disconnected after consecutive drops",
+					logger.String("client_id", clientID),
+					logger.Int("consecutive_drops", int(drops)),
+				)
 				blockedClients = append(blockedClients, clientID)
 			}
 		}
@@ -210,9 +211,10 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 
 					// Only log when reaching disconnect threshold to avoid log spam
 					if drops >= maxConsecutiveDrops {
-						if m.logger != nil {
-							m.logger.Printf("SSE client %s disconnected after %d consecutive drops", clientID, drops)
-						}
+						GetLogger().Info("SSE client disconnected after consecutive drops",
+							logger.String("client_id", clientID),
+							logger.Int("consecutive_drops", int(drops)),
+						)
 						blockedClients = append(blockedClients, clientID)
 					}
 				}
@@ -241,7 +243,7 @@ func (m *SSEManager) GetClientCount() int {
 func (c *Controller) initSSERoutes() {
 	// Initialize SSE manager if not already done
 	if c.sseManager == nil {
-		c.sseManager = NewSSEManager(c.logger)
+		c.sseManager = NewSSEManager()
 	}
 
 	// Create rate limiter for SSE connections (10 requests per minute per IP)
@@ -315,9 +317,9 @@ func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string
 	}
 
 	c.logInfoIfEnabled(fmt.Sprintf("SSE %s client %s", streamType, action),
-		"client_id", clientID,
-		"ip", ip,
-		"user_agent", userAgent,
+		logger.String("client_id", clientID),
+		logger.String("ip", ip),
+		logger.String("user_agent", userAgent),
 	)
 }
 
@@ -333,8 +335,8 @@ func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType str
 
 	if err := c.sendSSEMessage(ctx, "heartbeat", data); err != nil {
 		c.logDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
-			"client_id", clientID,
-			"error", err.Error(),
+			logger.String("client_id", clientID),
+			logger.String("error", err.Error()),
 		)
 		return err
 	}
@@ -492,10 +494,10 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 			if data, hasData := dataReceiver(); hasData {
 				if err := c.sendSSEMessage(ctx, eventType, data); err != nil {
 					c.logErrorIfEnabled("Failed to send SSE message",
-						"client_id", clientID,
-						"endpoint", endpoint,
-						"event_type", eventType,
-						"error", err.Error(),
+						logger.String("client_id", clientID),
+						logger.String("endpoint", endpoint),
+						logger.String("event_type", eventType),
+						logger.String("error", err.Error()),
 					)
 					c.recordSSEError(endpoint, "send_failed")
 					return err
@@ -525,7 +527,7 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 		deadline := time.Now().Add(sseWriteDeadline) // Write deadline timeout
 		if err := conn.SetWriteDeadline(deadline); err != nil {
 			// If we can't set deadline, log but continue - not all response writers support this
-			c.logDebugIfEnabled("Failed to set write deadline for SSE message", "error", err.Error())
+			c.logDebugIfEnabled("Failed to set write deadline for SSE message", logger.String("error", err.Error()))
 		}
 	}
 

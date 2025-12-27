@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // ControlAction represents a control action request
@@ -57,8 +58,8 @@ func (c *Controller) initControlRoutes() {
 // Returns a list of available control actions
 func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 	c.logInfoIfEnabled("Getting available control actions",
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	actions := []ControlAction{
@@ -77,9 +78,9 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Retrieved available control actions successfully",
-		"action_count", len(actions),
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.Int("action_count", len(actions)),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	return ctx.JSON(http.StatusOK, actions)
@@ -95,17 +96,17 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 // Returns an error if the control channel is nil or if the request times out
 func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
 	c.logInfoIfEnabled(logMessage,
-		"path", ctx.Request().URL.Path,
-		"ip", ctx.RealIP(),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	if c.controlChan == nil {
 		err := fmt.Errorf("control channel not initialized")
 		c.logErrorIfEnabled("Control channel not available",
-			"error", err.Error(),
-			"action", action,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
+			logger.Error(err),
+			logger.String("action", action),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, err,
 			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
@@ -120,18 +121,18 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 	select {
 	case c.controlChan <- signal:
 		c.logInfoIfEnabled("Control signal sent successfully",
-			"action", action,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
+			logger.String("action", action),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
 		)
 		// Signal sent successfully
 	case <-reqCtx.Done():
 		err := reqCtx.Err()
 		c.logErrorIfEnabled("Request timeout/cancel while sending control signal",
-			"error", err.Error(),
-			"action", action,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
+			logger.Error(err),
+			logger.String("action", action),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
 		)
 		// Request context is done (timeout or cancelled)
 		return c.HandleError(ctx, err,

@@ -1,4 +1,4 @@
-// internal/api/v2/auth/service.go
+// internal/api/auth/service.go
 package auth
 
 import (
@@ -6,7 +6,13 @@ import (
 	"errors"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// GetLogger returns the auth package logger.
+func GetLogger() logger.Logger {
+	return logger.Global().Module("auth")
+}
 
 // Sentinel errors for authentication failures.
 var (

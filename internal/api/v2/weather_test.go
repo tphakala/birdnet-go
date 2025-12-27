@@ -5,8 +5,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -121,9 +119,8 @@ func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface
 
 	// Create a controller with the test datastore
 	controller := &Controller{
-		Group:  e.Group("/api/v2"),
-		DS:     mockDS,
-		logger: log.New(io.Discard, "", 0), // Use discarded logger for tests
+		Group: e.Group("/api/v2"),
+		DS:    mockDS,
 	}
 
 	// We don't need to initialize routes for unit tests

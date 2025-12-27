@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -49,7 +50,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	// Parse JSON request
 	var req GenerateSupportDumpRequest
 	if err := ctx.Bind(&req); err != nil {
-		c.apiLogger.Error("Failed to parse support dump request", "error", err)
+		c.apiLogger.Error("Failed to parse support dump request", logger.Error(err))
 		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:   "Failed to parse request",
 			Message: err.Error(),
@@ -57,11 +58,11 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	c.apiLogger.Debug("Support dump request parsed",
-		"include_logs", req.IncludeLogs,
-		"include_config", req.IncludeConfig,
-		"include_system_info", req.IncludeSystemInfo,
-		"upload_to_sentry", req.UploadToSentry,
-		"has_user_message", req.UserMessage != "")
+		logger.Bool("include_logs", req.IncludeLogs),
+		logger.Bool("include_config", req.IncludeConfig),
+		logger.Bool("include_system_info", req.IncludeSystemInfo),
+		logger.Bool("upload_to_sentry", req.UploadToSentry),
+		logger.Bool("has_user_message", req.UserMessage != ""))
 
 	// Set defaults if nothing is selected
 	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo {
@@ -104,29 +105,29 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Collect data
-	c.apiLogger.Debug("Starting support data collection", "system_id", settings.SystemID)
+	c.apiLogger.Debug("Starting support data collection", logger.String("system_id", settings.SystemID))
 	dump, err := collector.Collect(ctx.Request().Context(), opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to collect support data",
-			"error", err,
-			"system_id", settings.SystemID,
-			"opts", opts,
+			logger.Error(err),
+			logger.String("system_id", settings.SystemID),
+			logger.Any("opts", opts),
 		)
 		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to collect support data",
 			Message: err.Error(),
 		})
 	}
-	c.apiLogger.Debug("Support data collected successfully", "dump_id", dump.ID)
+	c.apiLogger.Debug("Support data collected successfully", logger.String("dump_id", dump.ID))
 
 	// Create archive
-	c.apiLogger.Debug("Creating support archive", "dump_id", dump.ID)
+	c.apiLogger.Debug("Creating support archive", logger.String("dump_id", dump.ID))
 	archiveData, err := collector.CreateArchive(ctx.Request().Context(), dump, opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to create support archive",
-			"error", err,
-			"dump_id", dump.ID,
-			"context_err", ctx.Request().Context().Err(),
+			logger.Error(err),
+			logger.String("dump_id", dump.ID),
+			logger.Any("context_err", ctx.Request().Context().Err()),
 		)
 		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to create support archive",
@@ -134,8 +135,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		})
 	}
 	c.apiLogger.Debug("Support archive created successfully",
-		"dump_id", dump.ID,
-		"archive_size", len(archiveData))
+		logger.String("dump_id", dump.ID),
+		logger.Int("archive_size", len(archiveData)))
 
 	response := GenerateSupportDumpResponse{
 		Success:  true,
@@ -149,8 +150,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		if !settings.Sentry.Enabled {
 			if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
 				c.apiLogger.Error("Failed to initialize minimal Sentry for support upload",
-					"error", err,
-					"dump_id", dump.ID,
+					logger.Error(err),
+					logger.String("dump_id", dump.ID),
 				)
 				response.Message = "Support dump generated successfully but upload initialization failed"
 				req.UploadToSentry = false // Fall back to download
@@ -163,17 +164,17 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
 				// Log error but don't fail the request
 				c.apiLogger.Error("Failed to upload support dump to Sentry",
-					"error", err,
-					"dump_id", dump.ID,
+					logger.Error(err),
+					logger.String("dump_id", dump.ID),
 				)
 				response.Message = "Support dump generated successfully but upload failed"
 			} else {
 				response.UploadedAt = time.Now().UTC().Format(time.RFC3339)
 				response.Message = "Support dump generated and uploaded successfully"
 				c.apiLogger.Info("Support dump uploaded to Sentry",
-					"dump_id", dump.ID,
-					"system_id", settings.SystemID,
-					"telemetry_enabled", settings.Sentry.Enabled,
+					logger.String("dump_id", dump.ID),
+					logger.String("system_id", settings.SystemID),
+					logger.Bool("telemetry_enabled", settings.Sentry.Enabled),
 				)
 			}
 		}
@@ -187,8 +188,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
 		if err := os.WriteFile(tempFile, archiveData, FilePermOwnerOnly); err != nil {
 			c.apiLogger.Error("Failed to store temporary file",
-				"error", err,
-				"path", tempFile,
+				logger.Error(err),
+				logger.String("path", tempFile),
 			)
 		} else {
 			response.DownloadURL = fmt.Sprintf("/api/v2/support/download/%s", dump.ID)
@@ -197,9 +198,9 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Log successful generation
 	c.apiLogger.Info("Support dump generated",
-		"dump_id", dump.ID,
-		"size", len(archiveData),
-		"uploaded", req.UploadToSentry && settings.Sentry.Enabled,
+		logger.String("dump_id", dump.ID),
+		logger.Int("size", len(archiveData)),
+		logger.Bool("uploaded", req.UploadToSentry && settings.Sentry.Enabled),
 	)
 
 	return ctx.JSON(http.StatusOK, response)
@@ -315,7 +316,7 @@ func (c *Controller) cleanupOldSupportDumps() {
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		c.apiLogger.Error("Failed to list support dump files for cleanup",
-			"pattern", pattern, "error", err)
+			logger.String("pattern", pattern), logger.Error(err))
 		return
 	}
 
@@ -329,7 +330,7 @@ func (c *Controller) cleanupOldSupportDumps() {
 	}
 
 	if removedCount > 0 {
-		c.apiLogger.Info("Cleaned up old support dump files", "count", removedCount)
+		c.apiLogger.Info("Cleaned up old support dump files", logger.Int("count", removedCount))
 	}
 }
 
@@ -339,7 +340,7 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 	info, err := os.Stat(file)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			c.apiLogger.Warn("Failed to stat support dump file", "path", file, "error", err)
+			c.apiLogger.Warn("Failed to stat support dump file", logger.String("path", file), logger.Error(err))
 		}
 		return false
 	}
@@ -350,7 +351,7 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 
 	if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 		c.apiLogger.Warn("Failed to remove old support dump file",
-			"path", file, "age", time.Since(info.ModTime()), "error", err)
+			logger.String("path", file), logger.Duration("age", time.Since(info.ModTime())), logger.Error(err))
 		return false
 	}
 	return true

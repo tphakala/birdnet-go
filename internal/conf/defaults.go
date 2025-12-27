@@ -28,7 +28,8 @@ func setDefaultConfig() {
 	setModuleLogDefaults("main", true)       // Application lifecycle, console_also=true
 	setModuleLogDefaults("birdnet", true)    // BirdNET analysis
 	setModuleLogDefaults("audio", true)      // Audio capture/processing
-	setModuleLogDefaults("webserver", true)  // Echo HTTP server
+	setModuleLogDefaults("api", true)        // HTTP server and API (internal/api/)
+	setModuleLogDefaults("access", true)     // HTTP access logs (request/response)
 	setModuleLogDefaults("mqtt", true)       // MQTT client
 	setModuleLogDefaults("weather", true)    // Weather providers
 	setModuleLogDefaults("notifications", true)

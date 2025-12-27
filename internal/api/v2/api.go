@@ -5,15 +5,13 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
-
-	"net"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -48,7 +46,6 @@ type Controller struct {
 	Processor           *processor.Processor
 	EBirdClient         *ebird.Client
 	TaxonomyDB          *birdnet.TaxonomyDatabase
-	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
 	// DisableSaveSettings prevents persisting settings changes to disk.
@@ -189,14 +186,14 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 // New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, stdLogger *log.Logger,
+	controlChan chan string,
 	metrics *observability.Metrics, opts ...Option) (*Controller, error) {
-	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, stdLogger, metrics, true, opts...)
+	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, true, opts...)
 }
 
 // resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
 // Returns the absolute path and any error encountered.
-func resolveAndValidateMediaPath(configPath string, stdLogger *log.Logger) (string, error) {
+func resolveAndValidateMediaPath(configPath string) (string, error) {
 	if configPath == "" {
 		return "", fmt.Errorf("settings.realtime.audio.export.path must not be empty")
 	}
@@ -210,7 +207,10 @@ func resolveAndValidateMediaPath(configPath string, stdLogger *log.Logger) (stri
 			return "", fmt.Errorf("failed to get working directory to resolve relative media path: %w", err)
 		}
 		mediaPath = filepath.Join(workDir, mediaPath)
-		stdLogger.Printf("Resolved relative media export path %q to absolute path %q", configPath, mediaPath)
+		GetLogger().Debug("Resolved relative media export path",
+			logger.String("config_path", configPath),
+			logger.String("absolute_path", mediaPath),
+		)
 	}
 
 	// Ensure directory exists, creating if necessary
@@ -243,19 +243,15 @@ func ensureDirectoryExists(path string) error {
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
 func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, stdLogger *log.Logger,
+	controlChan chan string,
 	metrics *observability.Metrics, initializeRoutes bool, opts ...Option) (*Controller, error) {
-
-	if stdLogger == nil {
-		stdLogger = log.Default()
-	}
 
 	// Configure IP extractor for Cloudflare proxy support
 	e.IPExtractor = ipExtractorFromCloudflareHeader
-	stdLogger.Println("Configured custom IP extractor prioritizing CF-Connecting-IP")
+	GetLogger().Info("Configured custom IP extractor prioritizing CF-Connecting-IP")
 
 	// Validate and resolve media export path
-	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path, stdLogger)
+	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +271,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,
 		controlChan:          controlChan,
-		logger:               stdLogger,
 		detectionCache:       cache.New(detectionCacheExpiry, detectionCacheCleanup),
 		SFS:                  sfs, // Assign SecureFS instance
 		metrics:              metrics,
@@ -284,21 +279,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
 	}
 
-	// Update spectrogram logger level based on debug setting
-	UpdateSpectrogramLogLevel(settings.Debug)
-
 	// Initialize structured logger for API requests
-	c.apiLogger = logger.Global().Module("api")
+	c.apiLogger = logger.Global().Module("apiv2")
 
 	// Load local taxonomy database for fast species lookups
 	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
 	if err != nil {
 		c.logWarnIfEnabled("Failed to load taxonomy database", logger.Error(err))
 		c.logWarnIfEnabled("Species taxonomy lookups will fall back to eBird API")
-		if c.apiLogger == nil {
-			stdLogger.Printf("Warning: Failed to load taxonomy database: %v", err)
-			stdLogger.Printf("Species taxonomy lookups will fall back to eBird API")
-		}
 		// Continue without taxonomy database - eBird API fallback will be used
 		c.TaxonomyDB = nil
 	} else {
@@ -311,10 +299,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 			logger.String("version", taxonomyDB.Version),
 			logger.String("updated_at", taxonomyDB.UpdatedAt),
 		)
-		if c.apiLogger == nil {
-			stdLogger.Printf("Loaded taxonomy database: %v genera, %v families, %v species",
-				stats["genus_count"], stats["family_count"], stats["species_count"])
-		}
 	}
 
 	// Apply functional options (auth middleware and service injected from server)
@@ -323,10 +307,11 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	}
 
 	// Log auth configuration status
+	log := GetLogger()
 	if c.authMiddleware != nil {
-		stdLogger.Println("Auth middleware configured via functional options")
+		log.Info("Auth middleware configured via functional options")
 	} else {
-		stdLogger.Println("Warning: Auth middleware not configured")
+		log.Warn("Auth middleware not configured")
 	}
 
 	// Create v2 API group
@@ -352,7 +337,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.startTime = &now
 
 	// Initialize SSE manager
-	c.sseManager = NewSSEManager(stdLogger)
+	c.sseManager = NewSSEManager()
 
 	// Initialize eBird client if enabled
 	if settings.Realtime.EBird.Enabled {
@@ -364,7 +349,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 				Context("setting", "realtime.ebird.apikey").
 				Component("ebird").
 				Build()
-			stdLogger.Println("Warning: eBird integration enabled but API key not configured")
+			log.Warn("eBird integration enabled but API key not configured")
 		} else {
 			ebirdConfig := ebird.Config{
 				APIKey:   settings.Realtime.EBird.APIKey,
@@ -373,15 +358,15 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 			ebirdClient, err := ebird.NewClient(ebirdConfig)
 			if err != nil {
 				// Initialization error - already enhanced by ebird.NewClient
-				stdLogger.Printf("Warning: Failed to initialize eBird client: %v", err)
+				log.Warn("Failed to initialize eBird client", logger.Error(err))
 				// Continue without eBird client - it's not critical
 			} else {
 				c.EBirdClient = ebirdClient
-				stdLogger.Println("Initialized eBird API client")
+				log.Info("Initialized eBird API client")
 			}
 		}
 	} else {
-		stdLogger.Println("eBird integration disabled")
+		log.Debug("eBird integration disabled")
 	}
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
@@ -482,7 +467,10 @@ func (c *Controller) initRoutes() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					c.logger.Printf("PANIC during %s initialization: %v", initializer.name, r)
+					GetLogger().Error("PANIC during route initialization",
+						logger.String("route", initializer.name),
+						logger.Any("panic", r),
+					)
 				}
 			}()
 
@@ -577,7 +565,7 @@ func (c *Controller) Shutdown() {
 
 	// Flush the API logger
 	if err := c.apiLogger.Flush(); err != nil {
-		c.logger.Printf("Error flushing API log: %v", err)
+		GetLogger().Error("Error flushing API log", logger.Error(err))
 	}
 
 	// TODO: The go-cache library's janitor goroutine cannot be stopped.
@@ -648,11 +636,7 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 	isTunneled, _ := ctx.Get("is_tunneled").(bool)
 	tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
 
-	// Log the error with both the existing logger and the structured logger
-	c.logger.Printf("API Error [%s] from %s (Tunneled: %v, Provider: %s): %s: %v",
-		errorResp.CorrelationID, ip, isTunneled, tunnelProvider, message, err)
-
-	// Also log to structured logger if available
+	// Build error string for logging
 	var errorStr string
 	if err != nil {
 		errorStr = err.Error()
@@ -660,16 +644,17 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 		errorStr = message
 	}
 
+	// Log the error using structured logger
 	c.logErrorIfEnabled("API Error",
-		"correlation_id", errorResp.CorrelationID,
-		"message", message,
-		"error", errorStr,
-		"code", code,
-		"path", ctx.Request().URL.Path,
-		"method", ctx.Request().Method,
-		"ip", ip, // Log the extracted IP
-		"tunneled", isTunneled,
-		"tunnel_provider", tunnelProvider,
+		logger.String("correlation_id", errorResp.CorrelationID),
+		logger.String("message", message),
+		logger.String("error", errorStr),
+		logger.Int("code", code),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("method", ctx.Request().Method),
+		logger.String("ip", ip), // Log the extracted IP
+		logger.Bool("tunneled", isTunneled),
+		logger.String("tunnel_provider", tunnelProvider),
 	)
 
 	return ctx.JSON(code, errorResp)
@@ -690,10 +675,6 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 func (c *Controller) Debug(format string, v ...any) {
 	if c.Settings.WebServer.Debug {
 		msg := fmt.Sprintf(format, v...)
-		c.logger.Printf("[DEBUG] %s", msg)
-
-		// Also log to structured logger if available
-		// No IP available here, log simple debug message
 		c.logDebugIfEnabled(msg)
 	}
 }
@@ -736,13 +717,14 @@ func (c *Controller) GetAuthMiddleware() echo.MiddlewareFunc {
 // Auth middleware and service should be passed via functional options.
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, stdLogger *log.Logger, proc *processor.Processor,
+	controlChan chan string, proc *processor.Processor,
 	metrics *observability.Metrics, opts ...Option) *Controller {
 
 	// Create API controller with metrics and functional options
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, stdLogger, metrics, opts...)
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, opts...)
 	if err != nil {
-		stdLogger.Fatalf("Failed to initialize API: %v", err)
+		GetLogger().Error("Failed to initialize API", logger.Error(err))
+		os.Exit(1)
 	}
 
 	// Assign processor after initialization

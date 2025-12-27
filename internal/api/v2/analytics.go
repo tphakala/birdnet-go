@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const placeholderImageURL = "/assets/images/bird-placeholder.svg"
@@ -138,17 +139,23 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Retrieving daily species summary",
-		"date", selectedDate,
-		"min_confidence", minConfidence,
-		"limit", limit,
-		"ip", ip,
-		"path", path,
+		logger.String("date", selectedDate),
+		logger.Float64("min_confidence", minConfidence),
+		logger.Int("limit", limit),
+		logger.String("ip", ip),
+		logger.String("path", path),
 	)
 
 	// 2. Get Initial Data
 	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get initial daily species data", "date", selectedDate, "min_confidence", minConfidence, "error", err.Error(), "ip", ip, "path", path)
+		c.logErrorIfEnabled("Failed to get initial daily species data",
+			logger.String("date", selectedDate),
+			logger.Float64("min_confidence", minConfidence),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return c.HandleError(ctx, err, "Failed to get daily species data", http.StatusInternalServerError)
 	}
 
@@ -156,7 +163,12 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	aggregatedData, err := c.aggregateDailySpeciesData(notes, selectedDate, minConfidence)
 	if err != nil {
 		// Errors during hourly fetch are logged within the helper, but we need to handle the overall failure
-		c.logErrorIfEnabled("Failed to aggregate daily species data", "date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+		c.logErrorIfEnabled("Failed to aggregate daily species data",
+			logger.String("date", selectedDate),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		// Decide if this is a user error (bad data?) or server error
 		// For now, assume server error if aggregation fails overall
 		return c.HandleError(ctx, err, "Failed to process daily species data", http.StatusInternalServerError)
@@ -173,11 +185,11 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	result = sortAndLimitSpeciesSummary(result, limit)
 
 	c.logInfoIfEnabled("Daily species summary retrieved",
-		"date", selectedDate,
-		"count", len(result),
-		"limit_applied", limit > 0,
-		"ip", ip,
-		"path", path,
+		logger.String("date", selectedDate),
+		logger.Int("count", len(result)),
+		logger.Bool("limit_applied", limit > 0),
+		logger.String("ip", ip),
+		logger.String("path", path),
 	)
 
 	// 7. Return JSON
@@ -197,11 +209,11 @@ func (c *Controller) GetBatchDailySpeciesSummary(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Retrieving batch daily species summary",
-		"date_count", len(dates),
-		"min_confidence", minConfidence,
-		"limit", limit,
-		"ip", ip,
-		"path", path,
+		logger.Int("date_count", len(dates)),
+		logger.Float64("min_confidence", minConfidence),
+		logger.Int("limit", limit),
+		logger.String("ip", ip),
+		logger.String("path", path),
 	)
 
 	// Process each date and collect results
@@ -254,7 +266,11 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get data for date in batch request",
-			"date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+			logger.String("date", selectedDate),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return nil, err
 	}
 
@@ -262,7 +278,11 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 	aggregatedData, err := c.aggregateDailySpeciesData(notes, selectedDate, minConfidence)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to aggregate data for date in batch request",
-			"date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+			logger.String("date", selectedDate),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return nil, err
 	}
 
@@ -270,7 +290,11 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData, selectedDate)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to build response for date in batch request",
-			"date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+			logger.String("date", selectedDate),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return nil, err
 	}
 
@@ -524,7 +548,12 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	endDate := ctx.QueryParam("end_date")
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
-	c.logInfoIfEnabled("Retrieving species summary", "start_date", startDate, "end_date", endDate, "ip", ip, "path", path)
+	c.logInfoIfEnabled("Retrieving species summary",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, "species summary"); err != nil {
 		return err
@@ -532,10 +561,21 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 
 	// Retrieve species summary data from the datastore
 	summaryData, dbDuration, err := c.fetchSpeciesSummaryData(ctx, startDate, endDate)
-	c.logInfoIfEnabled("Database query completed", "duration_ms", dbDuration.Milliseconds(), "record_count", len(summaryData), "ip", ip, "path", path)
+	c.logInfoIfEnabled("Database query completed",
+		logger.Int64("duration_ms", dbDuration.Milliseconds()),
+		logger.Int("record_count", len(summaryData)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get species summary data", "start_date", startDate, "end_date", endDate, "error", err.Error(), "ip", ip, "path", path)
+		c.logErrorIfEnabled("Failed to get species summary data",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return c.HandleError(ctx, err, "Failed to get species summary data", http.StatusInternalServerError)
 	}
 
@@ -547,7 +587,14 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	// Apply limit
 	response, limit := c.applyOptionalLimit(ctx, response, ip, path)
 
-	c.logInfoIfEnabled("Species summary retrieved", "start_date", startDate, "end_date", endDate, "count", len(response), "limit", limit, "ip", ip, "path", path)
+	c.logInfoIfEnabled("Species summary retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("count", len(response)),
+		logger.Int("limit", limit),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -574,11 +621,21 @@ func (c *Controller) batchFetchThumbnailsWithLogging(scientificNames []string, i
 		return nil
 	}
 
-	c.logDebugIfEnabled("Fetching cached thumbnails only", "count", len(scientificNames), "ip", ip, "path", path)
+	c.logDebugIfEnabled("Fetching cached thumbnails only",
+		logger.Int("count", len(scientificNames)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 	thumbStart := time.Now()
 	thumbnailURLs := c.BirdImageCache.GetBatchCachedOnly(scientificNames)
 	thumbDuration := time.Since(thumbStart)
-	c.logInfoIfEnabled("Cached thumbnail fetch completed", "duration_ms", thumbDuration.Milliseconds(), "cached_count", len(thumbnailURLs), "requested_count", len(scientificNames), "ip", ip, "path", path)
+	c.logInfoIfEnabled("Cached thumbnail fetch completed",
+		logger.Int64("duration_ms", thumbDuration.Milliseconds()),
+		logger.Int("cached_count", len(thumbnailURLs)),
+		logger.Int("requested_count", len(scientificNames)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	return thumbnailURLs
 }
@@ -633,7 +690,12 @@ func (c *Controller) applyOptionalLimit(ctx echo.Context, response []SpeciesSumm
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil {
-		c.logWarnIfEnabled("Invalid limit parameter", "value", limitStr, "error", err.Error(), "ip", ip, "path", path)
+		c.logWarnIfEnabled("Invalid limit parameter",
+			logger.String("value", limitStr),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return response, 0
 	}
 
@@ -665,10 +727,10 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Retrieving hourly analytics",
-		"date", date,
-		"species", speciesParam,
-		"ip", ctx.RealIP(),
-		"path", ctx.Request().URL.Path,
+		logger.String("date", date),
+		logger.String("species", speciesParam),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
 	)
 
 	// Get hourly analytics data from the datastore
@@ -678,11 +740,11 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesParam)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get hourly analytics data",
-			"date", date,
-			"species", speciesParam,
-			"error", err.Error(),
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("date", date),
+			logger.String("species", speciesParam),
+			logger.String("error", err.Error()),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		return c.HandleError(ctx, err, "Failed to get hourly analytics data", http.StatusInternalServerError)
 	}
@@ -710,11 +772,11 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Hourly analytics retrieved",
-		"date", date,
-		"species", speciesParam,
-		"total", total,
-		"ip", ctx.RealIP(),
-		"path", ctx.Request().URL.Path,
+		logger.String("date", date),
+		logger.String("species", speciesParam),
+		logger.Int("total", total),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
 	)
 
 	return ctx.JSON(http.StatusOK, response)
@@ -754,11 +816,11 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Retrieving daily analytics",
-		"start_date", startDate,
-		"end_date", endDate,
-		"species", speciesParam,
-		"ip", ctx.RealIP(),
-		"path", ctx.Request().URL.Path,
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("species", speciesParam),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
 	)
 
 	// Get daily analytics data from the datastore
@@ -767,12 +829,12 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesParam)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get daily analytics data",
-			"start_date", startDate,
-			"end_date", endDate,
-			"species", speciesParam,
-			"error", err.Error(),
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("species", speciesParam),
+			logger.String("error", err.Error()),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		return c.HandleError(ctx, err, "Failed to get daily analytics data", http.StatusInternalServerError)
 	}
@@ -809,13 +871,13 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	response.Total = totalCount
 
 	c.logInfoIfEnabled("Daily analytics retrieved",
-		"start_date", startDate,
-		"end_date", endDate,
-		"species", speciesParam,
-		"data_points", len(response.Data),
-		"total", totalCount,
-		"ip", ctx.RealIP(),
-		"path", ctx.Request().URL.Path,
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("species", speciesParam),
+		logger.Int("data_points", len(response.Data)),
+		logger.Int("total", totalCount),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
 	)
 
 	return ctx.JSON(http.StatusOK, response)
@@ -870,7 +932,12 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	// Get query parameters with defaults (last 30 days)
 	startDate, endDate := getDefaultDateRange(ctx.QueryParam("start_date"), ctx.QueryParam("end_date"), -30, 0)
 
-	c.logInfoIfEnabled("Retrieving new species detections", "start_date", startDate, "end_date", endDate, "ip", ip, "path", path)
+	c.logInfoIfEnabled("Retrieving new species detections",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	// Validate date formats and order
 	if err := c.validateNewSpeciesDateParams(ctx, startDate, endDate, operation); err != nil {
@@ -886,14 +953,30 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	// Fetch data from datastore
 	newSpeciesData, err := c.DS.GetNewSpeciesDetections(ctx.Request().Context(), startDate, endDate, limit, offset)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get new species detections", "start_date", startDate, "end_date", endDate, "limit", limit, "offset", offset, "error", err.Error(), "ip", ip, "path", path)
+		c.logErrorIfEnabled("Failed to get new species detections",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.Int("limit", limit),
+			logger.Int("offset", offset),
+			logger.String("error", err.Error()),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return c.HandleError(ctx, err, "Failed to get new species detections", http.StatusInternalServerError)
 	}
 
 	// Build response with thumbnails
 	response := c.convertNewSpeciesToResponse(newSpeciesData)
 
-	c.logInfoIfEnabled("New species detections retrieved", "start_date", startDate, "end_date", endDate, "count", len(response), "limit", limit, "offset", offset, "ip", ip, "path", path)
+	c.logInfoIfEnabled("New species detections retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("count", len(response)),
+		logger.Int("limit", limit),
+		logger.Int("offset", offset),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -1094,7 +1177,13 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	}
 
 	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, PercentageMultiplier)
-	c.logInfoIfEnabled("Retrieving batch hourly species data", "date", date, "species_count", len(speciesParams), "min_confidence", minConfidence, "ip", ip, "path", path)
+	c.logInfoIfEnabled("Retrieving batch hourly species data",
+		logger.String("date", date),
+		logger.Int("species_count", len(speciesParams)),
+		logger.Float64("min_confidence", minConfidence),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	// Process all species
 	results, processingErrors := c.processHourlyBatchSpecies(ctx, speciesParams, date, ip, path)
@@ -1140,7 +1229,13 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 		hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesItem)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
-			c.logErrorIfEnabled("Error getting hourly data for species in batch request", "species", speciesItem, "date", date, "error", err.Error(), "ip", ip, "path", path)
+			c.logErrorIfEnabled("Error getting hourly data for species in batch request",
+				logger.String("species", speciesItem),
+				logger.String("date", date),
+				logger.String("error", err.Error()),
+				logger.String("ip", ip),
+				logger.String("path", path),
+			)
 			continue
 		}
 
@@ -1184,7 +1279,14 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 		return err
 	}
 
-	c.logInfoIfEnabled("Retrieving batch daily species data", "start_date", startDate, "end_date", endDate, "species_requested", len(speciesParams), "species_unique", len(uniqueSpecies), "ip", ip, "path", path)
+	c.logInfoIfEnabled("Retrieving batch daily species data",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("species_requested", len(speciesParams)),
+		logger.Int("species_unique", len(uniqueSpecies)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	// Process all species
 	results, processingErrors := c.processDailyBatchSpecies(ctx, uniqueSpecies, startDate, endDate, ip, path)
@@ -1232,7 +1334,14 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 		dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesItem)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err))
-			c.logErrorIfEnabled("Error getting daily data for species in batch request", "species", speciesItem, "start_date", startDate, "end_date", endDate, "error", err.Error(), "ip", ip, "path", path)
+			c.logErrorIfEnabled("Error getting daily data for species in batch request",
+				logger.String("species", speciesItem),
+				logger.String("start_date", startDate),
+				logger.String("end_date", endDate),
+				logger.String("error", err.Error()),
+				logger.String("ip", ip),
+				logger.String("path", path),
+			)
 			continue
 		}
 
@@ -1263,14 +1372,33 @@ func buildSpeciesDailyData(speciesName, startDate, endDate string, dailyData []d
 // handleBatchDailyResults logs and returns batch daily results
 func (c *Controller) handleBatchDailyResults(ctx echo.Context, results map[string]SpeciesDailyData, processingErrors []string, requestedCount, uniqueCount int, ip, path string) error {
 	if len(processingErrors) > 0 && len(results) > 0 {
-		c.logWarnIfEnabled("Batch daily species data completed with partial failures", "successful", len(results), "failed", len(processingErrors), "errors", processingErrors, "ip", ip, "path", path)
+		c.logWarnIfEnabled("Batch daily species data completed with partial failures",
+			logger.Int("successful", len(results)),
+			logger.Int("failed", len(processingErrors)),
+			logger.Any("errors", processingErrors),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 	}
 
 	if len(results) == 0 {
-		c.logErrorIfEnabled("All species in batch daily request failed", "requested_species", requestedCount, "unique_species", uniqueCount, "errors", processingErrors, "ip", ip, "path", path)
+		c.logErrorIfEnabled("All species in batch daily request failed",
+			logger.Int("requested_species", requestedCount),
+			logger.Int("unique_species", uniqueCount),
+			logger.Any("errors", processingErrors),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
 		return c.HandleError(ctx, fmt.Errorf("failed to process any requested species"), "Failed to process batch daily request", http.StatusInternalServerError)
 	}
 
-	c.logInfoIfEnabled("Batch daily species data retrieved", "requested_species", requestedCount, "unique_species", uniqueCount, "successful_species", len(results), "failed_species", len(processingErrors), "ip", ip, "path", path)
+	c.logInfoIfEnabled("Batch daily species data retrieved",
+		logger.Int("requested_species", requestedCount),
+		logger.Int("unique_species", uniqueCount),
+		logger.Int("successful_species", len(results)),
+		logger.Int("failed_species", len(processingErrors)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 	return ctx.JSON(http.StatusOK, results)
 }

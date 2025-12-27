@@ -3,7 +3,6 @@ package api
 import (
 	"io"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,14 +10,13 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/frontend"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // StaticFileServer handles serving static files for the frontend.
 // It supports both development mode (serving from disk) and production mode
 // (serving from embedded filesystem).
 type StaticFileServer struct {
-	logger *slog.Logger
-
 	// Dev mode state
 	devMode     bool
 	devModePath string
@@ -30,9 +28,8 @@ type StaticFileServer struct {
 
 // NewStaticFileServer creates a new static file server.
 // assetsFS is optional and provides the embedded assets filesystem for /assets/* routes.
-func NewStaticFileServer(logger *slog.Logger, assetsFS fs.FS) *StaticFileServer {
+func NewStaticFileServer(assetsFS fs.FS) *StaticFileServer {
 	return &StaticFileServer{
-		logger:   logger,
 		assetsFS: assetsFS,
 	}
 }
@@ -41,6 +38,7 @@ func NewStaticFileServer(logger *slog.Logger, assetsFS fs.FS) *StaticFileServer 
 // This allows hot-reloading of frontend assets during development.
 func (sfs *StaticFileServer) initDevMode() {
 	sfs.initOnce.Do(func() {
+		log := GetLogger()
 		// Check relative to current working directory
 		distPath := filepath.Join("frontend", "dist")
 
@@ -48,17 +46,12 @@ func (sfs *StaticFileServer) initDevMode() {
 		if ManifestExistsOnDisk(distPath) {
 			sfs.devMode = true
 			sfs.devModePath = distPath
-			if sfs.logger != nil {
-				sfs.logger.Info("Frontend dev mode enabled",
-					"path", distPath,
-					"hint", "Run 'npm run build -- --watch' in frontend/ for auto-rebuild",
-				)
-			}
+			log.Info("Frontend dev mode enabled",
+				logger.String("path", distPath),
+				logger.String("hint", "Run 'npm run build -- --watch' in frontend/ for auto-rebuild"))
 		} else {
 			sfs.devMode = false
-			if sfs.logger != nil {
-				sfs.logger.Info("Frontend production mode - serving from embedded filesystem")
-			}
+			log.Info("Frontend production mode - serving from embedded filesystem")
 		}
 	})
 }
@@ -172,46 +165,53 @@ func (sfs *StaticFileServer) setDevModeHeaders(c echo.Context, path string) {
 	c.Response().Header().Set("Expires", "0")
 }
 
-// logError logs an error if the logger is available.
+// logError logs an error using the centralized logger.
 func (sfs *StaticFileServer) logError(msg, path string, err error) {
-	if sfs.logger != nil {
-		sfs.logger.Error(msg, "path", path, "error", err)
-	}
+	GetLogger().Error(msg,
+		logger.String("path", path),
+		logger.Error(err))
 }
 
 // closeWithLog closes an io.Closer and logs any error.
 func (sfs *StaticFileServer) closeWithLog(c io.Closer, name string) {
-	if err := c.Close(); err != nil && sfs.logger != nil {
-		sfs.logger.Warn("Error closing "+name, "error", err)
+	if err := c.Close(); err != nil {
+		GetLogger().Warn("Error closing resource",
+			logger.String("name", name),
+			logger.Error(err))
 	}
 }
 
 // closeFileWithLog closes a file and logs any error with the path.
 func (sfs *StaticFileServer) closeFileWithLog(f *os.File, path string) {
-	if err := f.Close(); err != nil && sfs.logger != nil {
-		sfs.logger.Warn("Error closing file", "path", path, "error", err)
+	if err := f.Close(); err != nil {
+		GetLogger().Warn("Error closing file",
+			logger.String("path", path),
+			logger.Error(err))
 	}
 }
 
 // serveFromEmbed serves frontend assets from the embedded filesystem (production mode).
 func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
+	log := GetLogger()
 	// Open the file from embedded FS
 	file, err := frontend.DistFS.Open(path)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "File not found")
 	}
 	defer func() {
-		if closeErr := file.Close(); closeErr != nil && sfs.logger != nil {
-			sfs.logger.Warn("Error closing embedded file", "path", path, "error", closeErr)
+		if closeErr := file.Close(); closeErr != nil {
+			log.Warn("Error closing embedded file",
+				logger.String("path", path),
+				logger.Error(closeErr))
 		}
 	}()
 
 	// Get file info
 	stat, err := file.Stat()
 	if err != nil {
-		if sfs.logger != nil {
-			sfs.logger.Error("Failed to stat embedded file", "path", path, "error", err)
-		}
+		log.Error("Failed to stat embedded file",
+			logger.String("path", path),
+			logger.Error(err))
 		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
 		httpErr.Internal = err
 		return httpErr
@@ -244,15 +244,14 @@ func (sfs *StaticFileServer) serveFileContent(c echo.Context, file fs.File, stat
 	}
 
 	// Fallback to streaming
-	if sfs.logger != nil {
-		sfs.logger.Debug("Falling back to streaming for file", "path", path)
-	}
+	GetLogger().Debug("Falling back to streaming for file", logger.String("path", path))
 	return c.Stream(http.StatusOK, contentType, file)
 }
 
 // ServeEmbeddedFS serves files from any embedded filesystem.
 // This is useful for serving other embedded assets like views or static assets.
 func (sfs *StaticFileServer) ServeEmbeddedFS(c echo.Context, fsys fs.FS, path string) error {
+	log := GetLogger()
 	if fsys == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Assets filesystem not available")
 	}
@@ -262,16 +261,18 @@ func (sfs *StaticFileServer) ServeEmbeddedFS(c echo.Context, fsys fs.FS, path st
 		return echo.NewHTTPError(http.StatusNotFound, "File not found")
 	}
 	defer func() {
-		if closeErr := file.Close(); closeErr != nil && sfs.logger != nil {
-			sfs.logger.Warn("Error closing file", "path", path, "error", closeErr)
+		if closeErr := file.Close(); closeErr != nil {
+			log.Warn("Error closing file",
+				logger.String("path", path),
+				logger.Error(closeErr))
 		}
 	}()
 
 	stat, err := file.Stat()
 	if err != nil {
-		if sfs.logger != nil {
-			sfs.logger.Error("Failed to stat file from embedded FS", "path", path, "error", err)
-		}
+		log.Error("Failed to stat file from embedded FS",
+			logger.String("path", path),
+			logger.Error(err))
 		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
 		httpErr.Internal = err
 		return httpErr

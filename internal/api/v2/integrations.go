@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -128,7 +129,10 @@ func runStreamingIntegrationTest[T any](
 			}
 
 			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
-				c.logger.Printf("Error writing final %s test result: %v", integrationName, err)
+				GetLogger().Error("Error writing final test result",
+					logger.String("integration", integrationName),
+					logger.Error(err),
+				)
 			}
 		}
 	}()
@@ -140,7 +144,10 @@ func runStreamingIntegrationTest[T any](
 	for result := range resultChan {
 		writeMu.Lock()
 		if err := encoder.Encode(result); err != nil {
-			c.logger.Printf("Error encoding %s test result: %v", integrationName, err)
+			GetLogger().Error("Error encoding test result",
+				logger.String("integration", integrationName),
+				logger.Error(err),
+			)
 			writeMu.Unlock()
 			safeDoneClose()
 			cancel()
@@ -220,7 +227,9 @@ func (c *Controller) initIntegrationsRoutes() {
 func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting MQTT status", "path", path, "ip", ip)
+	c.logInfoIfEnabled("Getting MQTT status",
+		logger.String("path", path),
+		logger.String("ip", ip))
 
 	// Get MQTT configuration from settings
 	mqttConfig := c.Settings.Realtime.MQTT
@@ -235,12 +244,16 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 
 	// If MQTT is not enabled, return status as-is
 	if !mqttConfig.Enabled {
-		c.logInfoIfEnabled("MQTT is disabled, returning status", "path", path, "ip", ip)
+		c.logInfoIfEnabled("MQTT is disabled, returning status",
+			logger.String("path", path),
+			logger.String("ip", ip))
 		return ctx.JSON(http.StatusOK, status)
 	}
 
 	// Check connection status using a temporary client
-	c.logDebugIfEnabled("Checking MQTT connection status", "path", path, "ip", ip)
+	c.logDebugIfEnabled("Checking MQTT connection status",
+		logger.String("path", path),
+		logger.String("ip", ip))
 	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context())
 	status.Connected = connected
 	if checkErr != "" {
@@ -248,11 +261,11 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	}
 
 	c.logInfoIfEnabled("Retrieved MQTT status successfully",
-		"connected", status.Connected,
-		"broker", status.Broker,
-		"last_error", status.LastError,
-		"path", path,
-		"ip", ip,
+		logger.Bool("connected", status.Connected),
+		logger.String("broker", status.Broker),
+		logger.String("last_error", status.LastError),
+		logger.String("path", path),
+		logger.String("ip", ip),
 	)
 	return ctx.JSON(http.StatusOK, status)
 }
@@ -269,7 +282,8 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 
 	tempClient, err := mqtt.NewClient(c.Settings, c.metrics)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to create temporary MQTT client for status check", "error", err)
+		c.logErrorIfEnabled("Failed to create temporary MQTT client for status check",
+			logger.Error(err))
 		return false, fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error())
 	}
 	defer tempClient.Disconnect() // Ensure temporary client is disconnected
@@ -281,18 +295,22 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 	// Try to connect
 	err = tempClient.Connect(connectCtx)
 	if err != nil {
-		c.logWarnIfEnabled("Temporary MQTT client connection failed during status check", "error", err, "broker", c.Settings.Realtime.MQTT.Broker)
+		c.logWarnIfEnabled("Temporary MQTT client connection failed during status check",
+			logger.Error(err),
+			logger.String("broker", c.Settings.Realtime.MQTT.Broker))
 		return false, fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error())
 	}
 
 	// Check if genuinely connected
 	if !tempClient.IsConnected() {
-		c.logWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false", "broker", c.Settings.Realtime.MQTT.Broker)
+		c.logWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false",
+			logger.String("broker", c.Settings.Realtime.MQTT.Broker))
 		// Consider this a failure for status purposes, though connection might be flapping
 		return false, "error:connection:mqtt_connection_unstable"
 	}
 
-	c.logDebugIfEnabled("Temporary MQTT client connected successfully for status check", "broker", c.Settings.Realtime.MQTT.Broker)
+	c.logDebugIfEnabled("Temporary MQTT client connected successfully for status check",
+		logger.String("broker", c.Settings.Realtime.MQTT.Broker))
 	return true, "" // Connected successfully
 }
 
@@ -300,7 +318,9 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting BirdWeather status", "path", path, "ip", ip)
+	c.logInfoIfEnabled("Getting BirdWeather status",
+		logger.String("path", path),
+		logger.String("ip", ip))
 
 	// Get BirdWeather configuration from settings
 	bwConfig := c.Settings.Realtime.Birdweather
@@ -316,11 +336,11 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 	// For now, we just return the configuration status
 	// In the future, we could add checks for client status here
 	c.logInfoIfEnabled("Retrieved BirdWeather status successfully",
-		"enabled", status.Enabled,
-		"station_id", status.StationID,
-		"threshold", status.Threshold,
-		"path", path,
-		"ip", ip,
+		logger.Bool("enabled", status.Enabled),
+		logger.String("station_id", status.StationID),
+		logger.Float64("threshold", status.Threshold),
+		logger.String("path", path),
+		logger.String("ip", ip),
 	)
 
 	return ctx.JSON(http.StatusOK, status)
@@ -618,7 +638,7 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.logger.Printf("warning: failed to close response body: %v", err)
+			GetLogger().Warn("Failed to close response body", logger.Error(err))
 		}
 	}()
 
@@ -652,7 +672,7 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				c.logger.Printf("warning: failed to close response body: %v", err)
+				GetLogger().Warn("Failed to close response body", logger.Error(err))
 			}
 		}()
 

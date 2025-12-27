@@ -3,8 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -516,6 +514,5 @@ func createTestController(t *testing.T) *Controller {
 			},
 		},
 		DisableSaveSettings: true,
-		logger:              log.New(io.Discard, "", 0), // Add a discard logger for tests
 	}
 }

@@ -2,10 +2,8 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -34,7 +32,6 @@ func getTestController(t *testing.T, e *echo.Echo) *Controller {
 		Settings:            getTestSettings(t),
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true, // Disable saving to disk during tests
-		logger:              log.New(os.Stderr, "TEST: ", log.LstdFlags), // Add logger for tests
 	}
 }
 
