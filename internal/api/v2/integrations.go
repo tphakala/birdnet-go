@@ -402,7 +402,12 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 
 	// Create temporary settings for the test
 	testSettings := &conf.Settings{
+		BirdNET: conf.BirdNETConfig{
+			Latitude:  c.Settings.BirdNET.Latitude,
+			Longitude: c.Settings.BirdNET.Longitude,
+		},
 		Realtime: conf.RealtimeSettings{
+			Audio: c.Settings.Realtime.Audio, // Required for FFmpeg path (FLAC encoding)
 			Birdweather: conf.BirdweatherSettings{
 				Enabled:          request.Enabled,
 				ID:               request.ID,
