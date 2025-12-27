@@ -192,8 +192,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize bird image cache if needed
 	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
 
-	// Initialize processor
-	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
+	// Initialize processor with analysis logger for hierarchical logging
+	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache, GetLogger())
 
 	// Initialize Backup system
 	// Use slog.Default() for backup - backup package uses slog.Logger interface
@@ -262,16 +262,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if err := bufferManager.UpdateMonitors(sources); err != nil {
 			// Use structured logging to improve error visibility and triage
-			logger := GetLogger()
-
 			// Extract error details from the enhanced error if available
 			errorStr := err.Error()
-			logger.Warn("Buffer monitor setup completed with errors",
-				"error", errorStr,
-				"source_count", len(sources),
-				"sources", sources,
-				"component", "analysis.realtime",
-				"operation", "buffer_monitor_setup")
+			GetLogger().Warn("Buffer monitor setup completed with errors",
+				logger.String("error", errorStr),
+				logger.Int("source_count", len(sources)),
+				logger.Any("sources", sources),
+				logger.String("component", "analysis.realtime"),
+				logger.String("operation", "buffer_monitor_setup"))
 
 			// Also log to console for immediate visibility during startup
 			log.Printf("⚠️  Warning: Buffer monitor setup completed with errors: %v", err)
@@ -728,20 +726,20 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 		logger.String("operation", "clip_cleanup_init"))
 	log.Printf("Clip retention policy: %s, check interval: %d minutes", policy, checkInterval)
 	diskManagerLogger.Info("Cleanup timer started",
-		"policy", policy,
-		"interval_minutes", checkInterval,
-		"timestamp", time.Now().Format(time.RFC3339))
+		logger.String("policy", policy),
+		logger.Int("interval_minutes", checkInterval),
+		logger.String("timestamp", time.Now().Format(time.RFC3339)))
 
 	for {
 		select {
 		case <-quitChan:
 			// Handle quit signal to stop the monitor
 			diskManagerLogger.Info("Cleanup timer stopped",
-				"reason", "quit signal received",
-				"timestamp", time.Now().Format(time.RFC3339))
+				logger.String("reason", "quit signal received"),
+				logger.String("timestamp", time.Now().Format(time.RFC3339)))
 			// Ensure clean shutdown
 			if err := diskmanager.CloseLogger(); err != nil {
-				diskManagerLogger.Error("Failed to close diskmanager logger", "error", err)
+				diskManagerLogger.Error("Failed to close diskmanager logger", logger.Error(err))
 			}
 			return
 
@@ -753,8 +751,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 				logger.String("operation", "clip_cleanup_task"))
 			log.Println("🧹 Running clip cleanup task")
 			diskManagerLogger.Info("Cleanup timer triggered",
-				"timestamp", t.Format(time.RFC3339),
-				"policy", conf.Setting().Realtime.Audio.Export.Retention.Policy)
+				logger.String("timestamp", t.Format(time.RFC3339)),
+				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy))
 
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
@@ -767,8 +765,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 						logger.String("operation", "age_based_cleanup"))
 					log.Printf("Error during age-based cleanup: %v", result.Err)
 					diskManagerLogger.Error("Age-based cleanup failed",
-						"error", result.Err,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Error(result.Err),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
 					// Add structured logging
 					GetLogger().Info("Age-based cleanup completed successfully",
@@ -777,9 +775,9 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 						logger.String("operation", "age_based_cleanup"))
 					log.Printf("🧹 Age-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
 					diskManagerLogger.Info("Age-based cleanup completed via timer",
-						"clips_removed", result.ClipsRemoved,
-						"disk_utilization", result.DiskUtilization,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Int("clips_removed", result.ClipsRemoved),
+						logger.Int("disk_utilization", result.DiskUtilization),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 
@@ -793,12 +791,12 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 
 				if err != nil {
 					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",
-						"error", err,
-						"continuing_with_cleanup", true)
+						logger.Error(err),
+						logger.Bool("continuing_with_cleanup", true))
 				} else if skip {
 					diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
-						"current_usage", utilization,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Int("current_usage", utilization),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 					continue // Skip to next timer tick
 				}
 
@@ -812,8 +810,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 						logger.String("operation", "usage_based_cleanup"))
 					log.Printf("Error during usage-based cleanup: %v", result.Err)
 					diskManagerLogger.Error("Usage-based cleanup failed",
-						"error", result.Err,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Error(result.Err),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
 					// Add structured logging
 					GetLogger().Info("Usage-based cleanup completed successfully",
@@ -822,9 +820,9 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 						logger.String("operation", "usage_based_cleanup"))
 					log.Printf("🧹 Usage-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
 					diskManagerLogger.Info("Usage-based cleanup completed via timer",
-						"clips_removed", result.ClipsRemoved,
-						"disk_utilization", result.DiskUtilization,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Int("clips_removed", result.ClipsRemoved),
+						logger.Int("disk_utilization", result.DiskUtilization),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 		}

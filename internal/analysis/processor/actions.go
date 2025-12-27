@@ -220,6 +220,33 @@ type CompositeAction struct {
 	mu            sync.Mutex     // Protects concurrent access to Actions
 }
 
+// getBirdImageFromCache retrieves a bird image from cache with proper error handling and logging.
+// This helper consolidates duplicate image retrieval logic used by MqttAction and SSEAction.
+// Returns an empty BirdImage if the cache is nil or if retrieval fails.
+func getBirdImageFromCache(cache *imageprovider.BirdImageCache, scientificName, commonName, correlationID string) imageprovider.BirdImage {
+	if cache == nil {
+		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
+			logger.String("detection_id", correlationID),
+			logger.String("species", commonName),
+			logger.String("scientific_name", scientificName),
+			logger.String("operation", "check_bird_image_cache"))
+		return imageprovider.BirdImage{}
+	}
+
+	birdImage, err := cache.Get(scientificName)
+	if err != nil {
+		GetLogger().Warn("Error getting bird image from cache",
+			logger.String("detection_id", correlationID),
+			logger.Error(err),
+			logger.String("species", commonName),
+			logger.String("scientific_name", scientificName),
+			logger.String("operation", "get_bird_image"))
+		return imageprovider.BirdImage{}
+	}
+
+	return birdImage
+}
+
 // GetDescription returns a human-readable description of the LogAction
 func (a *LogAction) GetDescription() string {
 	if a.Description != "" {
@@ -531,7 +558,6 @@ func (a *LogAction) Execute(data any) error {
 			logger.Float64("confidence", a.Note.Confidence),
 			logger.String("clip_name", a.Note.ClipName),
 			logger.String("operation", "log_to_file"))
-		log.Printf("❌ Failed to log note to file")
 	}
 	// Add structured logging for console output
 	GetLogger().Info("Detection logged",
@@ -579,7 +605,6 @@ func (a *DatabaseAction) Execute(data any) error {
 			logger.Float64("confidence", a.Note.Confidence),
 			logger.String("clip_name", a.Note.ClipName),
 			logger.String("operation", "database_save"))
-		log.Printf("❌ Failed to save note and results to database")
 		return err
 	}
 
@@ -612,7 +637,6 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.Time("begin_time", a.Note.BeginTime),
 				logger.Int("duration_seconds", 15),
 				logger.String("operation", "read_audio_segment"))
-			log.Printf("❌ Failed to read audio segment from buffer")
 			return err
 		}
 
@@ -635,7 +659,6 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.String("species", a.Note.CommonName),
 				logger.String("clip_name", a.Note.ClipName),
 				logger.String("operation", "save_audio_clip"))
-			log.Printf("❌ Failed to save audio clip")
 			return err
 		}
 
@@ -650,8 +673,6 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.Time("begin_time", a.Note.BeginTime),
 				logger.Time("end_time", time.Now()),
 				logger.String("operation", "save_audio_clip_debug"))
-			log.Printf("✅ Saved audio clip to %s\n", a.Note.ClipName)
-			log.Printf("detection time %v, begin time %v, end time %v\n", a.Note.Time, a.Note.BeginTime, time.Now())
 		}
 	}
 
@@ -727,7 +748,6 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 				logger.Bool("is_new_species", isNewSpecies),
 				logger.Int("days_since_first_seen", daysSinceFirstSeen),
 				logger.String("operation", "create_detection_event"))
-			log.Printf("❌ Failed to create detection event: %v", err)
 		}
 		return
 	}
@@ -776,7 +796,6 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 				logger.Bool("is_new_species", isNewSpecies),
 				logger.Int("days_since_first_seen", daysSinceFirstSeen),
 				logger.String("operation", "publish_detection_event"))
-			log.Printf("🌟 Published new species detection event: %s", a.Note.CommonName)
 		}
 	}
 }
@@ -799,7 +818,6 @@ func (a *SaveAudioAction) Execute(data any) error {
 			logger.String("output_path", outputPath),
 			logger.String("clip_name", a.ClipName),
 			logger.String("operation", "create_directory"))
-		log.Printf("❌ Error creating directory for audio clip")
 		return err
 	}
 
@@ -814,7 +832,6 @@ func (a *SaveAudioAction) Execute(data any) error {
 				logger.String("clip_name", a.ClipName),
 				logger.String("format", "wav"),
 				logger.String("operation", "save_wav"))
-			log.Printf("❌ Error saving audio clip to WAV")
 			return err
 		}
 	} else {
@@ -828,7 +845,6 @@ func (a *SaveAudioAction) Execute(data any) error {
 				logger.String("clip_name", a.ClipName),
 				logger.String("format", a.Settings.Realtime.Audio.Export.Type),
 				logger.String("operation", "ffmpeg_export"))
-			log.Printf("❌ Error exporting audio clip with FFmpeg")
 			return err
 		}
 	}
@@ -911,8 +927,6 @@ func (a *BirdWeatherAction) Execute(data any) error {
 				logger.Float64("confidence", a.Note.Confidence),
 				logger.Float64("threshold", float64(a.Settings.Realtime.Birdweather.Threshold)),
 				logger.String("operation", "birdweather_threshold_check"))
-			log.Printf("⛔ Skipping BirdWeather upload for %s: confidence %.2f below threshold %.2f\n",
-				speciesName, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
 		}
 		return nil
 	}
@@ -952,12 +966,7 @@ func (a *BirdWeatherAction) Execute(data any) error {
 			logger.String("clip_name", note.ClipName),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "birdweather_upload"))
-		if a.RetryConfig.Enabled {
-			log.Printf("❌ Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s) (will retry): %v\n",
-				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
-		} else {
-			log.Printf("❌ Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s): %v\n",
-				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
+		if !a.RetryConfig.Enabled {
 			// Send notification for non-retryable failures
 			notification.NotifyIntegrationFailure("BirdWeather", err)
 		}
@@ -1049,35 +1058,8 @@ func (a *MqttAction) Execute(data any) error {
 			Build()
 	}
 
-	// Get bird image of detected bird
-	birdImage := imageprovider.BirdImage{} // Default to empty image
-	// Add nil check for BirdImageCache before calling Get
-	if a.BirdImageCache != nil {
-		var err error
-		birdImage, err = a.BirdImageCache.Get(a.Note.ScientificName)
-		if err != nil {
-			// Add structured logging
-			GetLogger().Warn("Error getting bird image from cache",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
-				logger.String("scientific_name", a.Note.ScientificName),
-				logger.String("operation", "get_bird_image"))
-			log.Printf("⚠️ Error getting bird image from cache for %s: %v", a.Note.ScientificName, err)
-			// Continue with the default empty image
-		}
-	} else {
-		// Log if the cache is nil, maybe helpful for debugging setup issues
-		// Add structured logging
-		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
-			logger.String("operation", "check_bird_image_cache"))
-		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
-	}
+	// Get bird image of detected bird using the shared helper
+	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Note.ScientificName, a.Note.CommonName, a.CorrelationID)
 
 	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
@@ -1275,35 +1257,8 @@ func (a *SSEAction) Execute(data any) error {
 		}
 	}
 
-	// Get bird image of detected bird
-	birdImage := imageprovider.BirdImage{} // Default to empty image
-	// Add nil check for BirdImageCache before calling Get
-	if a.BirdImageCache != nil {
-		var err error
-		birdImage, err = a.BirdImageCache.Get(a.Note.ScientificName)
-		if err != nil {
-			// Add structured logging
-			GetLogger().Warn("Error getting bird image from cache",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
-				logger.String("scientific_name", a.Note.ScientificName),
-				logger.String("operation", "get_bird_image"))
-			log.Printf("⚠️ Error getting bird image from cache for %s: %v", a.Note.ScientificName, err)
-			// Continue with the default empty image
-		}
-	} else {
-		// Log if the cache is nil, maybe helpful for debugging setup issues
-		// Add structured logging
-		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
-			logger.String("operation", "check_bird_image_cache"))
-		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
-	}
+	// Get bird image of detected bird using the shared helper
+	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Note.ScientificName, a.Note.CommonName, a.CorrelationID)
 
 	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
