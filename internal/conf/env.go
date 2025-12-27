@@ -113,11 +113,11 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyThreads, EnvVarThreads, validateEnvThreads},
 		{ConfigKeyDebug, EnvVarDebug, validateEnvBool},
 		{ConfigKeyUseXNNPACK, EnvVarUseXNNPACK, validateEnvBool},
-		
+
 		// Model Paths
 		{ConfigKeyModelPath, EnvVarModelPath, validateEnvPath},
 		{ConfigKeyLabelPath, EnvVarLabelPath, validateEnvPath},
-		
+
 		// Range Filter Configuration
 		{ConfigKeyRangeFilterModel, EnvVarRangeFilterModel, validateEnvRangeFilterModel},
 		{ConfigKeyRangeFilterThreshold, EnvVarRangeFilterThreshold, validateEnvRangeFilterThreshold},
@@ -341,7 +341,7 @@ func validateEnvBaseURL(value string) error {
 // canonicalizeValue normalizes environment variable values to appropriate types after validation
 func canonicalizeValue(configKey, envValue string) {
 	trimmed := strings.TrimSpace(envValue)
-	
+
 	// Determine value type based on config key and canonicalize accordingly
 	switch configKey {
 	// Boolean values
@@ -349,25 +349,25 @@ func canonicalizeValue(configKey, envValue string) {
 		if parsed, err := strconv.ParseBool(strings.ToLower(trimmed)); err == nil {
 			viper.Set(configKey, parsed)
 		}
-		
+
 	// Integer values
 	case ConfigKeyThreads:
 		if parsed, err := strconv.Atoi(trimmed); err == nil {
 			viper.Set(configKey, parsed)
 		}
-		
+
 	// Float64 values
-	case ConfigKeyLatitude, ConfigKeyLongitude, ConfigKeySensitivity, 
-		 ConfigKeyThreshold, ConfigKeyOverlap, ConfigKeyRangeFilterThreshold:
+	case ConfigKeyLatitude, ConfigKeyLongitude, ConfigKeySensitivity,
+		ConfigKeyThreshold, ConfigKeyOverlap, ConfigKeyRangeFilterThreshold:
 		if parsed, err := strconv.ParseFloat(trimmed, 64); err == nil {
 			viper.Set(configKey, parsed)
 		}
-		
+
 	// String values (including locale with special handling)
 	case ConfigKeyLocale:
 		// Canonicalize locale to lowercase
 		viper.Set(configKey, strings.ToLower(trimmed))
-		
+
 	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath:
 		// Regular string values - just trim whitespace
 		viper.Set(configKey, trimmed)
@@ -382,7 +382,7 @@ func canonicalizeValue(configKey, envValue string) {
 func configureEnvironmentVariables() error {
 	// Set up key replacer for nested config keys
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	
+
 	// Bind specific environment variables with validation
 	// Return any errors to the caller for centralized handling
 	return bindEnvVars()

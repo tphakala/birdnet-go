@@ -20,7 +20,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logger"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1500,8 +1499,8 @@ func isWeeklyBackup(t time.Time, schedules []conf.BackupScheduleConfig) bool {
 			configuredDay, err := parseWeekday(s.Weekday) // Assume parseWeekday exists
 			if err != nil {
 				log.Warn("Could not parse configured weekly backup day in schedule, skipping schedule check",
-					logger.String("configured_day", s.Weekday),
-					logger.Error(err))
+					logString("configured_day", s.Weekday),
+					logError(err))
 				continue // Check next schedule
 			}
 			// Check if the backup time's weekday matches the configured day

@@ -81,7 +81,7 @@ func ExampleValidateBirdNETSettings() {
 // The ValidationResult contains all errors and warnings without logging.
 func ExampleValidateBirdNETSettings_invalid() {
 	config := &BirdNETConfig{
-		Threshold: 1.5, // Invalid: must be between 0 and 1
+		Threshold: 1.5,   // Invalid: must be between 0 and 1
 		Latitude:  100.0, // Invalid: must be between -90 and 90
 	}
 

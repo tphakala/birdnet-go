@@ -425,9 +425,8 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (e
 	controller := &Controller{
 		Settings: &conf.Settings{
 			Main: struct {
-				Name      string         `json:"name"`
-				TimeAs24h bool           `json:"timeAs24h"`
-				Log       conf.LogConfig `json:"log"`
+				Name      string `json:"name"`
+				TimeAs24h bool   `json:"timeAs24h"`
 			}{
 				Name: "TestNode",
 			},

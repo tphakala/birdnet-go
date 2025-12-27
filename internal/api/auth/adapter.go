@@ -253,7 +253,6 @@ func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, er
 	return authCode, nil
 }
 
-
 // Logout invalidates the current session/token
 func (a *SecurityAdapter) Logout(c echo.Context) error {
 	// Clear all session values

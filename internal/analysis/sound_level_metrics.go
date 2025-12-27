@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	"log"
 	"math"
 	"sync"
 	"time"
@@ -12,26 +11,35 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// getMetricsLogger returns the metrics logger
+var (
+	metricsLogger     logger.Logger
+	metricsLoggerOnce sync.Once
+)
+
+// getMetricsLogger returns the metrics logger.
+// Uses sync.Once to ensure the logger is only initialized once.
 func getMetricsLogger() logger.Logger {
-	return logger.Global().Module("analysis").Module("soundlevel").Module("metrics")
+	metricsLoggerOnce.Do(func() {
+		metricsLogger = logger.Global().Module("analysis").Module("soundlevel").Module("metrics")
+	})
+	return metricsLogger
 }
 
 // startSoundLevelMetricsPublisher starts a goroutine to consume sound level data and update Prometheus metrics
 func startSoundLevelMetricsPublisher(wg *sync.WaitGroup, quitChan chan struct{}, metrics *observability.Metrics) {
+	lg := getMetricsLogger()
 	if metrics == nil || metrics.SoundLevel == nil {
-		log.Println("⚠️ Sound level metrics not available, metrics publishing disabled")
+		lg.Warn("sound level metrics not available, metrics publishing disabled")
 		return
 	}
 
 	wg.Go(func() {
-
-		log.Println("📊 Started sound level metrics publisher")
+		lg.Info("started sound level metrics publisher")
 
 		for {
 			select {
 			case <-quitChan:
-				log.Println("🔌 Stopping sound level metrics publisher")
+				lg.Info("stopping sound level metrics publisher")
 				return
 			case soundData := <-soundLevelChan:
 				// Update metrics for each octave band

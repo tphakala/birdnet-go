@@ -594,6 +594,7 @@ func TestShouldResetYear_CriticalReliability(t *testing.T) {
 
 // TestCheckAndResetPeriods_DateRange tests period transition logic
 // CRITICAL: Ensures proper state transitions for yearly and seasonal tracking
+//
 //nolint:gocognit // Table-driven test for date range period resets
 func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 	t.Parallel()

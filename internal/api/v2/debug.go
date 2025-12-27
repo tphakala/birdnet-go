@@ -165,7 +165,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 
 	// Map string type to notification.Type
 	notifType := mapNotificationType(req.Type)
-	
+
 	// Create notification using the service
 	_, err := notificationService.CreateWithComponent(
 		notifType,
@@ -174,7 +174,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 		req.Message,
 		"debug",
 	)
-	
+
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create notification: %v", err),
@@ -249,12 +249,12 @@ func getTelemetryStatus() map[string]any {
 	status := map[string]any{
 		"enabled": false, // Default to false for safety
 	}
-	
+
 	// Check if settings are available via global conf
 	if settings := conf.GetSettings(); settings != nil {
 		status["enabled"] = settings.Sentry.Enabled
 	}
-	
+
 	// Add health check info if available
 	if healthHandler := telemetry.NewHealthCheckHandler(); healthHandler != nil {
 		// Get coordinator from global instance
@@ -262,7 +262,7 @@ func getTelemetryStatus() map[string]any {
 			health := coord.HealthCheck()
 			status["healthy"] = health.Healthy
 			status["components"] = make(map[string]any)
-			
+
 			for name, compHealth := range health.Components {
 				status["components"].(map[string]any)[name] = map[string]any{
 					"state":   compHealth.State.String(),
@@ -272,7 +272,7 @@ func getTelemetryStatus() map[string]any {
 			}
 		}
 	}
-	
+
 	// Add worker stats if available
 	if worker := telemetry.GetTelemetryWorker(); worker != nil {
 		stats := worker.GetStats()
@@ -283,7 +283,7 @@ func getTelemetryStatus() map[string]any {
 			"circuit_state":    stats.CircuitState,
 		}
 	}
-	
+
 	return status
 }
 

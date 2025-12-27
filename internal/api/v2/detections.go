@@ -20,12 +20,12 @@ import (
 
 // Detection constants (file-local)
 const (
-	detectionCacheExpiry   = 5 * time.Minute  // Default cache expiration
-	detectionCacheCleanup  = 10 * time.Minute // Cache cleanup interval
-	defaultNumResults      = 100              // Default number of results
-	maxNumResults          = 1000             // Maximum number of results
-	sunEventWindowMinutes  = 30               // Minutes before/after sunrise/sunset
-	minHourRangeParts      = 2                // Minimum parts for hour range parsing
+	detectionCacheExpiry  = 5 * time.Minute  // Default cache expiration
+	detectionCacheCleanup = 10 * time.Minute // Cache cleanup interval
+	defaultNumResults     = 100              // Default number of results
+	maxNumResults         = 1000             // Maximum number of results
+	sunEventWindowMinutes = 30               // Minutes before/after sunrise/sunset
+	minHourRangeParts     = 2                // Minimum parts for hour range parsing
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -147,13 +147,13 @@ type DetectionResponse struct {
 	TimeOfDay          string       `json:"timeOfDay,omitempty"`
 	IsNewSpecies       bool         `json:"isNewSpecies,omitempty"`       // First seen within tracking window
 	DaysSinceFirstSeen int          `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
-	
+
 	// Multi-period tracking metadata
-	IsNewThisYear      bool         `json:"isNewThisYear,omitempty"`      // First time this year
-	IsNewThisSeason    bool         `json:"isNewThisSeason,omitempty"`    // First time this season  
-	DaysThisYear       int          `json:"daysThisYear,omitempty"`       // Days since first this year
-	DaysThisSeason     int          `json:"daysThisSeason,omitempty"`     // Days since first this season
-	CurrentSeason      string       `json:"currentSeason,omitempty"`      // Current season name
+	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
+	IsNewThisSeason bool   `json:"isNewThisSeason,omitempty"` // First time this season
+	DaysThisYear    int    `json:"daysThisYear,omitempty"`    // Days since first this year
+	DaysThisSeason  int    `json:"daysThisSeason,omitempty"`  // Days since first this season
+	CurrentSeason   string `json:"currentSeason,omitempty"`   // Current season name
 }
 
 // WeatherInfo represents weather data for a detection

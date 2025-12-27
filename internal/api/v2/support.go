@@ -18,10 +18,10 @@ import (
 
 // Support constants (file-local)
 const (
-	supportLogDurationWeeks = 4                 // Weeks of logs to collect
-	supportMaxLogSizeMB     = 50                // Maximum log size in MB
-	supportBytesPerKB       = 1024              // Bytes per kilobyte
-	supportBytesPerMB       = 1024 * 1024       // Bytes per megabyte
+	supportLogDurationWeeks = 4           // Weeks of logs to collect
+	supportMaxLogSizeMB     = 50          // Maximum log size in MB
+	supportBytesPerKB       = 1024        // Bytes per kilobyte
+	supportBytesPerMB       = 1024 * 1024 // Bytes per megabyte
 )
 
 // GenerateSupportDumpRequest represents the request for generating a support dump
@@ -100,7 +100,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		IncludeConfig:     req.IncludeConfig,
 		IncludeSystemInfo: req.IncludeSystemInfo,
 		LogDuration:       supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:        supportMaxLogSizeMB * supportBytesPerMB,                       // 50MB to accommodate more logs
+		MaxLogSize:        supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
 		ScrubSensitive:    true,
 	}
 

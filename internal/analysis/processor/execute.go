@@ -86,7 +86,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	// This ensures cancellation propagates from CompositeAction
 	cmdCtx, cancel := context.WithTimeout(ctx, ExecuteCommandTimeout)
 	defer cancel()
-	
+
 	cmd := exec.CommandContext(cmdCtx, cmdPath, args...) //nolint:gosec // G204: cmdPath validated by validateCommandPath(), args by buildSafeArguments()
 
 	// Set a clean environment
@@ -97,14 +97,14 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
 	executionDuration := time.Since(startTime)
-	
+
 	if err != nil {
 		// Get exit code if available
 		exitCode := -1
 		if cmd.ProcessState != nil {
 			exitCode = cmd.ProcessState.ExitCode()
 		}
-		
+
 		// Command execution failures are not retryable because:
 		// - Script logic errors won't be fixed by retrying
 		// - Non-zero exit codes indicate the script ran but failed
@@ -167,7 +167,7 @@ func validateCommandPath(command string) (string, error) {
 		default:
 			classification = "file_access_error"
 		}
-		
+
 		// File system errors are not retryable as they indicate permanent issues:
 		// - Missing files won't suddenly appear
 		// - Permission denials require manual intervention
@@ -214,7 +214,7 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 
 	for _, key := range keys {
 		value := params[key]
-		
+
 		// Validate parameter name (allow only alphanumeric and _-)
 		if !isValidParamName(key) {
 			return nil, errors.Newf("invalid parameter name").

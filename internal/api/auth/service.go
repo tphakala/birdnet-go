@@ -16,12 +16,12 @@ func GetLogger() logger.Logger {
 
 // Sentinel errors for authentication failures.
 var (
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrInvalidToken        = errors.New("invalid or expired token")
-	ErrSessionNotFound     = errors.New("session not found or expired")
-	ErrLogoutFailed        = errors.New("logout operation failed")
-	ErrBasicAuthDisabled   = errors.New("basic authentication is disabled")
-	ErrAuthCodeGeneration  = errors.New("failed to generate authorization code")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrInvalidToken       = errors.New("invalid or expired token")
+	ErrSessionNotFound    = errors.New("session not found or expired")
+	ErrLogoutFailed       = errors.New("logout operation failed")
+	ErrBasicAuthDisabled  = errors.New("basic authentication is disabled")
+	ErrAuthCodeGeneration = errors.New("failed to generate authorization code")
 )
 
 //go:generate go run golang.org/x/tools/cmd/stringer -type=AuthMethod

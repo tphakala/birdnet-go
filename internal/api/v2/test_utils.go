@@ -57,6 +57,7 @@ func safePointer[T any](args mock.Arguments, index int) *T {
 	}
 	return nil // Return nil if the argument itself is nil
 }
+
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.

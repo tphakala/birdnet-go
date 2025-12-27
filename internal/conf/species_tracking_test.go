@@ -8,9 +8,9 @@ import (
 
 func TestSpeciesTrackingSettings_Validate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		settings SpeciesTrackingSettings
-		wantErr bool
+		wantErr  bool
 	}{
 		{
 			name: "valid settings",
@@ -62,7 +62,7 @@ func TestSpeciesTrackingSettings_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			err := tt.settings.Validate()
 			if tt.wantErr {
 				assert.Error(t, err, "Expected validation to return an error")
@@ -95,7 +95,7 @@ func TestDetectHemisphere(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			got := DetectHemisphere(tt.latitude)
 			assert.Equal(t, tt.want, got, "DetectHemisphere() returned unexpected hemisphere for latitude %v", tt.latitude)
 		})
@@ -106,22 +106,22 @@ func TestDetectHemisphere(t *testing.T) {
 // for different hemispheres/regions to eliminate code duplication in tests
 func validateSeasonConfiguration(t *testing.T, latitude float64, expectedSeasons map[string]Season, regionName string) {
 	t.Helper()
-	
+
 	seasons := GetDefaultSeasons(latitude)
 	assert.Len(t, seasons, 4, "Expected 4 seasons for %s", regionName)
-	
+
 	// Verify all expected seasons exist with correct start months and days
 	for seasonName, expectedSeason := range expectedSeasons {
 		season, exists := seasons[seasonName]
 		assert.True(t, exists, "Expected season %s to exist in %s", seasonName, regionName)
 		assert.Equal(t, expectedSeason.StartMonth, season.StartMonth,
-			"Expected %s to start in month %d for %s, got %d", 
+			"Expected %s to start in month %d for %s, got %d",
 			seasonName, expectedSeason.StartMonth, regionName, season.StartMonth)
 		assert.Equal(t, expectedSeason.StartDay, season.StartDay,
-			"Expected %s to start on day %d for %s, got %d", 
+			"Expected %s to start on day %d for %s, got %d",
 			seasonName, expectedSeason.StartDay, regionName, season.StartDay)
 	}
-	
+
 	// Verify no unexpected seasons exist
 	for seasonName := range seasons {
 		assert.Contains(t, expectedSeasons, seasonName,
@@ -134,10 +134,10 @@ func TestGetDefaultSeasons(t *testing.T) {
 		t.Parallel()
 
 		expectedSeasons := map[string]Season{
-			"spring": {StartMonth: 3, StartDay: 20},   // March 20
-			"summer": {StartMonth: 6, StartDay: 21},   // June 21
-			"fall":   {StartMonth: 9, StartDay: 22},   // September 22
-			"winter": {StartMonth: 12, StartDay: 21},  // December 21
+			"spring": {StartMonth: 3, StartDay: 20},  // March 20
+			"summer": {StartMonth: 6, StartDay: 21},  // June 21
+			"fall":   {StartMonth: 9, StartDay: 22},  // September 22
+			"winter": {StartMonth: 12, StartDay: 21}, // December 21
 		}
 
 		validateSeasonConfiguration(t, 45.0, expectedSeasons, "northern hemisphere")
@@ -148,10 +148,10 @@ func TestGetDefaultSeasons(t *testing.T) {
 
 		// Seasons shifted by 6 months for southern hemisphere
 		expectedSeasons := map[string]Season{
-			"spring": {StartMonth: 9, StartDay: 22},   // September 22
-			"summer": {StartMonth: 12, StartDay: 21},  // December 21
-			"fall":   {StartMonth: 3, StartDay: 20},   // March 20
-			"winter": {StartMonth: 6, StartDay: 21},   // June 21
+			"spring": {StartMonth: 9, StartDay: 22},  // September 22
+			"summer": {StartMonth: 12, StartDay: 21}, // December 21
+			"fall":   {StartMonth: 3, StartDay: 20},  // March 20
+			"winter": {StartMonth: 6, StartDay: 21},  // June 21
 		}
 
 		validateSeasonConfiguration(t, -45.0, expectedSeasons, "southern hemisphere")
@@ -162,10 +162,10 @@ func TestGetDefaultSeasons(t *testing.T) {
 
 		// Wet/dry season cycle for equatorial regions
 		expectedSeasons := map[string]Season{
-			"wet1": {StartMonth: 3, StartDay: 1},   // March-May wet season
-			"dry1": {StartMonth: 6, StartDay: 1},   // June-August dry season
-			"wet2": {StartMonth: 9, StartDay: 1},   // September-November wet season
-			"dry2": {StartMonth: 12, StartDay: 1},  // December-February dry season
+			"wet1": {StartMonth: 3, StartDay: 1},  // March-May wet season
+			"dry1": {StartMonth: 6, StartDay: 1},  // June-August dry season
+			"wet2": {StartMonth: 9, StartDay: 1},  // September-November wet season
+			"dry2": {StartMonth: 12, StartDay: 1}, // December-February dry season
 		}
 
 		validateSeasonConfiguration(t, 0.0, expectedSeasons, "equatorial region")
@@ -202,10 +202,10 @@ func TestIsDefaultSeasonConfiguration(t *testing.T) {
 		{
 			name: "custom seasons - different names",
 			seasons: map[string]Season{
-				"rainy":  {StartMonth: 6, StartDay: 1},
-				"cool":   {StartMonth: 10, StartDay: 1},
-				"hot":    {StartMonth: 2, StartDay: 1},
-				"windy":  {StartMonth: 12, StartDay: 1},
+				"rainy": {StartMonth: 6, StartDay: 1},
+				"cool":  {StartMonth: 10, StartDay: 1},
+				"hot":   {StartMonth: 2, StartDay: 1},
+				"windy": {StartMonth: 12, StartDay: 1},
 			},
 			expected: false,
 		},

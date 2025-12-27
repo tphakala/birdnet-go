@@ -481,7 +481,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		Hourly HourlyWeatherResponse `json:"hourly"`
 		Time   string                `json:"timestamp"`
 	}{
-		Daily:  nil,                                     // Will be populated if available
+		Daily:  nil, // Will be populated if available
 		Hourly: c.buildHourlyWeatherResponse(latestWeather),
 		Time:   time.Now().Format(time.RFC3339),
 	}

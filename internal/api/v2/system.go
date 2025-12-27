@@ -787,7 +787,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		Name:       deviceName,
 		SampleRate: defaultAudioSampleRate, // Standard BirdNET sample rate
 		BitDepth:   defaultAudioBitDepth,   // Assuming 16-bit as per the capture.go implementation
-		Channels:   1,     // Assuming mono as per the capture.go implementation
+		Channels:   1,                      // Assuming mono as per the capture.go implementation
 	}
 
 	// Diagnostic information map

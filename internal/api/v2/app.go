@@ -17,9 +17,9 @@ const (
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
-	CSRFToken string               `json:"csrfToken"`
-	Security  SecurityConfigDTO    `json:"security"`
-	Version   string               `json:"version"`
+	CSRFToken string            `json:"csrfToken"`
+	Security  SecurityConfigDTO `json:"security"`
+	Version   string            `json:"version"`
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.

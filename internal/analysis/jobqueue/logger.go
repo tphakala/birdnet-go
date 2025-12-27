@@ -201,8 +201,9 @@ const (
 // This helper ensures consistent trace ID storage and retrieval across the jobqueue package.
 //
 // Example usage:
-//   ctx = WithTraceID(ctx, "trace-12345")
-//   LogJobStarted(ctx, jobID, actionType)
+//
+//	ctx = WithTraceID(ctx, "trace-12345")
+//	LogJobStarted(ctx, jobID, actionType)
 func WithTraceID(ctx context.Context, traceID string) context.Context {
 	return context.WithValue(ctx, contextKeyTraceID, traceID)
 }
@@ -213,7 +214,7 @@ func extractTraceID(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	
+
 	if traceID := ctx.Value(contextKeyTraceID); traceID != nil {
 		switch v := traceID.(type) {
 		case string:

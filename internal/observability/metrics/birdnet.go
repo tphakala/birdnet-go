@@ -307,9 +307,9 @@ func (m *BirdNETMetrics) RecordOperation(operation, status string) {
 			m.ModelLoadedGauge.Set(0)
 		}
 	case OpDetection:
-		// IMPORTANT: For the "detection" operation, the status parameter represents 
+		// IMPORTANT: For the "detection" operation, the status parameter represents
 		// the detected species name (e.g., "Turdus migratorius" for American Robin),
-		// not a success/error status. This is a special case where we reuse the 
+		// not a success/error status. This is a special case where we reuse the
 		// status parameter for semantic convenience in the Recorder interface.
 		m.DetectionCounter.WithLabelValues(status).Inc()
 	}

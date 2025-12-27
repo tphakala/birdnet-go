@@ -34,21 +34,21 @@ const (
 	hlsNewStreamGracePeriod    = 30 * time.Second // Grace period for new streams before cleanup
 
 	// Logging
-	hlsLogCooldown         = 60 * time.Second      // Only log client connections once per this duration
-	hlsVerboseEnvVar       = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
-	hlsVerboseTimeout      = 5 * time.Minute       // Verbose logging window at startup
-	hlsClientLogRetention  = 24 * time.Hour        // Retention period for client log timestamps
+	hlsLogCooldown        = 60 * time.Second      // Only log client connections once per this duration
+	hlsVerboseEnvVar      = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
+	hlsVerboseTimeout     = 5 * time.Minute       // Verbose logging window at startup
+	hlsClientLogRetention = 24 * time.Hour        // Retention period for client log timestamps
 
 	// Audio encoding
-	hlsMinSegments        = 2     // Minimum HLS segments required
-	hlsDefaultSegmentLen  = 2     // Default HLS segment length in seconds
-	hlsMinSegmentLen      = 1     // Minimum HLS segment length in seconds
-	hlsMaxSegmentLen      = 30    // Maximum HLS segment length in seconds
-	hlsAudioBitDepth      = 16    // Audio bit depth for encoding
-	hlsMinBitrate         = 16    // Minimum audio bitrate in kbps
-	hlsMaxBitrate         = 320   // Maximum audio bitrate in kbps
-	hlsDefaultSampleRate  = 48000 // Default audio sample rate in Hz
-	hlsCleanupDelay       = 5     // Delay in seconds before cleanup
+	hlsMinSegments       = 2     // Minimum HLS segments required
+	hlsDefaultSegmentLen = 2     // Default HLS segment length in seconds
+	hlsMinSegmentLen     = 1     // Minimum HLS segment length in seconds
+	hlsMaxSegmentLen     = 30    // Maximum HLS segment length in seconds
+	hlsAudioBitDepth     = 16    // Audio bit depth for encoding
+	hlsMinBitrate        = 16    // Minimum audio bitrate in kbps
+	hlsMaxBitrate        = 320   // Maximum audio bitrate in kbps
+	hlsDefaultSampleRate = 48000 // Default audio sample rate in Hz
+	hlsCleanupDelay      = 5     // Delay in seconds before cleanup
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -65,9 +65,9 @@ type HLSStreamInfo struct {
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
 type HLSStreamStatus struct {
-	Status        string `json:"status"`                   // "starting" or "ready"
-	Source        string `json:"source"`                   // Source identifier (URL-encoded)
-	PlaylistURL   string `json:"playlist_url,omitempty"`   // API URL for the playlist (not filesystem path)
+	Status        string `json:"status"`                 // "starting" or "ready"
+	Source        string `json:"source"`                 // Source identifier (URL-encoded)
+	PlaylistURL   string `json:"playlist_url,omitempty"` // API URL for the playlist (not filesystem path)
 	ActiveClients int    `json:"active_clients"`
 	PlaylistReady bool   `json:"playlist_ready"`
 }

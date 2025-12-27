@@ -209,7 +209,7 @@ func (c *Controller) validateSymlinkTarget(symlinkPath string) error {
 // convertDirEntryToItem converts a fs.DirEntry to FileSystemItem with enhanced error context
 func (c *Controller) convertDirEntryToItem(basePath string, entry fs.DirEntry) (FileSystemItem, error) {
 	fullPath := filepath.Join(basePath, entry.Name())
-	
+
 	info, err := entry.Info()
 	if err != nil {
 		return FileSystemItem{}, fmt.Errorf("unable to get file info for '%s' in directory '%s': %w", entry.Name(), basePath, err)

@@ -354,7 +354,6 @@ func ParseWeekday(day string) (time.Weekday, error) {
 	}
 }
 
-
 // GetLocalTimezone returns the local time zone of the system.
 func GetLocalTimezone() (*time.Location, error) {
 	return time.Local, nil

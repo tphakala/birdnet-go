@@ -201,9 +201,9 @@ func TestYearResetLogic(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -739,9 +739,9 @@ func TestLoadYearlyDataError(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()

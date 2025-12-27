@@ -3,7 +3,6 @@ package analysis
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -75,10 +75,10 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 func (cm *ControlMonitor) Start() {
 	// Initialize telemetry endpoint if enabled
 	cm.initializeTelemetryIfEnabled()
-	
+
 	// Initialize sound level monitoring if enabled
 	cm.initializeSoundLevelIfEnabled()
-	
+
 	go cm.monitor()
 }
 
@@ -88,7 +88,7 @@ func (cm *ControlMonitor) Stop() {
 	if cm.soundLevelManager != nil {
 		cm.soundLevelManager.Stop()
 	}
-	
+
 	// Stop telemetry endpoint if running
 	cm.telemetryEndpointMutex.Lock()
 	if cm.telemetryEndpoint != nil && cm.telemetryQuitChan != nil {
@@ -111,7 +111,7 @@ func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
 
 		// Start sound level monitoring
 		if err := cm.soundLevelManager.Start(); err != nil {
-			log.Printf("⚠️ Warning: Failed to start sound level monitoring: %v", err)
+			GetLogger().Warn("Failed to start sound level monitoring", logger.Error(err))
 		}
 	}
 }
@@ -123,36 +123,36 @@ func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
 func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
 	// Check if metrics is available
 	if cm.metrics == nil {
-		log.Printf("⚠️ Warning: Metrics not initialized, skipping telemetry endpoint initialization")
+		GetLogger().Warn("Metrics not initialized, skipping telemetry endpoint initialization")
 		return
 	}
-	
+
 	settings := conf.Setting()
 	if settings.Realtime.Telemetry.Enabled {
 		cm.telemetryEndpointMutex.Lock()
 		defer cm.telemetryEndpointMutex.Unlock()
-		
+
 		// Validate listen address format
 		if err := cm.validateListenAddress(settings.Realtime.Telemetry.Listen); err != nil {
-			log.Printf("⚠️ Warning: Invalid telemetry listen address: %v", err)
+			GetLogger().Warn("Invalid telemetry listen address", logger.Error(err))
 			return
 		}
-		
+
 		// Create quit channel
 		cm.telemetryQuitChan = make(chan struct{})
-		
+
 		// Initialize endpoint
 		endpoint, err := observability.NewEndpoint(settings, cm.metrics)
 		if err != nil {
-			log.Printf("Error initializing telemetry endpoint: %v", err)
+			GetLogger().Error("Failed to initialize telemetry endpoint", logger.Error(err))
 			return
 		}
-		
+
 		// Start the endpoint
 		endpoint.Start(&cm.telemetryWg, cm.telemetryQuitChan)
 		cm.telemetryEndpoint = endpoint
-		
-		log.Printf("📊 Telemetry endpoint started at %s", settings.Realtime.Telemetry.Listen)
+
+		GetLogger().Info("Telemetry endpoint started", logger.String("address", settings.Realtime.Telemetry.Listen))
 	}
 }
 
@@ -190,20 +190,20 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 	case "reconfigure_species_tracking":
 		cm.handleReconfigureSpeciesTracking()
 	default:
-		log.Printf("Received unknown control signal: %v", signal)
+		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
 }
 
 // handleRebuildRangeFilter rebuilds the range filter
 func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	if err := birdnet.BuildRangeFilter(cm.bn); err != nil {
-		log.Printf("\033[31m❌ Error handling range filter rebuild: %v\033[0m", err)
+		GetLogger().Error("Failed to rebuild range filter", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
-		log.Printf("\033[32m🔄 Range filter rebuilt successfully\033[0m")
+		GetLogger().Info("Range filter rebuilt successfully")
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
-	
+
 	// Perform log deduplicator cleanup when range filter is rebuilt
 	// This coupling is for practicality - we wanted to avoid creating new goroutines
 	// and the range filter rebuild happens periodically, making it a convenient hook
@@ -218,31 +218,31 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 // handleReloadBirdnet reloads the BirdNET model
 func (cm *ControlMonitor) handleReloadBirdnet() {
 	if err := cm.bn.ReloadModel(); err != nil {
-		log.Printf("\033[31m❌ Error reloading BirdNET model: %v\033[0m", err)
+		GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
 		cm.notifyError("Failed to reload BirdNET model", err)
 		return
 	}
 
-	log.Printf("\033[32m✅ BirdNET model reloaded successfully\033[0m")
+	GetLogger().Info("BirdNET model reloaded successfully")
 	cm.notifySuccess("BirdNET model reloaded successfully")
 
 	// Rebuild range filter after model reload
 	if err := birdnet.BuildRangeFilter(cm.bn); err != nil {
-		log.Printf("\033[31m❌ Error rebuilding range filter after model reload: %v\033[0m", err)
+		GetLogger().Error("Failed to rebuild range filter after model reload", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
-		log.Printf("\033[32m✅ Range filter rebuilt successfully\033[0m")
+		GetLogger().Info("Range filter rebuilt successfully")
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
 func (cm *ControlMonitor) handleReconfigureMQTT() {
-	log.Printf("\033[32m🔄 Reconfiguring MQTT connection...\033[0m")
+	GetLogger().Info("Reconfiguring MQTT connection")
 	settings := conf.Setting()
 
 	if cm.proc == nil {
-		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
+		GetLogger().Error("Processor not available for MQTT reconfiguration")
 		cm.notifyError("Failed to reconfigure MQTT", fmt.Errorf("processor not available"))
 		return
 	}
@@ -255,7 +255,7 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		var err error
 		newClient, err := mqtt.NewClient(settings, cm.proc.Metrics)
 		if err != nil {
-			log.Printf("\033[31m❌ Error creating MQTT client: %v\033[0m", err)
+			GetLogger().Error("Failed to create MQTT client", logger.Error(err))
 			cm.notifyError("Failed to create MQTT client", err)
 			return
 		}
@@ -263,7 +263,7 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := newClient.Connect(ctx); err != nil {
 			cancel()
-			log.Printf("\033[31m❌ Error connecting to MQTT broker: %v\033[0m", err)
+			GetLogger().Error("Failed to connect to MQTT broker", logger.Error(err))
 			cm.notifyError("Failed to connect to MQTT broker", err)
 			return
 		}
@@ -272,17 +272,17 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		// Safely set the new client
 		cm.proc.SetMQTTClient(newClient)
 
-		log.Printf("\033[32m✅ MQTT connection configured successfully\033[0m")
+		GetLogger().Info("MQTT connection configured successfully")
 		cm.notifySuccess("MQTT connection configured successfully")
 	} else {
-		log.Printf("\033[32m✅ MQTT connection disabled\033[0m")
+		GetLogger().Info("MQTT connection disabled")
 		cm.notifySuccess("MQTT connection disabled")
 	}
 }
 
 // handleReconfigureRTSP reconfigures RTSP sources
 func (cm *ControlMonitor) handleReconfigureRTSP() {
-	log.Printf("\033[32m🔄 Reconfiguring RTSP sources...\033[0m")
+	GetLogger().Info("Reconfiguring RTSP sources")
 	settings := conf.Setting()
 
 	// Prepare the list of active sources (using source IDs, not raw URLs)
@@ -294,11 +294,11 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 				if rtspSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP); rtspSource != nil {
 					sources = append(sources, rtspSource.ID)
 				} else {
-					log.Printf("⚠️ Failed to get RTSP source ID from registry for URL during reconfiguration")
+					GetLogger().Warn("Failed to get RTSP source ID from registry for URL during reconfiguration")
 				}
 			}
 		} else {
-			log.Printf("⚠️ Registry not available during RTSP reconfiguration, skipping RTSP sources")
+			GetLogger().Warn("Registry not available during RTSP reconfiguration, skipping RTSP sources")
 		}
 	}
 	if settings.Realtime.Audio.Source != "" {
@@ -307,16 +307,16 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
 				sources = append(sources, audioSource.ID)
 			} else {
-				log.Printf("⚠️ Failed to get audio source from registry during RTSP reconfiguration")
+				GetLogger().Warn("Failed to get audio source from registry during RTSP reconfiguration")
 			}
 		} else {
-			log.Printf("⚠️ Registry not available during RTSP reconfiguration, skipping audio source")
+			GetLogger().Warn("Registry not available during RTSP reconfiguration, skipping audio source")
 		}
 	}
 
 	// Update the analysis buffer monitors
 	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
-		log.Printf("\033[33m⚠️  Warning: Buffer monitor update completed with errors: %v\033[0m", err)
+		GetLogger().Warn("Buffer monitor update completed with errors", logger.Error(err))
 		// Note: We continue execution as this is not critical for RTSP reconfiguration
 	}
 
@@ -385,17 +385,17 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 
 	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
 
-	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
+	GetLogger().Info("RTSP sources reconfigured successfully")
 	cm.notifySuccess("Audio capture reconfigured successfully")
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
 func (cm *ControlMonitor) handleReconfigureBirdWeather() {
-	log.Printf("\033[32m🔄 Reconfiguring BirdWeather integration...\033[0m")
+	GetLogger().Info("Reconfiguring BirdWeather integration")
 	settings := conf.Setting()
 
 	if cm.proc == nil {
-		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
+		GetLogger().Error("Processor not available for BirdWeather reconfiguration")
 		cm.notifyError("Failed to reconfigure BirdWeather", fmt.Errorf("processor not available"))
 		return
 	}
@@ -407,29 +407,29 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 	if settings.Realtime.Birdweather.Enabled {
 		bwClient, err := birdweather.New(settings)
 		if err != nil {
-			log.Printf("\033[31m❌ Error creating BirdWeather client: %v\033[0m", err)
+			GetLogger().Error("Failed to create BirdWeather client", logger.Error(err))
 			cm.notifyError("Failed to create BirdWeather client", err)
 			return
 		}
 
 		// Update the processor's BirdWeather client using the thread-safe setter
 		cm.proc.SetBwClient(bwClient)
-		log.Printf("\033[32m✅ BirdWeather integration configured successfully\033[0m")
+		GetLogger().Info("BirdWeather integration configured successfully")
 		cm.notifySuccess("BirdWeather integration configured successfully")
 	} else {
 		// If BirdWeather is disabled, client is already set to nil by DisconnectBwClient
-		log.Printf("\033[32m✅ BirdWeather integration disabled\033[0m")
+		GetLogger().Info("BirdWeather integration disabled")
 		cm.notifySuccess("BirdWeather integration disabled")
 	}
 }
 
 // handleUpdateDetectionIntervals updates event tracking intervals for species
 func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
-	log.Printf("\033[32m🔄 Updating detection rate limits...\033[0m")
+	GetLogger().Info("Updating detection rate limits")
 	settings := conf.Setting()
 
 	if cm.proc == nil {
-		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
+		GetLogger().Error("Processor not available for detection interval update")
 		cm.notifyError("Failed to update detection intervals", fmt.Errorf("processor not available"))
 		return
 	}
@@ -437,7 +437,9 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 	// Validate global interval setting
 	globalInterval := time.Duration(settings.Realtime.Interval) * time.Second
 	if globalInterval <= 0 {
-		log.Printf("\033[33m⚠️ Warning: Invalid global interval value (%v), using default\033[0m", globalInterval)
+		GetLogger().Warn("Invalid global interval value, using default",
+			logger.String("invalid_value", globalInterval.String()),
+			logger.String("default_value", "5s"))
 		globalInterval = 5 * time.Second // Fallback to a reasonable default
 	}
 
@@ -457,57 +459,58 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 	// Replace the existing EventTracker with the new one
 	cm.proc.SetEventTracker(newTracker)
 
-	log.Printf("\033[32m✅ Detection rate limits updated successfully\033[0m")
+	GetLogger().Info("Detection rate limits updated successfully")
 	cm.notifySuccess("Detection rate limits updated successfully")
 }
 
 // notifySuccess logs a success message
 func (cm *ControlMonitor) notifySuccess(message string) {
-	log.Printf("✅ %s", message)
+	GetLogger().Info(message, logger.String("status", "success"))
 }
 
 // notifyError logs an error message
 func (cm *ControlMonitor) notifyError(message string, err error) {
-	log.Printf("❌ %s: %v", message, err)
+	GetLogger().Error(message, logger.Error(err))
 }
 
 // handleReconfigureSoundLevel reconfigures sound level monitoring
 func (cm *ControlMonitor) handleReconfigureSoundLevel() {
-	log.Printf("🔄 Reconfiguring sound level monitoring...")
+	GetLogger().Info("Reconfiguring sound level monitoring")
 
 	// Initialize the sound level manager if not already created
 	if cm.soundLevelManager == nil {
 		cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.apiController, cm.metrics)
 	}
-	
+
 	// Restart sound level monitoring with new settings
 	if err := cm.soundLevelManager.Restart(); err != nil {
-		log.Printf("❌ Error reconfiguring sound level monitoring: %v", err)
+		GetLogger().Error("Failed to reconfigure sound level monitoring", logger.Error(err))
 		cm.notifyError("Failed to reconfigure sound level monitoring", err)
 		return
 	}
-	
+
 	settings := conf.Setting()
 	if settings.Realtime.Audio.SoundLevel.Enabled {
-		log.Printf("✅ Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval)
+		GetLogger().Info("Sound level monitoring reconfigured",
+			logger.Int("interval_seconds", settings.Realtime.Audio.SoundLevel.Interval))
 		cm.notifySuccess(fmt.Sprintf("Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval))
 	} else {
-		log.Printf("✅ Sound level monitoring disabled")
+		GetLogger().Info("Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
 	}
 }
 
 // handleReconfigureTelemetry reconfigures the telemetry/metrics endpoint
 func (cm *ControlMonitor) handleReconfigureTelemetry() {
-	log.Printf("🔄 Reconfiguring telemetry endpoint...")
-	
+	GetLogger().Info("Reconfiguring telemetry endpoint")
+
 	// Check if metrics is available
 	if cm.metrics == nil {
-		log.Printf("❌ Error: Metrics not initialized")
+		GetLogger().Error("Metrics not initialized for telemetry reconfiguration")
 		cm.notifyError("Failed to reconfigure telemetry", fmt.Errorf("metrics not initialized"))
 		return
 	}
-	
+
 	settings := conf.Setting()
 
 	// Lock the mutex to ensure thread-safe access
@@ -522,27 +525,27 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		cm.telemetryWg.Wait()
 		cm.telemetryEndpoint = nil
 		cm.telemetryQuitChan = nil
-		log.Printf("✅ Stopped existing telemetry endpoint")
+		GetLogger().Info("Stopped existing telemetry endpoint")
 	}
 
 	// If telemetry is enabled, start new endpoint
 	if settings.Realtime.Telemetry.Enabled {
 		// Validate listen address format
 		if err := cm.validateListenAddress(settings.Realtime.Telemetry.Listen); err != nil {
-			log.Printf("❌ Invalid telemetry listen address: %v", err)
+			GetLogger().Error("Invalid telemetry listen address", logger.Error(err))
 			cm.notifyError("Invalid telemetry listen address", err)
 			return
 		}
-		
+
 		// Create quit channel for the new endpoint
 		cm.telemetryQuitChan = make(chan struct{})
-		
+
 		// Initialize new endpoint
 		endpoint, err := observability.NewEndpoint(settings, cm.metrics)
 		if err != nil {
-			log.Printf("❌ Error initializing telemetry endpoint: %v", err)
+			GetLogger().Error("Failed to initialize telemetry endpoint", logger.Error(err))
 			cm.notifyError("Failed to initialize telemetry endpoint", err)
-			cm.telemetryQuitChan = nil  // Clean up the channel on error
+			cm.telemetryQuitChan = nil // Clean up the channel on error
 			return
 		}
 
@@ -550,10 +553,10 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		endpoint.Start(&cm.telemetryWg, cm.telemetryQuitChan)
 		cm.telemetryEndpoint = endpoint
 
-		log.Printf("✅ Telemetry endpoint reconfigured at %s", settings.Realtime.Telemetry.Listen)
+		GetLogger().Info("Telemetry endpoint reconfigured", logger.String("address", settings.Realtime.Telemetry.Listen))
 		cm.notifySuccess(fmt.Sprintf("Telemetry endpoint reconfigured at %s", settings.Realtime.Telemetry.Listen))
 	} else {
-		log.Printf("✅ Telemetry endpoint disabled")
+		GetLogger().Info("Telemetry endpoint disabled")
 		cm.notifySuccess("Telemetry endpoint disabled")
 	}
 }
@@ -586,11 +589,11 @@ func (cm *ControlMonitor) validateListenAddress(address string) error {
 
 // handleReconfigureSpeciesTracking reconfigures the species tracking system
 func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
-	log.Printf("🔄 Reconfiguring species tracking...")
+	GetLogger().Info("Reconfiguring species tracking")
 	settings := conf.Setting()
 
 	if cm.proc == nil {
-		log.Printf("❌ Error: Processor not available")
+		GetLogger().Error("Processor not available for species tracking reconfiguration")
 		cm.notifyError("Failed to reconfigure species tracking", fmt.Errorf("processor not available"))
 		return
 	}
@@ -598,7 +601,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 	// Get the datastore from the processor
 	ds := cm.proc.Ds
 	if ds == nil {
-		log.Printf("❌ Error: Datastore not available")
+		GetLogger().Error("Datastore not available for species tracking reconfiguration")
 		cm.notifyError("Failed to reconfigure species tracking", fmt.Errorf("datastore not available"))
 		return
 	}
@@ -607,7 +610,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 	// This waits for in-flight async database operations to complete
 	if existingTracker := cm.proc.GetNewSpeciesTracker(); existingTracker != nil {
 		if err := existingTracker.Close(); err != nil {
-			log.Printf("⚠️ Warning: Failed to close existing species tracker: %v", err)
+			GetLogger().Warn("Failed to close existing species tracker", logger.Error(err))
 			// Continue anyway - we still want to reconfigure
 		}
 	}
@@ -615,14 +618,14 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 	// If species tracking is disabled, set tracker to nil
 	if !settings.Realtime.SpeciesTracking.Enabled {
 		cm.proc.SetNewSpeciesTracker(nil)
-		log.Printf("✅ Species tracking disabled")
+		GetLogger().Info("Species tracking disabled")
 		cm.notifySuccess("Species tracking disabled")
 		return
 	}
 
 	// Validate species tracking settings
 	if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
-		log.Printf("❌ Invalid species tracking configuration: %v", err)
+		GetLogger().Error("Invalid species tracking configuration", logger.Error(err))
 		cm.notifyError("Invalid species tracking configuration", err)
 		return
 	}
@@ -641,7 +644,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 
 	// Initialize species tracker from database
 	if err := newTracker.InitFromDatabase(); err != nil {
-		log.Printf("⚠️ Warning: Failed to initialize species tracker from database: %v", err)
+		GetLogger().Warn("Failed to initialize species tracker from database", logger.Error(err))
 		// Continue anyway - tracker will work for new detections
 	}
 
@@ -649,9 +652,9 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 	cm.proc.SetNewSpeciesTracker(newTracker)
 
 	hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
-	log.Printf("✅ Species tracking reconfigured: window=%d days, sync=%d minutes, hemisphere=%s",
-		settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
-		settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
-		hemisphere)
+	GetLogger().Info("Species tracking reconfigured",
+		logger.Int("window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays),
+		logger.Int("sync_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
+		logger.String("hemisphere", hemisphere))
 	cm.notifySuccess("Species tracking reconfigured successfully")
 }

@@ -38,11 +38,11 @@ type HTTPMetrics struct {
 	templateRenderErrors   *prometheus.CounterVec
 
 	// SSE (Server-Sent Events) metrics
-	sseActiveConnections   prometheus.Gauge
-	sseTotalConnections    *prometheus.CounterVec
-	sseConnectionDuration  *prometheus.HistogramVec
-	sseMessagesSent        *prometheus.CounterVec
-	sseErrors              *prometheus.CounterVec
+	sseActiveConnections  prometheus.Gauge
+	sseTotalConnections   *prometheus.CounterVec
+	sseConnectionDuration *prometheus.HistogramVec
+	sseMessagesSent       *prometheus.CounterVec
+	sseErrors             *prometheus.CounterVec
 }
 
 // NewHTTPMetrics creates and registers new HTTP handler metrics
@@ -366,7 +366,7 @@ func (m *HTTPMetrics) SSEConnectionClosed(endpoint string, duration float64, rea
 	default:
 		reason = SSECloseReasonError
 	}
-	
+
 	m.sseActiveConnections.Dec()
 	m.sseTotalConnections.WithLabelValues(endpoint, reason).Inc()
 	m.sseConnectionDuration.WithLabelValues(endpoint).Observe(duration)

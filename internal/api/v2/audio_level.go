@@ -561,7 +561,7 @@ func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
 func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
 	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
 		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.logDebugIfEnabled("Failed to set write deadline for "+operation, "error", err.Error())
+			c.logDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
 		}
 	}
 }

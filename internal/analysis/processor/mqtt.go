@@ -53,12 +53,11 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 		return
 	}
 
+	log := GetLogger()
 	// Create a new MQTT client using the settings and metrics
 	mqttClient, err := mqtt.NewClient(settings, p.Metrics)
 	if err != nil {
-		// Log an error if client creation fails
-		log := GetLogger()
-		log.Error("Failed to create MQTT client", logger.Error(err))
+		log.Error("failed to create MQTT client", logger.Error(err))
 		return
 	}
 
@@ -68,9 +67,7 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 
 	// Attempt to connect to the MQTT broker
 	if err := mqttClient.Connect(ctx); err != nil {
-		// Log an error if the connection attempt fails
-		log := GetLogger()
-		log.Error("Failed to connect to MQTT broker", logger.Error(err))
+		log.Error("failed to connect to MQTT broker", logger.Error(err))
 		return
 	}
 

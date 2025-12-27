@@ -25,13 +25,13 @@ func setDefaultConfig() {
 	viper.SetDefault("logging.file_output.compress", true)
 
 	// Per-module log files (all enabled by default)
-	setModuleLogDefaults("main", true)       // Application lifecycle, console_also=true
-	setModuleLogDefaults("birdnet", true)    // BirdNET analysis
-	setModuleLogDefaults("audio", true)      // Audio capture/processing
-	setModuleLogDefaults("api", true)        // HTTP server and API (internal/api/)
-	setModuleLogDefaults("access", true)     // HTTP access logs (request/response)
-	setModuleLogDefaults("mqtt", true)       // MQTT client
-	setModuleLogDefaults("weather", true)    // Weather providers
+	setModuleLogDefaults("main", true)    // Application lifecycle, console_also=true
+	setModuleLogDefaults("birdnet", true) // BirdNET analysis
+	setModuleLogDefaults("audio", true)   // Audio capture/processing
+	setModuleLogDefaults("api", true)     // HTTP server and API (internal/api/)
+	setModuleLogDefaults("access", true)  // HTTP access logs (request/response)
+	setModuleLogDefaults("mqtt", true)    // MQTT client
+	setModuleLogDefaults("weather", true) // Weather providers
 	setModuleLogDefaults("notifications", true)
 	setModuleLogDefaults("telemetry", true)
 	setModuleLogDefaults("events", true)
@@ -43,7 +43,7 @@ func setDefaultConfig() {
 	setModuleLogDefaults("backup", true)
 	setModuleLogDefaults("spectrogram", true)
 	setModuleLogDefaults("imageprovider", true)
-	setModuleLogDefaults("securefs", true)    // Secure filesystem operations
+	setModuleLogDefaults("securefs", true) // Secure filesystem operations
 
 	// Main module special: always log to console for start/stop visibility
 	viper.SetDefault("logging.modules.main.console_also", true)
