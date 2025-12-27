@@ -12,6 +12,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // getEncryptionKeyPath returns the path to the encryption key file
@@ -248,8 +249,8 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 	}
 
 	m.logger.Info("Encryption key generated and saved successfully",
-		"path", keyPath,
-		"duration_ms", time.Since(start).Milliseconds(),
+		logger.String("path", keyPath),
+		logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 	)
 	return keyHex, nil
 }
@@ -323,7 +324,7 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	m.logger.Info("Attempting to import encryption key")
 	start := time.Now()
 	defer func() {
-		m.logger.Debug("Import encryption key processing completed", "duration_ms", time.Since(start).Milliseconds())
+		m.logger.Debug("Import encryption key processing completed", logger.Int64("duration_ms", time.Since(start).Milliseconds()))
 	}()
 
 	// Parse the key file content
@@ -380,7 +381,7 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 		return err // Propagate error early
 	}
 
-	m.logger.Info("Attempting to import encryption key", "target_path", keyPath)
+	m.logger.Info("Attempting to import encryption key", logger.String("target_path", keyPath))
 	start = time.Now()
 
 	// Create the config directory if it doesn't exist
@@ -406,8 +407,8 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	}
 
 	m.logger.Info("Encryption key imported successfully",
-		"path", keyPath,
-		"duration_ms", time.Since(start).Milliseconds(),
+		logger.String("path", keyPath),
+		logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 	)
 	return nil
 }

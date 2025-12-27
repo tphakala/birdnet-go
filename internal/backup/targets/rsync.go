@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/backup"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Rsync-specific constants (shared constants imported from common.go)
@@ -54,6 +55,7 @@ type RsyncTargetConfig struct {
 // RsyncTarget implements the backup.Target interface using the system rsync command
 type RsyncTarget struct {
 	config      RsyncTargetConfig
+	log         logger.Logger
 	rsyncPath   string
 	sshPath     string
 	mu          sync.Mutex // Protects operations
@@ -76,7 +78,7 @@ func (r *RsyncProgressReader) Read(p []byte) (n int, err error) {
 }
 
 // NewRsyncTarget creates a new rsync target with the given configuration
-func NewRsyncTarget(settings map[string]any) (*RsyncTarget, error) {
+func NewRsyncTarget(settings map[string]any, lg logger.Logger) (*RsyncTarget, error) {
 	p := NewSettingsParser(settings)
 
 	config := RsyncTargetConfig{
@@ -112,8 +114,13 @@ func NewRsyncTarget(settings map[string]any) (*RsyncTarget, error) {
 		return nil, backup.NewError(backup.ErrConfig, "ssh: command not found in PATH", err)
 	}
 
+	if lg == nil {
+		lg = logger.Global().Module("backup")
+	}
+
 	return &RsyncTarget{
 		config:    config,
+		log:       lg.Module("rsync"),
 		tempFiles: make(map[string]bool),
 		rsyncPath: rsyncPath,
 		sshPath:   sshPath,
@@ -146,7 +153,10 @@ func (t *RsyncTarget) withRetry(ctx context.Context, op func() error) error {
 		}
 
 		if t.config.Debug {
-			fmt.Printf("Rsync: Retrying operation after error: %v (attempt %d/%d)\n", lastErr, attempt+1, t.config.MaxRetries)
+			t.log.Debug("Rsync: Retrying operation after error",
+				logger.Error(lastErr),
+				logger.Int("attempt", attempt+1),
+				logger.Int("max_retries", t.config.MaxRetries))
 		}
 		time.Sleep(t.config.RetryBackoff * time.Duration(attempt+1))
 	}
@@ -237,7 +247,9 @@ func (t *RsyncTarget) executeCommand(ctx context.Context, cmd *exec.Cmd) error {
 // Store implements the backup.Target interface with enhanced security
 func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
-		fmt.Printf("🔄 Rsync: Storing backup %s to %s\n", filepath.Base(sourcePath), t.config.Host)
+		t.log.Info("Rsync: Storing backup",
+			logger.String("file", filepath.Base(sourcePath)),
+			logger.String("host", t.config.Host))
 	}
 
 	// Create versioned metadata
@@ -265,12 +277,12 @@ func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 	defer func() {
 		if err := os.Remove(tempMetadataFile.Name()); err != nil {
-			fmt.Printf("rsync: failed to remove temp metadata file: %v\n", err)
+			t.log.Debug("rsync: failed to remove temp metadata file", logger.Error(err))
 		}
 	}()
 	defer func() {
 		if err := tempMetadataFile.Close(); err != nil {
-			fmt.Printf("rsync: failed to close temp metadata file: %v\n", err)
+			t.log.Debug("rsync: failed to close temp metadata file", logger.Error(err))
 		}
 	}()
 
@@ -293,16 +305,17 @@ func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	// Rename the temporary file to match the final name before upload
 	if err := t.atomicUpload(ctx, tempMetadataPath); err != nil {
 		if err := os.Remove(tempMetadataPath); err != nil {
-			fmt.Printf("rsync: failed to remove temp metadata path: %v\n", err)
+			t.log.Debug("rsync: failed to remove temp metadata path", logger.Error(err))
 		}
 		return backup.NewError(backup.ErrIO, fmt.Sprintf("rsync: failed to store metadata file %s", metadataFileName), err)
 	}
 	if err := os.Remove(tempMetadataPath); err != nil {
-		fmt.Printf("rsync: failed to remove temp metadata path: %v\n", err)
+		t.log.Debug("rsync: failed to remove temp metadata path", logger.Error(err))
 	}
 
 	if t.config.Debug {
-		fmt.Printf("✅ Rsync: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
+		t.log.Info("Rsync: Successfully stored backup with metadata",
+			logger.String("file", filepath.Base(sourcePath)))
 	}
 
 	return nil
@@ -462,7 +475,9 @@ func (t *RsyncTarget) cleanupTempFiles(ctx context.Context) error {
 	for path := range t.tempFiles {
 		if err := t.deleteFile(ctx, path); err != nil {
 			if t.config.Debug {
-				fmt.Printf("⚠️ Rsync: Failed to clean up temporary file %s: %v\n", path, err)
+				t.log.Warn("Rsync: Failed to clean up temporary file",
+					logger.String("path", path),
+					logger.Error(err))
 			}
 			errs = append(errs, fmt.Errorf("failed to delete %s: %w", path, err))
 		} else {
@@ -523,7 +538,8 @@ func (t *RsyncTarget) Name() string {
 // List implements the backup.Target interface
 func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		fmt.Printf("🔄 Rsync: Listing backups from %s\n", t.config.Host)
+		t.log.Info("Rsync: Listing backups",
+			logger.String("host", t.config.Host))
 	}
 
 	// Build SSH command to list files
@@ -569,7 +585,8 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		checkCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("test -f %s && echo exists", backupPath))...) // #nosec G204 -- sshPath validated during initialization, backupPath constructed from sanitized paths
 		if output, err := checkCmd.CombinedOutput(); err != nil || !strings.Contains(string(output), "exists") {
 			if t.config.Debug {
-				fmt.Printf("⚠️ Rsync: Skipping orphaned metadata file %s: backup file not found\n", name)
+				t.log.Warn("Rsync: Skipping orphaned metadata file, backup file not found",
+					logger.String("metadata_file", name))
 			}
 			continue
 		}
@@ -581,7 +598,8 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		metadata, err := t.downloadAndParseMetadata(ctx, metadataPath, sshArgs, backupName)
 		if err != nil {
 			if t.config.Debug {
-				fmt.Printf("⚠️ Rsync: %v\n", err)
+				t.log.Warn("Rsync: Failed to process metadata",
+					logger.Error(err))
 			}
 			continue
 		}
@@ -618,12 +636,12 @@ func (t *RsyncTarget) downloadAndParseMetadata(ctx context.Context, metadataPath
 	}
 	defer func() {
 		if err := os.Remove(tempFile.Name()); err != nil {
-			fmt.Printf("rsync: failed to remove temp file: %v\n", err)
+			t.log.Debug("rsync: failed to remove temp file", logger.Error(err))
 		}
 	}()
 	defer func() {
 		if err := tempFile.Close(); err != nil {
-			fmt.Printf("rsync: failed to close temp file: %v\n", err)
+			t.log.Debug("rsync: failed to close temp file", logger.Error(err))
 		}
 	}()
 
@@ -645,7 +663,9 @@ func (t *RsyncTarget) downloadAndParseMetadata(ctx context.Context, metadataPath
 // Delete implements the backup.Target interface with enhanced security
 func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		fmt.Printf("🔄 Rsync: Deleting backup %s from %s\n", target, t.config.Host)
+		t.log.Info("Rsync: Deleting backup",
+			logger.String("target", target),
+			logger.String("host", t.config.Host))
 	}
 
 	// Sanitize the target path
@@ -684,7 +704,8 @@ func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 	}
 
 	if t.config.Debug {
-		fmt.Printf("✅ Rsync: Successfully deleted backup %s\n", target)
+		t.log.Info("Rsync: Successfully deleted backup",
+			logger.String("target", target))
 	}
 
 	return nil

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -37,10 +37,10 @@ var windowsReservedNames = map[string]bool{
 
 // LocalTarget implements the backup.Target interface for local filesystem storage
 type LocalTarget struct {
-	path   string
-	debug  bool
-	logger *slog.Logger
-	sfs    *securefs.SecureFS // OS-level sandboxed filesystem (Go 1.24+)
+	path  string
+	debug bool
+	log   logger.Logger
+	sfs   *securefs.SecureFS // OS-level sandboxed filesystem (Go 1.24+)
 }
 
 // LocalTargetConfig holds configuration for the local filesystem target
@@ -66,10 +66,10 @@ func (t *LocalTarget) atomicWriteSecure(relativePath string, perm os.FileMode, w
 	defer func() {
 		if !success {
 			if err := tempFile.Close(); err != nil {
-				t.logger.Debug("local: failed to close temp file", "error", err)
+				t.log.Debug("local: failed to close temp file", logger.Error(err))
 			}
 			if err := t.sfs.Remove(tempName); err != nil {
-				t.logger.Debug("local: failed to remove temp file", "error", err)
+				t.log.Debug("local: failed to remove temp file", logger.Error(err))
 			}
 		}
 	}()
@@ -125,7 +125,7 @@ func (t *LocalTarget) withRetry(op func() error) error {
 		} else {
 			lastErr = err
 			if t.debug {
-				t.logger.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, DefaultMaxRetries))
+				t.log.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, DefaultMaxRetries))
 			}
 		}
 		time.Sleep(backoffDuration(i))
@@ -241,15 +241,15 @@ func validatePath(path string) error {
 }
 
 // NewLocalTarget creates a new local filesystem target
-func NewLocalTarget(config LocalTargetConfig, logger *slog.Logger) (*LocalTarget, error) {
+func NewLocalTarget(config LocalTargetConfig, lg logger.Logger) (*LocalTarget, error) {
 	// Validate and clean the path
 	if err := validatePath(config.Path); err != nil {
 		return nil, err
 	}
 	cleanPath := filepath.Clean(config.Path)
 
-	if logger == nil {
-		logger = slog.Default()
+	if lg == nil {
+		lg = logger.Global().Module("backup")
 	}
 
 	// Convert to absolute path
@@ -296,10 +296,10 @@ func NewLocalTarget(config LocalTargetConfig, logger *slog.Logger) (*LocalTarget
 	}
 
 	return &LocalTarget{
-		path:   absPath,
-		debug:  config.Debug,
-		logger: logger,
-		sfs:    sfs,
+		path:  absPath,
+		debug: config.Debug,
+		log:   lg.Module("local"),
+		sfs:   sfs,
 	}, nil
 }
 
@@ -321,7 +321,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	if t.debug {
-		t.logger.Info(fmt.Sprintf("🔄 Storing backup from %s to local target", sourcePath))
+		t.log.Info(fmt.Sprintf("🔄 Storing backup from %s to local target", sourcePath))
 	}
 
 	// Validate source file
@@ -395,7 +395,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 			}
 			defer func() {
 				if err := srcFile.Close(); err != nil {
-					t.logger.Debug("local: failed to close source file", "path", sourcePath, "error", err)
+					t.log.Debug("local: failed to close source file", logger.String("path", sourcePath), logger.Error(err))
 				}
 			}()
 
@@ -453,7 +453,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	if t.debug {
-		t.logger.Info(fmt.Sprintf("✅ Successfully stored backup %s with metadata", filepath.Base(sourcePath)))
+		t.log.Info(fmt.Sprintf("✅ Successfully stored backup %s with metadata", filepath.Base(sourcePath)))
 	}
 
 	return nil
@@ -498,7 +498,7 @@ func (t *LocalTarget) verifyBackup(ctx context.Context, backupPath string, expec
 // List returns a list of available backups
 func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.debug {
-		t.logger.Info("🔄 Listing backups in local target")
+		t.log.Info("🔄 Listing backups in local target")
 	}
 
 	// Use securefs for directory listing (sandboxed to backup path)
@@ -524,7 +524,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		// Check if the corresponding backup file exists (using securefs)
 		if _, err := t.sfs.Stat(backupName); err != nil {
 			if t.debug {
-				t.logger.Info(fmt.Sprintf("⚠️ Skipping orphaned metadata file %s: backup file not found", entry.Name()))
+				t.log.Info(fmt.Sprintf("⚠️ Skipping orphaned metadata file %s: backup file not found", entry.Name()))
 			}
 			continue
 		}
@@ -532,7 +532,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		// Read metadata file using securefs (sandboxed access)
 		metadataFile, err := t.sfs.Open(entry.Name())
 		if err != nil {
-			t.logger.Info(fmt.Sprintf("⚠️ Skipping backup %s: %v", backupName, err))
+			t.log.Info(fmt.Sprintf("⚠️ Skipping backup %s: %v", backupName, err))
 			continue
 		}
 
@@ -540,13 +540,13 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&metadata); err != nil {
 			if err := metadataFile.Close(); err != nil {
-				t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", entry.Name(), err))
+				t.log.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", entry.Name(), err))
 			}
-			t.logger.Info(fmt.Sprintf("⚠️ Invalid metadata in backup %s: %v", backupName, err))
+			t.log.Info(fmt.Sprintf("⚠️ Invalid metadata in backup %s: %v", backupName, err))
 			continue
 		}
 		if err := metadataFile.Close(); err != nil {
-			t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", entry.Name(), err))
+			t.log.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", entry.Name(), err))
 		}
 
 		backupInfo := backup.BackupInfo{
@@ -567,7 +567,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete removes a backup
 func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 	if t.debug {
-		t.logger.Info(fmt.Sprintf("🔄 Deleting backup %s from local target", backupID))
+		t.log.Info(fmt.Sprintf("🔄 Deleting backup %s from local target", backupID))
 	}
 
 	// Delete both the backup file and its metadata using securefs (sandboxed)
@@ -594,7 +594,7 @@ func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 	}
 
 	if t.debug {
-		t.logger.Info(fmt.Sprintf("✅ Successfully deleted backup %s", backupID))
+		t.log.Info(fmt.Sprintf("✅ Successfully deleted backup %s", backupID))
 	}
 
 	return nil
@@ -653,10 +653,10 @@ func (t *LocalTarget) Validate() error {
 			Build()
 	}
 	if err := f.Close(); err != nil {
-		t.logger.Debug("local: failed to close test file", "error", err)
+		t.log.Debug("local: failed to close test file", logger.Error(err))
 	}
 	if err := t.sfs.Remove(testFileName); err != nil {
-		t.logger.Debug("local: failed to remove test file", "error", err)
+		t.log.Debug("local: failed to remove test file", logger.Error(err))
 	}
 
 	// Check available disk space
@@ -684,8 +684,8 @@ func (t *LocalTarget) Validate() error {
 			Build()
 	}
 
-	if t.logger != nil {
-		t.logger.Info(fmt.Sprintf("💾 Available disk space at backup location: %.1f GB", availableGB))
+	if t.log != nil {
+		t.log.Info(fmt.Sprintf("💾 Available disk space at backup location: %.1f GB", availableGB))
 	}
 
 	return nil
