@@ -3,10 +3,10 @@ package metrics
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // HTTPMetrics contains Prometheus metrics for HTTP handler operations
@@ -387,7 +387,7 @@ func (m *HTTPMetrics) GetActiveSSEConnections() float64 {
 	metric := &dto.Metric{}
 	if err := m.sseActiveConnections.Write(metric); err != nil {
 		// Log the error with context for debugging metric registration issues
-		log.Printf("HTTPMetrics: Failed to write SSE active connections metric: %v", err)
+		log.Warn("Failed to write SSE active connections metric", logger.Error(err))
 		return 0
 	}
 	if metric.Gauge != nil && metric.Gauge.Value != nil {

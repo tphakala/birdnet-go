@@ -5,11 +5,11 @@ package observability
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	metricspkg "github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -65,9 +65,9 @@ func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 	}
 
 	wg.Go(func() {
-		log.Printf("Telemetry endpoint starting at %s", e.listenAddress)
+		log.Info("Telemetry endpoint starting", logger.String("address", e.listenAddress))
 		if err := e.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Telemetry HTTP server error: %v", err)
+			log.Error("Telemetry HTTP server error", logger.Error(err))
 		}
 	})
 
@@ -77,11 +77,11 @@ func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 // gracefulShutdown waits for the quit signal and shuts down the server gracefully.
 func (e *Endpoint) gracefulShutdown(quitChan <-chan struct{}) {
 	<-quitChan
-	log.Println("Stopping telemetry server...")
+	log.Info("Stopping telemetry server")
 	ctx, cancel := context.WithTimeout(context.Background(), metricspkg.ShutdownTimeout)
 	defer cancel()
 	if err := e.server.Shutdown(ctx); err != nil {
-		log.Printf("Telemetry server shutdown error: %v", err)
+		log.Error("Telemetry server shutdown error", logger.Error(err))
 	}
 }
 
