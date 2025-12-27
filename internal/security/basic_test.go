@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // parseURLOrFail parses a URL string and fails the test if parsing fails
@@ -532,7 +533,7 @@ func TestGetIPv4Subnet(t *testing.T) {
 	}
 }
 
-// testBasicLogger is a mock logger for basic.go tests
+// testBasicLogger is a mock logger that implements logger.Logger for basic.go tests
 type testBasicLogger struct {
 	debugCalls []string
 	warnCalls  []string
@@ -544,20 +545,40 @@ func newTestBasicLogger() *testBasicLogger {
 	return &testBasicLogger{}
 }
 
-func (l *testBasicLogger) Debug(msg string, _ ...any) {
+func (l *testBasicLogger) Module(_ string) logger.Logger {
+	return l
+}
+
+func (l *testBasicLogger) Trace(_ string, _ ...logger.Field) {}
+
+func (l *testBasicLogger) Debug(msg string, _ ...logger.Field) {
 	l.debugCalls = append(l.debugCalls, msg)
 }
 
-func (l *testBasicLogger) Warn(msg string, _ ...any) {
+func (l *testBasicLogger) Warn(msg string, _ ...logger.Field) {
 	l.warnCalls = append(l.warnCalls, msg)
 }
 
-func (l *testBasicLogger) Info(msg string, _ ...any) {
+func (l *testBasicLogger) Info(msg string, _ ...logger.Field) {
 	l.infoCalls = append(l.infoCalls, msg)
 }
 
-func (l *testBasicLogger) Error(msg string, _ ...any) {
+func (l *testBasicLogger) Error(msg string, _ ...logger.Field) {
 	l.errorCalls = append(l.errorCalls, msg)
+}
+
+func (l *testBasicLogger) With(_ ...logger.Field) logger.Logger {
+	return l
+}
+
+func (l *testBasicLogger) WithContext(_ context.Context) logger.Logger {
+	return l
+}
+
+func (l *testBasicLogger) Log(_ logger.LogLevel, _ string, _ ...logger.Field) {}
+
+func (l *testBasicLogger) Flush() error {
+	return nil
 }
 
 // TestExchangeCodeWithTimeout tests the code exchange timeout wrapper

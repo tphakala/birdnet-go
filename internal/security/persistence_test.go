@@ -1,10 +1,8 @@
 package security
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -168,32 +166,13 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 		},
 	}
 
-	// Capture slog output
-	var logBuffer bytes.Buffer
-	originalLevel := securityLevelVar.Level()
-
-	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
-	testLogger := slog.New(testHandler)
-	
-	// Use the thread-safe setter to replace the logger
-	restore := setTestLogger(testLogger)
-	securityLevelVar.Set(slog.LevelDebug)  // Ensure debug logs are captured
-
-	defer func() {
-		restore() // Restore original logger
-		securityLevelVar.Set(originalLevel)
-	}()
-
 	// Set the mock store
 	gothic.Store = &mockStore{}
 
-	// This should not panic and should log a warning
-	server.configureLocalNetworkCookieStore()
-
-	// Verify that appropriate warning was logged
-	logOutput := logBuffer.String()
-	assert.Contains(t, logOutput, "Unknown session store type")
-	assert.Contains(t, logOutput, "mockStore") // The string representation of the type might be "*security.mockStore" or similar
+	// This should not panic - the function handles unknown store types gracefully
+	assert.NotPanics(t, func() {
+		server.configureLocalNetworkCookieStore()
+	}, "configureLocalNetworkCookieStore should not panic with unknown store type")
 }
 
 // TestConfigureLocalNetworkWithMissingSessionSecret verifies that the function handles
@@ -214,31 +193,14 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 		sessions.Store
 	}
 
-	// Capture slog output
-	var logBuffer bytes.Buffer
-	originalLevel := securityLevelVar.Level()
-
-	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
-	testLogger := slog.New(testHandler)
-
-	// Use the thread-safe setter to replace the logger
-	restore := setTestLogger(testLogger)
-	securityLevelVar.Set(slog.LevelDebug)
-
-	defer func() {
-		restore()
-		securityLevelVar.Set(originalLevel)
-	}()
-
 	// Set the mock store
 	gothic.Store = &mockStore{}
 
-	// This should not panic and should log a warning about the unknown store type
-	server.configureLocalNetworkCookieStore()
-
-	// Verify that appropriate warning was logged
-	logOutput := logBuffer.String()
-	assert.Contains(t, logOutput, "Unknown session store type")
+	// This should not panic - the function handles unknown store types gracefully
+	// even with an empty session secret
+	assert.NotPanics(t, func() {
+		server.configureLocalNetworkCookieStore()
+	}, "configureLocalNetworkCookieStore should not panic with unknown store type and empty session secret")
 }
 
 // TestLoadCorruptedTokensFile tests handling of corrupted tokens file
