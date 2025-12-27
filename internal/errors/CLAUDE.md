@@ -26,7 +26,7 @@ func init() {
 
 - birdnet, myaudio, datastore, imageprovider
 - diskmanager, mqtt, weather, conf, telemetry
-- birdweather, backup, audiocore
+- birdweather, backup
 
 ⚠️ **Unregistered components cause incorrect telemetry tagging**
 

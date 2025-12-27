@@ -43,7 +43,6 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.processingtime", false)
 
 	// Audio source configuration
-	viper.SetDefault("realtime.audio.useaudiocore", false) // true to use new audiocore package instead of myaudio
 	viper.SetDefault("realtime.audio.source", "sysdefault")
 	viper.SetDefault("realtime.audio.streamtransport", "sse")
 
