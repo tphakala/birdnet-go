@@ -30,7 +30,7 @@ const (
 	toastDurationMedium   = 4000                   // Medium toast duration (4 seconds)
 	toastDurationLong     = 5000                   // Long toast duration (5 seconds)
 	toastDurationExtended = 8000                   // Extended toast duration (8 seconds)
-	minSortableElements = 2 // Minimum elements needed after first for sorting
+	minSortableElements   = 2                      // Minimum elements needed after first for sorting
 )
 
 // UpdateRequest represents a request to update settings
@@ -1277,13 +1277,13 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 
 // Field validation constants
 const (
-	minPort         = 1
-	maxPort         = 65535
-	minLatitude     = -90
-	maxLatitude     = 90
-	minLongitude    = -180
-	maxLongitude    = 180
-	minPasswordLen  = 8
+	minPort        = 1
+	maxPort        = 65535
+	minLatitude    = -90
+	maxLatitude    = 90
+	minLongitude   = -180
+	maxLongitude   = 180
+	minPasswordLen = 8
 )
 
 // fieldValidators maps field names to their validation functions
@@ -1403,12 +1403,12 @@ func getBlockedFieldMap() map[string]any {
 
 // settingsChangeCheck defines a settings change detector with its associated action and notification.
 type settingsChangeCheck struct {
-	name     string                                           // Human-readable name for logging
-	action   string                                           // Control action to trigger (empty = notify only)
-	changed  func(old, current *conf.Settings) bool           // Function to detect if settings changed
-	toast    string                                           // Toast message to display
-	toastTyp string                                           // Toast type: "info" or "warning"
-	duration int                                              // Toast duration in milliseconds
+	name     string                                 // Human-readable name for logging
+	action   string                                 // Control action to trigger (empty = notify only)
+	changed  func(old, current *conf.Settings) bool // Function to detect if settings changed
+	toast    string                                 // Toast message to display
+	toastTyp string                                 // Toast type: "info" or "warning"
+	duration int                                    // Toast duration in milliseconds
 }
 
 // settingsChangeChecks defines all settings change detectors in order of execution.

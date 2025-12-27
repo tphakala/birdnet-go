@@ -15,14 +15,14 @@ import (
 // Common constants for file operations and limits
 const (
 	// File and directory permissions
-	PermDir           = 0o700 // rwx------ for directories
-	PermFile          = 0o600 // rw------- for files
-	PermDirGroup      = 0o750 // rwxr-x--- for shared directories
-	PermFileGroup     = 0o640 // rw-r----- for shared files
+	PermDir       = 0o700 // rwx------ for directories
+	PermFile      = 0o600 // rw------- for files
+	PermDirGroup  = 0o750 // rwxr-x--- for shared directories
+	PermFileGroup = 0o640 // rw-r----- for shared files
 
 	// Path and size limits
-	MaxPathLength      = 4096 // Maximum total path length
-	MaxComponentLength = 255  // Maximum path component length (filename)
+	MaxPathLength      = 4096                    // Maximum total path length
+	MaxComponentLength = 255                     // Maximum path component length (filename)
 	MaxBackupSizeBytes = 10 * 1024 * 1024 * 1024 // 10GB
 
 	// Buffer sizes
@@ -39,21 +39,21 @@ const (
 	DefaultTimeout = 30 * time.Second
 
 	// Default ports
-	DefaultFTPPort   = 21
-	DefaultSSHPort   = 22
+	DefaultFTPPort = 21
+	DefaultSSHPort = 22
 
 	// Metadata file extensions
 	MetadataFileExt = ".meta"
 
 	// HTTP status codes for error classification
-	HTTPUnauthorized     = 401
-	HTTPForbidden        = 403
-	HTTPNotFound         = 404
-	HTTPTooManyRequests  = 429
-	HTTPInternalError    = 500
-	HTTPBadGateway       = 502
-	HTTPServiceUnavail   = 503
-	HTTPGatewayTimeout   = 504
+	HTTPUnauthorized    = 401
+	HTTPForbidden       = 403
+	HTTPNotFound        = 404
+	HTTPTooManyRequests = 429
+	HTTPInternalError   = 500
+	HTTPBadGateway      = 502
+	HTTPServiceUnavail  = 503
+	HTTPGatewayTimeout  = 504
 
 	// Parsing constants
 	MinLsOutputFields = 8 // Minimum fields in ls -l output for parsing
@@ -359,12 +359,12 @@ func DefaultKnownHostsFile() string {
 
 // PathValidationOpts configures path validation behavior
 type PathValidationOpts struct {
-	AllowHidden     bool   // Whether to allow hidden files/directories (starting with .)
-	AllowAbsolute   bool   // Whether to allow absolute paths
-	ConvertToSlash  bool   // Convert path separators to forward slashes (for remote targets)
-	CheckSymlinks   bool   // Check if path is a symlink (local filesystem only)
-	InvalidChars    string // Additional invalid characters beyond the default set
-	ReturnCleaned   bool   // Return the cleaned path instead of just validating
+	AllowHidden    bool   // Whether to allow hidden files/directories (starting with .)
+	AllowAbsolute  bool   // Whether to allow absolute paths
+	ConvertToSlash bool   // Convert path separators to forward slashes (for remote targets)
+	CheckSymlinks  bool   // Check if path is a symlink (local filesystem only)
+	InvalidChars   string // Additional invalid characters beyond the default set
+	ReturnCleaned  bool   // Return the cleaned path instead of just validating
 }
 
 // ValidatePathWithOpts performs comprehensive path validation with configurable options.
@@ -445,8 +445,8 @@ func ValidatePathWithOpts(pathToCheck string, opts PathValidationOpts) (string, 
 
 // TempFileResult contains the result of writing content to a temporary file
 type TempFileResult struct {
-	Path    string     // Path to the temporary file
-	Cleanup func()     // Function to remove the temp file (safe to call multiple times)
+	Path    string // Path to the temporary file
+	Cleanup func() // Function to remove the temp file (safe to call multiple times)
 }
 
 // WriteTempFile writes content to a temporary file and returns the path and cleanup function.

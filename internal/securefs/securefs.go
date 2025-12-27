@@ -826,10 +826,10 @@ func (sfs *SecureFS) Readlink(path string) (string, error) {
 
 	// Make the path relative to the base directory
 	relPath, err := filepath.Rel(sfs.baseDir, absPath)
-if err != nil {
-	// This error implies the path is outside the base directory.
-	return "", fmt.Errorf("%w: failed to make path relative: %w", ErrPathTraversal, err)
-}
+	if err != nil {
+		// This error implies the path is outside the base directory.
+		return "", fmt.Errorf("%w: failed to make path relative: %w", ErrPathTraversal, err)
+	}
 
 	// Validate the symlink file path itself is within bounds
 	// Check for path traversal attempts

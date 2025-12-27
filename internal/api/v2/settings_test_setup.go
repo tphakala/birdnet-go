@@ -29,11 +29,11 @@ func TestMain(m *testing.M) {
 				os.Exit(1)
 			}
 		}()
-		
+
 		// Disable HTTP keep-alives for all tests to prevent goroutine leaks
 		// This must be done before any test creates an HTTP client
 		DisableHTTPKeepAlivesForTesting()
-		
+
 		// Inject test settings before any test runs
 		// Create a dummy *testing.T for initialization purposes
 		// This is safe since we only use t.Helper() which doesn't require active test
@@ -43,14 +43,14 @@ func TestMain(m *testing.M) {
 			panic("getTestSettings() returned nil")
 		}
 		conf.SetTestSettings(testSettings)
-		
+
 		// Run tests
 		testResult := m.Run()
-		
+
 		// Give a small grace period for goroutines to clean up after all tests
 		// This is the ONLY place we use time.Sleep, and it's after ALL tests complete
 		time.Sleep(testCleanupGracePeriod)
-		
+
 		// Check for goroutine leaks after ALL tests have completed
 		// This avoids the issue of one test detecting another test's goroutines
 		if testResult == 0 {
@@ -65,17 +65,17 @@ func TestMain(m *testing.M) {
 				// Ignore lumberjack logger
 				goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 			}
-			
+
 			if err := goleak.Find(opts...); err != nil {
 				// Report the leak as a test failure
 				fmt.Fprintf(os.Stderr, "FAIL: Goroutine leak detected after all tests:\n%v\n", err)
 				return 1 // Fail the test suite
 			}
 		}
-		
+
 		return testResult
 	}()
-	
+
 	// Exit with the test result code
 	os.Exit(code)
 }

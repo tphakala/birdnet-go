@@ -495,4 +495,3 @@ func TestV2AuthService_Interface(t *testing.T) {
 		t.Log("SecurityAdapter correctly implements auth.Service interface including new methods")
 	})
 }
-

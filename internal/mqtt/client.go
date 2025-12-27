@@ -223,7 +223,7 @@ func (c *client) prepareForConnection(log logger.Logger, isAutoReconnect bool) e
 	if oldClientToDisconnect != nil {
 		disconnectTimeoutMs := durationToMillisUint(GracefulDisconnectTimeout)
 		log.Debug("Disconnecting old client instance",
-			logger.Int("timeout_ms", int(disconnectTimeoutMs)))
+			logger.Uint64("timeout_ms", uint64(disconnectTimeoutMs)))
 		oldClientToDisconnect.Disconnect(disconnectTimeoutMs)
 	}
 	return nil
@@ -424,8 +424,8 @@ func (c *client) cancelConnectionAttempt(clientToConnect mqtt.Client, log logger
 	}
 	cancelTimeout := c.calculateCancelTimeout()
 	log.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
-		logger.Int("timeout_ms", int(cancelTimeout)),
-		logger.Int("base_timeout", int(durationToMillisUint(CancelDisconnectTimeout))),
+		logger.Uint64("timeout_ms", uint64(cancelTimeout)),
+		logger.Uint64("base_timeout", uint64(durationToMillisUint(CancelDisconnectTimeout))),
 		logger.Int64("config_timeout_ms", c.config.DisconnectTimeout.Milliseconds()))
 	clientToConnect.Disconnect(cancelTimeout)
 }
@@ -726,7 +726,7 @@ func (c *client) disconnectWithTimeout(timeout time.Duration) {
 		if clientToDisconnect.IsConnected() {
 			disconnectTimeoutMs := uint(timeout.Milliseconds()) // #nosec G115 -- timeout value conversion safe
 			log.Debug("Sending disconnect signal to Paho client",
-				logger.Int("timeout_ms", int(disconnectTimeoutMs)))
+				logger.Uint64("timeout_ms", uint64(disconnectTimeoutMs)))
 			clientToDisconnect.Disconnect(disconnectTimeoutMs) // Perform disconnect outside lock
 			c.metrics.UpdateConnectionStatus(false)            // Update metrics after disconnect attempt
 		} else {

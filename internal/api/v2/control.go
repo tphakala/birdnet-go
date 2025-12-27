@@ -93,6 +93,7 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 //   - action: The action name for logging and response (e.g., ActionRestartAnalysis)
 //   - logMessage: Initial log message when request is received
 //   - successMessage: Message to return in the response when successful
+//
 // Returns an error if the control channel is nil or if the request times out
 func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
 	c.logInfoIfEnabled(logMessage,

@@ -12,7 +12,7 @@ import (
 // BenchmarkValidateRelativePathWithoutCache benchmarks path validation without caching
 func BenchmarkValidateRelativePathWithoutCache(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	// Create a temporary directory using Go 1.24 b.TempDir()
 	tempDir := b.TempDir()
 
@@ -43,7 +43,7 @@ func BenchmarkValidateRelativePathWithoutCache(b *testing.B) {
 // BenchmarkValidateRelativePathWithCache benchmarks path validation with caching
 func BenchmarkValidateRelativePathWithCache(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	// Create a temporary directory using Go 1.24 b.TempDir()
 	tempDir := b.TempDir()
 
@@ -74,7 +74,7 @@ func BenchmarkValidateRelativePathWithCache(b *testing.B) {
 // BenchmarkIsPathWithinBaseWithoutCache benchmarks path checking without caching
 func BenchmarkIsPathWithinBaseWithoutCache(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	// Create temporary directories using Go 1.24 b.TempDir()
 	tempDir := b.TempDir()
 
@@ -99,7 +99,7 @@ func BenchmarkIsPathWithinBaseWithoutCache(b *testing.B) {
 // BenchmarkIsPathWithinBaseWithCache benchmarks path checking with caching
 func BenchmarkIsPathWithinBaseWithCache(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	// Create temporary directories using Go 1.24 b.TempDir()
 	tempDir := b.TempDir()
 
@@ -125,12 +125,12 @@ func BenchmarkIsPathWithinBaseWithCache(b *testing.B) {
 // TestCacheExpiration tests that cache entries expire correctly
 func TestCacheExpiration(t *testing.T) {
 	cache := NewPathCache()
-	
+
 	// Set very short TTL for testing
 	cache.validateTTL = 100 * time.Millisecond
-	
+
 	testPath := "test/file.txt"
-	
+
 	// First call should compute and cache
 	result1, err1 := cache.GetValidatePath(testPath, func(path string) (string, error) {
 		return filepath.Clean(path), nil
@@ -161,7 +161,7 @@ func TestCacheExpiration(t *testing.T) {
 // TestCacheStats tests that cache statistics are collected correctly
 func TestCacheStats(t *testing.T) {
 	cache := NewPathCache()
-	
+
 	// Add some entries
 	testPaths := []string{"file1.txt", "file2.mp3", "file3.png"}
 	for _, path := range testPaths {
@@ -169,7 +169,7 @@ func TestCacheStats(t *testing.T) {
 			return filepath.Clean(p), nil
 		})
 	}
-	
+
 	stats := cache.GetCacheStats()
 	assert.Equal(t, 3, stats.ValidateTotal, "Expected 3 validate cache entries")
 }

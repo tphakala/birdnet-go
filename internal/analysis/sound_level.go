@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -35,9 +34,18 @@ const (
 	errMsgNoOctaveBandData = "no octave band data"
 )
 
-// getSoundLevelLogger returns the sound level logger
+var (
+	soundLevelLogger     logger.Logger
+	soundLevelLoggerOnce sync.Once
+)
+
+// getSoundLevelLogger returns the sound level logger.
+// Uses sync.Once to ensure the logger is only initialized once.
 func getSoundLevelLogger() logger.Logger {
-	return logger.Global().Module("analysis").Module("soundlevel")
+	soundLevelLoggerOnce.Do(func() {
+		soundLevelLogger = logger.Global().Module("analysis").Module("soundlevel")
+	})
+	return soundLevelLogger
 }
 
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
@@ -585,13 +593,14 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 
 // startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
 func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metricsInstance *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
+	lg := getSoundLevelLogger()
 	wg.Go(func() {
-		log.Println("📊 Started sound level metrics publisher")
+		lg.Info("started sound level metrics publisher")
 
 		for {
 			select {
 			case <-doneChan:
-				log.Println("🔌 Stopping sound level metrics publisher")
+				lg.Info("stopping sound level metrics publisher")
 				return
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
@@ -730,10 +739,11 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 				myaudio.UnregisterSoundLevelProcessor(audioSource.ID)
 				LogSoundLevelProcessorUnregistered(audioSource.DisplayName, "audio_device", "analysis.soundlevel")
 			} else {
-				log.Printf("⚠️ Failed to get audio source from registry during sound level processor unregistration")
+				GetLogger().Warn("failed to get audio source from registry during sound level processor unregistration",
+					logger.String("source", settings.Realtime.Audio.Source))
 			}
 		} else {
-			log.Printf("⚠️ Registry not available during sound level processor unregistration")
+			GetLogger().Warn("registry not available during sound level processor unregistration")
 		}
 	}
 

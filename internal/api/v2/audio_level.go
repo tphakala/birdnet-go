@@ -20,11 +20,11 @@ import (
 // Audio level SSE configuration constants
 const (
 	// Connection timeouts
-	audioLevelMaxDuration      = 30 * time.Minute      // Maximum stream duration to prevent resource leaks
-	audioLevelHeartbeatInterval = 10 * time.Second     // Heartbeat interval for keep-alive
-	audioLevelActivityCheck    = 1 * time.Second       // Activity check interval for sources
-	audioLevelInactivityThreshold = 15 * time.Second   // Threshold for marking sources as inactive
-	audioLevelRateLimitUpdate  = 50 * time.Millisecond // Rate limit for sending updates
+	audioLevelMaxDuration         = 30 * time.Minute      // Maximum stream duration to prevent resource leaks
+	audioLevelHeartbeatInterval   = 10 * time.Second      // Heartbeat interval for keep-alive
+	audioLevelActivityCheck       = 1 * time.Second       // Activity check interval for sources
+	audioLevelInactivityThreshold = 15 * time.Second      // Threshold for marking sources as inactive
+	audioLevelRateLimitUpdate     = 50 * time.Millisecond // Rate limit for sending updates
 
 	// Buffer sizes
 	audioLevelChannelBuffer = 100 // Buffer size for internal processing

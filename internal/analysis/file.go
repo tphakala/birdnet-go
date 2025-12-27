@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,13 +130,11 @@ func validateAudioFile(filePath string) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			// Add structured logging
-			GetLogger().Warn("Failed to close audio file",
+			GetLogger().Warn("failed to close audio file",
 				logger.String("component", "analysis.file"),
 				logger.Error(err),
 				logger.String("file_path", filePath),
 				logger.String("operation", "close_audio_file"))
-			log.Printf("Failed to close audio file: %v", err)
 		}
 	}()
 
@@ -451,7 +448,7 @@ func collectResults(
 		case notes := <-channels.resultChan:
 			// Sample logging: only log every 10th chunk to reduce overhead
 			currentChunkNum := atomic.LoadInt64(chunkCount)
-			if currentChunkNum % 10 == 0 || currentChunkNum == 1 {
+			if currentChunkNum%10 == 0 || currentChunkNum == 1 {
 				GetLogger().Debug("Received results for chunk", logger.Int64("chunk_number", currentChunkNum))
 			}
 			*allNotes = append(*allNotes, notes...)

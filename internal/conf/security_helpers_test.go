@@ -24,17 +24,17 @@ const (
 	testPort5500   = "5500"
 
 	// Test URLs
-	testURLHTTPS            = "https://birdnet.example.com:5500"
-	testURLHTTPSNoPort      = "https://birdnet.example.com"
-	testURLHTTPNoPort       = "http://birdnet.example.com"
-	testURLHTTPWithPort     = "http://birdnet.example.com:8080"
-	testURLHTTPLocalhost    = "http://localhost:8080"
-	testURLTrailingSlash    = "https://birdnet.example.com/"
-	testURLWithSubdomain    = "https://my.birdnet.home.arpa:8080"
-	testURLWithIP           = "http://192.168.1.100:8080"
-	testURLWithIPv6         = "https://[2001:db8::1]:8080"
-	testURLInvalid          = "not-a-valid-url"
-	testURLDifferent        = "https://different.example.com:5500"
+	testURLHTTPS         = "https://birdnet.example.com:5500"
+	testURLHTTPSNoPort   = "https://birdnet.example.com"
+	testURLHTTPNoPort    = "http://birdnet.example.com"
+	testURLHTTPWithPort  = "http://birdnet.example.com:8080"
+	testURLHTTPLocalhost = "http://localhost:8080"
+	testURLTrailingSlash = "https://birdnet.example.com/"
+	testURLWithSubdomain = "https://my.birdnet.home.arpa:8080"
+	testURLWithIP        = "http://192.168.1.100:8080"
+	testURLWithIPv6      = "https://[2001:db8::1]:8080"
+	testURLInvalid       = "not-a-valid-url"
+	testURLDifferent     = "https://different.example.com:5500"
 
 	// Test iteration counts for concurrent tests
 	numConcurrentGoroutines = 100

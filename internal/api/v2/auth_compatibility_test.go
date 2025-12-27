@@ -29,74 +29,74 @@ const testFrontendUsername = "birdnet-client"
 // 2. BasicAuth.ClientID differs from the hardcoded "birdnet-client" in the frontend
 func TestAuthCompatibility_V1VsV2Differences(t *testing.T) {
 	testCases := []struct {
-		name               string
-		storedClientID     string
-		storedPassword     string
-		inputUsername      string
-		inputPassword      string
-		v1ShouldSucceed    bool // V1 only checks password
-		v2ShouldSucceed    bool // V2 checks both username and password
-		description        string
+		name            string
+		storedClientID  string
+		storedPassword  string
+		inputUsername   string
+		inputPassword   string
+		v1ShouldSucceed bool // V1 only checks password
+		v2ShouldSucceed bool // V2 checks both username and password
+		description     string
 	}{
 		{
-			name:               "Both succeed - correct clientID and password",
-			storedClientID:     "birdnet-client",
-			storedPassword:     "secret123",
-			inputUsername:      "birdnet-client",
-			inputPassword:      "secret123",
-			v1ShouldSucceed:    true,
-			v2ShouldSucceed:    true,
-			description:        "Happy path - default config with matching credentials",
+			name:            "Both succeed - correct clientID and password",
+			storedClientID:  "birdnet-client",
+			storedPassword:  "secret123",
+			inputUsername:   "birdnet-client",
+			inputPassword:   "secret123",
+			v1ShouldSucceed: true,
+			v2ShouldSucceed: true,
+			description:     "Happy path - default config with matching credentials",
 		},
 		{
-			name:               "FIXED: Both succeed - empty clientID (V1 compatible mode)",
-			storedClientID:     "", // Empty ClientID - possible for old configs
-			storedPassword:     "secret123",
-			inputUsername:      "birdnet-client", // Frontend hardcodes this
-			inputPassword:      "secret123",
-			v1ShouldSucceed:    true, // V1 doesn't check username
-			v2ShouldSucceed:    true, // V2 now skips username check when ClientID is empty
-			description:        "Issue #1234 FIXED: Empty ClientID now works (V1 compatible mode)",
+			name:            "FIXED: Both succeed - empty clientID (V1 compatible mode)",
+			storedClientID:  "", // Empty ClientID - possible for old configs
+			storedPassword:  "secret123",
+			inputUsername:   "birdnet-client", // Frontend hardcodes this
+			inputPassword:   "secret123",
+			v1ShouldSucceed: true, // V1 doesn't check username
+			v2ShouldSucceed: true, // V2 now skips username check when ClientID is empty
+			description:     "Issue #1234 FIXED: Empty ClientID now works (V1 compatible mode)",
 		},
 		{
-			name:               "V1 succeeds, V2 fails - different clientID (expected behavior)",
-			storedClientID:     "admin", // Different ClientID explicitly configured
-			storedPassword:     "secret123",
-			inputUsername:      "birdnet-client", // Frontend hardcodes this
-			inputPassword:      "secret123",
-			v1ShouldSucceed:    true,  // V1 doesn't check username
-			v2ShouldSucceed:    false, // V2 correctly fails because "admin" != "birdnet-client"
-			description:        "When ClientID is explicitly set, V2 requires it to match",
+			name:            "V1 succeeds, V2 fails - different clientID (expected behavior)",
+			storedClientID:  "admin", // Different ClientID explicitly configured
+			storedPassword:  "secret123",
+			inputUsername:   "birdnet-client", // Frontend hardcodes this
+			inputPassword:   "secret123",
+			v1ShouldSucceed: true,  // V1 doesn't check username
+			v2ShouldSucceed: false, // V2 correctly fails because "admin" != "birdnet-client"
+			description:     "When ClientID is explicitly set, V2 requires it to match",
 		},
 		{
-			name:               "Both fail - wrong password",
-			storedClientID:     "birdnet-client",
-			storedPassword:     "secret123",
-			inputUsername:      "birdnet-client",
-			inputPassword:      "wrongpassword",
-			v1ShouldSucceed:    false,
-			v2ShouldSucceed:    false,
-			description:        "Both should fail with incorrect password",
+			name:            "Both fail - wrong password",
+			storedClientID:  "birdnet-client",
+			storedPassword:  "secret123",
+			inputUsername:   "birdnet-client",
+			inputPassword:   "wrongpassword",
+			v1ShouldSucceed: false,
+			v2ShouldSucceed: false,
+			description:     "Both should fail with incorrect password",
 		},
 		{
-			name:               "V1 succeeds, V2 fails - wrong username with correct password",
-			storedClientID:     "birdnet-client",
-			storedPassword:     "secret123",
-			inputUsername:      "wrong-user",
-			inputPassword:      "secret123",
-			v1ShouldSucceed:    true,  // V1 doesn't check username at all
-			v2ShouldSucceed:    false, // V2 requires username match when ClientID is set
-			description:        "V2 is more secure: requires username match when ClientID is configured",
+			name:            "V1 succeeds, V2 fails - wrong username with correct password",
+			storedClientID:  "birdnet-client",
+			storedPassword:  "secret123",
+			inputUsername:   "wrong-user",
+			inputPassword:   "secret123",
+			v1ShouldSucceed: true,  // V1 doesn't check username at all
+			v2ShouldSucceed: false, // V2 requires username match when ClientID is set
+			description:     "V2 is more secure: requires username match when ClientID is configured",
 		},
 		{
-			name:               "Empty ClientID - any username works (V1 compatible)",
-			storedClientID:     "", // Empty - V1 compatible mode
-			storedPassword:     "secret123",
-			inputUsername:      "any-random-user",
-			inputPassword:      "secret123",
-			v1ShouldSucceed:    true, // V1 doesn't check username
-			v2ShouldSucceed:    true, // V2 skips username check when ClientID is empty
-			description:        "When ClientID is empty, V2 behaves like V1 (password-only)",
+			name:            "Empty ClientID - any username works (V1 compatible)",
+			storedClientID:  "", // Empty - V1 compatible mode
+			storedPassword:  "secret123",
+			inputUsername:   "any-random-user",
+			inputPassword:   "secret123",
+			v1ShouldSucceed: true, // V1 doesn't check username
+			v2ShouldSucceed: true, // V2 skips username check when ClientID is empty
+			description:     "When ClientID is empty, V2 behaves like V1 (password-only)",
 		},
 	}
 

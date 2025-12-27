@@ -156,6 +156,7 @@ func (p *Processor) updateDynamicThreshold(commonName string, confidence float64
 // cleanUpDynamicThresholds removes stale dynamic thresholds for species that haven't been detected for a long time.
 // This cleans up both the in-memory map and the database.
 func (p *Processor) cleanUpDynamicThresholds() {
+	log := GetLogger()
 	// Calculate the duration after which a dynamic threshold is considered stale
 	staleDuration := time.Duration(p.Settings.Realtime.DynamicThreshold.ValidHours) * time.Hour
 
@@ -174,8 +175,7 @@ func (p *Processor) cleanUpDynamicThresholds() {
 		if now.Sub(dt.Timer) > staleDuration {
 			// If debug mode is enabled, log the removal of the stale threshold
 			if p.Settings.Realtime.DynamicThreshold.Debug {
-				log := GetLogger()
-				log.Debug("Removing stale dynamic threshold from memory", logger.String("species", species))
+				log.Debug("removing stale dynamic threshold from memory", logger.String("species", species))
 			}
 			// Remove the stale threshold from the map
 			delete(p.DynamicThresholds, species)
@@ -186,19 +186,16 @@ func (p *Processor) cleanUpDynamicThresholds() {
 
 	// Log memory cleanup if any were removed
 	if removedCount > 0 {
-		log := GetLogger()
-		log.Debug("Cleaned up stale dynamic thresholds from memory", logger.Int("count", removedCount))
+		log.Debug("cleaned up stale dynamic thresholds from memory", logger.Int("count", removedCount))
 	}
 
 	// Also clean up expired thresholds from the database
 	if p.Ds != nil {
 		dbCount, err := p.Ds.DeleteExpiredDynamicThresholds(now)
 		if err != nil {
-			log := GetLogger()
-			log.Warn("Failed to clean up expired dynamic thresholds from database", logger.Error(err))
+			log.Warn("failed to clean up expired dynamic thresholds from database", logger.Error(err))
 		} else if dbCount > 0 {
-			log := GetLogger()
-			log.Info("Cleaned up expired dynamic thresholds from database", logger.Int64("count", dbCount))
+			log.Info("cleaned up expired dynamic thresholds from database", logger.Int64("count", dbCount))
 		}
 	}
 }
@@ -208,6 +205,7 @@ func (p *Processor) cleanUpDynamicThresholds() {
 // The error return is always nil as database errors are logged internally
 // and the operation is best-effort for database cleanup.
 func (p *Processor) ResetDynamicThreshold(speciesName string) error {
+	log := GetLogger()
 	// Normalize to lowercase to match the casing used by addSpeciesToDynamicThresholds
 	speciesName = strings.ToLower(speciesName)
 
@@ -222,20 +220,17 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	if p.Ds != nil {
 		// Delete the threshold record
 		if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
-			log := GetLogger()
-			log.Warn("Failed to delete dynamic threshold from database", logger.String("species", speciesName), logger.Error(err))
+			log.Warn("failed to delete dynamic threshold from database", logger.String("species", speciesName), logger.Error(err))
 			// Don't return error - the in-memory reset was successful
 		}
 
 		// Delete event history for this species (no need to record reset event since history is cleared)
 		if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
-			log := GetLogger()
-			log.Warn("Failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(err))
+			log.Warn("failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(err))
 		}
 	}
 
-	log := GetLogger()
-	log.Info("Reset dynamic threshold", logger.String("species", speciesName))
+	log.Info("reset dynamic threshold", logger.String("species", speciesName))
 	return nil
 }
 
@@ -244,6 +239,7 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 // errors are logged internally and the operation is best-effort for database cleanup;
 // in-memory reset is always successful.
 func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
+	log := GetLogger()
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 
@@ -258,8 +254,7 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	if p.Ds != nil {
 		dbCount, err := p.Ds.DeleteAllDynamicThresholds()
 		if err != nil {
-			log := GetLogger()
-			log.Warn("Failed to delete all dynamic thresholds from database", logger.Error(err))
+			log.Warn("failed to delete all dynamic thresholds from database", logger.Error(err))
 			// Don't return error - the in-memory reset was successful
 		}
 
@@ -270,13 +265,11 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 
 		// Delete all event history
 		if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
-			log := GetLogger()
-			log.Warn("Failed to delete all threshold events from database", logger.Error(err))
+			log.Warn("failed to delete all threshold events from database", logger.Error(err))
 		}
 	}
 
-	log := GetLogger()
-	log.Info("Reset all dynamic thresholds", logger.Int64("count", count))
+	log.Info("reset all dynamic thresholds", logger.Int64("count", count))
 	return count, nil
 }
 

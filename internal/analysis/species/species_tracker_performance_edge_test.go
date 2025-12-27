@@ -20,6 +20,7 @@ import (
 
 // TestMemoryExhaustionScenarios tests tracker behavior under memory pressure
 // Critical for preventing OOM crashes in production
+//
 //nolint:gocognit // Memory stress test with multiple scenarios requires complex verification
 func TestMemoryExhaustionScenarios(t *testing.T) {
 	if testing.Short() {

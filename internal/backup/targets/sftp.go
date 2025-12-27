@@ -16,7 +16,6 @@ import (
 	"github.com/pkg/sftp"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -852,8 +851,8 @@ func knownHostsCallback(knownHostsFile string) (ssh.HostKeyCallback, error) {
 		}
 		// Warn user that SSH connections will fail until host keys are added
 		log.Warn("Created empty known_hosts file - SSH connections will fail until host keys are added",
-			logger.String("path", knownHostsFile),
-			logger.String("hint", "Run 'ssh-keyscan <hostname> >> "+knownHostsFile+"' to add host keys"))
+			logString("path", knownHostsFile),
+			logString("hint", "Run 'ssh-keyscan <hostname> >> "+knownHostsFile+"' to add host keys"))
 	}
 
 	callback, err := knownhosts.New(knownHostsFile)

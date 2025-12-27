@@ -15,7 +15,7 @@ type MyAudioMetrics struct {
 	bufferAllocationsTotal   *prometheus.CounterVec
 	bufferAllocationDuration *prometheus.HistogramVec
 	bufferAllocationErrors   *prometheus.CounterVec
-	bufferAllocationAttempts *prometheus.CounterVec  // Track all allocation attempts including blocked ones
+	bufferAllocationAttempts *prometheus.CounterVec   // Track all allocation attempts including blocked ones
 	bufferAllocationSizes    *prometheus.HistogramVec // Track allocation sizes for memory usage patterns
 
 	// Buffer capacity and utilization metrics

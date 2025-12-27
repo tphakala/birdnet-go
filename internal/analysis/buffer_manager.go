@@ -56,7 +56,7 @@ func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.Wait
 			Context("operation", "new_buffer_manager").
 			Build()
 	}
-	
+
 	return &BufferManager{
 		bn:       bn,
 		quitChan: quitChan,
@@ -114,14 +114,14 @@ func (m *BufferManager) AddMonitor(source string) error {
 
 	// Create a monitor-specific quit channel
 	monitorQuit := make(chan struct{})
-	
+
 	// Use LoadOrStore to atomically check and store, preventing race conditions
 	actual, loaded := m.monitors.LoadOrStore(source, monitorQuit)
 	if loaded {
 		// Monitor already exists for this source - not an error
 		return nil
 	}
-	
+
 	// Use the channel we just stored (actual is our monitorQuit channel)
 	monitorQuit = actual.(chan struct{})
 
@@ -153,7 +153,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 				m.monitors.Delete(source)
 			}
 		}()
-		
+
 		// Run the monitor
 		myaudio.AnalysisBufferMonitor(m.wg, m.bn, monitorQuit, source)
 	}()
@@ -198,7 +198,7 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 // RemoveAllMonitors stops all running monitors
 func (m *BufferManager) RemoveAllMonitors() []error {
 	var removalErrors []error
-	
+
 	m.monitors.Range(func(key, value any) bool {
 		source := key.(string)
 		if err := m.RemoveMonitor(source); err != nil {
@@ -213,7 +213,7 @@ func (m *BufferManager) RemoveAllMonitors() []error {
 		}
 		return true
 	})
-	
+
 	return removalErrors
 }
 
@@ -258,7 +258,7 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 		if source != "" {
 			wasExisting := toRemove[source]
 			delete(toRemove, source)
-			
+
 			if !wasExisting {
 				if err := m.AddMonitor(source); err != nil {
 					wrappedErr := errors.New(err).
@@ -309,10 +309,10 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 		allErrors := make([]error, 0, len(addErrors)+len(removeErrors))
 		allErrors = append(allErrors, addErrors...)
 		allErrors = append(allErrors, removeErrors...)
-		
+
 		// Join all errors to preserve individual error details
 		combinedErr := errors.Join(allErrors...)
-		
+
 		// Wrap with structured metadata
 		return errors.New(combinedErr).
 			Component("analysis.buffer").

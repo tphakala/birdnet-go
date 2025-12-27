@@ -73,7 +73,7 @@ var log logger.Logger
 var daysInMonth = [12]int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
 func init() {
-	log = logger.Global().Module("birdnet")
+	log = logger.Global().Module("analysis.species")
 }
 
 // SpeciesDatastore defines the minimal interface needed by SpeciesTracker

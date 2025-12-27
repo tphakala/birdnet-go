@@ -569,4 +569,3 @@ func TestInvalidPayloads(t *testing.T) {
 		assert.Fail(t, "Control signal was not sent")
 	}
 }
-

@@ -28,44 +28,6 @@ const (
 	SouthernHemisphereThreshold = -10.0
 )
 
-// =============================================================================
-// DEPRECATED: Legacy LogConfig types for backwards compatibility
-// These exist only to support internal/logging during migration to internal/logger.
-// Remove once all packages are migrated to internal/logger.
-// =============================================================================
-
-// RotationType defines the type of log rotation.
-// Deprecated: Use internal/logger package instead.
-type RotationType string
-
-const (
-	// RotationDaily rotates log files daily.
-	// Deprecated: Use internal/logger package instead.
-	RotationDaily RotationType = "daily"
-
-	// RotationWeekly rotates log files weekly.
-	// Deprecated: Use internal/logger package instead.
-	RotationWeekly RotationType = "weekly"
-
-	// RotationSize rotates log files based on size.
-	// Deprecated: Use internal/logger package instead.
-	RotationSize RotationType = "size"
-)
-
-// LogConfig defines the old logging configuration.
-// Deprecated: Use internal/logger.LoggingConfig instead.
-type LogConfig struct {
-	Enabled     bool         `yaml:"enabled" json:"enabled"`
-	Path        string       `yaml:"path" json:"path"`
-	Rotation    RotationType `yaml:"rotation" json:"rotation"`
-	MaxSize     int64        `yaml:"maxsize" json:"maxSize"`
-	RotationDay string       `yaml:"rotationday" json:"rotationDay"`
-}
-
-// =============================================================================
-// End of deprecated types
-// =============================================================================
-
 //go:embed config.yaml
 var configFiles embed.FS
 
@@ -126,16 +88,16 @@ type SoundLevelSettings struct {
 }
 
 type AudioSettings struct {
-	Source          string             `yaml:"source" mapstructure:"source" json:"source"`                   // audio source to use for analysis
-	FfmpegPath      string             `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"`       // path to ffmpeg, runtime value
-	FfmpegVersion   string             `yaml:"-" json:"ffmpegVersion,omitempty"`                             // ffmpeg version string, runtime value
-	FfmpegMajor     int                `yaml:"-" json:"ffmpegMajor,omitempty"`                               // ffmpeg major version number, runtime value
-	FfmpegMinor     int                `yaml:"-" json:"ffmpegMinor,omitempty"`                               // ffmpeg minor version number, runtime value
-	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                // path to sox, runtime value
-	SoxAudioTypes   []string           `yaml:"-" json:"-"`                                                   // supported audio types of sox, runtime value
-	StreamTransport string             `json:"streamTransport"`                                              // preferred transport for audio streaming: "auto", "sse", or "ws"
-	Export          ExportSettings     `json:"export"`                                                       // export settings
-	SoundLevel      SoundLevelSettings `json:"soundLevel"`                                                   // sound level monitoring settings
+	Source          string             `yaml:"source" mapstructure:"source" json:"source"`             // audio source to use for analysis
+	FfmpegPath      string             `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"` // path to ffmpeg, runtime value
+	FfmpegVersion   string             `yaml:"-" json:"ffmpegVersion,omitempty"`                       // ffmpeg version string, runtime value
+	FfmpegMajor     int                `yaml:"-" json:"ffmpegMajor,omitempty"`                         // ffmpeg major version number, runtime value
+	FfmpegMinor     int                `yaml:"-" json:"ffmpegMinor,omitempty"`                         // ffmpeg minor version number, runtime value
+	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`          // path to sox, runtime value
+	SoxAudioTypes   []string           `yaml:"-" json:"-"`                                             // supported audio types of sox, runtime value
+	StreamTransport string             `json:"streamTransport"`                                        // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          ExportSettings     `json:"export"`                                                 // export settings
+	SoundLevel      SoundLevelSettings `json:"soundLevel"`                                             // sound level monitoring settings
 
 	Equalizer EqualizerSettings `json:"equalizer"` // equalizer settings
 }
@@ -170,11 +132,11 @@ const (
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails      Thumbnails           `json:"thumbnails"`              // thumbnails settings
-	SummaryLimit    int                  `json:"summaryLimit"`            // limit for the number of species shown in the summary table
-	Locale          string               `json:"locale,omitempty"`        // UI locale setting
-	Spectrogram     SpectrogramPreRender `json:"spectrogram"`             // Spectrogram pre-rendering settings
-	TemperatureUnit string               `json:"temperatureUnit"`         // display unit for temperature: "celsius" or "fahrenheit"
+	Thumbnails      Thumbnails           `json:"thumbnails"`       // thumbnails settings
+	SummaryLimit    int                  `json:"summaryLimit"`     // limit for the number of species shown in the summary table
+	Locale          string               `json:"locale,omitempty"` // UI locale setting
+	Spectrogram     SpectrogramPreRender `json:"spectrogram"`      // Spectrogram pre-rendering settings
+	TemperatureUnit string               `json:"temperatureUnit"`  // display unit for temperature: "celsius" or "fahrenheit"
 }
 
 // Spectrogram generation mode constants
@@ -335,9 +297,9 @@ type HealthCheckConfig struct {
 
 // RateLimitingConfig holds rate limiting configuration.
 type RateLimitingConfig struct {
-	Enabled            bool `json:"enabled"`
-	RequestsPerMinute  int  `json:"requests_per_minute" mapstructure:"requests_per_minute"`
-	BurstSize          int  `json:"burst_size" mapstructure:"burst_size"`
+	Enabled           bool `json:"enabled"`
+	RequestsPerMinute int  `json:"requests_per_minute" mapstructure:"requests_per_minute"`
+	BurstSize         int  `json:"burst_size" mapstructure:"burst_size"`
 }
 
 // PushProviderConfig configures a single push provider instance.
@@ -361,11 +323,11 @@ type PushProviderConfig struct {
 
 // WebhookEndpointConfig configures a single webhook endpoint.
 type WebhookEndpointConfig struct {
-	URL     string                 `json:"url"`
-	Method  string                 `json:"method"`  // POST, PUT, PATCH (default: POST)
-	Headers map[string]string      `json:"headers"` // Custom HTTP headers
-	Timeout time.Duration          `json:"timeout"` // Per-endpoint timeout (default: use provider timeout)
-	Auth    WebhookAuthConfig      `json:"auth"`    // Authentication configuration
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`  // POST, PUT, PATCH (default: POST)
+	Headers map[string]string `json:"headers"` // Custom HTTP headers
+	Timeout time.Duration     `json:"timeout"` // Per-endpoint timeout (default: use provider timeout)
+	Auth    WebhookAuthConfig `json:"auth"`    // Authentication configuration
 }
 
 // WebhookAuthConfig configures authentication for webhook requests.
@@ -376,7 +338,7 @@ type WebhookEndpointConfig struct {
 //
 // File fields take precedence over value fields when both are set.
 type WebhookAuthConfig struct {
-	Type   string `json:"type"`   // "none", "bearer", "basic", "custom"
+	Type string `json:"type"` // "none", "bearer", "basic", "custom"
 
 	// Bearer authentication
 	Token     string `json:"token"`      // Token value or ${ENV_VAR}
@@ -389,9 +351,9 @@ type WebhookAuthConfig struct {
 	PassFile string `json:"pass_file"` // Path to file containing password
 
 	// Custom header authentication
-	Header     string `json:"header"`       // Header name
-	Value      string `json:"value"`        // Header value or ${ENV_VAR}
-	ValueFile  string `json:"value_file"`   // Path to file containing header value
+	Header    string `json:"header"`     // Header name
+	Value     string `json:"value"`      // Header value or ${ENV_VAR}
+	ValueFile string `json:"value_file"` // Path to file containing header value
 }
 
 // PushFilterConfig limits which notifications a provider receives.
@@ -527,12 +489,12 @@ func (f *FalsePositiveFilterSettings) Validate() error {
 
 // RealtimeSettings contains all settings related to realtime processing.
 type RealtimeSettings struct {
-	Interval            int                          `json:"interval"`            // minimum interval between log messages in seconds
-	ProcessingTime      bool                         `json:"processingTime"`      // true to report processing time for each prediction
-	Audio               AudioSettings                `json:"audio"`               // Audio processing settings
-	Dashboard           Dashboard                    `json:"dashboard"`           // Dashboard settings
-	DynamicThreshold    DynamicThresholdSettings     `json:"dynamicThreshold"`    // Dynamic threshold settings
-	FalsePositiveFilter FalsePositiveFilterSettings  `json:"falsePositiveFilter"` // False positive filtering aggressivity settings
+	Interval            int                         `json:"interval"`            // minimum interval between log messages in seconds
+	ProcessingTime      bool                        `json:"processingTime"`      // true to report processing time for each prediction
+	Audio               AudioSettings               `json:"audio"`               // Audio processing settings
+	Dashboard           Dashboard                   `json:"dashboard"`           // Dashboard settings
+	DynamicThreshold    DynamicThresholdSettings    `json:"dynamicThreshold"`    // Dynamic threshold settings
+	FalsePositiveFilter FalsePositiveFilterSettings `json:"falsePositiveFilter"` // False positive filtering aggressivity settings
 	Log                 struct {
 		Enabled bool   `json:"enabled"` // true to enable OBS chat log
 		Path    string `json:"path"`    // path to OBS chat log
@@ -896,19 +858,19 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
-	Debug       bool                `json:"debug"`       // true to enable debug mode
-	Sensitivity float64             `json:"sensitivity"` // birdnet analysis sigmoid sensitivity
-	Threshold   float64             `json:"threshold"`   // threshold for prediction confidence to report
-	Overlap     float64             `json:"overlap"`     // birdnet analysis overlap between chunks
-	Longitude   float64             `json:"longitude"`   // longitude of recording location for prediction filtering
-	Latitude    float64             `json:"latitude"`    // latitude of recording location for prediction filtering
-	Threads     int                 `json:"threads"`     // number of CPU threads to use for analysis
-	Locale      string              `json:"locale"`      // language to use for labels
-	RangeFilter RangeFilterSettings `json:"rangeFilter"` // range filter settings
-	ModelPath   string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"`   // path to external model file (empty for embedded)
-	LabelPath   string              `json:"labelPath,omitempty" yaml:"labelPath,omitempty"`   // path to external label file (empty for embedded)
-	Labels      []string            `yaml:"-" json:"-"`  // list of available species labels, runtime value
-	UseXNNPACK  bool                `json:"useXnnpack"`  // true to use XNNPACK delegate for inference acceleration
+	Debug       bool                `json:"debug"`                                          // true to enable debug mode
+	Sensitivity float64             `json:"sensitivity"`                                    // birdnet analysis sigmoid sensitivity
+	Threshold   float64             `json:"threshold"`                                      // threshold for prediction confidence to report
+	Overlap     float64             `json:"overlap"`                                        // birdnet analysis overlap between chunks
+	Longitude   float64             `json:"longitude"`                                      // longitude of recording location for prediction filtering
+	Latitude    float64             `json:"latitude"`                                       // latitude of recording location for prediction filtering
+	Threads     int                 `json:"threads"`                                        // number of CPU threads to use for analysis
+	Locale      string              `json:"locale"`                                         // language to use for labels
+	RangeFilter RangeFilterSettings `json:"rangeFilter"`                                    // range filter settings
+	ModelPath   string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"` // path to external model file (empty for embedded)
+	LabelPath   string              `json:"labelPath,omitempty" yaml:"labelPath,omitempty"` // path to external label file (empty for embedded)
+	Labels      []string            `yaml:"-" json:"-"`                                     // list of available species labels, runtime value
+	UseXNNPACK  bool                `json:"useXnnpack"`                                     // true to use XNNPACK delegate for inference acceleration
 }
 
 // RangeFilterSettings contains settings for the range filter
@@ -949,12 +911,12 @@ type AllowSubnetBypass struct {
 // OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format.
 // This replaces the individual GoogleAuth, GithubAuth, MicrosoftAuth fields.
 type OAuthProviderConfig struct {
-	Provider     string `yaml:"provider" json:"provider"`                       // Provider ID: "google", "github", "microsoft"
-	Enabled      bool   `yaml:"enabled" json:"enabled"`                         // true to enable this provider
-	ClientID     string `yaml:"clientId" json:"clientId"`                       // OAuth2 client ID
-	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`               // OAuth2 client secret
-	RedirectURI  string `yaml:"redirectUri,omitempty" json:"redirectUri"`       // OAuth2 redirect URI (optional, auto-generated if empty)
-	UserID       string `yaml:"userId,omitempty" json:"userId"`                 // Allowed user ID/email for this provider
+	Provider     string `yaml:"provider" json:"provider"`                 // Provider ID: "google", "github", "microsoft"
+	Enabled      bool   `yaml:"enabled" json:"enabled"`                   // true to enable this provider
+	ClientID     string `yaml:"clientId" json:"clientId"`                 // OAuth2 client ID
+	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`         // OAuth2 client secret
+	RedirectURI  string `yaml:"redirectUri,omitempty" json:"redirectUri"` // OAuth2 redirect URI (optional, auto-generated if empty)
+	UserID       string `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
 }
 
 // SecurityConfig handles all security-related settings and validations
@@ -1193,9 +1155,8 @@ type Settings struct {
 	Logging logger.LoggingConfig `json:"logging"` // centralized logging configuration
 
 	Main struct {
-		Name      string    `json:"name"`      // name of BirdNET-Go node, can be used to identify source of notes
-		TimeAs24h bool      `json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
-		Log       LogConfig `json:"log"`       // Deprecated: use Settings.Logging instead
+		Name      string `json:"name"`      // name of BirdNET-Go node, can be used to identify source of notes
+		TimeAs24h bool   `json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `json:"main"`
 
 	BirdNET BirdNETConfig `json:"birdnet"` // BirdNET configuration

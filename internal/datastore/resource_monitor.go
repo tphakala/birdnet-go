@@ -337,7 +337,7 @@ func ValidateStartupDiskSpace(dbPath string) error {
 	}
 
 	log.Info("Startup disk space validation passed",
-		logger.Int64("available_mb", int64(availableMB)),
+		logger.Uint64("available_mb", availableMB),
 		logger.Int64("required_mb", MinDiskSpaceStartup),
 		logger.String("path", dir))
 

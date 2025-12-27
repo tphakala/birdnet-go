@@ -42,7 +42,7 @@ type Config struct {
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
 
 	// Security settings
-	RedirectToHTTPS bool   // Redirect HTTP to HTTPS
+	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
 	AllowedOrigins  []string // CORS allowed origins
 
 	// Timeouts
@@ -55,8 +55,8 @@ type Config struct {
 	BodyLimit string // Maximum request body size (e.g., "1M", "10M")
 
 	// Logging
-	Debug    bool             // Enable debug mode
-	LogLevel logger.LogLevel  // Logging level
+	Debug    bool            // Enable debug mode
+	LogLevel logger.LogLevel // Logging level
 
 	// Development mode
 	DevMode bool // Enable development mode features

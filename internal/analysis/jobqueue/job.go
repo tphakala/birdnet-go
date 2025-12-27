@@ -9,7 +9,7 @@ import (
 type Job struct {
 	ID                     string      // Unique ID for this job
 	Action                 Action      // The action to execute
-	Data                   any // Data for the action
+	Data                   any         // Data for the action
 	Attempts               int         // Number of attempts made so far
 	MaxAttempts            int         // Maximum number of attempts allowed
 	CreatedAt              time.Time   // When the job was created

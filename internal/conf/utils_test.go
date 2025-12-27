@@ -8,11 +8,11 @@ import (
 
 func TestParseFfmpegVersion(t *testing.T) {
 	tests := []struct {
-		name          string
-		output        string
-		wantVersion   string
-		wantMajor     int
-		wantMinor     int
+		name        string
+		output      string
+		wantVersion string
+		wantMajor   int
+		wantMinor   int
 	}{
 		{
 			name: "FFmpeg 7.1.2 Debian",
@@ -47,18 +47,18 @@ built with gcc 11 (Ubuntu 11.2.0-19ubuntu1)`,
 			wantMinor:   4,
 		},
 		{
-			name:          "Empty output",
-			output:        "",
-			wantVersion:   "",
-			wantMajor:     0,
-			wantMinor:     0,
+			name:        "Empty output",
+			output:      "",
+			wantVersion: "",
+			wantMajor:   0,
+			wantMinor:   0,
 		},
 		{
-			name:          "Invalid format",
-			output:        "some random text",
-			wantVersion:   "",
-			wantMajor:     0,
-			wantMinor:     0,
+			name:        "Invalid format",
+			output:      "some random text",
+			wantVersion: "",
+			wantMajor:   0,
+			wantMinor:   0,
 		},
 		{
 			name: "FFmpeg git build with libavutil",

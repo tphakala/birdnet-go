@@ -55,11 +55,11 @@ func TestGetLogger(t *testing.T) {
 func TestLogJobEnqueued(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	// Create context with trace ID for verification
 	ctx := WithTraceID(context.Background(), "trace-123")
 	LogJobEnqueued(ctx, "job-123", "process", true)
-	
+
 	logEntry := parseLogEntry(t, buf)
 
 	// Assert JSON fields
@@ -74,9 +74,9 @@ func TestLogJobEnqueued(t *testing.T) {
 func TestLogJobStarted(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	LogJobStarted(context.TODO(), "job-456", "analyze")
-	
+
 	logEntry := parseLogEntry(t, buf)
 
 	// Assert JSON fields including action_type
@@ -89,10 +89,10 @@ func TestLogJobStarted(t *testing.T) {
 func TestLogJobCompleted(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	duration := 150 * time.Millisecond
 	LogJobCompleted(context.TODO(), "job-789", "upload", duration)
-	
+
 	logEntry := parseLogEntry(t, buf)
 
 	// Assert JSON fields
@@ -106,7 +106,7 @@ func TestLogJobCompleted(t *testing.T) {
 func TestLogJobFailed(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	testErr := errors.New("connection timeout")
 	LogJobFailed(context.TODO(), "job-999", "download", 3, 5, testErr)
 
@@ -139,7 +139,7 @@ func TestLogJobFailed(t *testing.T) {
 func TestLogQueueStats(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	LogQueueStats(context.TODO(), 10, 3, 50, 2)
 
 	logEntry := parseLogEntry(t, buf)
@@ -156,7 +156,7 @@ func TestLogQueueStats(t *testing.T) {
 func TestLogJobDropped(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	LogJobDropped(context.TODO(), "job-dropped-1", "Upload to BirdWeather")
 
 	logEntry := parseLogEntry(t, buf)
@@ -173,7 +173,7 @@ func TestLogJobDropped(t *testing.T) {
 func TestLogQueueStopped(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	LogQueueStopped(context.TODO(), "manual shutdown", "pending_jobs", 5)
 
 	logEntry := parseLogEntry(t, buf)
@@ -189,7 +189,7 @@ func TestLogQueueStopped(t *testing.T) {
 func TestLogJobRetrying(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	LogJobRetrying(context.TODO(), "job-retry-1", "Send MQTT message", 2, 5)
 
 	logEntry := parseLogEntry(t, buf)
@@ -207,12 +207,12 @@ func TestLogJobRetrying(t *testing.T) {
 func TestLogJobRetryScheduled(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelWarn)
 	t.Cleanup(cleanup)
-	
+
 	// Create test data
 	nextRetryAt := time.Now().Add(30 * time.Second)
 	delay := 30 * time.Second
 	testErr := fmt.Errorf("connection timeout")
-	
+
 	LogJobRetryScheduled(context.TODO(), "job-retry-sched-1", "HTTP POST request", 2, 5, delay, nextRetryAt, testErr)
 
 	logEntry := parseLogEntry(t, buf)
@@ -235,7 +235,7 @@ func TestLogJobRetryScheduled(t *testing.T) {
 func TestLogJobSuccess(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
-	
+
 	// Test first attempt success
 	LogJobSuccess(context.TODO(), "job-success-1", "Save to database", 1)
 

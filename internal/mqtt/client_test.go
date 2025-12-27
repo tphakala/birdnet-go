@@ -772,13 +772,13 @@ func TestCheckConnectionCooldown(t *testing.T) {
 			}
 
 			// Create logger for test
-			log := GetLogger().With(
+			testLog := GetLogger().With(
 				logger.String("broker", config.Broker),
 				logger.String("client_id", config.ClientID))
 
 			// Test the method - acquire read lock as required by the method
 			c.mu.RLock()
-			err := c.checkConnectionCooldownLocked(log)
+			err := c.checkConnectionCooldownLocked(testLog)
 			c.mu.RUnlock()
 
 			// Verify results
@@ -868,10 +868,10 @@ func runConfigureClientOptionsTest(t *testing.T, setupConfig func(*Config), expe
 		reconnectStop: make(chan struct{}),
 	}
 
-	log := GetLogger().With(
+	testLog := GetLogger().With(
 		logger.String("broker", config.Broker),
 		logger.String("client_id", config.ClientID))
-	opts, err := c.configureClientOptions(log)
+	opts, err := c.configureClientOptions(testLog)
 
 	verifyConfigureClientOptionsResult(t, opts, err, expectError, errorSubstr, verifyOpts)
 }
@@ -956,12 +956,12 @@ func TestPerformDNSResolution(t *testing.T) {
 			defer cancel()
 
 			// Create logger for test
-			log := GetLogger().With(
+			testLog := GetLogger().With(
 				logger.String("broker", config.Broker),
 				logger.String("client_id", config.ClientID))
 
 			// Test the method
-			err := c.performDNSResolution(ctx, log)
+			err := c.performDNSResolution(ctx, testLog)
 
 			// Verify results
 			if tt.expectError {
@@ -1095,7 +1095,7 @@ func runPerformConnectionAttemptTest(t *testing.T, setupConfig func(*Config), ex
 	c := &client{config: config, metrics: metrics.MQTT, reconnectStop: make(chan struct{})}
 	defer c.Disconnect()
 
-	log := GetLogger().With(
+	testLog := GetLogger().With(
 		logger.String("broker", config.Broker),
 		logger.String("client_id", config.ClientID))
 
@@ -1106,14 +1106,14 @@ func runPerformConnectionAttemptTest(t *testing.T, setupConfig func(*Config), ex
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	opts, optsErr := c.configureClientOptions(log)
+	opts, optsErr := c.configureClientOptions(testLog)
 	if optsErr != nil {
 		verifyConnectionAttemptError(t, optsErr, expectError, errorSubstr)
 		return
 	}
 
 	clientToConnect := paho.NewClient(opts)
-	err := c.performConnectionAttempt(ctx, clientToConnect, log)
+	err := c.performConnectionAttempt(ctx, clientToConnect, testLog)
 	verifyConnectionAttemptError(t, err, expectError, errorSubstr)
 }
 
@@ -1282,13 +1282,13 @@ func TestTimeRoundingEdgeCase(t *testing.T) {
 				reconnectStop:   make(chan struct{}),
 			}
 
-			log := GetLogger().With(
+			testLog := GetLogger().With(
 				logger.String("broker", config.Broker),
 				logger.String("client_id", config.ClientID))
 
 			// Test the checkConnectionCooldownLocked method
 			c.mu.RLock()
-			err := c.checkConnectionCooldownLocked(log)
+			err := c.checkConnectionCooldownLocked(testLog)
 			c.mu.RUnlock()
 
 			// Should always error since we're within cooldown

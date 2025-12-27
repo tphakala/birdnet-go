@@ -1,13 +1,13 @@
 package analysis
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -39,14 +39,15 @@ func (m *SoundLevelManager) Start() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	log := GetLogger()
 	if m.isRunning {
-		log.Println("Sound level monitoring is already running")
+		log.Debug("sound level monitoring is already running")
 		return nil
 	}
 
 	settings := conf.Setting()
 	if !settings.Realtime.Audio.SoundLevel.Enabled {
-		log.Println("🔇 Sound level monitoring is disabled")
+		log.Debug("sound level monitoring is disabled")
 		return nil
 	}
 
@@ -55,7 +56,8 @@ func (m *SoundLevelManager) Start() error {
 
 	// Register sound level processors for all active sources
 	if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
-		log.Printf("❌ Failed to register sound level processors: %v", err)
+		log.Error("failed to register sound level processors",
+			logger.Error(err))
 		return err
 	}
 
@@ -66,7 +68,7 @@ func (m *SoundLevelManager) Start() error {
 	startSoundLevelPublishers(&m.wg, m.doneChan, m.proc, m.soundLevelChan, m.apiController)
 
 	m.isRunning = true
-	log.Println("🔊 Sound level monitoring started")
+	log.Info("sound level monitoring started")
 	return nil
 }
 
@@ -75,12 +77,13 @@ func (m *SoundLevelManager) Stop() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	log := GetLogger()
 	if !m.isRunning {
-		log.Println("Sound level monitoring is not running")
+		log.Debug("sound level monitoring is not running")
 		return
 	}
 
-	log.Println("🔌 Stopping sound level monitoring...")
+	log.Info("stopping sound level monitoring")
 
 	// Signal all goroutines to stop
 	if m.doneChan != nil {
@@ -97,10 +100,11 @@ func (m *SoundLevelManager) Stop() {
 	select {
 	case <-done:
 		// All goroutines finished cleanly
-		log.Println("🔇 All sound level monitoring goroutines stopped cleanly")
+		log.Debug("all sound level monitoring goroutines stopped cleanly")
 	case <-time.After(30 * time.Second):
 		// Timeout occurred - force shutdown
-		log.Println("⚠️ Warning: Sound level monitoring shutdown timed out after 30s, forcing cleanup")
+		log.Warn("sound level monitoring shutdown timed out, forcing cleanup",
+			logger.Duration("timeout", 30*time.Second))
 		// Continue with cleanup anyway - don't hang the system
 	}
 
@@ -113,12 +117,12 @@ func (m *SoundLevelManager) Stop() {
 
 	m.isRunning = false
 	m.doneChan = nil
-	log.Println("🔇 Sound level monitoring stopped")
+	log.Info("sound level monitoring stopped")
 }
 
 // Restart stops and starts sound level monitoring with current settings
 func (m *SoundLevelManager) Restart() error {
-	log.Println("🔄 Restarting sound level monitoring...")
+	GetLogger().Info("restarting sound level monitoring")
 	m.Stop()
 	return m.Start()
 }

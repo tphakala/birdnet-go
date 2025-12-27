@@ -262,9 +262,9 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		// Initialize season maps
 		tracker.seasons = map[string]seasonDates{
 			testSeasonSpring: {month: 3, day: 1},
-			"Summer": {month: 6, day: 1},
-			"Autumn": {month: 9, day: 1},
-			"Winter": {month: 12, day: 1},
+			"Summer":         {month: 6, day: 1},
+			"Autumn":         {month: 9, day: 1},
+			"Winter":         {month: 12, day: 1},
 		}
 		tracker.currentSeason = testSeasonSpring
 

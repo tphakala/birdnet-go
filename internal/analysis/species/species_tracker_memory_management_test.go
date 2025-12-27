@@ -294,6 +294,7 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 
 // TestBuildSpeciesStatusWithBuffer_CriticalReliability tests status building with buffer optimization
 // CRITICAL: Core business logic that affects all status calculations
+//
 //nolint:gocognit // Table-driven test for status buffer operations
 func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 	t.Parallel()
@@ -479,6 +480,7 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 
 // TestConcurrentCacheOperations_CriticalReliability tests thread safety of cache operations
 // CRITICAL: Prevents race conditions and data corruption
+//
 //nolint:gocognit // Concurrency test with multiple goroutines requires complex coordination
 func TestConcurrentCacheOperations_CriticalReliability(t *testing.T) {
 	t.Parallel()

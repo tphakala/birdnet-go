@@ -215,7 +215,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 	// Extract the base path dynamically
 	basePath := c.extractBasePath(ctx, req)
-	
+
 	// Validate and sanitize the redirect URL from the request
 	finalRedirect := basePath // Default to detected base path
 	if req.RedirectURL != "" {
@@ -241,7 +241,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 			)
 		}
 	}
-	
+
 	// Construct the V2 OAuth callback URL with the validated redirect
 	// URL-encode both code and redirect to prevent parameter injection and handle special characters
 	redirectURL := fmt.Sprintf("/api/v2/auth/callback?code=%s&redirect=%s", url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
@@ -419,16 +419,16 @@ func isValidBasePath(basePath string) bool {
 
 	// Must not contain dangerous patterns
 	dangerousPatterns := []string{
-		"..",           // Directory traversal
-		"//",           // Protocol-relative URL
-		"\\",           // Backslash
-		"<",            // HTML injection
-		">",            // HTML injection
-		"javascript:",  // XSS
-		"data:",        // Data URLs
-		"\n",           // Newline injection
-		"\r",           // Carriage return injection
-		"\x00",         // Null byte
+		"..",          // Directory traversal
+		"//",          // Protocol-relative URL
+		"\\",          // Backslash
+		"<",           // HTML injection
+		">",           // HTML injection
+		"javascript:", // XSS
+		"data:",       // Data URLs
+		"\n",          // Newline injection
+		"\r",          // Carriage return injection
+		"\x00",        // Null byte
 	}
 
 	lowerPath := strings.ToLower(basePath)

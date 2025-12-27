@@ -210,7 +210,6 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
-
 // initAuth initializes authentication service and middleware at server level.
 // This is called before setupRoutes to ensure auth is available for route protection.
 func (s *Server) initAuth() {
@@ -446,7 +445,6 @@ func (s *Server) APIController() *apiv2.Controller {
 func (s *Server) Echo() *echo.Echo {
 	return s.echo
 }
-
 
 // StaticServer returns the static file server.
 func (s *Server) StaticServer() *StaticFileServer {

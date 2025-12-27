@@ -34,7 +34,7 @@ func NewLogDeduplicator(config DeduplicationConfig) *LogDeduplicator {
 	if config.HealthCheckInterval == 0 {
 		config.HealthCheckInterval = 60 * time.Second
 	}
-	
+
 	return &LogDeduplicator{
 		states: make(map[string]*LogState),
 		config: config,
@@ -49,13 +49,13 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 	if !d.config.Enabled {
 		return true, "dedup_disabled"
 	}
-	
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	
+
 	now := time.Now()
 	state, exists := d.states[source]
-	
+
 	// First time seeing this source
 	if !exists {
 		d.states[source] = &LogState{
@@ -65,7 +65,7 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 		}
 		return true, "first_log"
 	}
-	
+
 	// Check if values changed
 	if state.LastRawCount != rawCount || state.LastFilteredCount != filteredCount {
 		state.LastRawCount = rawCount
@@ -73,13 +73,13 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 		state.LastLogTime = now
 		return true, "values_changed"
 	}
-	
+
 	// Check if it's time for a health check
 	if now.Sub(state.LastLogTime) >= d.config.HealthCheckInterval {
 		state.LastLogTime = now
 		return true, "health_check"
 	}
-	
+
 	// No need to log - it's a duplicate
 	return false, ""
 }
@@ -90,17 +90,17 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 func (d *LogDeduplicator) Cleanup(staleAfter time.Duration) int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	
+
 	cutoff := time.Now().Add(-staleAfter)
 	removed := 0
-	
+
 	for source, state := range d.states {
 		if state.LastLogTime.Before(cutoff) {
 			delete(d.states, source)
 			removed++
 		}
 	}
-	
+
 	return removed
 }
 
@@ -108,7 +108,7 @@ func (d *LogDeduplicator) Cleanup(staleAfter time.Duration) int {
 func (d *LogDeduplicator) Reset() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	
+
 	d.states = make(map[string]*LogState)
 }
 
@@ -116,6 +116,6 @@ func (d *LogDeduplicator) Reset() {
 func (d *LogDeduplicator) Stats() (sourceCount int, enabled bool) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	
+
 	return len(d.states), d.config.Enabled
 }

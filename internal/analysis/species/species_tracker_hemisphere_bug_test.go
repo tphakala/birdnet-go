@@ -147,10 +147,10 @@ func TestGetSeasonalTrackingWithHemisphere_ShouldUpdateExistingSeasons(t *testin
 	}
 
 	testCases := []struct {
-		name             string
-		latitude         float64
-		expectedSeasons  map[string]conf.Season
-		description      string
+		name            string
+		latitude        float64
+		expectedSeasons map[string]conf.Season
+		description     string
 	}{
 		{
 			name:     "SouthernHemisphere_ShouldOverrideNorthernSeasons",

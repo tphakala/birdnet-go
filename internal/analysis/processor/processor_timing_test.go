@@ -14,8 +14,8 @@ import (
 func TestFlushDeadlineInFuture(t *testing.T) {
 	// Initialize test settings with default values
 	settings := &conf.Settings{}
-	settings.Realtime.Audio.Export.Length = 15     // 15 seconds capture length (default)
-	settings.Realtime.Audio.Export.PreCapture = 3  // 3 seconds pre-capture (default)
+	settings.Realtime.Audio.Export.Length = 15    // 15 seconds capture length (default)
+	settings.Realtime.Audio.Export.PreCapture = 3 // 3 seconds pre-capture (default)
 
 	// Calculate detection window (this is the actual production logic)
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second

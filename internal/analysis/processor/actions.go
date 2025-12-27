@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -988,7 +987,6 @@ func (a *BirdWeatherAction) Execute(data any) error {
 	}
 
 	if a.Settings.Debug {
-		// Add structured logging
 		GetLogger().Debug("Successfully uploaded to BirdWeather",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -997,7 +995,6 @@ func (a *BirdWeatherAction) Execute(data any) error {
 			logger.Float64("confidence", a.Note.Confidence),
 			logger.String("clip_name", a.Note.ClipName),
 			logger.String("operation", "birdweather_upload_success"))
-		log.Printf("✅ Successfully uploaded %s to BirdWeather\n", a.Note.ClipName)
 	}
 	return nil
 }
@@ -1015,7 +1012,6 @@ func (a *MqttAction) Execute(data any) error {
 	// Rely on background reconnect; fail action if not currently connected.
 	if !a.MqttClient.IsConnected() {
 		// Log slightly differently to indicate it's waiting for background reconnect
-		// Add structured logging
 		GetLogger().Warn("MQTT client not connected, skipping publish",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -1024,7 +1020,6 @@ func (a *MqttAction) Execute(data any) error {
 			logger.Float64("confidence", a.Note.Confidence),
 			logger.String("operation", "mqtt_connection_check"),
 			logger.String("status", "waiting_reconnect"))
-		log.Printf("🟡 MQTT client is not connected, skipping publish for %s (%s). Waiting for automatic reconnect.", a.Note.CommonName, a.Note.ScientificName)
 		// MQTT connection failures are retryable because:
 		// - The MQTT client has automatic reconnection logic
 		// - Connection may be temporarily lost due to network issues
@@ -1070,7 +1065,6 @@ func (a *MqttAction) Execute(data any) error {
 	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(noteWithBirdImage)
 	if err != nil {
-		// Add structured logging
 		GetLogger().Error("Failed to marshal note to JSON",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -1078,7 +1072,6 @@ func (a *MqttAction) Execute(data any) error {
 			logger.String("species", a.Note.CommonName),
 			logger.String("scientific_name", a.Note.ScientificName),
 			logger.String("operation", "json_marshal"))
-		log.Printf("❌ Error marshalling note to JSON")
 		return err
 	}
 
@@ -1097,7 +1090,6 @@ func (a *MqttAction) Execute(data any) error {
 		// This is a common issue with MQTT brokers and should be treated as retryable
 		isEOFErr := isEOFError(err)
 
-		// Add structured logging
 		GetLogger().Error("Failed to publish to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -1110,17 +1102,10 @@ func (a *MqttAction) Execute(data any) error {
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.Bool("is_eof_error", isEOFErr),
 			logger.String("operation", "mqtt_publish"))
-		if a.RetryConfig.Enabled {
-			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
-				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
-		} else {
-			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s): %v\n",
-				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
-			// Only send notification for non-EOF errors when retries are disabled
-			// EOF errors are typically transient connection issues
-			if !isEOFErr {
-				notification.NotifyIntegrationFailure("MQTT", err)
-			}
+		// Only send notification for non-EOF errors when retries are disabled
+		// EOF errors are typically transient connection issues
+		if !a.RetryConfig.Enabled && !isEOFErr {
+			notification.NotifyIntegrationFailure("MQTT", err)
 		}
 
 		// Enhance error context with EOF detection
@@ -1141,7 +1126,6 @@ func (a *MqttAction) Execute(data any) error {
 	}
 
 	if a.Settings.Debug {
-		// Add structured logging
 		GetLogger().Debug("Successfully published to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -1150,8 +1134,6 @@ func (a *MqttAction) Execute(data any) error {
 			logger.Float64("confidence", a.Note.Confidence),
 			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
 			logger.String("operation", "mqtt_publish_success"))
-		log.Printf("✅ Successfully published %s to MQTT topic %s\n",
-			a.Note.CommonName, a.Settings.Realtime.MQTT.Topic)
 	}
 	return nil
 }
@@ -1194,7 +1176,6 @@ func (a *UpdateRangeFilterAction) Execute(data any) error {
 			logger.Int("species_count", len(includedSpecies)),
 			logger.String("date", today.Format("2006-01-02")),
 			logger.String("operation", "update_range_filter_success"))
-		log.Printf("✅ Range filter updated with %d species for %s", len(includedSpecies), today.Format("2006-01-02"))
 	}
 
 	return nil
@@ -1228,7 +1209,6 @@ func (a *SSEAction) Execute(data any) error {
 	if a.Note.ClipName != "" {
 		if err := a.waitForAudioFile(); err != nil {
 			// Log warning but don't fail the SSE broadcast
-			// Add structured logging
 			GetLogger().Warn("Audio file not ready for SSE broadcast",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
@@ -1236,7 +1216,6 @@ func (a *SSEAction) Execute(data any) error {
 				logger.String("species", a.Note.CommonName),
 				logger.String("clip_name", a.Note.ClipName),
 				logger.String("operation", "sse_wait_audio_file"))
-			log.Printf("⚠️ Audio file not ready for %s, broadcasting without waiting: %v", a.Note.CommonName, err)
 		}
 	}
 
@@ -1245,7 +1224,6 @@ func (a *SSEAction) Execute(data any) error {
 	if a.Note.ID == 0 {
 		if err := a.waitForDatabaseID(); err != nil {
 			// Log warning but don't fail the SSE broadcast
-			// Add structured logging
 			GetLogger().Warn("Database ID not ready for SSE broadcast",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
@@ -1253,7 +1231,6 @@ func (a *SSEAction) Execute(data any) error {
 				logger.String("species", a.Note.CommonName),
 				logger.Any("note_id", a.Note.ID),
 				logger.String("operation", "sse_wait_database_id"))
-			log.Printf("⚠️ Database ID not ready for %s, broadcasting with ID=0: %v", a.Note.CommonName, err)
 		}
 	}
 
@@ -1268,7 +1245,6 @@ func (a *SSEAction) Execute(data any) error {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := sanitizeError(err)
-		// Add structured logging
 		GetLogger().Error("Failed to broadcast via SSE",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -1279,13 +1255,6 @@ func (a *SSEAction) Execute(data any) error {
 			logger.String("clip_name", a.Note.ClipName),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "sse_broadcast"))
-		if a.RetryConfig.Enabled {
-			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s) (will retry): %v\n",
-				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
-		} else {
-			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s): %v\n",
-				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
-		}
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryBroadcast).
@@ -1298,7 +1267,6 @@ func (a *SSEAction) Execute(data any) error {
 	}
 
 	if a.Settings.Debug {
-		// Add structured logging
 		GetLogger().Debug("Successfully broadcasted via SSE",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -1307,7 +1275,6 @@ func (a *SSEAction) Execute(data any) error {
 			logger.Float64("confidence", a.Note.Confidence),
 			logger.String("clip_name", a.Note.ClipName),
 			logger.String("operation", "sse_broadcast_success"))
-		log.Printf("✅ Successfully broadcasted %s via SSE\n", a.Note.CommonName)
 	}
 
 	return nil
@@ -1331,7 +1298,6 @@ func (a *SSEAction) waitForAudioFile() error {
 			// File exists, check if it has reasonable size
 			if info.Size() > MinAudioFileSize {
 				if a.Settings.Debug {
-					// Add structured logging
 					GetLogger().Debug("Audio file ready for SSE broadcast",
 						logger.String("component", "analysis.processor.actions"),
 						logger.String("detection_id", a.CorrelationID),
@@ -1339,7 +1305,6 @@ func (a *SSEAction) waitForAudioFile() error {
 						logger.Int64("file_size_bytes", info.Size()),
 						logger.String("species", a.Note.CommonName),
 						logger.String("operation", "wait_audio_file_success"))
-					log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
 				}
 				return nil
 			}
@@ -1372,7 +1337,6 @@ func (a *SSEAction) waitForDatabaseID() error {
 			// Found the note with an ID, update our copy
 			a.Note.ID = updatedNote.ID
 			if a.Settings.Debug {
-				// Add structured logging
 				GetLogger().Debug("Found database ID for SSE broadcast",
 					logger.String("component", "analysis.processor.actions"),
 					logger.String("detection_id", a.CorrelationID),
@@ -1380,7 +1344,6 @@ func (a *SSEAction) waitForDatabaseID() error {
 					logger.String("species", a.Note.CommonName),
 					logger.String("scientific_name", a.Note.ScientificName),
 					logger.String("operation", "wait_database_id_success"))
-				log.Printf("🔍 Found database ID %d for SSE broadcast: %s", updatedNote.ID, a.Note.CommonName)
 			}
 			return nil
 		}
