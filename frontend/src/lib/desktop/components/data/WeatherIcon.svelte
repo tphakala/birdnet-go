@@ -28,6 +28,7 @@
   - 02-04: Various cloud conditions
   - 09-10: Rain conditions
   - 11: Thunderstorm
+  - 12: Sleet
   - 13: Snow
   - 50: Mist/fog
 -->
@@ -53,6 +54,7 @@
     '09': { day: '🌧️', night: '🌧️', description: 'Shower rain' },
     '10': { day: '🌦️', night: '🌧️', description: 'Rain' },
     '11': { day: '⛈️', night: '⛈️', description: 'Thunderstorm' },
+    '12': { day: '🌨️', night: '🌨️', description: 'Sleet' },
     '13': { day: '❄️', night: '❄️', description: 'Snow' },
     '50': { day: '🌫️', night: '🌫️', description: 'Mist' },
   };
