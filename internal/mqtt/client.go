@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -16,6 +15,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -40,7 +40,8 @@ type client struct {
 
 // NewClient creates a new MQTT client with the provided configuration.
 func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metrics) (Client, error) {
-	mqttLogger.Info("Creating new MQTT client")
+	log := GetLogger()
+	log.Info("Creating new MQTT client")
 	config := DefaultConfig()
 	config.Broker = settings.Realtime.MQTT.Broker
 	config.ClientID = settings.Main.Name
@@ -60,27 +61,24 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	// Auto-detect TLS from broker URL scheme
 	if strings.HasPrefix(config.Broker, "ssl://") || strings.HasPrefix(config.Broker, "tls://") || strings.HasPrefix(config.Broker, "mqtts://") {
 		config.TLS.Enabled = true
-		mqttLogger.Info("TLS enabled based on broker URL scheme")
+		log.Info("TLS enabled based on broker URL scheme")
 	}
 
-	// Set log level based on the Debug flag
+	// Note: Debug mode logging is now controlled by the central logger configuration
 	if config.Debug {
-		SetLogLevel(slog.LevelDebug)
-		mqttLogger.Debug("MQTT Debug logging enabled") // Log that debug is on
-	} else {
-		SetLogLevel(slog.LevelInfo)
+		log.Debug("MQTT Debug logging enabled")
 	}
 
 	// Log config details without sensitive info
-	mqttLogger.Info("MQTT configuration loaded",
-		"broker", config.Broker,
-		"client_id", config.ClientID,
-		"username", config.Username, // Log username, usually not sensitive
-		"topic", config.Topic,
-		"retain", config.Retain,
-		"debug", config.Debug,
-		"tls_enabled", config.TLS.Enabled,
-		"tls_skip_verify", config.TLS.InsecureSkipVerify,
+	log.Info("MQTT configuration loaded",
+		logger.String("broker", config.Broker),
+		logger.String("client_id", config.ClientID),
+		logger.String("username", config.Username),
+		logger.String("topic", config.Topic),
+		logger.Bool("retain", config.Retain),
+		logger.Bool("debug", config.Debug),
+		logger.Bool("tls_enabled", config.TLS.Enabled),
+		logger.Bool("tls_skip_verify", config.TLS.InsecureSkipVerify),
 	)
 
 	return &client{
@@ -95,7 +93,7 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 func (c *client) SetControlChannel(ch chan string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	mqttLogger.Debug("Setting control channel for MQTT client")
+	GetLogger().Debug("Setting control channel for MQTT client")
 	c.controlChan = ch
 }
 
@@ -107,21 +105,20 @@ func (c *client) IsDebug() bool {
 }
 
 // SetDebug updates the debug setting in a thread-safe manner.
-// NOTE: This also changes the global MQTT logger level for the entire service.
+// NOTE: Debug mode logging is now controlled by the central logger configuration.
 func (c *client) SetDebug(debug bool) {
 	c.mu.Lock()
 	// Check if the value is actually changing to avoid unnecessary work
 	isChanging := c.config.Debug != debug
 	c.config.Debug = debug
-	c.mu.Unlock() // Unlock before calling SetLogLevel
+	c.mu.Unlock()
 
 	if isChanging {
+		log := GetLogger()
 		if debug {
-			mqttLogger.Debug("Client debug mode enabled, setting global MQTT log level to DEBUG")
-			SetLogLevel(slog.LevelDebug)
+			log.Debug("Client debug mode enabled")
 		} else {
-			mqttLogger.Debug("Client debug mode disabled, setting global MQTT log level to INFO") // Log at debug level *before* changing it
-			SetLogLevel(slog.LevelInfo)
+			log.Debug("Client debug mode disabled")
 		}
 	}
 }
@@ -153,59 +150,62 @@ func (c *client) Connect(ctx context.Context) error {
 // - With bypass: Reconnect proceeds as intended
 func (c *client) connectWithOptions(ctx context.Context, isAutoReconnect bool) error {
 	if err := ctx.Err(); err != nil { // Check context early
-		mqttLogger.Warn("Connect context already cancelled", "error", err)
+		GetLogger().Warn("Connect context already cancelled", logger.Error(err))
 		return err
 	}
 
-	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
-	c.logConnectionAttempt(logger, isAutoReconnect)
+	log := GetLogger().With(
+		logger.String("broker", c.config.Broker),
+		logger.String("client_id", c.config.ClientID),
+	)
+	c.logConnectionAttempt(log, isAutoReconnect)
 
 	// Phase 1: Prepare for connection (handles cooldown and old client)
-	if err := c.prepareForConnection(logger, isAutoReconnect); err != nil {
+	if err := c.prepareForConnection(log, isAutoReconnect); err != nil {
 		return err
 	}
 
 	// Phase 2: Create new client under lock
-	clientToConnect, err := c.createNewClient(logger)
+	clientToConnect, err := c.createNewClient(log)
 	if err != nil {
 		return err
 	}
 
 	// Phase 3: Perform DNS resolution if needed
-	if err := c.performDNSResolution(ctx, logger); err != nil {
+	if err := c.performDNSResolution(ctx, log); err != nil {
 		return err
 	}
 
 	// Phase 4: Attempt connection with timeout handling
-	connectErr := c.performConnectionAttempt(ctx, clientToConnect, logger)
+	connectErr := c.performConnectionAttempt(ctx, clientToConnect, log)
 
 	c.mu.Lock()
 	c.lastConnAttempt = time.Now()
 	c.mu.Unlock()
 
 	if connectErr != nil {
-		return c.handleConnectionFailure(connectErr, clientToConnect, logger)
+		return c.handleConnectionFailure(connectErr, clientToConnect, log)
 	}
 
-	logger.Info("Successfully connected to MQTT broker")
+	log.Info("Successfully connected to MQTT broker")
 	return nil
 }
 
 // logConnectionAttempt logs the appropriate message based on connection type
-func (c *client) logConnectionAttempt(logger *slog.Logger, isAutoReconnect bool) {
+func (c *client) logConnectionAttempt(log logger.Logger, isAutoReconnect bool) {
 	if isAutoReconnect {
-		logger.Info("Attempting automatic reconnect to MQTT broker")
+		log.Info("Attempting automatic reconnect to MQTT broker")
 	} else {
-		logger.Info("Attempting to connect to MQTT broker")
+		log.Info("Attempting to connect to MQTT broker")
 	}
 }
 
 // prepareForConnection handles cooldown check and disconnects old client if needed
-func (c *client) prepareForConnection(logger *slog.Logger, isAutoReconnect bool) error {
+func (c *client) prepareForConnection(log logger.Logger, isAutoReconnect bool) error {
 	c.mu.Lock()
 	// Only check cooldown for manual connection attempts, not automatic reconnects
 	if !isAutoReconnect {
-		if err := c.checkConnectionCooldownLocked(logger); err != nil {
+		if err := c.checkConnectionCooldownLocked(log); err != nil {
 			c.mu.Unlock()
 			return err
 		}
@@ -214,7 +214,7 @@ func (c *client) prepareForConnection(logger *slog.Logger, isAutoReconnect bool)
 	// Disconnect existing client if needed
 	var oldClientToDisconnect mqtt.Client
 	if c.internalClient != nil && c.internalClient.IsConnected() {
-		logger.Info("Marking existing client for disconnection before reconnecting")
+		log.Info("Marking existing client for disconnection before reconnecting")
 		oldClientToDisconnect = c.internalClient
 	}
 	c.mu.Unlock()
@@ -222,18 +222,19 @@ func (c *client) prepareForConnection(logger *slog.Logger, isAutoReconnect bool)
 	// Perform disconnection outside the lock
 	if oldClientToDisconnect != nil {
 		disconnectTimeoutMs := durationToMillisUint(GracefulDisconnectTimeout)
-		logger.Debug("Disconnecting old client instance", "timeout_ms", disconnectTimeoutMs)
+		log.Debug("Disconnecting old client instance",
+			logger.Int("timeout_ms", int(disconnectTimeoutMs)))
 		oldClientToDisconnect.Disconnect(disconnectTimeoutMs)
 	}
 	return nil
 }
 
 // createNewClient creates and configures a new MQTT client instance
-func (c *client) createNewClient(logger *slog.Logger) (mqtt.Client, error) {
+func (c *client) createNewClient(log logger.Logger) (mqtt.Client, error) {
 	// Create and configure client options outside the lock to avoid holding it during
 	// potential file I/O (TLS certificate loading). configureClientOptions only reads
 	// from c.config which is not modified concurrently.
-	opts, err := c.configureClientOptions(logger)
+	opts, err := c.configureClientOptions(log)
 	if err != nil {
 		return nil, err
 	}
@@ -242,35 +243,35 @@ func (c *client) createNewClient(logger *slog.Logger) (mqtt.Client, error) {
 	defer c.mu.Unlock()
 
 	// Reinitialize reconnectStop if it was closed by a previous Disconnect()
-	c.reinitializeReconnectStopLocked(logger)
+	c.reinitializeReconnectStopLocked(log)
 
 	// Create and store the new client instance
 	c.internalClient = mqtt.NewClient(opts)
-	logger.Debug("MQTT client options configured and new client created",
-		"keepalive", KeepAliveInterval,
-		"ping_timeout", PingTimeout,
-		"write_timeout", WriteTimeout,
-		"connect_timeout", c.config.ConnectTimeout,
-		"clean_session", true,
+	log.Debug("MQTT client options configured and new client created",
+		logger.Duration("keepalive", KeepAliveInterval),
+		logger.Duration("ping_timeout", PingTimeout),
+		logger.Duration("write_timeout", WriteTimeout),
+		logger.Duration("connect_timeout", c.config.ConnectTimeout),
+		logger.Bool("clean_session", true),
 	)
 	return c.internalClient, nil
 }
 
 // reinitializeReconnectStopLocked resets the reconnect stop channel if closed
 // CALLER MUST HOLD c.mu LOCK
-func (c *client) reinitializeReconnectStopLocked(logger *slog.Logger) {
+func (c *client) reinitializeReconnectStopLocked(log logger.Logger) {
 	select {
 	case <-c.reconnectStop:
 		c.reconnectStop = make(chan struct{})
-		logger.Debug("Reinitialized reconnectStop channel for new connection session")
+		log.Debug("Reinitialized reconnectStop channel for new connection session")
 	default:
 		// Channel is still open, leave it intact
 	}
 }
 
 // handleConnectionFailure processes connection errors and updates metrics
-func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.Client, logger *slog.Logger) error {
-	logger.Error("MQTT connection failed", "error", connectErr)
+func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.Client, log logger.Logger) error {
+	log.Error("MQTT connection failed", logger.Error(connectErr))
 
 	// Ensure metrics reflect failure
 	c.mu.Lock()
@@ -298,7 +299,9 @@ func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.
 func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	// Check context before acquiring lock
 	if err := ctx.Err(); err != nil {
-		mqttLogger.Warn("Publish context already cancelled", "topic", topic, "error", err)
+		GetLogger().Warn("Publish context already cancelled",
+			logger.String("topic", topic),
+			logger.Error(err))
 		return err
 	}
 
@@ -307,7 +310,7 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	// Avoids calling IsConnected() which would re-lock.
 	if c.internalClient == nil || !c.internalClient.IsConnected() {
 		c.mu.Unlock() // Unlock before returning error
-		mqttLogger.Warn("Publish failed: client is not connected")
+		GetLogger().Warn("Publish failed: client is not connected")
 		enhancedErr := errors.Newf("not connected to MQTT broker").
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
@@ -318,26 +321,32 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 			Build()
 		return enhancedErr
 	}
-	mqttLogger.Debug("Client is connected, continuing")
+	GetLogger().Debug("Client is connected, continuing")
 	clientToPublish := c.internalClient // Get client instance under lock
 	currentRetain := c.config.Retain    // Get config value under lock
 	c.mu.Unlock()                       // Unlock before blocking publish call
 
-	logger := mqttLogger.With("topic", topic, "qos", defaultQoS, "retain", currentRetain)
+	log := GetLogger().With(
+		logger.String("topic", topic),
+		logger.Int("qos", defaultQoS),
+		logger.Bool("retain", currentRetain))
 	timer := c.metrics.StartPublishTimer()
 	defer timer.ObserveDuration()
 
-	logger.Debug("Attempting to publish message", "payload_size", len(payload))
+	log.Debug("Attempting to publish message",
+		logger.Int("payload_size", len(payload)))
 
 	// Perform the publish operation directly
 	token := clientToPublish.Publish(topic, defaultQoS, currentRetain, payload)
 
 	// Wait directly on the token with timeout
 	if !token.WaitTimeout(c.config.PublishTimeout) {
-		logger.Error("MQTT publish timed out", "timeout", c.config.PublishTimeout)
+		log.Error("MQTT publish timed out",
+			logger.Duration("timeout", c.config.PublishTimeout))
 		// Check if the *original* context was cancelled
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			logger.Error("Context was cancelled during publish wait", "error", ctxErr)
+			log.Error("Context was cancelled during publish wait",
+				logger.Error(ctxErr))
 			return ctxErr
 		}
 		// If context is okay, return a specific timeout error
@@ -357,7 +366,8 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 
 	// Check token for errors after waiting
 	if publishErr := token.Error(); publishErr != nil {
-		logger.Error("MQTT publish failed", "error", publishErr)
+		log.Error("MQTT publish failed",
+			logger.Error(publishErr))
 		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_error")
 		enhancedErr := errors.New(publishErr).
 			Component("mqtt").
@@ -374,7 +384,7 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	}
 
 	// Only increment success metrics if the publish call did not return an error
-	logger.Debug("Publish completed successfully")
+	log.Debug("Publish completed successfully")
 	c.metrics.IncrementMessagesDelivered()
 	c.metrics.ObserveMessageSize(float64(len(payload)))
 	return nil
@@ -408,21 +418,21 @@ func (c *client) calculateCancelTimeout() uint {
 }
 
 // cancelConnectionAttempt disconnects the client to prevent goroutine leaks
-func (c *client) cancelConnectionAttempt(clientToConnect mqtt.Client, logger *slog.Logger) {
+func (c *client) cancelConnectionAttempt(clientToConnect mqtt.Client, log logger.Logger) {
 	if clientToConnect == nil {
 		return
 	}
 	cancelTimeout := c.calculateCancelTimeout()
-	logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
-		"timeout_ms", cancelTimeout,
-		"base_timeout", durationToMillisUint(CancelDisconnectTimeout),
-		"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
+	log.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
+		logger.Int("timeout_ms", int(cancelTimeout)),
+		logger.Int("base_timeout", int(durationToMillisUint(CancelDisconnectTimeout))),
+		logger.Int64("config_timeout_ms", c.config.DisconnectTimeout.Milliseconds()))
 	clientToConnect.Disconnect(cancelTimeout)
 }
 
 // checkConnectionCooldownLocked validates if enough time has passed since the last connection attempt
 // CALLER MUST HOLD c.mu LOCK (either read or write lock)
-func (c *client) checkConnectionCooldownLocked(logger *slog.Logger) error {
+func (c *client) checkConnectionCooldownLocked(log logger.Logger) error {
 	// Read shared state - caller must hold lock to prevent races
 	lastConnAttempt := c.lastConnAttempt
 	reconnectCooldown := c.config.ReconnectCooldown
@@ -437,7 +447,9 @@ func (c *client) checkConnectionCooldownLocked(logger *slog.Logger) error {
 		if lastAttemptRounded == 0 && lastAttemptAgo > 0 {
 			lastAttemptRounded = time.Second // Display as "1s ago" instead of "0s ago"
 		}
-		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptRounded, "cooldown", reconnectCooldown)
+		log.Warn("Connection attempt too recent",
+			logger.Duration("last_attempt_ago", lastAttemptRounded),
+			logger.Duration("cooldown", reconnectCooldown))
 		return errors.Newf("connection attempt too recent, last attempt was %v ago", lastAttemptRounded).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
@@ -451,7 +463,7 @@ func (c *client) checkConnectionCooldownLocked(logger *slog.Logger) error {
 }
 
 // configureClientOptions creates and configures MQTT client options
-func (c *client) configureClientOptions(logger *slog.Logger) (*mqtt.ClientOptions, error) {
+func (c *client) configureClientOptions(log logger.Logger) (*mqtt.ClientOptions, error) {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(c.config.Broker)
 	opts.SetClientID(c.config.ClientID)
@@ -471,7 +483,8 @@ func (c *client) configureClientOptions(logger *slog.Logger) (*mqtt.ClientOption
 	if c.config.TLS.Enabled {
 		tlsConfig, err := c.createTLSConfig()
 		if err != nil {
-			logger.Error("Failed to create TLS configuration", "error", err)
+			log.Error("Failed to create TLS configuration",
+				logger.Error(err))
 			return nil, errors.New(err).
 				Component("mqtt").
 				Category(errors.CategoryConfiguration).
@@ -481,10 +494,10 @@ func (c *client) configureClientOptions(logger *slog.Logger) (*mqtt.ClientOption
 				Build()
 		}
 		opts.SetTLSConfig(tlsConfig)
-		logger.Debug("TLS configuration applied",
-			"skip_verify", c.config.TLS.InsecureSkipVerify,
-			"has_ca_cert", c.config.TLS.CACert != "",
-			"has_client_cert", c.config.TLS.ClientCert != "",
+		log.Debug("TLS configuration applied",
+			logger.Bool("skip_verify", c.config.TLS.InsecureSkipVerify),
+			logger.Bool("has_ca_cert", c.config.TLS.CACert != ""),
+			logger.Bool("has_client_cert", c.config.TLS.ClientCert != ""),
 		)
 	}
 
@@ -492,11 +505,12 @@ func (c *client) configureClientOptions(logger *slog.Logger) (*mqtt.ClientOption
 }
 
 // performDNSResolution resolves the broker hostname if it's not an IP address
-func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) error {
+func (c *client) performDNSResolution(ctx context.Context, log logger.Logger) error {
 	// Parse the broker URL
 	u, err := url.Parse(c.config.Broker)
 	if err != nil {
-		logger.Error("Invalid broker URL", "error", err)
+		log.Error("Invalid broker URL",
+			logger.Error(err))
 		return errors.New(err).
 			Component("mqtt").
 			Category(errors.CategoryConfiguration).
@@ -511,12 +525,15 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 	defer dnsCancel()
 	host := u.Hostname()
 	if net.ParseIP(host) == nil {
-		logger.Debug("Resolving broker hostname", "host", host)
+		log.Debug("Resolving broker hostname",
+			logger.String("host", host))
 		_, err := net.DefaultResolver.LookupHost(dnsCtx, host)
 		if err != nil {
 			// Prioritize parent context cancellation over DNS-specific errors
 			if ctx.Err() != nil {
-				logger.Error("Context cancelled during DNS resolution", "host", host, "error", ctx.Err())
+				log.Error("Context cancelled during DNS resolution",
+					logger.String("host", host),
+					logger.Error(ctx.Err()))
 				c.mu.Lock()
 				c.lastConnAttempt = time.Now()
 				c.mu.Unlock()
@@ -524,7 +541,9 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 			}
 
 			// Handle DNS-specific errors
-			logger.Error("Failed to resolve broker hostname", "host", host, "error", err)
+			log.Error("Failed to resolve broker hostname",
+				logger.String("host", host),
+				logger.Error(err))
 			var dnsErr *net.DNSError
 			if errors.As(err, &dnsErr) {
 				c.mu.Lock()
@@ -553,20 +572,21 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 				Context("operation", "dns_resolution").
 				Build()
 		}
-		logger.Debug("Broker hostname resolved successfully", "host", host)
+		log.Debug("Broker hostname resolved successfully",
+			logger.String("host", host))
 	}
 	return nil
 }
 
 // performConnectionAttempt handles the actual MQTT connection with timeout management
-func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect mqtt.Client, logger *slog.Logger) error {
-	logger.Debug("Starting blocking connection attempt")
+func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect mqtt.Client, log logger.Logger) error {
+	log.Debug("Starting blocking connection attempt")
 	token := clientToConnect.Connect()
 
 	opDone := make(chan struct{})
 	go func() {
 		if !token.WaitTimeout(c.config.ConnectTimeout) {
-			mqttLogger.Debug("paho.token.WaitTimeout returned false, indicating its internal timeout likely expired")
+			GetLogger().Debug("paho.token.WaitTimeout returned false, indicating its internal timeout likely expired")
 		}
 		close(opDone)
 	}()
@@ -578,15 +598,17 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 	select {
 	case <-opDone:
 		drainTimer(timer)
-		return c.handleConnectionResult(token, clientToConnect, logger)
+		return c.handleConnectionResult(token, clientToConnect, log)
 	case <-timer.C:
-		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", timeoutDuration)
-		c.cancelConnectionAttempt(clientToConnect, logger)
+		log.Error("MQTT connection attempt timed out by client.go select",
+			logger.Duration("timeout", timeoutDuration))
+		c.cancelConnectionAttempt(clientToConnect, log)
 		return c.buildTimeoutError(timeoutDuration)
 	case <-ctx.Done():
 		drainTimer(timer)
-		logger.Error("Context cancelled during MQTT connection wait", "error", ctx.Err())
-		c.cancelConnectionAttempt(clientToConnect, logger)
+		log.Error("Context cancelled during MQTT connection wait",
+			logger.Error(ctx.Err()))
+		c.cancelConnectionAttempt(clientToConnect, log)
 		return ctx.Err()
 	}
 }
@@ -602,7 +624,7 @@ func drainTimer(timer *time.Timer) {
 }
 
 // handleConnectionResult processes the result of a completed connection attempt
-func (c *client) handleConnectionResult(token mqtt.Token, clientToConnect mqtt.Client, logger *slog.Logger) error {
+func (c *client) handleConnectionResult(token mqtt.Token, clientToConnect mqtt.Client, log logger.Logger) error {
 	connectErr := token.Error()
 	if connectErr != nil {
 		return connectErr
@@ -611,13 +633,14 @@ func (c *client) handleConnectionResult(token mqtt.Token, clientToConnect mqtt.C
 		return nil
 	}
 	// Token succeeded but client not connected - determine appropriate error
-	return c.buildNotConnectedError(logger)
+	return c.buildNotConnectedError(log)
 }
 
 // buildNotConnectedError creates an error for when token succeeds but client isn't connected
-func (c *client) buildNotConnectedError(logger *slog.Logger) error {
+func (c *client) buildNotConnectedError(log logger.Logger) error {
 	if c.config.ConnectTimeout < MinConnectTimeout {
-		logger.Warn("Connection failed with very short timeout, treating as timeout scenario", "timeout", c.config.ConnectTimeout)
+		log.Warn("Connection failed with very short timeout, treating as timeout scenario",
+			logger.Duration("timeout", c.config.ConnectTimeout))
 		return errors.Newf("mqtt connection timeout - connection failed with short timeout (%v)", c.config.ConnectTimeout).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
@@ -627,7 +650,7 @@ func (c *client) buildNotConnectedError(logger *slog.Logger) error {
 			Context("connect_timeout", c.config.ConnectTimeout).
 			Build()
 	}
-	logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
+	log.Warn("Paho token wait completed but client not connected, no explicit token error.")
 	return errors.Newf("mqtt connection failed post-wait, client not connected").
 		Component("mqtt").
 		Category(errors.CategoryMQTTConnection).
@@ -674,8 +697,10 @@ func (c *client) Disconnect() {
 func (c *client) disconnectWithTimeout(timeout time.Duration) {
 	c.mu.Lock() // Lock required to safely access reconnectStop, reconnectTimer, internalClient
 
-	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
-	logger.Info("Disconnecting from MQTT broker")
+	log := GetLogger().With(
+		logger.String("broker", c.config.Broker),
+		logger.String("client_id", c.config.ClientID))
+	log.Info("Disconnecting from MQTT broker")
 
 	// Signal reconnect loop to stop
 	select {
@@ -686,7 +711,7 @@ func (c *client) disconnectWithTimeout(timeout time.Duration) {
 	}
 
 	if c.reconnectTimer != nil {
-		logger.Debug("Stopping reconnect timer")
+		log.Debug("Stopping reconnect timer")
 		c.reconnectTimer.Stop()
 		c.reconnectTimer = nil // Prevent future use after stopping
 	}
@@ -700,24 +725,26 @@ func (c *client) disconnectWithTimeout(timeout time.Duration) {
 		// if IsConnected internally needs a lock (though it uses RLock)
 		if clientToDisconnect.IsConnected() {
 			disconnectTimeoutMs := uint(timeout.Milliseconds()) // #nosec G115 -- timeout value conversion safe
-			logger.Debug("Sending disconnect signal to Paho client", "timeout_ms", disconnectTimeoutMs)
+			log.Debug("Sending disconnect signal to Paho client",
+				logger.Int("timeout_ms", int(disconnectTimeoutMs)))
 			clientToDisconnect.Disconnect(disconnectTimeoutMs) // Perform disconnect outside lock
 			c.metrics.UpdateConnectionStatus(false)            // Update metrics after disconnect attempt
 		} else {
-			logger.Debug("Client was not connected when disconnect called")
+			log.Debug("Client was not connected when disconnect called")
 			// Ensure status is marked as false if we clear a non-nil but disconnected client
 			c.metrics.UpdateConnectionStatus(false)
 		}
 	} else {
-		logger.Debug("Client was not initialized when disconnect called")
+		GetLogger().Debug("Client was not initialized when disconnect called")
 		// Ensure status is marked as false if we are disconnecting with no client
 		c.metrics.UpdateConnectionStatus(false)
 	}
 }
 
 func (c *client) onConnect(client mqtt.Client) {
-	// Log using the package-level logger
-	mqttLogger.Info("Connected to MQTT broker", "broker", c.config.Broker, "client_id", c.config.ClientID)
+	GetLogger().Info("Connected to MQTT broker",
+		logger.String("broker", c.config.Broker),
+		logger.String("client_id", c.config.ClientID))
 	c.metrics.UpdateConnectionStatus(true)
 	// Reset reconnect attempts on successful connection - might be handled by Connect logic resetting lastConnAttempt implicitly
 }
@@ -732,8 +759,10 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 		Context("operation", "connection_lost").
 		Build()
 
-	// Log using the package-level logger
-	mqttLogger.Error("Connection to MQTT broker lost", "broker", c.config.Broker, "client_id", c.config.ClientID, "error", enhancedErr)
+	GetLogger().Error("Connection to MQTT broker lost",
+		logger.String("broker", c.config.Broker),
+		logger.String("client_id", c.config.ClientID),
+		logger.Error(enhancedErr))
 	c.metrics.UpdateConnectionStatus(false)
 	c.metrics.IncrementErrorsWithCategory("mqtt-connection", "connection_lost")
 
@@ -742,7 +771,7 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 	// Check if we should attempt to reconnect or if Disconnect was called
 	select {
 	case <-c.reconnectStop:
-		mqttLogger.Info("Reconnect mechanism stopped, not attempting reconnect.")
+		GetLogger().Info("Reconnect mechanism stopped, not attempting reconnect")
 		return
 	default:
 		// Proceed with reconnect
@@ -756,16 +785,16 @@ func (c *client) startReconnectTimer() {
 
 	// Ensure we don't start multiple timers if called rapidly
 	if c.reconnectTimer != nil {
-		mqttLogger.Debug("Reconnect timer already active, stopping previous one.")
+		GetLogger().Debug("Reconnect timer already active, stopping previous one")
 		c.reconnectTimer.Stop()
 	}
 
 	reconnectDelay := c.config.ReconnectDelay
-	mqttLogger.Info("Starting reconnect timer", "delay", reconnectDelay)
+	GetLogger().Info("Starting reconnect timer", logger.Duration("delay", reconnectDelay))
 	c.reconnectTimer = time.AfterFunc(reconnectDelay, func() {
 		select {
 		case <-c.reconnectStop: // Check if disconnect was called before timer fired
-			mqttLogger.Info("Reconnect cancelled before execution")
+			GetLogger().Info("Reconnect cancelled before execution")
 			return
 		default:
 			// Run reconnect logic in a separate goroutine to avoid blocking timer goroutine
@@ -780,13 +809,15 @@ func (c *client) reconnectWithBackoff() {
 	ctx, cancel := context.WithTimeout(context.Background(), c.config.ConnectTimeout+ReconnectContextGrace)
 	defer cancel()
 
-	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
-	logger.Info("Attempting to reconnect to MQTT broker")
+	log := GetLogger().With(
+		logger.String("broker", c.config.Broker),
+		logger.String("client_id", c.config.ClientID))
+	log.Info("Attempting to reconnect to MQTT broker")
 
 	// Check if reconnect process was stopped before attempting connection
 	select {
 	case <-c.reconnectStop:
-		logger.Info("Reconnect mechanism stopped during backoff, aborting reconnect attempt.")
+		log.Info("Reconnect mechanism stopped during backoff, aborting reconnect attempt")
 		return
 	default:
 		// Proceed with connect attempt
@@ -794,7 +825,7 @@ func (c *client) reconnectWithBackoff() {
 
 	// Use connectWithOptions with isAutoReconnect=true to bypass cooldown check
 	if err := c.connectWithOptions(ctx, true); err != nil {
-		logger.Error("Reconnect attempt failed", "error", err)
+		log.Error("Reconnect attempt failed", logger.Error(err))
 
 		// Extract error category for metrics
 		errorCategory := "generic"
@@ -807,7 +838,7 @@ func (c *client) reconnectWithBackoff() {
 		// Check if stopped *after* failed attempt before rescheduling
 		select {
 		case <-c.reconnectStop:
-			logger.Info("Reconnect mechanism stopped after failed attempt, not rescheduling.")
+			log.Info("Reconnect mechanism stopped after failed attempt, not rescheduling")
 			return
 		default:
 			// Schedule next attempt
@@ -815,7 +846,7 @@ func (c *client) reconnectWithBackoff() {
 		}
 	} else {
 		// Connection successful, logged by onConnect
-		logger.Info("Reconnect successful")
+		log.Info("Reconnect successful")
 		// No need to call startReconnectTimer here, connection is established
 	}
 }
@@ -894,7 +925,7 @@ func (c *client) loadCACertificate(tlsConfig *tls.Config) error {
 			Build()
 	}
 	tlsConfig.RootCAs = caCertPool
-	mqttLogger.Debug("CA certificate loaded", "path", c.config.TLS.CACert)
+	GetLogger().Debug("CA certificate loaded", logger.String("path", c.config.TLS.CACert))
 	return nil
 }
 
@@ -926,9 +957,8 @@ func (c *client) loadClientCertificate(tlsConfig *tls.Config) error {
 			Build()
 	}
 	tlsConfig.Certificates = []tls.Certificate{cert}
-	mqttLogger.Debug("Client certificate loaded",
-		"cert_path", c.config.TLS.ClientCert,
-		"key_path", c.config.TLS.ClientKey,
-	)
+	GetLogger().Debug("Client certificate loaded",
+		logger.String("cert_path", c.config.TLS.ClientCert),
+		logger.String("key_path", c.config.TLS.ClientKey))
 	return nil
 }

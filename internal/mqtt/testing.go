@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestConfig encapsulates test configuration for artificial delays and failures
@@ -303,7 +304,7 @@ func (c *client) testTLSConnection(ctx context.Context, hostPort string) error {
 	}
 
 	if err := tlsConn.Close(); err != nil {
-		mqttLogger.Warn("Failed to close TLS connection", "error", err)
+		GetLogger().Warn("Failed to close TLS connection", logger.Error(err))
 	}
 	return nil
 }
@@ -316,7 +317,7 @@ func (c *client) testPlainTCPConnection(ctx context.Context, hostPort string) er
 		return c.buildTCPConnectionError(err, hostPort)
 	}
 	if err := conn.Close(); err != nil {
-		mqttLogger.Warn("Failed to close connection", "error", err)
+		GetLogger().Warn("Failed to close connection", logger.Error(err))
 	}
 	return nil
 }
@@ -489,16 +490,14 @@ func determineResultState(result *TestResult) string {
 // logTestResult logs the test result using structured logging
 func logTestResult(result *TestResult) {
 	if result.Success {
-		mqttLogger.Info("Test stage completed",
-			"stage", result.Stage,
-			"message", result.Message,
-		)
+		GetLogger().Info("Test stage completed",
+			logger.String("stage", result.Stage),
+			logger.String("message", result.Message))
 	} else {
-		mqttLogger.Warn("Test stage failed",
-			"stage", result.Stage,
-			"message", result.Message,
-			"error", result.Error,
-		)
+		GetLogger().Warn("Test stage failed",
+			logger.String("stage", result.Stage),
+			logger.String("message", result.Message),
+			logger.String("error", result.Error))
 	}
 }
 
