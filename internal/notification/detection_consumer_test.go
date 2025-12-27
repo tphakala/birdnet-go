@@ -422,7 +422,7 @@ func TestDetectionNotificationConsumer_ConfidenceThreshold(t *testing.T) {
 	atThresholdEvent, err := events.NewDetectionEvent(
 		"Northern Cardinal",
 		"Cardinalis cardinalis", //nolint:misspell // Scientific name, not a misspelling
-		0.80, // Exactly at threshold
+		0.80,                    // Exactly at threshold
 		"backyard-camera",
 		true,
 		0,

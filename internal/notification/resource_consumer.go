@@ -9,22 +9,22 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/events"
-	"log/slog"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // ResourceEventWorker consumes resource monitoring events from the event bus
 type ResourceEventWorker struct {
-	service          *Service
-	logger           *slog.Logger
-	lastAlertTime    map[string]time.Time
-	alertThrottle    time.Duration
+	service           *Service
+	logger            logger.Logger
+	lastAlertTime     map[string]time.Time
+	alertThrottle     time.Duration
 	resourceThrottles map[string]time.Duration // Per-resource type throttles
-	mu               sync.RWMutex
-	processedCount   atomic.Uint64  // Thread-safe counter
-	suppressedCount  atomic.Uint64  // Thread-safe counter
-	cleanupTicker    *time.Ticker   // For periodic cleanup of lastAlertTime
-	stopCleanup      chan struct{}  // Signal to stop cleanup goroutine
-	wg               sync.WaitGroup // Wait for cleanup to finish
+	mu                sync.RWMutex
+	processedCount    atomic.Uint64  // Thread-safe counter
+	suppressedCount   atomic.Uint64  // Thread-safe counter
+	cleanupTicker     *time.Ticker   // For periodic cleanup of lastAlertTime
+	stopCleanup       chan struct{}  // Signal to stop cleanup goroutine
+	wg                sync.WaitGroup // Wait for cleanup to finish
 }
 
 // ResourceWorkerConfig holds configuration for the resource event worker
@@ -41,7 +41,7 @@ type ResourceWorkerConfig struct {
 // DefaultResourceWorkerConfig returns default configuration
 func DefaultResourceWorkerConfig() *ResourceWorkerConfig {
 	return &ResourceWorkerConfig{
-		AlertThrottle:     DefaultAlertThrottle, // Don't spam alerts for same resource
+		AlertThrottle:     DefaultAlertThrottle,           // Don't spam alerts for same resource
 		ResourceThrottles: make(map[string]time.Duration), // Empty by default, can be customized
 		Debug:             false,
 	}
@@ -57,11 +57,10 @@ func NewResourceEventWorker(service *Service, config *ResourceWorkerConfig) (*Re
 		config = DefaultResourceWorkerConfig()
 	}
 
-	logger := service.logger
-	if logger == nil {
-		logger = slog.Default()
+	log := service.logger
+	if log == nil {
+		log = GetLogger()
 	}
-	logger = logger.With("component", "resource-worker")
 
 	// Copy resource throttles to avoid mutation
 	resourceThrottles := make(map[string]time.Duration)
@@ -69,7 +68,7 @@ func NewResourceEventWorker(service *Service, config *ResourceWorkerConfig) (*Re
 
 	worker := &ResourceEventWorker{
 		service:           service,
-		logger:            logger,
+		logger:            log,
 		lastAlertTime:     make(map[string]time.Time),
 		alertThrottle:     config.AlertThrottle,
 		resourceThrottles: resourceThrottles,
@@ -118,10 +117,9 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 		w.suppressedCount.Add(1)
 		if w.logger != nil {
 			w.logger.Debug("suppressing duplicate resource alert",
-				"resource_type", event.GetResourceType(),
-				"severity", event.GetSeverity(),
-				"throttle_duration", w.alertThrottle,
-			)
+				logger.String("resource_type", event.GetResourceType()),
+				logger.String("severity", event.GetSeverity()),
+				logger.Duration("throttle_duration", w.alertThrottle))
 		}
 		return nil
 	}
@@ -149,12 +147,11 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 
 	if w.logger != nil {
 		w.logger.Info("resource alert notification created",
-			"resource_type", event.GetResourceType(),
-			"severity", event.GetSeverity(),
-			"current_value", event.GetCurrentValue(),
-			"threshold", event.GetThreshold(),
-			"notification_id", notification.ID,
-		)
+			logger.String("resource_type", event.GetResourceType()),
+			logger.String("severity", event.GetSeverity()),
+			logger.Float64("current_value", event.GetCurrentValue()),
+			logger.Float64("threshold", event.GetThreshold()),
+			logger.String("notification_id", notification.ID))
 	}
 
 	return nil
@@ -258,7 +255,7 @@ func (w *ResourceEventWorker) shouldThrottle(alertKey, resourceType string) bool
 	w.mu.RLock()
 	lastTime, exists := w.lastAlertTime[alertKey]
 	throttleDuration := w.alertThrottle
-	
+
 	// Check if there's a specific throttle for this resource type
 	if duration, ok := w.resourceThrottles[resourceType]; ok {
 		throttleDuration = duration
@@ -310,7 +307,7 @@ func (w *ResourceEventWorker) GetStats() struct {
 // cleanupLoop periodically removes old entries from lastAlertTime map
 func (w *ResourceEventWorker) cleanupLoop() {
 	defer w.wg.Done()
-	
+
 	for {
 		select {
 		case <-w.cleanupTicker.C:
@@ -325,29 +322,28 @@ func (w *ResourceEventWorker) cleanupLoop() {
 func (w *ResourceEventWorker) cleanupOldAlerts() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	now := time.Now()
 	maxAge := w.alertThrottle
-	
+
 	// Check all resource-specific throttles to find the maximum
 	for _, duration := range w.resourceThrottles {
 		if duration > maxAge {
 			maxAge = duration
 		}
 	}
-	
+
 	// Add some buffer to ensure we don't remove entries too early
 	maxAge *= 2
-	
+
 	// Remove old entries
 	for key, lastTime := range w.lastAlertTime {
 		if now.Sub(lastTime) > maxAge {
 			delete(w.lastAlertTime, key)
 			if w.logger != nil {
 				w.logger.Debug("cleaned up old alert time entry",
-					"key", key,
-					"age", now.Sub(lastTime),
-				)
+					logger.String("key", key),
+					logger.Duration("age", now.Sub(lastTime)))
 			}
 		}
 	}

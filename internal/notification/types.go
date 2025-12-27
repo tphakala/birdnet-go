@@ -260,12 +260,12 @@ func (s *InMemoryStore) Save(notification *Notification) error {
 	}
 
 	s.notifications[notification.ID] = notification
-	
+
 	// Update unread count if this is a new unread notification
 	if notification.Status == StatusUnread {
 		s.unreadCount++
 	}
-	
+
 	return nil
 }
 
@@ -324,14 +324,14 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 	if !exists {
 		return fmt.Errorf("notification not found: %s", notification.ID)
 	}
-	
+
 	// Update unread count if status changed
 	if oldNotif.Status == StatusUnread && notification.Status != StatusUnread {
 		s.unreadCount--
 	} else if oldNotif.Status != StatusUnread && notification.Status == StatusUnread {
 		s.unreadCount++
 	}
-	
+
 	s.notifications[notification.ID] = notification
 	return nil
 }
@@ -347,7 +347,7 @@ func (s *InMemoryStore) Delete(id string) error {
 			s.unreadCount--
 		}
 	}
-	
+
 	delete(s.notifications, id)
 	return nil
 }

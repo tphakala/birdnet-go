@@ -19,7 +19,7 @@ const (
 	ToastTypeWarning ToastType = "warning"
 	// ToastTypeError for error messages
 	ToastTypeError ToastType = "error"
-	
+
 	// ToastNotificationTitle is the standard title for toast notifications
 	// This constant is used to identify toast notifications for filtering
 	ToastNotificationTitle = "Toast Message"
@@ -91,7 +91,7 @@ func (t *Toast) ToNotification() *Notification {
 	// Map toast types to notification types and priorities
 	var notifType Type
 	var priority Priority
-	
+
 	switch t.Type {
 	case ToastTypeError:
 		notifType = TypeError
@@ -106,25 +106,25 @@ func (t *Toast) ToNotification() *Notification {
 		notifType = TypeInfo
 		priority = PriorityLow
 	}
-	
+
 	// Create notification with toast metadata
 	notif := NewNotification(notifType, priority, ToastNotificationTitle, t.Message)
 	notif.WithComponent(t.Component).
 		WithMetadata(MetadataKeyIsToast, true).
 		WithMetadata("toastType", string(t.Type)).
 		WithMetadata("toastId", t.ID)
-	
+
 	if t.Duration > 0 {
 		notif.WithMetadata("duration", t.Duration)
 	}
-	
+
 	if t.Action != nil {
 		notif.WithMetadata("action", t.Action)
 	}
-	
+
 	// Toasts are ephemeral - set short expiry
 	notif.WithExpiry(DefaultQuickExpiry)
-	
+
 	return notif
 }
 
@@ -133,15 +133,15 @@ func SendToast(message string, toastType ToastType, component string) error {
 	if !IsInitialized() {
 		return fmt.Errorf("notification service not initialized")
 	}
-	
+
 	service := GetService()
 	if service == nil {
 		return fmt.Errorf("notification service is nil")
 	}
-	
+
 	toast := NewToast(message, toastType).WithComponent(component)
 	notification := toast.ToNotification()
-	
+
 	// Use CreateWithMetadata to preserve all toast metadata
 	return service.CreateWithMetadata(notification)
 }
@@ -151,17 +151,17 @@ func SendToastWithDuration(message string, toastType ToastType, component string
 	if !IsInitialized() {
 		return fmt.Errorf("notification service not initialized")
 	}
-	
+
 	service := GetService()
 	if service == nil {
 		return fmt.Errorf("notification service is nil")
 	}
-	
+
 	toast := NewToast(message, toastType).
 		WithComponent(component).
 		WithDuration(duration)
 	notification := toast.ToNotification()
-	
+
 	// Use CreateWithMetadata to preserve all toast metadata
 	return service.CreateWithMetadata(notification)
 }

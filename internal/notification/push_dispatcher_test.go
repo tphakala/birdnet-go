@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -75,7 +76,7 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 
 	d := &pushDispatcher{
 		providers:      []enhancedProvider{{prov: fp, circuitBreaker: nil, filter: conf.PushFilterConfig{}, name: fp.name}},
-		log:            getFileLogger(false),
+		log:            GetLogger(),
 		enabled:        true,
 		maxRetries:     0,
 		retryDelay:     10 * time.Millisecond,
@@ -265,7 +266,7 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 
 	d := &pushDispatcher{
 		providers:      []enhancedProvider{{prov: slowProvider, circuitBreaker: nil, filter: conf.PushFilterConfig{}, name: slowProvider.name}},
-		log:            getFileLogger(false),
+		log:            GetLogger(),
 		enabled:        true,
 		maxRetries:     0,
 		retryDelay:     10 * time.Millisecond,
@@ -649,14 +650,14 @@ func TestLogDebug(t *testing.T) {
 	t.Run("nil_logger_no_panic", func(t *testing.T) {
 		// Should not panic with nil logger
 		assert.NotPanics(t, func() {
-			logDebug(nil, "test message", "key", "value")
+			logDebug(nil, "test message", logger.String("key", "value"))
 		})
 	})
 
 	t.Run("with_logger", func(t *testing.T) {
-		log := getFileLogger(false)
+		log := GetLogger()
 		assert.NotPanics(t, func() {
-			logDebug(log, "test message", "key", "value")
+			logDebug(log, "test message", logger.String("key", "value"))
 		})
 	})
 }

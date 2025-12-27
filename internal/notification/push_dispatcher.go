@@ -3,7 +3,6 @@ package notification
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"math/rand/v2"
 	"net"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"golang.org/x/sync/semaphore"
 )
@@ -44,7 +44,7 @@ const (
 // It subscribes to the notification service and forwards notifications asynchronously.
 type pushDispatcher struct {
 	providers         []enhancedProvider
-	log               *slog.Logger
+	log               logger.Logger
 	enabled           bool
 	maxRetries        int
 	retryDelay        time.Duration
@@ -110,7 +110,7 @@ func initializePushDispatcher(settings *conf.Settings, notificationMetrics *metr
 func createPushDispatcher(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) *pushDispatcher {
 	maxConcurrentJobs := calculateMaxConcurrentJobs(settings)
 	return &pushDispatcher{
-		log:               getFileLogger(settings.Debug),
+		log:               GetLogger(),
 		enabled:           settings.Notification.Push.Enabled,
 		maxRetries:        settings.Notification.Push.MaxRetries,
 		retryDelay:        settings.Notification.Push.RetryDelay,
@@ -134,7 +134,7 @@ func calculateMaxConcurrentJobs(settings *conf.Settings) int64 {
 }
 
 // createHealthCheckerIfEnabled creates a health checker if enabled in settings.
-func createHealthCheckerIfEnabled(settings *conf.Settings, log *slog.Logger, notificationMetrics *metrics.NotificationMetrics) *HealthChecker {
+func createHealthCheckerIfEnabled(settings *conf.Settings, log logger.Logger, notificationMetrics *metrics.NotificationMetrics) *HealthChecker {
 	if !settings.Notification.Push.HealthCheck.Enabled {
 		return nil
 	}
@@ -163,9 +163,9 @@ func warnIfLocalhostWithExternalWebhooks(pd *pushDispatcher, settings *conf.Sett
 	baseURL := settings.Security.GetBaseURL(settings.WebServer.Port)
 	if containsLocalhost(baseURL) && hasExternalWebhooks(pd.providers) {
 		pd.log.Info("detection URLs use localhost with external webhooks",
-			"base_url", baseURL,
-			"note", "External services may not access these URLs",
-			"fix", "Set security.baseUrl, security.host, or BIRDNET_URL environment variable")
+			logger.String("base_url", baseURL),
+			logger.String("note", "External services may not access these URLs"),
+			logger.String("fix", "Set security.baseUrl, security.host, or BIRDNET_URL environment variable"))
 	}
 }
 
@@ -175,7 +175,7 @@ func startDispatcherIfNeeded(pd *pushDispatcher) error {
 		return nil
 	}
 	if err := pd.start(); err != nil {
-		pd.log.Error("failed to start push dispatcher", "error", err)
+		pd.log.Error("failed to start push dispatcher", logger.Error(err))
 		return err
 	}
 	return nil
@@ -198,9 +198,9 @@ func (d *pushDispatcher) start() error {
 	d.startHealthChecker(ctx)
 
 	d.log.Info("push dispatcher started",
-		"providers", len(d.providers),
-		"health_checker", d.healthChecker != nil,
-		"max_concurrent_dispatches", d.maxConcurrentJobs)
+		logger.Int("providers", len(d.providers)),
+		logger.Bool("health_checker", d.healthChecker != nil),
+		logger.Int64("max_concurrent_dispatches", d.maxConcurrentJobs))
 	return nil
 }
 
@@ -229,7 +229,7 @@ func (d *pushDispatcher) startHealthChecker(ctx context.Context) {
 		return
 	}
 	if err := d.healthChecker.Start(ctx); err != nil {
-		d.log.Error("failed to start health checker", "error", err)
+		d.log.Error("failed to start health checker", logger.Error(err))
 	}
 }
 
@@ -270,9 +270,9 @@ func (d *pushDispatcher) acquireSemaphoreSlot(ctx context.Context, ep *enhancedP
 	if err != nil {
 		if d.log != nil {
 			d.log.Warn("dispatch queue full, dropping notification",
-				"provider", ep.name,
-				"notification_id", notif.ID,
-				"error", err)
+				logger.String("provider", ep.name),
+				logger.String("notification_id", notif.ID),
+				logger.Error(err))
 		}
 		if d.metrics != nil {
 			d.metrics.RecordFilterRejection(ep.name, "queue_full")
@@ -298,9 +298,9 @@ func (d *pushDispatcher) recoverFromDispatchPanic(provider *enhancedProvider, no
 	if r := recover(); r != nil {
 		if d.log != nil {
 			d.log.Error("panic in dispatch goroutine",
-				"provider", provider.name,
-				"notification_id", notif.ID,
-				"panic", r)
+				logger.String("provider", provider.name),
+				logger.String("notification_id", notif.ID),
+				logger.Any("panic", r))
 		}
 	}
 }
@@ -345,8 +345,8 @@ func (d *pushDispatcher) checkRateLimit(ep *enhancedProvider, notif *Notificatio
 	if ep.rateLimiter != nil && !ep.rateLimiter.Allow() {
 		if d.log != nil {
 			d.log.Warn("notification rate limited",
-				"provider", ep.name,
-				"notification_id", notif.ID)
+				logger.String("provider", ep.name),
+				logger.String("notification_id", notif.ID))
 		}
 		if d.metrics != nil {
 			d.metrics.RecordFilterRejection(ep.name, "rate_limited")
@@ -443,24 +443,20 @@ func (d *pushDispatcher) recordAttemptMetrics(providerName, notifType string, er
 
 // logSuccess logs a successful delivery.
 func (d *pushDispatcher) logSuccess(providerName string, notif *Notification, notifType string, attempts int, duration time.Duration) {
-	if d.log != nil {
-		d.log.Info("push sent",
-			"provider", providerName,
-			"id", notif.ID,
-			"type", notifType,
-			"priority", string(notif.Priority),
-			"attempt", attempts,
-			"elapsed", duration)
-	}
+	d.log.Info("push sent",
+		logger.String("provider", providerName),
+		logger.String("id", notif.ID),
+		logger.String("type", notifType),
+		logger.String("priority", string(notif.Priority)),
+		logger.Int("attempt", attempts),
+		logger.Duration("elapsed", duration))
 }
 
 // logCircuitBreakerOpen logs when circuit breaker blocks a request.
 func (d *pushDispatcher) logCircuitBreakerOpen(providerName, notifID string) {
-	if d.log != nil {
-		d.log.Warn("push blocked by circuit breaker",
-			"provider", providerName,
-			"id", notifID)
-	}
+	d.log.Warn("push blocked by circuit breaker",
+		logger.String("provider", providerName),
+		logger.String("id", notifID))
 }
 
 // shouldRetry determines if an attempt should be retried.
@@ -474,10 +470,10 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 	if !retryable || attempts > d.maxRetries {
 		if d.log != nil {
 			d.log.Error("push send failed",
-				"provider", providerName,
-				"attempts", attempts,
-				"error", err,
-				"retryable", retryable)
+				logger.String("provider", providerName),
+				logger.Int("attempts", attempts),
+				logger.Error(err),
+				logger.Bool("retryable", retryable))
 		}
 		return false
 	}
@@ -532,22 +528,18 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	// Apply jitter and ensure final delay stays within bounds
 	delay := min(max(exponential+jitter, baseDelay), maxDelay)
 
-	if d.log != nil {
-		d.log.Debug("waiting for retry with exponential backoff",
-			"provider", providerName,
-			"attempts", attempts,
-			"delay", delay,
-			"base_delay", baseDelay,
-			"max_delay", maxDelay)
-	}
+	d.log.Debug("waiting for retry with exponential backoff",
+		logger.String("provider", providerName),
+		logger.Int("attempts", attempts),
+		logger.Duration("delay", delay),
+		logger.Duration("base_delay", baseDelay),
+		logger.Duration("max_delay", maxDelay))
 
 	select {
 	case <-ctx.Done():
-		if d.log != nil {
-			d.log.Debug("retry cancelled due to context cancellation",
-				"provider", providerName,
-				"attempts", attempts)
-		}
+		d.log.Debug("retry cancelled due to context cancellation",
+			logger.String("provider", providerName),
+			logger.Int("attempts", attempts))
 		return false
 	case <-time.After(delay):
 		return true
@@ -556,7 +548,7 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 
 // ----------------- Provider construction -----------------
 
-func buildProvider(pc *conf.PushProviderConfig, log *slog.Logger) Provider {
+func buildProvider(pc *conf.PushProviderConfig, log logger.Logger) Provider {
 	ptype := strings.ToLower(pc.Type)
 	types := effectiveTypes(pc.Filter.Types)
 	switch ptype {
@@ -567,29 +559,23 @@ func buildProvider(pc *conf.PushProviderConfig, log *slog.Logger) Provider {
 	case "webhook":
 		endpoints, err := convertWebhookEndpoints(pc.Endpoints, log)
 		if err != nil {
-			if log != nil {
-				log.Error("failed to resolve webhook secrets",
-					"name", pc.Name,
-					"error", err)
-			}
+			log.Error("failed to resolve webhook secrets",
+				logger.String("name", pc.Name),
+				logger.Error(err))
 			return nil
 		}
 		provider, err := NewWebhookProvider(orDefault(pc.Name, "webhook"), pc.Enabled, endpoints, types, pc.Template)
 		if err != nil {
-			if log != nil {
-				log.Error("failed to create webhook provider",
-					"name", pc.Name,
-					"error", err)
-			}
+			log.Error("failed to create webhook provider",
+				logger.String("name", pc.Name),
+				logger.Error(err))
 			return nil
 		}
 		return provider
 	default:
-		if log != nil {
-			log.Warn("unknown push provider type; skipping",
-				"name", pc.Name,
-				"type", pc.Type)
-		}
+		log.Warn("unknown push provider type; skipping",
+			logger.String("name", pc.Name),
+			logger.String("type", pc.Type))
 		return nil
 	}
 }
@@ -613,9 +599,11 @@ func orDefault[T ~string](v, d T) T {
 // MatchesProviderFilterWithReason applies filtering and returns both result and reason.
 // Reason indicates why the notification matched or was rejected for better observability.
 // Returns (matches, reason) where reason is one of the filterReason* constants.
-func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	if f == nil {
-		logDebug(log, "no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
+		logDebug(log, "no filter configured, allowing notification",
+			logger.String("provider", providerName),
+			logger.String("notification_id", n.ID))
 		return true, filterReasonAll
 	}
 
@@ -643,22 +631,30 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 }
 
 // logDebug is a helper to reduce repeated logging checks
-func logDebug(log *slog.Logger, msg string, args ...any) {
+func logDebug(log logger.Logger, msg string, fields ...logger.Field) {
 	if log != nil {
-		log.Debug(msg, args...)
+		log.Debug(msg, fields...)
 	}
 }
 
 // checkTypeFilter validates the notification type against configured filter
-func checkTypeFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func checkTypeFilter(f *conf.PushFilterConfig, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	if len(f.Types) == 0 {
 		return true, ""
 	}
 
-	logDebug(log, "checking type filter", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
+	logDebug(log, "checking type filter",
+		logger.String("provider", providerName),
+		logger.Any("allowed_types", f.Types),
+		logger.String("notification_type", string(n.Type)),
+		logger.String("notification_id", n.ID))
 
 	if !slices.Contains(f.Types, string(n.Type)) {
-		logDebug(log, "filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
+		logDebug(log, "filter failed: type mismatch",
+			logger.String("provider", providerName),
+			logger.Any("allowed_types", f.Types),
+			logger.String("notification_type", string(n.Type)),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonTypeMismatch
 	}
 
@@ -666,13 +662,17 @@ func checkTypeFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger
 }
 
 // checkPriorityFilter validates the notification priority against configured filter
-func checkPriorityFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func checkPriorityFilter(f *conf.PushFilterConfig, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	if len(f.Priorities) == 0 {
 		return true, ""
 	}
 
 	if !slices.Contains(f.Priorities, string(n.Priority)) {
-		logDebug(log, "filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
+		logDebug(log, "filter failed: priority mismatch",
+			logger.String("provider", providerName),
+			logger.Any("allowed_priorities", f.Priorities),
+			logger.String("notification_priority", string(n.Priority)),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonPriorityMismatch
 	}
 
@@ -680,13 +680,17 @@ func checkPriorityFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Lo
 }
 
 // checkComponentFilter validates the notification component against configured filter
-func checkComponentFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func checkComponentFilter(f *conf.PushFilterConfig, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	if len(f.Components) == 0 {
 		return true, ""
 	}
 
 	if !slices.Contains(f.Components, n.Component) {
-		logDebug(log, "filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
+		logDebug(log, "filter failed: component mismatch",
+			logger.String("provider", providerName),
+			logger.Any("allowed_components", f.Components),
+			logger.String("notification_component", n.Component),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonComponentMismatch
 	}
 
@@ -694,9 +698,13 @@ func checkComponentFilter(f *conf.PushFilterConfig, n *Notification, log *slog.L
 }
 
 // checkMetadataFilters validates notification metadata against configured filters
-func checkMetadataFilters(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func checkMetadataFilters(f *conf.PushFilterConfig, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	for key, val := range f.MetadataFilters {
-		logDebug(log, "processing metadata filter", "provider", providerName, "key", key, "filter_value", val, "notification_id", n.ID)
+		logDebug(log, "processing metadata filter",
+			logger.String("provider", providerName),
+			logger.String("key", key),
+			logger.Any("filter_value", val),
+			logger.String("notification_id", n.ID))
 
 		// Special handling for confidence threshold
 		if key == "confidence" {
@@ -716,48 +724,70 @@ func checkMetadataFilters(f *conf.PushFilterConfig, n *Notification, log *slog.L
 }
 
 // checkConfidenceFilter handles confidence threshold filtering with operators
-func checkConfidenceFilter(filterVal any, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func checkConfidenceFilter(filterVal any, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	cond, ok := filterVal.(string)
 	if !ok {
-		logDebug(log, "filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", filterVal, "notification_id", n.ID)
+		logDebug(log, "filter failed: confidence filter misconfigured",
+			logger.String("provider", providerName),
+			logger.Any("filter_value", filterVal),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
 	cond = strings.TrimSpace(cond)
 	if cond == "" {
-		logDebug(log, "filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
+		logDebug(log, "filter failed: empty confidence condition",
+			logger.String("provider", providerName),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
 	// Parse operator and value
 	op, valStr := parseConfidenceOperator(cond)
 	if op == "" {
-		logDebug(log, "filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
+		logDebug(log, "filter failed: unknown confidence operator",
+			logger.String("provider", providerName),
+			logger.String("condition", cond),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
 	threshold, err := strconv.ParseFloat(valStr, 64)
 	if err != nil {
-		logDebug(log, "filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
+		logDebug(log, "filter failed: invalid confidence threshold",
+			logger.String("provider", providerName),
+			logger.String("threshold_str", valStr),
+			logger.Error(err),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
 	// Get confidence value from notification metadata
 	raw, exists := n.Metadata["confidence"]
 	if !exists {
-		logDebug(log, "filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
+		logDebug(log, "filter failed: confidence metadata missing",
+			logger.String("provider", providerName),
+			logger.Any("available_metadata", n.Metadata),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
 	cv, ok := toFloat(raw)
 	if !ok {
-		logDebug(log, "filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
+		logDebug(log, "filter failed: confidence value not parseable",
+			logger.String("provider", providerName),
+			logger.Any("confidence_value", raw),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
 	// Check if confidence meets threshold
 	if !compareConfidence(cv, op, threshold) {
-		logDebug(log, "filter failed: confidence threshold not met", "provider", providerName, "condition", cond, "actual_confidence", cv, "notification_id", n.ID)
+		logDebug(log, "filter failed: confidence threshold not met",
+			logger.String("provider", providerName),
+			logger.String("condition", cond),
+			logger.Float64("actual_confidence", cv),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonConfidenceThreshold
 	}
 
@@ -795,15 +825,24 @@ func compareConfidence(confidence float64, op string, threshold float64) bool {
 }
 
 // checkExactMetadataMatch validates exact metadata key-value match
-func checkExactMetadataMatch(key string, expectedVal any, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+func checkExactMetadataMatch(key string, expectedVal any, n *Notification, log logger.Logger, providerName string) (matches bool, reason string) {
 	actualVal, ok := n.Metadata[key]
 	if !ok {
-		logDebug(log, "filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
+		logDebug(log, "filter failed: metadata key missing",
+			logger.String("provider", providerName),
+			logger.String("required_key", key),
+			logger.Any("available_metadata", n.Metadata),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonMetadataMismatch
 	}
 
 	if fmt.Sprint(actualVal) != fmt.Sprint(expectedVal) {
-		logDebug(log, "filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", expectedVal, "actual", actualVal, "notification_id", n.ID)
+		logDebug(log, "filter failed: metadata value mismatch",
+			logger.String("provider", providerName),
+			logger.String("key", key),
+			logger.Any("expected", expectedVal),
+			logger.Any("actual", actualVal),
+			logger.String("notification_id", n.ID))
 		return false, filterReasonMetadataMismatch
 	}
 
@@ -813,7 +852,7 @@ func checkExactMetadataMatch(key string, expectedVal any, n *Notification, log *
 // MatchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
 // This function is exported for testing purposes and preserved for backward compatibility.
 // New code should use MatchesProviderFilterWithReason for better observability.
-func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) bool {
+func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log logger.Logger, providerName string) bool {
 	// Delegate to the enhanced version and discard the reason
 	matches, _ := MatchesProviderFilterWithReason(f, n, log, providerName)
 	return matches
@@ -913,9 +952,7 @@ func (d *pushDispatcher) getCircuitBreakerConfig(settings *conf.Settings) Circui
 	cbConfig.HalfOpenMaxRequests = settings.Notification.Push.CircuitBreaker.HalfOpenMaxRequests
 
 	if err := cbConfig.Validate(); err != nil {
-		if d.log != nil {
-			d.log.Error("invalid circuit breaker configuration, using defaults", "error", err)
-		}
+		d.log.Error("invalid circuit breaker configuration, using defaults", logger.Error(err))
 		return DefaultCircuitBreakerConfig()
 	}
 	return cbConfig
@@ -929,9 +966,10 @@ func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbCo
 	}
 
 	if err := prov.ValidateConfig(); err != nil {
-		if d.log != nil {
-			d.log.Error("push provider config invalid", "name", pc.Name, "type", pc.Type, "error", err)
-		}
+		d.log.Error("push provider config invalid",
+			logger.String("name", pc.Name),
+			logger.String("type", pc.Type),
+			logger.Error(err))
 		return nil
 	}
 
@@ -952,13 +990,11 @@ func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbCo
 		name:           name,
 	}
 
-	if d.log != nil {
-		d.log.Debug("registered enhanced push provider",
-			"name", name,
-			"circuit_breaker", cb != nil,
-			"types", pc.Filter.Types,
-			"priorities", pc.Filter.Priorities)
-	}
+	d.log.Debug("registered enhanced push provider",
+		logger.String("name", name),
+		logger.Bool("circuit_breaker", cb != nil),
+		logger.Any("types", pc.Filter.Types),
+		logger.Any("priorities", pc.Filter.Priorities))
 
 	return ep
 }
@@ -982,12 +1018,10 @@ func (d *pushDispatcher) createProviderRateLimiter(settings *conf.Settings, name
 		BurstSize:         settings.Notification.Push.RateLimiting.BurstSize,
 	})
 
-	if d.log != nil {
-		d.log.Info("rate limiter enabled for provider",
-			"provider", name,
-			"requests_per_minute", settings.Notification.Push.RateLimiting.RequestsPerMinute,
-			"burst_size", settings.Notification.Push.RateLimiting.BurstSize)
-	}
+	d.log.Info("rate limiter enabled for provider",
+		logger.String("provider", name),
+		logger.Int("requests_per_minute", settings.Notification.Push.RateLimiting.RequestsPerMinute),
+		logger.Int("burst_size", settings.Notification.Push.RateLimiting.BurstSize))
 
 	return rl
 }
@@ -996,11 +1030,9 @@ func (d *pushDispatcher) createProviderRateLimiter(settings *conf.Settings, name
 func (d *pushDispatcher) injectTelemetry(prov Provider, cb *PushCircuitBreaker, name string) {
 	service := GetService()
 	if service == nil || service.GetTelemetry() == nil {
-		if d.log != nil {
-			d.log.Debug("telemetry not available for provider injection",
-				"provider", name,
-				"service_exists", service != nil)
-		}
+		d.log.Debug("telemetry not available for provider injection",
+			logger.String("provider", name),
+			logger.Bool("service_exists", service != nil))
 		return
 	}
 
@@ -1008,20 +1040,16 @@ func (d *pushDispatcher) injectTelemetry(prov Provider, cb *PushCircuitBreaker, 
 
 	if cb != nil {
 		cb.SetTelemetry(telemetry)
-		if d.log != nil {
-			d.log.Debug("telemetry injected into circuit breaker",
-				"provider", name,
-				"telemetry_enabled", telemetry.IsEnabled())
-		}
+		d.log.Debug("telemetry injected into circuit breaker",
+			logger.String("provider", name),
+			logger.Bool("telemetry_enabled", telemetry.IsEnabled()))
 	}
 
 	if webhookProv, ok := prov.(*WebhookProvider); ok {
 		webhookProv.SetTelemetry(telemetry)
-		if d.log != nil {
-			d.log.Debug("telemetry injected into webhook provider",
-				"provider", name,
-				"telemetry_enabled", telemetry.IsEnabled())
-		}
+		d.log.Debug("telemetry injected into webhook provider",
+			logger.String("provider", name),
+			logger.Bool("telemetry_enabled", telemetry.IsEnabled()))
 	}
 }
 
@@ -1095,7 +1123,7 @@ func containsAny(s string, substrs ...string) bool {
 // convertWebhookEndpoints converts configuration webhook endpoints to provider webhook endpoints.
 // Resolves all secrets (environment variables and files) during conversion.
 // Returns error if any secret resolution fails.
-func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log *slog.Logger) ([]WebhookEndpoint, error) {
+func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log logger.Logger) ([]WebhookEndpoint, error) {
 	endpoints := make([]WebhookEndpoint, 0, len(cfgEndpoints))
 	for i := range cfgEndpoints {
 		cfg := &cfgEndpoints[i] // Use pointer to avoid copying

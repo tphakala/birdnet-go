@@ -146,13 +146,13 @@ func resolveWebhookAuth(cfg *conf.WebhookAuthConfig) (*WebhookAuth, error) {
 // LLM Note: `omitzero` is more precise than `omitempty` as it only omits
 // true zero values (0, false, nil, "") instead of all "empty-ish" values.
 type WebhookPayload struct {
-	ID        string                 `json:"id"`
-	Type      string                 `json:"type"`
-	Priority  string                 `json:"priority,omitzero"`
-	Title     string                 `json:"title"`
-	Message   string                 `json:"message"`
-	Component string                 `json:"component,omitzero"`
-	Timestamp string                 `json:"timestamp"`
+	ID        string         `json:"id"`
+	Type      string         `json:"type"`
+	Priority  string         `json:"priority,omitzero"`
+	Title     string         `json:"title"`
+	Message   string         `json:"message"`
+	Component string         `json:"component,omitzero"`
+	Timestamp string         `json:"timestamp"`
 	Metadata  map[string]any `json:"metadata,omitzero"`
 }
 
