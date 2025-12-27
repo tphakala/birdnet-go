@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -124,7 +123,7 @@ func isRunningInDocker() bool {
 }
 
 func init() {
-	serviceLogger = logger.Global().Module("main")
+	serviceLogger = logger.Global().Module("support")
 }
 
 // Collector collects support data for troubleshooting
@@ -922,7 +921,7 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			serviceLogger.Warn("Failed to close log file", logger.String("path", path), logger.Error(err))
 		}
 	}()
 
@@ -1412,7 +1411,7 @@ func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath stri
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			serviceLogger.Warn("Failed to close file during archive creation", logger.String("source_path", sourcePath), logger.Error(err))
 		}
 	}()
 
@@ -1451,7 +1450,7 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			serviceLogger.Warn("Failed to close log file during archive", logger.String("source_path", sourcePath), logger.Error(err))
 		}
 	}()
 
