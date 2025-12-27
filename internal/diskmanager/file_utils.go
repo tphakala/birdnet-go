@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // tempFileExt is the temporary file extension used during audio file creation.
@@ -55,7 +55,9 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			GetLogger().Warn("Failed to close policy file",
+				logger.String("file", policyFile),
+				logger.Error(err))
 		}
 	}()
 
@@ -145,9 +147,8 @@ func handleWalkError(err error, path string, debug bool) error {
 	// listing and lstat call. If the error is "no such file or directory"
 	// and the path appears to be a temp file, continue walking.
 	if os.IsNotExist(err) && strings.HasSuffix(strings.ToLower(path), tempFileExt) {
-		if debug {
-			log.Printf("Skipping missing temp file (likely renamed during processing): %s", path)
-		}
+		GetLogger().Debug("Skipping missing temp file (likely renamed during processing)",
+			logger.String("path", path))
 		return nil // Continue walking
 	}
 	return err
@@ -180,8 +181,10 @@ func processFile(path string, info os.FileInfo, state *walkState) {
 			state.firstParseError = err
 		}
 		state.parseErrorCount++
-		if state.debug && state.parseErrorCount <= state.maxParseErrors {
-			log.Printf("Error parsing file %s: %v", path, err)
+		if state.parseErrorCount <= state.maxParseErrors {
+			GetLogger().Debug("Error parsing file",
+				logger.String("path", path),
+				logger.Error(err))
 		}
 		return // Continue with next file
 	}
@@ -235,9 +238,9 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 		return nil, descriptiveErr
 	}
 
-	if debug {
-		log.Printf("Found %d protected clips", len(lockedClips))
-	}
+	log := GetLogger()
+	log.Debug("Found protected clips",
+		logger.Int("count", len(lockedClips)))
 
 	// Build a set of basenames for fast O(1) membership checks
 	lockedSet := make(map[string]struct{}, len(lockedClips))
@@ -276,12 +279,9 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 
 	// If we encountered parse errors but still have some valid files, log a summary but continue
 	if state.parseErrorCount > 0 {
-		if debug {
-			log.Printf("Encountered %d file parsing errors during cleanup", state.parseErrorCount)
-			if state.parseErrorCount > maxParseErrors {
-				log.Printf("Only first %d errors were logged", maxParseErrors)
-			}
-		}
+		log.Debug("Encountered file parsing errors during cleanup",
+			logger.Int("error_count", state.parseErrorCount),
+			logger.Int("max_logged", maxParseErrors))
 		// If we have no valid files at all, return an error
 		if len(state.files) == 0 && state.firstParseError != nil {
 			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %w", state.firstParseError)).
@@ -400,13 +400,17 @@ func contains(slice []string, item string) bool {
 
 // WriteSortedFilesToFile writes the sorted list of files to a text file for investigation
 func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
+	log := GetLogger()
+
 	file, err := os.Create(filePath) //nolint:gosec // G304: filePath is programmatically constructed
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			log.Warn("Failed to close file",
+				logger.String("path", filePath),
+				logger.Error(err))
 		}
 	}()
 
@@ -423,7 +427,9 @@ func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
 		return fmt.Errorf("failed to sync file: %w", err)
 	}
 
-	log.Printf("Sorted files have been written to %s", filePath)
+	log.Info("Sorted files have been written",
+		logger.String("path", filePath),
+		logger.Int("file_count", len(files)))
 	return nil
 }
 

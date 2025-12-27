@@ -3,13 +3,13 @@ package diskmanager
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Policy defines cleanup policies
@@ -28,20 +28,19 @@ type Policy struct {
 // Returns a CleanupResult containing error, number of clips removed, and current disk utilization percentage.
 func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	// Log the start of the cleanup run with structured logger
-	serviceLogger.Info("Usage-based cleanup run started",
-		"policy", "usage",
-	)
+	GetLogger().Info("Usage-based cleanup run started",
+		logger.String("policy", "usage"))
 
 	// Perform initial setup (get files, settings, check if proceed)
 	files, baseDir, retention, proceed, initialResult := prepareInitialCleanup(db)
 	if !proceed {
-		serviceLogger.Info("Usage-based cleanup run completed",
-			"policy", "usage",
-			"result", "no action needed",
-			"files_removed", 0,
-			"disk_utilization", initialResult.DiskUtilization,
-			"timestamp", time.Now().Format(time.RFC3339),
-			"duration_ms", 0)
+		GetLogger().Info("Usage-based cleanup run completed",
+			logger.String("policy", "usage"),
+			logger.String("result", "no action needed"),
+			logger.Int("files_removed", 0),
+			logger.Int("disk_utilization", initialResult.DiskUtilization),
+			logger.String("timestamp", time.Now().Format(time.RFC3339)),
+			logger.Int64("duration_ms", 0))
 		return initialResult
 	}
 
@@ -56,21 +55,22 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	usageThresholdFloat, err := conf.ParsePercentage(usageThresholdSetting)
 	if err != nil {
 		// Use the utilization from the initial result if available
-		serviceLogger.Error("Usage-based cleanup failed",
-			"policy", "usage",
-			"threshold_setting", usageThresholdSetting,
-			"error", err,
-			"files_removed", 0,
-			"disk_utilization", initialResult.DiskUtilization,
-			"timestamp", time.Now().Format(time.RFC3339),
-			"duration_ms", time.Since(startTime).Milliseconds())
+		GetLogger().Error("Usage-based cleanup failed",
+			logger.String("policy", "usage"),
+			logger.String("threshold_setting", usageThresholdSetting),
+			logger.Error(err),
+			logger.Int("files_removed", 0),
+			logger.Int("disk_utilization", initialResult.DiskUtilization),
+			logger.String("timestamp", time.Now().Format(time.RFC3339)),
+			logger.Int64("duration_ms", time.Since(startTime).Milliseconds()))
 		return CleanupResult{Err: fmt.Errorf("failed to parse usage threshold '%s': %w", usageThresholdSetting, err), ClipsRemoved: 0, DiskUtilization: initialResult.DiskUtilization}
 	}
 	usageThreshold := int(usageThresholdFloat)
 
-	if debug {
-		log.Printf("Starting usage-based cleanup. Base directory: %s, Usage threshold: %d%% (from %.1f%%)", baseDir, usageThreshold, usageThresholdFloat)
-	}
+	GetLogger().Debug("Starting usage-based cleanup",
+		logger.String("policy", "usage"),
+		logger.String("base_dir", baseDir),
+		logger.Int("usage_threshold", usageThreshold))
 
 	// Get initial detailed disk usage and check if cleanup is needed *now*
 	// Only proceed if current usage is above the threshold
@@ -84,14 +84,14 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 		// Early completion - disk usage already below threshold
 		duration := time.Since(startTime)
-		serviceLogger.Info("Usage-based cleanup run completed",
-			"policy", "usage",
-			"result", "usage below threshold",
-			"files_removed", 0,
-			"disk_utilization", finalUtilization,
-			"usage_threshold", usageThreshold,
-			"timestamp", time.Now().Format(time.RFC3339),
-			"duration_ms", duration.Milliseconds())
+		GetLogger().Info("Usage-based cleanup run completed",
+			logger.String("policy", "usage"),
+			logger.String("result", "usage below threshold"),
+			logger.Int("files_removed", 0),
+			logger.Int("disk_utilization", finalUtilization),
+			logger.Int("usage_threshold", usageThreshold),
+			logger.String("timestamp", time.Now().Format(time.RFC3339)),
+			logger.Int64("duration_ms", duration.Milliseconds()))
 
 		return CleanupResult{Err: err, ClipsRemoved: 0, DiskUtilization: finalUtilization}
 	}
@@ -126,19 +126,19 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	// Log completion with results
 	duration := time.Since(startTime)
 	if loopErr != nil {
-		serviceLogger.Error("Usage-based cleanup run completed with errors",
-			"policy", "usage",
-			"files_removed", deletedCount,
-			"disk_utilization", finalUsagePercent,
-			"error", loopErr,
-			"duration", duration)
+		GetLogger().Error("Usage-based cleanup run completed with errors",
+			logger.String("policy", "usage"),
+			logger.Int("files_removed", deletedCount),
+			logger.Int("disk_utilization", finalUsagePercent),
+			logger.Error(loopErr),
+			logger.Duration("duration", duration))
 	} else {
-		serviceLogger.Info("Usage-based cleanup run completed",
-			"policy", "usage",
-			"files_removed", deletedCount,
-			"disk_utilization", finalUsagePercent,
-			"usage_threshold", usageThreshold,
-			"duration", duration)
+		GetLogger().Info("Usage-based cleanup run completed",
+			logger.String("policy", "usage"),
+			logger.Int("files_removed", deletedCount),
+			logger.Int("disk_utilization", finalUsagePercent),
+			logger.Int("usage_threshold", usageThreshold),
+			logger.Duration("duration", duration))
 	}
 
 	return CleanupResult{Err: loopErr, ClipsRemoved: deletedCount, DiskUtilization: finalUsagePercent}
@@ -174,10 +174,14 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 	estimatedUsedBytes := params.diskInfo.UsedBytes
 	lastKnownGoodUsagePercent = params.initialUsagePercent
 
+	log := GetLogger()
+
 	for i := range files {
 		select {
 		case <-quit:
-			log.Printf("Usage-based cleanup loop interrupted by quit signal\n")
+			log.Info("Usage-based cleanup loop interrupted by quit signal",
+				logger.String("policy", "usage"),
+				logger.Int("files_deleted", deletedCount))
 			return deletedCount, lastKnownGoodUsagePercent, loopErr // Return current state on quit
 		default:
 			// Refresh disk usage periodically using helper
@@ -238,22 +242,29 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 // getFinalUsagePercent calculates the final disk usage percentage, falling back if necessary.
 // This provides an accurate final measurement after cleanup has completed.
 func getFinalUsagePercent(baseDir string, lastKnownGoodUsagePercent int, debug bool) int {
+	log := GetLogger()
+
 	finalDiskInfo, finalDiskErr := GetDetailedDiskUsage(baseDir)
 	if finalDiskErr != nil {
-		log.Printf("Warning: Failed to get final accurate disk usage after cleanup: %v. Using last known value: %d%%", finalDiskErr, lastKnownGoodUsagePercent)
+		log.Warn("Failed to get final accurate disk usage after cleanup, using last known value",
+			logger.String("policy", "usage"),
+			logger.Error(finalDiskErr),
+			logger.Int("last_known_usage", lastKnownGoodUsagePercent))
 		return lastKnownGoodUsagePercent // Use fallback
 	}
 
 	if finalDiskInfo.TotalBytes > 0 {
 		finalUsagePercent := int((finalDiskInfo.UsedBytes * 100) / finalDiskInfo.TotalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
-		if debug {
-			log.Printf("Final accurate disk usage: %d%%", finalUsagePercent)
-		}
+		log.Debug("Final accurate disk usage calculated",
+			logger.String("policy", "usage"),
+			logger.Int("final_usage", finalUsagePercent))
 		return finalUsagePercent
 	}
 
 	// Fallback if total bytes is 0 (should be rare)
-	log.Printf("Warning: Final disk info reported zero total bytes. Using last known value: %d%%", lastKnownGoodUsagePercent)
+	log.Warn("Final disk info reported zero total bytes, using last known value",
+		logger.String("policy", "usage"),
+		logger.Int("last_known_usage", lastKnownGoodUsagePercent))
 	return lastKnownGoodUsagePercent
 }
 
@@ -276,9 +287,10 @@ func checkInitialUsage(baseDir string, usageThreshold int, debug bool) (initialU
 		}
 		initialUsagePercent = int(initialUsagePercentFloat)
 		if initialUsagePercent < usageThreshold {
-			if debug {
-				log.Printf("Initial disk usage (fallback %.2f%%) is below threshold (%d%%). No usage-based cleanup needed.", initialUsagePercentFloat, usageThreshold)
-			}
+			GetLogger().Debug("Initial disk usage (fallback) below threshold, no cleanup needed",
+				logger.String("policy", "usage"),
+				logger.Int("initial_usage", initialUsagePercent),
+				logger.Int("threshold", usageThreshold))
 			return initialUsagePercent, DiskSpaceInfo{}, false, nil // No error, just don't proceed
 		}
 		// Fallback succeeded, but usage is high. Cannot proceed reliably without detailed info.
@@ -295,9 +307,10 @@ func checkInitialUsage(baseDir string, usageThreshold int, debug bool) (initialU
 	updateDiskUsageMetrics(diskInfo)
 
 	if initialUsagePercent < usageThreshold {
-		if debug {
-			log.Printf("Initial disk usage (%d%%) is below threshold (%d%%). No usage-based cleanup needed.", initialUsagePercent, usageThreshold)
-		}
+		GetLogger().Debug("Initial disk usage below threshold, no cleanup needed",
+			logger.String("policy", "usage"),
+			logger.Int("initial_usage", initialUsagePercent),
+			logger.Int("threshold", usageThreshold))
 		return initialUsagePercent, diskInfo, false, nil // No error, just don't proceed
 	}
 
@@ -340,9 +353,9 @@ func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]m
 // 2. Species with most occurrences in each subdirectory (to maintain diversity)
 // 3. Lower confidence recordings first (to keep higher quality recordings)
 func sortFilesForUsage(files []FileInfo, speciesMonthCount map[string]map[string]int, debug bool) {
-	if debug {
-		log.Printf("Sorting files by usage cleanup priority.")
-	}
+	GetLogger().Debug("Sorting files by usage cleanup priority",
+		logger.String("policy", "usage"),
+		logger.Int("file_count", len(files)))
 
 	sort.Slice(files, func(i, j int) bool {
 		// Priority 1: Oldest files first
@@ -381,30 +394,33 @@ func sortFilesForUsage(files []FileInfo, speciesMonthCount map[string]map[string
 		return false // Keep original order if all else is equal
 	})
 
-	if debug {
-		log.Printf("Files sorted for usage cleanup.")
-	}
+	GetLogger().Debug("Files sorted for usage cleanup",
+		logger.String("policy", "usage"))
 }
 
 // refreshUsageDataIfNeeded periodically refreshes the disk usage information.
 // It returns the potentially updated DiskSpaceInfo and estimatedUsedBytes.
 func refreshUsageDataIfNeeded(deletedCount, refreshInterval int, baseDir string, currentDiskInfo DiskSpaceInfo, currentEstimatedUsedBytes uint64, debug bool) (updatedDiskInfo DiskSpaceInfo, updatedEstimatedUsedBytes uint64) {
+	log := GetLogger()
+
 	// Only refresh every refreshInterval deletions to minimize I/O impact
 	if deletedCount > 0 && deletedCount%refreshInterval == 0 && baseDir != "" {
 		refreshedDiskInfo, refreshErr := GetDetailedDiskUsage(baseDir)
 		if refreshErr != nil {
-			log.Printf("Warning: Failed to refresh disk usage during cleanup: %v. Continuing with estimated usage.", refreshErr)
+			log.Warn("Failed to refresh disk usage during cleanup, continuing with estimated usage",
+				logger.String("policy", "usage"),
+				logger.Error(refreshErr))
 			// Keep using the old info and estimate
 			return currentDiskInfo, currentEstimatedUsedBytes
-		} else {
-			if debug {
-				log.Printf("Refreshed disk usage. Total: %d, Used: %d", refreshedDiskInfo.TotalBytes, refreshedDiskInfo.UsedBytes)
-			}
-			// Update disk usage metrics
-			updateDiskUsageMetrics(refreshedDiskInfo)
-			// Return updated info and reset estimate to actual
-			return refreshedDiskInfo, refreshedDiskInfo.UsedBytes
 		}
+		log.Debug("Refreshed disk usage",
+			logger.String("policy", "usage"),
+			logger.Uint64("total_bytes", refreshedDiskInfo.TotalBytes),
+			logger.Uint64("used_bytes", refreshedDiskInfo.UsedBytes))
+		// Update disk usage metrics
+		updateDiskUsageMetrics(refreshedDiskInfo)
+		// Return updated info and reset estimate to actual
+		return refreshedDiskInfo, refreshedDiskInfo.UsedBytes
 	}
 	// No refresh needed or possible, return current values
 	return currentDiskInfo, currentEstimatedUsedBytes
@@ -413,19 +429,22 @@ func refreshUsageDataIfNeeded(deletedCount, refreshInterval int, baseDir string,
 // shouldStopUsageCleanup checks if the cleanup loop should terminate based on usage threshold or max deletions.
 // Returns true if cleanup should stop, false if it should continue.
 func shouldStopUsageCleanup(currentUsagePercent, usageThreshold, deletedCount, maxDeletions int, debug bool) bool {
+	log := GetLogger()
+
 	// Check if usage is still above threshold
 	if currentUsagePercent < usageThreshold {
-		if debug {
-			log.Printf("Disk usage (%d%%) is now below threshold (%d%%). Stopping usage-based cleanup.", currentUsagePercent, usageThreshold)
-		}
+		log.Debug("Disk usage now below threshold, stopping cleanup",
+			logger.String("policy", "usage"),
+			logger.Int("current_usage", currentUsagePercent),
+			logger.Int("threshold", usageThreshold))
 		return true // Stop deleting files
 	}
 
 	// Check if max deletions reached
 	if deletedCount >= maxDeletions {
-		if debug {
-			log.Printf("Reached maximum number of deletions (%d) for usage-based cleanup.", maxDeletions)
-		}
+		log.Debug("Reached maximum number of deletions for usage-based cleanup",
+			logger.String("policy", "usage"),
+			logger.Int("max_deletions", maxDeletions))
 		return true // Stop deleting files
 	}
 
