@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // SyncIfNeeded checks if a database sync is needed and performs it
@@ -33,16 +33,16 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 	t.mu.RUnlock()
 
 	// Log sync attempt
-	logger.Debug("Starting database sync",
-		"existing_lifetime_species", existingLifetimeCount,
-		"existing_yearly_species", existingYearlyCount,
-		"existing_seasonal_species", existingSeasonalCount)
+	log.Debug("Starting database sync",
+		logger.Int("existing_lifetime_species", existingLifetimeCount),
+		logger.Int("existing_yearly_species", existingYearlyCount),
+		logger.Int("existing_seasonal_species", existingSeasonalCount))
 
 	// Perform database sync
 	if err := t.InitFromDatabase(); err != nil {
-		logger.Error("Database sync failed, preserving existing data",
-			"error", err,
-			"existing_species", existingLifetimeCount)
+		log.Error("Database sync failed, preserving existing data",
+			logger.Error(err),
+			logger.Int("existing_species", existingLifetimeCount))
 		// Don't propagate error if we have existing data - continue with cached data
 		if existingLifetimeCount > 0 {
 			return nil
@@ -56,16 +56,16 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 	t.mu.RUnlock()
 
 	if existingLifetimeCount > 0 && newLifetimeCount == 0 {
-		logger.Warn("Database sync returned no data but had existing data - possible database issue",
-			"previous_count", existingLifetimeCount,
-			"new_count", newLifetimeCount)
+		log.Warn("Database sync returned no data but had existing data - possible database issue",
+			logger.Int("previous_count", existingLifetimeCount),
+			logger.Int("new_count", newLifetimeCount))
 	}
 
 	// Also perform periodic cleanup of old records (both species and notification records)
 	pruned := t.PruneOldEntries()
 	if pruned > 0 {
-		logger.Debug("Pruned old entries during sync",
-			"count", pruned)
+		log.Debug("Pruned old entries during sync",
+			logger.Int("count", pruned))
 	}
 
 	return nil
@@ -102,10 +102,10 @@ func (t *SpeciesTracker) pruneYearlyEntriesLocked(now time.Time) int {
 		if firstSeen.Before(currentYearStart) {
 			delete(t.speciesThisYear, scientificName)
 			pruned++
-			logger.Debug("Pruned old yearly entry",
-				"species", scientificName,
-				"first_seen", firstSeen.Format("2006-01-02"),
-				"year_start", currentYearStart.Format("2006-01-02"))
+			log.Debug("Pruned old yearly entry",
+				logger.String("species", scientificName),
+				logger.String("first_seen", firstSeen.Format("2006-01-02")),
+				logger.String("year_start", currentYearStart.Format("2006-01-02")))
 		}
 	}
 	return pruned
@@ -136,9 +136,9 @@ func (t *SpeciesTracker) pruneSeasonalEntriesLocked(now time.Time) int {
 			prunedFromSeason := len(speciesMap)
 			delete(t.speciesBySeason, season)
 			pruned += prunedFromSeason
-			logger.Debug("Pruned old season data",
-				"season", season,
-				"entries_removed", prunedFromSeason)
+			log.Debug("Pruned old season data",
+				logger.String("season", season),
+				logger.Int("entries_removed", prunedFromSeason))
 		}
 	}
 	return pruned
@@ -212,10 +212,10 @@ func (t *SpeciesTracker) ShouldSuppressNotification(scientificName string, curre
 	shouldSuppress := currentTime.Before(suppressUntil)
 
 	if shouldSuppress {
-		logger.Debug("Suppressing duplicate notification",
-			"species", scientificName,
-			"suppress_until", suppressUntil,
-			"suppression_window", window)
+		log.Debug("Suppressing duplicate notification",
+			logger.String("species", scientificName),
+			logger.Time("suppress_until", suppressUntil),
+			logger.Duration("suppression_window", window))
 	}
 	return shouldSuppress
 }
@@ -239,9 +239,9 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	t.mu.Unlock()
 
 	// Log outside the critical section to reduce lock contention
-	logger.Debug("Recorded notification sent",
-		"species", scientificName,
-		"sent_time", sentTime.Format("2006-01-02 15:04:05"))
+	log.Debug("Recorded notification sent",
+		logger.String("species", scientificName),
+		logger.String("sent_time", sentTime.Format("2006-01-02 15:04:05")))
 
 	// Persist to database asynchronously to avoid blocking (BG-17 fix)
 	// This ensures notification suppression state survives application restarts
@@ -264,15 +264,15 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 			}
 
 			if err := t.ds.SaveNotificationHistory(history); err != nil {
-				logger.Error("Failed to save notification history to database",
-					"species", scientificName,
-					"error", err,
-					"operation", "save_notification_history")
+				log.Error("Failed to save notification history to database",
+					logger.String("species", scientificName),
+					logger.Error(err),
+					logger.String("operation", "save_notification_history"))
 				// Don't crash - in-memory suppression still works
 			} else {
-				logger.Debug("Persisted notification history to database",
-					"species", scientificName,
-					"expires_at", expiresAt.Format("2006-01-02 15:04:05"))
+				log.Debug("Persisted notification history to database",
+					logger.String("species", scientificName),
+					logger.String("expires_at", expiresAt.Format("2006-01-02 15:04:05")))
 			}
 		})
 	}
@@ -295,9 +295,9 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	if cleaned > 0 {
 		// Log the actual cutoff used by cleanupOldNotificationRecordsLocked
 		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
-		logger.Debug("Cleaned up old notification records from memory",
-			"removed_count", cleaned,
-			"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+		log.Debug("Cleaned up old notification records from memory",
+			logger.Int("removed_count", cleaned),
+			logger.String("cutoff_time", cutoffTime.Format("2006-01-02 15:04:05")))
 	}
 
 	// Clean up database records asynchronously (BG-17 fix)
@@ -311,13 +311,13 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 			// Delete records that have expired (ExpiresAt < now)
 			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(currentTime)
 			if err != nil {
-				logger.Error("Failed to cleanup expired notification history from database",
-					"error", err,
-					"current_time", currentTime.Format("2006-01-02 15:04:05"))
+				log.Error("Failed to cleanup expired notification history from database",
+					logger.Error(err),
+					logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")))
 			} else if deletedCount > 0 {
-				logger.Debug("Cleaned up expired notification history from database",
-					"deleted_count", deletedCount,
-					"current_time", currentTime.Format("2006-01-02 15:04:05"))
+				log.Debug("Cleaned up expired notification history from database",
+					logger.Int64("deleted_count", deletedCount),
+					logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")))
 			}
 		})
 	}
@@ -325,7 +325,7 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	return cleaned
 }
 
-// Close releases resources associated with the species tracker, including the logger.
+// Close releases resources associated with the species tracker.
 // This should be called during application shutdown or when the tracker is no longer needed.
 // It waits for any in-flight async database operations to complete before returning.
 func (t *SpeciesTracker) Close() error {
@@ -333,14 +333,7 @@ func (t *SpeciesTracker) Close() error {
 	// This prevents goroutine leaks and ensures data is persisted before shutdown
 	t.asyncOpsWg.Wait()
 
-	// Close the shared logger used by all tracker instances
-	// Note: This is a package-level resource shared across all tracker instances
-	if err := Close(); err != nil {
-		return errors.New(err).
-			Component("new-species-tracker").
-			Category(errors.CategoryResource).
-			Context("operation", "close_logger").
-			Build()
-	}
+	// Note: The logger is a global resource managed at the application level,
+	// so it's not closed here.
 	return nil
 }

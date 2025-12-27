@@ -3,8 +3,6 @@ package telemetry
 
 import (
 	"fmt"
-	"log"
-	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -94,7 +93,7 @@ func collectPlatformInfo() PlatformInfo {
 func InitSentry(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
-		log.Println("Sentry telemetry is disabled (opt-in required)")
+		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
 		return nil
 	}
 
@@ -128,8 +127,8 @@ func InitSentry(settings *conf.Settings) error {
 
 // enableDebugLogging enables debug logging for telemetry
 func enableDebugLogging() {
-	serviceLevelVar.Set(slog.LevelDebug)
-	logTelemetryInfo(nil, "telemetry debug logging enabled")
+	// Log level is now controlled by the central logger package
+	GetLogger().Info("telemetry debug logging enabled")
 }
 
 // initializeSentrySDK initializes the Sentry SDK with privacy-compliant options
@@ -162,7 +161,7 @@ func initializeSentrySDK(settings *conf.Settings) error {
 // createBeforeSendHook creates the BeforeSend hook for privacy filtering
 func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
 	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-		if serviceLogger != nil && settings.Sentry.Debug {
+		if settings.Sentry.Debug {
 			return applyPrivacyFiltersWithLogging(event)
 		}
 		return applyPrivacyFilters(event)
@@ -242,25 +241,25 @@ func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
 
 // logEventBeforeFiltering logs event details before privacy filtering
 func logEventBeforeFiltering(event *sentry.Event) {
-	logTelemetryDebug(nil, "applying privacy filters to event",
-		"event_id", event.EventID,
-		"has_user_data", !event.User.IsEmpty(),
-		"has_server_name", event.ServerName != "",
-		"contexts_count", len(event.Contexts),
-		"extra_count", len(event.Extra),
-		"tags_count", len(event.Tags),
-	)
+	log := GetLogger()
+	log.Debug("applying privacy filters to event",
+		logger.Any("event_id", event.EventID),
+		logger.Bool("has_user_data", !event.User.IsEmpty()),
+		logger.Bool("has_server_name", event.ServerName != ""),
+		logger.Int("contexts_count", len(event.Contexts)),
+		logger.Int("extra_count", len(event.Extra)),
+		logger.Int("tags_count", len(event.Tags)))
 }
 
 // logEventAfterFiltering logs event details after privacy filtering
 func logEventAfterFiltering(event *sentry.Event, filtersApplied []string) {
-	logTelemetryDebug(nil, "privacy filters applied",
-		"event_id", event.EventID,
-		"filters_applied", filtersApplied,
-		"remaining_contexts", len(event.Contexts),
-		"remaining_extra", len(event.Extra),
-		"remaining_tags", len(event.Tags),
-	)
+	log := GetLogger()
+	log.Debug("privacy filters applied",
+		logger.Any("event_id", event.EventID),
+		logger.Any("filters_applied", filtersApplied),
+		logger.Int("remaining_contexts", len(event.Contexts)),
+		logger.Int("remaining_extra", len(event.Extra)),
+		logger.Int("remaining_tags", len(event.Tags)))
 }
 
 // removePrivacyContexts removes sensitive contexts and returns what was removed
@@ -369,21 +368,23 @@ func processDeferredMessages() int {
 // logInitializationSuccess logs the successful initialization of Sentry
 func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
 	platformInfo := collectPlatformInfo()
-
-	logTelemetryInfo(nil, "Sentry telemetry initialized",
-		"system_id", settings.SystemID,
-		"version", settings.Version,
-		"debug", settings.Sentry.Debug,
-		"platform", platformInfo.OS,
-		"arch", platformInfo.Architecture,
-		"deferred_messages", deferredCount,
-	)
+	log := GetLogger()
 
 	if deferredCount > 0 {
-		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)",
-			deferredCount, settings.SystemID)
+		log.Info("Sentry telemetry initialized successfully",
+			logger.String("system_id", settings.SystemID),
+			logger.String("version", settings.Version),
+			logger.Bool("debug", settings.Sentry.Debug),
+			logger.String("platform", platformInfo.OS),
+			logger.String("arch", platformInfo.Architecture),
+			logger.Int("deferred_messages_processed", deferredCount))
 	} else {
-		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
+		log.Info("Sentry telemetry initialized successfully (opt-in enabled)",
+			logger.String("system_id", settings.SystemID),
+			logger.String("version", settings.Version),
+			logger.Bool("debug", settings.Sentry.Debug),
+			logger.String("platform", platformInfo.OS),
+			logger.String("arch", platformInfo.Architecture))
 	}
 }
 
@@ -556,14 +557,14 @@ func CaptureError(err error, component string) {
 
 	// Create a scrubbed error for privacy - this prevents PII leakage
 	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
+	log := GetLogger()
 
 	// Log the error being sent (privacy-safe)
-	logTelemetryDebug(nil, "sending error event",
-		"event_type", "error",
-		"component", component,
-		"error_type", fmt.Sprintf("%T", err),
-		"scrubbed_message", scrubbedErrorMsg,
-	)
+	log.Debug("sending error event",
+		logger.String("event_type", "error"),
+		logger.String("component", component),
+		logger.String("error_type", fmt.Sprintf("%T", err)),
+		logger.String("scrubbed_message", scrubbedErrorMsg))
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		// Generate meaningful error title from scrubbed message to prevent PII leakage
@@ -601,9 +602,7 @@ func CaptureError(err error, component string) {
 	})
 
 	// Log successful submission
-	logTelemetryDebug(nil, "error event sent successfully",
-		"component", component,
-	)
+	log.Debug("error event sent successfully", logger.String("component", component))
 }
 
 // CaptureMessage captures a message with privacy-compliant context
@@ -614,14 +613,14 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 
 	// Scrub sensitive information from the message
 	scrubbedMessage := privacy.ScrubMessage(message)
+	log := GetLogger()
 
 	// Log the message being sent (privacy-safe)
-	logTelemetryDebug(nil, "sending message event",
-		"event_type", "message",
-		"sentry_level", string(level),
-		"component", component,
-		"scrubbed_message", scrubbedMessage,
-	)
+	log.Debug("sending message event",
+		logger.String("event_type", "message"),
+		logger.String("sentry_level", string(level)),
+		logger.String("component", component),
+		logger.String("scrubbed_message", scrubbedMessage))
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
@@ -630,10 +629,9 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	})
 
 	// Log successful submission
-	logTelemetryDebug(nil, "message event sent successfully",
-		"component", component,
-		"sentry_level", string(level),
-	)
+	log.Debug("message event sent successfully",
+		logger.String("component", component),
+		logger.String("sentry_level", string(level)))
 }
 
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
@@ -664,13 +662,12 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 
 	// Log deferred message
 	scrubbedMessage := privacy.ScrubMessage(message)
-	logTelemetryDebug(nil, "deferring message for later processing",
-		"event_type", "deferred_message",
-		"sentry_level", string(level),
-		"component", component,
-		"scrubbed_message", scrubbedMessage,
-		"deferred_count", len(deferredMessages),
-	)
+	GetLogger().Debug("deferring message for later processing",
+		logger.String("event_type", "deferred_message"),
+		logger.String("sentry_level", string(level)),
+		logger.String("component", component),
+		logger.String("scrubbed_message", scrubbedMessage),
+		logger.Int("deferred_count", len(deferredMessages)))
 }
 
 // Flush ensures all buffered events are sent to Sentry
@@ -742,8 +739,8 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// Create an enabled attachment uploader
 	attachmentUploader = NewAttachmentUploader(true)
 
-	logTelemetryInfo(nil, "telemetry: minimal Sentry initialized for support uploads only",
-		"system_id", systemID)
+	GetLogger().Info("minimal Sentry initialized for support uploads only",
+		logger.String("system_id", systemID))
 
 	return nil
 }

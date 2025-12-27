@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // TestNoCircularDependency verifies that events package doesn't import errors package
@@ -20,8 +19,7 @@ func TestNoCircularDependency(t *testing.T) {
 	// This test primarily exists to ensure compilation succeeds
 	// If there's a circular dependency, this won't compile
 
-	// Initialize logging
-	logging.Init()
+	// No logging initialization needed for integration tests
 
 	// Reset state
 	events.ResetForTesting()
@@ -44,8 +42,7 @@ func TestNoCircularDependency(t *testing.T) {
 func TestErrorEventIntegration(t *testing.T) {
 	// Remove t.Parallel() to ensure clean state for global error hooks
 
-	// Initialize logging
-	logging.Init()
+	// No logging initialization needed for integration tests
 
 	// Reset event bus state
 	events.ResetForTesting()

@@ -43,7 +43,7 @@ func TestInitManager_StateTransitions(t *testing.T) {
 
 	// Create a fresh manager for this test
 	manager := &InitManager{
-		logger: getLoggerSafe("test"),
+		initLog: GetLogger(),
 	}
 
 	// Test state transitions
@@ -69,7 +69,7 @@ func TestInitManager_WaitForComponent(t *testing.T) {
 	t.Parallel()
 
 	manager := &InitManager{
-		logger: getLoggerSafe("test"),
+		initLog: GetLogger(),
 	}
 
 	// Test immediate success
@@ -112,7 +112,7 @@ func TestInitManager_HealthCheck(t *testing.T) {
 	t.Parallel()
 
 	manager := &InitManager{
-		logger: getLoggerSafe("test"),
+		initLog: GetLogger(),
 	}
 
 	// Set various states
@@ -139,7 +139,7 @@ func TestInitManager_Shutdown(t *testing.T) {
 
 	// Create a fresh manager for this test to avoid interference
 	manager := &InitManager{
-		logger: getLoggerSafe("test"),
+		initLog: GetLogger(),
 	}
 
 	// Set some states

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Health check constants
@@ -52,10 +54,7 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"error":  "telemetry not initialized",
 		}); err != nil {
 			// Log the error but response headers are already set
-			logger := getLoggerSafe("health-check")
-			if logger != nil {
-				logger.Error("failed to encode health check error response", "error", err)
-			}
+			GetLogger().Error("failed to encode health check error response", logger.Error(err))
 		}
 		return
 	}
@@ -103,10 +102,7 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(httpStatus)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		// Log the error but response headers are already set
-		logger := getLoggerSafe("health-check")
-		if logger != nil {
-			logger.Error("failed to encode health check response", "error", err)
-		}
+		GetLogger().Error("failed to encode health check response", logger.Error(err))
 	}
 }
 
@@ -140,7 +136,7 @@ func PeriodicHealthCheck(interval time.Duration, stopChan <-chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	logger := getLoggerSafe("health-check")
+	healthLog := GetLogger().With(logger.String("component", "health-check"))
 
 	for {
 		select {
@@ -148,9 +144,9 @@ func PeriodicHealthCheck(interval time.Duration, stopChan <-chan struct{}) {
 			if globalInitCoordinator != nil {
 				status := globalInitCoordinator.HealthCheck()
 				if !status.Healthy {
-					logger.Warn("telemetry health check failed",
-						"status", getOverallStatus(status),
-						"components", formatUnhealthyComponents(status))
+					healthLog.Warn("telemetry health check failed",
+						logger.String("status", getOverallStatus(status)),
+						logger.String("components", formatUnhealthyComponents(status)))
 				}
 			}
 		case <-stopChan:

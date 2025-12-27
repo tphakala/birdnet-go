@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,6 +28,44 @@ const (
 	NorthernHemisphereThreshold = 10.0
 	SouthernHemisphereThreshold = -10.0
 )
+
+// =============================================================================
+// DEPRECATED: Legacy LogConfig types for backwards compatibility
+// These exist only to support internal/logging during migration to internal/logger.
+// Remove once all packages are migrated to internal/logger.
+// =============================================================================
+
+// RotationType defines the type of log rotation.
+// Deprecated: Use internal/logger package instead.
+type RotationType string
+
+const (
+	// RotationDaily rotates log files daily.
+	// Deprecated: Use internal/logger package instead.
+	RotationDaily RotationType = "daily"
+
+	// RotationWeekly rotates log files weekly.
+	// Deprecated: Use internal/logger package instead.
+	RotationWeekly RotationType = "weekly"
+
+	// RotationSize rotates log files based on size.
+	// Deprecated: Use internal/logger package instead.
+	RotationSize RotationType = "size"
+)
+
+// LogConfig defines the old logging configuration.
+// Deprecated: Use internal/logger.LoggingConfig instead.
+type LogConfig struct {
+	Enabled     bool         `yaml:"enabled" json:"enabled"`
+	Path        string       `yaml:"path" json:"path"`
+	Rotation    RotationType `yaml:"rotation" json:"rotation"`
+	MaxSize     int64        `yaml:"maxsize" json:"maxSize"`
+	RotationDay string       `yaml:"rotationday" json:"rotationDay"`
+}
+
+// =============================================================================
+// End of deprecated types
+// =============================================================================
 
 //go:embed config.yaml
 var configFiles embed.FS
@@ -967,7 +1006,6 @@ type WebServerSettings struct {
 	Debug      bool               `json:"debug"`      // true to enable debug mode
 	Enabled    bool               `json:"enabled"`    // true to enable web server
 	Port       string             `json:"port"`       // port for web server
-	Log        LogConfig          `json:"log"`        // logging configuration for web server
 	LiveStream LiveStreamSettings `json:"liveStream"` // live stream configuration
 }
 
@@ -1152,10 +1190,13 @@ type Settings struct {
 	SystemID           string   `yaml:"-" json:"systemId,omitempty"`           // Unique system identifier for telemetry
 	ValidationWarnings []string `yaml:"-" json:"validationWarnings,omitempty"` // Configuration validation warnings for telemetry
 
+	// Logging configuration
+	Logging logger.LoggingConfig `json:"logging"` // centralized logging configuration
+
 	Main struct {
 		Name      string    `json:"name"`      // name of BirdNET-Go node, can be used to identify source of notes
 		TimeAs24h bool      `json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
-		Log       LogConfig `json:"log"`       // logging configuration
+		Log       LogConfig `json:"log"`       // Deprecated: use Settings.Logging instead
 	} `json:"main"`
 
 	BirdNET BirdNETConfig `json:"birdnet"` // BirdNET configuration
@@ -1193,24 +1234,6 @@ type Settings struct {
 
 	Notification NotificationConfig `json:"notification"` // Configuration for push notifications
 }
-
-// LogConfig defines the configuration for a log file
-type LogConfig struct {
-	Enabled     bool         `json:"enabled"`     // true to enable this log
-	Path        string       `json:"path"`        // Path to the log file
-	Rotation    RotationType `json:"rotation"`    // Type of log rotation
-	MaxSize     int64        `json:"maxSize"`     // Max size in bytes for RotationSize
-	RotationDay string       `json:"rotationDay"` // Day of the week for RotationWeekly (as a string: "Sunday", "Monday", etc.)
-}
-
-// RotationType defines different types of log rotations.
-type RotationType string
-
-const (
-	RotationDaily  RotationType = "daily"
-	RotationWeekly RotationType = "weekly"
-	RotationSize   RotationType = "size"
-)
 
 // settingsInstance is the current settings instance
 var (

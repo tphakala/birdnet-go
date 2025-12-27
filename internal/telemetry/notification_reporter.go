@@ -3,6 +3,7 @@ package telemetry
 
 import (
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -72,12 +73,12 @@ func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags ma
 	// Convert string level to sentry.Level
 	sentryLevel := convertToSentryLevel(level)
 
+	log := GetLogger()
 	// Log the event being sent (privacy-safe)
-	logTelemetryDebug(nil, "sending notification event",
-		"event_type", "notification",
-		"level", level,
-		"tags", tags,
-	)
+	log.Debug("sending notification event",
+		logger.String("event_type", "notification"),
+		logger.String("level", level),
+		logger.Any("tags", tags))
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetLevel(sentryLevel)
@@ -100,10 +101,9 @@ func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags ma
 	})
 
 	// Log successful submission
-	logTelemetryDebug(nil, "notification event sent successfully",
-		"level", level,
-		"component", tags["component"],
-	)
+	log.Debug("notification event sent successfully",
+		logger.String("level", level),
+		logger.String("component", tags["component"]))
 }
 
 // IsEnabled returns whether telemetry reporting is enabled

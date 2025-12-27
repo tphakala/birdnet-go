@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // mockErrorEvent implements the ErrorEvent interface for testing
@@ -54,9 +53,6 @@ func newMockErrorEvent(component, category, message string) *mockErrorEvent {
 
 func TestNotificationWorker_ProcessEvent(t *testing.T) {
 	t.Parallel()
-
-	// Initialize logging
-	logging.Init()
 
 	tests := []struct {
 		name           string
@@ -122,8 +118,6 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-
 	// Create service with very low rate limit to trigger failures
 	service := newTestServiceForRateLimiting(t, 2)
 	defer service.Stop()
@@ -166,8 +160,6 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 
 func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 	t.Parallel()
-
-	logging.Init()
 
 	service := NewService(nil)
 	defer service.Stop()
@@ -221,8 +213,6 @@ func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 func TestNotificationWorker_MessageTruncation(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-
 	service := NewService(nil)
 	defer service.Stop()
 
@@ -241,8 +231,6 @@ func TestNotificationWorker_MessageTruncation(t *testing.T) {
 
 func TestNotificationWorker_BatchProcessing(t *testing.T) {
 	t.Parallel()
-
-	logging.Init()
 
 	service := newTestService(t)
 	defer service.Stop()

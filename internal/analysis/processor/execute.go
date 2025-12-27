@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 type ExecuteCommandAction struct {
@@ -37,8 +38,8 @@ func (a ExecuteCommandAction) Execute(data any) error {
 
 // ExecuteContext implements the ContextAction interface for proper context propagation
 func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) error {
-	logger := GetLogger()
-	logger.Info("Executing command", "command", a.Command, "params", a.Params)
+	log := GetLogger()
+	log.Info("Executing command", logger.String("command", a.Command), logger.Any("params", a.Params))
 
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
@@ -79,7 +80,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 			Build()
 	}
 
-	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
+	log.Debug("Executing command with arguments", logger.String("command_path", cmdPath), logger.Any("args", args))
 
 	// Create command with timeout, inheriting from parent context
 	// This ensures cancellation propagates from CompositeAction
@@ -126,10 +127,10 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	if len(outputStr) > 200 {
 		preview = outputStr[:200] + "... (truncated)"
 	}
-	logger.Info("Command executed successfully", 
-		"output_size_bytes", len(output),
-		"execution_duration_ms", executionDuration.Milliseconds(),
-		"output_preview", preview)
+	log.Info("Command executed successfully",
+		logger.Int("output_size_bytes", len(output)),
+		logger.Int64("execution_duration_ms", executionDuration.Milliseconds()),
+		logger.String("output_preview", preview))
 	return nil
 }
 

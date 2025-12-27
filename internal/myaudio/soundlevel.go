@@ -3,17 +3,13 @@ package myaudio
 
 import (
 	"fmt"
-	"io"
-	"log"
-	"log/slog"
 	"math"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // OctaveBandData represents sound level statistics for a single 1/3rd octave band
@@ -92,13 +88,13 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 		interval = conf.MinSoundLevelInterval
 
 		// Log when interval is clamped to minimum
-		if logger := getSoundLevelLogger(); logger != nil {
-			logger.Info("sound level interval clamped to minimum",
-				"source", source,
-				"configured_interval", configuredInterval,
-				"actual_interval", interval,
-				"minimum_interval", conf.MinSoundLevelInterval,
-				"reason", "prevent excessive CPU usage")
+		if log := getSoundLevelLogger(); log != nil {
+			log.Info("sound level interval clamped to minimum",
+				logger.String("source", source),
+				logger.Int("configured_interval", configuredInterval),
+				logger.Int("actual_interval", interval),
+				logger.Int("minimum_interval", conf.MinSoundLevelInterval),
+				logger.String("reason", "prevent excessive CPU usage"))
 		}
 	}
 
@@ -301,17 +297,17 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 
 	// Log input signal statistics if debug is enabled and realtime logging is on
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
-		if logger := getSoundLevelLogger(); logger != nil {
+		if log := getSoundLevelLogger(); log != nil {
 			inputRMS := math.Sqrt(sumSquares / float64(sampleCount))
 			inputDB := 20 * math.Log10(inputRMS+1e-10) // Add small value to avoid log(0)
-			logger.Debug("processing audio samples",
-				"source", p.source,
-				"name", p.name,
-				"sample_count", sampleCount,
-				"min_sample", minSample,
-				"max_sample", maxSample,
-				"input_rms", inputRMS,
-				"input_db", inputDB)
+			log.Debug("processing audio samples",
+				logger.String("source", p.source),
+				logger.String("name", p.name),
+				logger.Int("sample_count", sampleCount),
+				logger.Float64("min_sample", minSample),
+				logger.Float64("max_sample", maxSample),
+				logger.Float64("input_rms", inputRMS),
+				logger.Float64("input_db", inputDB))
 		}
 	}
 
@@ -356,14 +352,14 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 
 			// Log band measurement if debug is enabled and realtime logging is on
 			if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
-				if logger := getSoundLevelLogger(); logger != nil {
-					logger.Debug("calculated band level",
-						"source", p.source,
-						"band", bandKey,
-						"center_freq", filter.centerFreq,
-						"rms", rms,
-						"level_db", levelDB,
-						"sample_count", buffer.targetSampleCount)
+				if log := getSoundLevelLogger(); log != nil {
+					log.Debug("calculated band level",
+						logger.String("source", p.source),
+						logger.String("band", bandKey),
+						logger.Float64("center_freq", filter.centerFreq),
+						logger.Float64("rms", rms),
+						logger.Float64("level_db", levelDB),
+						logger.Int("sample_count", buffer.targetSampleCount))
 				}
 			}
 
@@ -405,13 +401,13 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 
 		// Log interval measurement completion if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			if logger := getSoundLevelLogger(); logger != nil {
-				logger.Debug("completed sound level interval measurement",
-					"source", p.source,
-					"name", p.name,
-					"interval", p.interval,
-					"timestamp", soundLevelData.Timestamp,
-					"octave_bands", len(soundLevelData.OctaveBands))
+			if log := getSoundLevelLogger(); log != nil {
+				log.Debug("completed sound level interval measurement",
+					logger.String("source", p.source),
+					logger.String("name", p.name),
+					logger.Int("interval", p.interval),
+					logger.Time("timestamp", soundLevelData.Timestamp),
+					logger.Int("octave_bands", len(soundLevelData.OctaveBands)))
 			}
 		}
 
@@ -521,47 +517,23 @@ func formatBandKey(centerFreq float64) string {
 var (
 	soundLevelProcessors     = make(map[string]*soundLevelProcessor)
 	soundLevelProcessorMutex sync.RWMutex
-	soundLevelLogger         *slog.Logger
+	soundLevelLogger         logger.Logger
 	soundLevelLoggerOnce     sync.Once
-	soundLevelLevelVar       = new(slog.LevelVar) // Dynamic level control
-	soundLevelCloseLogger    func() error
 )
 
 // getSoundLevelLogger returns the sound level logger, initializing it if necessary
-func getSoundLevelLogger() *slog.Logger {
+func getSoundLevelLogger() logger.Logger {
 	soundLevelLoggerOnce.Do(func() {
-		var err error
-		// Define log file path relative to working directory
-		logFilePath := filepath.Join("logs", "soundlevel.log")
-		// Set initial level based on debug flag
-		initialLevel := slog.LevelInfo
-		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			initialLevel = slog.LevelDebug
-		}
-		soundLevelLevelVar.Set(initialLevel)
-
-		// Initialize the service-specific file logger
-		soundLevelLogger, soundLevelCloseLogger, err = logging.NewFileLogger(logFilePath, "sound-level-processor", soundLevelLevelVar)
-		if err != nil {
-			// Fallback: Log error to standard log and use stdout logger
-			log.Printf("WARNING: Failed to initialize sound level processor file logger at %s: %v. Using console logging.", logFilePath, err)
-			// Fallback to console logger
-			logging.Init()
-			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: soundLevelLevelVar})
-			soundLevelLogger = slog.New(fbHandler).With("service", "sound-level-processor")
-			soundLevelCloseLogger = func() error { return nil } // No-op closer
-		}
+		soundLevelLogger = logger.Global().Module("audio").Module("soundlevel")
 	})
 	return soundLevelLogger
 }
 
 // UpdateSoundLevelDebugSetting updates the debug log level for sound level processing
+// Note: With the new logger, debug level is controlled by the global logger configuration
 func UpdateSoundLevelDebugSetting(debug bool) {
-	if debug {
-		soundLevelLevelVar.Set(slog.LevelDebug)
-	} else {
-		soundLevelLevelVar.Set(slog.LevelInfo)
-	}
+	// Debug level is now controlled by global logger configuration
+	// This function is kept for API compatibility but is a no-op
 }
 
 // RegisterSoundLevelProcessor registers a sound level processor for a source
@@ -583,11 +555,11 @@ func RegisterSoundLevelProcessor(source, name string) error {
 	soundLevelProcessors[source] = processor
 
 	// Log registration if debug is enabled
-	if logger := getSoundLevelLogger(); logger != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		logger.Debug("registered sound level processor",
-			"source", source,
-			"name", name,
-			"total_processors", len(soundLevelProcessors))
+	if log := getSoundLevelLogger(); log != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
+		log.Debug("registered sound level processor",
+			logger.String("source", source),
+			logger.String("name", name),
+			logger.Int("total_processors", len(soundLevelProcessors)))
 	}
 
 	return nil
@@ -600,10 +572,10 @@ func UnregisterSoundLevelProcessor(source string) {
 
 	// Log unregistration if debug is enabled and processor exists
 	if _, exists := soundLevelProcessors[source]; exists {
-		if logger := getSoundLevelLogger(); logger != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			logger.Debug("unregistering sound level processor",
-				"source", source,
-				"remaining_processors", len(soundLevelProcessors)-1)
+		if log := getSoundLevelLogger(); log != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			log.Debug("unregistering sound level processor",
+				logger.String("source", source),
+				logger.Int("remaining_processors", len(soundLevelProcessors)-1))
 		}
 	}
 

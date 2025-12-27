@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"log/slog"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // InitState represents the initialization state of a component
@@ -60,8 +60,8 @@ type InitManager struct {
 	workerErr           atomic.Value // stores error
 
 	// Dependencies
-	mu     sync.RWMutex
-	logger *slog.Logger
+	mu        sync.RWMutex
+	initLog   logger.Logger
 }
 
 var (
@@ -73,7 +73,7 @@ var (
 func GetInitManager() *InitManager {
 	initManagerOnce.Do(func() {
 		initManager = &InitManager{
-			logger: getLoggerSafe("init-manager"),
+			initLog: GetLogger().With(logger.String("component", "init-manager")),
 		}
 	})
 	return initManager
@@ -84,13 +84,13 @@ func (m *InitManager) InitializeErrorIntegrationSafe() error {
 	var err error
 	m.errorIntegrationOnce.Do(func() {
 		m.errorIntegration.Store(int32(InitStateInProgress))
-		m.logger.Debug("initializing error integration")
+		m.initLog.Debug("initializing error integration")
 
 		// Call the actual initialization
 		InitializeErrorIntegration()
 
 		m.errorIntegration.Store(int32(InitStateCompleted))
-		m.logger.Info("error integration initialized successfully")
+		m.initLog.Info("error integration initialized successfully")
 	})
 
 	// Check for stored error
@@ -108,7 +108,7 @@ func (m *InitManager) InitializeSentrySafe(settings any) error {
 	var err error
 	m.sentryOnce.Do(func() {
 		m.sentryClient.Store(int32(InitStateInProgress))
-		m.logger.Debug("initializing Sentry client")
+		m.initLog.Debug("initializing Sentry client")
 
 		// Ensure error integration is ready
 		if err := m.InitializeErrorIntegrationSafe(); err != nil {
@@ -136,16 +136,16 @@ func (m *InitManager) InitializeSentrySafe(settings any) error {
 			if err != nil {
 				m.sentryErr.Store(err)
 				m.sentryClient.Store(int32(InitStateFailed))
-				m.logger.Error("Sentry initialization failed", "error", err)
+				m.initLog.Error("Sentry initialization failed", logger.Error(err))
 			} else {
 				m.sentryClient.Store(int32(InitStateCompleted))
-				m.logger.Info("Sentry initialized successfully")
+				m.initLog.Info("Sentry initialized successfully")
 			}
 		case <-ctx.Done():
 			err = fmt.Errorf("sentry initialization timeout")
 			m.sentryErr.Store(err)
 			m.sentryClient.Store(int32(InitStateFailed))
-			m.logger.Error("Sentry initialization timeout")
+			m.initLog.Error("Sentry initialization timeout")
 		}
 	})
 
@@ -164,7 +164,7 @@ func (m *InitManager) InitializeEventBusSafe() error {
 	var err error
 	m.eventBusOnce.Do(func() {
 		m.eventBus.Store(int32(InitStateInProgress))
-		m.logger.Debug("initializing event bus integration")
+		m.initLog.Debug("initializing event bus integration")
 
 		// Ensure dependencies are ready
 		if state := InitState(m.errorIntegration.Load()); state != InitStateCompleted {
@@ -178,12 +178,12 @@ func (m *InitManager) InitializeEventBusSafe() error {
 		if err = InitializeTelemetryEventBus(); err != nil {
 			m.eventBusErr.Store(err)
 			m.eventBus.Store(int32(InitStateFailed))
-			m.logger.Error("event bus integration failed", "error", err)
+			m.initLog.Error("event bus integration failed", logger.Error(err))
 			return
 		}
 
 		m.eventBus.Store(int32(InitStateCompleted))
-		m.logger.Info("event bus integration initialized successfully")
+		m.initLog.Info("event bus integration initialized successfully")
 	})
 
 	// Check for stored error
@@ -284,7 +284,7 @@ func (m *InitManager) HealthCheck() HealthStatus {
 
 // Shutdown performs graceful shutdown of telemetry components
 func (m *InitManager) Shutdown(ctx context.Context) error {
-	m.logger.Info("starting telemetry shutdown")
+	m.initLog.Info("starting telemetry shutdown")
 
 	// Mark components as shutting down
 	m.telemetryWorker.Store(int32(InitStateNotStarted))
@@ -304,16 +304,16 @@ func (m *InitManager) Shutdown(ctx context.Context) error {
 	case <-done:
 		// Close the service logger file handle
 		if err := CloseServiceLogger(); err != nil {
-			m.logger.Warn("failed to close service logger", "error", err)
+			m.initLog.Warn("failed to close service logger", logger.Error(err))
 		}
-		m.logger.Info("telemetry shutdown completed")
+		m.initLog.Info("telemetry shutdown completed")
 		return nil
 	case <-ctx.Done():
 		// Still try to close logger even on timeout
 		if err := CloseServiceLogger(); err != nil {
-			m.logger.Warn("failed to close service logger during timeout", "error", err)
+			m.initLog.Warn("failed to close service logger during timeout", logger.Error(err))
 		}
-		m.logger.Warn("telemetry shutdown timeout")
+		m.initLog.Warn("telemetry shutdown timeout")
 		return ctx.Err()
 	}
 }

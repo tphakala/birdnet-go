@@ -353,10 +353,6 @@ func ParseWeekday(day string) (time.Weekday, error) {
 	}
 }
 
-// GetRotationDay returns the time.Weekday representation of RotationDay
-func (lc *LogConfig) GetRotationDay() (time.Weekday, error) {
-	return ParseWeekday(lc.RotationDay)
-}
 
 // GetLocalTimezone returns the local time zone of the system.
 func GetLocalTimezone() (*time.Location, error) {

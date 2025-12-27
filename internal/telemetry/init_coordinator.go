@@ -8,7 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // componentInitTimeout is the timeout for waiting for a single component to initialize
@@ -28,8 +28,8 @@ func NewInitCoordinator() *InitCoordinator {
 
 // InitializeAll performs complete telemetry initialization in the correct order
 func (c *InitCoordinator) InitializeAll(settings *conf.Settings) error {
-	logger := getLoggerSafe("init-coordinator")
-	logger.Info("starting telemetry initialization sequence")
+	log := GetLogger()
+	log.Info("starting telemetry initialization sequence")
 
 	// Phase 1: Initialize error integration (synchronous reporting)
 	if err := c.manager.InitializeErrorIntegrationSafe(); err != nil {
@@ -40,30 +40,26 @@ func (c *InitCoordinator) InitializeAll(settings *conf.Settings) error {
 	if settings.Sentry.Enabled {
 		if err := c.manager.InitializeSentrySafe(settings); err != nil {
 			// Log but don't fail - Sentry is not critical
-			logger.Error("Sentry initialization failed", "error", err)
+			log.Error("Sentry initialization failed", logger.Error(err))
 		}
 	}
 
 	// Phase 3: Event bus integration is deferred until after main services are ready
-	logger.Info("telemetry initialization sequence completed (event bus integration deferred)")
+	log.Info("telemetry initialization sequence completed (event bus integration deferred)")
 	return nil
 }
 
 // InitializeEventBusIntegration should be called after all core services are initialized
 func (c *InitCoordinator) InitializeEventBusIntegration() error {
-	logger := getLoggerSafe("init-coordinator")
-	
-	// Check prerequisites
-	if !logging.IsInitialized() {
-		return fmt.Errorf("logging not initialized")
-	}
+	log := GetLogger()
 
+	// Check prerequisites
 	if !events.IsInitialized() {
 		return fmt.Errorf("event bus not initialized")
 	}
 
 	// Initialize event bus integration
-	logger.Info("initializing telemetry event bus integration")
+	log.Info("initializing telemetry event bus integration")
 	if err := c.manager.InitializeEventBusSafe(); err != nil {
 		return fmt.Errorf("event bus integration failed: %w", err)
 	}
@@ -75,6 +71,8 @@ func (c *InitCoordinator) InitializeEventBusIntegration() error {
 func (c *InitCoordinator) WaitForInitialization(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	log := GetLogger()
 
 	components := []struct {
 		name         string
@@ -92,7 +90,7 @@ func (c *InitCoordinator) WaitForInitialization(timeout time.Duration) error {
 			return fmt.Errorf("timeout waiting for initialization")
 		default:
 			state := c.manager.GetComponentState(comp.name)
-			
+
 			// Skip if not started (may be intentionally deferred)
 			if state == InitStateNotStarted && !comp.required {
 				continue
@@ -104,10 +102,9 @@ func (c *InitCoordinator) WaitForInitialization(timeout time.Duration) error {
 					return fmt.Errorf("required component %s failed: %w", comp.name, err)
 				}
 				// Log non-required failures
-				logger := getLoggerSafe("init-coordinator")
-				logger.Warn("optional component initialization failed", 
-					"component", comp.name, 
-					"error", err)
+				log.Warn("optional component initialization failed",
+					logger.String("component", comp.name),
+					logger.Error(err))
 			}
 		}
 	}

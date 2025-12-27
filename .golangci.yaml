@@ -41,7 +41,7 @@ linters:
     - unused
   settings:
     gocognit:
-      min-complexity: 50
+      min-complexity: 30
     gocritic:
       disabled-checks:
         - commentFormatting

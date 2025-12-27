@@ -1,54 +1,20 @@
 package analysis
 
 import (
-	"io"
 	"log"
-	"log/slog"
 	"math"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// Package-level logger for sound level metrics
-var (
-	metricsLogger      *slog.Logger
-	loggerOnce         sync.Once
-	metricsLevelVar    = new(slog.LevelVar) // Dynamic level control
-	metricsCloseLogger func() error
-)
-
-// getMetricsLogger returns the metrics logger, initializing it if necessary
-func getMetricsLogger() *slog.Logger {
-	loggerOnce.Do(func() {
-		var err error
-		// Define log file path relative to working directory - use same file as sound level
-		logFilePath := filepath.Join("logs", "soundlevel.log")
-		// Set initial level based on debug flag
-		initialLevel := slog.LevelInfo
-		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			initialLevel = slog.LevelDebug
-		}
-		metricsLevelVar.Set(initialLevel)
-
-		// Initialize the service-specific file logger
-		metricsLogger, metricsCloseLogger, err = logging.NewFileLogger(logFilePath, "sound-level-metrics", metricsLevelVar)
-		if err != nil {
-			// Fallback: Log error to standard log and use stdout logger
-			log.Printf("WARNING: Failed to initialize sound level metrics file logger at %s: %v. Using console logging.", logFilePath, err)
-			// Fallback to console logger
-			logging.Init()
-			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: metricsLevelVar})
-			metricsLogger = slog.New(fbHandler).With("service", "sound-level-metrics")
-			metricsCloseLogger = func() error { return nil } // No-op closer
-		}
-	})
-	return metricsLogger
+// getMetricsLogger returns the metrics logger
+func getMetricsLogger() logger.Logger {
+	return logger.Global().Module("analysis").Module("soundlevel").Module("metrics")
 }
 
 // startSoundLevelMetricsPublisher starts a goroutine to consume sound level data and update Prometheus metrics
@@ -89,14 +55,13 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 	// Log metrics update if debug is enabled
 	// This is logged at interval rate, not realtime
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		if logger := getMetricsLogger(); logger != nil {
-			logger.Debug("updating sound level metrics",
-				"source", soundData.Source,
-				"name", soundData.Name,
-				"timestamp", soundData.Timestamp,
-				"duration", soundData.Duration,
-				"bands_count", len(soundData.OctaveBands))
-		}
+		lg := getMetricsLogger()
+		lg.Debug("updating sound level metrics",
+			logger.String("source", soundData.Source),
+			logger.String("name", soundData.Name),
+			logger.Time("timestamp", soundData.Timestamp),
+			logger.Int("duration", soundData.Duration),
+			logger.Int("bands_count", len(soundData.OctaveBands)))
 	}
 
 	// Update metrics for each octave band
@@ -113,15 +78,14 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 		// Log detailed band metrics if debug is enabled and realtime logging is on
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
-			if logger := getMetricsLogger(); logger != nil {
-				logger.Debug("updated octave band metrics",
-					"source", soundData.Source,
-					"band", bandKey,
-					"min_db", bandData.Min,
-					"max_db", bandData.Max,
-					"mean_db", bandData.Mean,
-					"samples", bandData.SampleCount)
-			}
+			lg := getMetricsLogger()
+			lg.Debug("updated octave band metrics",
+				logger.String("source", soundData.Source),
+				logger.String("band", bandKey),
+				logger.Float64("min_db", bandData.Min),
+				logger.Float64("max_db", bandData.Max),
+				logger.Float64("mean_db", bandData.Mean),
+				logger.Int("samples", bandData.SampleCount))
 		}
 	}
 
@@ -144,13 +108,12 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 		// Log overall sound level if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			if logger := getMetricsLogger(); logger != nil {
-				logger.Debug("calculated overall sound level",
-					"source", soundData.Source,
-					"name", soundData.Name,
-					"overall_level_db", overallLevel,
-					"bands_averaged", len(soundData.OctaveBands))
-			}
+			lg := getMetricsLogger()
+			lg.Debug("calculated overall sound level",
+				logger.String("source", soundData.Source),
+				logger.String("name", soundData.Name),
+				logger.Float64("overall_level_db", overallLevel),
+				logger.Int("bands_averaged", len(soundData.OctaveBands)))
 		}
 	}
 
@@ -160,11 +123,10 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 	// Log processing duration if debug is enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		if logger := getMetricsLogger(); logger != nil {
-			logger.Debug("sound level metrics update complete",
-				"source", soundData.Source,
-				"name", soundData.Name,
-				"processing_duration_seconds", processingDuration)
-		}
+		lg := getMetricsLogger()
+		lg.Debug("sound level metrics update complete",
+			logger.String("source", soundData.Source),
+			logger.String("name", soundData.Name),
+			logger.Float64("processing_duration_seconds", processingDuration))
 	}
 }

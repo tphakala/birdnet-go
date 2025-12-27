@@ -3,16 +3,12 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
-	"log/slog"
 	"maps"
-	"path/filepath"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -34,7 +30,8 @@ const (
 //     internal timeout (sentryFlushTimeout) completes. This is intentional to allow
 //     in-flight events to be sent even when the caller has given up waiting.
 func flushWithContext(ctx context.Context, operation string) error {
-	logTelemetryDebug(nil, "telemetry: flushing event to Sentry", "operation", operation)
+	log := GetLogger()
+	log.Debug("flushing event to Sentry", logger.String("operation", operation))
 
 	flushDone := make(chan struct{})
 	go func() {
@@ -44,7 +41,7 @@ func flushWithContext(ctx context.Context, operation string) error {
 
 	select {
 	case <-ctx.Done():
-		logTelemetryWarn(nil, "telemetry: "+operation+" cancelled during flush", "error", ctx.Err())
+		log.Warn(operation+" cancelled during flush", logger.Error(ctx.Err()))
 		return errors.New(ctx.Err()).
 			Component("telemetry").
 			Category(errors.CategoryNetwork).
@@ -52,43 +49,8 @@ func flushWithContext(ctx context.Context, operation string) error {
 			Context("reason", "context_cancelled_during_flush").
 			Build()
 	case <-flushDone:
-		logTelemetryDebug(nil, "telemetry: flush completed successfully", "operation", operation)
+		log.Debug("flush completed successfully", logger.String("operation", operation))
 		return nil
-	}
-}
-
-// Package-level logger specific to telemetry service
-var (
-	serviceLogger   *slog.Logger
-	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
-	closeLogger     func() error
-)
-
-// CloseServiceLogger closes the telemetry service logger file handle.
-// This should be called during application shutdown to ensure log files are properly flushed.
-func CloseServiceLogger() error {
-	if closeLogger != nil {
-		return closeLogger()
-	}
-	return nil
-}
-
-func init() {
-	var err error
-	// Define log file path relative to working directory
-	logFilePath := filepath.Join("logs", "telemetry.log")
-	initialLevel := slog.LevelDebug // Set desired initial level
-	serviceLevelVar.Set(initialLevel)
-
-	// Initialize the service-specific file logger
-	serviceLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "telemetry", serviceLevelVar)
-	if err != nil {
-		// Fallback: Log error to standard log and potentially disable service logging
-		log.Printf("FATAL: Failed to initialize telemetry file logger at %s: %v. Service logging disabled.", logFilePath, err)
-		// Set logger to a disabled handler to prevent nil panics, but respects level var
-		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
-		serviceLogger = slog.New(fbHandler).With("service", "telemetry")
-		closeLogger = func() error { return nil } // No-op closer
 	}
 }
 
@@ -106,6 +68,8 @@ func NewAttachmentUploader(enabled bool) *AttachmentUploader {
 
 // UploadSupportDump uploads a support dump to Sentry as an event with attachment
 func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []byte, systemID, userMessage string) error {
+	log := GetLogger()
+
 	// Extract trace ID early for use in error messages
 	traceID := extractTraceID(ctx)
 
@@ -115,15 +79,15 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 		scrubbedMessage = privacy.ScrubMessage(userMessage)
 	}
 
-	logTelemetryInfo(nil, "telemetry: starting support dump upload",
-		"system_id", systemID,
-		"dump_size", len(dumpData),
-		"has_message", userMessage != "",
-		"trace_id", traceID,
-		"scrubbed_message", scrubbedMessage)
+	log.Info("starting support dump upload",
+		logger.String("system_id", systemID),
+		logger.Int("dump_size", len(dumpData)),
+		logger.Bool("has_message", userMessage != ""),
+		logger.String("trace_id", traceID),
+		logger.String("scrubbed_message", scrubbedMessage))
 
 	if !au.enabled {
-		logTelemetryWarn(nil, "telemetry: upload blocked - uploader not enabled")
+		log.Warn("upload blocked - uploader not enabled")
 		err := errors.Newf("attachment uploader is not enabled").
 			Component("telemetry").
 			Category(errors.CategoryConfiguration).
@@ -137,7 +101,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	// Check if context is already cancelled
 	select {
 	case <-ctx.Done():
-		logTelemetryWarn(nil, "telemetry: upload cancelled - context already done", "error", ctx.Err())
+		log.Warn("upload cancelled - context already done", logger.Error(ctx.Err()))
 		err := errors.New(ctx.Err()).
 			Component("telemetry").
 			Category(errors.CategoryNetwork).
@@ -187,7 +151,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	// Capture the event with attachment using WithScope
 	var eventID *sentry.EventID
 
-	logTelemetryDebug(nil, "telemetry: capturing event with attachment")
+	log.Debug("capturing event with attachment")
 	sentry.WithScope(func(scope *sentry.Scope) {
 		// Add the support dump as an attachment
 		filename := fmt.Sprintf("support_dump_%s_%d.zip", systemID, time.Now().Unix())
@@ -196,12 +160,12 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 			ContentType: "application/zip",
 			Payload:     dumpData,
 		})
-		logTelemetryDebug(nil, "telemetry: attachment added to scope",
-			"filename", filename,
-			"attachment_type", "support_dump",
-			"content_type", "application/zip",
-			"size_bytes", len(dumpData),
-			"system_id", systemID)
+		log.Debug("attachment added to scope",
+			logger.String("filename", filename),
+			logger.String("attachment_type", "support_dump"),
+			logger.String("content_type", "application/zip"),
+			logger.Int("size_bytes", len(dumpData)),
+			logger.String("system_id", systemID))
 
 		// Add user message as breadcrumb
 		if userMessage != "" {
@@ -212,7 +176,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 				Level:     sentry.LevelInfo,
 				Timestamp: time.Now(),
 			}, maxBreadcrumbs)
-			logTelemetryDebug(nil, "telemetry: user message added as breadcrumb")
+			log.Debug("user message added as breadcrumb")
 		}
 
 		// Capture the event within this scope
@@ -220,7 +184,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	})
 
 	if eventID == nil {
-		logTelemetryError(nil, "telemetry: failed to capture support dump event in Sentry")
+		log.Error("failed to capture support dump event in Sentry")
 		return errors.Newf("failed to capture support dump event in Sentry").
 			Component("telemetry").
 			Category(errors.CategoryNetwork).
@@ -230,29 +194,30 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 			Build()
 	}
 
-	logTelemetryDebug(nil, "telemetry: event captured", "event_id", eventID)
+	log.Debug("event captured", logger.Any("event_id", eventID))
 
 	// Flush to ensure the event is sent with context awareness
 	if err := flushWithContext(ctx, "upload_support_dump"); err != nil {
 		return err
 	}
 
-	logTelemetryInfo(nil, "telemetry: support dump uploaded successfully",
-		"system_id", systemID,
-		"event_id", eventID,
-		"dump_size", len(dumpData))
+	log.Info("support dump uploaded successfully",
+		logger.String("system_id", systemID),
+		logger.Any("event_id", eventID),
+		logger.Int("dump_size", len(dumpData)))
 	return nil
 }
 
 // CreateSupportEvent creates a support request event without an attachment
 func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, message string, metadata map[string]any) error {
-	logTelemetryInfo(nil, "telemetry: creating support event",
-		"system_id", systemID,
-		"has_metadata", len(metadata) > 0)
+	log := GetLogger()
+	log.Info("creating support event",
+		logger.String("system_id", systemID),
+		logger.Bool("has_metadata", len(metadata) > 0))
 
 	// Input validation
 	if systemID == "" {
-		logTelemetryError(nil, "telemetry: validation failed - empty systemID")
+		log.Error("validation failed - empty systemID")
 		return errors.Newf("systemID cannot be empty").
 			Component("telemetry").
 			Category(errors.CategoryValidation).
@@ -261,7 +226,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	}
 
 	if message == "" {
-		logTelemetryError(nil, "telemetry: validation failed - empty message")
+		log.Error("validation failed - empty message")
 		return errors.Newf("message cannot be empty").
 			Component("telemetry").
 			Category(errors.CategoryValidation).
@@ -273,7 +238,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	traceID := extractTraceID(ctx)
 	if traceID != "" {
 		// Log trace ID for observability
-		logTelemetryDebug(nil, "telemetry: trace ID found", "trace_id", traceID)
+		log.Debug("trace ID found", logger.String("trace_id", traceID))
 		sentry.ConfigureScope(func(scope *sentry.Scope) {
 			scope.SetTag("trace_id", traceID)
 		})
@@ -283,7 +248,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	scrubbedMessage := privacy.ScrubMessage(message)
 
 	if !au.enabled {
-		logTelemetryWarn(nil, "telemetry: support event blocked - telemetry not enabled")
+		log.Warn("support event blocked - telemetry not enabled")
 		return errors.Newf("telemetry is not enabled - cannot create support event").
 			Component("telemetry").
 			Category(errors.CategoryConfiguration).
@@ -322,10 +287,10 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	}
 
 	// Capture event
-	logTelemetryDebug(nil, "telemetry: capturing support event")
+	log.Debug("capturing support event")
 	eventID := sentry.CaptureEvent(event)
 	if eventID == nil {
-		logTelemetryError(nil, "telemetry: failed to capture support event in Sentry")
+		log.Error("failed to capture support event in Sentry")
 		return errors.Newf("failed to capture support event in Sentry").
 			Component("telemetry").
 			Category(errors.CategoryNetwork).
@@ -334,16 +299,16 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 			Build()
 	}
 
-	logTelemetryDebug(nil, "telemetry: support event captured", "event_id", eventID)
+	log.Debug("support event captured", logger.Any("event_id", eventID))
 
 	// Flush with context awareness
 	if err := flushWithContext(ctx, "create_support_event"); err != nil {
 		return err
 	}
 
-	logTelemetryInfo(nil, "telemetry: support event created successfully",
-		"system_id", systemID,
-		"event_id", eventID)
+	log.Info("support event created successfully",
+		logger.String("system_id", systemID),
+		logger.Any("event_id", eventID))
 	return nil
 }
 

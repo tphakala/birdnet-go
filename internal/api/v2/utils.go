@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // NormalizeClipPathStrict normalizes the audio clip path by removing the clips prefix if present.
@@ -347,7 +348,9 @@ type hourlyDataItem interface {
 }
 
 // hourlyDistributionAdapter adapts HourlyDistributionData to hourlyDataItem.
-type hourlyDistributionAdapter struct{ d datastore.HourlyDistributionData }
+type hourlyDistributionAdapter struct {
+	d datastore.HourlyDistributionData
+}
 
 func (a hourlyDistributionAdapter) GetHour() int  { return a.d.Hour }
 func (a hourlyDistributionAdapter) GetCount() int { return a.d.Count }
@@ -823,30 +826,30 @@ func validateRequiredStringWhenEnabled(providerMap map[string]any, fieldName, pr
 // =============================================================================
 
 // logInfoIfEnabled logs info message if apiLogger is enabled
-func (c *Controller) logInfoIfEnabled(msg string, args ...any) {
+func (c *Controller) logInfoIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Info(msg, args...)
+		c.apiLogger.Info(msg, fields...)
 	}
 }
 
 // logErrorIfEnabled logs error message if apiLogger is enabled
-func (c *Controller) logErrorIfEnabled(msg string, args ...any) {
+func (c *Controller) logErrorIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Error(msg, args...)
+		c.apiLogger.Error(msg, fields...)
 	}
 }
 
 // logWarnIfEnabled logs warning message if apiLogger is enabled
-func (c *Controller) logWarnIfEnabled(msg string, args ...any) {
+func (c *Controller) logWarnIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Warn(msg, args...)
+		c.apiLogger.Warn(msg, fields...)
 	}
 }
 
 // logDebugIfEnabled logs debug message if apiLogger is enabled
-func (c *Controller) logDebugIfEnabled(msg string, args ...any) {
+func (c *Controller) logDebugIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Debug(msg, args...)
+		c.apiLogger.Debug(msg, fields...)
 	}
 }
 

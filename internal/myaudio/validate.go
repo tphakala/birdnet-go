@@ -13,7 +13,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Validation constants
@@ -417,9 +417,10 @@ func QuickValidateAudioFile(audioPath string) (bool, error) {
 	defer func() {
 		if err := file.Close(); err != nil {
 			// Log the close error for debugging purposes
-			logging.Debug("Failed to close audio file during validation",
-				"path", audioPath,
-				"error", err)
+			log := logger.Global().Module("audio")
+			log.Debug("Failed to close audio file during validation",
+				logger.String("path", audioPath),
+				logger.Error(err))
 		}
 	}()
 

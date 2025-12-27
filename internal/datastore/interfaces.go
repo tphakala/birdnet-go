@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -26,11 +25,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc" // Import suncalc
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
@@ -233,11 +233,13 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 	txStart := time.Now()
-	txLogger := getLogger().With("tx_id", txID, "operation", "save_note")
+	txLogger := getLogger()
 
 	txLogger.Debug("Starting transaction",
-		"note_scientific_name", note.ScientificName,
-		"results_count", len(results))
+		logger.String("tx_id", txID),
+		logger.String("operation", "save_note"),
+		logger.String("note_scientific_name", note.ScientificName),
+		logger.Int("results_count", len(results)))
 
 	// Retry configuration
 	maxRetries := 5
@@ -255,8 +257,10 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 				"table", "notes")
 
 			txLogger.Error("Failed to begin transaction",
-				"error", lastErr,
-				"attempt", attempt+1)
+				logger.String("tx_id", txID),
+				logger.String("operation", "save_note"),
+				logger.Error(lastErr),
+				logger.Int("attempt", attempt+1))
 
 			continue
 		}
@@ -997,7 +1001,7 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 
 	// Use Session to temporarily modify logger config for this query
 	err = ds.DB.Session(&gorm.Session{
-		Logger: ds.DB.Logger.LogMode(logger.Silent),
+		Logger: ds.DB.Logger.LogMode(gormlogger.Silent),
 	}).Where("note_id = ?", id).First(&review).Error
 
 	if err != nil {
@@ -1383,7 +1387,7 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 			Build()
 	}
 	// Use Session to disable logging for this query
-	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+	if err := ds.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).
 		Where("scientific_name = ? AND provider_name = ?", query.ScientificName, query.ProviderName).First(&cache).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrImageCacheNotFound
@@ -1405,12 +1409,12 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 
 	if cache.ProviderName == "" {
 		err := validationError("provider name cannot be empty", "provider_name", "")
-		getLogger().Error("Invalid image cache data: empty provider name", "error", err)
+		getLogger().Error("Invalid image cache data: empty provider name", logger.Error(err))
 		return err
 	}
 	if cache.ScientificName == "" {
 		err := validationError("scientific name cannot be empty", "scientific_name", "")
-		getLogger().Error("Invalid image cache data: empty scientific name", "error", err)
+		getLogger().Error("Invalid image cache data: empty scientific name", logger.Error(err))
 		return err
 	}
 
@@ -1424,8 +1428,8 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		if isConstraintViolation(err) {
 			// This is expected with UPSERT, log at debug level
 			getLogger().Debug("Image cache UPSERT handled constraint",
-				"scientific_name", cache.ScientificName,
-				"provider", cache.ProviderName)
+				logger.String("scientific_name", cache.ScientificName),
+				logger.String("provider", cache.ProviderName))
 		} else {
 			enhancedErr := dbError(err, "save_image_cache", errors.PriorityMedium,
 				"table", "image_caches",
@@ -1434,7 +1438,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				"action", "cache_species_thumbnail")
 
 			getLogger().Error("Failed to save image cache",
-				"error", enhancedErr)
+				logger.Error(enhancedErr))
 
 			// Record error metric
 			ds.metricsMu.RLock()
@@ -1464,7 +1468,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 // GetAllImageCaches retrieves all image cache entries for a specific provider
 func (ds *DataStore) GetAllImageCaches(providerName string) ([]ImageCache, error) {
 	var caches []ImageCache
-	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+	if err := ds.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).
 		Where("provider_name = ?", providerName).Find(&caches).Error; err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -1498,7 +1502,7 @@ func (ds *DataStore) GetImageCacheBatch(providerName string, scientificNames []s
 
 	var caches []ImageCache
 	// Use Session to disable logging for this query and use IN clause for batch lookup
-	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+	if err := ds.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).
 		Where("provider_name = ? AND scientific_name IN ?", providerName, scientificNames).
 		Find(&caches).Error; err != nil {
 		return nil, errors.New(err).
@@ -2099,7 +2103,7 @@ func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTim
 // Helper functions for Save method to reduce cognitive complexity
 
 // saveNoteInTransaction saves a note within a transaction
-func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string, attempt int, txLogger *slog.Logger) error {
+func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string, attempt int, txLogger logger.Logger) error {
 	if err := tx.Create(note).Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
@@ -2112,9 +2116,9 @@ func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string,
 			Build()
 
 		txLogger.Error("Failed to save note",
-			"error", enhancedErr,
-			"note_id", note.ID,
-			"scientific_name", note.ScientificName)
+			logger.Error(enhancedErr),
+			logger.Any("note_id", note.ID),
+			logger.String("scientific_name", note.ScientificName))
 
 		// Record error metric
 		ds.metricsMu.RLock()
@@ -2140,7 +2144,7 @@ func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string,
 }
 
 // saveResultsInTransaction saves results within a transaction
-func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, noteID uint, txID string, attempt int, txLogger *slog.Logger) error {
+func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, noteID uint, txID string, attempt int, txLogger logger.Logger) error {
 	for i, result := range results {
 		result.NoteID = noteID
 		if err := tx.Create(&result).Error; err != nil {
@@ -2155,9 +2159,9 @@ func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, no
 				Build()
 
 			txLogger.Error("Failed to save result",
-				"error", enhancedErr,
-				"note_id", noteID,
-				"result_index", i)
+				logger.Error(enhancedErr),
+				logger.Any("note_id", noteID),
+				logger.Int("result_index", i))
 
 			ds.metricsMu.RLock()
 			metricsInstance := ds.metrics
@@ -2173,7 +2177,7 @@ func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, no
 }
 
 // commitTransactionWithMetrics commits a transaction and records metrics
-func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, attempt int, txLogger *slog.Logger) error {
+func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, attempt int, txLogger logger.Logger) error {
 	if err := tx.Commit().Error; err != nil {
 		// Commit failures are critical as they can lead to data loss
 		priority := errors.PriorityHigh
@@ -2187,7 +2191,7 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 			"action", "finalize_detection_save")
 
 		txLogger.Error("Failed to commit transaction",
-			"error", enhancedErr)
+			logger.Error(enhancedErr))
 
 		ds.metricsMu.RLock()
 		metricsInstance := ds.metrics
@@ -2212,7 +2216,7 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 }
 
 // handleDatabaseLockError handles database lock errors with backoff
-func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay time.Duration, txLogger *slog.Logger) {
+func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay time.Duration, txLogger logger.Logger) {
 	// Calculate exponential backoff with jitter to avoid thundering herd
 	baseBackoff := baseDelay * time.Duration(attempt+1)
 	// Add 0-25% jitter to the base backoff
@@ -2220,10 +2224,10 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 	delay := baseBackoff + jitter
 
 	txLogger.Warn("Database locked, scheduling retry",
-		"attempt", attempt+1,
-		"max_attempts", maxRetries,
-		"backoff_ms", delay.Milliseconds(),
-		"jitter_ms", jitter.Milliseconds())
+		logger.Int("attempt", attempt+1),
+		logger.Int("max_attempts", maxRetries),
+		logger.Int64("backoff_ms", delay.Milliseconds()),
+		logger.Int64("jitter_ms", jitter.Milliseconds()))
 
 	// Record retry metric
 	ds.metricsMu.RLock()
@@ -2237,7 +2241,7 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 }
 
 // executeTransaction executes the save operations within a transaction
-func (ds *DataStore) executeTransaction(tx *gorm.DB, note *Note, results []Results, txID string, attempt int, txLogger *slog.Logger) error {
+func (ds *DataStore) executeTransaction(tx *gorm.DB, note *Note, results []Results, txID string, attempt int, txLogger logger.Logger) error {
 	// Set up panic recovery with rollback
 	defer func() {
 		if r := recover(); r != nil {
@@ -2275,12 +2279,12 @@ func (ds *DataStore) executeTransaction(tx *gorm.DB, note *Note, results []Resul
 }
 
 // recordTransactionSuccess records success metrics for a transaction
-func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resultsCount int, txLogger *slog.Logger) {
+func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resultsCount int, txLogger logger.Logger) {
 	duration := time.Since(txStart)
 	txLogger.Info("Transaction completed",
-		"duration", duration,
-		"attempts", attempts,
-		"rows_affected", 1+resultsCount)
+		logger.Duration("duration", duration),
+		logger.Int("attempts", attempts),
+		logger.Int("rows_affected", 1+resultsCount))
 
 	// Record success metrics
 	ds.metricsMu.RLock()
@@ -2295,7 +2299,7 @@ func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resul
 }
 
 // handleMaxRetriesExhausted handles the case when all retries are exhausted
-func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txStart time.Time, txLogger *slog.Logger) error {
+func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txStart time.Time, txLogger logger.Logger) error {
 	enhancedErr := stateError(lastErr, "save_transaction", "transaction_retry_exhausted",
 		"tx_id", txID,
 		"max_retries_exhausted", "true",
@@ -2303,8 +2307,8 @@ func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txSta
 		"total_duration_ms", time.Since(txStart).Milliseconds())
 
 	txLogger.Error("Transaction failed after max retries",
-		"error", enhancedErr,
-		"total_duration", time.Since(txStart))
+		logger.Error(enhancedErr),
+		logger.Duration("total_duration", time.Since(txStart)))
 
 	// Record failure metrics
 	ds.metricsMu.RLock()

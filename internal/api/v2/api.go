@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"log/slog"
 	"net"
 	"strings"
 
@@ -28,7 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -62,9 +60,7 @@ type Controller struct {
 	detectionCache       *cache.Cache // Cache for detection queries
 	startTime            *time.Time
 	SFS                  *securefs.SecureFS     // Add SecureFS instance
-	apiLogger            *slog.Logger           // Structured logger for API operations
-	apiLevelVar          *slog.LevelVar         // Dynamic level control (type declaration)
-	apiLoggerClose       func() error           // Function to close the log file
+	apiLogger            logger.Logger          // Structured logger for API operations
 	metrics              *observability.Metrics // Shared metrics instance
 	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
 
@@ -193,14 +189,14 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 // New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger,
+	controlChan chan string, stdLogger *log.Logger,
 	metrics *observability.Metrics, opts ...Option) (*Controller, error) {
-	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, metrics, true, opts...)
+	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, stdLogger, metrics, true, opts...)
 }
 
 // resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
 // Returns the absolute path and any error encountered.
-func resolveAndValidateMediaPath(configPath string, logger *log.Logger) (string, error) {
+func resolveAndValidateMediaPath(configPath string, stdLogger *log.Logger) (string, error) {
 	if configPath == "" {
 		return "", fmt.Errorf("settings.realtime.audio.export.path must not be empty")
 	}
@@ -214,7 +210,7 @@ func resolveAndValidateMediaPath(configPath string, logger *log.Logger) (string,
 			return "", fmt.Errorf("failed to get working directory to resolve relative media path: %w", err)
 		}
 		mediaPath = filepath.Join(workDir, mediaPath)
-		logger.Printf("Resolved relative media export path %q to absolute path %q", configPath, mediaPath)
+		stdLogger.Printf("Resolved relative media export path %q to absolute path %q", configPath, mediaPath)
 	}
 
 	// Ensure directory exists, creating if necessary
@@ -247,19 +243,19 @@ func ensureDirectoryExists(path string) error {
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
 func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger,
+	controlChan chan string, stdLogger *log.Logger,
 	metrics *observability.Metrics, initializeRoutes bool, opts ...Option) (*Controller, error) {
 
-	if logger == nil {
-		logger = log.Default()
+	if stdLogger == nil {
+		stdLogger = log.Default()
 	}
 
 	// Configure IP extractor for Cloudflare proxy support
 	e.IPExtractor = ipExtractorFromCloudflareHeader
-	logger.Println("Configured custom IP extractor prioritizing CF-Connecting-IP")
+	stdLogger.Println("Configured custom IP extractor prioritizing CF-Connecting-IP")
 
 	// Validate and resolve media export path
-	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path, logger)
+	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path, stdLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +275,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,
 		controlChan:          controlChan,
-		logger:               logger,
+		logger:               stdLogger,
 		detectionCache:       cache.New(detectionCacheExpiry, detectionCacheCleanup),
 		SFS:                  sfs, // Assign SecureFS instance
 		metrics:              metrics,
@@ -292,33 +288,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	UpdateSpectrogramLogLevel(settings.Debug)
 
 	// Initialize structured logger for API requests
-	apiLogPath := "logs/web.log"
-	initialLevel := slog.LevelInfo
-	c.apiLevelVar = new(slog.LevelVar) // Initialize here
-	c.apiLevelVar.Set(initialLevel)
-
-	apiLogger, closeFunc, err := logging.NewFileLogger(apiLogPath, "api", c.apiLevelVar)
-	if err != nil {
-		logger.Printf("Warning: Failed to initialize API structured logger: %v", err)
-		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
-		logger.Printf("API falling back to a disabled logger due to initialization error.")
-		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: c.apiLevelVar})
-		c.apiLogger = slog.New(fbHandler).With("service", "api")
-		c.apiLoggerClose = func() error { return nil } // No-op closer
-	} else {
-		c.apiLogger = apiLogger
-		c.apiLoggerClose = closeFunc
-		logger.Printf("API structured logging initialized to %s", apiLogPath)
-	}
+	c.apiLogger = logger.Global().Module("api")
 
 	// Load local taxonomy database for fast species lookups
 	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
 	if err != nil {
-		c.logWarnIfEnabled("Failed to load taxonomy database", "error", err)
+		c.logWarnIfEnabled("Failed to load taxonomy database", logger.Error(err))
 		c.logWarnIfEnabled("Species taxonomy lookups will fall back to eBird API")
 		if c.apiLogger == nil {
-			logger.Printf("Warning: Failed to load taxonomy database: %v", err)
-			logger.Printf("Species taxonomy lookups will fall back to eBird API")
+			stdLogger.Printf("Warning: Failed to load taxonomy database: %v", err)
+			stdLogger.Printf("Species taxonomy lookups will fall back to eBird API")
 		}
 		// Continue without taxonomy database - eBird API fallback will be used
 		c.TaxonomyDB = nil
@@ -326,14 +305,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		c.TaxonomyDB = taxonomyDB
 		stats := taxonomyDB.Stats()
 		c.logInfoIfEnabled("Loaded taxonomy database",
-			"genus_count", stats["genus_count"],
-			"family_count", stats["family_count"],
-			"species_count", stats["species_count"],
-			"version", taxonomyDB.Version,
-			"updated_at", taxonomyDB.UpdatedAt,
+			logger.Any("genus_count", stats["genus_count"]),
+			logger.Any("family_count", stats["family_count"]),
+			logger.Any("species_count", stats["species_count"]),
+			logger.String("version", taxonomyDB.Version),
+			logger.String("updated_at", taxonomyDB.UpdatedAt),
 		)
 		if c.apiLogger == nil {
-			logger.Printf("Loaded taxonomy database: %v genera, %v families, %v species",
+			stdLogger.Printf("Loaded taxonomy database: %v genera, %v families, %v species",
 				stats["genus_count"], stats["family_count"], stats["species_count"])
 		}
 	}
@@ -345,9 +324,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 
 	// Log auth configuration status
 	if c.authMiddleware != nil {
-		logger.Println("Auth middleware configured via functional options")
+		stdLogger.Println("Auth middleware configured via functional options")
 	} else {
-		logger.Println("Warning: Auth middleware not configured")
+		stdLogger.Println("Warning: Auth middleware not configured")
 	}
 
 	// Create v2 API group
@@ -373,7 +352,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.startTime = &now
 
 	// Initialize SSE manager
-	c.sseManager = NewSSEManager(logger)
+	c.sseManager = NewSSEManager(stdLogger)
 
 	// Initialize eBird client if enabled
 	if settings.Realtime.EBird.Enabled {
@@ -385,7 +364,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 				Context("setting", "realtime.ebird.apikey").
 				Component("ebird").
 				Build()
-			logger.Println("Warning: eBird integration enabled but API key not configured")
+			stdLogger.Println("Warning: eBird integration enabled but API key not configured")
 		} else {
 			ebirdConfig := ebird.Config{
 				APIKey:   settings.Realtime.EBird.APIKey,
@@ -394,15 +373,15 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 			ebirdClient, err := ebird.NewClient(ebirdConfig)
 			if err != nil {
 				// Initialization error - already enhanced by ebird.NewClient
-				logger.Printf("Warning: Failed to initialize eBird client: %v", err)
+				stdLogger.Printf("Warning: Failed to initialize eBird client: %v", err)
 				// Continue without eBird client - it's not critical
 			} else {
 				c.EBirdClient = ebirdClient
-				logger.Println("Initialized eBird API client")
+				stdLogger.Println("Initialized eBird API client")
 			}
 		}
 	} else {
-		logger.Println("eBird integration disabled")
+		stdLogger.Println("eBird integration disabled")
 	}
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
@@ -439,24 +418,23 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 			isTunneled, _ := ctx.Get("is_tunneled").(bool)
 			tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
 
-			// Log the request with structured data using LogAttrs to avoid allocations
-			// when the log level is disabled.
-			attrs := []slog.Attr{
-				slog.String("method", req.Method),
-				slog.String("path", req.URL.Path),
-				slog.String("query", req.URL.RawQuery),
-				slog.Int("status", res.Status),
-				slog.String("ip", ctx.RealIP()), // Uses custom extractor
-				slog.Bool("tunneled", isTunneled),
-				slog.String("tunnel_provider", tunnelProvider),
-				slog.String("user_agent", req.UserAgent()),
-				slog.Int64("latency_ms", time.Since(start).Milliseconds()),
+			// Log the request with structured data
+			fields := []logger.Field{
+				logger.String("method", req.Method),
+				logger.String("path", req.URL.Path),
+				logger.String("query", req.URL.RawQuery),
+				logger.Int("status", res.Status),
+				logger.String("ip", ctx.RealIP()), // Uses custom extractor
+				logger.Bool("tunneled", isTunneled),
+				logger.String("tunnel_provider", tunnelProvider),
+				logger.String("user_agent", req.UserAgent()),
+				logger.Int64("latency_ms", time.Since(start).Milliseconds()),
 			}
 			if err != nil {
-				attrs = append(attrs, slog.Any("error", err))
+				fields = append(fields, logger.Error(err))
 			}
 
-			c.apiLogger.LogAttrs(ctx.Request().Context(), slog.LevelInfo, "API Request", attrs...)
+			c.apiLogger.Info("API Request", fields...)
 
 			return err
 		}
@@ -597,11 +575,9 @@ func (c *Controller) Shutdown() {
 	// Wait for all goroutines to finish
 	c.wg.Wait()
 
-	// Close the API logger if it was initialized
-	if c.apiLoggerClose != nil {
-		if err := c.apiLoggerClose(); err != nil {
-			c.logger.Printf("Error closing API log file: %v", err)
-		}
+	// Flush the API logger
+	if err := c.apiLogger.Flush(); err != nil {
+		c.logger.Printf("Error flushing API log: %v", err)
 	}
 
 	// TODO: The go-cache library's janitor goroutine cannot be stopped.
@@ -723,7 +699,7 @@ func (c *Controller) Debug(format string, v ...any) {
 }
 
 // logAPIRequest is a helper to log API requests with common context fields.
-func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg string, args ...any) {
+func (c *Controller) logAPIRequest(ctx echo.Context, level logger.LogLevel, msg string, fields ...logger.Field) {
 	if c.apiLogger == nil {
 		return // Do nothing if logger isn't initialized
 	}
@@ -732,29 +708,17 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 
-	// Create base attributes
-	baseAttrs := []any{
-		"path", path,
-		"ip", ip,
+	// Create base fields
+	baseFields := []logger.Field{
+		logger.String("path", path),
+		logger.String("ip", ip),
 	}
 
-	// Append specific attributes to base attributes
-	baseAttrs = append(baseAttrs, args...) // Assign append result back to baseAttrs
+	// Append specific fields to base fields
+	baseFields = append(baseFields, fields...)
 
 	// Log at the specified level
-	switch level {
-	case slog.LevelDebug:
-		c.apiLogger.Debug(msg, baseAttrs...)
-	case slog.LevelInfo:
-		c.apiLogger.Info(msg, baseAttrs...)
-	case slog.LevelWarn:
-		c.apiLogger.Warn(msg, baseAttrs...)
-	case slog.LevelError:
-		c.apiLogger.Error(msg, baseAttrs...)
-	default:
-		// Default to Info if level is unknown or custom (like Fatal)
-		c.apiLogger.Log(ctx.Request().Context(), level, msg, baseAttrs...)
-	}
+	c.apiLogger.Log(level, msg, baseFields...)
 }
 
 // GetAuthMiddleware returns the authentication middleware function injected from server.
@@ -772,13 +736,13 @@ func (c *Controller) GetAuthMiddleware() echo.MiddlewareFunc {
 // Auth middleware and service should be passed via functional options.
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger, proc *processor.Processor,
+	controlChan chan string, stdLogger *log.Logger, proc *processor.Processor,
 	metrics *observability.Metrics, opts ...Option) *Controller {
 
 	// Create API controller with metrics and functional options
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, metrics, opts...)
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, stdLogger, metrics, opts...)
 	if err != nil {
-		logger.Fatalf("Failed to initialize API: %v", err)
+		stdLogger.Fatalf("Failed to initialize API: %v", err)
 	}
 
 	// Assign processor after initialization
@@ -786,8 +750,8 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 
 	// Log initialization
 	apiController.logInfoIfEnabled("API v2 initialized",
-		"version", settings.Version,
-		"build_date", settings.BuildDate,
+		logger.String("version", settings.Version),
+		logger.String("build_date", settings.BuildDate),
 	)
 
 	return apiController

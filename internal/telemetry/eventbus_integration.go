@@ -5,11 +5,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"log/slog"
-
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 var (
@@ -17,32 +15,26 @@ var (
 	telemetryWorker     *TelemetryWorker
 	telemetryWorkerOnce sync.Once
 	errWorkerInit       error // Stores worker initialization error
-	logger              *slog.Logger
 )
-
-func init() {
-	logger = logging.ForService("telemetry-integration")
-	if logger == nil {
-		logger = slog.Default().With("service", "telemetry-integration")
-	}
-}
 
 // InitializeEventBusIntegration sets up the telemetry worker as an event consumer
 // This should be called after both Sentry and event bus are initialized
 // Thread-safe: uses sync.Once to ensure single initialization
 func InitializeEventBusIntegration() error {
+	log := GetLogger()
+
 	// Check if Sentry is enabled (skip check in test mode)
 	if atomic.LoadInt32(&testMode) == 0 {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
-			logger.Info("Sentry telemetry disabled, skipping event bus integration")
+			log.Info("Sentry telemetry disabled, skipping event bus integration")
 			return nil
 		}
 	}
 
 	// Check if event bus is initialized
 	if !events.IsInitialized() {
-		logger.Warn("event bus not initialized, skipping telemetry integration")
+		log.Warn("event bus not initialized, skipping telemetry integration")
 		return nil
 	}
 
@@ -75,17 +67,16 @@ func InitializeEventBusIntegration() error {
 		telemetryWorker = worker
 
 		// Log registration details
-		logTelemetryInfo(logger, "telemetry worker registered with event bus",
-			"consumer", worker.Name(),
-			"supports_batching", worker.SupportsBatching(),
-			"batching_enabled", config.BatchingEnabled,
-			"batch_size", config.BatchSize,
-			"batch_timeout", config.BatchTimeout,
-			"circuit_breaker_threshold", config.FailureThreshold,
-			"recovery_timeout", config.RecoveryTimeout,
-			"rate_limit", config.RateLimitMaxEvents,
-			"sampling_rate", config.SamplingRate,
-		)
+		GetLogger().Info("telemetry worker registered with event bus",
+			logger.String("consumer", worker.Name()),
+			logger.Bool("supports_batching", worker.SupportsBatching()),
+			logger.Bool("batching_enabled", config.BatchingEnabled),
+			logger.Int("batch_size", config.BatchSize),
+			logger.Duration("batch_timeout", config.BatchTimeout),
+			logger.Int("circuit_breaker_threshold", config.FailureThreshold),
+			logger.Duration("recovery_timeout", config.RecoveryTimeout),
+			logger.Int("rate_limit", config.RateLimitMaxEvents),
+			logger.Float64("sampling_rate", config.SamplingRate))
 	})
 
 	return errWorkerInit
@@ -116,7 +107,7 @@ func UpdateSamplingRate(rate float64) error {
 	}
 
 	// Log the update
-	logTelemetryInfo(logger, "updated telemetry sampling rate", "rate", rate)
+	GetLogger().Info("updated telemetry sampling rate", logger.Float64("rate", rate))
 
 	return nil
 }

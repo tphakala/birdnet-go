@@ -203,7 +203,7 @@ func TestComponentHealthStatus(t *testing.T) {
 	t.Parallel()
 
 	manager := &InitManager{
-		logger: getLoggerSafe("test"),
+		initLog: GetLogger(),
 	}
 
 	// Set up various component states
