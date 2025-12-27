@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // validTableNameRegex matches valid table names: alphanumeric, underscores, and dashes only
@@ -57,17 +57,16 @@ func (store *MySQLStore) Open() error {
 		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
 		store.Settings.Output.MySQL.Database)
 	getLogger().Info("Opening MySQL database connection",
-		"dsn", sanitizedDSN)
+		logger.String("dsn", sanitizedDSN))
 
 	// Configure GORM logger with metrics if available
-	var gormLogger logger.Interface
+	var gormLogger gormlogger.Interface
 	if store.Settings.Debug {
 		// Use debug log level with lower slow threshold
-		gormLogger = NewGormLogger(100*time.Millisecond, logger.Info, store.metrics)
-		datastoreLevelVar.Set(slog.LevelDebug)
+		gormLogger = NewGormLogger(100*time.Millisecond, gormlogger.Info, store.metrics)
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(200*time.Millisecond, logger.Warn, store.metrics)
+		gormLogger = NewGormLogger(200*time.Millisecond, gormlogger.Warn, store.metrics)
 	}
 
 	// Open the MySQL database
@@ -81,9 +80,9 @@ func (store *MySQLStore) Open() error {
 
 	// Log successful connection
 	getLogger().Info("MySQL database opened successfully",
-		"host", store.Settings.Output.MySQL.Host,
-		"port", store.Settings.Output.MySQL.Port,
-		"database", store.Settings.Output.MySQL.Database)
+		logger.String("host", store.Settings.Output.MySQL.Host),
+		logger.String("port", store.Settings.Output.MySQL.Port),
+		logger.String("database", store.Settings.Output.MySQL.Database))
 
 	if err := performAutoMigration(db, store.Settings.Debug, "MySQL", dsn); err != nil {
 		return err
@@ -118,30 +117,30 @@ func (store *MySQLStore) Close() error {
 
 	// Log database closing
 	getLogger().Info("Closing MySQL database connection",
-		"host", store.Settings.Output.MySQL.Host,
-		"database", store.Settings.Output.MySQL.Database)
+		logger.String("host", store.Settings.Output.MySQL.Host),
+		logger.String("database", store.Settings.Output.MySQL.Database))
 
 	// Retrieve the generic database object from the GORM DB object
 	sqlDB, err := store.DB.DB()
 	if err != nil {
 		getLogger().Error("Failed to retrieve generic DB object",
-			"error", err)
+			logger.Error(err))
 		return err
 	}
 
 	// Close the generic database object, which closes the underlying SQL database connection
 	if err := sqlDB.Close(); err != nil {
 		getLogger().Error("Failed to close MySQL database",
-			"host", store.Settings.Output.MySQL.Host,
-			"database", store.Settings.Output.MySQL.Database,
-			"error", err)
+			logger.String("host", store.Settings.Output.MySQL.Host),
+			logger.String("database", store.Settings.Output.MySQL.Database),
+			logger.Error(err))
 		return err
 	}
 
 	// Log successful closure
 	getLogger().Info("MySQL database closed successfully",
-		"host", store.Settings.Output.MySQL.Host,
-		"database", store.Settings.Output.MySQL.Database)
+		logger.String("host", store.Settings.Output.MySQL.Host),
+		logger.String("database", store.Settings.Output.MySQL.Database))
 
 	return nil
 }
@@ -157,7 +156,7 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 	}
 
 	optimizeStart := time.Now()
-	optimizeLogger := getLogger().With("operation", "optimize", "db_type", "MySQL")
+	optimizeLogger := getLogger().With(logger.String("operation", "optimize"), logger.String("db_type", "MySQL"))
 
 	optimizeLogger.Info("Starting database optimization")
 
@@ -169,11 +168,11 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 			Category(errors.CategoryDatabase).
 			Context("operation", "show_tables").
 			Build()
-		optimizeLogger.Error("Failed to get table list", "error", enhancedErr)
+		optimizeLogger.Error("Failed to get table list", logger.Error(enhancedErr))
 		return enhancedErr
 	}
 
-	optimizeLogger.Info("Found tables to optimize", "table_count", len(tables))
+	optimizeLogger.Info("Found tables to optimize", logger.Int("table_count", len(tables)))
 
 	// Optimize each table
 	optimizedCount := 0
@@ -181,22 +180,22 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 		// Validate table name to prevent SQL injection
 		if !isValidTableName(table) {
 			optimizeLogger.Error("Invalid table name detected, skipping",
-				"table", table,
-				"reason", "contains unsafe characters or exceeds length limit")
+				logger.String("table", table),
+				logger.String("reason", "contains unsafe characters or exceeds length limit"))
 			continue
 		}
 
 		tableStart := time.Now()
-		optimizeLogger.Debug("Optimizing table", "table", table)
+		optimizeLogger.Debug("Optimizing table", logger.String("table", table))
 
 		// Run OPTIMIZE TABLE
 		if err := store.DB.Exec(fmt.Sprintf("OPTIMIZE TABLE `%s`", table)).Error; err != nil {
 			// MySQL may return a note/warning for InnoDB tables, which is not an error
 			if !strings.Contains(err.Error(), "Table does not support optimize") {
 				optimizeLogger.Warn("Failed to optimize table",
-					"table", table,
-					"error", err,
-					"note", "This is often normal for InnoDB tables")
+					logger.String("table", table),
+					logger.Error(err),
+					logger.String("note", "This is often normal for InnoDB tables"))
 			}
 		} else {
 			optimizedCount++
@@ -205,19 +204,19 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 		// Run ANALYZE TABLE to update statistics
 		if err := store.DB.Exec(fmt.Sprintf("ANALYZE TABLE `%s`", table)).Error; err != nil {
 			optimizeLogger.Warn("Failed to analyze table",
-				"table", table,
-				"error", err)
+				logger.String("table", table),
+				logger.Error(err))
 		} else {
 			optimizeLogger.Info("Table optimization completed",
-				"table", table,
-				"duration", time.Since(tableStart))
+				logger.String("table", table),
+				logger.Duration("duration", time.Since(tableStart)))
 		}
 	}
 
 	optimizeLogger.Info("Database optimization completed",
-		"total_duration", time.Since(optimizeStart),
-		"tables_processed", len(tables),
-		"tables_optimized", optimizedCount)
+		logger.Duration("total_duration", time.Since(optimizeStart)),
+		logger.Int("tables_processed", len(tables)),
+		logger.Int("tables_optimized", optimizedCount))
 
 	return nil
 }

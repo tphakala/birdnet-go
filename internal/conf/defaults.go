@@ -1,24 +1,54 @@
 // conf/defaults.go default values for settings
 package conf
 
-import (
-	"github.com/spf13/viper"
-
-	"time"
-)
+import "github.com/spf13/viper"
 
 // Sets default values for the configuration.
 func setDefaultConfig() {
 	viper.SetDefault("debug", false)
 
+	// Logging configuration
+	viper.SetDefault("logging.default_level", "info")
+	viper.SetDefault("logging.timezone", "Local")
+
+	// Console logging
+	viper.SetDefault("logging.console.enabled", true)
+	viper.SetDefault("logging.console.level", "warn")
+
+	// Main application log file
+	viper.SetDefault("logging.file_output.enabled", true)
+	viper.SetDefault("logging.file_output.path", "logs/application.log")
+	viper.SetDefault("logging.file_output.level", "info")
+	viper.SetDefault("logging.file_output.max_size", 100)
+	viper.SetDefault("logging.file_output.max_age", 30)
+	viper.SetDefault("logging.file_output.max_backups", 10)
+	viper.SetDefault("logging.file_output.compress", true)
+
+	// Per-module log files (all enabled by default)
+	setModuleLogDefaults("main", true)       // Application lifecycle, console_also=true
+	setModuleLogDefaults("birdnet", true)    // BirdNET analysis
+	setModuleLogDefaults("audio", true)      // Audio capture/processing
+	setModuleLogDefaults("webserver", true)  // Echo HTTP server
+	setModuleLogDefaults("mqtt", true)       // MQTT client
+	setModuleLogDefaults("weather", true)    // Weather providers
+	setModuleLogDefaults("notifications", true)
+	setModuleLogDefaults("telemetry", true)
+	setModuleLogDefaults("events", true)
+	setModuleLogDefaults("datastore", true)
+	setModuleLogDefaults("birdweather", true)
+	setModuleLogDefaults("auth", true)
+	setModuleLogDefaults("config", true)
+	setModuleLogDefaults("diskmanager", true)
+	setModuleLogDefaults("backup", true)
+	setModuleLogDefaults("spectrogram", true)
+	setModuleLogDefaults("imageprovider", true)
+
+	// Main module special: always log to console for start/stop visibility
+	viper.SetDefault("logging.modules.main.console_also", true)
+
 	// Main configuration
 	viper.SetDefault("main.name", "BirdNET-Go")
 	viper.SetDefault("main.timeas24h", true)
-	viper.SetDefault("main.log.enabled", true)
-	viper.SetDefault("main.log.path", "birdnet.log")
-	viper.SetDefault("main.log.rotation", RotationDaily)
-	viper.SetDefault("main.log.maxsize", 1048576)
-	viper.SetDefault("main.log.rotationday", "Sunday")
 
 	// BirdNET configuration
 	viper.SetDefault("birdnet.debug", false)
@@ -259,13 +289,6 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.enabled", true)
 	viper.SetDefault("webserver.port", "8080")
 
-	// Webserver log configuration
-	viper.SetDefault("webserver.log.enabled", false)
-	viper.SetDefault("webserver.log.path", "webui.log")
-	viper.SetDefault("webserver.log.rotation", RotationDaily)
-	viper.SetDefault("webserver.log.maxsize", 1048576)
-	viper.SetDefault("webserver.log.rotationday", time.Sunday)
-
 	// Live stream configuration
 	viper.SetDefault("webserver.livestream.debug", false)
 	viper.SetDefault("webserver.livestream.bitrate", 128)
@@ -355,4 +378,13 @@ func setDefaultConfig() {
 	// Notification templates
 	viper.SetDefault("notification.templates.newspecies.title", "New Species: {{.CommonName}}")
 	viper.SetDefault("notification.templates.newspecies.message", "{{.ImageURL}}\n\nFirst detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. \n{{.DetectionURL}}")
+}
+
+// setModuleLogDefaults sets default values for a module log configuration
+func setModuleLogDefaults(module string, enabled bool) {
+	prefix := "logging.modules." + module
+	viper.SetDefault(prefix+".enabled", enabled)
+	viper.SetDefault(prefix+".file_path", "logs/"+module+".log")
+	viper.SetDefault(prefix+".level", "debug")
+	viper.SetDefault(prefix+".console_also", false)
 }

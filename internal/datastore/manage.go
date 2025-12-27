@@ -3,15 +3,15 @@ package datastore
 import (
 	"fmt"
 	"log"
-	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 const (
@@ -28,9 +28,9 @@ const (
 )
 
 // createGormLogger configures and returns a new GORM logger instance.
-func createGormLogger() logger.Interface {
+func createGormLogger() gormlogger.Interface {
 	// Use our custom GORM logger with metrics support
-	return NewGormLogger(DefaultSlowQueryThreshold, logger.Warn, nil)
+	return NewGormLogger(DefaultSlowQueryThreshold, gormlogger.Warn, nil)
 }
 
 // getSQLiteIndexInfo executes PRAGMA index_info for a given SQLite index name,
@@ -254,7 +254,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	migrationStart := time.Now()
-	migrationLogger := getLogger().With("db_type", dbType)
+	migrationLogger := getLogger().With(logger.String("db_type", dbType))
 
 	migrationLogger.Info("Starting database migration")
 
@@ -276,9 +276,9 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 
 	// Log successful migration completion
 	migrationLogger.Info("Database migration completed successfully",
-		"db_type", dbType,
-		"total_duration", time.Since(migrationStart),
-		"tables_migrated", successCount)
+		logger.String("db_type", dbType),
+		logger.Duration("total_duration", time.Since(migrationStart)),
+		logger.Int("tables_migrated", successCount))
 
 	return nil
 }
@@ -379,7 +379,7 @@ func redactSensitiveInfo(dsn string) string {
 }
 
 // validateAndFixSchema checks and fixes the database schema if needed
-func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool, lgr *slog.Logger) error {
+func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool, lgr logger.Logger) error {
 	migrator := db.Migrator()
 	var schemaCorrect bool
 	var err error
@@ -396,7 +396,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 				"table", "image_caches",
 				"action", "database_schema_validation")
 
-			lgr.Error("Schema validation failed", "error", enhancedErr)
+			lgr.Error("Schema validation failed", logger.Error(enhancedErr))
 			return enhancedErr
 		}
 	case "mysql":
@@ -414,18 +414,18 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 					"database", dbName,
 					"action", "database_schema_validation")
 
-				lgr.Error("Schema validation failed", "error", enhancedErr)
+				lgr.Error("Schema validation failed", logger.Error(enhancedErr))
 				return enhancedErr
 			}
 		}
 	default:
 		lgr.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
-			"db_type", dbType)
+			logger.String("db_type", dbType))
 		schemaCorrect = true // Avoid dropping for unsupported types
 	}
 
 	lgr.Info("Schema validation completed",
-		"schema_correct", schemaCorrect)
+		logger.Bool("schema_correct", schemaCorrect))
 
 	if !schemaCorrect {
 		if migrator.HasTable(&ImageCache{}) {
@@ -448,7 +448,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 }
 
 // migrateTables performs the actual table migrations
-func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
+func migrateTables(db *gorm.DB, dbType string, lgr logger.Logger) (int, error) {
 	tableMappings := []struct {
 		model any
 		name  string
@@ -467,7 +467,7 @@ func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 	}
 
 	lgr.Info("Starting table migrations",
-		"table_count", len(tableMappings))
+		logger.Int("table_count", len(tableMappings)))
 
 	// Migrate each table individually for better logging
 	successCount := 0
@@ -482,15 +482,15 @@ func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 }
 
 // migrateTable migrates a single table with detailed logging
-func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr *slog.Logger) error {
+func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr logger.Logger) error {
 	tableStart := time.Now()
 
 	// Check if table exists before migration
 	tableExists := db.Migrator().HasTable(model)
 
 	lgr.Debug("Migrating table",
-		"table", tableName,
-		"exists", tableExists)
+		logger.String("table", tableName),
+		logger.Bool("exists", tableExists))
 
 	// Get column information before migration (if table exists)
 	columnsBefore := getTableColumns(db, model, tableExists)
@@ -502,8 +502,8 @@ func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr *slog.Lo
 			"action", "database_schema_setup")
 
 		lgr.Error("Table migration failed",
-			"table", tableName,
-			"error", enhancedErr)
+			logger.String("table", tableName),
+			logger.Error(enhancedErr))
 		return enhancedErr
 	}
 
@@ -569,10 +569,10 @@ func findNewColumns(db *gorm.DB, model any, columnsBefore []string) []string {
 }
 
 // createOptimizedIndexes creates optimized database indexes for performance
-func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error {
+func createOptimizedIndexes(db *gorm.DB, dbType string, lgr logger.Logger) error {
 	indexStart := time.Now()
 	lgr.Info("Creating optimized indexes",
-		"db_type", dbType)
+		logger.String("db_type", dbType))
 
 	// Define the optimized index for new species tracking
 	// This index benefits the new species tracking queries that filter by scientific_name and date
@@ -582,8 +582,8 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 	// Check if index already exists using GORM's migrator
 	if db.Migrator().HasIndex(&Note{}, indexName) {
 		lgr.Debug("Optimized index already exists, skipping creation",
-			"index", indexName,
-			"table", tableName)
+			logger.String("index", indexName),
+			logger.String("table", tableName))
 		return nil
 	}
 
@@ -599,9 +599,9 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 
 		if isDuplicateIndex {
 			lgr.Debug("Index already exists, continuing",
-				"index", indexName,
-				"table", tableName,
-				"db_type", dbType)
+				logger.String("index", indexName),
+				logger.String("table", tableName),
+				logger.String("db_type", dbType))
 			return nil
 		}
 
@@ -616,26 +616,26 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 	}
 
 	lgr.Info("Optimized index created successfully",
-		"index", indexName,
-		"table", tableName,
-		"duration", time.Since(indexStart),
-		"db_type", dbType)
+		logger.String("index", indexName),
+		logger.String("table", tableName),
+		logger.Duration("duration", time.Since(indexStart)),
+		logger.String("db_type", dbType))
 
 	return nil
 }
 
 // logTableMigration logs the result of a table migration
-func logTableMigration(lgr *slog.Logger, tableName, action string, addedColumns []string, duration time.Duration) {
-	logFields := []any{
-		"table", tableName,
-		"action", action,
-		"duration", duration,
+func logTableMigration(lgr logger.Logger, tableName, action string, addedColumns []string, duration time.Duration) {
+	logFields := []logger.Field{
+		logger.String("table", tableName),
+		logger.String("action", action),
+		logger.Duration("duration", duration),
 	}
 
 	if len(addedColumns) > 0 {
-		logFields = append(logFields, "columns_added", len(addedColumns))
+		logFields = append(logFields, logger.Int("columns_added", len(addedColumns)))
 		if len(addedColumns) <= MaxColumnsForDetailedDisplay {
-			logFields = append(logFields, "new_columns", addedColumns)
+			logFields = append(logFields, logger.Any("new_columns", addedColumns))
 		}
 	}
 

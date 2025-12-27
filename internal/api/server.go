@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"log/slog"
@@ -26,7 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -53,8 +52,11 @@ type Server struct {
 	config   *Config
 	settings *conf.Settings
 	logger   *log.Logger
-	slogger  *slog.Logger
-	levelVar *slog.LevelVar
+	slogger  logger.Logger
+
+	// Temporary slog logger for components not yet migrated to logger.Logger
+	// TODO: Remove once all middleware and auth components are migrated
+	legacySlogger *slog.Logger
 
 	// Dependencies
 	dataStore      datastore.Interface
@@ -82,9 +84,6 @@ type Server struct {
 
 	// Lifecycle management
 	startTime time.Time
-
-	// Cleanup
-	logCloser func() error
 }
 
 // ServerOption is a functional option for configuring the Server.
@@ -196,9 +195,11 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 	}
 
 	// Initialize structured logger
-	if err := s.initLogger(); err != nil {
-		return nil, fmt.Errorf("failed to initialize logger: %w", err)
-	}
+	s.slogger = logger.Global().Module("webserver")
+
+	// Create legacy slog logger for components not yet migrated
+	// TODO: Remove once all middleware and auth components use logger.Logger
+	s.legacySlogger = slog.Default().With("service", "webserver")
 
 	// Initialize Echo
 	s.echo = echo.New()
@@ -222,34 +223,14 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 	}
 
 	s.slogger.Info("HTTP server initialized",
-		"address", config.Address(),
-		"tls", config.TLSEnabled,
-		"debug", config.Debug,
+		logger.String("address", config.Address()),
+		logger.Bool("tls", config.TLSEnabled),
+		logger.Bool("debug", config.Debug),
 	)
 
 	return s, nil
 }
 
-// initLogger initializes the structured logger for the server.
-func (s *Server) initLogger() error {
-	s.levelVar = new(slog.LevelVar)
-	s.levelVar.Set(s.config.LogLevel)
-
-	logger, closer, err := logging.NewFileLogger(DefaultLogPath, "server", s.levelVar)
-	if err != nil {
-		// Fallback to discard logger
-		s.logger.Printf("Warning: Failed to initialize server logger: %v", err)
-		handler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: s.levelVar})
-		s.slogger = slog.New(handler).With("service", "server")
-		s.logCloser = func() error { return nil }
-		return nil
-	}
-
-	s.slogger = logger
-	s.logCloser = closer
-	s.logger.Printf("Server logging initialized to %s", DefaultLogPath)
-	return nil
-}
 
 // initAuth initializes authentication service and middleware at server level.
 // This is called before setupRoutes to ensure auth is available for route protection.
@@ -260,10 +241,10 @@ func (s *Server) initAuth() {
 	}
 
 	// Create auth service adapter
-	s.authService = auth.NewSecurityAdapter(s.oauth2Server, s.slogger)
+	s.authService = auth.NewSecurityAdapter(s.oauth2Server, s.legacySlogger)
 
 	// Create auth middleware
-	authMw := auth.NewMiddleware(s.authService, s.slogger)
+	authMw := auth.NewMiddleware(s.authService, s.legacySlogger)
 	s.authMiddleware = authMw.Authenticate
 
 	s.slogger.Info("Auth middleware initialized at server level")
@@ -275,7 +256,7 @@ func (s *Server) setupMiddleware() {
 	s.echo.Use(echomw.Recover())
 
 	// Request logging using custom middleware package
-	s.echo.Use(mw.NewRequestLogger(s.slogger))
+	s.echo.Use(mw.NewRequestLogger(s.legacySlogger))
 
 	// Security middleware configuration
 	securityConfig := mw.SecurityConfig{
@@ -290,7 +271,7 @@ func (s *Server) setupMiddleware() {
 	s.echo.Use(mw.NewCORS(securityConfig))
 
 	// CSRF protection middleware
-	s.echo.Use(mw.NewCSRFWithLogger(s.slogger))
+	s.echo.Use(mw.NewCSRFWithLogger(s.legacySlogger))
 
 	// Body limit middleware
 	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))
@@ -312,18 +293,18 @@ func (s *Server) setupRoutes() error {
 	s.registerOAuthRoutes()
 
 	// Initialize static file server for frontend assets
-	s.staticServer = NewStaticFileServer(s.slogger, s.assetsFS)
+	s.staticServer = NewStaticFileServer(s.legacySlogger, s.assetsFS)
 	s.staticServer.RegisterRoutes(s.echo)
 
 	// Initialize SPA handler - serves Vite's index.html directly
 	// Configuration is fetched by frontend from /api/v2/app/config
 	devMode := s.staticServer.IsDevMode()
 	devModePath := s.staticServer.DevModePath()
-	s.spaHandler = NewSPAHandler(s.slogger, devMode, devModePath)
+	s.spaHandler = NewSPAHandler(s.legacySlogger, devMode, devModePath)
 
 	s.slogger.Info("Static file server initialized",
-		"mode", s.staticServer.DevModeStatus(),
-		"spa_mode", s.spaHandler.DevModeStatus(),
+		logger.String("mode", s.staticServer.DevModeStatus()),
+		logger.String("spa_mode", s.spaHandler.DevModeStatus()),
 	)
 
 	// Initialize API v2 controller with auth middleware and service injected
@@ -361,8 +342,8 @@ func (s *Server) setupRoutes() error {
 	s.registerSPARoutes()
 
 	s.slogger.Info("Routes initialized",
-		"api_version", "v2",
-		"static_mode", s.staticServer.DevModeStatus(),
+		logger.String("api_version", "v2"),
+		logger.String("static_mode", s.staticServer.DevModeStatus()),
 	)
 
 	return nil
@@ -388,7 +369,7 @@ func (s *Server) healthCheck(c echo.Context) error {
 func (s *Server) Start() {
 	go func() {
 		if err := s.startBlocking(); err != nil {
-			s.slogger.Error("Server error", "error", err)
+			s.slogger.Error("Server error", logger.Error(err))
 		}
 	}()
 
@@ -407,7 +388,7 @@ func (s *Server) Start() {
 func (s *Server) startBlocking() error {
 	addr := s.config.Address()
 
-	s.slogger.Info("Starting HTTP server", "address", addr)
+	s.slogger.Info("Starting HTTP server", logger.String("address", addr))
 
 	var err error
 	switch {
@@ -418,8 +399,8 @@ func (s *Server) startBlocking() error {
 	case s.config.TLSEnabled:
 		// Manual TLS
 		s.slogger.Info("Starting with manual TLS",
-			"cert", s.config.TLSCertFile,
-			"key", s.config.TLSKeyFile,
+			logger.String("cert", s.config.TLSCertFile),
+			logger.String("key", s.config.TLSKeyFile),
 		)
 		err = s.echo.StartTLS(addr, s.config.TLSCertFile, s.config.TLSKeyFile)
 	default:
@@ -463,20 +444,17 @@ func (s *Server) Shutdown() error {
 
 	// Shutdown Echo server (causes Start() goroutine to exit)
 	if err := s.echo.Shutdown(ctx); err != nil {
-		s.slogger.Error("Error during server shutdown", "error", err)
+		s.slogger.Error("Error during server shutdown", logger.Error(err))
 		return fmt.Errorf("shutdown error: %w", err)
 	}
 
-	// Log completion before closing logger
+	// Log completion and flush
 	s.slogger.Info("Server shutdown complete")
 	s.logger.Println("✅ Server shutdown complete")
 
-	// Close logger last to ensure all messages are written
-	if s.logCloser != nil {
-		if err := s.logCloser(); err != nil {
-			// Use fmt since logger may be closed
-			fmt.Printf("Error closing log file: %v\n", err)
-		}
+	// Flush logger to ensure all messages are written
+	if err := s.slogger.Flush(); err != nil {
+		fmt.Printf("Error flushing log: %v\n", err)
 	}
 
 	return nil
@@ -493,13 +471,6 @@ func (s *Server) Echo() *echo.Echo {
 	return s.echo
 }
 
-// SetLogLevel dynamically changes the logging level.
-func (s *Server) SetLogLevel(level slog.Level) {
-	if s.levelVar != nil {
-		s.levelVar.Set(level)
-		s.slogger.Info("Log level changed", "level", level.String())
-	}
-}
 
 // StaticServer returns the static file server.
 func (s *Server) StaticServer() *StaticFileServer {
@@ -592,9 +563,9 @@ func (s *Server) registerSPARoutes() {
 	s.echo.GET("/ui/*", s.spaHandler.ServeApp)
 
 	s.slogger.Debug("SPA routes registered",
-		"public_routes", len(publicRoutes),
-		"public_dynamic_routes", len(publicDynamicRoutes),
-		"protected_routes", len(protectedRoutes),
+		logger.Int("public_routes", len(publicRoutes)),
+		logger.Int("public_dynamic_routes", len(publicDynamicRoutes)),
+		logger.Int("protected_routes", len(protectedRoutes)),
 	)
 }
 
@@ -613,8 +584,8 @@ func (s *Server) registerOAuthRoutes() {
 	s.echo.GET("/auth/:provider/callback", s.handleOAuthCallback)
 
 	s.slogger.Debug("OAuth routes registered",
-		"begin_route", "/auth/:provider",
-		"callback_route", "/auth/:provider/callback",
+		logger.String("begin_route", "/auth/:provider"),
+		logger.String("callback_route", "/auth/:provider/callback"),
 	)
 }
 
@@ -624,15 +595,15 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	provider := c.Param("provider")
 
 	s.slogger.Info("OAuth begin request",
-		"provider", provider,
-		"ip", c.RealIP(),
+		logger.String("provider", provider),
+		logger.String("ip", c.RealIP()),
 	)
 
 	// Validate provider is one we support
 	if !s.isValidOAuthProvider(provider) {
 		s.slogger.Warn("Invalid OAuth provider requested",
-			"provider", provider,
-			"ip", c.RealIP(),
+			logger.String("provider", provider),
+			logger.String("ip", c.RealIP()),
 		)
 		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
 	}
@@ -643,9 +614,9 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	// Try to complete auth if user already has a valid session
 	if user, err := gothic.CompleteUserAuth(c.Response(), req); err == nil {
 		s.slogger.Info("User already authenticated via OAuth",
-			"provider", provider,
-			"user_id", user.UserID,
-			"email", user.Email,
+			logger.String("provider", provider),
+			logger.String("user_id", user.UserID),
+			logger.String("email", user.Email),
 		)
 		// User is already authenticated, redirect to dashboard
 		return c.Redirect(http.StatusFound, "/ui/dashboard")
@@ -662,8 +633,8 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	provider := c.Param("provider")
 
 	s.slogger.Info("OAuth callback received",
-		"provider", provider,
-		"ip", c.RealIP(),
+		logger.String("provider", provider),
+		logger.String("ip", c.RealIP()),
 	)
 
 	// Add provider to request context for gothic
@@ -673,28 +644,28 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	user, err := gothic.CompleteUserAuth(c.Response(), req)
 	if err != nil {
 		s.slogger.Error("OAuth authentication failed",
-			"provider", provider,
-			"error", err.Error(),
-			"ip", c.RealIP(),
+			logger.String("provider", provider),
+			logger.Error(err),
+			logger.String("ip", c.RealIP()),
 		)
 		return c.String(http.StatusUnauthorized, "Authentication failed: "+err.Error())
 	}
 
 	s.slogger.Info("OAuth authentication successful",
-		"provider", provider,
-		"user_id", user.UserID,
-		"email", user.Email,
-		"name", user.Name,
-		"ip", c.RealIP(),
+		logger.String("provider", provider),
+		logger.String("user_id", user.UserID),
+		logger.String("email", user.Email),
+		logger.String("name", user.Name),
+		logger.String("ip", c.RealIP()),
 	)
 
 	// Validate user is allowed (check against configured allowed user IDs)
 	if !s.isAllowedOAuthUser(provider, user.UserID, user.Email) {
 		s.slogger.Warn("OAuth user not in allowed list",
-			"provider", provider,
-			"user_id", user.UserID,
-			"email", user.Email,
-			"ip", c.RealIP(),
+			logger.String("provider", provider),
+			logger.String("user_id", user.UserID),
+			logger.String("email", user.Email),
+			logger.String("ip", c.RealIP()),
 		)
 		return c.String(http.StatusForbidden, "Access denied: user not authorized")
 	}
@@ -708,22 +679,22 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 
 	if err := gothic.StoreInSession("userId", userId, req, c.Response()); err != nil {
 		s.slogger.Error("Failed to store userId in session",
-			"error", err.Error(),
-			"provider", provider,
+			logger.Error(err),
+			logger.String("provider", provider),
 		)
 	}
 
 	// Store provider name in session for later reference
 	if err := gothic.StoreInSession(provider, user.UserID, req, c.Response()); err != nil {
 		s.slogger.Error("Failed to store provider session",
-			"error", err.Error(),
-			"provider", provider,
+			logger.Error(err),
+			logger.String("provider", provider),
 		)
 	}
 
 	s.slogger.Info("OAuth session established, redirecting to dashboard",
-		"provider", provider,
-		"user_id", userId,
+		logger.String("provider", provider),
+		logger.String("user_id", userId),
 	)
 
 	// Redirect to dashboard after successful authentication

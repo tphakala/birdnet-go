@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // mockErrorEvent implements ErrorEvent for testing
@@ -122,7 +122,7 @@ func createTestEventBus(t *testing.T, bufferSize, workers int) *EventBus {
 		resourceConsumers: make([]ResourceEventConsumer, 0),
 		ctx:               ctx,
 		cancel:            cancel,
-		logger:            logging.ForService("test"),
+		logger:            logger.NewConsoleLogger("test", logger.LogLevelDebug),
 		startTime:         time.Now(),
 		config:            &Config{Workers: workers, BufferSize: bufferSize},
 	}
@@ -155,8 +155,7 @@ func resetGlobalStateForTesting() {
 func TestEventBusInitialization(t *testing.T) {
 	// Don't run in parallel due to global state modifications
 	
-	// Initialize logging for tests
-	logging.Init()
+	// Logger is created per test in helper function
 	
 	// Reset global state
 	ResetForTesting()
@@ -198,9 +197,9 @@ func TestEventBusInitialization(t *testing.T) {
 // injectable to improve test isolation.
 func TestEventBusPublish(t *testing.T) {
 	// Don't run main test in parallel, but subtests can be parallel
-	
-	logging.Init()
-	
+
+	// Logger created in helper function createTestEventBus
+
 	t.Run("publish without consumers", func(t *testing.T) {
 		t.Parallel()
 
@@ -269,7 +268,7 @@ func TestEventBusPublish(t *testing.T) {
 func TestEventBusOverflow(t *testing.T) {
 	// Don't run in parallel - modifies global state
 
-	logging.Init()
+	// Logger created in helper function
 
 	// Reset global state after test
 	t.Cleanup(resetGlobalStateForTesting)
@@ -331,7 +330,7 @@ func TestEventBusOverflow(t *testing.T) {
 func TestEventBusShutdown(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
+	// Logger created in helper function
 
 	// Create event bus
 	ctx, cancel := context.WithCancel(context.Background())
@@ -346,7 +345,7 @@ func TestEventBusShutdown(t *testing.T) {
 		resourceConsumers: make([]ResourceEventConsumer, 0),
 		ctx:               ctx,
 		cancel:            cancel,
-		logger:            logging.ForService("test"),
+		logger:            logger.NewConsoleLogger("test", logger.LogLevelDebug),
 	}
 	eb.initialized.Store(true)
 
@@ -390,7 +389,7 @@ func TestEventBusShutdown(t *testing.T) {
 func TestConsumerPanic(t *testing.T) {
 	// Don't run in parallel - modifies global state
 
-	logging.Init()
+	// Logger created in helper function
 
 	// Reset global state after test
 	t.Cleanup(resetGlobalStateForTesting)

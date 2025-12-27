@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sys/unix"
 )
 
@@ -29,7 +30,7 @@ func getMountInfoPlatform(path string) (*MountInfo, error) {
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
 			// Log but don't override the main error
-			getLogger().Warn("Failed to close /proc/mounts", "error", closeErr)
+			getLogger().Warn("Failed to close /proc/mounts", logger.Error(closeErr))
 		}
 	}()
 
@@ -86,7 +87,7 @@ func captureMemoryInfo() (MemoryInfo, error) {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			getLogger().Warn("Failed to close /proc/meminfo", "error", closeErr)
+			getLogger().Warn("Failed to close /proc/meminfo", logger.Error(closeErr))
 		}
 	}()
 
@@ -142,7 +143,7 @@ func getProcessMemoryUsage() (*ProcessMemoryUsage, error) {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			getLogger().Warn("Failed to close process status file", "error", closeErr)
+			getLogger().Warn("Failed to close process status file", logger.Error(closeErr))
 		}
 	}()
 

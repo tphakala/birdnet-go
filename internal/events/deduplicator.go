@@ -6,8 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	
-	"log/slog"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // DeduplicationConfig holds configuration for error deduplication
@@ -48,7 +48,7 @@ type ErrorDeduplicator struct {
 	// Lifecycle
 	stopCleanup chan struct{}
 	cleanupDone chan struct{}
-	logger      *slog.Logger
+	logger      logger.Logger
 }
 
 // dedupeEntry tracks an error occurrence
@@ -67,7 +67,7 @@ type lruEntry struct {
 }
 
 // NewErrorDeduplicator creates a new error deduplicator
-func NewErrorDeduplicator(config *DeduplicationConfig, logger *slog.Logger) *ErrorDeduplicator {
+func NewErrorDeduplicator(config *DeduplicationConfig, log logger.Logger) *ErrorDeduplicator {
 	if config == nil {
 		config = DefaultDeduplicationConfig()
 	}
@@ -79,7 +79,7 @@ func NewErrorDeduplicator(config *DeduplicationConfig, logger *slog.Logger) *Err
 		entryMap:    make(map[uint64]int),
 		stopCleanup: make(chan struct{}),
 		cleanupDone: make(chan struct{}),
-		logger:      logger,
+		logger:      log,
 	}
 	
 	// Start cleanup goroutine if enabled
@@ -104,11 +104,11 @@ func (ed *ErrorDeduplicator) ShouldProcess(event ErrorEvent) bool {
 	// Debug logging
 	if ed.config.Debug {
 		ed.logger.Debug("checking deduplication",
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
-			"error_message", event.GetMessage(),
-			"cache_size", len(ed.cache),
-			"hash", hash,
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
+			logger.String("error_message", event.GetMessage()),
+			logger.Int("cache_size", len(ed.cache)),
+			logger.Any("hash", hash),
 		)
 	}
 	
@@ -176,11 +176,11 @@ func (ed *ErrorDeduplicator) ShouldProcess(event ErrorEvent) bool {
 	// Log periodically (every 10 suppressions)
 	if entry.suppressed%10 == 0 {
 		ed.logger.Debug("suppressing duplicate error",
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
-			"count", entry.count,
-			"suppressed", entry.suppressed,
-			"first_seen", entry.firstSeen,
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
+			logger.Int64("count", entry.count),
+			logger.Int64("suppressed", entry.suppressed),
+			logger.Time("first_seen", entry.firstSeen),
 		)
 	}
 	
@@ -313,8 +313,8 @@ func (ed *ErrorDeduplicator) cleanup() {
 	
 	if expired > 0 {
 		ed.logger.Debug("cleaned up expired deduplication entries",
-			"expired", expired,
-			"remaining", len(ed.cache),
+			logger.Int("expired", expired),
+			logger.Int("remaining", len(ed.cache)),
 		)
 	}
 }

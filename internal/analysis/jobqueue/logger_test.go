@@ -24,11 +24,11 @@ const (
 // setupTestLogger sets up a test logger and returns the buffer and cleanup function
 func setupTestLogger(level slog.Level) (buf *bytes.Buffer, cleanup func()) {
 	buf = &bytes.Buffer{}
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{
+	oldLogger := slogLogger
+	slogLogger = slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{
 		Level: level,
 	}))
-	return buf, func() { logger = oldLogger }
+	return buf, func() { slogLogger = oldLogger }
 }
 
 // parseLogEntry parses JSON log output into a map

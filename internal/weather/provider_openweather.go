@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -76,8 +76,8 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		settings.Realtime.Weather.OpenWeather.Units,
 	)
 
-	logger := weatherLogger.With("provider", openWeatherProviderName)
-	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "appid"))
+	providerLogger := weatherLogger.With(logger.String("provider", openWeatherProviderName))
+	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "appid")))
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
@@ -86,7 +86,7 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 	req.Header.Set("User-Agent", UserAgent)
 
 	// Execute request with retry
-	body, err := executeOpenWeatherRequest(req, logger)
+	body, err := executeOpenWeatherRequest(req, providerLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -106,23 +106,27 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		)
 	}
 
-	logger.Info("Successfully received and parsed weather data")
+	providerLogger.Info("Successfully received and parsed weather data")
 	mappedData := mapOpenWeatherResponse(&weatherData, settings)
-	logger.Debug("Mapped API response to WeatherData structure", "city", mappedData.Location.City, "temp", mappedData.Temperature.Current)
+	providerLogger.Debug("Mapped API response to WeatherData structure",
+		logger.String("city", mappedData.Location.City),
+		logger.Float64("temp", mappedData.Temperature.Current))
 	return mappedData, nil
 }
 
 // executeOpenWeatherRequest executes HTTP request with retry logic
-func executeOpenWeatherRequest(req *http.Request, logger *slog.Logger) ([]byte, error) {
+func executeOpenWeatherRequest(req *http.Request, log logger.Logger) ([]byte, error) {
 	client := &http.Client{Timeout: RequestTimeout}
 
 	for i := range MaxRetries {
 		isLastAttempt := i == MaxRetries-1
-		attemptLogger := logger.With("attempt", i+1, "max_attempts", MaxRetries)
+		attemptLogger := log.With(
+			logger.Int("attempt", i+1),
+			logger.Int("max_attempts", MaxRetries))
 
 		resp, err := client.Do(req)
 		if err != nil {
-			attemptLogger.Warn("HTTP request failed", "error", err)
+			attemptLogger.Warn("HTTP request failed", logger.Error(err))
 			if isLastAttempt {
 				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", openWeatherProviderName)
 			}
@@ -130,12 +134,12 @@ func executeOpenWeatherRequest(req *http.Request, logger *slog.Logger) ([]byte, 
 			continue
 		}
 
-		attemptLogger.Debug("Received HTTP response", "status_code", resp.StatusCode)
+		attemptLogger.Debug("Received HTTP response", logger.Int("status_code", resp.StatusCode))
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
-			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode)
+			attemptLogger.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
 			if isLastAttempt {
 				return nil, newWeatherErrorWithRetries(
 					fmt.Errorf("received non-200 response (%d)", resp.StatusCode),

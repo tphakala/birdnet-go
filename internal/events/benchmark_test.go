@@ -5,13 +5,11 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // BenchmarkFastPathNoConsumers tests the performance when no consumers are registered
 func BenchmarkFastPathNoConsumers(b *testing.B) {
-	// Initialize logging
-	logging.Init()
+	// No logging initialization needed for benchmarks
 
 	// Reset global state
 	ResetForTesting()
@@ -57,8 +55,7 @@ func BenchmarkFastPathNoConsumers(b *testing.B) {
 
 // BenchmarkWithConsumer tests the performance with a consumer registered
 func BenchmarkWithConsumer(b *testing.B) {
-	// Initialize logging
-	logging.Init()
+	// No logging initialization needed for benchmarks
 
 	// Reset global state
 	ResetForTesting()

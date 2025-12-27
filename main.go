@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -92,6 +93,29 @@ func mainWithExitCode() int {
 	// Set runtime values
 	settings.Version = version
 	settings.BuildDate = buildDate
+
+	// Initialize the centralized logger
+	centralLogger, err := logger.NewCentralLogger(&settings.Logging)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
+		return 1
+	}
+	logger.SetGlobal(centralLogger)
+	defer func() {
+		// Log application shutdown
+		mainLog := centralLogger.Module("main")
+		mainLog.Info("Application stopped")
+		if err := centralLogger.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error closing logger: %v\n", err)
+		}
+	}()
+
+	// Log application start
+	mainLog := centralLogger.Module("main")
+	mainLog.Info("Application started",
+		logger.String("version", settings.Version),
+		logger.String("build_date", settings.BuildDate),
+		logger.String("config_file", viper.ConfigFileUsed()))
 
 	// Load or create system ID for telemetry
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // EventType represents the types of events to be tracked.
@@ -154,10 +155,10 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 			effectiveTimeout = time.Duration(speciesConfig.Interval) * time.Second
 		} else if speciesConfig.Interval < 0 {
 			// Log a warning for negative interval values
-			logger := GetLogger()
-			logger.Warn("Negative interval configured for species, using default interval instead",
-				"interval", speciesConfig.Interval,
-				"species", species)
+			log := GetLogger()
+			log.Warn("Negative interval configured for species, using default interval instead",
+				logger.Int("interval", speciesConfig.Interval),
+				logger.String("species", species))
 			// Continue using the default interval
 		}
 		// For zero interval, silently use the default interval (existing behavior)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -82,16 +83,16 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 	enhancedErr := dt.buildEnhancedError(err, operation, context)
 
 	// Log locally with full context
-	logFields := []any{
-		"operation", operation,
-		"error", err.Error(),
-		"severity", severity,
-		"recommendations", context.Recommendations,
+	logFields := []logger.Field{
+		logger.String("operation", operation),
+		logger.String("error", err.Error()),
+		logger.String("severity", severity),
+		logger.Any("recommendations", context.Recommendations),
 	}
 
 	// Add resource summary only if ResourceSnapshot is available
 	if context.ResourceSnapshot != nil {
-		logFields = append(logFields, "resource_summary", context.ResourceSnapshot.FormatResourceSummary())
+		logFields = append(logFields, logger.String("resource_summary", context.ResourceSnapshot.FormatResourceSummary()))
 	}
 
 	getLogger().Error("Database error with context", logFields...)
@@ -119,7 +120,7 @@ func (dt *DatastoreTelemetry) gatherErrorContext(err error, operation string, st
 		context.Recommendations = snapshot.GetResourceRecommendations()
 		context.Severity = dt.calculateSeverity(err, context)
 	} else {
-		getLogger().Warn("Failed to capture resource snapshot for error context", "error", captureErr)
+		getLogger().Warn("Failed to capture resource snapshot for error context", logger.Error(captureErr))
 	}
 
 	// Capture database health if store interface supports it

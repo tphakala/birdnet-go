@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // startConnectionPoolMonitoring starts a goroutine that periodically monitors
@@ -23,7 +25,7 @@ func (ds *DataStore) startConnectionPoolMonitoring(ctx context.Context, interval
 				sqlDB, err := ds.DB.DB()
 				if err != nil {
 					getLogger().Error("Failed to get SQL DB for monitoring",
-						"error", err)
+						logger.Error(err))
 					continue
 				}
 				
@@ -48,19 +50,19 @@ func (ds *DataStore) startConnectionPoolMonitoring(ctx context.Context, interval
 				}
 				
 				getLogger().Info("Connection pool statistics",
-					"open_connections", stats.OpenConnections,
-					"in_use", stats.InUse,
-					"idle", stats.Idle,
-					"wait_count", stats.WaitCount,
-					"wait_duration", stats.WaitDuration,
-					"max_idle_closed", stats.MaxIdleClosed,
-					"max_lifetime_closed", stats.MaxLifetimeClosed)
-					
+					logger.Int("open_connections", stats.OpenConnections),
+					logger.Int("in_use", stats.InUse),
+					logger.Int("idle", stats.Idle),
+					logger.Int64("wait_count", stats.WaitCount),
+					logger.Duration("wait_duration", stats.WaitDuration),
+					logger.Int64("max_idle_closed", stats.MaxIdleClosed),
+					logger.Int64("max_lifetime_closed", stats.MaxLifetimeClosed))
+
 				// Warn if pool is exhausted
 				if stats.WaitCount > 0 {
 					getLogger().Warn("Connection pool experiencing waits",
-						"wait_count", stats.WaitCount,
-						"total_wait_duration", stats.WaitDuration)
+						logger.Int64("wait_count", stats.WaitCount),
+						logger.Duration("total_wait_duration", stats.WaitDuration))
 				}
 			}
 		}
@@ -89,9 +91,9 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 					metrics.UpdateDatabaseSize(dbSize)
 				} else if err != nil {
 					getLogger().Error("Failed to get database size",
-						"error", err)
+						logger.Error(err))
 				}
-				
+
 				// Update table row counts
 				tables := []string{"notes", "results", "image_caches", "note_reviews", "note_locks"}
 				for _, table := range tables {
@@ -99,17 +101,17 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 						metrics.UpdateTableRowCount(table, count)
 					} else if err != nil {
 						getLogger().Error("Failed to get table row count",
-							"table", table,
-							"error", err)
+							logger.String("table", table),
+							logger.Error(err))
 					}
 				}
-				
+
 				// Update active lock count
 				if lockCount, err := ds.getActiveLockCount(); err == nil && metrics != nil {
 					metrics.UpdateActiveLockCount(lockCount)
 				} else if err != nil {
 					getLogger().Error("Failed to get active lock count",
-						"error", err)
+						logger.Error(err))
 				}
 			}
 		}
@@ -187,13 +189,13 @@ func (ds *DataStore) StartMonitoring(connectionPoolInterval, databaseStatsInterv
 	if connectionPoolInterval > 0 {
 		ds.startConnectionPoolMonitoring(ds.monitoringCtx, connectionPoolInterval)
 		getLogger().Info("Started connection pool monitoring",
-			"interval", connectionPoolInterval)
+			logger.Duration("interval", connectionPoolInterval))
 	}
-	
+
 	if databaseStatsInterval > 0 {
 		ds.startDatabaseMonitoring(ds.monitoringCtx, databaseStatsInterval)
 		getLogger().Info("Started database statistics monitoring",
-			"interval", databaseStatsInterval)
+			logger.Duration("interval", databaseStatsInterval))
 	}
 }
 

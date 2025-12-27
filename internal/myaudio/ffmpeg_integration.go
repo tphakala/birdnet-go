@@ -2,14 +2,12 @@ package myaudio
 
 import (
 	"log"
-	"log/slog"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -22,48 +20,33 @@ var (
 	// Monitoring is started separately when we have audioChan
 	monitoringOnce sync.Once
 
-	integrationLogger      *slog.Logger
-	integrationLevelVar    = new(slog.LevelVar)
-	closeIntegrationLogger func() error
+	integrationLogger     logger.Logger
+	integrationLoggerOnce sync.Once
 )
 
-func init() {
-	var err error
-	// Define log file path relative to working directory - use ffmpeg-input.log as requested
-	logFilePath := filepath.Join("logs", "ffmpeg-input.log")
-	initialLevel := slog.LevelInfo // Set desired initial level
-	integrationLevelVar.Set(initialLevel)
-
-	// Initialize the service-specific file logger
-	integrationLogger, closeIntegrationLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-input", integrationLevelVar)
-	if err != nil {
-		// Fallback: Log error to standard log and use default logger
-		log.Printf("Failed to initialize ffmpeg-input file logger at %s: %v. Using default logger.", logFilePath, err)
-		integrationLogger = slog.Default().With("service", "ffmpeg-input")
-		closeIntegrationLogger = func() error { return nil } // No-op closer
-	}
+// getIntegrationLogger returns the integration logger, initializing it if necessary
+func getIntegrationLogger() logger.Logger {
+	integrationLoggerOnce.Do(func() {
+		integrationLogger = logger.Global().Module("audio").Module("ffmpeg")
+	})
+	return integrationLogger
 }
 
 // UpdateFFmpegLogLevel updates the logger level based on configuration
+// Note: With the new logger, debug level is controlled by the global logger configuration
 func UpdateFFmpegLogLevel() {
-	if conf.Setting().Debug {
-		integrationLevelVar.Set(slog.LevelDebug)
-	} else {
-		integrationLevelVar.Set(slog.LevelInfo)
-	}
+	// Debug level is now controlled by global logger configuration
+	// This function is kept for API compatibility but is a no-op
 }
 
 // registerSoundLevelProcessorIfEnabled registers a sound level processor for the given source
 // if sound level processing is enabled in the configuration. This helper function ensures
 // consistent registration behavior across different stream initialization paths.
 // Returns an error if registration fails, nil if disabled or successful.
-func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) error {
+func registerSoundLevelProcessorIfEnabled(source string, log logger.Logger) error {
 	// Ensure we have a non-nil logger to prevent panics
-	if logger == nil {
-		logger = integrationLogger
-		if logger == nil {
-			logger = slog.Default()
-		}
+	if log == nil {
+		log = getIntegrationLogger()
 	}
 
 	settings := conf.Setting()
@@ -75,9 +58,9 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 	registry := GetRegistry()
 	// Guard against nil registry during initialization to prevent panic
 	if registry == nil {
-		logger.Warn("registry not available during sound level processor registration",
-			"url", privacy.SanitizeRTSPUrl(source),
-			"operation", "register_sound_level")
+		log.Warn("registry not available during sound level processor registration",
+			logger.String("url", privacy.SanitizeRTSPUrl(source)),
+			logger.String("operation", "register_sound_level"))
 		return errors.Newf("registry not available during initialization").
 			Component("ffmpeg-integration").
 			Category(errors.CategorySystem).
@@ -87,9 +70,9 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 
 	audioSource := registry.GetOrCreateSource(source, SourceTypeRTSP)
 	if audioSource == nil {
-		logger.Warn("failed to get/create audio source for sound level processor",
-			"url", privacy.SanitizeRTSPUrl(source),
-			"operation", "register_sound_level")
+		log.Warn("failed to get/create audio source for sound level processor",
+			logger.String("url", privacy.SanitizeRTSPUrl(source)),
+			logger.String("operation", "register_sound_level"))
 		return errors.Newf("failed to get/create audio source").
 			Component("ffmpeg-integration").
 			Category(errors.CategorySystem).
@@ -100,12 +83,11 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 
 	// Register the sound level processor using source ID and DisplayName
 	if err := RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
-		logger.Warn("failed to register sound level processor",
-			"id", audioSource.ID,
-			"display_name", audioSource.DisplayName,
-			"error", err,
-			"operation", "register_sound_level")
-		log.Printf("⚠️ Error registering sound level processor for %s: %v", audioSource.DisplayName, err)
+		log.Warn("failed to register sound level processor",
+			logger.String("id", audioSource.ID),
+			logger.String("display_name", audioSource.DisplayName),
+			logger.Error(err),
+			logger.String("operation", "register_sound_level"))
 		return errors.New(err).
 			Component("ffmpeg-integration").
 			Category(errors.CategorySystem).
@@ -114,10 +96,10 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 			Context("display_name", audioSource.DisplayName).
 			Build()
 	} else if conf.Setting().Debug {
-		logger.Debug("registered sound level processor",
-			"id", audioSource.ID,
-			"display_name", audioSource.DisplayName,
-			"operation", "register_sound_level")
+		log.Debug("registered sound level processor",
+			logger.String("id", audioSource.ID),
+			logger.String("display_name", audioSource.DisplayName),
+			logger.String("operation", "register_sound_level"))
 	}
 	return nil
 }
@@ -150,7 +132,7 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 	// This ensures the Do block is only executed when a valid audioChan is available
 	if audioChan == nil {
 		integrationLogger.Error("cannot start monitoring - audioChan is nil",
-			"operation", "start_monitoring_once")
+			logger.String("operation", "start_monitoring_once"))
 		log.Printf("❌ Cannot start FFmpeg monitoring - audio channel is nil")
 		return
 	}
@@ -158,7 +140,7 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 	monitoringOnce.Do(func() {
 		if manager == nil {
 			integrationLogger.Error("cannot start monitoring - manager is nil",
-				"operation", "start_monitoring_once")
+				logger.String("operation", "start_monitoring_once"))
 			return
 		}
 
@@ -169,9 +151,9 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 		}
 
 		integrationLogger.Info("starting FFmpeg stream monitoring",
-			"monitoring_interval_seconds", monitoringInterval.Seconds(),
-			"watchdog_interval_seconds", watchdogCheckInterval.Seconds(),
-			"operation", "start_monitoring_once")
+			logger.Float64("monitoring_interval_seconds", monitoringInterval.Seconds()),
+			logger.Float64("watchdog_interval_seconds", watchdogCheckInterval.Seconds()),
+			logger.String("operation", "start_monitoring_once"))
 
 		log.Printf("🩺 Starting FFmpeg stream monitoring (health check: %v, watchdog: %v)",
 			monitoringInterval, watchdogCheckInterval)
@@ -192,8 +174,8 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// Check FFmpeg availability
 	if conf.GetFfmpegBinaryName() == "" {
 		integrationLogger.Error("FFmpeg not available",
-			"url", privacy.SanitizeRTSPUrl(url),
-			"operation", "capture_audio_rtsp")
+			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.String("operation", "capture_audio_rtsp"))
 		log.Printf("❌ FFmpeg is not available, cannot capture audio from %s", url)
 		return
 	}
@@ -202,8 +184,8 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	manager := getGlobalManager()
 	if manager == nil {
 		integrationLogger.Error("FFmpeg manager is not available",
-			"url", privacy.SanitizeRTSPUrl(url),
-			"operation", "capture_audio_rtsp")
+			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.String("operation", "capture_audio_rtsp"))
 		log.Printf("❌ FFmpeg manager is not available for %s", url)
 		return
 	}
@@ -215,10 +197,10 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// Start the stream
 	if err := manager.StartStream(url, transport, unifiedAudioChan); err != nil {
 		integrationLogger.Error("failed to start stream",
-			"url", privacy.SanitizeRTSPUrl(url),
-			"error", err,
-			"transport", transport,
-			"operation", "capture_audio_rtsp")
+			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.Error(err),
+			logger.String("transport", transport),
+			logger.String("operation", "capture_audio_rtsp"))
 		log.Printf("❌ Failed to start stream for %s: %v", url, err)
 		return
 	}
@@ -231,9 +213,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 				// Stop the stream
 				if err := manager.StopStream(url); err != nil {
 					integrationLogger.Warn("failed to stop stream",
-						"url", privacy.SanitizeRTSPUrl(url),
-						"error", err,
-						"operation", "quit_signal")
+						logger.String("url", privacy.SanitizeRTSPUrl(url)),
+						logger.Error(err),
+						logger.String("operation", "quit_signal"))
 					log.Printf("⚠️ Error stopping stream %s: %v", url, err)
 				}
 				return
@@ -241,9 +223,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 				// Restart the stream
 				if err := manager.RestartStream(url); err != nil {
 					integrationLogger.Warn("failed to restart stream",
-						"url", privacy.SanitizeRTSPUrl(url),
-						"error", err,
-						"operation", "restart_signal")
+						logger.String("url", privacy.SanitizeRTSPUrl(url)),
+						logger.Error(err),
+						logger.String("operation", "restart_signal"))
 					log.Printf("⚠️ Error restarting stream %s: %v", url, err)
 				}
 			}

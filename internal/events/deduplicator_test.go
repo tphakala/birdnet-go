@@ -6,15 +6,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestDeduplicatorBasic tests basic deduplication functionality
 func TestDeduplicatorBasic(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-	logger := logging.ForService("test")
+	log := logger.NewConsoleLogger("test", logger.LogLevelDebug)
 
 	config := &DeduplicationConfig{
 		Enabled:         true,
@@ -23,7 +22,7 @@ func TestDeduplicatorBasic(t *testing.T) {
 		CleanupInterval: 0, // Disable automatic cleanup for test
 	}
 
-	dedup := NewErrorDeduplicator(config, logger)
+	dedup := NewErrorDeduplicator(config, log)
 	t.Cleanup(dedup.Shutdown)
 
 	// Create test event
@@ -60,8 +59,7 @@ func TestDeduplicatorBasic(t *testing.T) {
 func TestDeduplicatorDifferentErrors(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-	logger := logging.ForService("test")
+	log := logger.NewConsoleLogger("test", logger.LogLevelDebug)
 
 	config := &DeduplicationConfig{
 		Enabled:         true,
@@ -70,7 +68,7 @@ func TestDeduplicatorDifferentErrors(t *testing.T) {
 		CleanupInterval: 0,
 	}
 
-	dedup := NewErrorDeduplicator(config, logger)
+	dedup := NewErrorDeduplicator(config, log)
 	t.Cleanup(dedup.Shutdown)
 
 	// Different components
@@ -133,8 +131,7 @@ func TestDeduplicatorDifferentErrors(t *testing.T) {
 func TestDeduplicatorLRUEviction(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-	logger := logging.ForService("test")
+	log := logger.NewConsoleLogger("test", logger.LogLevelDebug)
 
 	config := &DeduplicationConfig{
 		Enabled:         true,
@@ -143,7 +140,7 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 		CleanupInterval: 0,
 	}
 
-	dedup := NewErrorDeduplicator(config, logger)
+	dedup := NewErrorDeduplicator(config, log)
 	t.Cleanup(dedup.Shutdown)
 
 	// Add 3 different errors
@@ -193,8 +190,7 @@ func TestDeduplicatorLRUEviction(t *testing.T) {
 func TestDeduplicatorCleanup(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-	logger := logging.ForService("test")
+	log := logger.NewConsoleLogger("test", logger.LogLevelDebug)
 
 	config := &DeduplicationConfig{
 		Enabled:         true,
@@ -203,7 +199,7 @@ func TestDeduplicatorCleanup(t *testing.T) {
 		CleanupInterval: 200 * time.Millisecond,
 	}
 
-	dedup := NewErrorDeduplicator(config, logger)
+	dedup := NewErrorDeduplicator(config, log)
 	t.Cleanup(dedup.Shutdown)
 
 	// Add some errors
@@ -233,14 +229,13 @@ func TestDeduplicatorCleanup(t *testing.T) {
 func TestDeduplicatorDisabled(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-	logger := logging.ForService("test")
+	log := logger.NewConsoleLogger("test", logger.LogLevelDebug)
 
 	config := &DeduplicationConfig{
 		Enabled: false,
 	}
 
-	dedup := NewErrorDeduplicator(config, logger)
+	dedup := NewErrorDeduplicator(config, log)
 	t.Cleanup(dedup.Shutdown)
 
 	event := &mockErrorEvent{
@@ -264,8 +259,7 @@ func TestDeduplicatorDisabled(t *testing.T) {
 func TestDeduplicatorContext(t *testing.T) {
 	t.Parallel()
 
-	logging.Init()
-	logger := logging.ForService("test")
+	log := logger.NewConsoleLogger("test", logger.LogLevelDebug)
 
 	config := &DeduplicationConfig{
 		Enabled:         true,
@@ -274,7 +268,7 @@ func TestDeduplicatorContext(t *testing.T) {
 		CleanupInterval: 0,
 	}
 
-	dedup := NewErrorDeduplicator(config, logger)
+	dedup := NewErrorDeduplicator(config, log)
 	t.Cleanup(dedup.Shutdown)
 
 	// Same error with different operation context

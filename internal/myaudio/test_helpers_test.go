@@ -4,25 +4,21 @@ package myaudio
 
 import (
 	"context"
-	"log/slog"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // --- Logger Helpers ---
 
 // getTestLogger returns a logger for testing.
-// Uses the logging service if available, falls back to slog.Default().
-func getTestLogger() *slog.Logger {
-	logger := logging.ForService("test")
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return logger
+func getTestLogger() logger.Logger {
+	// Use console logger with debug level for tests, output to io.Discard to keep tests quiet
+	return logger.NewSlogLogger(io.Discard, logger.LogLevelDebug, nil)
 }
 
 // --- FFprobe Helpers ---

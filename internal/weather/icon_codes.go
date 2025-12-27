@@ -1,5 +1,7 @@
 package weather
 
+import "github.com/tphakala/birdnet-go/internal/logger"
+
 // IconCode represents a standardized weather icon code
 type IconCode string
 
@@ -237,6 +239,8 @@ func GetStandardIconCode(code, provider string) IconCode {
 		}
 	}
 	// Return Unknown if no mapping found
-	weatherLogger.Warn("No standard icon mapping found for provider code", "provider", provider, "code", code)
+	weatherLogger.Warn("No standard icon mapping found for provider code",
+		logger.String("provider", provider),
+		logger.String("code", code))
 	return IconUnknown
 }

@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"log/slog"
 	"math"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +15,7 @@ import (
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -37,60 +35,9 @@ const (
 	errMsgNoOctaveBandData = "no octave band data"
 )
 
-// Package-level logger for sound level monitoring
-var (
-	soundLevelLogger    *slog.Logger
-	soundLoggerOnce     sync.Once
-	serviceLevelVar     = new(slog.LevelVar) // Dynamic level control
-	soundLevelCloseFunc func() error
-)
-
-// getSoundLevelLogger returns the sound level logger, initializing it if necessary
-func getSoundLevelLogger() *slog.Logger {
-	soundLoggerOnce.Do(func() {
-		var err error
-		// Define log file path relative to working directory
-		logFilePath := filepath.Join("logs", "soundlevel.log")
-		// Set initial level based on debug flag
-		initialLevel := slog.LevelInfo
-		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			initialLevel = slog.LevelDebug
-		}
-		serviceLevelVar.Set(initialLevel)
-
-		// Initialize the service-specific file logger
-		soundLevelLogger, soundLevelCloseFunc, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
-		if err != nil {
-			// Fallback: Use main analysis logger and log the issue
-			mainLogger := GetLogger() // Get the main analysis logger
-			if mainLogger != nil {
-				soundLevelLogger = mainLogger.With("subsystem", "sound-level")
-				soundLevelLogger.Warn("Failed to initialize sound level file logger, using fallback",
-					"error", err,
-					"log_path", logFilePath,
-					"service", "analysis.soundlevel")
-			} else {
-				// Ultimate fallback to default logger if even the main logger isn't available
-				soundLevelLogger = slog.Default().With("service", "analysis.soundlevel")
-			}
-			soundLevelCloseFunc = func() error { return nil } // No-op closer
-		}
-	})
-	return soundLevelLogger
-}
-
-// getSoundLevelServiceLevelVar returns the service level var for dynamic log level control
-func getSoundLevelServiceLevelVar() *slog.LevelVar {
-	return serviceLevelVar
-}
-
-// CloseSoundLevelLogger closes the sound level file logger and releases resources
-// This should be called during component shutdown to ensure proper cleanup of file handles
-func CloseSoundLevelLogger() error {
-	if soundLevelCloseFunc != nil {
-		return soundLevelCloseFunc()
-	}
-	return nil
+// getSoundLevelLogger returns the sound level logger
+func getSoundLevelLogger() logger.Logger {
+	return logger.Global().Module("analysis").Module("soundlevel")
 }
 
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
@@ -138,18 +85,17 @@ func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData 
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 			if band.Min != sanitizedBand.Min || band.Max != sanitizedBand.Max ||
 				band.Mean != sanitizedBand.Mean || key != normalizedKey {
-				if logger := getSoundLevelLogger(); logger != nil {
-					logger.Debug("sanitized and polished octave band data",
-						"original_band", key,
-						"normalized_band", normalizedKey,
-						"center_freq", band.CenterFreq,
-						"original_min", band.Min,
-						"original_max", band.Max,
-						"original_mean", band.Mean,
-						"sanitized_min", sanitizedBand.Min,
-						"sanitized_max", sanitizedBand.Max,
-						"sanitized_mean", sanitizedBand.Mean)
-				}
+				lg := getSoundLevelLogger()
+				lg.Debug("sanitized and polished octave band data",
+					logger.String("original_band", key),
+					logger.String("normalized_band", normalizedKey),
+					logger.Float64("center_freq", band.CenterFreq),
+					logger.Float64("original_min", band.Min),
+					logger.Float64("original_max", band.Max),
+					logger.Float64("original_mean", band.Mean),
+					logger.Float64("sanitized_min", sanitizedBand.Min),
+					logger.Float64("sanitized_max", sanitizedBand.Max),
+					logger.Float64("sanitized_mean", sanitizedBand.Mean))
 			}
 		}
 	}
@@ -374,21 +320,20 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, 
 				// Log received sound level data if debug is enabled
 				// This is logged at interval rate, not realtime
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					if logger := getSoundLevelLogger(); logger != nil {
-						logger.Debug("received sound level data",
-							"source", soundData.Source,
-							"name", soundData.Name,
-							"timestamp", soundData.Timestamp,
-							"duration", soundData.Duration,
-							"bands_count", len(soundData.OctaveBands))
-					}
+					lg := getSoundLevelLogger()
+					lg.Debug("received sound level data",
+						logger.String("source", soundData.Source),
+						logger.String("name", soundData.Name),
+						logger.Time("timestamp", soundData.Timestamp),
+						logger.Int("duration", soundData.Duration),
+						logger.Int("bands_count", len(soundData.OctaveBands)))
 				}
 				// Publish sound level data to MQTT
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
 					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
-						"error", err,
-						"source", soundData.Source,
-						"name", soundData.Name)
+						logger.Error(err),
+						logger.String("source", soundData.Source),
+						logger.String("name", soundData.Name))
 				}
 			}
 		}
@@ -407,11 +352,10 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 	if err := validateSoundLevelData(&soundData); err != nil {
 		// Log validation error if debug enabled
 		if settings.Realtime.Audio.SoundLevel.Debug {
-			if logger := getSoundLevelLogger(); logger != nil {
-				logger.Debug("sound level data validation failed",
-					"source", soundData.Source,
-					"error", err)
-			}
+			lg := getSoundLevelLogger()
+			lg.Debug("sound level data validation failed",
+				logger.String("source", soundData.Source),
+				logger.Error(err))
 		}
 		return err
 	}
@@ -476,29 +420,28 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 	// Log detailed sound level data if debug is enabled
 	// These logs are for publishing events, not realtime processing
 	if settings.Realtime.Audio.SoundLevel.Debug {
-		if logger := getSoundLevelLogger(); logger != nil {
-			logger.Debug("published sound level data to MQTT",
-				"topic", topic,
-				"source", soundData.Source,
-				"name", soundData.Name,
-				"json_size", len(jsonData),
-				"octave_bands", len(soundData.OctaveBands),
-				"component", "analysis.soundlevel",
-				"operation", "publish_mqtt")
+		lg := getSoundLevelLogger()
+		lg.Debug("published sound level data to MQTT",
+			logger.String("topic", topic),
+			logger.String("source", soundData.Source),
+			logger.String("name", soundData.Name),
+			logger.Int("json_size", len(jsonData)),
+			logger.Int("octave_bands", len(soundData.OctaveBands)),
+			logger.String("component", "analysis.soundlevel"),
+			logger.String("operation", "publish_mqtt"))
 
-			// Log each octave band's values only if realtime logging is enabled
-			if settings.Realtime.Audio.SoundLevel.DebugRealtimeLogging {
-				for band, data := range sanitizedData.OctaveBands {
-					logger.Debug("octave band values",
-						"band", band,
-						"center_freq", data.CenterFreq,
-						"min_db", data.Min,
-						"max_db", data.Max,
-						"mean_db", data.Mean,
-						"sample_count", data.SampleCount,
-						"component", "analysis.soundlevel",
-						"operation", "log_octave_bands")
-				}
+		// Log each octave band's values only if realtime logging is enabled
+		if settings.Realtime.Audio.SoundLevel.DebugRealtimeLogging {
+			for band, data := range sanitizedData.OctaveBands {
+				lg.Debug("octave band values",
+					logger.String("band", band),
+					logger.Float64("center_freq", data.CenterFreq),
+					logger.Float64("min_db", data.Min),
+					logger.Float64("max_db", data.Max),
+					logger.Float64("mean_db", data.Mean),
+					logger.Int("sample_count", data.SampleCount),
+					logger.String("component", "analysis.soundlevel"),
+					logger.String("operation", "log_octave_bands"))
 			}
 		}
 	}
@@ -551,19 +494,18 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 				}
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					if logger := getSoundLevelLogger(); logger != nil {
-						logger.Debug("MQTT publisher received sound level data",
-							"source", soundData.Source,
-							"name", soundData.Name,
-							"timestamp", soundData.Timestamp)
-					}
+					lg := getSoundLevelLogger()
+					lg.Debug("MQTT publisher received sound level data",
+						logger.String("source", soundData.Source),
+						logger.String("name", soundData.Name),
+						logger.Time("timestamp", soundData.Timestamp))
 				}
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
 					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
 					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
-						"error", err,
-						"source", soundData.Source,
-						"name", soundData.Name)
+						logger.Error(err),
+						logger.String("source", soundData.Source),
+						logger.String("name", soundData.Name))
 				}
 			}
 		}
@@ -595,11 +537,10 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 	if err := validateSoundLevelData(&soundData); err != nil {
 		// Log validation error if debug enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			if logger := getSoundLevelLogger(); logger != nil {
-				logger.Debug("sound level data validation failed for SSE",
-					"source", soundData.Source,
-					"error", err)
-			}
+			lg := getSoundLevelLogger()
+			lg.Debug("sound level data validation failed for SSE",
+				logger.String("source", soundData.Source),
+				logger.Error(err))
 		}
 		return err
 	}
@@ -632,12 +573,11 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 
 	// Log successful broadcast if debug is enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		if logger := getSoundLevelLogger(); logger != nil {
-			logger.Debug("successfully broadcast sound level data via SSE",
-				"source", soundData.Source,
-				"name", soundData.Name,
-				"bands_count", len(soundData.OctaveBands))
-		}
+		lg := getSoundLevelLogger()
+		lg.Debug("successfully broadcast sound level data via SSE",
+			logger.String("source", soundData.Source),
+			logger.String("name", soundData.Name),
+			logger.Int("bands_count", len(soundData.OctaveBands)))
 	}
 
 	return nil
@@ -656,12 +596,11 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					if logger := getSoundLevelLogger(); logger != nil {
-						logger.Debug("metrics publisher received sound level data",
-							"source", soundData.Source,
-							"name", soundData.Name,
-							"timestamp", soundData.Timestamp)
-					}
+					lg := getSoundLevelLogger()
+					lg.Debug("metrics publisher received sound level data",
+						logger.String("source", soundData.Source),
+						logger.String("name", soundData.Name),
+						logger.Time("timestamp", soundData.Timestamp))
 				}
 				// Update Prometheus metrics
 				if metricsInstance != nil && metricsInstance.SoundLevel != nil {
