@@ -134,23 +134,23 @@ func BenchmarkLogInfo(b *testing.B) {
 // BenchmarkLogWithModule benchmarks logging with module scoping
 func BenchmarkLogWithModule(b *testing.B) {
 	b.Run("ModuleLogger", func(b *testing.B) {
-		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil).Module("analyzer")
+		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil).Module("analysis")
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			logger.Info("analyzing CVE",
-				String("cve_id", "CVE-2024-1234"),
-				Int("score", 75))
+			logger.Info("analyzing audio",
+				String("species", "Turdus merula"),
+				Int("confidence", 75))
 		}
 	})
 
 	b.Run("NestedModule", func(b *testing.B) {
-		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil).Module("analyzer").Module("ai")
+		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil).Module("analysis").Module("processor")
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			logger.Info("AI analysis complete",
-				String("cve_id", "CVE-2024-1234"),
+			logger.Info("processing complete",
+				String("species", "Turdus merula"),
 				Duration("elapsed", 2*time.Second))
 		}
 	})
