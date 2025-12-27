@@ -3,13 +3,9 @@ package mqtt
 
 import (
 	"context"
-	"io"
-	"log"
-	"log/slog"
-	"path/filepath"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Timeout constants for MQTT operations
@@ -102,52 +98,10 @@ type TLSConfig struct {
 	ClientKey          string // path to client key file
 }
 
-// Package-level logger for MQTT related events
-var (
-	mqttLogger      *slog.Logger
-	mqttLogCloser   func() error         // Stores the closer function
-	mqttLogFilePath string               // Stores the log file path
-	mqttLevelVar    = new(slog.LevelVar) // Dynamic level control
-)
-
-func init() {
-	mqttLogFilePath = filepath.Join("logs", "mqtt.log") // Use filepath.Join for safety
-	initialLevel := slog.LevelInfo                      // Default level
-	mqttLevelVar.Set(initialLevel)                      // Set initial level
-
-	var err error
-	// Initialize the service-specific file logger using the LevelVar
-	mqttLogger, mqttLogCloser, err = logging.NewFileLogger(mqttLogFilePath, "mqtt", mqttLevelVar)
-	if err != nil {
-		// Use standard log for this critical setup error, as logging might not be fully functional
-		log.Printf("ERROR: Failed to initialize MQTT file logger at %s: %v. Service logging disabled.", mqttLogFilePath, err)
-		// Fallback to a disabled logger to prevent nil panics
-		mqttLogger = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: mqttLevelVar}))
-		mqttLogCloser = func() error { return nil } // No-op closer for fallback
-	} else {
-		// Use standard log for initial confirmation message
-		mqttLogger.Info("MQTT file logger initialised", "path", mqttLogFilePath)
-	}
-}
-
-// SetLogLevel dynamically changes the logging level for the MQTT logger.
-func SetLogLevel(level slog.Level) {
-	oldLevel := mqttLevelVar.Level()
-	if level == oldLevel {
-		return
-	}
-
-	mqttLevelVar.Set(level)
-}
-
-// CloseLogger closes the MQTT-specific file logger, if one was successfully initialized.
-// This should be called during graceful shutdown.
-func CloseLogger() error {
-	if mqttLogCloser != nil {
-		log.Println("Closing MQTT file logger...")
-		return mqttLogCloser()
-	}
-	return nil
+// GetLogger returns the module-scoped logger for MQTT operations.
+// This logger is automatically integrated with the application's central logging system.
+func GetLogger() logger.Logger {
+	return logger.Global().Module("mqtt")
 }
 
 // DefaultConfig returns a Config with reasonable default values
