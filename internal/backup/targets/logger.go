@@ -1,5 +1,5 @@
-// Package backup provides backup functionality for BirdNET-Go.
-package backup
+// Package targets provides backup target implementations.
+package targets
 
 import "github.com/tphakala/birdnet-go/internal/logger"
 

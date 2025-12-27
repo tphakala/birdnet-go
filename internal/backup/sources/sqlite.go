@@ -246,7 +246,7 @@ func (s *SQLiteSource) withDatabase(dbPath string, readOnly bool, fn func(*Datab
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			slog.Debug("Failed to close database connection", "error", err)
+			s.logger.Debug("Failed to close database connection", "error", err)
 		}
 	}()
 
@@ -429,7 +429,7 @@ func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			slog.Debug("Failed to close backup file", "path", tempPath, "error", err)
+			s.logger.Debug("Failed to close backup file", "path", tempPath, "error", err)
 		}
 	}()
 
@@ -500,7 +500,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := destDB.Close(); err != nil {
-			slog.Debug("Failed to close destination database", "error", err)
+			s.logger.Debug("Failed to close destination database", "error", err)
 		}
 	}()
 
@@ -515,7 +515,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := srcConn.Close(); err != nil {
-			slog.Debug("Failed to close source connection", "error", err)
+			s.logger.Debug("Failed to close source connection", "error", err)
 		}
 	}()
 
@@ -529,7 +529,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := dstConn.Close(); err != nil {
-			slog.Debug("Failed to close destination connection", "error", err)
+			s.logger.Debug("Failed to close destination connection", "error", err)
 		}
 	}()
 
@@ -582,7 +582,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := backupConn.Close(); err != nil {
-			slog.Debug("Failed to close backup connection", "error", err)
+			s.logger.Debug("Failed to close backup connection", "error", err)
 		}
 	}()
 	s.logger.Debug("Initialized SQLite backup connection", "total_pages", totalPages)
@@ -612,7 +612,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 	defer func() {
 		if err := backupFile.Close(); err != nil {
-			slog.Debug("Failed to close backup file for reading", "path", tempPath, "error", err)
+			s.logger.Debug("Failed to close backup file for reading", "path", tempPath, "error", err)
 		}
 	}()
 
