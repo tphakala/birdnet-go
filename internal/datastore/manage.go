@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"slices"
 	"strings"
@@ -47,7 +46,10 @@ func getSQLiteIndexInfo(db *gorm.DB, indexName string, debug bool) ([]struct {
 	query := fmt.Sprintf("PRAGMA index_info('%s')", escapedIndexName)
 	if err := db.Raw(query).Scan(&info).Error; err != nil {
 		// Log the warning here as the caller might just continue
-		log.Printf("WARN: Failed to get info for index '%s' using query [%s]: %v", indexName, query, err)
+		log.Warn("Failed to get info for index",
+			logger.String("index", indexName),
+			logger.String("query", query),
+			logger.Error(err))
 		return nil, err // Return the error to indicate failure
 	}
 	return info, nil
@@ -79,7 +81,7 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	// 1. Check if the table exists
 	if !db.Migrator().HasTable(&ImageCache{}) {
 		if debug {
-			log.Println("DEBUG: SQLite 'image_caches' table does not exist.")
+			log.Debug("SQLite 'image_caches' table does not exist")
 		}
 		return false, nil // Table doesn't exist, schema is implicitly incorrect for this check
 	}
@@ -96,7 +98,9 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	// 3. Analyze each index
 	for _, idx := range indexes {
 		if debug {
-			log.Printf("DEBUG: SQLite Analyzing index: Name=%s, Unique=%d", idx.Name, idx.Unique)
+			log.Debug("SQLite analyzing index",
+				logger.String("name", idx.Name),
+				logger.Int("unique", idx.Unique))
 		}
 
 		// Both the correct and the known incorrect index must be unique
@@ -117,11 +121,14 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 			if len(columns) == 2 && slices.Contains(columns, "provider_name") && slices.Contains(columns, "scientific_name") {
 				correctIndexFound = true
 				if debug {
-					log.Printf("DEBUG: SQLite Found correct composite unique index: %s", idx.Name)
+					log.Debug("SQLite found correct composite unique index",
+						logger.String("index", idx.Name))
 				}
 			} else if debug {
 				// Log if the named index doesn't have the expected structure
-				log.Printf("DEBUG: SQLite Index '%s' found, but columns %v or uniqueness mismatch.", idx.Name, columns)
+				log.Debug("SQLite index found but columns or uniqueness mismatch",
+					logger.String("index", idx.Name),
+					logger.Any("columns", columns))
 			}
 		} else {
 			// Check if it's the known incorrect index (unique, 1 column: scientific_name)
@@ -129,7 +136,8 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 			if len(columns) == 1 && columns[0] == "scientific_name" {
 				incorrectIndexFound = true
 				if debug {
-					log.Printf("DEBUG: SQLite Found incorrect single-column unique index on scientific_name: %s", idx.Name)
+					log.Debug("SQLite found incorrect single-column unique index on scientific_name",
+						logger.String("index", idx.Name))
 				}
 			}
 		}
@@ -141,7 +149,9 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	}
 
 	if debug {
-		log.Printf("DEBUG: SQLite Schema Check Result: correctIndexFound=%v, incorrectIndexFound=%v", correctIndexFound, incorrectIndexFound)
+		log.Debug("SQLite schema check result",
+			logger.Bool("correct_index_found", correctIndexFound),
+			logger.Bool("incorrect_index_found", incorrectIndexFound))
 	}
 
 	// Schema is considered correct only if the specific target index exists AND the specific incorrect index does NOT exist.
@@ -189,8 +199,11 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 
 	for _, stat := range stats {
 		if debug {
-			log.Printf("DEBUG: MySQL Processing index stat: Index=%s, Column=%s, Seq=%d, NonUnique=%d",
-				stat.IndexName, stat.ColumnName, stat.SeqInIndex, stat.NonUnique)
+			log.Debug("MySQL processing index stat",
+				logger.String("index", stat.IndexName),
+				logger.String("column", stat.ColumnName),
+				logger.Int("seq", stat.SeqInIndex),
+				logger.Int("non_unique", stat.NonUnique))
 		}
 		detail, exists := indexDetails[stat.IndexName]
 		if !exists {
@@ -224,7 +237,8 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 				if providerOk && scientificOk && providerSeq == 1 && scientificSeq == 2 {
 					foundCorrectIndex = true
 					if debug {
-						log.Printf("DEBUG: MySQL Found correct composite unique index: %s", indexName)
+						log.Debug("MySQL found correct composite unique index",
+							logger.String("index", indexName))
 					}
 				}
 			}
@@ -232,7 +246,8 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 			// Check for the incorrect single-column unique index on scientific_name
 			foundIncorrectIndex = true
 			if debug {
-				log.Printf("DEBUG: MySQL Found incorrect single-column unique index on scientific_name: %s", indexName)
+				log.Debug("MySQL found incorrect single-column unique index on scientific_name",
+					logger.String("index", indexName))
 			}
 		}
 
@@ -243,7 +258,9 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 	}
 
 	if debug {
-		log.Printf("DEBUG: MySQL Schema Check Result: foundCorrectIndex=%v, foundIncorrectIndex=%v", foundCorrectIndex, foundIncorrectIndex)
+		log.Debug("MySQL schema check result",
+			logger.Bool("correct_index_found", foundCorrectIndex),
+			logger.Bool("incorrect_index_found", foundIncorrectIndex))
 	}
 
 	// Schema is correct if the target composite index exists and the incorrect single-column one doesn't
@@ -254,7 +271,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	migrationStart := time.Now()
-	migrationLogger := getLogger().With(logger.String("db_type", dbType))
+	migrationLogger := log.With(logger.String("db_type", dbType))
 
 	migrationLogger.Info("Starting database migration")
 
@@ -307,7 +324,9 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 	u, err := url.Parse(parseInput)
 	if err != nil {
 		sanitizedConnectionInfo := redactSensitiveInfo(connectionInfo)
-		log.Printf("WARN: Failed to parse MySQL connection info '%s' as URL: %v. Cannot extract DB name.", sanitizedConnectionInfo, err)
+		log.Warn("Failed to parse MySQL connection info as URL",
+			logger.String("dsn", sanitizedConnectionInfo),
+			logger.Error(err))
 		return "" // Return empty on parse error
 	}
 
@@ -353,7 +372,8 @@ func redactSensitiveInfo(dsn string) string {
 	if err != nil {
 		// If parsing fails even with added scheme, return a generic redacted string
 		// as we cannot reliably locate the password. Avoid logging the raw DSN.
-		log.Printf("DEBUG: Failed to parse DSN for redaction: %v. Returning generic redaction.", err)
+		log.Debug("Failed to parse DSN for redaction, returning generic redaction",
+			logger.Error(err))
 		return "[REDACTED DSN]"
 	}
 

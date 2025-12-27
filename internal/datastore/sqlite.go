@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -65,11 +64,11 @@ func checkWritePermission(path string) error {
 	}
 	if err := f.Close(); err != nil {
 		// Log but don't fail permission check
-		log.Printf("Failed to close temp file: %v", err)
+		log.Warn("Failed to close temp file", logger.Error(err))
 	}
 	if err := os.Remove(tempFile); err != nil {
 		// Log but don't fail permission check
-		log.Printf("Failed to remove temp file: %v", err)
+		log.Warn("Failed to remove temp file", logger.Error(err))
 	}
 	return nil
 }
@@ -131,7 +130,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	}
 	defer func() {
 		if err := source.Close(); err != nil {
-			log.Printf("Failed to close source database: %v", err)
+			log.Warn("Failed to close source database", logger.Error(err))
 		}
 	}()
 
@@ -147,7 +146,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	}
 	defer func() {
 		if err := destination.Close(); err != nil {
-			log.Printf("Failed to close backup file: %v", err)
+			log.Warn("Failed to close backup file", logger.Error(err))
 		}
 	}()
 
@@ -162,7 +161,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 			Build()
 	}
 
-	log.Printf("Created database backup: %s", backupPath)
+	log.Info("Created database backup", logger.String("path", backupPath))
 	return nil
 }
 
@@ -184,7 +183,7 @@ func (s *SQLiteStore) Open() error {
 	}
 
 	// Log database opening
-	getLogger().Info("Opening SQLite database",
+	log.Info("Opening SQLite database",
 		logger.String("path", dbPath))
 
 	// Create database directory if it doesn't exist
@@ -249,7 +248,9 @@ func (s *SQLiteStore) Open() error {
 
 	for _, pragma := range pragmas {
 		if _, err := sqlDB.Exec(pragma); err != nil {
-			log.Printf("Warning: Failed to set pragma %s: %v", pragma, err)
+			log.Warn("Failed to set pragma",
+				logger.String("pragma", pragma),
+				logger.Error(err))
 		}
 	}
 
@@ -257,7 +258,7 @@ func (s *SQLiteStore) Open() error {
 	s.DB = db
 
 	// Log successful connection
-	getLogger().Info("SQLite database opened successfully",
+	log.Info("SQLite database opened successfully",
 		logger.String("path", dbPath),
 		logger.String("journal_mode", "WAL"),
 		logger.String("synchronous", "NORMAL"))
@@ -299,7 +300,7 @@ func (s *SQLiteStore) Close() error {
 		s.StopMonitoring()
 
 		// Log database closing
-		getLogger().Info("Closing SQLite database",
+		log.Info("Closing SQLite database",
 			logger.String("path", s.Settings.Output.SQLite.Path))
 
 		sqlDB, err := s.DB.DB()
@@ -312,14 +313,14 @@ func (s *SQLiteStore) Close() error {
 		}
 
 		if err := sqlDB.Close(); err != nil {
-			getLogger().Error("Failed to close SQLite database",
+			log.Error("Failed to close SQLite database",
 				logger.String("path", s.Settings.Output.SQLite.Path),
 				logger.Error(err))
 			return err
 		}
 
 		// Log successful closure
-		getLogger().Info("SQLite database closed successfully",
+		log.Info("SQLite database closed successfully",
 			logger.String("path", s.Settings.Output.SQLite.Path))
 		return nil
 	}
@@ -337,7 +338,7 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 	}
 
 	optimizeStart := time.Now()
-	optimizeLogger := getLogger().With(logger.String("operation", "optimize"), logger.String("db_type", "SQLite"))
+	optimizeLogger := log.With(logger.String("operation", "optimize"), logger.String("db_type", "SQLite"))
 
 	optimizeLogger.Info("Starting database optimization")
 
@@ -491,7 +492,7 @@ func (s *SQLiteStore) CheckpointWAL() error {
 			Build()
 	}
 
-	log.Println("✅ SQLite WAL checkpoint completed successfully")
+	log.Info("SQLite WAL checkpoint completed successfully")
 	return nil
 }
 

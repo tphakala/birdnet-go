@@ -50,7 +50,7 @@ func dbError(err error, operation, priority string, context ...any) error {
 
 	// Validate context pairs and add them
 	if len(context)%2 != 0 {
-		getLogger().Warn("Odd number of context parameters in dbError",
+		log.Warn("Odd number of context parameters in dbError",
 			logger.String("operation", operation),
 			logger.Int("context_length", len(context)))
 		// Drop the last unpaired element
@@ -119,7 +119,7 @@ func stateError(err error, operation, stateType string, context ...any) error {
 
 	// Validate and add additional context pairs
 	if len(context)%2 != 0 {
-		getLogger().Warn("Odd number of context parameters in stateError",
+		log.Warn("Odd number of context parameters in stateError",
 			logger.String("operation", operation),
 			logger.String("state_type", stateType),
 			logger.Int("context_length", len(context)))
@@ -147,7 +147,7 @@ func conflictError(err error, operation, conflictType string, context ...any) er
 
 	// Validate and add additional context pairs
 	if len(context)%2 != 0 {
-		getLogger().Warn("Odd number of context parameters in conflictError",
+		log.Warn("Odd number of context parameters in conflictError",
 			logger.String("operation", operation),
 			logger.String("conflict_type", conflictType),
 			logger.Int("context_length", len(context)))
@@ -185,7 +185,7 @@ func criticalError(err error, operation, reason string, context ...any) error {
 
 	// Validate and add additional context pairs
 	if len(context)%2 != 0 {
-		getLogger().Warn("Odd number of context parameters in criticalError",
+		log.Warn("Odd number of context parameters in criticalError",
 			logger.String("operation", operation),
 			logger.String("critical_reason", reason),
 			logger.Int("context_length", len(context)))
