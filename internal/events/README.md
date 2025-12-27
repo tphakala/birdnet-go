@@ -123,9 +123,12 @@ eventBus, err := events.Initialize(config)
 ### Registering Consumers
 
 ```go
+import "github.com/tphakala/birdnet-go/internal/logger"
+
 // Implement EventConsumer interface
 type MyConsumer struct {
     name string
+    log  logger.Logger
 }
 
 func (c *MyConsumer) Name() string {
@@ -134,7 +137,8 @@ func (c *MyConsumer) Name() string {
 
 func (c *MyConsumer) ProcessEvent(event events.ErrorEvent) error {
     // Process single event
-    log.Printf("Processing error: %s", event.GetMessage())
+    c.log.Debug("processing error event",
+        logger.String("message", event.GetMessage()))
     return nil
 }
 

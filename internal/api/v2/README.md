@@ -408,8 +408,10 @@ if param == "" {
 ### Logging
 
 ```go
-// Use structured logging
-c.logAPIRequest(ctx, slog.LevelInfo, "Operation completed", "key", value)
+// Use structured logging with type-safe field constructors
+c.log.Info("operation completed",
+    logger.String("key", value),
+    logger.String("ip", ctx.RealIP()))
 ```
 
 ### Authentication

@@ -604,27 +604,30 @@ Handlers follow a consistent pattern:
    return ctx.JSON(http.StatusOK, detection)
    ```
 
-5. **Logging**: Handlers utilize structured logging via `c.apiLogger`:
+5. **Logging**: Handlers utilize structured logging via `c.log` (cached `logger.Logger`):
    - Log entry points with `Info` level, including relevant request parameters (e.g., date, species, ID) and context (IP address, request path).
    - Log successful outcomes with `Info` level, summarizing results (e.g., number of records fetched, action completed).
    - Log validation errors or expected issues (e.g., resource not found, invalid parameters) with `Warn` level.
    - Log unexpected errors (e.g., database failures, internal processing errors) with `Error` level, including the underlying error message and relevant context.
-   - Use `c.Debug` for verbose debugging information during development.
+   - Use `Debug` for verbose debugging information during development.
    - Example:
      ```go
-     if c.apiLogger != nil {
-         c.apiLogger.Info("Handling request for detection", "detection_id", id, "ip", ctx.RealIP(), "path", ctx.Request().URL.Path)
-     }
+     c.log.Info("handling request for detection",
+         logger.String("detection_id", id),
+         logger.String("ip", ctx.RealIP()),
+         logger.String("path", ctx.Request().URL.Path))
+
      // ... processing ...
      if err != nil {
-         if c.apiLogger != nil {
-             c.apiLogger.Error("Failed to fetch detection from datastore", "detection_id", id, "error", err.Error(), "ip", ctx.RealIP(), "path", ctx.Request().URL.Path)
-         }
+         c.log.Error("failed to fetch detection from datastore",
+             logger.String("detection_id", id),
+             logger.Error(err),
+             logger.String("ip", ctx.RealIP()))
          return c.HandleError(ctx, err, "Database error", http.StatusInternalServerError)
      }
-     if c.apiLogger != nil {
-         c.apiLogger.Info("Successfully retrieved detection", "detection_id", id, "ip", ctx.RealIP(), "path", ctx.Request().URL.Path)
-     }
+
+     c.log.Info("successfully retrieved detection",
+         logger.String("detection_id", id))
      ```
 
 ### Settings Management
@@ -827,11 +830,11 @@ When working with the API code, be mindful of these important considerations:
 - Example:
 
   ```go
-  // INCORRECT
-  c.logger.Printf("Login attempt with credentials: %s:%s", username, password)
+  // INCORRECT - exposes credentials
+  c.log.Info("login attempt", logger.String("username", username), logger.String("password", password))
 
-  // CORRECT
-  c.logger.Printf("Login attempt for user: %s", username)
+  // CORRECT - only log non-sensitive data
+  c.log.Info("login attempt", logger.String("username", username))
   ```
 
 ### Error Handling
@@ -850,11 +853,11 @@ When working with the API code, be mindful of these important considerations:
 
   // CORRECT
   if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-      c.logger.Printf("Failed to set write deadline: %v", err)
+      c.log.Warn("failed to set write deadline", logger.Error(err))
       return err
   }
   if err := conn.WriteMessage(messageType, payload); err != nil {
-      c.logger.Printf("Failed to write message: %v", err)
+      c.log.Warn("failed to write message", logger.Error(err))
       return err
   }
   ```
@@ -872,7 +875,7 @@ When working with the API code, be mindful of these important considerations:
 
   // CORRECT
   if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-      c.logger.Printf("Failed to set read deadline: %v", err)
+      c.log.Warn("failed to set read deadline", logger.Error(err))
       return err
   }
   ```
