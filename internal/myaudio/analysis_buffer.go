@@ -3,7 +3,6 @@ package myaudio
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -184,7 +184,10 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	if registry != nil {
 		registry.AcquireSourceReference(sourceID)
 	} else {
-		log.Printf("⚠️ Registry not available during analysis buffer allocation, skipping source reference for: %s", sourceID)
+		log := GetLogger()
+		log.Warn("registry not available during analysis buffer allocation",
+			logger.String("source_id", sourceID),
+			logger.String("operation", "allocate_analysis_buffer"))
 	}
 
 	// Record successful allocation metrics
@@ -233,16 +236,21 @@ func RemoveAnalysisBuffer(sourceID string) error {
 
 	// Release reference to this source - registry will auto-remove if count reaches zero
 	registry := GetRegistry()
+	log := GetLogger()
 	// Guard against nil registry during shutdown to prevent panic
 	if registry != nil {
 		if err := registry.ReleaseSourceReference(sourceID); err != nil {
 			// Log but don't fail - buffer removal succeeded
 			if !errors.Is(err, ErrSourceNotFound) {
-				log.Printf("⚠️ Failed to release source reference: %v", err)
+				log.Warn("failed to release source reference",
+					logger.String("source_id", sourceID),
+					logger.Error(err))
 			}
 		}
 	} else {
-		log.Printf("⚠️ Registry not available during analysis buffer cleanup, skipping source reference release for: %s", sourceID)
+		log.Warn("registry not available during analysis buffer cleanup",
+			logger.String("source_id", sourceID),
+			logger.String("operation", "remove_analysis_buffer"))
 	}
 
 	return nil
@@ -277,6 +285,8 @@ func InitAnalysisBuffers(capacity int, sources []string) error {
 
 // WriteToAnalysisBuffer writes audio data into the ring buffer for a given source ID.
 func WriteToAnalysisBuffer(sourceID string, data []byte) error {
+	log := GetLogger()
+
 	// Get source info for enhanced logging (ID + DisplayName)
 	var displayName string
 	if registry := GetRegistry(); registry != nil {
@@ -347,8 +357,12 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		warningCounterMutex.Unlock()
 
 		if shouldLog {
-			log.Printf("⚠️ Analysis buffer for %s is %.2f%% full (used: %d/%d bytes)",
-				displayName, capacityUsed*100, currentLength, capacity)
+			log.Warn("analysis buffer near capacity",
+				logger.String("display_name", displayName),
+				logger.String("source_id", sourceID),
+				logger.Float64("capacity_percent", capacityUsed*100),
+				logger.Int("used_bytes", currentLength),
+				logger.Int("capacity_bytes", capacity))
 		}
 
 		if m := getAnalysisMetrics(); m != nil && capacityUsed > 0.95 {
@@ -383,8 +397,13 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 			if n < len(data) {
 				// Partial write - log and record metrics
 				// Note: ringbuffer's Free() method is thread-safe
-				log.Printf("⚠️ Only wrote %d of %d bytes to buffer for %s (capacity: %d, free: %d)",
-					n, len(data), displayName, capacity, ab.Free())
+				log.Warn("partial write to analysis buffer",
+					logger.String("display_name", displayName),
+					logger.String("source_id", sourceID),
+					logger.Int("bytes_written", n),
+					logger.Int("bytes_requested", len(data)),
+					logger.Int("capacity", capacity),
+					logger.Int("free_bytes", ab.Free()))
 
 				if m := getAnalysisMetrics(); m != nil {
 					m.RecordBufferWrite("analysis", sourceID, "partial")
@@ -398,8 +417,13 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 
 		// Log detailed buffer state
 		// Note: ringbuffer's Free() and Length() methods are thread-safe
-		log.Printf("⚠️ Analysis buffer for %s has %d/%d bytes free (%d bytes used), tried to write %d bytes",
-			displayName, ab.Free(), capacity, ab.Length(), len(data))
+		log.Warn("analysis buffer write failed",
+			logger.String("display_name", displayName),
+			logger.String("source_id", sourceID),
+			logger.Int("free_bytes", ab.Free()),
+			logger.Int("capacity", capacity),
+			logger.Int("used_bytes", ab.Length()),
+			logger.Int("write_bytes", len(data)))
 
 		// Record retry metrics
 		if m := getAnalysisMetrics(); m != nil {
@@ -411,9 +435,16 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		}
 
 		if errors.Is(err, ringbuffer.ErrIsFull) {
-			log.Printf("⚠️ Analysis buffer for %s is full. Waiting before retry %d/%d", displayName, retry+1, maxRetries)
+			log.Warn("analysis buffer full, retrying",
+				logger.String("display_name", displayName),
+				logger.String("source_id", sourceID),
+				logger.Int("retry", retry+1),
+				logger.Int("max_retries", maxRetries))
 		} else {
-			log.Printf("❌ Unexpected error writing to analysis buffer for %s: %v", displayName, err)
+			log.Error("unexpected error writing to analysis buffer",
+				logger.String("display_name", displayName),
+				logger.String("source_id", sourceID),
+				logger.Error(err))
 		}
 
 		// System resource utilization capture disabled to prevent disk space issues
@@ -424,8 +455,14 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 	}
 
 	// If we've reached this point, we've failed all retries
-	log.Printf("❌ Failed to write to analysis buffer for %s after %d attempts. Dropping %d bytes of PCM data. Buffer state: capacity=%d, used=%d, free=%d",
-		displayName, maxRetries, len(data), capacity, ab.Length(), ab.Free())
+	log.Error("failed to write to analysis buffer after all retries",
+		logger.String("display_name", displayName),
+		logger.String("source_id", sourceID),
+		logger.Int("attempts", maxRetries),
+		logger.Int("dropped_bytes", len(data)),
+		logger.Int("capacity", capacity),
+		logger.Int("used_bytes", ab.Length()),
+		logger.Int("free_bytes", ab.Free()))
 
 	// Record data drop metrics
 	if m := getAnalysisMetrics(); m != nil {
@@ -580,6 +617,8 @@ func AnalysisBufferExists(sourceID string) bool {
 
 // AnalysisBufferMonitor monitors the buffer and processes audio data when enough data is present.
 func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, sourceID string) {
+	log := GetLogger()
+
 	wg.Add(1)
 	defer func() {
 		wg.Done()
@@ -602,7 +641,9 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 		case <-ticker.C: // Wait for the next tick
 			data, err := ReadFromAnalysisBuffer(sourceID)
 			if err != nil {
-				log.Printf("❌ Buffer read error: %v", err)
+				log.Error("buffer read error",
+					logger.String("source_id", sourceID),
+					logger.Error(err))
 
 				if m := getAnalysisMetrics(); m != nil {
 					m.RecordAnalysisBufferPoll(sourceID, "error")
@@ -633,7 +674,9 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 				}
 
 				if err != nil {
-					log.Printf("❌ Error processing data for source ID %s: %v", sourceID, err)
+					log.Error("error processing data",
+						logger.String("source_id", sourceID),
+						logger.Error(err))
 				}
 			} else if m := getAnalysisMetrics(); m != nil {
 				m.RecordAnalysisBufferPoll(sourceID, "insufficient_data")
