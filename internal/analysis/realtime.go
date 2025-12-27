@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -192,13 +191,12 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize processor with analysis logger for hierarchical logging
 	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache, GetLogger())
 
-	// Initialize Backup system
-	// Use slog.Default() for backup - backup package uses slog.Logger interface
-	backupLogger := slog.Default()
-	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLogger)
+	// Initialize Backup system using centralized logger
+	backupLog := logger.Global().Module("backup")
+	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLog)
 	if err != nil {
 		// Log the specific error from initialization
-		backupLogger.Error("Failed to initialize backup system", "error", err)
+		backupLog.Error("Failed to initialize backup system", logger.Error(err))
 		// Don't make this fatal - continue without backup system
 		GetLogger().Warn("backup system initialization failed",
 			logger.Error(err),
@@ -1270,10 +1268,10 @@ func logHLSCleanup(err error) {
 }
 
 // initializeBackupSystem sets up the backup manager and scheduler.
-func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) (*backup.Manager, *backup.Scheduler, error) {
-	backupLogger.Info("Initializing backup system...")
+func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*backup.Manager, *backup.Scheduler, error) {
+	backupLog.Info("Initializing backup system...")
 
-	stateManager, err := backup.NewStateManager(backupLogger)
+	stateManager, err := backup.NewStateManager(backupLog)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").
@@ -1283,7 +1281,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	}
 
 	// Use settings.Version for the app version
-	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
+	backupManager, err := backup.NewManager(settings, backupLog, stateManager, settings.Version)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").
@@ -1291,7 +1289,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 			Context("operation", "initialize_backup_manager").
 			Build()
 	}
-	backupScheduler, err := backup.NewScheduler(backupManager, backupLogger, stateManager)
+	backupScheduler, err := backup.NewScheduler(backupManager, backupLog, stateManager)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").
@@ -1303,31 +1301,31 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	// Load schedule for backupScheduler if backup is enabled
 	switch {
 	case settings.Backup.Enabled && len(settings.Backup.Schedules) > 0:
-		backupLogger.Info("Loading backup schedule from configuration")
+		backupLog.Info("Loading backup schedule from configuration")
 		if err := backupScheduler.LoadFromConfig(&settings.Backup); err != nil {
 			// Log the error but don't necessarily stop initialization
-			backupLogger.Error("Failed to load backup schedule from config", "error", err)
+			backupLog.Error("Failed to load backup schedule from config", logger.Error(err))
 		}
 	case settings.Backup.Enabled:
 		// This case is reached if backup is enabled but no schedules are defined.
-		backupLogger.Info("Backup enabled, but no schedules configured.")
+		backupLog.Info("Backup enabled, but no schedules configured.")
 	default:
 		// This case is reached if backup is disabled.
-		backupLogger.Info("Backup system is disabled.")
+		backupLog.Info("Backup system is disabled.")
 	}
 
 	// Start backupManager and backupScheduler if backup is enabled
 	if settings.Backup.Enabled {
-		backupLogger.Info("Starting backup manager")
+		backupLog.Info("Starting backup manager")
 		if err := backupManager.Start(); err != nil {
 			// Log the error but don't necessarily stop initialization
-			backupLogger.Error("Failed to start backup manager", "error", err)
+			backupLog.Error("Failed to start backup manager", logger.Error(err))
 		}
-		backupLogger.Info("Starting backup scheduler")
+		backupLog.Info("Starting backup scheduler")
 		backupScheduler.Start() // Start the scheduler
 	}
 
-	backupLogger.Info("Backup system initialized.")
+	backupLog.Info("Backup system initialized.")
 	return backupManager, backupScheduler, nil
 }
 
