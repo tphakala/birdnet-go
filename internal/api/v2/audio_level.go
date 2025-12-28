@@ -20,11 +20,12 @@ import (
 // Audio level SSE configuration constants
 const (
 	// Connection timeouts
-	audioLevelMaxDuration      = 30 * time.Minute      // Maximum stream duration to prevent resource leaks
-	audioLevelHeartbeatInterval = 10 * time.Second     // Heartbeat interval for keep-alive
-	audioLevelActivityCheck    = 1 * time.Second       // Activity check interval for sources
-	audioLevelInactivityThreshold = 15 * time.Second   // Threshold for marking sources as inactive
-	audioLevelRateLimitUpdate  = 50 * time.Millisecond // Rate limit for sending updates
+	audioLevelMaxDuration         = 30 * time.Minute      // Maximum stream duration to prevent resource leaks
+	audioLevelHeartbeatInterval   = 10 * time.Second      // Heartbeat interval for keep-alive
+	audioLevelActivityCheck       = 1 * time.Second       // Activity check interval for sources
+	audioLevelInactivityThreshold = 15 * time.Second      // Threshold for marking sources as inactive
+	audioLevelRateLimitUpdate     = 50 * time.Millisecond // Rate limit for sending updates
+	audioLevelWriteDeadline       = 10 * time.Second      // Write deadline for SSE messages to prevent WriteTimeout
 
 	// Buffer sizes
 	audioLevelChannelBuffer = 100 // Buffer size for internal processing
@@ -344,10 +345,9 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 
 		case <-heartbeat.C:
 			// Send heartbeat comment to keep connection alive
-			if _, err := fmt.Fprintf(ctx.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
+			if err := c.sendAudioLevelHeartbeat(ctx); err != nil {
 				return err
 			}
-			ctx.Response().Flush()
 		}
 	}
 }
@@ -568,10 +568,35 @@ func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]my
 		return fmt.Errorf("failed to marshal audio level data: %w", err)
 	}
 
+	// Reset write deadline to prevent server WriteTimeout from closing connection.
+	// This extends the deadline with each successful write, keeping the SSE connection alive.
+	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
+			c.logDebugIfEnabled("Failed to set write deadline for audio level SSE", "error", err.Error())
+		}
+	}
+
 	if _, err := fmt.Fprintf(ctx.Response(), "data: %s\n\n", jsonData); err != nil {
 		return fmt.Errorf("failed to write SSE message: %w", err)
 	}
 
+	ctx.Response().Flush()
+	return nil
+}
+
+// sendAudioLevelHeartbeat sends a heartbeat comment to keep the SSE connection alive.
+// It resets the write deadline before writing to prevent server WriteTimeout.
+func (c *Controller) sendAudioLevelHeartbeat(ctx echo.Context) error {
+	// Reset write deadline to prevent server WriteTimeout from closing connection.
+	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
+			c.logDebugIfEnabled("Failed to set write deadline for heartbeat", "error", err.Error())
+		}
+	}
+
+	if _, err := fmt.Fprintf(ctx.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
+		return err
+	}
 	ctx.Response().Flush()
 	return nil
 }
