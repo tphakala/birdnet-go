@@ -397,7 +397,7 @@ func Error(err error) Field {
 //	    logger.Duration("elapsed", time.Since(start)),
 //	    logger.Duration("timeout", 30*time.Second))
 func Duration(key string, value time.Duration) Field {
-	return Field{Key: internKey(key), Value: value.String()}
+	return Field{Key: internKey(key), Value: value}
 }
 
 // Time creates a time field for structured logging.

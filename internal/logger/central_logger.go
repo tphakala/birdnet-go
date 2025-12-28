@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -130,6 +131,12 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("logging config cannot be nil")
 	}
+
+	// Apply defaults for nil output configurations
+	// This ensures backwards compatibility when users upgrade - their existing configs
+	// without explicit file_output or console sections will get sensible defaults
+	// rather than silently disabling logging.
+	applyConfigDefaults(cfg)
 
 	// Load timezone
 	// Special case: "Local" uses the system's local timezone
@@ -543,6 +550,13 @@ func (m *moduleLogger) log(level slog.Level, msg string, fields ...Field) {
 	putAttrs(attrsPtr)
 }
 
+// roundFloat rounds a float64 to the specified number of decimal places.
+// Used to produce cleaner log output (e.g., 1.234 instead of 1.23456789).
+func roundFloat(val float64, precision int) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
+}
+
 // fieldToAttr converts Field to slog.Attr
 func fieldToAttr(f Field) slog.Attr {
 	switch v := f.Value.(type) {
@@ -553,15 +567,19 @@ func fieldToAttr(f Field) slog.Attr {
 	case int64:
 		return slog.Int64(f.Key, v)
 	case float32:
-		return slog.Float64(f.Key, float64(v))
+		// Round to 3 decimal places for cleaner output
+		return slog.Float64(f.Key, roundFloat(float64(v), 3))
 	case float64:
-		return slog.Float64(f.Key, v)
+		// Round to 3 decimal places for cleaner output
+		return slog.Float64(f.Key, roundFloat(v, 3))
 	case bool:
 		return slog.Bool(f.Key, v)
 	case time.Time:
 		return slog.Time(f.Key, v)
 	case time.Duration:
-		return slog.Duration(f.Key, v)
+		// Format as human-readable string (e.g., "5ms", "1.5s") for consistent output
+		// slog.Duration outputs nanoseconds in JSON which is not human-friendly
+		return slog.String(f.Key, v.Round(time.Millisecond).String())
 	default:
 		return slog.Any(f.Key, v)
 	}

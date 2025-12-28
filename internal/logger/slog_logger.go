@@ -349,15 +349,19 @@ func (l *SlogLogger) fieldToAttr(f Field) slog.Attr {
 	case int64:
 		return slog.Int64(f.Key, v)
 	case float32:
-		return slog.Float64(f.Key, float64(v))
+		// Round to 3 decimal places for cleaner output
+		return slog.Float64(f.Key, roundFloat(float64(v), 3))
 	case float64:
-		return slog.Float64(f.Key, v)
+		// Round to 3 decimal places for cleaner output
+		return slog.Float64(f.Key, roundFloat(v, 3))
 	case bool:
 		return slog.Bool(f.Key, v)
 	case time.Time:
 		return slog.Time(f.Key, v)
 	case time.Duration:
-		return slog.Duration(f.Key, v)
+		// Format as human-readable string (e.g., "5ms", "1.5s") for consistent output
+		// slog.Duration outputs nanoseconds in JSON which is not human-friendly
+		return slog.String(f.Key, v.Round(time.Millisecond).String())
 	default:
 		return slog.Any(f.Key, v)
 	}
