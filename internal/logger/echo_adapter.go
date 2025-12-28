@@ -137,41 +137,50 @@ func (a *EchoLoggerAdapter) Errorj(j echo_log.JSON) {
 	a.logger.Error("Echo JSON error", Any("data", j))
 }
 
-// Fatal logs a message at ERROR level and panics to trigger graceful shutdown
+// Fatal logs a message at ERROR level and panics to trigger graceful shutdown.
+// The panic is intentional to match Echo's expected behavior - Echo's recovery
+// middleware can catch this panic and perform graceful shutdown. This allows
+// the application to clean up resources before terminating.
 func (a *EchoLoggerAdapter) Fatal(i ...any) {
 	msg := fmt.Sprint(i...)
 	a.logger.Error(msg)
 	panic("Echo fatal error: " + msg)
 }
 
-// Fatalf logs a formatted message at ERROR level and panics
+// Fatalf logs a formatted message at ERROR level and panics.
+// See Fatal for explanation of why panic is used.
 func (a *EchoLoggerAdapter) Fatalf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	a.logger.Error(msg)
 	panic("Echo fatal error: " + msg)
 }
 
-// Fatalj logs a JSON object at ERROR level and panics
+// Fatalj logs a JSON object at ERROR level and panics.
+// See Fatal for explanation of why panic is used.
 func (a *EchoLoggerAdapter) Fatalj(j echo_log.JSON) {
 	a.logger.Error("Echo JSON fatal", Any("data", j))
 	panic(fmt.Sprintf("Echo fatal error: %v", j))
 }
 
-// Panic logs a message at ERROR level and panics
+// Panic logs a message at ERROR level and panics.
+// The panic is intentional to match Echo's expected behavior - Echo's recovery
+// middleware can catch this panic and handle it appropriately.
 func (a *EchoLoggerAdapter) Panic(i ...any) {
 	msg := fmt.Sprint(i...)
 	a.logger.Error(msg)
 	panic(msg)
 }
 
-// Panicf logs a formatted message at ERROR level and panics
+// Panicf logs a formatted message at ERROR level and panics.
+// See Panic for explanation of why panic is used.
 func (a *EchoLoggerAdapter) Panicf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	a.logger.Error(msg)
 	panic(msg)
 }
 
-// Panicj logs a JSON object at ERROR level and panics
+// Panicj logs a JSON object at ERROR level and panics.
+// See Panic for explanation of why panic is used.
 func (a *EchoLoggerAdapter) Panicj(j echo_log.JSON) {
 	a.logger.Error("Echo JSON panic", Any("data", j))
 	panic(j)

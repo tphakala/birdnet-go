@@ -26,44 +26,44 @@ type ConsoleOutput struct {
 // File output uses JSON format with RFC3339 timestamps for machine parsing
 // and log aggregation systems (ELK, Loki, Splunk, etc.).
 type FileOutput struct {
-	Enabled    bool   `yaml:"enabled" json:"enabled"`         // enable file output
-	Path       string `yaml:"path" json:"path"`               // log file path
-	MaxSize    int    `yaml:"max_size" json:"max_size"`       // TODO: implement log rotation - maximum size in MB before rotation
-	MaxAge     int    `yaml:"max_age" json:"max_age"`         // TODO: implement log rotation - maximum age in days to keep old logs
-	MaxBackups int    `yaml:"max_backups" json:"max_backups"` // TODO: implement log rotation - maximum number of old log files to keep
-	Compress   bool   `yaml:"compress" json:"compress"`       // TODO: implement log rotation - compress rotated logs
-	Level      string `yaml:"level" json:"level"`             // log level for file output
+	Enabled         bool   `yaml:"enabled" json:"enabled"`                     // enable file output
+	Path            string `yaml:"path" json:"path"`                           // log file path
+	MaxSize         int    `yaml:"max_size" json:"max_size"`                   // maximum size in MB before rotation (0 = disabled)
+	MaxAge          int    `yaml:"max_age" json:"max_age"`                     // maximum age in days to keep rotated logs (0 = no limit)
+	MaxRotatedFiles int    `yaml:"max_rotated_files" json:"max_rotated_files"` // maximum number of rotated log files to keep (0 = no limit)
+	Compress        bool   `yaml:"compress" json:"compress"`                   // compress rotated logs with gzip
+	Level           string `yaml:"level" json:"level"`                         // log level for file output
 }
 
 // ModuleOutput represents per-module output configuration
 type ModuleOutput struct {
-	Enabled     bool   `yaml:"enabled" json:"enabled"`           // enable module-specific output
-	FilePath    string `yaml:"file_path" json:"file_path"`       // dedicated file path for this module
-	Level       string `yaml:"level" json:"level"`               // log level override for this module
-	ConsoleAlso bool   `yaml:"console_also" json:"console_also"` // also log to console
-	MaxSize     int    `yaml:"max_size" json:"max_size"`         // TODO: implement log rotation - maximum size in MB before rotation (0 = use FileOutput default)
-	MaxAge      int    `yaml:"max_age" json:"max_age"`           // TODO: implement log rotation - maximum age in days (0 = use FileOutput default)
-	MaxBackups  int    `yaml:"max_backups" json:"max_backups"`   // TODO: implement log rotation - maximum number of old files (0 = use FileOutput default)
-	Compress    bool   `yaml:"compress" json:"compress"`         // TODO: implement log rotation - compress rotated logs
+	Enabled         bool   `yaml:"enabled" json:"enabled"`                                   // enable module-specific output
+	FilePath        string `yaml:"file_path" json:"file_path"`                               // dedicated file path for this module
+	Level           string `yaml:"level" json:"level"`                                       // log level override for this module
+	ConsoleAlso     bool   `yaml:"console_also" json:"console_also"`                         // also log to console
+	MaxSize         int    `yaml:"max_size" json:"max_size"`                                 // maximum size in MB before rotation (0 = use FileOutput default)
+	MaxAge          int    `yaml:"max_age" json:"max_age"`                                   // maximum age in days (0 = use FileOutput default)
+	MaxRotatedFiles int    `yaml:"max_rotated_files" json:"max_rotated_files"`               // maximum number of rotated files (0 = use FileOutput default)
+	Compress        *bool  `yaml:"compress,omitempty" json:"compress,omitempty"`             // compress rotated logs (nil = use FileOutput default)
 }
 
 // Default values for logging configuration.
 // These match the defaults in conf/defaults.go to ensure consistency.
 const (
-	DefaultLogLevel           = "info"
-	DefaultLogPath            = "logs/application.log"
-	DefaultAccessLogPath      = "logs/access.log"
-	DefaultAuthLogPath        = "logs/auth.log"
-	DefaultAudioLogPath       = "logs/audio.log"
+	DefaultLogLevel             = "info"
+	DefaultLogPath              = "logs/application.log"
+	DefaultAccessLogPath        = "logs/access.log"
+	DefaultAuthLogPath          = "logs/auth.log"
+	DefaultAudioLogPath         = "logs/audio.log"
 	DefaultBirdweatherLogPath   = "logs/birdweather.log"
 	DefaultWeatherLogPath       = "logs/weather.log"
 	DefaultImageproviderLogPath = "logs/imageprovider.log"
-	DefaultMaxSize            = 100 // MB
-	DefaultMaxAge             = 30  // days
-	DefaultMaxBackups         = 10
-	DefaultCompressLogs       = true
-	DefaultConsoleEnabled     = true
-	DefaultFileEnabled        = true
+	DefaultMaxSize              = 100   // MB before rotation
+	DefaultMaxAge               = 30    // days to keep rotated files
+	DefaultMaxRotatedFiles      = 10    // max number of rotated files
+	DefaultCompressLogs         = false // compression disabled by default
+	DefaultConsoleEnabled       = true
+	DefaultFileEnabled          = true
 )
 
 // ensureModuleOutput adds a default module output configuration if not already present.
@@ -106,13 +106,13 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	// File logging should be enabled by default for troubleshooting and log aggregation
 	if cfg.FileOutput == nil {
 		cfg.FileOutput = &FileOutput{
-			Enabled:    DefaultFileEnabled,
-			Path:       DefaultLogPath,
-			Level:      DefaultLogLevel,
-			MaxSize:    DefaultMaxSize,
-			MaxAge:     DefaultMaxAge,
-			MaxBackups: DefaultMaxBackups,
-			Compress:   DefaultCompressLogs,
+			Enabled:         DefaultFileEnabled,
+			Path:            DefaultLogPath,
+			Level:           DefaultLogLevel,
+			MaxSize:         DefaultMaxSize,
+			MaxAge:          DefaultMaxAge,
+			MaxRotatedFiles: DefaultMaxRotatedFiles,
+			Compress:        DefaultCompressLogs,
 		}
 	}
 

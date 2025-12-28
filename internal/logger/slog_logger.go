@@ -136,7 +136,9 @@ func (l *SlogLogger) ReopenLogFile() error {
 	return nil
 }
 
-// Module returns a logger scoped to a specific module
+// Module returns a logger scoped to a specific module.
+// The returned logger shares the parent's handler but gets its own copy of fields
+// to ensure immutability - modifications to parent fields won't affect children.
 func (l *SlogLogger) Module(name string) Logger {
 	if l == nil {
 		return nil
@@ -153,7 +155,7 @@ func (l *SlogLogger) Module(name string) Logger {
 		level:      l.level,
 		module:     moduleName,
 		timezone:   l.timezone,
-		fields:     l.fields,
+		fields:     slices.Clone(l.fields), // clone to ensure immutability
 		logWriter:  l.logWriter,
 		filePath:   l.filePath,
 	}

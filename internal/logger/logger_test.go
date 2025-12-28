@@ -313,8 +313,8 @@ func TestSlogLogger_WithContext(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logger := NewSlogLogger(buf, LogLevelInfo, time.UTC)
 
-		//nolint:staticcheck // Using string key to match production logger expectations
-		ctx := context.WithValue(context.Background(), "trace_id", "trace-123")
+		// Use WithTraceID() - the documented API for setting trace IDs
+		ctx := WithTraceID(context.Background(), "trace-123")
 		contextLogger := logger.WithContext(ctx)
 
 		contextLogger.Info("test message")

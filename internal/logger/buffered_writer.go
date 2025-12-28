@@ -19,16 +19,9 @@ const DefaultFlushInterval = 5 * time.Second
 // BufferedFileWriter wraps a file with buffered I/O for improved performance.
 // It is thread-safe and supports periodic auto-flushing.
 //
-// Design note: The file handle is abstracted to support future log rotation.
-// When rotation is implemented, the underlying file can be swapped via a
-// dedicated method without changing the writer interface.
-//
-// TODO: Implement log rotation with the following features:
-//   - Size-based rotation (rotate when file exceeds MaxSize MB)
-//   - Age-based cleanup (delete files older than MaxAge days)
-//   - Backup limit (keep only MaxBackups old files)
-//   - Optional compression of rotated files
-//   - Atomic file swap to prevent data loss during rotation
+// Design note: The file handle is abstracted to support log rotation.
+// The underlying file can be swapped atomically via SwapFile() without
+// changing the writer interface. See RotationManager for rotation logic.
 type BufferedFileWriter struct {
 	mu          sync.Mutex
 	file        *os.File
@@ -38,7 +31,8 @@ type BufferedFileWriter struct {
 	stopFlush   chan struct{}
 	flushDone   chan struct{}
 	flushTicker *time.Ticker
-	closed      bool // tracks if Close has been called
+	closed      bool             // tracks if Close has been called
+	rotation    *RotationManager // optional rotation manager
 }
 
 // BufferedWriterOption configures a BufferedFileWriter
@@ -62,6 +56,16 @@ func WithFlushInterval(interval time.Duration) BufferedWriterOption {
 		}
 		if interval > 0 {
 			w.flushTicker = time.NewTicker(interval)
+		}
+	}
+}
+
+// WithRotation enables log rotation with the given configuration.
+// Rotation is checked during each flush interval.
+func WithRotation(config RotationConfig) BufferedWriterOption {
+	return func(w *BufferedFileWriter) {
+		if config.IsEnabled() {
+			w.rotation = NewRotationManager(w.filePath, config, w)
 		}
 	}
 }
@@ -143,6 +147,10 @@ func (w *BufferedFileWriter) autoFlushLoop() {
 		case <-w.flushTicker.C:
 			// Ignore flush errors in background - they'll surface on next Write
 			_ = w.Flush()
+			// Check for rotation after flush
+			if w.rotation != nil {
+				w.rotation.CheckAndRotate()
+			}
 		}
 	}
 }
@@ -208,6 +216,38 @@ func (w *BufferedFileWriter) Sync() error {
 	return w.syncLocked()
 }
 
+// SwapFile atomically swaps the underlying file with a new one.
+// This is used for log rotation - the new file is prepared externally,
+// then swapped in with minimal lock duration.
+// Returns the old file handle (caller is responsible for closing it).
+func (w *BufferedFileWriter) SwapFile(newFile *os.File) (*os.File, error) {
+	if newFile == nil {
+		return nil, fmt.Errorf("new file cannot be nil")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return nil, fmt.Errorf("writer is closed")
+	}
+
+	// Flush current buffer to old file
+	if err := w.flushLocked(); err != nil {
+		return nil, fmt.Errorf("failed to flush before swap: %w", err)
+	}
+
+	// Swap the file
+	oldFile := w.file
+	w.file = newFile
+	w.filePath = newFile.Name()
+
+	// Reset the bufio.Writer to use the new file
+	w.writer.Reset(newFile)
+
+	return oldFile, nil
+}
+
 // Close flushes the buffer, syncs to disk, and closes the underlying file. Thread-safe.
 // Close is idempotent - calling it multiple times is safe.
 func (w *BufferedFileWriter) Close() error {
@@ -220,6 +260,11 @@ func (w *BufferedFileWriter) Close() error {
 	}
 	w.closed = true
 	w.mu.Unlock()
+
+	// Stop rotation manager first
+	if w.rotation != nil {
+		w.rotation.Close()
+	}
 
 	// Stop auto-flush goroutine if it was started
 	if w.flushTicker != nil {
@@ -256,6 +301,14 @@ func (w *BufferedFileWriter) FilePath() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.filePath
+}
+
+// SetFilePath updates the internal file path after external rename.
+// This is used after log rotation renames the file to keep the path in sync.
+func (w *BufferedFileWriter) SetFilePath(path string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.filePath = path
 }
 
 // Buffered returns the number of bytes buffered but not yet written to disk
