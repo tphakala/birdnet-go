@@ -209,13 +209,13 @@ type ConsoleOutput struct {
 
 // File output: JSON format with RFC3339 timestamps
 type FileOutput struct {
-    Enabled    bool   `yaml:"enabled"`
-    Path       string `yaml:"path"`
-    MaxSize    int    `yaml:"max_size"`    // MB
-    MaxAge     int    `yaml:"max_age"`     // days
-    MaxBackups int    `yaml:"max_backups"`
-    Compress   bool   `yaml:"compress"`
-    Level      string `yaml:"level"`
+    Enabled         bool   `yaml:"enabled"`
+    Path            string `yaml:"path"`
+    MaxSize         int    `yaml:"max_size"`          // MB before rotation
+    MaxAge          int    `yaml:"max_age"`           // days to keep rotated files
+    MaxRotatedFiles int    `yaml:"max_rotated_files"` // max rotated files to keep
+    Compress        bool   `yaml:"compress"`          // gzip rotated files
+    Level           string `yaml:"level"`
 }
 
 type ModuleOutput struct {

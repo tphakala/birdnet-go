@@ -19,16 +19,9 @@ const DefaultFlushInterval = 5 * time.Second
 // BufferedFileWriter wraps a file with buffered I/O for improved performance.
 // It is thread-safe and supports periodic auto-flushing.
 //
-// Design note: The file handle is abstracted to support future log rotation.
-// When rotation is implemented, the underlying file can be swapped via a
-// dedicated method without changing the writer interface.
-//
-// TODO: Implement log rotation with the following features:
-//   - Size-based rotation (rotate when file exceeds MaxSize MB)
-//   - Age-based cleanup (delete files older than MaxAge days)
-//   - Backup limit (keep only MaxBackups old files)
-//   - Optional compression of rotated files
-//   - Atomic file swap to prevent data loss during rotation
+// Design note: The file handle is abstracted to support log rotation.
+// The underlying file can be swapped atomically via SwapFile() without
+// changing the writer interface. See RotationManager for rotation logic.
 type BufferedFileWriter struct {
 	mu          sync.Mutex
 	file        *os.File
