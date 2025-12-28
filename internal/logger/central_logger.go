@@ -20,8 +20,20 @@ import (
 	_ "time/tzdata"
 )
 
-// Default capacity for pooled attribute slices (module + ~7 fields)
-const defaultAttrCapacity = 8
+// Constants for logger configuration
+const (
+	// defaultAttrCapacity is the default capacity for pooled attribute slices (module + ~7 fields)
+	defaultAttrCapacity = 8
+
+	// traceLevelValue is slog.Level for TRACE level (below Debug which is -4)
+	traceLevelValue = slog.Level(-8)
+
+	// floatPrecisionRatio is pre-computed 10^3 for rounding floats to 3 decimal places
+	floatPrecisionRatio = 1000.0
+
+	// maxLevelWidth is the maximum width of log level strings for text formatting
+	maxLevelWidth = 5
+)
 
 // Global logger instance
 var (
@@ -63,9 +75,9 @@ func Global() *CentralLogger {
 						Level:   "info",
 					},
 				},
-				timezone:     time.Local,
-				moduleFiles:  make(map[string]*os.File),
-				moduleLevels: make(map[string]slog.Level),
+				timezone:      time.Local,
+				moduleWriters: make(map[string]*BufferedFileWriter),
+				moduleLevels:  make(map[string]slog.Level),
 			}
 			// Create console-only base handler
 			globalLogger.baseHandler = newTextHandler(os.Stdout, slog.LevelInfo, time.Local)
@@ -117,13 +129,13 @@ func putAttrs(attrs *[]slog.Attr) {
 
 // CentralLogger manages module-aware logging with flexible routing
 type CentralLogger struct {
-	config       *LoggingConfig
-	timezone     *time.Location
-	baseHandler  slog.Handler          // Default handler for modules without specific config
-	mainFile     *os.File              // Main log file handle (if file output enabled)
-	moduleFiles  map[string]*os.File   // Per-module file handles
-	moduleLevels map[string]slog.Level // Per-module log levels
-	mu           sync.RWMutex          // Protects concurrent access
+	config        *LoggingConfig
+	timezone      *time.Location
+	baseHandler   slog.Handler                    // Default handler for modules without specific config
+	mainWriter    *BufferedFileWriter             // Main log file writer (if file output enabled)
+	moduleWriters map[string]*BufferedFileWriter  // Per-module buffered writers
+	moduleLevels  map[string]slog.Level           // Per-module log levels
+	mu            sync.RWMutex                    // Protects concurrent access
 }
 
 // NewCentralLogger creates a centralized logger with module routing
@@ -153,10 +165,10 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 	}
 
 	cl := &CentralLogger{
-		config:       cfg,
-		timezone:     tz,
-		moduleFiles:  make(map[string]*os.File),
-		moduleLevels: make(map[string]slog.Level),
+		config:        cfg,
+		timezone:      tz,
+		moduleWriters: make(map[string]*BufferedFileWriter),
+		moduleLevels:  make(map[string]slog.Level),
 	}
 
 	// Parse module levels
@@ -169,7 +181,8 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 		return nil, fmt.Errorf("failed to create base handler: %w", err)
 	}
 
-	// Open module-specific log files
+	// Open module-specific log files with buffered writers
+	// On error, clean up already-opened writers to prevent resource leaks
 	for module, moduleConfig := range cfg.ModuleOutputs {
 		if !moduleConfig.Enabled {
 			continue
@@ -177,15 +190,17 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 
 		// Ensure directory exists
 		if err := ensureFileDirectory(moduleConfig.FilePath); err != nil {
+			cl.closeAllWriters() // Clean up on error
 			return nil, fmt.Errorf("failed to create directory for module %s: %w", module, err)
 		}
 
-		// Open module log file
-		file, err := os.OpenFile(moduleConfig.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, LogFilePermissions)
+		// Create buffered writer for module log file
+		writer, err := NewBufferedFileWriter(moduleConfig.FilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to open log file for module %s: %w", module, err)
+			cl.closeAllWriters() // Clean up on error
+			return nil, fmt.Errorf("failed to create log writer for module %s: %w", module, err)
 		}
-		cl.moduleFiles[module] = file
+		cl.moduleWriters[module] = writer
 	}
 
 	return cl, nil
@@ -208,20 +223,20 @@ func (cl *CentralLogger) createBaseHandler() error {
 			return fmt.Errorf("failed to create log directory: %w", err)
 		}
 
-		// Open main log file
-		file, err := os.OpenFile(cl.config.FileOutput.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, LogFilePermissions)
+		// Create buffered writer for main log file
+		writer, err := NewBufferedFileWriter(cl.config.FileOutput.Path)
 		if err != nil {
-			return fmt.Errorf("failed to open log file: %w", err)
+			return fmt.Errorf("failed to create log writer: %w", err)
 		}
 
-		// Store the file handle for proper cleanup
-		cl.mainFile = file
+		// Store the writer for proper cleanup
+		cl.mainWriter = writer
 
 		fileLevel := parseLogLevel(cl.config.FileOutput.Level)
 		opts := &slog.HandlerOptions{
 			Level: fileLevel,
 		}
-		handlers = append(handlers, slog.NewJSONHandler(file, opts))
+		handlers = append(handlers, slog.NewJSONHandler(writer, opts))
 	}
 
 	if len(handlers) == 0 {
@@ -262,11 +277,11 @@ func (cl *CentralLogger) Module(name string) Logger {
 
 	// Add module-specific file handler if configured
 	if hasModuleConfig && moduleConfig.Enabled {
-		if moduleFile, ok := cl.moduleFiles[name]; ok {
+		if moduleWriter, ok := cl.moduleWriters[name]; ok {
 			opts := &slog.HandlerOptions{
 				Level: moduleLevel,
 			}
-			handlers = append(handlers, slog.NewJSONHandler(moduleFile, opts))
+			handlers = append(handlers, slog.NewJSONHandler(moduleWriter, opts))
 		}
 
 		// Also log to console if requested - USE TEXT FORMAT
@@ -291,7 +306,7 @@ func (cl *CentralLogger) Module(name string) Logger {
 		logger:   slog.New(handler),
 		level:    moduleLevel,
 		timezone: cl.timezone,
-		fields:   make([]Field, 0),
+		fields:   nil, // nil is equivalent to empty slice but avoids allocation
 	}
 }
 
@@ -303,7 +318,7 @@ func (cl *CentralLogger) getModuleLevelLocked(module string) slog.Level {
 	return parseLogLevel(cl.config.DefaultLevel)
 }
 
-// Close closes all open log files
+// Close closes all buffered writers and their underlying files
 func (cl *CentralLogger) Close() error {
 	if cl == nil {
 		return nil
@@ -312,27 +327,41 @@ func (cl *CentralLogger) Close() error {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
+	return cl.closeAllWritersLocked()
+}
+
+// closeAllWriters closes all writers without locking (for use during initialization errors)
+func (cl *CentralLogger) closeAllWriters() {
+	_ = cl.closeAllWritersLocked()
+}
+
+// closeAllWritersLocked closes all writers (caller must hold lock or be in init)
+func (cl *CentralLogger) closeAllWritersLocked() error {
 	var errs []error
 
-	// Close main log file
-	if cl.mainFile != nil {
-		if err := cl.mainFile.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close main log file: %w", err))
+	// Close main log writer (flushes buffer and syncs to disk)
+	if cl.mainWriter != nil {
+		if err := cl.mainWriter.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close main log writer: %w", err))
 		}
-		cl.mainFile = nil
+		cl.mainWriter = nil
 	}
 
-	// Close module files
-	for module, file := range cl.moduleFiles {
-		if err := file.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close log file for module %s: %w", module, err))
+	// Close module writers
+	for module, writer := range cl.moduleWriters {
+		if err := writer.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close log writer for module %s: %w", module, err))
 		}
 	}
+	// Clear the map to avoid referencing closed writers
+	cl.moduleWriters = nil
 
 	return errors.Join(errs...)
 }
 
-// Flush ensures all buffered logs are written
+// Flush ensures all buffered logs are written to OS buffers.
+// Note: This flushes to OS buffers but does not fsync to disk.
+// For critical sync to disk, Close() will perform full sync.
 func (cl *CentralLogger) Flush() error {
 	if cl == nil {
 		return nil
@@ -343,17 +372,17 @@ func (cl *CentralLogger) Flush() error {
 
 	var errs []error
 
-	// Sync main log file
-	if cl.mainFile != nil {
-		if err := cl.mainFile.Sync(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync main log file: %w", err))
+	// Flush main log writer
+	if cl.mainWriter != nil {
+		if err := cl.mainWriter.Flush(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to flush main log writer: %w", err))
 		}
 	}
 
-	// Sync module files
-	for module, file := range cl.moduleFiles {
-		if err := file.Sync(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync log file for module %s: %w", module, err))
+	// Flush module writers
+	for module, writer := range cl.moduleWriters {
+		if err := writer.Flush(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to flush log writer for module %s: %w", module, err))
 		}
 	}
 
@@ -385,7 +414,7 @@ func ensureFileDirectory(filePath string) error {
 func parseLogLevel(level string) slog.Level {
 	switch level {
 	case "trace":
-		return slog.Level(-8) // Trace level below Debug (-4)
+		return traceLevelValue
 	case "debug":
 		return slog.LevelDebug
 	case "info":
@@ -425,8 +454,6 @@ func (m *moduleLogger) Module(name string) Logger {
 
 // Trace logs a trace message (most verbose level)
 func (m *moduleLogger) Trace(msg string, fields ...Field) {
-	// Trace level is -8 (below Debug which is -4)
-	const traceLevelValue = slog.Level(-8)
 	if m == nil || m.level > traceLevelValue {
 		return
 	}
@@ -498,18 +525,14 @@ func (m *moduleLogger) WithContext(ctx context.Context) Logger {
 		return m
 	}
 
-	fields := make([]Field, 0, 1)
-
 	// Extract trace ID from context if available
-	if traceID := getTraceIDFromContext(ctx); traceID != "" {
-		fields = append(fields, String("trace_id", traceID))
-	}
-
-	if len(fields) == 0 {
+	// Check first to avoid allocation when no trace ID exists
+	traceID := getTraceIDFromContext(ctx)
+	if traceID == "" {
 		return m
 	}
 
-	return m.With(fields...)
+	return m.With(String(traceIDKey, traceID))
 }
 
 // Flush ensures all buffered logs are written
@@ -530,7 +553,7 @@ func (m *moduleLogger) log(level slog.Level, msg string, fields ...Field) {
 
 	// Add module
 	if m.module != "" {
-		attrs = append(attrs, slog.String("module", m.module))
+		attrs = append(attrs, slog.String(moduleKey, m.module))
 	}
 
 	// Add accumulated context fields
@@ -550,11 +573,11 @@ func (m *moduleLogger) log(level slog.Level, msg string, fields ...Field) {
 	putAttrs(attrsPtr)
 }
 
-// roundFloat rounds a float64 to the specified number of decimal places.
+// roundFloat rounds a float64 to 3 decimal places.
 // Used to produce cleaner log output (e.g., 1.234 instead of 1.23456789).
-func roundFloat(val float64, precision int) float64 {
-	ratio := math.Pow(10, float64(precision))
-	return math.Round(val*ratio) / ratio
+// Uses pre-computed floatPrecisionRatio to avoid math.Pow per call.
+func roundFloat(val float64) float64 {
+	return math.Round(val*floatPrecisionRatio) / floatPrecisionRatio
 }
 
 // fieldToAttr converts Field to slog.Attr
@@ -567,11 +590,11 @@ func fieldToAttr(f Field) slog.Attr {
 	case int64:
 		return slog.Int64(f.Key, v)
 	case float32:
-		// Round to 3 decimal places for cleaner output
-		return slog.Float64(f.Key, roundFloat(float64(v), 3))
+		// Round for cleaner output
+		return slog.Float64(f.Key, roundFloat(float64(v)))
 	case float64:
-		// Round to 3 decimal places for cleaner output
-		return slog.Float64(f.Key, roundFloat(v, 3))
+		// Round for cleaner output
+		return slog.Float64(f.Key, roundFloat(v))
 	case bool:
 		return slog.Bool(f.Key, v)
 	case time.Time:

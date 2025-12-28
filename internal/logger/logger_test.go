@@ -57,7 +57,8 @@ func TestFieldConstructors(t *testing.T) {
 		duration := 5 * time.Second
 		field := Duration("elapsed", duration)
 		assert.Equal(t, "elapsed", field.Key)
-		assert.Equal(t, "5s", field.Value)
+		// Field stores raw time.Duration; conversion to string happens in fieldToAttr
+		assert.Equal(t, duration, field.Value)
 	})
 
 	t.Run("Time field", func(t *testing.T) {

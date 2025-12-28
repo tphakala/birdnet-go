@@ -18,14 +18,15 @@ const (
 
 // SlogLogger implements Logger interface using Go's standard log/slog
 type SlogLogger struct {
-	handler  slog.Handler
-	level    slog.Level
-	module   string
-	timezone *time.Location
-	fields   []Field
-	logFile  *os.File
-	filePath string
-	mu       sync.RWMutex // protects logFile
+	handler    slog.Handler
+	slogLogger *slog.Logger // cached instance to avoid per-call allocation
+	level      slog.Level
+	module     string
+	timezone   *time.Location
+	fields     []Field
+	logWriter  *BufferedFileWriter
+	filePath   string
+	mu         sync.RWMutex // protects logWriter and slogLogger
 }
 
 // NewSlogLogger creates a new slog-based logger with JSON output
@@ -44,10 +45,11 @@ func NewSlogLogger(writer io.Writer, level LogLevel, timezone *time.Location) *S
 	handler := slog.NewJSONHandler(writer, opts)
 
 	return &SlogLogger{
-		handler:  handler,
-		level:    parseSlogLevel(level),
-		timezone: timezone,
-		fields:   make([]Field, 0),
+		handler:    handler,
+		slogLogger: slog.New(handler), // cache logger instance
+		level:      parseSlogLevel(level),
+		timezone:   timezone,
+		fields:     nil, // nil is equivalent to empty slice but avoids allocation
 	}
 }
 
@@ -57,88 +59,79 @@ func NewSlogLogger(writer io.Writer, level LogLevel, timezone *time.Location) *S
 // (Timestamps are omitted - journald/Docker adds them automatically)
 func NewConsoleLogger(module string, level LogLevel) *SlogLogger {
 	tz := time.Local
+	handler := newTextHandler(os.Stdout, parseSlogLevel(level), tz)
 
 	return &SlogLogger{
-		handler:  newTextHandler(os.Stdout, parseSlogLevel(level), tz),
-		level:    parseSlogLevel(level),
-		module:   module,
-		timezone: tz,
-		fields:   make([]Field, 0),
+		handler:    handler,
+		slogLogger: slog.New(handler), // cache logger instance
+		level:      parseSlogLevel(level),
+		module:     module,
+		timezone:   tz,
+		fields:     nil, // nil is equivalent to empty slice but avoids allocation
 	}
 }
 
-// NewSlogLoggerWithFile creates a new slog-based logger with file output
+// NewSlogLoggerWithFile creates a new slog-based logger with buffered file output
 func NewSlogLoggerWithFile(filePath string, level LogLevel, timezone *time.Location) (*SlogLogger, error) {
 	if timezone == nil {
 		timezone = time.UTC
 	}
 
-	logger := &SlogLogger{
-		level:    parseSlogLevel(level),
-		timezone: timezone,
-		fields:   make([]Field, 0),
-		filePath: filePath,
+	// Create buffered writer for log file
+	writer, err := NewBufferedFileWriter(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create log writer: %w", err)
 	}
 
-	// Open log file
-	if err := logger.openLogFile(); err != nil {
-		return nil, fmt.Errorf("failed to open log file: %w", err)
-	}
-
-	// Create handler with file writer
+	// Create handler with buffered writer
 	opts := &slog.HandlerOptions{
 		Level: parseSlogLevel(level),
 	}
-	logger.handler = slog.NewJSONHandler(logger.logFile, opts)
+	handler := slog.NewJSONHandler(writer, opts)
+
+	logger := &SlogLogger{
+		handler:    handler,
+		slogLogger: slog.New(handler), // cache logger instance
+		level:      parseSlogLevel(level),
+		timezone:   timezone,
+		fields:     nil, // nil is equivalent to empty slice but avoids allocation
+		logWriter:  writer,
+		filePath:   filePath,
+	}
 
 	return logger, nil
 }
 
-// openLogFile opens or reopens the log file
-func (l *SlogLogger) openLogFile() error {
-	if l.filePath == "" {
-		return fmt.Errorf("log file path not set")
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// Close existing file if open
-	if l.logFile != nil {
-		if err := l.logFile.Close(); err != nil {
-			return fmt.Errorf("failed to close existing log file: %w", err)
-		}
-	}
-
-	// Open file with append mode
-	file, err := os.OpenFile(l.filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, LogFilePermissions)
-	if err != nil {
-		return fmt.Errorf("failed to open log file %s: %w", l.filePath, err)
-	}
-
-	l.logFile = file
-	return nil
-}
-
-// ReopenLogFile reopens the log file (for log rotation via SIGHUP)
+// ReopenLogFile reopens the log file (for log rotation via SIGHUP).
+// Note: With buffered writers, this closes the old writer and creates a new one.
 func (l *SlogLogger) ReopenLogFile() error {
 	if l.filePath == "" {
 		return nil // not using file logging
 	}
 
-	// Reopen the file
-	if err := l.openLogFile(); err != nil {
-		return err
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Close existing writer if open
+	if l.logWriter != nil {
+		if err := l.logWriter.Close(); err != nil {
+			return fmt.Errorf("failed to close existing log writer: %w", err)
+		}
 	}
 
-	// Recreate handler with new file handle
+	// Create new buffered writer
+	writer, err := NewBufferedFileWriter(l.filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create new log writer: %w", err)
+	}
+	l.logWriter = writer
+
+	// Recreate handler with new writer
 	opts := &slog.HandlerOptions{
 		Level: l.level,
 	}
-
-	l.mu.Lock()
-	l.handler = slog.NewJSONHandler(l.logFile, opts)
-	l.mu.Unlock()
+	l.handler = slog.NewJSONHandler(writer, opts)
+	l.slogLogger = slog.New(l.handler) // update cached logger
 
 	return nil
 }
@@ -155,13 +148,14 @@ func (l *SlogLogger) Module(name string) Logger {
 	}
 
 	return &SlogLogger{
-		handler:  l.handler,
-		level:    l.level,
-		module:   moduleName,
-		timezone: l.timezone,
-		fields:   l.fields,
-		logFile:  l.logFile,
-		filePath: l.filePath,
+		handler:    l.handler,
+		slogLogger: l.slogLogger, // share cached logger instance
+		level:      l.level,
+		module:     moduleName,
+		timezone:   l.timezone,
+		fields:     l.fields,
+		logWriter:  l.logWriter,
+		filePath:   l.filePath,
 	}
 }
 
@@ -170,8 +164,6 @@ func (l *SlogLogger) Trace(msg string, fields ...Field) {
 	if l == nil {
 		return
 	}
-	// Trace level is -8 (below Debug which is -4)
-	const traceLevelValue = slog.Level(-8)
 	if l.level > traceLevelValue {
 		return
 	}
@@ -234,13 +226,14 @@ func (l *SlogLogger) With(fields ...Field) Logger {
 	}
 
 	return &SlogLogger{
-		handler:  l.handler,
-		level:    l.level,
-		module:   l.module,
-		timezone: l.timezone,
-		fields:   slices.Concat(l.fields, fields),
-		logFile:  l.logFile,
-		filePath: l.filePath,
+		handler:    l.handler,
+		slogLogger: l.slogLogger, // share cached logger instance
+		level:      l.level,
+		module:     l.module,
+		timezone:   l.timezone,
+		fields:     slices.Concat(l.fields, fields),
+		logWriter:  l.logWriter,
+		filePath:   l.filePath,
 	}
 }
 
@@ -253,21 +246,17 @@ func (l *SlogLogger) WithContext(ctx context.Context) Logger {
 		return l
 	}
 
-	fields := make([]Field, 0, 2) //nolint:mnd // Capacity hint for trace_id field
-
 	// Extract trace ID from context if available
-	if traceID := getTraceID(ctx); traceID != "" {
-		fields = append(fields, String("trace_id", traceID))
-	}
-
-	if len(fields) == 0 {
+	// Check first to avoid allocation when no trace ID exists
+	traceID := getTraceIDFromContext(ctx)
+	if traceID == "" {
 		return l
 	}
 
-	return l.With(fields...)
+	return l.With(String(traceIDKey, traceID))
 }
 
-// Flush ensures all buffered logs are written
+// Flush ensures all buffered logs are written to OS buffers
 func (l *SlogLogger) Flush() error {
 	if l == nil {
 		return nil
@@ -276,17 +265,17 @@ func (l *SlogLogger) Flush() error {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	// Sync file if we're writing to one
-	if l.logFile != nil {
-		if err := l.logFile.Sync(); err != nil {
-			return fmt.Errorf("failed to sync log file: %w", err)
+	// Flush buffered writer if we're writing to one
+	if l.logWriter != nil {
+		if err := l.logWriter.Flush(); err != nil {
+			return fmt.Errorf("failed to flush log writer: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// Close closes the log file if open
+// Close closes the buffered writer and underlying file
 func (l *SlogLogger) Close() error {
 	if l == nil {
 		return nil
@@ -295,11 +284,11 @@ func (l *SlogLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.logFile != nil {
-		if err := l.logFile.Close(); err != nil {
-			return fmt.Errorf("failed to close log file: %w", err)
+	if l.logWriter != nil {
+		if err := l.logWriter.Close(); err != nil {
+			return fmt.Errorf("failed to close log writer: %w", err)
 		}
-		l.logFile = nil
+		l.logWriter = nil
 	}
 
 	return nil
@@ -317,61 +306,32 @@ func (l *SlogLogger) log(level slog.Level, msg string, fields ...Field) {
 
 	// Add module if set
 	if l.module != "" {
-		attrs = append(attrs, slog.String("module", l.module))
+		attrs = append(attrs, slog.String(moduleKey, l.module))
 	}
 
 	// Add accumulated context fields
-	for _, f := range l.fields {
-		attrs = append(attrs, l.fieldToAttr(f))
+	for i := range l.fields {
+		attrs = append(attrs, fieldToAttr(l.fields[i]))
 	}
 
 	// Add current fields
-	for _, f := range fields {
-		attrs = append(attrs, l.fieldToAttr(f))
+	for i := range fields {
+		attrs = append(attrs, fieldToAttr(fields[i]))
 	}
 
-	// Create logger from handler and log
-	logger := slog.New(l.handler)
-	logger.LogAttrs(context.Background(), level, msg, attrs...)
+	// Use cached logger instance (avoids allocation per log call)
+	l.slogLogger.LogAttrs(context.Background(), level, msg, attrs...)
 
 	// Return slice to pool
 	*attrsPtr = attrs
 	putAttrs(attrsPtr)
 }
 
-// fieldToAttr converts Field to slog.Attr
-func (l *SlogLogger) fieldToAttr(f Field) slog.Attr {
-	switch v := f.Value.(type) {
-	case string:
-		return slog.String(f.Key, v)
-	case int:
-		return slog.Int(f.Key, v)
-	case int64:
-		return slog.Int64(f.Key, v)
-	case float32:
-		// Round to 3 decimal places for cleaner output
-		return slog.Float64(f.Key, roundFloat(float64(v), 3))
-	case float64:
-		// Round to 3 decimal places for cleaner output
-		return slog.Float64(f.Key, roundFloat(v, 3))
-	case bool:
-		return slog.Bool(f.Key, v)
-	case time.Time:
-		return slog.Time(f.Key, v)
-	case time.Duration:
-		// Format as human-readable string (e.g., "5ms", "1.5s") for consistent output
-		// slog.Duration outputs nanoseconds in JSON which is not human-friendly
-		return slog.String(f.Key, v.Round(time.Millisecond).String())
-	default:
-		return slog.Any(f.Key, v)
-	}
-}
-
 // parseSlogLevel converts LogLevel to slog.Level
 func parseSlogLevel(level LogLevel) slog.Level {
 	switch level {
 	case LogLevelTrace:
-		return slog.Level(-8) // Trace level below Debug (-4)
+		return traceLevelValue
 	case LogLevelDebug:
 		return slog.LevelDebug
 	case LogLevelInfo:
@@ -383,20 +343,4 @@ func parseSlogLevel(level LogLevel) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-// getTraceID extracts trace ID from context
-func getTraceID(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	// Try typed key first (preferred)
-	if traceID, ok := ctx.Value(TraceIDKey).(string); ok {
-		return traceID
-	}
-	// Fall back to string key for backward compatibility
-	if traceID, ok := ctx.Value("trace_id").(string); ok {
-		return traceID
-	}
-	return ""
 }

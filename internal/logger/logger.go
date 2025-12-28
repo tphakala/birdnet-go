@@ -217,9 +217,13 @@ func internKey(key string) string {
 	return unique.Make(key).Value()
 }
 
-// Pre-interned common keys for zero-allocation access
+// Pre-interned common keys for zero-allocation access.
+// These keys are frequently used across the codebase and benefit from
+// being interned once rather than on each log call.
 var (
-	errorKey = internKey("error")
+	errorKey   = internKey("error")
+	moduleKey  = internKey("module")
+	traceIDKey = internKey("trace_id")
 )
 
 // Logger is the centralized logging interface for dependency injection

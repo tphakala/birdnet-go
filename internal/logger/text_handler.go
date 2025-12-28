@@ -8,8 +8,17 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+// textAttrPool provides reusable slices for slog.Attr to reduce allocations in Handle.
+var textAttrPool = sync.Pool{
+	New: func() any {
+		s := make([]slog.Attr, 0, defaultAttrCapacity)
+		return &s
+	},
+}
 
 // textHandler formats logs in human-readable text format for console output.
 // This handler is optimized for developer experience during local development
@@ -45,7 +54,7 @@ func newTextHandler(w io.Writer, level slog.Level, _ *time.Location) *textHandle
 	return &textHandler{
 		writer: w,
 		level:  level,
-		attrs:  make([]slog.Attr, 0),
+		attrs:  nil, // nil is equivalent to empty slice but avoids allocation
 	}
 }
 
@@ -60,11 +69,14 @@ func (h *textHandler) Enabled(_ context.Context, level slog.Level) bool {
 func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
 	level := record.Level.String()
 
+	// Get attribute slice from pool (reduces allocations in hot path)
+	attrsPtr := textAttrPool.Get().(*[]slog.Attr)
+	extraAttrs := *attrsPtr
+
 	// Extract module and collect other attributes
 	module := ""
-	extraAttrs := make([]slog.Attr, 0, record.NumAttrs())
 	record.Attrs(func(attr slog.Attr) bool {
-		if attr.Key == "module" {
+		if attr.Key == moduleKey {
 			module = attr.Value.String()
 		} else {
 			extraAttrs = append(extraAttrs, attr)
@@ -77,8 +89,8 @@ func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
 
 	// LEVEL (no timestamp - journald/Docker adds it)
 	sb.WriteString(level)
-	// Pad level to 5 chars for alignment
-	for i := len(level); i < 5; i++ {
+	// Pad level for alignment (longest level is "ERROR" = 5 chars)
+	for i := len(level); i < maxLevelWidth; i++ {
 		sb.WriteByte(' ')
 	}
 
@@ -102,7 +114,13 @@ func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
 	}
 
 	sb.WriteByte('\n')
-	_, err := h.writer.Write([]byte(sb.String()))
+
+	// Return slice to pool
+	*attrsPtr = extraAttrs[:0]
+	textAttrPool.Put(attrsPtr)
+
+	// Use io.WriteString to avoid allocation if writer implements io.StringWriter
+	_, err := io.WriteString(h.writer, sb.String())
 	return err
 }
 

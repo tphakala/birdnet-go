@@ -13,9 +13,7 @@ type multiWriterHandler struct {
 
 // newMultiWriterHandler creates a handler that writes to multiple handlers
 func newMultiWriterHandler(handlers ...slog.Handler) slog.Handler {
-	if handlers == nil {
-		handlers = make([]slog.Handler, 0)
-	}
+	// nil slice works fine for append and iteration - no need to allocate
 	return &multiWriterHandler{handlers: handlers}
 }
 

@@ -28,10 +28,10 @@ type ConsoleOutput struct {
 type FileOutput struct {
 	Enabled    bool   `yaml:"enabled" json:"enabled"`         // enable file output
 	Path       string `yaml:"path" json:"path"`               // log file path
-	MaxSize    int    `yaml:"max_size" json:"max_size"`       // maximum size in MB before rotation
-	MaxAge     int    `yaml:"max_age" json:"max_age"`         // maximum age in days to keep old logs
-	MaxBackups int    `yaml:"max_backups" json:"max_backups"` // maximum number of old log files to keep
-	Compress   bool   `yaml:"compress" json:"compress"`       // compress rotated logs
+	MaxSize    int    `yaml:"max_size" json:"max_size"`       // TODO: implement log rotation - maximum size in MB before rotation
+	MaxAge     int    `yaml:"max_age" json:"max_age"`         // TODO: implement log rotation - maximum age in days to keep old logs
+	MaxBackups int    `yaml:"max_backups" json:"max_backups"` // TODO: implement log rotation - maximum number of old log files to keep
+	Compress   bool   `yaml:"compress" json:"compress"`       // TODO: implement log rotation - compress rotated logs
 	Level      string `yaml:"level" json:"level"`             // log level for file output
 }
 
@@ -41,10 +41,10 @@ type ModuleOutput struct {
 	FilePath    string `yaml:"file_path" json:"file_path"`       // dedicated file path for this module
 	Level       string `yaml:"level" json:"level"`               // log level override for this module
 	ConsoleAlso bool   `yaml:"console_also" json:"console_also"` // also log to console
-	MaxSize     int    `yaml:"max_size" json:"max_size"`         // maximum size in MB before rotation (0 = use FileOutput default)
-	MaxAge      int    `yaml:"max_age" json:"max_age"`           // maximum age in days (0 = use FileOutput default)
-	MaxBackups  int    `yaml:"max_backups" json:"max_backups"`   // maximum number of old files (0 = use FileOutput default)
-	Compress    bool   `yaml:"compress" json:"compress"`         // compress rotated logs
+	MaxSize     int    `yaml:"max_size" json:"max_size"`         // TODO: implement log rotation - maximum size in MB before rotation (0 = use FileOutput default)
+	MaxAge      int    `yaml:"max_age" json:"max_age"`           // TODO: implement log rotation - maximum age in days (0 = use FileOutput default)
+	MaxBackups  int    `yaml:"max_backups" json:"max_backups"`   // TODO: implement log rotation - maximum number of old files (0 = use FileOutput default)
+	Compress    bool   `yaml:"compress" json:"compress"`         // TODO: implement log rotation - compress rotated logs
 }
 
 // Default values for logging configuration.
@@ -65,6 +65,19 @@ const (
 	DefaultConsoleEnabled     = true
 	DefaultFileEnabled        = true
 )
+
+// ensureModuleOutput adds a default module output configuration if not already present.
+// This helper reduces repetition when setting up default module configurations.
+func ensureModuleOutput(cfg *LoggingConfig, module, filePath string) {
+	if _, exists := cfg.ModuleOutputs[module]; !exists {
+		cfg.ModuleOutputs[module] = ModuleOutput{
+			Enabled:     true,
+			FilePath:    filePath,
+			Level:       DefaultLogLevel,
+			ConsoleAlso: false,
+		}
+	}
+}
 
 // applyConfigDefaults applies sensible defaults for nil configuration sections.
 // This ensures backwards compatibility when users upgrade - their existing configs
@@ -103,106 +116,31 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 		}
 	}
 
-	// Apply default module outputs for critical modules
-	// HTTP access logs should always go to a separate file for security auditing,
-	// log rotation, and easier analysis (separate from application logs)
+	// Initialize module outputs map if nil
 	if cfg.ModuleOutputs == nil {
 		cfg.ModuleOutputs = make(map[string]ModuleOutput)
 	}
 
-	// Add access log module if not explicitly configured
-	// This ensures HTTP request/response logs are always separated from application logs
-	if _, hasAccess := cfg.ModuleOutputs["access"]; !hasAccess {
-		cfg.ModuleOutputs["access"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultAccessLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false, // Access logs are typically high volume, don't spam console
-		}
-	}
+	// Apply default module outputs for critical modules
+	// Each module gets its own log file for separation of concerns:
+	// - Security auditing (access, auth, security)
+	// - Log rotation management
+	// - Easier analysis and debugging
 
-	// Consolidate API logs with access logs - they're both HTTP request logs
-	if _, hasAPI := cfg.ModuleOutputs["api"]; !hasAPI {
-		cfg.ModuleOutputs["api"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultAccessLogPath, // Same file as access logs
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
+	// HTTP request logs (access and API)
+	ensureModuleOutput(cfg, "access", DefaultAccessLogPath)
+	ensureModuleOutput(cfg, "api", DefaultAccessLogPath) // Same file as access logs
 
-	// Add security/auth log module if not explicitly configured
-	// Authentication and authorization logs need separate file for security auditing
-	if _, hasSecurity := cfg.ModuleOutputs["security"]; !hasSecurity {
-		cfg.ModuleOutputs["security"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultAuthLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
+	// Security/authentication logs
+	ensureModuleOutput(cfg, "security", DefaultAuthLogPath)
+	ensureModuleOutput(cfg, "auth", DefaultAuthLogPath)
 
-	// Also route auth module to auth.log
-	if _, hasAuth := cfg.ModuleOutputs["auth"]; !hasAuth {
-		cfg.ModuleOutputs["auth"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultAuthLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
+	// Audio processing logs (high volume during operation)
+	ensureModuleOutput(cfg, "audio", DefaultAudioLogPath)
+	ensureModuleOutput(cfg, "audio.ffmpeg", DefaultAudioLogPath)
 
-	// Add audio log module if not explicitly configured
-	// Audio capture/processing logs are high volume during operation
-	if _, hasAudio := cfg.ModuleOutputs["audio"]; !hasAudio {
-		cfg.ModuleOutputs["audio"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultAudioLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
-
-	// Route audio.ffmpeg module to audio.log as well
-	if _, hasFFmpeg := cfg.ModuleOutputs["audio.ffmpeg"]; !hasFFmpeg {
-		cfg.ModuleOutputs["audio.ffmpeg"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultAudioLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
-
-	// Add birdweather log module if not explicitly configured
-	// BirdWeather API interactions are logged separately for debugging integrations
-	if _, hasBirdweather := cfg.ModuleOutputs["birdweather"]; !hasBirdweather {
-		cfg.ModuleOutputs["birdweather"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultBirdweatherLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
-
-	// Add weather log module if not explicitly configured
-	// Weather provider interactions are logged separately
-	if _, hasWeather := cfg.ModuleOutputs["weather"]; !hasWeather {
-		cfg.ModuleOutputs["weather"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultWeatherLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
-
-	// Add imageprovider log module if not explicitly configured
-	// Image provider (Flickr, etc.) interactions are logged separately
-	if _, hasImageprovider := cfg.ModuleOutputs["imageprovider"]; !hasImageprovider {
-		cfg.ModuleOutputs["imageprovider"] = ModuleOutput{
-			Enabled:     true,
-			FilePath:    DefaultImageproviderLogPath,
-			Level:       DefaultLogLevel,
-			ConsoleAlso: false,
-		}
-	}
+	// External service integration logs
+	ensureModuleOutput(cfg, "birdweather", DefaultBirdweatherLogPath)
+	ensureModuleOutput(cfg, "weather", DefaultWeatherLogPath)
+	ensureModuleOutput(cfg, "imageprovider", DefaultImageproviderLogPath)
 }
