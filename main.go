@@ -110,6 +110,10 @@ func mainWithExitCode() int {
 		// Log application shutdown
 		mainLog := centralLogger.Module("main")
 		mainLog.Info("Application stopped")
+		// Flush buffered logs before closing
+		if err := centralLogger.Flush(); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN  [main] Failed to flush logger error=%v\n", err)
+		}
 		if err := centralLogger.Close(); err != nil {
 			// Use fmt here as logger is being closed
 			fmt.Fprintf(os.Stderr, "WARN  [main] Failed to close logger error=%v\n", err)
