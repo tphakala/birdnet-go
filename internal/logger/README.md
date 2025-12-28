@@ -7,6 +7,7 @@ Centralized, module-aware logging system for BirdNET-Go built on Go's standard `
 - **Dual Output Formats**:
   - **Console**: Human-readable text without timestamps (journald/Docker adds them)
   - **Files**: JSON with RFC3339 timestamps for production log aggregation
+- **Log Rotation**: Size-based rotation with optional gzip compression
 - **Module-Scoped Logging**: Routes logs to module-specific files (`audio.log`, `analysis.log`, etc.)
 - **Type-Safe Fields**: Structured logging with compile-time safety
 - **Cross-Platform Timezone**: Embedded IANA timezone database for Windows compatibility
@@ -210,6 +211,55 @@ especially important during daylight saving time transitions.
 **Why Dual Format?**
 - **Console**: Optimized for humans scanning logs during development
 - **Files**: Optimized for machines parsing logs in production (ELK, Loki, etc.)
+
+## Log Rotation
+
+Automatic size-based log rotation prevents log files from growing unbounded.
+
+### Configuration
+
+```yaml
+file_output:
+  enabled: true
+  path: "logs/app.log"
+  max_size: 100           # MB - rotate when file exceeds this size (0 = disabled)
+  max_age: 30             # days - delete rotated files older than this (0 = no limit)
+  max_rotated_files: 10   # keep at most this many rotated files (0 = no limit)
+  compress: false         # gzip rotated files (disabled by default)
+```
+
+### Behavior
+
+- **Size-based rotation**: Checked every 5 seconds during buffer flush
+- **File naming**: `app-2025-01-15T14-30-05Z.log` (UTC timestamp, Windows-compatible)
+- **Compression**: Async gzip, runs in background, produces `.log.gz` files
+- **Cleanup**: Deletes files exceeding either `max_age` OR `max_rotated_files` limits
+- **Disk-full recovery**: Aggressively deletes oldest rotated files, falls back to console if needed
+
+### Defaults
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `max_size` | 100 | MB before rotation |
+| `max_age` | 30 | Days to keep rotated files |
+| `max_rotated_files` | 10 | Max rotated files to keep |
+| `compress` | false | Gzip compression (opt-in) |
+
+### Module-Specific Rotation
+
+Module logs inherit rotation settings from `file_output` by default. Override per-module:
+
+```yaml
+modules:
+  audio:
+    enabled: true
+    file_path: "logs/audio.log"
+    max_size: 50           # Override: smaller max size
+    max_rotated_files: 5   # Override: keep fewer files
+    compress: true         # Override: enable compression
+```
+
+Zero values in module config fall back to `file_output` defaults.
 
 ## Module-Scoped Logging
 
@@ -476,10 +526,10 @@ logging:
     enabled: true
     path: "logs/app.log"
     level: "debug"
-    max_size: 100      # MB
-    max_age: 30        # days
-    max_backups: 10
-    compress: true
+    max_size: 100           # MB - rotate when file exceeds this size
+    max_age: 30             # days - delete rotated files older than this
+    max_rotated_files: 10   # keep at most this many rotated files
+    compress: false         # gzip rotated files (opt-in)
     # JSON timestamps use RFC3339 format with timezone offset
 
   module_levels:
