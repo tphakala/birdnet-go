@@ -236,7 +236,7 @@ func (c *Controller) validateDateFormatWithResponse(ctx echo.Context, dateStr, p
 			logger.String("parameter", paramName),
 			logger.String("value", dateStr),
 			logger.String("operation", operation),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)

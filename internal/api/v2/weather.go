@@ -120,7 +120,7 @@ func (c *Controller) GetDailyWeather(ctx echo.Context) error {
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get daily weather data",
 			logger.String("date", date),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -155,7 +155,7 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 
 	hourlyWeather, err := c.DS.GetHourlyWeather(date)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get hourly weather data", logger.String("date", date), logger.String("error", err.Error()), logger.String("path", path), logger.String("ip", ip))
+		c.logErrorIfEnabled("Failed to get hourly weather data", logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to get hourly weather data", http.StatusInternalServerError)
 	}
 
@@ -185,7 +185,7 @@ func (c *Controller) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path s
 	// Check if it's a future date
 	requestedDate, parseErr := time.Parse("2006-01-02", date)
 	if parseErr != nil {
-		c.logErrorIfEnabled("Invalid date format in hourly weather request", logger.String("date", date), logger.String("error", parseErr.Error()), logger.String("path", path), logger.String("ip", ip))
+		c.logErrorIfEnabled("Invalid date format in hourly weather request", logger.String("date", date), logger.Error(parseErr), logger.String("path", path), logger.String("ip", ip))
 		emptyResponse.Message = "No weather data found for the specified date"
 		return ctx.JSON(http.StatusOK, emptyResponse)
 	}
@@ -299,7 +299,7 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 
 // handleDetectionFetchError handles errors when fetching a detection
 func (c *Controller) handleDetectionFetchError(ctx echo.Context, err error, id, ip, path string) error {
-	c.logErrorIfEnabled("Failed to get detection", logger.String("detection_id", id), logger.String("error", err.Error()), logger.String("path", path), logger.String("ip", ip))
+	c.logErrorIfEnabled("Failed to get detection", logger.String("detection_id", id), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
@@ -310,7 +310,7 @@ func (c *Controller) handleDetectionFetchError(ctx echo.Context, err error, id, 
 func (c *Controller) fetchDailyWeatherForDetection(date, id, ip, path string) DailyWeatherResponse {
 	dailyEvents, err := c.DS.GetDailyEvents(date)
 	if err != nil {
-		c.logWarnIfEnabled("Failed to get daily weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.String("error", err.Error()), logger.String("path", path), logger.String("ip", ip))
+		c.logWarnIfEnabled("Failed to get daily weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		dailyEvents = datastore.DailyEvents{Date: date}
 	}
 	return c.buildDailyWeatherResponse(dailyEvents)
@@ -320,7 +320,7 @@ func (c *Controller) fetchDailyWeatherForDetection(date, id, ip, path string) Da
 func (c *Controller) fetchHourlyWeatherForDetection(date, id, ip, path string) []datastore.HourlyWeather {
 	hourlyWeatherList, err := c.DS.GetHourlyWeather(date)
 	if err != nil {
-		c.logWarnIfEnabled("Failed to get hourly weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.String("error", err.Error()), logger.String("path", path), logger.String("ip", ip))
+		c.logWarnIfEnabled("Failed to get hourly weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return []datastore.HourlyWeather{}
 	}
 	return hourlyWeatherList
@@ -330,7 +330,7 @@ func (c *Controller) fetchHourlyWeatherForDetection(date, id, ip, path string) [
 func (c *Controller) getDetectionTimeOfDay(note *datastore.Note, date, id string) (detectionTime *time.Time, timeOfDay string) {
 	detectionTime, timeOfDay, parseErr := c.determineTimeOfDayForDetection(note, date, id)
 	if parseErr != nil {
-		c.logWarnIfEnabled("Proceeding with default TimeOfDay due to parsing/calculation error", logger.String("detection_id", id), logger.String("error", parseErr.Error()))
+		c.logWarnIfEnabled("Proceeding with default TimeOfDay due to parsing/calculation error", logger.String("detection_id", id), logger.Error(parseErr))
 	}
 	return detectionTime, timeOfDay
 }
@@ -359,7 +359,7 @@ func (c *Controller) findHourlyWeatherByHourString(hourlyWeatherList []datastore
 	hourStr := timeStr[:2]
 	requestedHour, convErr := strconv.Atoi(hourStr)
 	if convErr != nil {
-		c.logErrorIfEnabled("Invalid hour derived from detection time during fallback", logger.String("detection_id", id), logger.String("hour", hourStr), logger.String("time", timeStr), logger.String("error", convErr.Error()), logger.String("path", path), logger.String("ip", ip))
+		c.logErrorIfEnabled("Invalid hour derived from detection time during fallback", logger.String("detection_id", id), logger.String("hour", hourStr), logger.String("time", timeStr), logger.Error(convErr), logger.String("path", path), logger.String("ip", ip))
 		return HourlyWeatherResponse{}
 	}
 
@@ -379,7 +379,7 @@ func (c *Controller) determineTimeOfDayForDetection(note *datastore.Note, date, 
 	detectionTimeStr := date + " " + note.Time
 	detectionTime, parseErr := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
 	if parseErr != nil {
-		c.logWarnIfEnabled("Failed to parse detection time for TimeOfDay calculation", logger.String("detection_id", detectionID), logger.String("time_str", detectionTimeStr), logger.String("error", parseErr.Error()))
+		c.logWarnIfEnabled("Failed to parse detection time for TimeOfDay calculation", logger.String("detection_id", detectionID), logger.String("time_str", detectionTimeStr), logger.Error(parseErr))
 		return nil, timeOfDay, parseErr
 	}
 
@@ -390,7 +390,7 @@ func (c *Controller) determineTimeOfDayForDetection(note *datastore.Note, date, 
 
 	sunTimes, sunErr := c.SunCalc.GetSunEventTimes(detectionTime)
 	if sunErr != nil {
-		c.logWarnIfEnabled("Failed to get sun times for TimeOfDay calculation", logger.String("detection_id", detectionID), logger.String("date", date), logger.String("error", sunErr.Error()))
+		c.logWarnIfEnabled("Failed to get sun times for TimeOfDay calculation", logger.String("detection_id", detectionID), logger.String("date", date), logger.Error(sunErr))
 		return &detectionTime, timeOfDay, sunErr
 	}
 
@@ -465,7 +465,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	latestWeather, err := c.DS.LatestHourlyWeather()
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get latest weather data",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -492,7 +492,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		// Log the error but continue with partial response
 		c.logWarnIfEnabled("Failed to get daily weather data for latest weather",
 			logger.String("date", date),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -564,7 +564,7 @@ func (c *Controller) GetSunTimes(ctx echo.Context) error {
 	if err != nil {
 		c.logErrorIfEnabled("Invalid date format in sun times request",
 			logger.String("date", date),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -594,7 +594,7 @@ func (c *Controller) GetSunTimes(ctx echo.Context) error {
 	if err != nil {
 		c.logErrorIfEnabled("Failed to calculate sun times",
 			logger.String("date", date),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)

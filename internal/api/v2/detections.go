@@ -431,7 +431,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	params, err := c.parseDetectionQueryParams(ctx)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to parse query parameters",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -459,7 +459,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	if err != nil {
 		c.logErrorIfEnabled("Failed to retrieve detections",
 			logger.String("queryType", params.QueryType),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -700,7 +700,7 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 			logger.Int("duration", duration),
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -711,7 +711,7 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 			logger.String("date", date),
 			logger.String("hour", hour),
 			logger.Int("duration", duration),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -757,7 +757,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 			logger.Int("duration", duration),
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -769,7 +769,7 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 			logger.String("date", date),
 			logger.String("hour", hour),
 			logger.Int("duration", duration),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -801,7 +801,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 	if err != nil {
 		c.logErrorIfEnabled("Failed to perform advanced search",
 			logger.String("filters", fmt.Sprintf("%+v", filters)),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -899,7 +899,7 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 			logger.String("query", search),
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -908,7 +908,7 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	if err != nil {
 		c.logErrorIfEnabled("Failed to count search results",
 			logger.String("query", search),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -948,7 +948,7 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 		c.logErrorIfEnabled("Failed to get all detections",
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return nil, 0, err
 	}
@@ -1138,7 +1138,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 			c.logErrorIfEnabled("Failed to update lock status",
 				logger.String("detection_id", idStr),
 				logger.Bool("attempted_lock_state", req.LockDetection),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 				logger.String("ip", ctx.RealIP()),
 			)
 			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)

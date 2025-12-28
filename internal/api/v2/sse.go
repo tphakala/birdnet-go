@@ -336,7 +336,7 @@ func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType str
 	if err := c.sendSSEMessage(ctx, "heartbeat", data); err != nil {
 		c.logDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 		)
 		return err
 	}
@@ -497,7 +497,7 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 						logger.String("client_id", clientID),
 						logger.String("endpoint", endpoint),
 						logger.String("event_type", eventType),
-						logger.String("error", err.Error()),
+						logger.Error(err),
 					)
 					c.recordSSEError(endpoint, "send_failed")
 					return err
@@ -527,7 +527,7 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 		deadline := time.Now().Add(sseWriteDeadline) // Write deadline timeout
 		if err := conn.SetWriteDeadline(deadline); err != nil {
 			// If we can't set deadline, log but continue - not all response writers support this
-			c.logDebugIfEnabled("Failed to set write deadline for SSE message", logger.String("error", err.Error()))
+			c.logDebugIfEnabled("Failed to set write deadline for SSE message", logger.Error(err))
 		}
 	}
 

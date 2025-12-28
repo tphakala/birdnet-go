@@ -607,7 +607,7 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, url string, bod
 				logger.Int("max_retries", maxRetries),
 				logger.Int64("delay_ms", delay.Milliseconds()),
 				logger.String("url", url),
-				logger.String("error", err.Error()))
+				logger.Error(err))
 
 			select {
 			case <-time.After(delay):

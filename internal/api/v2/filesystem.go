@@ -99,7 +99,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	var req BrowseRequest
 	if err := ctx.Bind(&req); err != nil {
 		c.logErrorIfEnabled("Failed to bind browse request",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -117,7 +117,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 		}
 		c.logWarnIfEnabled("Path validation failed",
 			logger.String("requested_path", req.Path),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, err, err.Error(), status)
@@ -128,7 +128,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	if err != nil {
 		c.logErrorIfEnabled("Failed to read directory",
 			logger.String("path", pathResult.browsePath),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, err, "Unable to read directory", http.StatusForbidden)
@@ -142,7 +142,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 			c.logDebugIfEnabled("Skipping file due to error",
 				logger.String("file", entry.Name()),
 				logger.String("directory", pathResult.browsePath),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 			)
 			continue
 		}
@@ -154,7 +154,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 	if err != nil {
 		c.logDebugIfEnabled("Failed to get parent path",
 			logger.String("path", pathResult.browsePath),
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		parentPath = ""
 	}
 

@@ -153,7 +153,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 			httpErr.Code, httpErr.Internal, httpErr.Message)
 		// Log this as an error since it represents a failed request from SFS
 		c.logErrorIfEnabled("SecureFS returned HTTP error",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.Int("status_code", httpErr.Code),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -169,7 +169,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 	switch {
 	case errors.Is(err, securefs.ErrPathTraversal) || errors.Is(err, ErrPathTraversalAttempt):
 		c.logWarnIfEnabled("Path traversal attempt detected",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -178,7 +178,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		return c.HandleError(ctx, err, "Invalid file path: attempted path traversal", http.StatusBadRequest)
 	case errors.Is(err, securefs.ErrInvalidPath) || errors.Is(err, ErrInvalidAudioPath):
 		c.logWarnIfEnabled("Invalid file path provided",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -187,7 +187,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		return c.HandleError(ctx, err, "Invalid file path specification", http.StatusBadRequest)
 	case errors.Is(err, securefs.ErrAccessDenied):
 		c.logWarnIfEnabled("Access denied to resource",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -196,7 +196,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		return c.HandleError(ctx, err, "Access denied to requested resource", http.StatusForbidden)
 	case errors.Is(err, securefs.ErrNotRegularFile):
 		c.logWarnIfEnabled("Requested resource is not a regular file",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -205,7 +205,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
 	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
 		c.logInfoIfEnabled("Resource not found", // Info level as 404 is common
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -214,7 +214,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		return c.HandleError(ctx, err, "Resource not found", http.StatusNotFound)
 	case errors.Is(err, context.DeadlineExceeded):
 		c.logWarnIfEnabled("Request timed out",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -223,7 +223,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
 	case errors.Is(err, context.Canceled):
 		c.logInfoIfEnabled("Request canceled by client",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 			logger.Bool("tunneled", isTunneled),
@@ -234,7 +234,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 
 	// For other errors, log as error and use the provided user message with a 500 status
 	c.logErrorIfEnabled("Unhandled SecureFS/media error",
-		logger.String("error", err.Error()),
+		logger.Error(err),
 		logger.String("user_message", userMsg),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -295,7 +295,7 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	if err != nil {
 		c.logWarnIfEnabled("Invalid file path detected",
 			logger.String("original_filename", filename),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
@@ -484,7 +484,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get clip path from database",
 			logger.String("note_id", noteID),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
@@ -590,7 +590,7 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 		c.logErrorIfEnabled("Spectrogram generation failed",
 			logger.String("note_id", noteID),
 			logger.String("clip_path", clipPath),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.Int64("duration_ms", generationDuration.Milliseconds()),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
@@ -613,7 +613,7 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 		c.logErrorIfEnabled("Failed to serve spectrogram file",
 			logger.String("note_id", noteID),
 			logger.String("spectrogram_path", spectrogramPath),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.Int64("serve_duration_ms", serveDuration.Milliseconds()),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
@@ -948,7 +948,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 			logger.String("note_id", noteID),
 			logger.String("clip_path", clipPath),
 			logger.String("normalized_path", normalizedPath),
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		return c.HandleError(ctx, err, "Invalid audio path", http.StatusBadRequest)
 	}
 
@@ -1034,7 +1034,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 			c.logErrorIfEnabled("Async spectrogram generation failed",
 				logger.String("note_id", noteID),
 				logger.String("clip_path", clipPath),
-				logger.String("error", err.Error()))
+				logger.Error(err))
 		} else {
 			c.logInfoIfEnabled("Async spectrogram generated successfully",
 				logger.String("note_id", noteID),
@@ -1253,7 +1253,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 			getSpectrogramLogger().Warn("Audio validation canceled or timed out",
 				logger.String("audio_path", audioPath),
 				logger.String("abs_audio_path", absAudioPath),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 				logger.Int64("validation_duration_ms", validationDuration.Milliseconds()),
 				logger.String("spectrogram_key", spectrogramKey))
 			return nil, err
@@ -1262,7 +1262,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 		getSpectrogramLogger().Error("Audio validation failed with FFprobe",
 			logger.String("audio_path", audioPath),
 			logger.String("abs_audio_path", absAudioPath),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.Int64("validation_duration_ms", validationDuration.Milliseconds()),
 			logger.String("spectrogram_key", spectrogramKey))
 		return nil, &AudioNotReadyError{
@@ -1368,7 +1368,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	if err != nil {
 		getSpectrogramLogger().Debug("Failed to stat audio file for duration cache",
 			logger.String("audio_path", audioPath),
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		return 0
 	}
 
@@ -1402,7 +1402,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	duration, err := myaudio.GetAudioDuration(durationCtx, audioPath)
 	if err != nil {
 		getSpectrogramLogger().Warn("Failed to get audio duration with ffprobe",
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("audio_path", audioPath))
 		return 0
 	}
@@ -1509,7 +1509,7 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, spectrogramKey s
 	} else if !os.IsNotExist(err) {
 		getSpectrogramLogger().Debug("Fast path: unexpected error checking existing spectrogram",
 			logger.String("spectrogram_key", spectrogramKey),
-			logger.String("error", err.Error()))
+			logger.Error(err))
 	} else {
 		getSpectrogramLogger().Debug("Fast path MISS: spectrogram does not exist",
 			logger.String("spectrogram_key", spectrogramKey),
@@ -1542,12 +1542,12 @@ func (c *Controller) checkAudioFileExists(relAudioPath string) error {
 		if os.IsNotExist(err) {
 			getSpectrogramLogger().Debug("Audio file does not exist",
 				logger.String("relative_audio_path", relAudioPath),
-				logger.String("error", err.Error()))
+				logger.Error(err))
 			return fmt.Errorf("%w: %w (path: %s)", ErrAudioFileNotFound, err, relAudioPath)
 		}
 		getSpectrogramLogger().Debug("Error checking audio file",
 			logger.String("relative_audio_path", relAudioPath),
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		return fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	} else {
 		getSpectrogramLogger().Debug("Audio file exists",
@@ -1797,7 +1797,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 			// Log at Debug level for expected operational events
 			getSpectrogramLogger().Debug("Spectrogram generation canceled or interrupted",
 				logger.String("spectrogram_key", spectrogramKey),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 				logger.Int64("duration_ms", time.Since(generationStart).Milliseconds()),
 				logger.String("abs_audio_path", absAudioPath),
 				logger.String("abs_spectrogram_path", absSpectrogramPath))
@@ -1805,7 +1805,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 			// Log at Error level for unexpected failures
 			getSpectrogramLogger().Error("Spectrogram generation failed",
 				logger.String("spectrogram_key", spectrogramKey),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 				logger.Int64("duration_ms", time.Since(generationStart).Milliseconds()),
 				logger.String("abs_audio_path", absAudioPath),
 				logger.String("abs_spectrogram_path", absSpectrogramPath))
@@ -1918,7 +1918,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if err != nil {
 		getSpectrogramLogger().Debug("Spectrogram generation failed",
 			logger.String("spectrogram_key", spectrogramKey),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 		return "", fmt.Errorf("failed to generate spectrogram: %w", err)
 	}

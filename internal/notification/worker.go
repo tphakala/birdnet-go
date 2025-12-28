@@ -12,7 +12,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // NotificationWorker implements EventConsumer to process error events
@@ -235,7 +234,7 @@ func (w *NotificationWorker) handleNotificationCreationError(event events.ErrorE
 	}
 
 	w.log.Error("failed to create notification",
-		logger.String("error", privacy.ScrubMessage(err.Error())),
+		logger.Error(err),
 		logger.String("component", event.GetComponent()),
 		logger.String("category", event.GetCategory()))
 	return err

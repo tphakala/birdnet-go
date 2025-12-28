@@ -1091,7 +1091,7 @@ func logQueryMissingError(resp *jason.Object, params map[string]string, fullURL 
 	}
 
 	log.Info("Wikipedia response missing 'query' field - analyzing response structure",
-		logger.String("error", queryErr.Error()),
+		logger.Error(queryErr),
 		logger.String("request_url", fullURL),
 		logger.String("response_analysis", "checking_for_api_errors"))
 

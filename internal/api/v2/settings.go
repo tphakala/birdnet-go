@@ -125,7 +125,7 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 	// Get the settings section
 	sectionValue, err := getSettingsSection(settings, section)
 	if err != nil {
-		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to get settings section", logger.String("section", section), logger.String("error", err.Error()))
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to get settings section", logger.String("section", section), logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to get settings section", http.StatusNotFound)
 	}
 
@@ -158,13 +158,13 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	var updatedSettings conf.Settings
 	if err := ctx.Bind(&updatedSettings); err != nil {
 		// Log binding error
-		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to bind request body for settings update", logger.String("error", err.Error()))
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to bind request body for settings update", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
 	// Verify the request body contains valid data
 	if err := validateSettingsData(&updatedSettings); err != nil {
-		c.logAPIRequest(ctx, logger.LogLevelError, "Invalid settings data received", logger.String("error", err.Error()))
+		c.logAPIRequest(ctx, logger.LogLevelError, "Invalid settings data received", logger.Error(err))
 		return c.HandleError(ctx, err, "Invalid settings data", http.StatusBadRequest)
 	}
 
@@ -172,7 +172,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
 	if err != nil {
 		// Log error during field update attempt
-		c.logAPIRequest(ctx, logger.LogLevelError, "Error updating allowed settings fields", logger.String("error", err.Error()), logger.Any("skipped_fields", skippedFields))
+		c.logAPIRequest(ctx, logger.LogLevelError, "Error updating allowed settings fields", logger.Error(err), logger.Any("skipped_fields", skippedFields))
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 	}
 	if len(skippedFields) > 0 {
@@ -184,7 +184,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
 		// Attempt to rollback changes if applying them failed
 		*settings = oldSettings
-		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.String("error", err.Error()))
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
@@ -192,7 +192,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	if err := conf.SaveSettings(); err != nil {
 		// Attempt to rollback changes if saving failed
 		*settings = oldSettings
-		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.String("error", err.Error()))
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 

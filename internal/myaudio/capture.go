@@ -496,7 +496,7 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 		if err != nil {
 			log.Warn("Error decoding device ID",
 				logger.Int("device_index", i),
-				logger.String("error", err.Error()))
+				logger.Error(err))
 			continue
 		}
 

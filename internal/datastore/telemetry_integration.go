@@ -85,7 +85,7 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 	// Log locally with full context
 	logFields := []logger.Field{
 		logger.String("operation", operation),
-		logger.String("error", err.Error()),
+		logger.Error(err),
 		logger.String("severity", severity),
 		logger.Any("recommendations", context.Recommendations),
 	}

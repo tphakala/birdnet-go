@@ -61,7 +61,7 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 	if err != nil {
 		log.Debug("Primary path not found, trying alternative path",
 			logger.String("primary_path", filePath),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("alternative_path", altFilePath))
 		// If that fails, try with the internal/imageprovider prefix
 		jsonData, err = fs.ReadFile(dataFs, altFilePath)

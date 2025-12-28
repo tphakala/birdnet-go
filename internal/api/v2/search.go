@@ -56,7 +56,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	// Parse the request
 	var req SearchRequest
 	if err := ctx.Bind(&req); err != nil {
-		c.logErrorIfEnabled("Failed to bind search request", logger.String("error", err.Error()), logger.String("path", path), logger.String("ip", ip))
+		c.logErrorIfEnabled("Failed to bind search request", logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
@@ -79,7 +79,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	// Execute the search
 	results, total, err := c.DS.SearchDetections(&filters)
 	if err != nil {
-		c.logErrorIfEnabled("Search query failed", logger.String("error", err.Error()), logger.String("filters", fmt.Sprintf("%+v", filters)), logger.String("path", path), logger.String("ip", ip))
+		c.logErrorIfEnabled("Search query failed", logger.Error(err), logger.String("filters", fmt.Sprintf("%+v", filters)), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Search failed", http.StatusInternalServerError)
 	}
 

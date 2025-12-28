@@ -352,7 +352,7 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 	if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
 		c.logDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
 			logger.String("client_id", clientID),
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		return err
 	}
 	return nil
@@ -496,7 +496,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
 					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
 					logger.String("client_id", clientID),
-					logger.String("error", err.Error()))
+					logger.Error(err))
 				return err
 			}
 		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
@@ -509,7 +509,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 					logger.String("client_id", clientID),
 					logger.String("previous_state", previousSnapshot.ProcessState),
 					logger.String("current_state", currentSnapshot.ProcessState),
-					logger.String("error", err.Error()))
+					logger.Error(err))
 				return err
 			}
 		}

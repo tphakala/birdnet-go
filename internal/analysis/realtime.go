@@ -1464,7 +1464,7 @@ func printSystemDetails(settings *conf.Settings) {
 	// Get system details with gopsutil
 	info, err := host.Info()
 	if err != nil {
-		log.Warn("Failed to retrieve host info", logger.String("error", err.Error()))
+		log.Warn("Failed to retrieve host info", logger.Error(err))
 	}
 
 	var hwModel string

@@ -152,7 +152,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		c.logErrorIfEnabled("Failed to get initial daily species data",
 			logger.String("date", selectedDate),
 			logger.Float64("min_confidence", minConfidence),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -165,7 +165,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		// Errors during hourly fetch are logged within the helper, but we need to handle the overall failure
 		c.logErrorIfEnabled("Failed to aggregate daily species data",
 			logger.String("date", selectedDate),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -267,7 +267,7 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get data for date in batch request",
 			logger.String("date", selectedDate),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -279,7 +279,7 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 	if err != nil {
 		c.logErrorIfEnabled("Failed to aggregate data for date in batch request",
 			logger.String("date", selectedDate),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -291,7 +291,7 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 	if err != nil {
 		c.logErrorIfEnabled("Failed to build response for date in batch request",
 			logger.String("date", selectedDate),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -572,7 +572,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		c.logErrorIfEnabled("Failed to get species summary data",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -692,7 +692,7 @@ func (c *Controller) applyOptionalLimit(ctx echo.Context, response []SpeciesSumm
 	if err != nil {
 		c.logWarnIfEnabled("Invalid limit parameter",
 			logger.String("value", limitStr),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -742,7 +742,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 		c.logErrorIfEnabled("Failed to get hourly analytics data",
 			logger.String("date", date),
 			logger.String("species", speciesParam),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
@@ -832,7 +832,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
 			logger.String("species", speciesParam),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
@@ -958,7 +958,7 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 			logger.String("end_date", endDate),
 			logger.Int("limit", limit),
 			logger.Int("offset", offset),
-			logger.String("error", err.Error()),
+			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -1232,7 +1232,7 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 			c.logErrorIfEnabled("Error getting hourly data for species in batch request",
 				logger.String("species", speciesItem),
 				logger.String("date", date),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 				logger.String("ip", ip),
 				logger.String("path", path),
 			)
@@ -1338,7 +1338,7 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 				logger.String("species", speciesItem),
 				logger.String("start_date", startDate),
 				logger.String("end_date", endDate),
-				logger.String("error", err.Error()),
+				logger.Error(err),
 				logger.String("ip", ip),
 				logger.String("path", path),
 			)

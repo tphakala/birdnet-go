@@ -63,7 +63,7 @@ func mainWithExitCode() int {
 
 		f, err := os.Create(profilePath) //nolint:gosec // G304: profilePath is programmatically constructed with timestamp
 		if err != nil {
-			bootLog.Error("Failed to create profile file", logger.String("error", err.Error()))
+			bootLog.Error("Failed to create profile file", logger.Error(err))
 			return 1
 		}
 		defer func() {
@@ -74,7 +74,7 @@ func mainWithExitCode() int {
 		}()
 
 		if err := pprof.StartCPUProfile(f); err != nil {
-			bootLog.Error("Failed to start CPU profile", logger.String("error", err.Error()))
+			bootLog.Error("Failed to start CPU profile", logger.Error(err))
 			return 1
 		}
 		defer pprof.StopCPUProfile()
@@ -102,7 +102,7 @@ func mainWithExitCode() int {
 	// Initialize the centralized logger
 	centralLogger, err := logger.NewCentralLogger(&settings.Logging)
 	if err != nil {
-		bootLog.Error("Failed to initialize logger", logger.String("error", err.Error()))
+		bootLog.Error("Failed to initialize logger", logger.Error(err))
 		return 1
 	}
 	logger.SetGlobal(centralLogger)
@@ -127,7 +127,7 @@ func mainWithExitCode() int {
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
 	if err != nil {
 		mainLog.Warn("Failed to load system ID, using temporary ID",
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		// Generate a temporary one for this session
 		systemID, _ = telemetry.GenerateSystemID()
 	}
@@ -142,7 +142,7 @@ func mainWithExitCode() int {
 	// Note: Telemetry is opt-in; errors here are expected if not enabled
 	if err := telemetry.InitializeSystem(settings); err != nil {
 		mainLog.Debug("Core systems not initialized",
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		// Continue - these are not critical for basic operation
 	}
 
@@ -150,7 +150,7 @@ func mainWithExitCode() int {
 	// Note: This is expected when telemetry is opt-in and not enabled
 	if err := telemetry.WaitForReady(5 * time.Second); err != nil {
 		mainLog.Debug("Core systems initialization incomplete",
-			logger.String("error", err.Error()))
+			logger.Error(err))
 		// Continue - not critical for operation
 	}
 
@@ -186,7 +186,7 @@ func mainWithExitCode() int {
 			// Clean exit for user-initiated cancellation
 			return 0
 		}
-		mainLog.Error("Command execution failed", logger.String("error", err.Error()))
+		mainLog.Error("Command execution failed", logger.Error(err))
 		return 1
 	}
 
