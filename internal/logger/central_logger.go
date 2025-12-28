@@ -10,6 +10,13 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	// Embed timezone database for cross-platform compatibility.
+	// On Windows, the IANA timezone database may not be available,
+	// causing time.LoadLocation() to fail. This import embeds the
+	// timezone data directly in the binary (~450KB), ensuring
+	// timezone operations work consistently on Linux, macOS, and Windows.
+	_ "time/tzdata"
 )
 
 // Default capacity for pooled attribute slices (module + ~7 fields)
@@ -124,9 +131,17 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 	}
 
 	// Load timezone
-	tz, err := time.LoadLocation(cfg.Timezone)
-	if err != nil {
-		return nil, fmt.Errorf("invalid timezone %s: %w", cfg.Timezone, err)
+	// Special case: "Local" uses the system's local timezone
+	var tz *time.Location
+	switch cfg.Timezone {
+	case "", "Local":
+		tz = time.Local
+	default:
+		var err error
+		tz, err = time.LoadLocation(cfg.Timezone)
+		if err != nil {
+			return nil, fmt.Errorf("invalid timezone %s: %w", cfg.Timezone, err)
+		}
 	}
 
 	cl := &CentralLogger{

@@ -15,29 +15,37 @@ import (
 // This handler is optimized for developer experience during local development
 // and server startup, providing clear, scannable log messages without JSON clutter.
 //
-// Format: [YYYY-MM-DD HH:MM:SS] LEVEL  [module] message key=value key2=value2
+// Timestamps are intentionally omitted from console output following the
+// Twelve-Factor App methodology. When running as a systemd service or Docker
+// container, the execution environment (journald, Docker log driver) adds
+// timestamps automatically. This avoids redundant timestamps like:
+//
+//	Dec 28 13:43:08 birdnet-go[1234]: [28.12.2025 13:43:08] INFO ...
+//
+// Format: LEVEL  [module] message key=value key2=value2
 //
 // Example output:
 //
-//	[2025-11-17 09:59:51] INFO  [main] Initializing application database=/path/to/db
-//	[2025-11-17 09:59:52] ERROR [api] Request failed status=500 error="connection timeout"
+//	INFO  [main] Initializing application database=/path/to/db
+//	ERROR [api] Request failed status=500 error="connection timeout"
+//
+// In journald, this appears as:
+//
+//	Dec 28 13:43:08 birdnet-go[1234]: INFO  [main] Initializing application
 type textHandler struct {
-	writer   io.Writer
-	level    slog.Level
-	timezone *time.Location
-	attrs    []slog.Attr
+	writer io.Writer
+	level  slog.Level
+	attrs  []slog.Attr
 }
 
-// newTextHandler creates a new text handler for human-readable console output
-func newTextHandler(w io.Writer, level slog.Level, tz *time.Location) *textHandler {
-	if tz == nil {
-		tz = time.UTC
-	}
+// newTextHandler creates a new text handler for human-readable console output.
+// The timezone parameter is accepted for API compatibility but ignored since
+// console output no longer includes timestamps.
+func newTextHandler(w io.Writer, level slog.Level, _ *time.Location) *textHandler {
 	return &textHandler{
-		writer:   w,
-		level:    level,
-		timezone: tz,
-		attrs:    make([]slog.Attr, 0),
+		writer: w,
+		level:  level,
+		attrs:  make([]slog.Attr, 0),
 	}
 }
 
@@ -50,8 +58,6 @@ func (h *textHandler) Enabled(_ context.Context, level slog.Level) bool {
 //
 //nolint:gocritic // slog.Handler interface requires record by value, not pointer
 func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
-	// Format timestamp in Finnish locale (DD.MM.YYYY HH:MM:SS) for consistency
-	timestamp := record.Time.In(h.timezone).Format("02.01.2006 15:04:05")
 	level := record.Level.String()
 
 	// Extract module and collect other attributes
@@ -69,10 +75,7 @@ func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
 	// Build message using strings.Builder with direct writes (faster than fmt.Sprintf)
 	var sb strings.Builder
 
-	// [timestamp] LEVEL
-	sb.WriteByte('[')
-	sb.WriteString(timestamp)
-	sb.WriteString("] ")
+	// LEVEL (no timestamp - journald/Docker adds it)
 	sb.WriteString(level)
 	// Pad level to 5 chars for alignment
 	for i := len(level); i < 5; i++ {
@@ -129,8 +132,8 @@ func writeAttrValue(sb *strings.Builder, attr slog.Attr) {
 	case bool:
 		sb.WriteString(strconv.FormatBool(v))
 	case time.Time:
-		// Format time in Finnish locale
-		sb.WriteString(v.Format("02.01.2006 15:04:05"))
+		// Format time in ISO 8601 for consistency
+		sb.WriteString(v.Format(time.RFC3339))
 	case time.Duration:
 		sb.WriteString(v.String())
 	default:
@@ -141,10 +144,9 @@ func writeAttrValue(sb *strings.Builder, attr slog.Attr) {
 // WithAttrs returns a new handler with accumulated attributes
 func (h *textHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &textHandler{
-		writer:   h.writer,
-		level:    h.level,
-		timezone: h.timezone,
-		attrs:    slices.Concat(h.attrs, attrs),
+		writer: h.writer,
+		level:  h.level,
+		attrs:  slices.Concat(h.attrs, attrs),
 	}
 }
 

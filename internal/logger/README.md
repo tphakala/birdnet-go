@@ -5,13 +5,12 @@ Centralized, module-aware logging system for BirdNET-Go built on Go's standard `
 ## Features
 
 - **Dual Output Formats**:
-  - **Console**: Human-readable text for development
-  - **Files**: JSON for production log aggregation
+  - **Console**: Human-readable text without timestamps (journald/Docker adds them)
+  - **Files**: JSON with RFC3339 timestamps for production log aggregation
 - **Module-Scoped Logging**: Routes logs to module-specific files (`audio.log`, `analysis.log`, etc.)
 - **Type-Safe Fields**: Structured logging with compile-time safety
-- **Zero External Dependencies**: Built on Go standard library only
+- **Cross-Platform Timezone**: Embedded IANA timezone database for Windows compatibility
 - **Echo Integration**: Adapter for Echo framework's internal logging
-- **Finnish Locale**: Date/time formatting in DD.MM.YYYY HH:MM format
 
 ## Package Migration Quick Reference
 
@@ -148,13 +147,28 @@ appLogger.Info("Application started",
 
 ### Output Examples
 
-**Console (human-readable text)**:
+**Console (human-readable text, no timestamps)**:
+
+Following the [Twelve-Factor App](https://12factor.net/logs) methodology, console output
+omits timestamps. When running as a systemd service or Docker container, the execution
+environment (journald, Docker log driver) adds timestamps automatically.
+
 ```
-[17.11.2025 09:59:51] INFO  [main] Application started version=1.0.0 port=8080
-[17.11.2025 09:59:52] ERROR [api] Request failed status=500 error="timeout"
+INFO  [main] Application started version=1.0.0 port=8080
+ERROR [api] Request failed status=500 error="timeout"
 ```
 
-**File (JSON for machine parsing)**:
+**In journald/systemd**:
+```
+Dec 28 13:43:08 birdnet-go[1234]: INFO  [main] Application started version=1.0.0 port=8080
+Dec 28 13:43:09 birdnet-go[1234]: ERROR [api] Request failed status=500 error="timeout"
+```
+
+**File (JSON with RFC3339 timestamps for machine parsing)**:
+
+JSON logs include RFC3339 timestamps with timezone offset for unambiguous parsing,
+especially important during daylight saving time transitions.
+
 ```json
 {"time":"2025-11-17T09:59:51+02:00","level":"INFO","msg":"Application started","module":"main","version":"1.0.0","port":8080}
 {"time":"2025-11-17T09:59:52+02:00","level":"ERROR","msg":"Request failed","module":"api","status":500,"error":"timeout"}
@@ -448,12 +462,15 @@ logger.Error("Operation failed", logger.Error(err))
 ```yaml
 logging:
   default_level: "info"
-  timezone: "Europe/Helsinki"
+  # Timezone for JSON log timestamps.
+  # Use "Local" for system timezone, "UTC", or any IANA timezone name.
+  # Examples: "Europe/Helsinki", "America/New_York", "Asia/Tokyo"
+  timezone: "Local"
 
   console:
     enabled: true
     level: "info"
-    pretty: false  # Future: color support
+    # Note: Console output has no timestamps (journald/Docker adds them)
 
   file_output:
     enabled: true
@@ -463,6 +480,7 @@ logging:
     max_age: 30        # days
     max_backups: 10
     compress: true
+    # JSON timestamps use RFC3339 format with timezone offset
 
   module_levels:
     datastore: "debug"
@@ -491,7 +509,7 @@ logging:
 {
   "logging": {
     "default_level": "info",
-    "timezone": "Europe/Helsinki",
+    "timezone": "Local",
     "console": {
       "enabled": true,
       "level": "info"
@@ -504,6 +522,33 @@ logging:
   }
 }
 ```
+
+### Timezone Configuration
+
+The `timezone` setting controls the timezone used in JSON file timestamps:
+
+| Value | Behavior |
+|-------|----------|
+| `"Local"` | Uses system's local timezone (default) |
+| `""` (empty) | Same as "Local" |
+| `"UTC"` | Coordinated Universal Time |
+| `"Europe/Helsinki"` | Any valid IANA timezone name |
+
+The timezone database is embedded in the binary for cross-platform compatibility,
+ensuring timezone operations work consistently on Linux, macOS, and Windows.
+
+### Timestamp Design
+
+**Console output**: No timestamps. Following the [Twelve-Factor App](https://12factor.net/logs)
+methodology, timestamps are omitted from console output. The execution environment
+(systemd/journald, Docker) adds timestamps automatically, avoiding redundancy like:
+```
+Dec 28 13:43:08 birdnet-go[1234]: [28.12.2025 13:43:08] INFO ...  # Redundant!
+```
+
+**JSON file output**: RFC3339 format with timezone offset (e.g., `2025-12-28T13:43:08+02:00`).
+The offset ensures unambiguous parsing, especially during daylight saving time transitions
+when the same local time can occur twice (fall-back) or be skipped (spring-forward).
 
 ## Best Practices
 

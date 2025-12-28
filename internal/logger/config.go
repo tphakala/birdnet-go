@@ -3,8 +3,7 @@ package logger
 // LoggingConfig represents logging configuration
 type LoggingConfig struct {
 	Level         string                  `yaml:"level" json:"level"`                   // debug, info, warn, error (deprecated, use DefaultLevel)
-	Format        string                  `yaml:"format" json:"format"`                 // json, text
-	Timezone      string                  `yaml:"timezone" json:"timezone"`             // Europe/Helsinki
+	Timezone      string                  `yaml:"timezone" json:"timezone"`             // "Local", "UTC", or IANA timezone name like "Europe/Helsinki"
 	File          string                  `yaml:"file" json:"file"`                     // optional log file path (deprecated, use FileOutput)
 	DebugWebhooks bool                    `yaml:"debug_webhooks" json:"debug_webhooks"` // if true, logs full webhook details (headers, body, etc.)
 	DefaultLevel  string                  `yaml:"default_level" json:"default_level"`   // default log level for all modules
@@ -14,14 +13,18 @@ type LoggingConfig struct {
 	ModuleLevels  map[string]string       `yaml:"module_levels" json:"module_levels"`   // per-module log levels
 }
 
-// ConsoleOutput represents console logging configuration
+// ConsoleOutput represents console logging configuration.
+// Console output uses human-readable text format without timestamps.
+// Timestamps are omitted following the Twelve-Factor App methodology;
+// the execution environment (journald, Docker) adds them automatically.
 type ConsoleOutput struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"` // enable console output
-	Pretty  bool   `yaml:"pretty" json:"pretty"`   // colored, human-readable output for development
 	Level   string `yaml:"level" json:"level"`     // log level for console output
 }
 
-// FileOutput represents file logging configuration
+// FileOutput represents file logging configuration.
+// File output uses JSON format with RFC3339 timestamps for machine parsing
+// and log aggregation systems (ELK, Loki, Splunk, etc.).
 type FileOutput struct {
 	Enabled    bool   `yaml:"enabled" json:"enabled"`         // enable file output
 	Path       string `yaml:"path" json:"path"`               // log file path

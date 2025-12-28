@@ -53,7 +53,8 @@ func NewSlogLogger(writer io.Writer, level LogLevel, timezone *time.Location) *S
 
 // NewConsoleLogger creates a console logger with human-readable text format.
 // Use this for bootstrap/fallback scenarios before the central logger is initialized.
-// Output format matches CentralLogger console output: [DD.MM.YYYY HH:MM:SS] LEVEL  [module] message key=value
+// Output format matches CentralLogger console output: LEVEL  [module] message key=value
+// (Timestamps are omitted - journald/Docker adds them automatically)
 func NewConsoleLogger(module string, level LogLevel) *SlogLogger {
 	tz := time.Local
 
