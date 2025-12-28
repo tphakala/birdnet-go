@@ -2535,6 +2535,67 @@ func (_c *MockInterface_GetSpeciesSummaryData_Call) RunAndReturn(run func(contex
 	return _c
 }
 
+// GetSourceSummaryData provides a mock function with given fields: ctx, startDate, endDate, limit
+func (_m *MockInterface) GetSourceSummaryData(ctx context.Context, startDate string, endDate string, limit int) ([]datastore.SourceSummaryData, error) {
+	ret := _m.Called(ctx, startDate, endDate, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSourceSummaryData")
+	}
+
+	var r0 []datastore.SourceSummaryData
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) ([]datastore.SourceSummaryData, error)); ok {
+		return rf(ctx, startDate, endDate, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) []datastore.SourceSummaryData); ok {
+		r0 = rf(ctx, startDate, endDate, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.SourceSummaryData)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetSourceSummaryData_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSourceSummaryData'
+type MockInterface_GetSourceSummaryData_Call struct {
+	*mock.Call
+}
+
+// GetSourceSummaryData is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+//   - limit int
+func (_e *MockInterface_Expecter) GetSourceSummaryData(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}) *MockInterface_GetSourceSummaryData_Call {
+	return &MockInterface_GetSourceSummaryData_Call{Call: _e.mock.On("GetSourceSummaryData", ctx, startDate, endDate, limit)}
+}
+
+func (_c *MockInterface_GetSourceSummaryData_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int)) *MockInterface_GetSourceSummaryData_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetSourceSummaryData_Call) Return(_a0 []datastore.SourceSummaryData, _a1 error) *MockInterface_GetSourceSummaryData_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetSourceSummaryData_Call) RunAndReturn(run func(context.Context, string, string, int) ([]datastore.SourceSummaryData, error)) *MockInterface_GetSourceSummaryData_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetThresholdEvents provides a mock function with given fields: speciesName, limit
 func (_m *MockInterface) GetThresholdEvents(speciesName string, limit int) ([]datastore.ThresholdEvent, error) {
 	ret := _m.Called(speciesName, limit)

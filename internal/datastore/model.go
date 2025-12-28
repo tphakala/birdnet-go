@@ -13,10 +13,12 @@ type AudioSource struct {
 
 // Note represents a single observation data point
 type Note struct {
-	ID         uint `gorm:"primaryKey"`
-	SourceNode string
-	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
-	Time       string `gorm:"index:idx_notes_time"`
+	ID          uint   `gorm:"primaryKey"`
+	SourceNode  string // Node name from config (Main.Name)
+	SourceID    string `gorm:"index:idx_notes_source_id"` // Audio source registry ID (e.g., "rtsp_87b89761")
+	SourceLabel string `gorm:"index:idx_notes_source_label"` // User-friendly label for the audio source (e.g., "Backyard Feeder")
+	Date        string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
+	Time        string `gorm:"index:idx_notes_time"`
 	//InputFile      string
 	Source      AudioSource `gorm:"-"` // Runtime only, not stored in database
 	BeginTime   time.Time
@@ -182,14 +184,14 @@ type DynamicThreshold struct {
 // This enables the frontend to display a timeline of threshold adjustments per species.
 type ThresholdEvent struct {
 	ID            uint      `gorm:"primaryKey"`
-	SpeciesName   string    `gorm:"index;not null;size:200"`  // Common name (lowercase)
-	PreviousLevel int       `gorm:"not null"`                 // Level before change
-	NewLevel      int       `gorm:"not null"`                 // Level after change
-	PreviousValue float64   `gorm:"not null"`                 // Threshold value before change
-	NewValue      float64   `gorm:"not null"`                 // Threshold value after change
-	ChangeReason  string    `gorm:"not null;size:50"`         // "high_confidence", "expiry", "manual_reset"
-	Confidence    float64   `gorm:"default:0"`                // Detection confidence that triggered change (if applicable)
-	CreatedAt     time.Time `gorm:"index;not null"`           // When the event occurred
+	SpeciesName   string    `gorm:"index;not null;size:200"` // Common name (lowercase)
+	PreviousLevel int       `gorm:"not null"`                // Level before change
+	NewLevel      int       `gorm:"not null"`                // Level after change
+	PreviousValue float64   `gorm:"not null"`                // Threshold value before change
+	NewValue      float64   `gorm:"not null"`                // Threshold value after change
+	ChangeReason  string    `gorm:"not null;size:50"`        // "high_confidence", "expiry", "manual_reset"
+	Confidence    float64   `gorm:"default:0"`               // Detection confidence that triggered change (if applicable)
+	CreatedAt     time.Time `gorm:"index;not null"`          // When the event occurred
 }
 
 // NotificationHistory tracks sent notifications to prevent duplicate notifications after restart
@@ -197,10 +199,10 @@ type ThresholdEvent struct {
 // Resolves BG-17: Species tracker loses state on restart - causes false "New Species" notifications
 type NotificationHistory struct {
 	ID               uint      `gorm:"primaryKey"`
-	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"` // Scientific name of the species
+	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"`                    // Scientific name of the species
 	NotificationType string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:50;default:new_species"` // Type: "new_species", "yearly", "seasonal"
-	LastSent         time.Time `gorm:"index;not null"`                                                       // When notification was last sent
-	ExpiresAt        time.Time `gorm:"index;not null"`                                                       // When this record expires (2x suppression window)
-	CreatedAt        time.Time `gorm:"not null"`                                                             // When first created
-	UpdatedAt        time.Time `gorm:"not null"`                                                             // Last update time
+	LastSent         time.Time `gorm:"index;not null"`                                                                          // When notification was last sent
+	ExpiresAt        time.Time `gorm:"index;not null"`                                                                          // When this record expires (2x suppression window)
+	CreatedAt        time.Time `gorm:"not null"`                                                                                // When first created
+	UpdatedAt        time.Time `gorm:"not null"`                                                                                // Last update time
 }

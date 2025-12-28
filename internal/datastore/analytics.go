@@ -13,6 +13,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// defaultSourceLabel is the display label for detections from the local microphone (no RTSP label)
+const defaultSourceLabel = "Local Microphone"
+
 // isDebugLoggingEnabled returns true if debug logging is enabled and logger is available
 func isDebugLoggingEnabled() bool {
 	settings := conf.GetSettings()
@@ -665,4 +668,56 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	}
 
 	return finalResults, nil
+}
+
+// SourceSummaryData contains detection statistics by audio source
+type SourceSummaryData struct {
+	SourceLabel string `json:"source_label"`
+	Count       int    `json:"count"`
+}
+
+// GetSourceSummaryData retrieves detection counts grouped by source_label
+// Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
+// Empty source_label values are aggregated as defaultSourceLabel for display purposes
+// Optional limit parameter restricts the number of results (0 = unlimited)
+func (ds *DataStore) GetSourceSummaryData(ctx context.Context, startDate, endDate string, limit int) ([]SourceSummaryData, error) {
+	// Pre-allocate with reasonable capacity
+	summaries := make([]SourceSummaryData, 0, 10)
+
+	// Build CASE expression for reuse in SELECT and GROUP BY
+	caseExpr := fmt.Sprintf("CASE WHEN source_label = '' OR source_label IS NULL THEN '%s' ELSE source_label END", defaultSourceLabel)
+
+	// Build query with CASE to handle empty source_label
+	query := ds.DB.WithContext(ctx).Table("notes").
+		Select(fmt.Sprintf("%s as source_label, COUNT(*) as count", caseExpr)).
+		Group(caseExpr).
+		Order("count DESC")
+
+	// Apply limit if specified
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	// Apply date range filter
+	switch {
+	case startDate != "" && endDate != "":
+		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
+	case startDate != "":
+		query = query.Where("date >= ?", startDate)
+	case endDate != "":
+		query = query.Where("date <= ?", endDate)
+	}
+
+	// Execute query
+	if err := query.Scan(&summaries).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_source_summary_data").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	return summaries, nil
 }
