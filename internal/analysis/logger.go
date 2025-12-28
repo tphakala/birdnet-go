@@ -2,8 +2,6 @@
 package analysis
 
 import (
-	"sync"
-
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -11,18 +9,10 @@ import (
 // ComponentSoundLevel is the component identifier for sound level logging.
 const ComponentSoundLevel = "analysis.soundlevel"
 
-var (
-	serviceLogger logger.Logger
-	initOnce      sync.Once
-)
-
 // GetLogger returns the analysis package logger scoped to the analysis module.
-// Uses sync.Once to ensure the logger is only initialized once.
+// Fetched dynamically to ensure it uses the current centralized logger.
 func GetLogger() logger.Logger {
-	initOnce.Do(func() {
-		serviceLogger = logger.Global().Module("analysis")
-	})
-	return serviceLogger
+	return logger.Global().Module("analysis")
 }
 
 // Sound level structured logging functions

@@ -3,9 +3,12 @@ package targets
 
 import "github.com/tphakala/birdnet-go/internal/logger"
 
-// Package-level cached logger instance for efficiency.
-// Used for logging in helper functions that don't have access to injected loggers.
-var log = logger.Global().Module("backup")
+// GetLogger returns the backup targets package logger scoped to the backup module.
+// The logger is fetched from the global logger each time to ensure it uses
+// the current centralized logger (which may be set after package init).
+func GetLogger() logger.Logger {
+	return logger.Global().Module("backup")
+}
 
 // Field constructors re-exported for use in this package.
 // This avoids import shadowing issues with function parameters named "logger".

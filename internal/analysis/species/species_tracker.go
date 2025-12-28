@@ -67,13 +67,13 @@ const (
 )
 
 // Package-level logger for species tracking
-var log logger.Logger
-
 // daysInMonth contains the number of days in each month (non-leap year, Jan=index 0)
 var daysInMonth = [12]int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
-func init() {
-	log = logger.Global().Module("analysis.species")
+// getLog returns the species tracker logger.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getLog() logger.Logger {
+	return logger.Global().Module("analysis.species")
 }
 
 // SpeciesDatastore defines the minimal interface needed by SpeciesTracker
@@ -179,7 +179,7 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 	now := time.Now() // Uses system local timezone
 
 	// Log initialization
-	log.Debug("Creating new species tracker",
+	getLog().Debug("Creating new species tracker",
 		logger.Bool("enabled", settings.Enabled),
 		logger.Int("window_days", settings.NewSpeciesWindowDays),
 		logger.Bool("yearly_enabled", settings.YearlyTracking.Enabled),
@@ -224,7 +224,7 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		for name, season := range settings.SeasonalTracking.Seasons {
 			// Validate season date
 			if err := validateSeasonDate(season.StartMonth, season.StartDay); err != nil {
-				log.Error("Invalid season date, skipping",
+				getLog().Error("Invalid season date, skipping",
 					logger.String("season", name),
 					logger.Int("month", season.StartMonth),
 					logger.Int("day", season.StartDay),
@@ -235,7 +235,7 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 				month: season.StartMonth,
 				day:   season.StartDay,
 			}
-			log.Debug("Configured season",
+			getLog().Debug("Configured season",
 				logger.String("name", name),
 				logger.Int("start_month", season.StartMonth),
 				logger.Int("start_day", season.StartDay))
@@ -251,7 +251,7 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 
 	tracker.currentSeason = tracker.getCurrentSeason(now)
 
-	log.Debug("Species tracker initialized",
+	getLog().Debug("Species tracker initialized",
 		logger.String("current_season", tracker.currentSeason),
 		logger.Int("current_year", tracker.currentYear),
 		logger.Int("total_seasons", len(tracker.seasons)))

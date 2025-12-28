@@ -15,7 +15,7 @@ func (t *SpeciesTracker) updateLifetimeTrackingLocked(scientificName string, det
 
 	if !exists {
 		t.speciesFirstSeen[scientificName] = detectionTime
-		log.Debug("New lifetime species detected",
+		getLog().Debug("New lifetime species detected",
 			logger.String("species", scientificName),
 			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05")))
 		return true
@@ -23,7 +23,7 @@ func (t *SpeciesTracker) updateLifetimeTrackingLocked(scientificName string, det
 
 	if detectionTime.Before(firstSeen) {
 		t.speciesFirstSeen[scientificName] = detectionTime
-		log.Debug("Updated lifetime first seen to earlier date",
+		getLog().Debug("Updated lifetime first seen to earlier date",
 			logger.String("species", scientificName),
 			logger.String("old_date", firstSeen.Format("2006-01-02")),
 			logger.String("new_date", detectionTime.Format("2006-01-02")))
@@ -40,13 +40,13 @@ func (t *SpeciesTracker) updateYearlyTrackingLocked(scientificName string, detec
 	existingTime, yearExists := t.speciesThisYear[scientificName]
 	if !yearExists {
 		t.speciesThisYear[scientificName] = detectionTime
-		log.Debug("New species for this year",
+		getLog().Debug("New species for this year",
 			logger.String("species", scientificName),
 			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05")),
 			logger.Int("current_year", t.currentYear))
 	} else if detectionTime.Before(existingTime) {
 		t.speciesThisYear[scientificName] = detectionTime
-		log.Debug("Updated yearly first seen to earlier date",
+		getLog().Debug("Updated yearly first seen to earlier date",
 			logger.String("species", scientificName),
 			logger.String("old_date", existingTime.Format("2006-01-02")),
 			logger.String("new_date", detectionTime.Format("2006-01-02")),
@@ -67,7 +67,7 @@ func (t *SpeciesTracker) updateSeasonalTrackingLocked(scientificName string, det
 
 	if _, seasonExists := t.speciesBySeason[currentSeason][scientificName]; !seasonExists {
 		t.speciesBySeason[currentSeason][scientificName] = detectionTime
-		log.Debug("New species for this season",
+		getLog().Debug("New species for this season",
 			logger.String("species", scientificName),
 			logger.String("season", currentSeason),
 			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05")))
@@ -127,7 +127,7 @@ func (t *SpeciesTracker) checkAndUpdateLifetimeLocked(scientificName string, det
 	daysSince := int(detectionTime.Sub(firstSeen) / (hoursPerDay * time.Hour))
 	if daysSince < 0 {
 		// Handle anomaly: treat as earliest detection
-		log.Debug("Negative days calculation detected - treating as earliest detection",
+		getLog().Debug("Negative days calculation detected - treating as earliest detection",
 			logger.String("species", scientificName),
 			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05.000")),
 			logger.String("first_seen", firstSeen.Format("2006-01-02 15:04:05.000")))

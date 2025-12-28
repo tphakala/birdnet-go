@@ -387,7 +387,7 @@ func (m *HTTPMetrics) GetActiveSSEConnections() float64 {
 	metric := &dto.Metric{}
 	if err := m.sseActiveConnections.Write(metric); err != nil {
 		// Log the error with context for debugging metric registration issues
-		log.Warn("Failed to write SSE active connections metric", logger.Error(err))
+		GetLogger().Warn("Failed to write SSE active connections metric", logger.Error(err))
 		return 0
 	}
 	if metric.Gauge != nil && metric.Gauge.Value != nil {

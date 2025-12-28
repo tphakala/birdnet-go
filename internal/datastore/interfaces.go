@@ -232,7 +232,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 	txStart := time.Now()
-	txLogger := log
+	txLogger := GetLogger()
 
 	txLogger.Debug("Starting transaction",
 		logger.String("tx_id", txID),
@@ -678,7 +678,7 @@ func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	}
 
 	elapsed := time.Since(now)
-	log.Debug("Retrieved detections",
+	GetLogger().Debug("Retrieved detections",
 		logger.Int("count", numDetections),
 		logger.Duration("elapsed", elapsed))
 
@@ -1285,7 +1285,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 				baseBackoff := baseDelay * time.Duration(attempt+1)
 				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
 				delay := baseBackoff + jitter
-				log.Debug("Database locked, retrying",
+				GetLogger().Debug("Database locked, retrying",
 					logger.String("tx_id", txID),
 					logger.Duration("delay", delay),
 					logger.Int("attempt", attempt+1),
@@ -1302,7 +1302,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 
 		// If we get here, the transaction was successful
 		if attempt > 0 {
-			log.Info("Database transaction successful after retries",
+			GetLogger().Info("Database transaction successful after retries",
 				logger.String("tx_id", txID),
 				logger.Int("attempts", attempt+1))
 		}
@@ -1354,7 +1354,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 				baseBackoff := baseDelay * time.Duration(attempt+1)
 				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
 				delay := baseBackoff + jitter
-				log.Debug("Database locked, retrying",
+				GetLogger().Debug("Database locked, retrying",
 					logger.String("tx_id", txID),
 					logger.Duration("delay", delay),
 					logger.Int("attempt", attempt+1),
@@ -1374,7 +1374,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 
 		// If we get here, the transaction was successful
 		if attempt > 0 {
-			log.Info("Database transaction successful after retries",
+			GetLogger().Info("Database transaction successful after retries",
 				logger.String("tx_id", txID),
 				logger.Int("attempts", attempt+1))
 		}
@@ -1424,12 +1424,12 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 
 	if cache.ProviderName == "" {
 		err := validationError("provider name cannot be empty", "provider_name", "")
-		log.Error("Invalid image cache data: empty provider name", logger.Error(err))
+		GetLogger().Error("Invalid image cache data: empty provider name", logger.Error(err))
 		return err
 	}
 	if cache.ScientificName == "" {
 		err := validationError("scientific name cannot be empty", "scientific_name", "")
-		log.Error("Invalid image cache data: empty scientific name", logger.Error(err))
+		GetLogger().Error("Invalid image cache data: empty scientific name", logger.Error(err))
 		return err
 	}
 
@@ -1442,7 +1442,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		// Detect constraint violations
 		if isConstraintViolation(err) {
 			// This is expected with UPSERT, log at debug level
-			log.Debug("Image cache UPSERT handled constraint",
+			GetLogger().Debug("Image cache UPSERT handled constraint",
 				logger.String("scientific_name", cache.ScientificName),
 				logger.String("provider", cache.ProviderName))
 		} else {
@@ -1452,7 +1452,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				"provider", cache.ProviderName,
 				"action", "cache_species_thumbnail")
 
-			log.Error("Failed to save image cache",
+			GetLogger().Error("Failed to save image cache",
 				logger.Error(enhancedErr))
 
 			// Record error metric
@@ -1512,7 +1512,7 @@ func (ds *DataStore) GetImageCacheBatch(providerName string, scientificNames []s
 	// Debug logging (controlled by thumbnails debug setting)
 	settings := conf.Setting()
 	if settings.Realtime.Dashboard.Thumbnails.Debug {
-		log.Debug("GetImageCacheBatch: Querying",
+		GetLogger().Debug("GetImageCacheBatch: Querying",
 			logger.String("provider", providerName),
 			logger.Any("species", scientificNames))
 	}
@@ -1532,7 +1532,7 @@ func (ds *DataStore) GetImageCacheBatch(providerName string, scientificNames []s
 	}
 
 	if settings.Realtime.Dashboard.Thumbnails.Debug {
-		log.Debug("GetImageCacheBatch: Found entries",
+		GetLogger().Debug("GetImageCacheBatch: Found entries",
 			logger.Int("count", len(caches)),
 			logger.String("provider", providerName))
 	}
@@ -1699,7 +1699,7 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 	}
 
 	// Debug logging for TimeOfDay filter
-	log.Debug("TimeOfDay filter check",
+	GetLogger().Debug("TimeOfDay filter check",
 		logger.String("filter_value", filters.TimeOfDay),
 		logger.Bool("suncalc_nil", ds.SunCalc == nil),
 		logger.Bool("db_nil", ds.DB == nil))
@@ -1709,10 +1709,10 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB)
 		switch {
 		case err != nil:
-			log.Warn("Failed to build TimeOfDay conditions, skipping filter",
+			GetLogger().Warn("Failed to build TimeOfDay conditions, skipping filter",
 				logger.Error(err))
 		case len(dateConditions) > 0:
-			log.Debug("Successfully built TimeOfDay conditions",
+			GetLogger().Debug("Successfully built TimeOfDay conditions",
 				logger.Int("condition_count", len(dateConditions)),
 				logger.String("filter", filters.TimeOfDay))
 			combinedCondition := ds.DB.Where(dateConditions[0])
@@ -1721,11 +1721,11 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 			}
 			query = query.Where(combinedCondition)
 		default:
-			log.Debug("No TimeOfDay conditions were generated",
+			GetLogger().Debug("No TimeOfDay conditions were generated",
 				logger.String("filter", filters.TimeOfDay))
 		}
 	} else {
-		log.Debug("Skipping TimeOfDay filter",
+		GetLogger().Debug("Skipping TimeOfDay filter",
 			logger.String("filter_value", filters.TimeOfDay),
 			logger.Bool("suncalc_nil", ds.SunCalc == nil),
 			logger.Bool("db_nil", ds.DB == nil))
@@ -1750,7 +1750,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		today := time.Now()
 		endDateStr = today.Format("2006-01-02")
 		startDateStr = today.AddDate(-1, 0, 0).Format("2006-01-02") // 1 year ago
-		log.Info("TimeOfDay filter applied without date range, defaulting to last year",
+		GetLogger().Info("TimeOfDay filter applied without date range, defaulting to last year",
 			logger.String("start_date", startDateStr),
 			logger.String("end_date", endDateStr))
 	case startDateStr == "":
@@ -1857,7 +1857,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		representativeDay := weekData.dateRange[len(weekData.dateRange)/2]
 		sunTimes, err := sc.GetSunEventTimes(representativeDay)
 		if err != nil {
-			log.Warn("Could not get sun times for week, skipping for TimeOfDay filter",
+			GetLogger().Warn("Could not get sun times for week, skipping for TimeOfDay filter",
 				logger.Int("year", weekData.year),
 				logger.Int("week", weekData.week),
 				logger.Error(err))
@@ -1875,7 +1875,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		// Get the sun times for this week
 		weekData, exists := weeklySunCache[key]
 		if !exists || weekData == nil {
-			log.Warn("No sun times found for week, skipping date for TimeOfDay filter",
+			GetLogger().Warn("No sun times found for week, skipping date for TimeOfDay filter",
 				logger.Int("year", year),
 				logger.Int("week", week),
 				logger.String("date", dateStr))
@@ -1911,7 +1911,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	}
 
 	// Log summary of how many conditions were created
-	log.Info("Created date-specific conditions for TimeOfDay filter",
+	GetLogger().Info("Created date-specific conditions for TimeOfDay filter",
 		logger.Int("condition_count", len(conditions)),
 		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1))
 
@@ -2026,7 +2026,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		// consistent timezone handling across all database time parsing operations
 		timestamp, err := time.ParseInLocation("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time, time.Local)
 		if err != nil {
-			log.Warn("Failed to parse timestamp, using current time",
+			GetLogger().Warn("Failed to parse timestamp, using current time",
 				logger.String("date", scanned.Date),
 				logger.String("time", scanned.Time),
 				logger.Uint64("note_id", uint64(scanned.ID)),

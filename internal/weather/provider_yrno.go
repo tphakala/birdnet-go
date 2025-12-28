@@ -195,7 +195,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		settings.BirdNET.Latitude,
 		settings.BirdNET.Longitude)
 
-	providerLogger := weatherLogger.With(logger.String("provider", yrNoProviderName))
+	providerLogger := getLogger().With(logger.String("provider", yrNoProviderName))
 	providerLogger.Info("Fetching weather data", logger.String("url", apiURL))
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)

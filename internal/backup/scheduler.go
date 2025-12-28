@@ -35,18 +35,15 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new backup scheduler
-func NewScheduler(manager *Manager, log logger.Logger, stateManager *StateManager) (*Scheduler, error) {
-	if log == nil {
-		log = logger.Global().Module("backup")
-	}
+func NewScheduler(manager *Manager, _ logger.Logger, stateManager *StateManager) (*Scheduler, error) {
 	if stateManager == nil {
-		log.Error("StateManager provided to NewScheduler cannot be nil")
+		GetLogger().Error("StateManager provided to NewScheduler cannot be nil")
 		return nil, fmt.Errorf("state manager cannot be nil")
 	}
 
 	return &Scheduler{
 		manager: manager,
-		logger:  log.Module("scheduler"),
+		logger:  GetLogger().Module("scheduler"),
 		state:   stateManager,
 	}, nil
 }

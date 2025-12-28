@@ -3,6 +3,9 @@ package metrics
 
 import "github.com/tphakala/birdnet-go/internal/logger"
 
-// Package-level cached logger instance for efficiency.
-// All logging in this package should use this variable.
-var log = logger.Global().Module("telemetry")
+// GetLogger returns the metrics package logger scoped to the telemetry module.
+// The logger is fetched from the global logger each time to ensure it uses
+// the current centralized logger (which may be set after package init).
+func GetLogger() logger.Logger {
+	return logger.Global().Module("telemetry")
+}

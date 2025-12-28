@@ -188,7 +188,7 @@ func PrintUserInfo() {
 		// Get group memberships for the current user
 		groupIDs, err := currentUser.GroupIds()
 		if err != nil {
-			log.Warn("Failed to get group memberships", logger.Error(err))
+			GetLogger().Warn("Failed to get group memberships", logger.Error(err))
 			return
 		}
 
@@ -197,7 +197,7 @@ func PrintUserInfo() {
 			// Look up the group information for each group ID
 			group, err := user.LookupGroupId(gid)
 			if err != nil {
-				log.Warn("Failed to lookup group", logger.String("gid", gid), logger.Error(err))
+				GetLogger().Warn("Failed to lookup group", logger.String("gid", gid), logger.Error(err))
 				continue
 			}
 			// Uncomment the following line to print group information
@@ -211,7 +211,7 @@ func PrintUserInfo() {
 
 		// If the user is not a member of the 'audio' group, print an error message
 		if !audioMember {
-			log.Error("User is not member of audio group",
+			GetLogger().Error("User is not member of audio group",
 				logger.String("username", currentUser.Username),
 				logger.String("fix_command", fmt.Sprintf("sudo usermod -a -G audio %s", currentUser.Username)))
 		}
@@ -243,7 +243,7 @@ func RunningInContainer() bool {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Warn("Failed to close /proc/self/cgroup", logger.Error(err))
+			GetLogger().Warn("Failed to close /proc/self/cgroup", logger.Error(err))
 		}
 	}()
 
@@ -590,7 +590,7 @@ func ValidateToolPath(configuredPath, toolName string) (string, error) {
 			return configuredPath, nil
 		}
 		// If configured path is invalid, log a warning but still check PATH as a fallback
-		log.Warn("Configured tool path invalid or not found, checking system PATH",
+		GetLogger().Warn("Configured tool path invalid or not found, checking system PATH",
 			logger.String("configured_path", configuredPath),
 			logger.String("tool", toolName))
 	}
@@ -632,7 +632,7 @@ func moveFile(src, dst string) error {
 	}
 	defer func() {
 		if err := srcFile.Close(); err != nil {
-			log.Warn("Failed to close source file", logger.Error(err))
+			GetLogger().Warn("Failed to close source file", logger.Error(err))
 		}
 	}() // Ensure the source file is closed when we're done
 
@@ -642,7 +642,7 @@ func moveFile(src, dst string) error {
 	}
 	defer func() {
 		if err := dstFile.Close(); err != nil {
-			log.Warn("Failed to close destination file", logger.Error(err))
+			GetLogger().Warn("Failed to close destination file", logger.Error(err))
 		}
 	}() // Ensure the destination file is closed when we're done
 
@@ -727,7 +727,7 @@ func resolveGatewayFromRoute() net.IP {
 	defer func() {
 		if err := file.Close(); err != nil {
 			// Log error but don't fail - this is a best-effort operation
-			log.Warn("Failed to close /proc/net/route", logger.Error(err))
+			GetLogger().Warn("Failed to close /proc/net/route", logger.Error(err))
 		}
 	}()
 
@@ -787,7 +787,7 @@ func IsInHostSubnet(clientIP net.IP) bool {
 	// Get the host IP
 	hostIP, err := GetHostIP()
 	if err != nil {
-		log.Warn("Error getting host IP", logger.Error(err))
+		GetLogger().Warn("Error getting host IP", logger.Error(err))
 		return false
 	}
 

@@ -19,7 +19,7 @@ func createFIFOPlatform(path string) (string, error) {
 	removeFIFO := func() {
 		if _, err := os.Stat(path); err == nil {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Warn("Error removing existing FIFO",
+				GetLogger().Warn("Error removing existing FIFO",
 					logger.String("path", path),
 					logger.Error(err))
 			}
@@ -34,7 +34,7 @@ func createFIFOPlatform(path string) (string, error) {
 	for retry := range 3 {
 		fifoErr = syscall.Mkfifo(path, 0o600)
 		if fifoErr == nil {
-			log.Debug("Successfully created FIFO pipe", logger.String("path", path))
+			GetLogger().Debug("Successfully created FIFO pipe", logger.String("path", path))
 			return path, nil
 		}
 
@@ -42,7 +42,7 @@ func createFIFOPlatform(path string) (string, error) {
 			break // fatal – no point in retrying
 		}
 
-		log.Debug("FIFO already exists, removing and retrying",
+		GetLogger().Debug("FIFO already exists, removing and retrying",
 			logger.Int("retry", retry+1),
 			logger.String("path", path))
 		removeFIFO()

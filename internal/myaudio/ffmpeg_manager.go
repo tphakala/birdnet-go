@@ -45,12 +45,10 @@ func formatTimeSinceData(lastDataReceived time.Time) string {
 	return time.Since(lastDataReceived).String()
 }
 
-// Use shared logger from integration file
-var managerLogger logger.Logger
-
-func init() {
-	// Use the shared integration logger for consistency
-	managerLogger = getIntegrationLogger()
+// getManagerLogger returns the logger for FFmpeg manager.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getManagerLogger() logger.Logger {
+	return getIntegrationLogger()
 }
 
 // FFmpegManager manages all FFmpeg streams
@@ -104,7 +102,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 
 	// Initialize buffers for the stream using the source ID, not the raw URL
 	if err := initializeBuffersForSource(stream.source.ID); err != nil {
-		managerLogger.Error("failed to initialize buffers for stream",
+		getManagerLogger().Error("failed to initialize buffers for stream",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("sourceID", stream.source.ID),
 			logger.Error(err),
@@ -119,8 +117,8 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 	}
 
 	// Initialize sound level processor if enabled
-	if err := registerSoundLevelProcessorIfEnabled(url, managerLogger); err != nil {
-		managerLogger.Warn("sound level processor registration failed during stream start",
+	if err := registerSoundLevelProcessorIfEnabled(url, getManagerLogger()); err != nil {
+		getManagerLogger().Warn("sound level processor registration failed during stream start",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "start_stream_sound_level_registration"))
@@ -135,7 +133,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 		stream.Run(m.ctx)
 	})
 
-	managerLogger.Info("started FFmpeg stream",
+	getManagerLogger().Info("started FFmpeg stream",
 		logger.String("url", privacy.SanitizeRTSPUrl(url)),
 		logger.String("transport", transport),
 		logger.String("component", "ffmpeg-manager"),
@@ -166,7 +164,7 @@ func (m *FFmpegManager) StopStream(url string) error {
 
 	// Unregister sound level processor while holding lock
 	UnregisterSoundLevelProcessor(url)
-	managerLogger.Debug("unregistered sound level processor",
+	getManagerLogger().Debug("unregistered sound level processor",
 		logger.String("url", privacy.SanitizeRTSPUrl(url)),
 		logger.String("operation", "stop_stream"))
 
@@ -186,20 +184,20 @@ func (m *FFmpegManager) StopStream(url string) error {
 	time.Sleep(100 * time.Millisecond)
 
 	if err := RemoveAnalysisBuffer(url); err != nil {
-		managerLogger.Warn("failed to remove analysis buffer",
+		getManagerLogger().Warn("failed to remove analysis buffer",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "stop_stream_buffer_cleanup"))
 	}
 
 	if err := RemoveCaptureBuffer(url); err != nil {
-		managerLogger.Warn("failed to remove capture buffer",
+		getManagerLogger().Warn("failed to remove capture buffer",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "stop_stream_buffer_cleanup"))
 	}
 
-	managerLogger.Info("stopped FFmpeg stream",
+	getManagerLogger().Info("stopped FFmpeg stream",
 		logger.String("url", privacy.SanitizeRTSPUrl(url)),
 		logger.String("operation", "stop_stream"))
 	return nil
@@ -224,8 +222,8 @@ func (m *FFmpegManager) RestartStream(url string) error {
 
 	// Re-register sound level processor if sound level monitoring is enabled
 	// This ensures processor registration survives stream restarts
-	if err := registerSoundLevelProcessorIfEnabled(url, managerLogger); err != nil {
-		managerLogger.Warn("sound level processor registration failed during stream restart",
+	if err := registerSoundLevelProcessorIfEnabled(url, getManagerLogger()); err != nil {
+		getManagerLogger().Warn("sound level processor registration failed during stream restart",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "restart_stream_sound_level_registration"))
@@ -235,7 +233,7 @@ func (m *FFmpegManager) RestartStream(url string) error {
 
 	stream.Restart(false) // false = automatic restart (health-triggered)
 
-	managerLogger.Info("restarted FFmpeg stream",
+	getManagerLogger().Info("restarted FFmpeg stream",
 		logger.String("url", privacy.SanitizeRTSPUrl(url)),
 		logger.String("operation", "restart_stream"))
 
@@ -305,7 +303,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 	// Restart streams with changed transport settings
 	// This is done before stopping unconfigured streams to provide clear log ordering
 	for _, change := range toRestart {
-		managerLogger.Info("transport setting changed, restarting stream",
+		getManagerLogger().Info("transport setting changed, restarting stream",
 			logger.String("url", privacy.SanitizeRTSPUrl(change.url)),
 			logger.String("old_transport", change.oldTransport),
 			logger.String("new_transport", change.newTransport),
@@ -315,7 +313,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 		// Stop stream with old transport
 		// StopStream() is synchronous and includes buffer cleanup delay
 		if err := m.StopStream(change.url); err != nil {
-			managerLogger.Error("failed to stop stream for transport change",
+			getManagerLogger().Error("failed to stop stream for transport change",
 				logger.String("url", privacy.SanitizeRTSPUrl(change.url)),
 				logger.String("old_transport", change.oldTransport),
 				logger.String("new_transport", change.newTransport),
@@ -330,7 +328,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 		m.streamsMu.RLock()
 		if _, stillExists := m.streams[change.url]; stillExists {
 			m.streamsMu.RUnlock()
-			managerLogger.Error("stream still exists after StopStream",
+			getManagerLogger().Error("stream still exists after StopStream",
 				logger.String("url", privacy.SanitizeRTSPUrl(change.url)),
 				logger.String("old_transport", change.oldTransport),
 				logger.String("new_transport", change.newTransport),
@@ -342,7 +340,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 
 		// Start stream with new transport
 		if err := m.StartStream(change.url, change.newTransport, audioChan); err != nil {
-			managerLogger.Error("failed to restart stream with new transport",
+			getManagerLogger().Error("failed to restart stream with new transport",
 				logger.String("url", privacy.SanitizeRTSPUrl(change.url)),
 				logger.String("old_transport", change.oldTransport),
 				logger.String("new_transport", change.newTransport),
@@ -352,7 +350,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 			continue
 		}
 
-		managerLogger.Info("restarted stream with new transport",
+		getManagerLogger().Info("restarted stream with new transport",
 			logger.String("url", privacy.SanitizeRTSPUrl(change.url)),
 			logger.String("transport", change.newTransport),
 			logger.String("operation", "sync_transport_change_complete"))
@@ -370,7 +368,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 
 	for _, url := range toStop {
 		if err := m.StopStream(url); err != nil {
-			managerLogger.Warn("failed to stop unconfigured stream",
+			getManagerLogger().Warn("failed to stop unconfigured stream",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.Error(err),
 				logger.String("component", "ffmpeg-manager"),
@@ -386,7 +384,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 
 		if !running {
 			if err := m.StartStream(url, transport, audioChan); err != nil {
-				managerLogger.Warn("failed to start configured stream",
+				getManagerLogger().Warn("failed to start configured stream",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.Error(err),
 					logger.String("transport", transport),
@@ -404,7 +402,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan UnifiedAudioData) {
 	// Validate audioChan is provided - watchdog requires it for force-restarting streams
 	if audioChan == nil {
-		managerLogger.Error("cannot start monitoring - audioChan is nil",
+		getManagerLogger().Error("cannot start monitoring - audioChan is nil",
 			logger.String("component", "ffmpeg-manager"),
 			logger.String("operation", "start_monitoring"))
 		return
@@ -423,7 +421,7 @@ func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan U
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		managerLogger.Info("started health check monitoring",
+		getManagerLogger().Info("started health check monitoring",
 			logger.Float64("interval_seconds", interval.Seconds()),
 			logger.String("component", "ffmpeg-manager"),
 			logger.String("operation", "start_monitoring"))
@@ -431,7 +429,7 @@ func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan U
 		for {
 			select {
 			case <-m.ctx.Done():
-				managerLogger.Info("stopping health check monitoring",
+				getManagerLogger().Info("stopping health check monitoring",
 					logger.String("component", "ffmpeg-manager"),
 					logger.String("operation", "stop_monitoring"))
 				return
@@ -447,7 +445,7 @@ func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan U
 		ticker := time.NewTicker(watchdogCheckInterval)
 		defer ticker.Stop()
 
-		managerLogger.Info("started watchdog monitoring for stuck streams",
+		getManagerLogger().Info("started watchdog monitoring for stuck streams",
 			logger.Float64("interval_seconds", watchdogCheckInterval.Seconds()),
 			logger.Float64("max_unhealthy_duration_seconds", maxUnhealthyDuration.Seconds()),
 			logger.String("component", "ffmpeg-manager"),
@@ -456,7 +454,7 @@ func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan U
 		for {
 			select {
 			case <-m.ctx.Done():
-				managerLogger.Info("stopping watchdog monitoring",
+				getManagerLogger().Info("stopping watchdog monitoring",
 					logger.String("component", "ffmpeg-manager"),
 					logger.String("operation", "stop_watchdog"))
 				return
@@ -472,7 +470,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 	health := m.HealthCheck()
 
 	if conf.Setting().Debug {
-		managerLogger.Debug("performing health check on all streams",
+		getManagerLogger().Debug("performing health check on all streams",
 			logger.Int("stream_count", len(health)),
 			logger.String("operation", "check_stream_health"))
 	}
@@ -487,7 +485,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 
 			// Skip if stream doesn't exist (shouldn't happen but be defensive)
 			if !exists {
-				managerLogger.Debug("unhealthy stream not found in streams map",
+				getManagerLogger().Debug("unhealthy stream not found in streams map",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.String("operation", "health_check"))
 				continue
@@ -496,7 +494,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 			// Check if stream is already in the process of restarting
 			if stream.IsRestarting() {
 				if conf.Setting().Debug {
-					managerLogger.Debug("skipping restart for stream already in restart process",
+					getManagerLogger().Debug("skipping restart for stream already in restart process",
 						logger.String("url", privacy.SanitizeRTSPUrl(url)),
 						logger.Float64("last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived)),
 						logger.Int("restart_count", h.RestartCount),
@@ -511,7 +509,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 				timeSinceStart := time.Since(processStartTime)
 				if timeSinceStart < minimumStreamRuntime {
 					if conf.Setting().Debug {
-						managerLogger.Debug("skipping restart for new stream still establishing",
+						getManagerLogger().Debug("skipping restart for new stream still establishing",
 							logger.String("url", privacy.SanitizeRTSPUrl(url)),
 							logger.Float64("runtime_seconds", timeSinceStart.Seconds()),
 							logger.Float64("minimum_runtime_seconds", minimumStreamRuntime.Seconds()),
@@ -522,7 +520,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 				}
 			}
 
-			managerLogger.Warn("unhealthy stream detected",
+			getManagerLogger().Warn("unhealthy stream detected",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.Float64("last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived)),
 				logger.Int("restart_count", h.RestartCount),
@@ -533,13 +531,13 @@ func (m *FFmpegManager) checkStreamHealth() {
 
 			// Restart unhealthy streams
 			if conf.Setting().Debug {
-				managerLogger.Debug("attempting to restart unhealthy stream",
+				getManagerLogger().Debug("attempting to restart unhealthy stream",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.String("operation", "health_check_restart_attempt"))
 			}
 
 			if err := m.RestartStream(url); err != nil {
-				managerLogger.Error("failed to restart unhealthy stream",
+				getManagerLogger().Error("failed to restart unhealthy stream",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.Error(err),
 					logger.String("operation", "health_check_restart"))
@@ -557,7 +555,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 				// This will be reported via event bus if telemetry is enabled
 				_ = errorWithContext
 			} else if conf.Setting().Debug {
-				managerLogger.Debug("successfully initiated restart for unhealthy stream",
+				getManagerLogger().Debug("successfully initiated restart for unhealthy stream",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.String("operation", "health_check_restart_success"))
 			}
@@ -575,7 +573,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 			m.streamsMu.RUnlock()
 
 			// Log healthy streams at debug level
-			managerLogger.Debug("stream is healthy",
+			getManagerLogger().Debug("stream is healthy",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.Int("pid", currentPID),
 				logger.Bool("is_receiving_data", h.IsReceivingData),
@@ -594,7 +592,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 	now := time.Now()
 
 	if conf.Setting().Debug {
-		managerLogger.Debug("watchdog checking for stuck streams",
+		getManagerLogger().Debug("watchdog checking for stuck streams",
 			logger.Int("total_streams", len(health)),
 			logger.String("operation", "watchdog_check"))
 	}
@@ -618,7 +616,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 
 		if stream.IsRestarting() {
 			if conf.Setting().Debug {
-				managerLogger.Debug("skipping watchdog check - stream already restarting",
+				getManagerLogger().Debug("skipping watchdog check - stream already restarting",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.String("operation", "watchdog_check_skip_restarting"))
 			}
@@ -638,11 +636,11 @@ func (m *FFmpegManager) checkForStuckStreams() {
 		// Check if exceeded threshold
 		if unhealthyDuration < maxUnhealthyDuration {
 			if conf.Setting().Debug {
-				managerLogger.Debug("unhealthy stream not yet at watchdog threshold",
+				getManagerLogger().Debug("unhealthy stream not yet at watchdog threshold",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.Float64("unhealthy_duration_seconds", unhealthyDuration.Seconds()),
 					logger.Float64("threshold_seconds", maxUnhealthyDuration.Seconds()),
-					logger.Float64("remaining_seconds", (maxUnhealthyDuration - unhealthyDuration).Seconds()),
+					logger.Float64("remaining_seconds", (maxUnhealthyDuration-unhealthyDuration).Seconds()),
 					logger.String("operation", "watchdog_check"))
 			}
 			continue
@@ -659,7 +657,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 		if exists && time.Since(lastReset) < maxUnhealthyDuration {
 			m.forceResetMu.Unlock()
 			if conf.Setting().Debug {
-				managerLogger.Debug("skipping force reset due to cooldown",
+				getManagerLogger().Debug("skipping force reset due to cooldown",
 					logger.String("url", privacy.SanitizeRTSPUrl(url)),
 					logger.Float64("time_since_last_reset_seconds", time.Since(lastReset).Seconds()),
 					logger.Float64("cooldown_seconds", maxUnhealthyDuration.Seconds()),
@@ -686,21 +684,21 @@ func (m *FFmpegManager) checkForStuckStreams() {
 		m.audioChanMu.RUnlock()
 
 		if !streamExists {
-			managerLogger.Warn("stream disappeared during watchdog check",
+			getManagerLogger().Warn("stream disappeared during watchdog check",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.String("operation", "watchdog_stream_missing"))
 			continue
 		}
 
 		if audioChan == nil {
-			managerLogger.Error("cannot restart stuck stream - no audioChan available",
+			getManagerLogger().Error("cannot restart stuck stream - no audioChan available",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.String("operation", "watchdog_no_audiochan"))
 			continue
 		}
 
 		// Force full reset
-		managerLogger.Error("stream stuck unhealthy, forcing full reset",
+		getManagerLogger().Error("stream stuck unhealthy, forcing full reset",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.Float64("unhealthy_duration_seconds", unhealthyDuration.Seconds()),
 			logger.Float64("threshold_seconds", maxUnhealthyDuration.Seconds()),
@@ -712,7 +710,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 
 		// Stop stream completely
 		if err := m.StopStream(url); err != nil {
-			managerLogger.Error("failed to stop stuck stream",
+			getManagerLogger().Error("failed to stop stuck stream",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.Error(err),
 				logger.String("operation", "watchdog_stop"))
@@ -722,14 +720,14 @@ func (m *FFmpegManager) checkForStuckStreams() {
 		// Verify stream was removed - if not, force-remove it to ensure clean state
 		m.streamsMu.Lock()
 		if _, stillExists := m.streams[url]; stillExists {
-			managerLogger.Warn("stream still exists after watchdog stop, force-removing entry",
+			getManagerLogger().Warn("stream still exists after watchdog stop, force-removing entry",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.String("operation", "watchdog_stop_verification"))
 
 			// Force-remove the stream entry to ensure clean state
 			delete(m.streams, url)
 
-			managerLogger.Info("force-removed stuck stream entry",
+			getManagerLogger().Info("force-removed stuck stream entry",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.String("operation", "watchdog_force_cleanup"))
 		}
@@ -740,7 +738,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 
 		// Restart stream with fresh state
 		if err := m.StartStream(url, transport, audioChan); err != nil {
-			managerLogger.Error("failed to restart stuck stream after watchdog stop",
+			getManagerLogger().Error("failed to restart stuck stream after watchdog stop",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.String("transport", transport),
 				logger.Error(err),
@@ -748,7 +746,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 			continue
 		}
 
-		managerLogger.Info("watchdog successfully force-reset stuck stream",
+		getManagerLogger().Info("watchdog successfully force-reset stuck stream",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("transport", transport),
 			logger.Float64("unhealthy_duration_seconds", unhealthyDuration.Seconds()),
@@ -765,7 +763,7 @@ func (m *FFmpegManager) Shutdown() {
 	activeStreams := len(m.streams)
 	m.streamsMu.RUnlock()
 
-	managerLogger.Info("shutting down FFmpeg manager",
+	getManagerLogger().Info("shutting down FFmpeg manager",
 		logger.Int("active_streams", activeStreams),
 		logger.String("operation", "shutdown"))
 
@@ -783,7 +781,7 @@ func (m *FFmpegManager) Shutdown() {
 	// Stop each stream using StopStream which handles unregistration
 	for _, url := range urls {
 		if err := m.StopStream(url); err != nil {
-			managerLogger.Warn("failed to stop stream during shutdown",
+			getManagerLogger().Warn("failed to stop stream during shutdown",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.Error(err),
 				logger.String("operation", "shutdown"))
@@ -800,12 +798,12 @@ func (m *FFmpegManager) Shutdown() {
 	// Wait with timeout
 	select {
 	case <-done:
-		managerLogger.Info("FFmpeg manager shutdown complete",
+		getManagerLogger().Info("FFmpeg manager shutdown complete",
 			logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 			logger.Int("stopped_streams", activeStreams),
 			logger.String("operation", "shutdown"))
 	case <-time.After(30 * time.Second):
-		managerLogger.Warn("FFmpeg manager shutdown timeout",
+		getManagerLogger().Warn("FFmpeg manager shutdown timeout",
 			logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 			logger.Int("active_streams", activeStreams),
 			logger.String("operation", "shutdown"))

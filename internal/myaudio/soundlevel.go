@@ -517,16 +517,12 @@ func formatBandKey(centerFreq float64) string {
 var (
 	soundLevelProcessors     = make(map[string]*soundLevelProcessor)
 	soundLevelProcessorMutex sync.RWMutex
-	soundLevelLogger         logger.Logger
-	soundLevelLoggerOnce     sync.Once
 )
 
-// getSoundLevelLogger returns the sound level logger, initializing it if necessary
+// getSoundLevelLogger returns the sound level logger.
+// Fetched dynamically to ensure it uses the current centralized logger.
 func getSoundLevelLogger() logger.Logger {
-	soundLevelLoggerOnce.Do(func() {
-		soundLevelLogger = logger.Global().Module("audio").Module("soundlevel")
-	})
-	return soundLevelLogger
+	return logger.Global().Module("audio").Module("soundlevel")
 }
 
 // UpdateSoundLevelDebugSetting updates the debug log level for sound level processing

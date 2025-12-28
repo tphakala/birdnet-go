@@ -127,7 +127,7 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 		}
 
 		if i == 0 || (i+1)%5 == 0 {
-			log.Debug("FIFO writer waiting",
+			GetLogger().Debug("FIFO writer waiting",
 				logger.String("path", fifoPath),
 				logger.Int("attempt", i+1),
 				logger.Error(openErr))

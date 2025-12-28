@@ -854,7 +854,7 @@ func knownHostsCallback(knownHostsFile string) (ssh.HostKeyCallback, error) {
 				Build()
 		}
 		// Warn user that SSH connections will fail until host keys are added
-		log.Warn("Created empty known_hosts file - SSH connections will fail until host keys are added",
+		GetLogger().Warn("Created empty known_hosts file - SSH connections will fail until host keys are added",
 			logString("path", knownHostsFile),
 			logString("hint", "Run 'ssh-keyscan <hostname> >> "+knownHostsFile+"' to add host keys"))
 	}

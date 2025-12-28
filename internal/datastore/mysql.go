@@ -55,7 +55,7 @@ func (store *MySQLStore) Open() error {
 		store.Settings.Output.MySQL.Username,
 		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
 		store.Settings.Output.MySQL.Database)
-	log.Info("Opening MySQL database connection",
+	GetLogger().Info("Opening MySQL database connection",
 		logger.String("dsn", sanitizedDSN))
 
 	// Configure GORM logger with metrics if available
@@ -71,14 +71,14 @@ func (store *MySQLStore) Open() error {
 	// Open the MySQL database
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: gormLogger})
 	if err != nil {
-		log.Error("Failed to open MySQL database", logger.Error(err))
+		GetLogger().Error("Failed to open MySQL database", logger.Error(err))
 		return fmt.Errorf("failed to open MySQL database: %w", err)
 	}
 
 	store.DB = db
 
 	// Log successful connection
-	log.Info("MySQL database opened successfully",
+	GetLogger().Info("MySQL database opened successfully",
 		logger.String("host", store.Settings.Output.MySQL.Host),
 		logger.String("port", store.Settings.Output.MySQL.Port),
 		logger.String("database", store.Settings.Output.MySQL.Database))
@@ -115,21 +115,21 @@ func (store *MySQLStore) Close() error {
 	store.StopMonitoring()
 
 	// Log database closing
-	log.Info("Closing MySQL database connection",
+	GetLogger().Info("Closing MySQL database connection",
 		logger.String("host", store.Settings.Output.MySQL.Host),
 		logger.String("database", store.Settings.Output.MySQL.Database))
 
 	// Retrieve the generic database object from the GORM DB object
 	sqlDB, err := store.DB.DB()
 	if err != nil {
-		log.Error("Failed to retrieve generic DB object",
+		GetLogger().Error("Failed to retrieve generic DB object",
 			logger.Error(err))
 		return err
 	}
 
 	// Close the generic database object, which closes the underlying SQL database connection
 	if err := sqlDB.Close(); err != nil {
-		log.Error("Failed to close MySQL database",
+		GetLogger().Error("Failed to close MySQL database",
 			logger.String("host", store.Settings.Output.MySQL.Host),
 			logger.String("database", store.Settings.Output.MySQL.Database),
 			logger.Error(err))
@@ -137,7 +137,7 @@ func (store *MySQLStore) Close() error {
 	}
 
 	// Log successful closure
-	log.Info("MySQL database closed successfully",
+	GetLogger().Info("MySQL database closed successfully",
 		logger.String("host", store.Settings.Output.MySQL.Host),
 		logger.String("database", store.Settings.Output.MySQL.Database))
 
@@ -155,7 +155,7 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 	}
 
 	optimizeStart := time.Now()
-	optimizeLogger := log.With(logger.String("operation", "optimize"), logger.String("db_type", "MySQL"))
+	optimizeLogger := GetLogger().With(logger.String("operation", "optimize"), logger.String("db_type", "MySQL"))
 
 	optimizeLogger.Info("Starting database optimization")
 

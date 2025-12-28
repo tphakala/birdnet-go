@@ -175,11 +175,7 @@ type Manager struct {
 }
 
 // NewManager creates a new backup manager
-func NewManager(fullConfig *conf.Settings, log logger.Logger, stateManager *StateManager, appVersion string) (*Manager, error) {
-	if log == nil {
-		// Fallback to package logger if none provided
-		log = logger.Global().Module("backup")
-	}
+func NewManager(fullConfig *conf.Settings, _ logger.Logger, stateManager *StateManager, appVersion string) (*Manager, error) {
 	if stateManager == nil {
 		return nil, fmt.Errorf("StateManager cannot be nil")
 	}
@@ -189,7 +185,7 @@ func NewManager(fullConfig *conf.Settings, log logger.Logger, stateManager *Stat
 		fullConfig:   fullConfig,         // Keep the full config
 		sources:      make(map[string]Source),
 		targets:      make(map[string]Target),
-		logger:       log.Module("manager"),
+		logger:       GetLogger().Module("manager"),
 		stateManager: stateManager,
 		appVersion:   appVersion,
 	}, nil
@@ -1498,7 +1494,7 @@ func isWeeklyBackup(t time.Time, schedules []conf.BackupScheduleConfig) bool {
 		if s.Enabled && s.IsWeekly {
 			configuredDay, err := parseWeekday(s.Weekday) // Assume parseWeekday exists
 			if err != nil {
-				log.Warn("Could not parse configured weekly backup day in schedule, skipping schedule check",
+				GetLogger().Warn("Could not parse configured weekly backup day in schedule, skipping schedule check",
 					logString("configured_day", s.Weekday),
 					logError(err))
 				continue // Check next schedule

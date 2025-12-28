@@ -34,18 +34,10 @@ const (
 	errMsgNoOctaveBandData = "no octave band data"
 )
 
-var (
-	soundLevelLogger     logger.Logger
-	soundLevelLoggerOnce sync.Once
-)
-
 // getSoundLevelLogger returns the sound level logger.
-// Uses sync.Once to ensure the logger is only initialized once.
+// Fetched dynamically to ensure it uses the current centralized logger.
 func getSoundLevelLogger() logger.Logger {
-	soundLevelLoggerOnce.Do(func() {
-		soundLevelLogger = logger.Global().Module("analysis").Module("soundlevel")
-	})
-	return soundLevelLogger
+	return logger.Global().Module("analysis").Module("soundlevel")
 }
 
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders

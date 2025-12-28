@@ -22,7 +22,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 
 	now := time.Now()
 
-	log.Debug("Initializing species tracker from database",
+	getLog().Debug("Initializing species tracker from database",
 		logger.String("current_time", now.Format("2006-01-02 15:04:05")),
 		logger.Bool("yearly_enabled", t.yearlyEnabled),
 		logger.Bool("seasonal_enabled", t.seasonalEnabled))
@@ -73,7 +73,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 	// 4. Self-healing: As new notifications are sent, the suppression state rebuilds automatically
 	// 5. The table will be created by GORM AutoMigrate on first run
 	if err := t.loadNotificationHistoryFromDatabase(now); err != nil {
-		log.Error("Failed to load notification history from database",
+		getLog().Error("Failed to load notification history from database",
 			logger.Error(err),
 			logger.String("operation", "load_notification_history"),
 			logger.String("impact", "May send duplicate notifications for species detected recently"))
@@ -82,7 +82,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 
 	t.lastSyncTime = now
 
-	log.Debug("Database initialization complete",
+	getLog().Debug("Database initialization complete",
 		logger.Int("lifetime_species", len(t.speciesFirstSeen)),
 		logger.Int("yearly_species", len(t.speciesThisYear)),
 		logger.Int("total_seasons", len(t.speciesBySeason)),
@@ -120,7 +120,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
 				if err != nil {
-					log.Debug("Failed to parse first seen date",
+					getLog().Debug("Failed to parse first seen date",
 						logger.String("species", species.ScientificName),
 						logger.String("date", species.FirstSeenDate),
 						logger.Error(err))
@@ -129,15 +129,15 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 				t.speciesFirstSeen[species.ScientificName] = firstSeen
 			}
 		}
-		log.Debug("Loaded species data from database",
+		getLog().Debug("Loaded species data from database",
 			logger.Int("species_count", len(newSpeciesData)))
 	case len(t.speciesFirstSeen) == 0:
 		// No data from database and no existing data - initialize empty map
 		t.speciesFirstSeen = make(map[string]time.Time, initialSpeciesCapacity)
-		log.Debug("No species data from database, initialized empty tracking")
+		getLog().Debug("No species data from database, initialized empty tracking")
 	default:
 		// Database returned empty data but we have existing data - keep it
-		log.Debug("Database returned empty species data, preserving existing tracking data",
+		getLog().Debug("Database returned empty species data, preserving existing tracking data",
 			logger.Int("existing_species_count", len(t.speciesFirstSeen)))
 	}
 
@@ -173,7 +173,7 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
 				if err != nil {
-					log.Debug("Failed to parse yearly first seen date",
+					getLog().Debug("Failed to parse yearly first seen date",
 						logger.String("species", species.ScientificName),
 						logger.String("date", species.FirstSeenDate),
 						logger.Error(err))
@@ -182,17 +182,17 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 				t.speciesThisYear[species.ScientificName] = firstSeen
 			}
 		}
-		log.Debug("Loaded yearly species data from database",
+		getLog().Debug("Loaded yearly species data from database",
 			logger.Int("species_count", len(yearlyData)),
 			logger.Int("year", t.currentYear))
 	case len(t.speciesThisYear) == 0:
 		// No data from database and no existing data - initialize empty map
 		t.speciesThisYear = make(map[string]time.Time, initialSpeciesCapacity)
-		log.Debug("No yearly species data from database, initialized empty tracking",
+		getLog().Debug("No yearly species data from database, initialized empty tracking",
 			logger.Int("year", t.currentYear))
 	default:
 		// Database returned empty data but we have existing data - keep it
-		log.Debug("Database returned empty yearly data, preserving existing tracking data",
+		getLog().Debug("Database returned empty yearly data, preserving existing tracking data",
 			logger.Int("existing_yearly_species_count", len(t.speciesThisYear)),
 			logger.Int("year", t.currentYear))
 	}
@@ -204,7 +204,7 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) (map[string]time.Time, error) {
 	startDate, endDate := t.getSeasonDateRange(seasonName, now)
 
-	log.Debug("Loading data for season",
+	getLog().Debug("Loading data for season",
 		logger.String("season", seasonName),
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate))
@@ -232,7 +232,7 @@ func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) 
 		}
 		firstSeen, parseErr := time.Parse("2006-01-02", species.FirstSeenDate)
 		if parseErr != nil {
-			log.Debug("Failed to parse seasonal first seen date",
+			getLog().Debug("Failed to parse seasonal first seen date",
 				logger.String("species", species.ScientificName),
 				logger.String("season", seasonName),
 				logger.String("date", species.FirstSeenDate),
@@ -242,7 +242,7 @@ func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) 
 		seasonMap[species.ScientificName] = firstSeen
 	}
 
-	log.Debug("Season loading complete",
+	getLog().Debug("Season loading complete",
 		logger.String("season", seasonName),
 		logger.Int("total_retrieved", len(seasonalData)),
 		logger.Int("species_loaded", len(seasonMap)))
@@ -269,7 +269,7 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 	// Initialize seasonal maps
 	t.speciesBySeason = make(map[string]map[string]time.Time)
 
-	log.Debug("Loading seasonal data from database",
+	getLog().Debug("Loading seasonal data from database",
 		logger.Int("total_seasons", len(t.seasons)),
 		logger.Bool("has_existing_data", hasExistingData))
 
@@ -283,7 +283,7 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 
 	// If all seasons returned empty and we had existing data, restore it
 	if t.allSeasonsEmpty() && hasExistingData {
-		log.Debug("All seasons returned empty data, restoring existing seasonal tracking data")
+		getLog().Debug("All seasons returned empty data, restoring existing seasonal tracking data")
 		t.speciesBySeason = existingSeasonData
 	}
 
@@ -295,7 +295,7 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) error {
 	// Only load if notification suppression is enabled
 	if t.notificationSuppressionWindow <= 0 {
-		log.Debug("Notification suppression disabled, skipping history load")
+		getLog().Debug("Notification suppression disabled, skipping history load")
 		return nil
 	}
 
@@ -303,7 +303,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 	// This handles cases where notifications were sent just before the suppression window
 	lookbackTime := now.Add(-2 * t.notificationSuppressionWindow)
 
-	log.Debug("Loading notification history from database",
+	getLog().Debug("Loading notification history from database",
 		logger.String("lookback_time", lookbackTime.Format("2006-01-02 15:04:05")),
 		logger.Duration("suppression_window", t.notificationSuppressionWindow))
 
@@ -335,13 +335,13 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 		// Store the most recent notification time for each species
 		t.notificationLastSent[histories[i].ScientificName] = histories[i].LastSent
 
-		log.Debug("Loaded notification history",
+		getLog().Debug("Loaded notification history",
 			logger.String("species", histories[i].ScientificName),
 			logger.String("last_sent", histories[i].LastSent.Format("2006-01-02 15:04:05")),
 			logger.String("notification_type", histories[i].NotificationType))
 	}
 
-	log.Debug("Notification history loaded successfully",
+	getLog().Debug("Notification history loaded successfully",
 		logger.Int("notifications_loaded", len(histories)),
 		logger.Int("map_size", len(t.notificationLastSent)))
 

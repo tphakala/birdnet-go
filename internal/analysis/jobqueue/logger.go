@@ -11,16 +11,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// Package-level logger for job queue operations
-var log logger.Logger
-
 // slogLogger is an slog.Logger used for test compatibility.
 // Tests can swap this out with a custom logger to capture output.
 // nolint:gochecknoglobals // Required for test compatibility
 var slogLogger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-func init() {
-	log = logger.Global().Module("birdnet")
+// getLog returns the jobqueue package logger.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getLog() logger.Logger {
+	return logger.Global().Module("birdnet")
 }
 
 // GetLogger returns the slog logger for test compatibility
@@ -38,7 +37,7 @@ func LogJobEnqueued(ctx context.Context, jobID, actionType string, retryable boo
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Job enqueued", fields...)
+	getLog().WithContext(ctx).Info("Job enqueued", fields...)
 }
 
 // LogJobStarted logs when a job begins execution
@@ -50,7 +49,7 @@ func LogJobStarted(ctx context.Context, jobID, actionType string) {
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Job started", fields...)
+	getLog().WithContext(ctx).Info("Job started", fields...)
 }
 
 // LogJobCompleted logs when a job finishes successfully
@@ -63,7 +62,7 @@ func LogJobCompleted(ctx context.Context, jobID, actionType string, duration tim
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Job completed", fields...)
+	getLog().WithContext(ctx).Info("Job completed", fields...)
 }
 
 // LogJobFailed logs when a job fails
@@ -79,7 +78,7 @@ func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxAtt
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
 
-	contextLogger := log.WithContext(ctx)
+	contextLogger := getLog().WithContext(ctx)
 	// Use Error level for final failure, Warn for retryable failures
 	if attempt >= maxAttempts {
 		contextLogger.Error("Job failed permanently", fields...)
@@ -99,7 +98,7 @@ func LogQueueStats(ctx context.Context, pending, running, completed, failed int)
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Queue statistics", fields...)
+	getLog().WithContext(ctx).Info("Queue statistics", fields...)
 }
 
 // LogJobDropped logs when a job is dropped due to queue being full
@@ -112,7 +111,7 @@ func LogJobDropped(ctx context.Context, jobID, actionDesc string) {
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Warn("Job dropped", fields...)
+	getLog().WithContext(ctx).Warn("Job dropped", fields...)
 }
 
 // LogQueueStopped logs when the job queue processing is stopped
@@ -137,7 +136,7 @@ func LogQueueStopped(ctx context.Context, reason string, details ...any) {
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Queue processing stopped", fields...)
+	getLog().WithContext(ctx).Info("Queue processing stopped", fields...)
 }
 
 // LogJobRetrying logs when a job is being retried (at execution start)
@@ -153,7 +152,7 @@ func LogJobRetrying(ctx context.Context, jobID, actionDesc string, attempt, maxA
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Job retry execution starting", fields...)
+	getLog().WithContext(ctx).Info("Job retry execution starting", fields...)
 }
 
 // LogJobRetryScheduled logs when a job is scheduled for retry after failure
@@ -172,7 +171,7 @@ func LogJobRetryScheduled(ctx context.Context, jobID, actionDesc string, attempt
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Warn("Job scheduled for retry after failure", fields...)
+	getLog().WithContext(ctx).Warn("Job scheduled for retry after failure", fields...)
 }
 
 // LogJobSuccess logs when a job completes successfully
@@ -186,7 +185,7 @@ func LogJobSuccess(ctx context.Context, jobID, actionDesc string, attempt int) {
 	if traceID := extractTraceID(ctx); traceID != "" {
 		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	log.WithContext(ctx).Info("Job succeeded", fields...)
+	getLog().WithContext(ctx).Info("Job succeeded", fields...)
 }
 
 // Context key types for safe context value retrieval

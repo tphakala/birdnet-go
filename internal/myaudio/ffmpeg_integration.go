@@ -18,17 +18,12 @@ var (
 
 	// Monitoring is started separately when we have audioChan
 	monitoringOnce sync.Once
-
-	integrationLogger     logger.Logger
-	integrationLoggerOnce sync.Once
 )
 
-// getIntegrationLogger returns the integration logger, initializing it if necessary
+// getIntegrationLogger returns the integration logger.
+// Fetched dynamically to ensure it uses the current centralized logger.
 func getIntegrationLogger() logger.Logger {
-	integrationLoggerOnce.Do(func() {
-		integrationLogger = logger.Global().Module("audio").Module("ffmpeg")
-	})
-	return integrationLogger
+	return logger.Global().Module("audio").Module("ffmpeg")
 }
 
 // UpdateFFmpegLogLevel updates the logger level based on configuration
@@ -130,14 +125,14 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 	// Check for nil audioChan BEFORE consuming the sync.Once guard
 	// This ensures the Do block is only executed when a valid audioChan is available
 	if audioChan == nil {
-		integrationLogger.Error("cannot start monitoring - audioChan is nil",
+		getIntegrationLogger().Error("cannot start monitoring - audioChan is nil",
 			logger.String("operation", "start_monitoring_once"))
 		return
 	}
 
 	monitoringOnce.Do(func() {
 		if manager == nil {
-			integrationLogger.Error("cannot start monitoring - manager is nil",
+			getIntegrationLogger().Error("cannot start monitoring - manager is nil",
 				logger.String("operation", "start_monitoring_once"))
 			return
 		}
@@ -148,7 +143,7 @@ func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData
 			monitoringInterval = 30 * time.Second // default fallback
 		}
 
-		integrationLogger.Info("starting FFmpeg stream monitoring",
+		getIntegrationLogger().Info("starting FFmpeg stream monitoring",
 			logger.Float64("monitoring_interval_seconds", monitoringInterval.Seconds()),
 			logger.Float64("watchdog_interval_seconds", watchdogCheckInterval.Seconds()),
 			logger.String("operation", "start_monitoring_once"))
@@ -168,7 +163,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 
 	// Check FFmpeg availability
 	if conf.GetFfmpegBinaryName() == "" {
-		integrationLogger.Error("FFmpeg not available",
+		getIntegrationLogger().Error("FFmpeg not available",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("operation", "capture_audio_rtsp"))
 		return
@@ -177,7 +172,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// Get the global manager
 	manager := getGlobalManager()
 	if manager == nil {
-		integrationLogger.Error("FFmpeg manager is not available",
+		getIntegrationLogger().Error("FFmpeg manager is not available",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("operation", "capture_audio_rtsp"))
 		return
@@ -189,7 +184,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 
 	// Start the stream
 	if err := manager.StartStream(url, transport, unifiedAudioChan); err != nil {
-		integrationLogger.Error("failed to start stream",
+		getIntegrationLogger().Error("failed to start stream",
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.Error(err),
 			logger.String("transport", transport),
@@ -204,7 +199,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 			case <-quitChan:
 				// Stop the stream
 				if err := manager.StopStream(url); err != nil {
-					integrationLogger.Warn("failed to stop stream",
+					getIntegrationLogger().Warn("failed to stop stream",
 						logger.String("url", privacy.SanitizeRTSPUrl(url)),
 						logger.Error(err),
 						logger.String("operation", "quit_signal"))
@@ -213,7 +208,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 			case <-restartChan:
 				// Restart the stream
 				if err := manager.RestartStream(url); err != nil {
-					integrationLogger.Warn("failed to restart stream",
+					getIntegrationLogger().Warn("failed to restart stream",
 						logger.String("url", privacy.SanitizeRTSPUrl(url)),
 						logger.Error(err),
 						logger.String("operation", "restart_signal"))

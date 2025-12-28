@@ -76,7 +76,7 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		settings.Realtime.Weather.OpenWeather.Units,
 	)
 
-	providerLogger := weatherLogger.With(logger.String("provider", openWeatherProviderName))
+	providerLogger := getLogger().With(logger.String("provider", openWeatherProviderName))
 	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "appid")))
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)

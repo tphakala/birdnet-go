@@ -11,18 +11,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-var (
-	metricsLogger     logger.Logger
-	metricsLoggerOnce sync.Once
-)
-
 // getMetricsLogger returns the metrics logger.
-// Uses sync.Once to ensure the logger is only initialized once.
+// Fetched dynamically to ensure it uses the current centralized logger.
 func getMetricsLogger() logger.Logger {
-	metricsLoggerOnce.Do(func() {
-		metricsLogger = logger.Global().Module("analysis").Module("soundlevel").Module("metrics")
-	})
-	return metricsLogger
+	return logger.Global().Module("analysis").Module("soundlevel").Module("metrics")
 }
 
 // startSoundLevelMetricsPublisher starts a goroutine to consume sound level data and update Prometheus metrics

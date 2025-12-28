@@ -122,7 +122,7 @@ func (ds *DataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, 
 	}
 
 	if result.RowsAffected > 0 {
-		log.Info("Cleaned up expired notification history",
+		GetLogger().Info("Cleaned up expired notification history",
 			logger.Int64("count", result.RowsAffected),
 			logger.String("before", before.Format(time.RFC3339)))
 	}

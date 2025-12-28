@@ -33,14 +33,14 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 	t.mu.RUnlock()
 
 	// Log sync attempt
-	log.Debug("Starting database sync",
+	getLog().Debug("Starting database sync",
 		logger.Int("existing_lifetime_species", existingLifetimeCount),
 		logger.Int("existing_yearly_species", existingYearlyCount),
 		logger.Int("existing_seasonal_species", existingSeasonalCount))
 
 	// Perform database sync
 	if err := t.InitFromDatabase(); err != nil {
-		log.Error("Database sync failed, preserving existing data",
+		getLog().Error("Database sync failed, preserving existing data",
 			logger.Error(err),
 			logger.Int("existing_species", existingLifetimeCount))
 		// Don't propagate error if we have existing data - continue with cached data
@@ -56,7 +56,7 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 	t.mu.RUnlock()
 
 	if existingLifetimeCount > 0 && newLifetimeCount == 0 {
-		log.Warn("Database sync returned no data but had existing data - possible database issue",
+		getLog().Warn("Database sync returned no data but had existing data - possible database issue",
 			logger.Int("previous_count", existingLifetimeCount),
 			logger.Int("new_count", newLifetimeCount))
 	}
@@ -64,7 +64,7 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 	// Also perform periodic cleanup of old records (both species and notification records)
 	pruned := t.PruneOldEntries()
 	if pruned > 0 {
-		log.Debug("Pruned old entries during sync",
+		getLog().Debug("Pruned old entries during sync",
 			logger.Int("count", pruned))
 	}
 
@@ -102,7 +102,7 @@ func (t *SpeciesTracker) pruneYearlyEntriesLocked(now time.Time) int {
 		if firstSeen.Before(currentYearStart) {
 			delete(t.speciesThisYear, scientificName)
 			pruned++
-			log.Debug("Pruned old yearly entry",
+			getLog().Debug("Pruned old yearly entry",
 				logger.String("species", scientificName),
 				logger.String("first_seen", firstSeen.Format("2006-01-02")),
 				logger.String("year_start", currentYearStart.Format("2006-01-02")))
@@ -136,7 +136,7 @@ func (t *SpeciesTracker) pruneSeasonalEntriesLocked(now time.Time) int {
 			prunedFromSeason := len(speciesMap)
 			delete(t.speciesBySeason, season)
 			pruned += prunedFromSeason
-			log.Debug("Pruned old season data",
+			getLog().Debug("Pruned old season data",
 				logger.String("season", season),
 				logger.Int("entries_removed", prunedFromSeason))
 		}
@@ -212,7 +212,7 @@ func (t *SpeciesTracker) ShouldSuppressNotification(scientificName string, curre
 	shouldSuppress := currentTime.Before(suppressUntil)
 
 	if shouldSuppress {
-		log.Debug("Suppressing duplicate notification",
+		getLog().Debug("Suppressing duplicate notification",
 			logger.String("species", scientificName),
 			logger.Time("suppress_until", suppressUntil),
 			logger.Duration("suppression_window", window))
@@ -239,7 +239,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	t.mu.Unlock()
 
 	// Log outside the critical section to reduce lock contention
-	log.Debug("Recorded notification sent",
+	getLog().Debug("Recorded notification sent",
 		logger.String("species", scientificName),
 		logger.String("sent_time", sentTime.Format("2006-01-02 15:04:05")))
 
@@ -264,13 +264,13 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 			}
 
 			if err := t.ds.SaveNotificationHistory(history); err != nil {
-				log.Error("Failed to save notification history to database",
+				getLog().Error("Failed to save notification history to database",
 					logger.String("species", scientificName),
 					logger.Error(err),
 					logger.String("operation", "save_notification_history"))
 				// Don't crash - in-memory suppression still works
 			} else {
-				log.Debug("Persisted notification history to database",
+				getLog().Debug("Persisted notification history to database",
 					logger.String("species", scientificName),
 					logger.String("expires_at", expiresAt.Format("2006-01-02 15:04:05")))
 			}
@@ -295,7 +295,7 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	if cleaned > 0 {
 		// Log the actual cutoff used by cleanupOldNotificationRecordsLocked
 		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
-		log.Debug("Cleaned up old notification records from memory",
+		getLog().Debug("Cleaned up old notification records from memory",
 			logger.Int("removed_count", cleaned),
 			logger.String("cutoff_time", cutoffTime.Format("2006-01-02 15:04:05")))
 	}
@@ -311,11 +311,11 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 			// Delete records that have expired (ExpiresAt < now)
 			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(currentTime)
 			if err != nil {
-				log.Error("Failed to cleanup expired notification history from database",
+				getLog().Error("Failed to cleanup expired notification history from database",
 					logger.Error(err),
 					logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")))
 			} else if deletedCount > 0 {
-				log.Debug("Cleaned up expired notification history from database",
+				getLog().Debug("Cleaned up expired notification history from database",
 					logger.Int64("deleted_count", deletedCount),
 					logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")))
 			}

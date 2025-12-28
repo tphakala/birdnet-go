@@ -67,7 +67,7 @@ func (s *Settings) ShouldUpdateRangeFilterToday() bool {
 
 		// Log the update decision for debugging
 		if s.Debug {
-			log.Debug("Scheduled range filter update",
+			GetLogger().Debug("Scheduled range filter update",
 				logger.String("date", today.Format("2006-01-02")),
 				logger.String("last_updated", s.BirdNET.RangeFilter.LastUpdated.Format("2006-01-02 15:04:05")))
 		}

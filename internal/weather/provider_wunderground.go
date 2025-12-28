@@ -260,7 +260,7 @@ func validateWundergroundConfig(settings *conf.Settings) (*wundergroundConfig, e
 		cfg.units = "e"
 	}
 	if cfg.units != "e" && cfg.units != "m" && cfg.units != "h" {
-		weatherLogger.Warn("Invalid units value, falling back to imperial", logger.String("units", cfg.units))
+		getLogger().Warn("Invalid units value, falling back to imperial", logger.String("units", cfg.units))
 		cfg.units = "e"
 	}
 	if cfg.apiKey == "" || cfg.stationID == "" {
@@ -308,7 +308,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		return nil, err
 	}
 
-	providerLogger := weatherLogger.With(logger.String("provider", wundergroundProviderName))
+	providerLogger := getLogger().With(logger.String("provider", wundergroundProviderName))
 	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "apiKey")))
 
 	// Execute request

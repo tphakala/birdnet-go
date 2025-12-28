@@ -40,7 +40,7 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 	status := t.buildSpeciesStatusWithBuffer(scientificName, currentTime, currentSeason)
 
 	// Log computed status for debugging
-	log.Debug("Species status computed",
+	getLog().Debug("Species status computed",
 		logger.String("species", scientificName),
 		logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")),
 		logger.String("current_season", currentSeason),
@@ -204,7 +204,7 @@ func (t *SpeciesTracker) evictOldestCacheEntries() {
 		delete(t.statusCache, entries[i].name)
 	}
 
-	log.Debug("Cache cleanup completed",
+	getLog().Debug("Cache cleanup completed",
 		logger.Int("removed_count", entriesToRemove),
 		logger.Int("remaining_count", len(t.statusCache)))
 }

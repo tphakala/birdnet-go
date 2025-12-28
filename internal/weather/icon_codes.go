@@ -239,7 +239,7 @@ func GetStandardIconCode(code, provider string) IconCode {
 		}
 	}
 	// Return Unknown if no mapping found
-	weatherLogger.Warn("No standard icon mapping found for provider code",
+	getLogger().Warn("No standard icon mapping found for provider code",
 		logger.String("provider", provider),
 		logger.String("code", code))
 	return IconUnknown

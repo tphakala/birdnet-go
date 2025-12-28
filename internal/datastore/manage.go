@@ -46,7 +46,7 @@ func getSQLiteIndexInfo(db *gorm.DB, indexName string, debug bool) ([]struct {
 	query := fmt.Sprintf("PRAGMA index_info('%s')", escapedIndexName)
 	if err := db.Raw(query).Scan(&info).Error; err != nil {
 		// Log the warning here as the caller might just continue
-		log.Warn("Failed to get info for index",
+		GetLogger().Warn("Failed to get info for index",
 			logger.String("index", indexName),
 			logger.String("query", query),
 			logger.Error(err))
@@ -81,7 +81,7 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	// 1. Check if the table exists
 	if !db.Migrator().HasTable(&ImageCache{}) {
 		if debug {
-			log.Debug("SQLite 'image_caches' table does not exist")
+			GetLogger().Debug("SQLite 'image_caches' table does not exist")
 		}
 		return false, nil // Table doesn't exist, schema is implicitly incorrect for this check
 	}
@@ -98,7 +98,7 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	// 3. Analyze each index
 	for _, idx := range indexes {
 		if debug {
-			log.Debug("SQLite analyzing index",
+			GetLogger().Debug("SQLite analyzing index",
 				logger.String("name", idx.Name),
 				logger.Int("unique", idx.Unique))
 		}
@@ -121,12 +121,12 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 			if len(columns) == 2 && slices.Contains(columns, "provider_name") && slices.Contains(columns, "scientific_name") {
 				correctIndexFound = true
 				if debug {
-					log.Debug("SQLite found correct composite unique index",
+					GetLogger().Debug("SQLite found correct composite unique index",
 						logger.String("index", idx.Name))
 				}
 			} else if debug {
 				// Log if the named index doesn't have the expected structure
-				log.Debug("SQLite index found but columns or uniqueness mismatch",
+				GetLogger().Debug("SQLite index found but columns or uniqueness mismatch",
 					logger.String("index", idx.Name),
 					logger.Any("columns", columns))
 			}
@@ -136,7 +136,7 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 			if len(columns) == 1 && columns[0] == "scientific_name" {
 				incorrectIndexFound = true
 				if debug {
-					log.Debug("SQLite found incorrect single-column unique index on scientific_name",
+					GetLogger().Debug("SQLite found incorrect single-column unique index on scientific_name",
 						logger.String("index", idx.Name))
 				}
 			}
@@ -149,7 +149,7 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	}
 
 	if debug {
-		log.Debug("SQLite schema check result",
+		GetLogger().Debug("SQLite schema check result",
 			logger.Bool("correct_index_found", correctIndexFound),
 			logger.Bool("incorrect_index_found", incorrectIndexFound))
 	}
@@ -199,7 +199,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 
 	for _, stat := range stats {
 		if debug {
-			log.Debug("MySQL processing index stat",
+			GetLogger().Debug("MySQL processing index stat",
 				logger.String("index", stat.IndexName),
 				logger.String("column", stat.ColumnName),
 				logger.Int("seq", stat.SeqInIndex),
@@ -237,7 +237,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 				if providerOk && scientificOk && providerSeq == 1 && scientificSeq == 2 {
 					foundCorrectIndex = true
 					if debug {
-						log.Debug("MySQL found correct composite unique index",
+						GetLogger().Debug("MySQL found correct composite unique index",
 							logger.String("index", indexName))
 					}
 				}
@@ -246,7 +246,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 			// Check for the incorrect single-column unique index on scientific_name
 			foundIncorrectIndex = true
 			if debug {
-				log.Debug("MySQL found incorrect single-column unique index on scientific_name",
+				GetLogger().Debug("MySQL found incorrect single-column unique index on scientific_name",
 					logger.String("index", indexName))
 			}
 		}
@@ -258,7 +258,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 	}
 
 	if debug {
-		log.Debug("MySQL schema check result",
+		GetLogger().Debug("MySQL schema check result",
 			logger.Bool("correct_index_found", foundCorrectIndex),
 			logger.Bool("incorrect_index_found", foundIncorrectIndex))
 	}
@@ -271,7 +271,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	migrationStart := time.Now()
-	migrationLogger := log.With(logger.String("db_type", dbType))
+	migrationLogger := GetLogger().With(logger.String("db_type", dbType))
 
 	migrationLogger.Debug("Starting database migration")
 
@@ -324,7 +324,7 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 	u, err := url.Parse(parseInput)
 	if err != nil {
 		sanitizedConnectionInfo := redactSensitiveInfo(connectionInfo)
-		log.Warn("Failed to parse MySQL connection info as URL",
+		GetLogger().Warn("Failed to parse MySQL connection info as URL",
 			logger.String("dsn", sanitizedConnectionInfo),
 			logger.Error(err))
 		return "" // Return empty on parse error
@@ -372,7 +372,7 @@ func redactSensitiveInfo(dsn string) string {
 	if err != nil {
 		// If parsing fails even with added scheme, return a generic redacted string
 		// as we cannot reliably locate the password. Avoid logging the raw DSN.
-		log.Debug("Failed to parse DSN for redaction, returning generic redaction",
+		GetLogger().Debug("Failed to parse DSN for redaction, returning generic redaction",
 			logger.Error(err))
 		return "[REDACTED DSN]"
 	}
@@ -416,14 +416,14 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 				"table", "image_caches",
 				"action", "database_schema_validation")
 
-			log.Error("Schema validation failed", logger.Error(enhancedErr))
+			GetLogger().Error("Schema validation failed", logger.Error(enhancedErr))
 			return enhancedErr
 		}
 	case "mysql":
 		// Need to extract dbName from connectionInfo for MySQL check
 		dbName := extractDBNameFromMySQLInfo(connectionInfo)
 		if dbName == "" {
-			log.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
+			GetLogger().Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
 			schemaCorrect = true // Avoid dropping if we can't check
 		} else {
 			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
@@ -434,33 +434,33 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 					"database", dbName,
 					"action", "database_schema_validation")
 
-				log.Error("Schema validation failed", logger.Error(enhancedErr))
+				GetLogger().Error("Schema validation failed", logger.Error(enhancedErr))
 				return enhancedErr
 			}
 		}
 	default:
-		log.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
+		GetLogger().Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
 			logger.String("db_type", dbType))
 		schemaCorrect = true // Avoid dropping for unsupported types
 	}
 
-	log.Debug("Schema validation completed",
+	GetLogger().Debug("Schema validation completed",
 		logger.Bool("schema_correct", schemaCorrect))
 
 	if !schemaCorrect {
 		if migrator.HasTable(&ImageCache{}) {
 			if debug {
-				log.Debug("Incorrect schema detected for 'image_caches'. Dropping table")
+				GetLogger().Debug("Incorrect schema detected for 'image_caches'. Dropping table")
 			}
 			if err := migrator.DropTable(&ImageCache{}); err != nil {
 				return fmt.Errorf("failed to drop existing 'image_caches' table with incorrect schema: %w", err)
 			}
 		} else if debug {
-			log.Debug("'image_caches' table does not exist. AutoMigrate will create it")
+			GetLogger().Debug("'image_caches' table does not exist. AutoMigrate will create it")
 		}
 	} else {
 		if debug {
-			log.Debug("Schema for 'image_caches' appears correct. Skipping drop")
+			GetLogger().Debug("Schema for 'image_caches' appears correct. Skipping drop")
 		}
 	}
 
@@ -482,11 +482,11 @@ func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
 		{&NoteLock{}, "note_locks"},
 		{&ImageCache{}, "image_caches"},
 		{&DynamicThreshold{}, "dynamic_thresholds"},
-		{&ThresholdEvent{}, "threshold_events"},             // BG-59: Threshold change history
-		{&NotificationHistory{}, "notification_histories"},  // BG-17: Notification suppression persistence
+		{&ThresholdEvent{}, "threshold_events"},            // BG-59: Threshold change history
+		{&NotificationHistory{}, "notification_histories"}, // BG-17: Notification suppression persistence
 	}
 
-	log.Debug("Starting table migrations",
+	GetLogger().Debug("Starting table migrations",
 		logger.Int("table_count", len(tableMappings)))
 
 	// Migrate each table individually for better logging
@@ -508,7 +508,7 @@ func migrateTable(db *gorm.DB, model any, tableName, dbType string, log logger.L
 	// Check if table exists before migration
 	tableExists := db.Migrator().HasTable(model)
 
-	log.Debug("Migrating table",
+	GetLogger().Debug("Migrating table",
 		logger.String("table", tableName),
 		logger.Bool("exists", tableExists))
 
@@ -521,7 +521,7 @@ func migrateTable(db *gorm.DB, model any, tableName, dbType string, log logger.L
 			"table", tableName,
 			"action", "database_schema_setup")
 
-		log.Error("Table migration failed",
+		GetLogger().Error("Table migration failed",
 			logger.String("table", tableName),
 			logger.Error(enhancedErr))
 		return enhancedErr
@@ -591,7 +591,7 @@ func findNewColumns(db *gorm.DB, model any, columnsBefore []string) []string {
 // createOptimizedIndexes creates optimized database indexes for performance
 func createOptimizedIndexes(db *gorm.DB, dbType string, log logger.Logger) error {
 	indexStart := time.Now()
-	log.Debug("Creating optimized indexes",
+	GetLogger().Debug("Creating optimized indexes",
 		logger.String("db_type", dbType))
 
 	// Define the optimized index for new species tracking
@@ -601,7 +601,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, log logger.Logger) error
 
 	// Check if index already exists using GORM's migrator
 	if db.Migrator().HasIndex(&Note{}, indexName) {
-		log.Debug("Optimized index already exists, skipping creation",
+		GetLogger().Debug("Optimized index already exists, skipping creation",
 			logger.String("index", indexName),
 			logger.String("table", tableName))
 		return nil
@@ -618,7 +618,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, log logger.Logger) error
 			strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
 
 		if isDuplicateIndex {
-			log.Debug("Index already exists, continuing",
+			GetLogger().Debug("Index already exists, continuing",
 				logger.String("index", indexName),
 				logger.String("table", tableName),
 				logger.String("db_type", dbType))
@@ -635,7 +635,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, log logger.Logger) error
 			Build()
 	}
 
-	log.Debug("Optimized index created successfully",
+	GetLogger().Debug("Optimized index created successfully",
 		logger.String("index", indexName),
 		logger.String("table", tableName),
 		logger.Duration("duration", time.Since(indexStart)),
@@ -659,5 +659,5 @@ func logTableMigration(log logger.Logger, tableName, action string, addedColumns
 		}
 	}
 
-	log.Debug("Table migration completed", logFields...)
+	GetLogger().Debug("Table migration completed", logFields...)
 }

@@ -65,9 +65,9 @@ func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 	}
 
 	wg.Go(func() {
-		log.Info("Telemetry endpoint starting", logger.String("address", e.listenAddress))
+		GetLogger().Info("Telemetry endpoint starting", logger.String("address", e.listenAddress))
 		if err := e.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("Telemetry HTTP server error", logger.Error(err))
+			GetLogger().Error("Telemetry HTTP server error", logger.Error(err))
 		}
 	})
 
@@ -77,11 +77,11 @@ func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 // gracefulShutdown waits for the quit signal and shuts down the server gracefully.
 func (e *Endpoint) gracefulShutdown(quitChan <-chan struct{}) {
 	<-quitChan
-	log.Info("Stopping telemetry server")
+	GetLogger().Info("Stopping telemetry server")
 	ctx, cancel := context.WithTimeout(context.Background(), metricspkg.ShutdownTimeout)
 	defer cancel()
 	if err := e.server.Shutdown(ctx); err != nil {
-		log.Error("Telemetry server shutdown error", logger.Error(err))
+		GetLogger().Error("Telemetry server shutdown error", logger.Error(err))
 	}
 }
 

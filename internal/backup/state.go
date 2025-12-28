@@ -58,7 +58,7 @@ type StateManager struct {
 }
 
 // NewStateManager creates a new state manager
-func NewStateManager(log logger.Logger) (*StateManager, error) {
+func NewStateManager(_ logger.Logger) (*StateManager, error) {
 	// Get config directory
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
@@ -71,11 +71,6 @@ func NewStateManager(log logger.Logger) (*StateManager, error) {
 	// Create state file path
 	statePath := filepath.Join(configPaths[0], "backup-state.json")
 
-	// Initialize logger if nil (fallback to package logger)
-	if log == nil {
-		log = logger.Global().Module("backup")
-	}
-
 	sm := &StateManager{
 		statePath: statePath,
 		state: &BackupState{
@@ -84,7 +79,7 @@ func NewStateManager(log logger.Logger) (*StateManager, error) {
 			Stats:      make(map[string]BackupStats),
 			MissedRuns: make([]MissedBackup, 0),
 		},
-		logger: log.Module("statemanager"),
+		logger: GetLogger().Module("statemanager"),
 	}
 
 	// Load existing state if available

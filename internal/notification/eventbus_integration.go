@@ -14,27 +14,28 @@ var (
 	resourceWorker *ResourceEventWorker
 	// detectionConsumer is the singleton detection notification consumer
 	detectionConsumer *DetectionNotificationConsumer
-	integrationLogger logger.Logger
 )
 
-func init() {
-	integrationLogger = logger.Global().Module("notification-integration")
+// getIntegrationLogger returns the logger for notification integration.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getIntegrationLogger() logger.Logger {
+	return logger.Global().Module("notification-integration")
 }
 
 // InitializeEventBusIntegration sets up the notification worker as an event consumer
 // This should be called after both the notification service and event bus are initialized
 func InitializeEventBusIntegration() error {
-	integrationLogger.Info("initializing notification event bus integration")
+	getIntegrationLogger().Info("initializing notification event bus integration")
 
 	// Check if notification service is initialized
 	if !IsInitialized() {
-		integrationLogger.Warn("notification service not initialized, skipping event bus integration")
+		getIntegrationLogger().Warn("notification service not initialized, skipping event bus integration")
 		return nil
 	}
 
 	// Check if event bus is initialized
 	if !events.IsInitialized() {
-		integrationLogger.Warn("event bus not initialized, skipping notification integration")
+		getIntegrationLogger().Warn("event bus not initialized, skipping notification integration")
 		return nil
 	}
 
@@ -69,7 +70,7 @@ func InitializeEventBusIntegration() error {
 	// Store reference for stats/monitoring
 	notificationWorker = worker
 
-	integrationLogger.Info("notification worker registered with event bus",
+	getIntegrationLogger().Info("notification worker registered with event bus",
 		logger.String("consumer", worker.Name()),
 		logger.Bool("supports_batching", worker.SupportsBatching()),
 		logger.Bool("batching_enabled", config.BatchingEnabled),
@@ -98,7 +99,7 @@ func InitializeEventBusIntegration() error {
 	// Store reference
 	resourceWorker = resWorker
 
-	integrationLogger.Info("resource worker registered with event bus",
+	getIntegrationLogger().Info("resource worker registered with event bus",
 		logger.String("consumer", resWorker.Name()),
 		logger.Duration("alert_throttle", resourceConfig.AlertThrottle),
 		logger.Bool("debug", resourceConfig.Debug))
@@ -109,7 +110,7 @@ func InitializeEventBusIntegration() error {
 		return fmt.Errorf("failed to register detection notification consumer: %w", err)
 	}
 
-	integrationLogger.Info("detection notification consumer registered with event bus",
+	getIntegrationLogger().Info("detection notification consumer registered with event bus",
 		logger.String("consumer", detectionConsumer.Name()),
 		logger.Bool("debug", resourceConfig.Debug))
 

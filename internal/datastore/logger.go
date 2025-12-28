@@ -23,8 +23,12 @@ func sanitizeSQL(sql string) string {
 	return strings.TrimSpace(whitespaceRegex.ReplaceAllString(sql, " "))
 }
 
-// Package-level cached logger instance for efficiency
-var log = logger.Global().Module("datastore")
+// GetLogger returns the datastore package logger scoped to the datastore module.
+// The logger is fetched from the global logger each time to ensure it uses
+// the current centralized logger (which may be set after package init).
+func GetLogger() logger.Logger {
+	return logger.Global().Module("datastore")
+}
 
 // GormLogger implements GORM's logger interface with structured logging and metrics
 type GormLogger struct {
@@ -52,21 +56,21 @@ func (l *GormLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
 // Info implements gormlogger.Interface
 func (l *GormLogger) Info(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= gormlogger.Info {
-		log.Info(fmt.Sprintf(msg, data...))
+		GetLogger().Info(fmt.Sprintf(msg, data...))
 	}
 }
 
 // Warn implements gormlogger.Interface
 func (l *GormLogger) Warn(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= gormlogger.Warn {
-		log.Warn(fmt.Sprintf(msg, data...))
+		GetLogger().Warn(fmt.Sprintf(msg, data...))
 	}
 }
 
 // Error implements gormlogger.Interface
 func (l *GormLogger) Error(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= gormlogger.Error {
-		log.Error("GORM error",
+		GetLogger().Error("GORM error",
 			logger.String("msg", fmt.Sprintf(msg, data...)))
 
 		// Record error metric if available
@@ -109,7 +113,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 			Context("original_error_type", fmt.Sprintf("%T", err)).
 			Build()
 
-		log.Error("Database query failed",
+		GetLogger().Error("Database query failed",
 			logger.Error(enhancedErr),
 			logger.String("sql", sanitized),
 			logger.Duration("duration", elapsed),
@@ -123,7 +127,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 	case elapsed > l.SlowThreshold && l.SlowThreshold != 0:
 		// Log slow query with warning (sanitize SQL for readability)
-		log.Warn("Slow query detected",
+		GetLogger().Warn("Slow query detected",
 			logger.String("sql", sanitizeSQL(sql)),
 			logger.Duration("duration", elapsed),
 			logger.Int64("rows_affected", rows),
@@ -136,7 +140,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 	case l.LogLevel >= gormlogger.Info:
 		// Log normal queries at debug level (sanitize SQL for readability)
-		log.Debug("Query executed",
+		GetLogger().Debug("Query executed",
 			logger.String("sql", sanitizeSQL(sql)),
 			logger.Duration("duration", elapsed),
 			logger.Int64("rows_affected", rows))

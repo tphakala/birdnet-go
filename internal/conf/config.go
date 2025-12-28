@@ -1233,9 +1233,9 @@ func Load() (*Settings, error) {
 		configFile := viper.ConfigFileUsed()
 		if configFile != "" {
 			if err := SaveYAMLConfig(configFile, settings); err != nil {
-				log.Warn("Failed to save migrated OAuth config", logger.Error(err))
+				GetLogger().Warn("Failed to save migrated OAuth config", logger.Error(err))
 			} else {
-				log.Info("Saved migrated OAuth configuration", logger.String("path", configFile))
+				GetLogger().Info("Saved migrated OAuth configuration", logger.String("path", configFile))
 			}
 		}
 	}
@@ -1258,7 +1258,7 @@ func Load() (*Settings, error) {
 		viper.Set("security.sessionsecret", sessionSecret)
 
 		// Log that we generated a new session secret
-		log.Info("Generated new SessionSecret for existing configuration")
+		GetLogger().Info("Generated new SessionSecret for existing configuration")
 
 		// Save the updated config back to file to persist the generated secret
 		// This ensures the secret remains the same across restarts
@@ -1266,11 +1266,11 @@ func Load() (*Settings, error) {
 		if configFile != "" {
 			if err := SaveYAMLConfig(configFile, settings); err != nil {
 				// Log the error but don't fail - the generated secret will work for this session
-				log.Warn("Failed to save generated SessionSecret to config file", logger.Error(err))
+				GetLogger().Warn("Failed to save generated SessionSecret to config file", logger.Error(err))
 			} else {
 				// Set secure file permissions after saving
 				if err := os.Chmod(configFile, 0o600); err != nil {
-					log.Warn("Failed to set secure permissions on config file", logger.Error(err))
+					GetLogger().Warn("Failed to set secure permissions on config file", logger.Error(err))
 				}
 			}
 		}
@@ -1286,7 +1286,7 @@ func Load() (*Settings, error) {
 				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") ||
 					strings.Contains(errMsg, "OAuth authentication warning") {
 					// This is a warning - report to telemetry but don't fail
-					log.Warn("Configuration warning", logger.String("message", errMsg))
+					GetLogger().Warn("Configuration warning", logger.String("message", errMsg))
 					// Store the warning for later telemetry reporting
 					settings.ValidationWarnings = append(settings.ValidationWarnings, errMsg)
 					// Note: Telemetry reporting will happen later in birdnet package when Sentry is initialized
@@ -1322,7 +1322,7 @@ func initViper() error {
 	if err := configureEnvironmentVariables(); err != nil {
 		// Log any validation warnings but don't fail startup
 		// This allows the application to continue with config file/default values
-		log.Warn("Environment variable configuration warning", logger.Error(err))
+		GetLogger().Warn("Environment variable configuration warning", logger.Error(err))
 	}
 
 	// Get OS specific config paths
@@ -1418,7 +1418,7 @@ func createDefaultConfig() error {
 func getDefaultConfig() string {
 	data, err := fs.ReadFile(configFiles, "config.yaml")
 	if err != nil {
-		log.Error("Error reading config file", logger.Error(err))
+		GetLogger().Error("Error reading config file", logger.Error(err))
 		os.Exit(1)
 	}
 	return string(data)
@@ -1474,12 +1474,12 @@ func (s *Settings) MigrateOAuthConfig() bool {
 		if cfg := migrateLegacyProvider(legacy.name, legacy.config); cfg != nil {
 			s.Security.OAuthProviders = append(s.Security.OAuthProviders, *cfg)
 			migrated = true
-			log.Info("Migrated OAuth configuration to new format", logger.String("provider", legacy.name))
+			GetLogger().Info("Migrated OAuth configuration to new format", logger.String("provider", legacy.name))
 		}
 	}
 
 	if migrated {
-		log.Info("OAuth configuration migration complete", logger.String("note", "Legacy fields will be ignored"))
+		GetLogger().Info("OAuth configuration migration complete", logger.String("note", "Legacy fields will be ignored"))
 	}
 
 	return migrated
@@ -1574,7 +1574,7 @@ func SaveSettings() error {
 			Build()
 	}
 
-	log.Info("Settings saved successfully", logger.String("path", configPath))
+	GetLogger().Info("Settings saved successfully", logger.String("path", configPath))
 	return nil
 }
 
@@ -1589,7 +1589,7 @@ func Setting() *Settings {
 					Category(errors.CategoryConfiguration).
 					Context("operation", "load-settings-init").
 					Build()
-				log.Error("Error loading settings", logger.Error(enhancedErr))
+				GetLogger().Error("Error loading settings", logger.Error(enhancedErr))
 				os.Exit(1)
 			}
 		}
@@ -1767,7 +1767,7 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 	// Ensure the temporary file is removed in case of any failure
 	defer func() {
 		if err := os.Remove(tempFileName); err != nil && !os.IsNotExist(err) {
-			log.Warn("Failed to remove temporary file", logger.Error(err), logger.String("file", tempFileName))
+			GetLogger().Warn("Failed to remove temporary file", logger.Error(err), logger.String("file", tempFileName))
 		}
 	}()
 
@@ -1818,7 +1818,7 @@ func GenerateRandomSecret() string {
 			Category(errors.CategorySystem).
 			Context("operation", "generate-random-secret").
 			Build()
-		log.Error("Failed to generate random secret", logger.Error(enhancedErr))
+		GetLogger().Error("Failed to generate random secret", logger.Error(enhancedErr))
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes)

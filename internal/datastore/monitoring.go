@@ -19,37 +19,37 @@ func (ds *DataStore) startConnectionPoolMonitoring(ctx context.Context, interval
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("Connection pool monitoring stopped due to context cancellation")
+				GetLogger().Info("Connection pool monitoring stopped due to context cancellation")
 				return
 			case <-ticker.C:
 				sqlDB, err := ds.DB.DB()
 				if err != nil {
-					log.Error("Failed to get SQL DB for monitoring",
+					GetLogger().Error("Failed to get SQL DB for monitoring",
 						logger.Error(err))
 					continue
 				}
-				
+
 				stats := sqlDB.Stats()
-				
+
 				// Update metrics
 				ds.metricsMu.RLock()
 				metrics := ds.metrics
 				ds.metricsMu.RUnlock()
-				
+
 				if metrics != nil {
 					metrics.UpdateConnectionMetrics(
 						stats.InUse,
 						stats.Idle,
 						stats.MaxOpenConnections,
 					)
-					
+
 					if stats.WaitCount > 0 {
 						metrics.RecordLockContention("connection_pool", "wait_for_connection")
 						metrics.RecordLockWaitTime("connection_pool", stats.WaitDuration.Seconds())
 					}
 				}
-				
-				log.Info("Connection pool statistics",
+
+				GetLogger().Info("Connection pool statistics",
 					logger.Int("open_connections", stats.OpenConnections),
 					logger.Int("in_use", stats.InUse),
 					logger.Int("idle", stats.Idle),
@@ -60,7 +60,7 @@ func (ds *DataStore) startConnectionPoolMonitoring(ctx context.Context, interval
 
 				// Warn if pool is exhausted
 				if stats.WaitCount > 0 {
-					log.Warn("Connection pool experiencing waits",
+					GetLogger().Warn("Connection pool experiencing waits",
 						logger.Int64("wait_count", stats.WaitCount),
 						logger.Duration("total_wait_duration", stats.WaitDuration))
 				}
@@ -78,19 +78,19 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("Database monitoring stopped due to context cancellation")
+				GetLogger().Info("Database monitoring stopped due to context cancellation")
 				return
 			case <-ticker.C:
 				// Get metrics reference once to avoid multiple lock acquisitions
 				ds.metricsMu.RLock()
 				metrics := ds.metrics
 				ds.metricsMu.RUnlock()
-				
+
 				// Update database size metrics
 				if dbSize, err := ds.getDatabaseSize(); err == nil && metrics != nil {
 					metrics.UpdateDatabaseSize(dbSize)
 				} else if err != nil {
-					log.Error("Failed to get database size",
+					GetLogger().Error("Failed to get database size",
 						logger.Error(err))
 				}
 
@@ -100,7 +100,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 					if count, err := ds.getTableRowCount(table); err == nil && metrics != nil {
 						metrics.UpdateTableRowCount(table, count)
 					} else if err != nil {
-						log.Error("Failed to get table row count",
+						GetLogger().Error("Failed to get table row count",
 							logger.String("table", table),
 							logger.Error(err))
 					}
@@ -110,7 +110,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 				if lockCount, err := ds.getActiveLockCount(); err == nil && metrics != nil {
 					metrics.UpdateActiveLockCount(lockCount)
 				} else if err != nil {
-					log.Error("Failed to get active lock count",
+					GetLogger().Error("Failed to get active lock count",
 						logger.Error(err))
 				}
 			}
@@ -121,7 +121,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 // getDatabaseSize returns the total size of the database in bytes
 func (ds *DataStore) getDatabaseSize() (int64, error) {
 	var size int64
-	
+
 	// SQLite-specific query
 	if strings.ToLower(ds.DB.Name()) == "sqlite" {
 		// For SQLite, we use page_count * page_size
@@ -131,14 +131,14 @@ func (ds *DataStore) getDatabaseSize() (int64, error) {
 		}
 		return size, nil
 	}
-	
+
 	// MySQL-specific query
 	if strings.ToLower(ds.DB.Name()) == "mysql" {
 		var dbName string
 		if err := ds.DB.Raw("SELECT DATABASE()").Scan(&dbName).Error; err != nil {
 			return 0, fmt.Errorf("failed to get current database name: %w", err)
 		}
-		
+
 		err := ds.DB.Raw(`
 			SELECT SUM(data_length + index_length) 
 			FROM information_schema.tables 
@@ -149,7 +149,7 @@ func (ds *DataStore) getDatabaseSize() (int64, error) {
 		}
 		return size, nil
 	}
-	
+
 	return 0, fmt.Errorf("unsupported database type: %s", ds.DB.Name())
 }
 
@@ -177,24 +177,24 @@ func (ds *DataStore) getActiveLockCount() (int, error) {
 func (ds *DataStore) StartMonitoring(connectionPoolInterval, databaseStatsInterval time.Duration) {
 	ds.monitoringMu.Lock()
 	defer ds.monitoringMu.Unlock()
-	
+
 	// Stop any existing monitoring first
 	if ds.monitoringCancel != nil {
 		ds.monitoringCancel()
 	}
-	
+
 	// Create new context for monitoring lifecycle
 	ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(context.Background())
-	
+
 	if connectionPoolInterval > 0 {
 		ds.startConnectionPoolMonitoring(ds.monitoringCtx, connectionPoolInterval)
-		log.Info("Started connection pool monitoring",
+		GetLogger().Info("Started connection pool monitoring",
 			logger.Duration("interval", connectionPoolInterval))
 	}
 
 	if databaseStatsInterval > 0 {
 		ds.startDatabaseMonitoring(ds.monitoringCtx, databaseStatsInterval)
-		log.Info("Started database statistics monitoring",
+		GetLogger().Info("Started database statistics monitoring",
 			logger.Duration("interval", databaseStatsInterval))
 	}
 }
@@ -203,13 +203,13 @@ func (ds *DataStore) StartMonitoring(connectionPoolInterval, databaseStatsInterv
 func (ds *DataStore) StopMonitoring() {
 	ds.monitoringMu.Lock()
 	defer ds.monitoringMu.Unlock()
-	
+
 	if ds.monitoringCancel != nil {
-		log.Info("Stopping all monitoring activities")
+		GetLogger().Info("Stopping all monitoring activities")
 		ds.monitoringCancel()
 		ds.monitoringCancel = nil
 		ds.monitoringCtx = nil
-		log.Info("All monitoring activities stopped")
+		GetLogger().Info("All monitoring activities stopped")
 	}
 }
 
@@ -217,6 +217,6 @@ func (ds *DataStore) StopMonitoring() {
 func (ds *DataStore) IsMonitoringActive() bool {
 	ds.monitoringMu.Lock()
 	defer ds.monitoringMu.Unlock()
-	
+
 	return ds.monitoringCtx != nil && ds.monitoringCtx.Err() == nil
 }
