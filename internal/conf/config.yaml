@@ -5,16 +5,22 @@ debug: false              # print debug messages, can help with problem solving
 # Centralized logging configuration
 logging:
   default_level: info     # default log level: debug, info, warn, error
-  format: text            # output format: text, json
-  timezone: ""            # timezone for timestamps (empty = local), e.g., "Europe/Helsinki"
+  # Timezone for JSON file timestamps. Console output has no timestamps
+  # (journald/Docker adds them). Use "Local" for system timezone, "UTC",
+  # or IANA timezone name like "Europe/Helsinki", "America/New_York"
+  timezone: "Local"
 
   # Console output configuration
+  # Note: Console uses human-readable text format without timestamps.
+  # When running as systemd service or Docker container, the execution
+  # environment adds timestamps automatically.
   console:
     enabled: true         # enable console output
-    pretty: true          # colored, human-readable output for development
     level: info           # log level for console output
 
   # Default file output configuration
+  # Note: File output uses JSON format with RFC3339 timestamps for
+  # machine parsing and log aggregation (ELK, Loki, etc.)
   file_output:
     enabled: true         # enable file output
     path: logs/birdnet.log # default log file path

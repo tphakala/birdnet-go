@@ -1459,10 +1459,12 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 
 // printSystemDetails prints system information and analyzer configuration
 func printSystemDetails(settings *conf.Settings) {
+	log := GetLogger()
+
 	// Get system details with gopsutil
 	info, err := host.Info()
 	if err != nil {
-		fmt.Printf("❌ Error retrieving host info: %v\n", err)
+		log.Warn("Failed to retrieve host info", logger.String("error", err.Error()))
 	}
 
 	var hwModel string
@@ -1475,13 +1477,17 @@ func printSystemDetails(settings *conf.Settings) {
 		hwModel = "unknown"
 	}
 
-	// Print platform, OS etc. details
-	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
+	// Log system details
+	log.Info("System details",
+		logger.String("os", info.OS),
+		logger.String("platform", info.Platform),
+		logger.String("platform_version", info.PlatformVersion),
+		logger.String("hardware", hwModel))
 
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
-	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, overlap: %v, sensitivity: %v, interval: %v\n",
-		settings.BirdNET.Threshold,
-		settings.BirdNET.Overlap,
-		settings.BirdNET.Sensitivity,
-		settings.Realtime.Interval)
+	log.Info("Starting analyzer in realtime mode",
+		logger.Float64("threshold", settings.BirdNET.Threshold),
+		logger.Float64("overlap", settings.BirdNET.Overlap),
+		logger.Float64("sensitivity", settings.BirdNET.Sensitivity),
+		logger.Int("interval", settings.Realtime.Interval))
 }

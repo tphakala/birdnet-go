@@ -13,7 +13,7 @@ func setDefaultConfig() {
 
 	// Console logging
 	viper.SetDefault("logging.console.enabled", true)
-	viper.SetDefault("logging.console.level", "warn")
+	viper.SetDefault("logging.console.level", "info")
 
 	// Main application log file
 	viper.SetDefault("logging.file_output.enabled", true)

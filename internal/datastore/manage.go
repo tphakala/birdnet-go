@@ -273,7 +273,7 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	migrationStart := time.Now()
 	migrationLogger := log.With(logger.String("db_type", dbType))
 
-	migrationLogger.Info("Starting database migration")
+	migrationLogger.Debug("Starting database migration")
 
 	// Validate and fix schema if needed
 	if err := validateAndFixSchema(db, dbType, connectionInfo, debug, migrationLogger); err != nil {
@@ -292,7 +292,7 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	}
 
 	// Log successful migration completion
-	migrationLogger.Info("Database migration completed successfully",
+	migrationLogger.Debug("Database migration completed successfully",
 		logger.String("db_type", dbType),
 		logger.Duration("total_duration", time.Since(migrationStart)),
 		logger.Int("tables_migrated", successCount))
@@ -399,7 +399,7 @@ func redactSensitiveInfo(dsn string) string {
 }
 
 // validateAndFixSchema checks and fixes the database schema if needed
-func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool, lgr logger.Logger) error {
+func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool, log logger.Logger) error {
 	migrator := db.Migrator()
 	var schemaCorrect bool
 	var err error
@@ -416,14 +416,14 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 				"table", "image_caches",
 				"action", "database_schema_validation")
 
-			lgr.Error("Schema validation failed", logger.Error(enhancedErr))
+			log.Error("Schema validation failed", logger.Error(enhancedErr))
 			return enhancedErr
 		}
 	case "mysql":
 		// Need to extract dbName from connectionInfo for MySQL check
 		dbName := extractDBNameFromMySQLInfo(connectionInfo)
 		if dbName == "" {
-			lgr.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
+			log.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
 			schemaCorrect = true // Avoid dropping if we can't check
 		} else {
 			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
@@ -434,33 +434,33 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 					"database", dbName,
 					"action", "database_schema_validation")
 
-				lgr.Error("Schema validation failed", logger.Error(enhancedErr))
+				log.Error("Schema validation failed", logger.Error(enhancedErr))
 				return enhancedErr
 			}
 		}
 	default:
-		lgr.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
+		log.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
 			logger.String("db_type", dbType))
 		schemaCorrect = true // Avoid dropping for unsupported types
 	}
 
-	lgr.Info("Schema validation completed",
+	log.Debug("Schema validation completed",
 		logger.Bool("schema_correct", schemaCorrect))
 
 	if !schemaCorrect {
 		if migrator.HasTable(&ImageCache{}) {
 			if debug {
-				lgr.Debug("Incorrect schema detected for 'image_caches'. Dropping table")
+				log.Debug("Incorrect schema detected for 'image_caches'. Dropping table")
 			}
 			if err := migrator.DropTable(&ImageCache{}); err != nil {
 				return fmt.Errorf("failed to drop existing 'image_caches' table with incorrect schema: %w", err)
 			}
 		} else if debug {
-			lgr.Debug("'image_caches' table does not exist. AutoMigrate will create it")
+			log.Debug("'image_caches' table does not exist. AutoMigrate will create it")
 		}
 	} else {
 		if debug {
-			lgr.Debug("Schema for 'image_caches' appears correct. Skipping drop")
+			log.Debug("Schema for 'image_caches' appears correct. Skipping drop")
 		}
 	}
 
@@ -468,7 +468,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 }
 
 // migrateTables performs the actual table migrations
-func migrateTables(db *gorm.DB, dbType string, lgr logger.Logger) (int, error) {
+func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
 	tableMappings := []struct {
 		model any
 		name  string
@@ -486,13 +486,13 @@ func migrateTables(db *gorm.DB, dbType string, lgr logger.Logger) (int, error) {
 		{&NotificationHistory{}, "notification_histories"},  // BG-17: Notification suppression persistence
 	}
 
-	lgr.Info("Starting table migrations",
+	log.Debug("Starting table migrations",
 		logger.Int("table_count", len(tableMappings)))
 
 	// Migrate each table individually for better logging
 	successCount := 0
 	for _, table := range tableMappings {
-		if err := migrateTable(db, table.model, table.name, dbType, lgr); err != nil {
+		if err := migrateTable(db, table.model, table.name, dbType, log); err != nil {
 			return successCount, err
 		}
 		successCount++
@@ -502,13 +502,13 @@ func migrateTables(db *gorm.DB, dbType string, lgr logger.Logger) (int, error) {
 }
 
 // migrateTable migrates a single table with detailed logging
-func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr logger.Logger) error {
+func migrateTable(db *gorm.DB, model any, tableName, dbType string, log logger.Logger) error {
 	tableStart := time.Now()
 
 	// Check if table exists before migration
 	tableExists := db.Migrator().HasTable(model)
 
-	lgr.Debug("Migrating table",
+	log.Debug("Migrating table",
 		logger.String("table", tableName),
 		logger.Bool("exists", tableExists))
 
@@ -521,7 +521,7 @@ func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr logger.L
 			"table", tableName,
 			"action", "database_schema_setup")
 
-		lgr.Error("Table migration failed",
+		log.Error("Table migration failed",
 			logger.String("table", tableName),
 			logger.Error(enhancedErr))
 		return enhancedErr
@@ -531,7 +531,7 @@ func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr logger.L
 	action, addedColumns := determineTableChanges(db, model, tableExists, columnsBefore)
 
 	// Log migration result
-	logTableMigration(lgr, tableName, action, addedColumns, time.Since(tableStart))
+	logTableMigration(log, tableName, action, addedColumns, time.Since(tableStart))
 
 	return nil
 }
@@ -589,9 +589,9 @@ func findNewColumns(db *gorm.DB, model any, columnsBefore []string) []string {
 }
 
 // createOptimizedIndexes creates optimized database indexes for performance
-func createOptimizedIndexes(db *gorm.DB, dbType string, lgr logger.Logger) error {
+func createOptimizedIndexes(db *gorm.DB, dbType string, log logger.Logger) error {
 	indexStart := time.Now()
-	lgr.Info("Creating optimized indexes",
+	log.Debug("Creating optimized indexes",
 		logger.String("db_type", dbType))
 
 	// Define the optimized index for new species tracking
@@ -601,7 +601,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr logger.Logger) error
 
 	// Check if index already exists using GORM's migrator
 	if db.Migrator().HasIndex(&Note{}, indexName) {
-		lgr.Debug("Optimized index already exists, skipping creation",
+		log.Debug("Optimized index already exists, skipping creation",
 			logger.String("index", indexName),
 			logger.String("table", tableName))
 		return nil
@@ -618,7 +618,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr logger.Logger) error
 			strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
 
 		if isDuplicateIndex {
-			lgr.Debug("Index already exists, continuing",
+			log.Debug("Index already exists, continuing",
 				logger.String("index", indexName),
 				logger.String("table", tableName),
 				logger.String("db_type", dbType))
@@ -635,7 +635,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr logger.Logger) error
 			Build()
 	}
 
-	lgr.Info("Optimized index created successfully",
+	log.Debug("Optimized index created successfully",
 		logger.String("index", indexName),
 		logger.String("table", tableName),
 		logger.Duration("duration", time.Since(indexStart)),
@@ -645,7 +645,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr logger.Logger) error
 }
 
 // logTableMigration logs the result of a table migration
-func logTableMigration(lgr logger.Logger, tableName, action string, addedColumns []string, duration time.Duration) {
+func logTableMigration(log logger.Logger, tableName, action string, addedColumns []string, duration time.Duration) {
 	logFields := []logger.Field{
 		logger.String("table", tableName),
 		logger.String("action", action),
@@ -659,5 +659,5 @@ func logTableMigration(lgr logger.Logger, tableName, action string, addedColumns
 		}
 	}
 
-	lgr.Info("Table migration completed", logFields...)
+	log.Debug("Table migration completed", logFields...)
 }
