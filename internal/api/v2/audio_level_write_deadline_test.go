@@ -90,9 +90,11 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		assert.False(t, mockWriter.writeCalledFirst.Load(),
 			"Write should not be called before SetWriteDeadline")
 
-		// Verify the deadline is in the future (at least a few seconds)
-		assert.True(t, mockWriter.lastDeadline.After(time.Now()),
-			"Write deadline should be set to a future time")
+		// Verify the deadline is set to approximately audioLevelWriteDeadline in the future
+		expectedDeadline := time.Now().Add(audioLevelWriteDeadline)
+		deadlineDiff := mockWriter.lastDeadline.Sub(expectedDeadline).Abs()
+		assert.Less(t, deadlineDiff, 100*time.Millisecond,
+			"Write deadline should be set to approximately %v in the future", audioLevelWriteDeadline)
 	})
 
 	t.Run("write deadline extends connection lifetime", func(t *testing.T) {

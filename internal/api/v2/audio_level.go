@@ -556,6 +556,16 @@ func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
 	return remoteAddr
 }
 
+// resetAudioLevelWriteDeadline resets the write deadline for the SSE connection.
+// This prevents the server's WriteTimeout from terminating long-lived SSE connections.
+func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
+	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
+			c.logDebugIfEnabled("Failed to set write deadline for "+operation, "error", err.Error())
+		}
+	}
+}
+
 // sendAudioLevelUpdate sends the current levels to the client
 func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]myaudio.AudioLevelData) error {
 	message := AudioLevelSSEData{
@@ -569,12 +579,7 @@ func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]my
 	}
 
 	// Reset write deadline to prevent server WriteTimeout from closing connection.
-	// This extends the deadline with each successful write, keeping the SSE connection alive.
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.logDebugIfEnabled("Failed to set write deadline for audio level SSE", "error", err.Error())
-		}
-	}
+	c.resetAudioLevelWriteDeadline(ctx, "audio level update")
 
 	if _, err := fmt.Fprintf(ctx.Response(), "data: %s\n\n", jsonData); err != nil {
 		return fmt.Errorf("failed to write SSE message: %w", err)
@@ -588,11 +593,7 @@ func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]my
 // It resets the write deadline before writing to prevent server WriteTimeout.
 func (c *Controller) sendAudioLevelHeartbeat(ctx echo.Context) error {
 	// Reset write deadline to prevent server WriteTimeout from closing connection.
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.logDebugIfEnabled("Failed to set write deadline for heartbeat", "error", err.Error())
-		}
-	}
+	c.resetAudioLevelWriteDeadline(ctx, "heartbeat")
 
 	if _, err := fmt.Fprintf(ctx.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
 		return err
