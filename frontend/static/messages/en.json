@@ -350,7 +350,9 @@
       "confidenceMax": "Maximum confidence percentage",
       "verifiedStatus": "Verified Status",
       "lockedStatus": "Locked Status",
-      "timeOfDay": "Time of Day"
+      "timeOfDay": "Time of Day",
+      "source": "Source",
+      "sourcePlaceholder": "e.g., Backyard Feeder"
     },
     "advancedFilters": "Advanced Filters",
     "showAdvancedFilters": "Show Advanced Filters",
@@ -544,6 +546,7 @@
     },
     "headers": {
       "dateTime": "Date & Time",
+      "source": "Source",
       "weather": "Weather",
       "species": "Species",
       "confidence": "Confidence",
@@ -797,12 +800,15 @@
       "date": "Date",
       "firstHeardOn": "First Heard On",
       "firstHeardDate": "First Heard Date",
-      "firstHeard": "First Heard"
+      "firstHeard": "First Heard",
+      "detectionsBySource": "Detections by Source",
+      "noSourceData": "No source data available"
     },
     "recentDetections": {
       "title": "Recent Detections",
       "headers": {
         "dateTime": "Date & Time",
+        "source": "Source",
         "species": "Species",
         "confidence": "Confidence",
         "timeOfDay": "Time of Day"
@@ -1894,6 +1900,9 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "labelField": "Label",
+        "labelPlaceholder": "e.g., Backyard Feeder, Front Porch",
+        "labelHelp": "Optional friendly name to identify this stream in detection reports",
         "urlLabel": "Stream URL",
         "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
         "typeLabel": "Stream Type",

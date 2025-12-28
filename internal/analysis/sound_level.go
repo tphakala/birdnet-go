@@ -654,21 +654,21 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 	// Register for each configured RTSP source, but prioritize actually running streams
 	configuredURLs := make(map[string]bool)
-	for _, url := range settings.Realtime.RTSP.URLs {
-		configuredURLs[url] = true
+	for _, stream := range settings.Realtime.RTSP.GetStreamConfigs() {
+		configuredURLs[stream.URL] = true
 		totalSources++
 
 		// Get or create the RTSP source in the registry
 		registry := myaudio.GetRegistry()
-		audioSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
+		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.SourceTypeRTSP)
 		if audioSource == nil {
 			errs = append(errs, errors.Newf("failed to get/create RTSP source").
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
 				Context("operation", "get_or_create_rtsp_source").
-				Context("url", privacy.SanitizeRTSPUrl(url)).
+				Context("url", privacy.SanitizeRTSPUrl(stream.URL)).
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(privacy.SanitizeRTSPUrl(url), "rtsp", "analysis.soundlevel", fmt.Errorf("failed to get/create RTSP source"))
+			LogSoundLevelProcessorRegistrationFailed(privacy.SanitizeRTSPUrl(stream.URL), "rtsp", "analysis.soundlevel", fmt.Errorf("failed to get/create RTSP source"))
 			continue
 		}
 
@@ -676,7 +676,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 			// Safely check stream health status
 			var streamRunning bool
 			var streamExists bool
-			if streamHealth, exists := activeStreams[url]; exists {
+			if streamHealth, exists := activeStreams[stream.URL]; exists {
 				streamRunning = streamHealth.IsHealthy
 				streamExists = true
 			}
@@ -688,14 +688,14 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("source_type", "rtsp").
 				Context("source_id", audioSource.ID).
 				Context("display_name", audioSource.DisplayName).
-				Context("source_url", url).
+				Context("source_url", stream.URL).
 				Context("stream_running", streamRunning).
 				Context("stream_exists", streamExists). // indicates if stream was found in health map
 				Build())
 			LogSoundLevelProcessorRegistrationFailed(audioSource.DisplayName, "rtsp_stream", "analysis.soundlevel", err)
 		} else {
 			successCount++
-			if _, isActive := activeStreams[url]; isActive {
+			if _, isActive := activeStreams[stream.URL]; isActive {
 				LogSoundLevelProcessorRegistered(audioSource.DisplayName, "rtsp_active", "analysis.soundlevel")
 			} else {
 				LogSoundLevelProcessorRegistered(audioSource.DisplayName, "rtsp_configured", "analysis.soundlevel")
@@ -740,9 +740,22 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 		}
 	}
 
-	// Unregister all RTSP sources
-	for _, url := range settings.Realtime.RTSP.URLs {
-		myaudio.UnregisterSoundLevelProcessor(url)
-		LogSoundLevelProcessorUnregistered(privacy.SanitizeRTSPUrl(url), "rtsp_stream", "analysis.soundlevel")
+	// Unregister all RTSP sources - use registry to get consistent IDs
+	for _, stream := range settings.Realtime.RTSP.GetStreamConfigs() {
+		if stream.URL == "" {
+			continue
+		}
+		registry := myaudio.GetRegistry()
+		if registry != nil {
+			if audioSource := registry.GetOrCreateSource(stream.URL, myaudio.SourceTypeRTSP); audioSource != nil {
+				myaudio.UnregisterSoundLevelProcessor(audioSource.ID)
+				LogSoundLevelProcessorUnregistered(audioSource.DisplayName, "rtsp_stream", "analysis.soundlevel")
+			} else {
+				GetLogger().Warn("failed to get RTSP source from registry during sound level processor unregistration",
+					logger.String("url", privacy.SanitizeRTSPUrl(stream.URL)))
+			}
+		} else {
+			GetLogger().Warn("registry not available during RTSP sound level processor unregistration")
+		}
 	}
 }

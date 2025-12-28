@@ -13,10 +13,12 @@ type AudioSource struct {
 
 // Note represents a single observation data point
 type Note struct {
-	ID         uint `gorm:"primaryKey"`
-	SourceNode string
-	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
-	Time       string `gorm:"index:idx_notes_time"`
+	ID          uint   `gorm:"primaryKey"`
+	SourceNode  string // Node name from config (Main.Name)
+	SourceID    string `gorm:"index:idx_notes_source_id"` // Audio source registry ID (e.g., "rtsp_87b89761")
+	SourceLabel string `gorm:"index:idx_notes_source_label"` // User-friendly label for the audio source (e.g., "Backyard Feeder")
+	Date        string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
+	Time        string `gorm:"index:idx_notes_time"`
 	//InputFile      string
 	Source      AudioSource `gorm:"-"` // Runtime only, not stored in database
 	BeginTime   time.Time

@@ -1619,6 +1619,8 @@ func (p *Processor) NewWithSpeciesInfo(
 	// Return a new Note struct populated with the provided parameters and the current date and time
 	return datastore.Note{
 		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
+		SourceID:       sourceStruct.ID,                // Audio source registry ID
+		SourceLabel:    sourceStruct.DisplayName,       // User-friendly label for audio source
 		Date:           date,                           // Use ISO 8601 date format
 		Time:           timeStr,                        // Use 24-hour time format
 		Source:         sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName

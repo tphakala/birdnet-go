@@ -350,7 +350,9 @@
       "confidenceMax": "Maksymalny procent pewności",
       "verifiedStatus": "Status Weryfikacji",
       "lockedStatus": "Status Blokady",
-      "timeOfDay": "Pora Dnia"
+      "timeOfDay": "Pora Dnia",
+      "source": "Źródło",
+      "sourcePlaceholder": "np. Karmnik w ogrodzie"
     },
     "advancedFilters": "Zaawansowane Filtry",
     "showAdvancedFilters": "Pokaż Zaawansowane Filtry",
@@ -544,6 +546,7 @@
     },
     "headers": {
       "dateTime": "Data i Czas",
+      "source": "Źródło",
       "weather": "Pogoda",
       "species": "Gatunek",
       "confidence": "Pewność",
@@ -794,7 +797,9 @@
       "date": "Data",
       "firstHeardOn": "Po raz Pierwszy Usłyszany",
       "firstHeardDate": "Data Pierwszego Usłyszenia",
-      "firstHeard": "Pierwszy Raz Usłyszany"
+      "firstHeard": "Pierwszy Raz Usłyszany",
+      "detectionsBySource": "Detekcje według źródła",
+      "noSourceData": "Brak danych o źródle"
     },
     "recentDetections": {
       "title": "Ostatnie Detekcje",
@@ -802,7 +807,8 @@
         "dateTime": "Data i Czas",
         "species": "Gatunek",
         "confidence": "Pewność",
-        "timeOfDay": "Pora Dnia"
+        "timeOfDay": "Pora Dnia",
+        "source": "Źródło"
       },
       "noRecentDetections": "Nie znaleziono ostatnich detekcji",
       "unknownSpecies": "Nieznany",
@@ -2046,6 +2052,9 @@
       },
       "streams": {
         "streamLabel": "Strumień",
+        "labelField": "Etykieta",
+        "labelPlaceholder": "np. Karmnik ogrodowy, Weranda",
+        "labelHelp": "Opcjonalna nazwa do identyfikacji strumienia w raportach wykryć",
         "urlLabel": "Adres URL Strumienia",
         "urlHelp": "Wprowadź adres URL RTSP z opcjonalnymi danymi uwierzytelniającymi (rtsp://użytkownik:hasło@host:port/ścieżka)",
         "typeLabel": "Typ Strumienia",
@@ -2505,12 +2514,6 @@
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
       "mysqlHostPlaceholder": "Wprowadź host MySQL",
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
-    },
-    "tabs": {
-      "navigation": "Karty nawigacji ustawień",
-      "hasChanges": "Ta karta ma niezapisane zmiany",
-      "setAsDefault": "Ustaw jako domyślne",
-      "defaultIndicator": "Domyślne źródło wejściowe"
     }
   },
   "auth": {
@@ -2550,7 +2553,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ładowanie danych...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2559,7 +2562,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ładowanie danych...",
       "error": "Nie udało się załadować danych",
       "sortBy": "Sortuj według {column}",
       "rowsPerPage": "Wierszy na stronę",

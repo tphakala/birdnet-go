@@ -350,7 +350,9 @@
       "confidenceMax": "Porcentaje máximo de confianza",
       "verifiedStatus": "Estado verificado",
       "lockedStatus": "Estado bloqueado",
-      "timeOfDay": "Hora del día"
+      "timeOfDay": "Hora del día",
+      "source": "Fuente",
+      "sourcePlaceholder": "ej. Comedero del jardín"
     },
     "advancedFilters": "Filtros avanzados",
     "showAdvancedFilters": "Mostrar filtros avanzados",
@@ -544,6 +546,7 @@
     },
     "headers": {
       "dateTime": "Fecha y hora",
+      "source": "Fuente",
       "weather": "Clima",
       "species": "Especie",
       "confidence": "Confianza",
@@ -794,7 +797,9 @@
       "date": "Fecha",
       "firstHeardOn": "Escuchado por primera vez el",
       "firstHeardDate": "Fecha de primera escucha",
-      "firstHeard": "Primera escucha"
+      "firstHeard": "Primera escucha",
+      "detectionsBySource": "Detecciones por fuente",
+      "noSourceData": "No hay datos de fuente disponibles"
     },
     "recentDetections": {
       "title": "Detecciones recientes",
@@ -802,7 +807,8 @@
         "dateTime": "Fecha y hora",
         "species": "Especie",
         "confidence": "Confianza",
-        "timeOfDay": "Hora del día"
+        "timeOfDay": "Hora del día",
+        "source": "Fuente"
       },
       "noRecentDetections": "No se encontraron detecciones recientes",
       "unknownSpecies": "Desconocida",
@@ -1890,6 +1896,9 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "labelField": "Etiqueta",
+        "labelPlaceholder": "ej., Comedero del patio, Porche delantero",
+        "labelHelp": "Nombre opcional para identificar este stream en los informes de detección",
         "urlLabel": "URL del stream",
         "urlHelp": "Ingrese URL RTSP con credenciales opcionales (rtsp://usuario:contraseña@host:puerto/ruta)",
         "typeLabel": "Tipo de stream",
@@ -2544,7 +2553,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Cargando datos...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2553,7 +2562,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Cargando datos...",
       "error": "Error al cargar datos",
       "sortBy": "Ordenar por {column}",
       "rowsPerPage": "Filas por página",

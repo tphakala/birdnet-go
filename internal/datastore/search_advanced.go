@@ -19,7 +19,8 @@ type AdvancedSearchFilters struct {
 	DateRange     *DateRange
 	Verified      *bool
 	Species       []string
-	Location      []string // Maps to source field
+	Location      []string // Maps to source field (legacy file source)
+	Source        []string // Maps to source_label field (RTSP stream labels)
 	Locked        *bool
 	SortAscending bool
 	Limit         int
@@ -88,9 +89,14 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 		query = query.Where("species_code IN ? OR scientific_name IN ?", filters.Species, filters.Species)
 	}
 
-	// Apply location/source filter
+	// Apply location/source filter (legacy file source)
 	if len(filters.Location) > 0 {
 		query = query.Where("source IN ?", filters.Location)
+	}
+
+	// Apply source label filter (RTSP stream labels)
+	if len(filters.Source) > 0 {
+		query = query.Where("source_label IN ?", filters.Source)
 	}
 
 	// Apply verified filter

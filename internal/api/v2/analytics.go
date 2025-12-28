@@ -124,6 +124,10 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/daily", c.GetDailyAnalytics)
 	timeGroup.GET("/daily/batch", c.GetBatchDailySpeciesData)         // Batch daily trends for multiple species
 	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution) // Renamed endpoint for time-of-day distribution
+
+	// Source analytics routes (RTSP stream labels, soundcard sources)
+	sourcesGroup := analyticsGroup.Group("/sources")
+	sourcesGroup.GET("/summary", c.GetSourceSummary)
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -1401,4 +1405,71 @@ func (c *Controller) handleBatchDailyResults(ctx echo.Context, results map[strin
 		logger.String("path", path),
 	)
 	return ctx.JSON(http.StatusOK, results)
+}
+
+// SourceSummaryResponse represents a source in the source summary API response
+type SourceSummaryResponse struct {
+	SourceLabel string `json:"source_label"`
+	Count       int    `json:"count"`
+}
+
+// GetSourceSummary handles GET /api/v2/analytics/sources/summary
+// Returns detection counts grouped by audio source (RTSP stream labels, soundcard)
+func (c *Controller) GetSourceSummary(ctx echo.Context) error {
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
+
+	// Parse optional limit parameter (0 = unlimited)
+	limit := 0
+	if limitStr := ctx.QueryParam("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	c.logInfoIfEnabled("Retrieving source summary",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("limit", limit),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
+
+	// Validate date range if provided
+	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, "source summary"); err != nil {
+		return err
+	}
+
+	// Retrieve source summary data from the datastore
+	sourceData, err := c.DS.GetSourceSummaryData(ctx.Request().Context(), startDate, endDate, limit)
+	if err != nil {
+		c.logErrorIfEnabled("Failed to get source summary data",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.Error(err),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
+		return c.HandleError(ctx, err, "Failed to get source summary data", http.StatusInternalServerError)
+	}
+
+	// Convert to response format
+	response := make([]SourceSummaryResponse, 0, len(sourceData))
+	for _, data := range sourceData {
+		response = append(response, SourceSummaryResponse{
+			SourceLabel: data.SourceLabel,
+			Count:       data.Count,
+		})
+	}
+
+	c.logInfoIfEnabled("Source summary retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("source_count", len(response)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
+
+	return ctx.JSON(http.StatusOK, response)
 }

@@ -236,6 +236,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           rtsp: {
             transport: 'tcp',
             urls: [],
+            streams: [],
           },
         },
       } as unknown as SettingsFormData,
@@ -290,6 +291,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           rtsp: {
             transport: 'tcp',
             urls: [],
+            streams: [],
           },
         },
       } as unknown as SettingsFormData,
@@ -373,6 +375,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             rtsp: {
               transport: 'tcp',
               urls: initialUrls,
+              streams: [],
             },
           },
         },
@@ -472,6 +475,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             rtsp: {
               transport: 'tcp',
               urls: initialUrls,
+              streams: [],
             },
           },
         },
@@ -510,6 +514,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             rtsp: {
               transport: 'tcp',
               urls: [initialUrl],
+              streams: [],
             },
           },
         },
@@ -643,6 +648,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             rtsp: {
               transport: 'tcp',
               urls: [],
+              streams: [],
             },
           },
         } as unknown as SettingsFormData,
@@ -673,6 +679,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             rtsp: {
               transport: 'tcp',
               urls: [],
+              streams: [],
             },
           },
         } as unknown as SettingsFormData,
@@ -695,6 +702,403 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       );
 
       expect(hasChanges).toBe(true);
+    });
+  });
+});
+
+describe('AudioSettingsPage - RTSP Streams with Labels (Issue #1494)', () => {
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    originalFetch = global.fetch;
+
+    const { settingsStore } = await import('$lib/stores/settings');
+
+    // Reset store with streams support
+    settingsStore.set({
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      activeSection: 'audio',
+      originalData: {
+        main: {
+          name: '',
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          timezone: '',
+          debugMode: false,
+          logLevel: 'info',
+          logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+        },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.03,
+          overlap: 0.0,
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          threads: 1,
+          rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+        },
+        realtime: {
+          audio: {
+            source: '',
+            soundLevel: { enabled: false, interval: 60 },
+            equalizer: { enabled: false, filters: [] },
+            export: {
+              enabled: false,
+              path: 'clips/',
+              type: 'wav',
+              bitrate: '96k',
+              retention: {
+                policy: 'none',
+                maxAge: '7d',
+                maxUsage: '80%',
+                minClips: 10,
+                keepSpectrograms: false,
+              },
+            },
+          },
+          rtsp: {
+            transport: 'tcp',
+            urls: [],
+            streams: [],
+          },
+        },
+      } as unknown as SettingsFormData,
+      formData: {
+        main: {
+          name: '',
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          timezone: '',
+          debugMode: false,
+          logLevel: 'info',
+          logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+        },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.03,
+          overlap: 0.0,
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          threads: 1,
+          rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+        },
+        realtime: {
+          audio: {
+            source: '',
+            soundLevel: { enabled: false, interval: 60 },
+            equalizer: { enabled: false, filters: [] },
+            export: {
+              enabled: false,
+              path: 'clips/',
+              type: 'wav',
+              bitrate: '96k',
+              retention: {
+                policy: 'none',
+                maxAge: '7d',
+                maxUsage: '80%',
+                minClips: 10,
+                keepSpectrograms: false,
+              },
+            },
+          },
+          rtsp: {
+            transport: 'tcp',
+            urls: [],
+            streams: [],
+          },
+        },
+      } as unknown as SettingsFormData,
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          { Index: 0, Name: 'Built-in Microphone' },
+          { Index: 1, Name: 'USB Audio Device' },
+        ]),
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  describe('Stream Labels', () => {
+    it('should handle streams with labels', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Add streams with labels
+      const streams = [
+        { url: 'rtsp://192.168.1.100:554/stream1', label: 'Backyard Feeder' },
+        { url: 'rtsp://192.168.1.101:554/stream2', label: 'Front Porch' },
+      ];
+
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams,
+        },
+      });
+
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams,
+        },
+      });
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual(streams);
+    });
+
+    it('should handle empty streams array', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+      render(AudioSettingsPage);
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual([]);
+    });
+
+    it('should handle streams without labels (empty string)', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+      render(AudioSettingsPage);
+
+      // Add stream without label
+      const streams = [{ url: 'rtsp://192.168.1.100:554/stream1', label: '' }];
+
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams,
+        },
+      });
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual(streams);
+      expect(store.formData.realtime?.rtsp?.streams?.[0]?.label).toBe('');
+    });
+
+    it('should handle multiple streams with mixed label presence', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+      render(AudioSettingsPage);
+
+      // Mix of streams with and without labels
+      const streams = [
+        { url: 'rtsp://192.168.1.100:554/stream1', label: 'Backyard' },
+        { url: 'rtsp://192.168.1.101:554/stream2', label: '' },
+        { url: 'rtsp://192.168.1.102:554/stream3', label: 'Garden' },
+      ];
+
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams,
+        },
+      });
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.streams).toHaveLength(3);
+      expect(store.formData.realtime?.rtsp?.streams?.[0]?.label).toBe('Backyard');
+      expect(store.formData.realtime?.rtsp?.streams?.[1]?.label).toBe('');
+      expect(store.formData.realtime?.rtsp?.streams?.[2]?.label).toBe('Garden');
+    });
+
+    it('should update stream label', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+
+      // Start with a stream
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: [],
+              streams: [{ url: 'rtsp://192.168.1.100:554/stream1', label: 'Old Label' }],
+            },
+          },
+        },
+      }));
+
+      render(AudioSettingsPage);
+
+      // Update the label
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [{ url: 'rtsp://192.168.1.100:554/stream1', label: 'New Label' }],
+        },
+      });
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.streams?.[0]?.label).toBe('New Label');
+    });
+
+    it('should detect changes when stream label is modified', async () => {
+      const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
+
+      const original = {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [{ url: 'rtsp://192.168.1.100:554/stream1', label: 'Original' }],
+        },
+      };
+
+      const modified = {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [{ url: 'rtsp://192.168.1.100:554/stream1', label: 'Modified' }],
+        },
+      };
+
+      expect(hasSettingsChanged(original, modified)).toBe(true);
+      expect(hasSettingsChanged(original, original)).toBe(false);
+    });
+
+    it('should detect changes when stream is added', async () => {
+      const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
+
+      const original = {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [],
+        },
+      };
+
+      const modified = {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [{ url: 'rtsp://192.168.1.100:554/stream1', label: 'New Stream' }],
+        },
+      };
+
+      expect(hasSettingsChanged(original, modified)).toBe(true);
+    });
+
+    it('should handle removing a stream', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+
+      // Start with two streams
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: [],
+              streams: [
+                { url: 'rtsp://192.168.1.100:554/stream1', label: 'Stream 1' },
+                { url: 'rtsp://192.168.1.101:554/stream2', label: 'Stream 2' },
+              ],
+            },
+          },
+        },
+      }));
+
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Remove the first stream
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [{ url: 'rtsp://192.168.1.101:554/stream2', label: 'Stream 2' }],
+        },
+      });
+
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+          streams: [{ url: 'rtsp://192.168.1.101:554/stream2', label: 'Stream 2' }],
+        },
+      });
+    });
+  });
+
+  describe('Backward Compatibility', () => {
+    it('should support both urls and streams arrays simultaneously', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      // Set both urls (legacy) and streams (new)
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: ['rtsp://legacy.example.com/stream'],
+              streams: [{ url: 'rtsp://192.168.1.100:554/stream1', label: 'New Format' }],
+            },
+          },
+        },
+      }));
+
+      render(AudioSettingsPage);
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.urls).toEqual(['rtsp://legacy.example.com/stream']);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual([
+        { url: 'rtsp://192.168.1.100:554/stream1', label: 'New Format' },
+      ]);
+    });
+
+    it('should handle config with only legacy urls (no streams field)', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      // Simulate legacy config without streams field
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: ['rtsp://192.168.1.100:554/stream1'],
+              // streams field intentionally omitted to simulate legacy config
+            },
+          },
+        },
+      }));
+
+      render(AudioSettingsPage);
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.urls).toEqual(['rtsp://192.168.1.100:554/stream1']);
+      // streams may be undefined in legacy config
+      expect(store.formData.realtime?.rtsp?.streams ?? []).toEqual([]);
     });
   });
 });

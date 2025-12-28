@@ -350,7 +350,9 @@
       "confidenceMax": "Hoogste percentage betrouwbaarheid",
       "verifiedStatus": "Status beoordeling",
       "lockedStatus": "Status vergrendeling",
-      "timeOfDay": "Tijdstip"
+      "timeOfDay": "Tijdstip",
+      "source": "Bron",
+      "sourcePlaceholder": "bijv. Voedertafel in de tuin"
     },
     "advancedFilters": "Uitgebreide filters",
     "showAdvancedFilters": "Toon uitgebreide filters",
@@ -544,6 +546,7 @@
     },
     "headers": {
       "dateTime": "Datum/Tijd",
+      "source": "Bron",
       "weather": "Weer",
       "species": "Soort",
       "confidence": "Betrouwbaarheid",
@@ -794,7 +797,9 @@
       "date": "Datum",
       "firstHeardOn": "Eerst gehoord op",
       "firstHeardDate": "Datum eerst gehoord",
-      "firstHeard": "Eerst gehoord"
+      "firstHeard": "Eerst gehoord",
+      "detectionsBySource": "Herkenningen per bron",
+      "noSourceData": "Geen brongegevens beschikbaar"
     },
     "recentDetections": {
       "title": "Recent herkend",
@@ -802,7 +807,8 @@
         "dateTime": "Datum/Tijd",
         "species": "Soort",
         "confidence": "Betrouwbaarheid",
-        "timeOfDay": "Dagdeel"
+        "timeOfDay": "Dagdeel",
+        "source": "Bron"
       },
       "noRecentDetections": "Geen recente herkenning gevonden",
       "unknownSpecies": "Onbekend",
@@ -2040,6 +2046,9 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "labelField": "Label",
+        "labelPlaceholder": "bijv., Vogelvoeder achtertuin, Voorveranda",
+        "labelHelp": "Optionele naam om deze stream te identificeren in detectierapporten",
         "urlLabel": "Stream URL",
         "urlHelp": "Voer RTSP URL in met optionele credentials (rtsp://gebruiker:wachtwoord@host:poort/pad)",
         "typeLabel": "Stream Type",
@@ -2544,7 +2553,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Gegevens inlezen ...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2553,7 +2562,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Gegevens inlezen ...",
       "error": "Gegevens inlezen is mislukt",
       "sortBy": "Sorteer op {column}",
       "rowsPerPage": "Rijen per pagina",

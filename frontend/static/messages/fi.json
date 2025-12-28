@@ -350,7 +350,9 @@
       "confidenceMax": "Enimmäisluottamusprosentti",
       "verifiedStatus": "Todennettu tila",
       "lockedStatus": "Lukittu tila",
-      "timeOfDay": "Vuorokaudenaika"
+      "timeOfDay": "Vuorokaudenaika",
+      "source": "Lähde",
+      "sourcePlaceholder": "esim. Takapihan ruokinta"
     },
     "advancedFilters": "Lisäsuodattimet",
     "showAdvancedFilters": "Näytä lisäsuodattimet",
@@ -544,6 +546,7 @@
     },
     "headers": {
       "dateTime": "Päivä ja aika",
+      "source": "Lähde",
       "weather": "Sää",
       "species": "Laji",
       "confidence": "Luottamus",
@@ -794,7 +797,9 @@
       "date": "Päivämäärä",
       "firstHeardOn": "Ensi kertaa kuultu",
       "firstHeardDate": "Ensikuulemispäivä",
-      "firstHeard": "Ensikuuleminen"
+      "firstHeard": "Ensikuuleminen",
+      "detectionsBySource": "Havainnot lähteen mukaan",
+      "noSourceData": "Lähdetietoja ei saatavilla"
     },
     "recentDetections": {
       "title": "Viimeisimmät havainnot",
@@ -802,7 +807,8 @@
         "dateTime": "Päivä ja aika",
         "species": "Laji",
         "confidence": "Luottamus",
-        "timeOfDay": "Vuorokaudenaika"
+        "timeOfDay": "Vuorokaudenaika",
+        "source": "Lähde"
       },
       "noRecentDetections": "Viimeaikaisia havaintoja ei löytynyt",
       "unknownSpecies": "Tuntematon",
@@ -1890,6 +1896,9 @@
       },
       "streams": {
         "streamLabel": "Virta",
+        "labelField": "Nimi",
+        "labelPlaceholder": "esim., Takapihan ruokinta, Etuterassi",
+        "labelHelp": "Valinnainen nimi tämän virran tunnistamiseksi havaintoraporteissa",
         "urlLabel": "Virran URL",
         "urlHelp": "Syötä RTSP-URL valinnaisten tunnistetietojen kanssa (rtsp://käyttäjä:salasana@isäntä:portti/polku)",
         "typeLabel": "Virran tyyppi",
@@ -2544,7 +2553,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ladataan tietoja...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2553,7 +2562,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ladataan tietoja...",
       "error": "Tietojen lataus epäonnistui",
       "sortBy": "Lajittele {column}",
       "rowsPerPage": "Rivejä sivulla",

@@ -124,6 +124,7 @@ type Interface interface {
 	GetHourlyDistribution(ctx context.Context, startDate, endDate string, species string) ([]HourlyDistributionData, error)
 	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
+	GetSourceSummaryData(ctx context.Context, startDate, endDate string, limit int) ([]SourceSummaryData, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
@@ -1609,6 +1610,7 @@ type SearchFilters struct {
 	UnlockedOnly   bool
 	Device         string
 	TimeOfDay      string // "any", "day", "night", "sunrise", "sunset"
+	Source         string // Filter by source label
 	Page           int
 	PerPage        int
 	SortBy         string
@@ -1733,6 +1735,10 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 
 	if filters.Device != "" {
 		query = query.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
+	}
+
+	if filters.Source != "" {
+		query = query.Where("notes.source_label LIKE ?", "%"+filters.Source+"%")
 	}
 
 	return query
