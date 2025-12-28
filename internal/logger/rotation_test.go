@@ -14,6 +14,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for rotation configuration
+const (
+	testMaxSizeSmall      = 512  // bytes - triggers rotation quickly
+	testMaxSizeKB         = 1024 // 1KB
+	testMaxSize2KB        = 2048 // 2KB
+	testMaxAgeDays        = 30   // days
+	testMaxFiles          = 5    // rotated file count
+	testMaxFilesSmall     = 3    // smaller rotated file count for cleanup tests
+	testDataSmall         = 600  // bytes - exceeds testMaxSizeSmall
+	testDataLarge         = 1500 // bytes - exceeds testMaxSizeKB
+	testConcurrentWriters = 10
+	testWritesPerWriter   = 50
+	testWriteSize         = 50 // bytes per concurrent write
+)
+
 func TestRotationConfig_IsEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -22,7 +37,7 @@ func TestRotationConfig_IsEnabled(t *testing.T) {
 	}{
 		{
 			name:     "enabled when MaxSize > 0",
-			config:   RotationConfig{MaxSize: 1024},
+			config:   RotationConfig{MaxSize: testMaxSizeKB},
 			expected: true,
 		},
 		{
@@ -189,9 +204,9 @@ func TestRotationManager_CheckAndRotate_SizeBasedRotation(t *testing.T) {
 
 	// Create a small MaxSize for testing (1KB)
 	config := RotationConfig{
-		MaxSize:         1024, // 1KB
-		MaxAge:          30,
-		MaxRotatedFiles: 5,
+		MaxSize:         testMaxSizeKB,
+		MaxAge:          testMaxAgeDays,
+		MaxRotatedFiles: testMaxFiles,
 		Compress:        false,
 	}
 
@@ -201,7 +216,7 @@ func TestRotationManager_CheckAndRotate_SizeBasedRotation(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 
 	// Write data exceeding MaxSize
-	data := strings.Repeat("x", 1500) // 1.5KB
+	data := strings.Repeat("x", testDataLarge)
 	_, err = writer.Write([]byte(data))
 	require.NoError(t, err)
 	require.NoError(t, writer.Flush())
@@ -230,9 +245,9 @@ func TestRotationManager_Compression(t *testing.T) {
 	logPath := filepath.Join(tempDir, "test.log")
 
 	config := RotationConfig{
-		MaxSize:         512, // 512 bytes for quick rotation
-		MaxAge:          30,
-		MaxRotatedFiles: 5,
+		MaxSize:         testMaxSizeSmall, // small size for quick rotation
+		MaxAge:          testMaxAgeDays,
+		MaxRotatedFiles: testMaxFiles,
 		Compress:        true,
 	}
 
@@ -289,9 +304,9 @@ func TestRotationManager_Cleanup_MaxRotatedFiles(t *testing.T) {
 	}
 
 	config := RotationConfig{
-		MaxSize:         512,
-		MaxAge:          0, // No age limit
-		MaxRotatedFiles: 3, // Keep only 3
+		MaxSize:         testMaxSizeSmall,
+		MaxAge:          0,                 // No age limit
+		MaxRotatedFiles: testMaxFilesSmall, // Keep only 3
 		Compress:        false,
 	}
 
@@ -300,7 +315,7 @@ func TestRotationManager_Cleanup_MaxRotatedFiles(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 
 	// Write data to trigger rotation
-	_, err = writer.Write([]byte(strings.Repeat("x", 600)))
+	_, err = writer.Write([]byte(strings.Repeat("x", testDataSmall)))
 	require.NoError(t, err)
 	require.NoError(t, writer.Flush())
 
@@ -316,7 +331,7 @@ func TestRotationManager_Cleanup_MaxRotatedFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have at most MaxRotatedFiles
-	assert.LessOrEqual(t, len(files), 3, "should have at most 3 rotated files")
+	assert.LessOrEqual(t, len(files), testMaxFilesSmall, "should have at most 3 rotated files")
 }
 
 func TestRotationManager_Cleanup_MaxAge(t *testing.T) {
@@ -334,9 +349,9 @@ func TestRotationManager_Cleanup_MaxAge(t *testing.T) {
 	require.NoError(t, os.WriteFile(recentFile, []byte("recent"), 0o600))
 
 	config := RotationConfig{
-		MaxSize:         512,
-		MaxAge:          30, // 30 days
-		MaxRotatedFiles: 0,  // No count limit
+		MaxSize:         testMaxSizeSmall,
+		MaxAge:          testMaxAgeDays, // 30 days
+		MaxRotatedFiles: 0,              // No count limit
 		Compress:        false,
 	}
 
@@ -345,7 +360,7 @@ func TestRotationManager_Cleanup_MaxAge(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 
 	// Write data to trigger rotation
-	_, err = writer.Write([]byte(strings.Repeat("x", 600)))
+	_, err = writer.Write([]byte(strings.Repeat("x", testDataSmall)))
 	require.NoError(t, err)
 	require.NoError(t, writer.Flush())
 
@@ -370,8 +385,8 @@ func TestRotationManager_ConcurrentWrites(t *testing.T) {
 	logPath := filepath.Join(tempDir, "test.log")
 
 	config := RotationConfig{
-		MaxSize:         2048, // 2KB
-		MaxAge:          30,
+		MaxSize:         testMaxSize2KB,
+		MaxAge:          testMaxAgeDays,
 		MaxRotatedFiles: 10,
 		Compress:        false,
 	}
@@ -382,15 +397,13 @@ func TestRotationManager_ConcurrentWrites(t *testing.T) {
 
 	// Write concurrently from multiple goroutines
 	var wg sync.WaitGroup
-	numWriters := 10
-	writesPerWriter := 50
 
-	for i := range numWriters {
+	for i := range testConcurrentWriters {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := range writesPerWriter {
-				data := strings.Repeat("x", 50) // 50 bytes per write
+			for j := range testWritesPerWriter {
+				data := strings.Repeat("x", testWriteSize)
 				_, err := writer.Write([]byte(data))
 				if err != nil {
 					t.Logf("writer %d, write %d error: %v", id, j, err)
@@ -496,9 +509,9 @@ func TestRotationManager_Close(t *testing.T) {
 	logPath := filepath.Join(tempDir, "test.log")
 
 	config := RotationConfig{
-		MaxSize:         1024,
-		MaxAge:          30,
-		MaxRotatedFiles: 5,
+		MaxSize:         testMaxSizeKB,
+		MaxAge:          testMaxAgeDays,
+		MaxRotatedFiles: testMaxFiles,
 		Compress:        false,
 	}
 

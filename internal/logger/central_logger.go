@@ -28,7 +28,7 @@ const (
 	// traceLevelValue is slog.Level for TRACE level (below Debug which is -4)
 	traceLevelValue = slog.Level(-8)
 
-	// floatPrecisionRatio is pre-computed 10^3 for rounding floats to 3 decimal places
+	// floatPrecisionRatio rounds floats to 3 decimal places in log output
 	floatPrecisionRatio = 1000.0
 
 	// maxLevelWidth is the maximum width of log level strings for text formatting
@@ -37,9 +37,8 @@ const (
 
 // Global logger instance
 var (
-	globalLogger     *CentralLogger
-	globalLoggerOnce sync.Once
-	globalLoggerMu   sync.RWMutex
+	globalLogger   *CentralLogger
+	globalLoggerMu sync.Mutex
 )
 
 // SetGlobal sets the global CentralLogger instance.
@@ -53,39 +52,30 @@ func SetGlobal(cl *CentralLogger) {
 // Global returns the global CentralLogger instance.
 // If no logger has been set via SetGlobal, it returns a fallback console logger.
 func Global() *CentralLogger {
-	globalLoggerMu.RLock()
+	globalLoggerMu.Lock()
+	defer globalLoggerMu.Unlock()
+
 	if globalLogger != nil {
-		defer globalLoggerMu.RUnlock()
 		return globalLogger
 	}
-	globalLoggerMu.RUnlock()
 
-	// Create fallback logger (only once)
-	globalLoggerOnce.Do(func() {
-		globalLoggerMu.Lock()
-		defer globalLoggerMu.Unlock()
-		if globalLogger == nil {
-			// Create a minimal console-only logger as fallback
-			globalLogger = &CentralLogger{
-				config: &LoggingConfig{
-					DefaultLevel: "info",
-					Timezone:     "Local",
-					Console: &ConsoleOutput{
-						Enabled: true,
-						Level:   "info",
-					},
-				},
-				timezone:      time.Local,
-				moduleWriters: make(map[string]*BufferedFileWriter),
-				moduleLevels:  make(map[string]slog.Level),
-			}
-			// Create console-only base handler
-			globalLogger.baseHandler = newTextHandler(os.Stdout, slog.LevelInfo, time.Local)
-		}
-	})
+	// Create a minimal console-only logger as fallback
+	globalLogger = &CentralLogger{
+		config: &LoggingConfig{
+			DefaultLevel: "info",
+			Timezone:     "Local",
+			Console: &ConsoleOutput{
+				Enabled: true,
+				Level:   "info",
+			},
+		},
+		timezone:      time.Local,
+		moduleWriters: make(map[string]*BufferedFileWriter),
+		moduleLevels:  make(map[string]slog.Level),
+	}
+	// Create console-only base handler
+	globalLogger.baseHandler = newTextHandler(os.Stdout, slog.LevelInfo, time.Local)
 
-	globalLoggerMu.RLock()
-	defer globalLoggerMu.RUnlock()
 	return globalLogger
 }
 
@@ -452,7 +442,9 @@ type moduleLogger struct {
 	fields   []Field
 }
 
-// Module creates a sub-module logger
+// Module creates a sub-module logger.
+// The returned logger shares the parent's slog.Logger but gets its own copy of fields
+// to ensure immutability - modifications to parent fields won't affect children.
 func (m *moduleLogger) Module(name string) Logger {
 	if m == nil {
 		return nil
@@ -463,7 +455,7 @@ func (m *moduleLogger) Module(name string) Logger {
 		logger:   m.logger,
 		level:    m.level,
 		timezone: m.timezone,
-		fields:   m.fields,
+		fields:   slices.Clone(m.fields), // clone to ensure immutability
 	}
 }
 
@@ -623,17 +615,13 @@ func fieldToAttr(f Field) slog.Attr {
 	}
 }
 
-// getTraceIDFromContext extracts trace ID from context
+// getTraceIDFromContext extracts trace ID from context.
+// Use WithTraceID() to set trace IDs in context.
 func getTraceIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	// Try typed key first (preferred)
 	if traceID, ok := ctx.Value(TraceIDKey).(string); ok {
-		return traceID
-	}
-	// Fall back to string key for backward compatibility
-	if traceID, ok := ctx.Value("trace_id").(string); ok {
 		return traceID
 	}
 	return ""

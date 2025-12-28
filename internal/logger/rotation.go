@@ -228,6 +228,44 @@ func (rm *RotationManager) rotatedFilePattern() string {
 	return fmt.Sprintf("%s-*Z%s", base, ext)
 }
 
+// rotatedFileInfo holds metadata about a rotated log file.
+type rotatedFileInfo struct {
+	path    string
+	modTime time.Time
+}
+
+// listRotatedFilesSorted returns all rotated files (including compressed) sorted oldest first.
+// This helper eliminates duplication between cleanup() and recoverDiskSpace().
+func (rm *RotationManager) listRotatedFilesSorted() []rotatedFileInfo {
+	pattern := rm.rotatedFilePattern()
+
+	// Find all rotated files (both compressed and uncompressed)
+	files, _ := filepath.Glob(pattern)
+	compressedFiles, _ := filepath.Glob(pattern + ".gz")
+	files = append(files, compressedFiles...)
+
+	if len(files) == 0 {
+		return nil
+	}
+
+	// Get file info for sorting
+	fileInfos := make([]rotatedFileInfo, 0, len(files))
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			continue
+		}
+		fileInfos = append(fileInfos, rotatedFileInfo{path: f, modTime: info.ModTime()})
+	}
+
+	// Sort by modification time (oldest first)
+	sort.Slice(fileInfos, func(i, j int) bool {
+		return fileInfos[i].modTime.Before(fileInfos[j].modTime)
+	})
+
+	return fileInfos
+}
+
 // compressFile compresses a rotated log file with gzip.
 // Runs asynchronously - errors are logged to stderr.
 func (rm *RotationManager) compressFile(srcPath string) {
@@ -278,41 +316,10 @@ func (rm *RotationManager) compressFile(srcPath string) {
 
 // cleanup removes old rotated files based on MaxAge and MaxRotatedFiles limits.
 func (rm *RotationManager) cleanup() {
-	pattern := rm.rotatedFilePattern()
-
-	// Find all rotated files (both compressed and uncompressed)
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "rotation: failed to list rotated files: %v\n", err)
+	fileInfos := rm.listRotatedFilesSorted()
+	if len(fileInfos) == 0 {
 		return
 	}
-
-	// Also find compressed files
-	compressedFiles, _ := filepath.Glob(pattern + ".gz")
-	files = append(files, compressedFiles...)
-
-	if len(files) == 0 {
-		return
-	}
-
-	// Get file info for sorting and filtering
-	type fileInfo struct {
-		path    string
-		modTime time.Time
-	}
-	fileInfos := make([]fileInfo, 0, len(files))
-	for _, f := range files {
-		info, err := os.Stat(f)
-		if err != nil {
-			continue
-		}
-		fileInfos = append(fileInfos, fileInfo{path: f, modTime: info.ModTime()})
-	}
-
-	// Sort by modification time (oldest first)
-	sort.Slice(fileInfos, func(i, j int) bool {
-		return fileInfos[i].modTime.Before(fileInfos[j].modTime)
-	})
 
 	now := time.Now()
 	maxAge := time.Duration(rm.config.MaxAge) * 24 * time.Hour
@@ -350,38 +357,18 @@ func (rm *RotationManager) cleanup() {
 
 // recoverDiskSpace attempts to free disk space by deleting oldest rotated files.
 // Returns true if space was potentially freed.
+//
+// Recovery strategy: Delete up to half the rotated files (oldest first), stopping
+// early if disk space becomes available. The 50% limit balances freeing space
+// while preserving recent logs for debugging. Deleting at least one file ensures
+// progress even with few rotated files.
 func (rm *RotationManager) recoverDiskSpace() bool {
-	pattern := rm.rotatedFilePattern()
-
-	// Find all rotated files
-	files, _ := filepath.Glob(pattern)
-	compressedFiles, _ := filepath.Glob(pattern + ".gz")
-	files = append(files, compressedFiles...)
-
-	if len(files) == 0 {
+	fileInfos := rm.listRotatedFilesSorted()
+	if len(fileInfos) == 0 {
 		return false
 	}
 
-	// Get file info for sorting
-	type fileInfo struct {
-		path    string
-		modTime time.Time
-	}
-	fileInfos := make([]fileInfo, 0, len(files))
-	for _, f := range files {
-		info, err := os.Stat(f)
-		if err != nil {
-			continue
-		}
-		fileInfos = append(fileInfos, fileInfo{path: f, modTime: info.ModTime()})
-	}
-
-	// Sort oldest first
-	sort.Slice(fileInfos, func(i, j int) bool {
-		return fileInfos[i].modTime.Before(fileInfos[j].modTime)
-	})
-
-	// Delete oldest files until we free some space (or delete half)
+	// Delete oldest files until we free space or reach the 50% limit
 	deleted := 0
 	maxDelete := max(len(fileInfos)/2, 1)
 

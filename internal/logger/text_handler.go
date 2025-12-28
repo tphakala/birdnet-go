@@ -70,8 +70,12 @@ func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
 	level := record.Level.String()
 
 	// Get attribute slice from pool (reduces allocations in hot path)
-	attrsPtr := textAttrPool.Get().(*[]slog.Attr)
-	extraAttrs := *attrsPtr
+	ptr, ok := textAttrPool.Get().(*[]slog.Attr)
+	if !ok {
+		s := make([]slog.Attr, 0, defaultAttrCapacity)
+		ptr = &s
+	}
+	extraAttrs := *ptr
 
 	// Extract module and collect other attributes
 	module := ""
@@ -116,8 +120,8 @@ func (h *textHandler) Handle(_ context.Context, record slog.Record) error {
 	sb.WriteByte('\n')
 
 	// Return slice to pool
-	*attrsPtr = extraAttrs[:0]
-	textAttrPool.Put(attrsPtr)
+	*ptr = extraAttrs[:0]
+	textAttrPool.Put(ptr)
 
 	// Use io.WriteString to avoid allocation if writer implements io.StringWriter
 	_, err := io.WriteString(h.writer, sb.String())
