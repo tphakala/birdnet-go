@@ -825,10 +825,10 @@ func validateRequiredStringWhenEnabled(providerMap map[string]any, fieldName, pr
 // Logging Helpers
 // =============================================================================
 
-// GetLogger returns a logger instance for the apiv2 package.
+// GetLogger returns a logger instance for the API v2 package.
 // This provides consistent logging with module identification.
 func GetLogger() logger.Logger {
-	return logger.Global().Module("apiv2")
+	return logger.Global().Module("api")
 }
 
 // log returns a logger for the Controller methods.

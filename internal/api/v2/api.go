@@ -280,7 +280,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	}
 
 	// Initialize structured logger for API requests
-	c.apiLogger = logger.Global().Module("apiv2")
+	c.apiLogger = logger.Global().Module("api")
 
 	// Load local taxonomy database for fast species lookups
 	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
