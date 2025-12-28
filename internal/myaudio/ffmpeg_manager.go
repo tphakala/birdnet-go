@@ -270,8 +270,8 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 	configuredURLs := make(map[string]string) // url -> transport
 
 	// Build map of configured URLs with their transport settings
-	for _, url := range settings.Realtime.RTSP.URLs {
-		configuredURLs[url] = settings.Realtime.RTSP.Transport
+	for _, stream := range settings.Realtime.RTSP.GetStreamConfigs() {
+		configuredURLs[stream.URL] = settings.Realtime.RTSP.Transport
 	}
 
 	// Check for transport changes in existing streams

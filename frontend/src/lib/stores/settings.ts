@@ -131,18 +131,19 @@ export interface RTSPHealthSettings {
   monitoringInterval: number; // health check interval in seconds (default: 30)
 }
 
+// RTSPStream represents a single RTSP stream with URL and optional label
+export interface RTSPStream {
+  url: string; // RTSP stream URL
+  label: string; // User-friendly label for display (e.g., "Backyard Feeder"); empty string means unlabeled
+}
+
 // RTSPSettings matches backend RTSPSettings exactly
 export interface RTSPSettings {
   transport: string; // RTSP Transport Protocol ("tcp" or "udp")
-  urls: string[]; // RTSP stream URLs - simple string array to match backend
+  urls: string[]; // Legacy: RTSP stream URLs (use streams for new configs)
+  streams?: RTSPStream[]; // RTSP streams with labels (recommended format)
   health?: RTSPHealthSettings; // health monitoring settings
   ffmpegParameters?: string[]; // optional custom FFmpeg parameters
-}
-
-// Deprecated - kept for backwards compatibility during migration
-export interface RTSPUrl {
-  url: string;
-  enabled: boolean;
 }
 
 export interface AudioQuality {

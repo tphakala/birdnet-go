@@ -219,6 +219,7 @@ type detectionQueryParams struct {
 	Verified   string
 	Location   string
 	Locked     string
+	Source     string
 	// Include additional data
 	IncludeWeather bool
 }
@@ -226,11 +227,11 @@ type detectionQueryParams struct {
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
 // Includes all filter parameters to avoid cache collisions.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s",
+	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s",
 		p.Search, p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
 		p.Verified, p.Location, p.Locked,
-		p.Species, p.Date, p.StartDate+":"+p.EndDate)
+		p.Species, p.Date, p.StartDate+":"+p.EndDate, p.Source)
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
@@ -250,6 +251,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 		Verified:   ctx.QueryParam("verified"),
 		Location:   ctx.QueryParam("location"),
 		Locked:     ctx.QueryParam("locked"),
+		Source:     ctx.QueryParam("source"),
 		// Include weather data
 		IncludeWeather: ctx.QueryParam("includeWeather") == QueryValueTrue,
 	}
@@ -499,7 +501,7 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 	// Check if advanced filters are present
 	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" ||
 		params.HourRange != "" || params.Verified != "" ||
-		params.Location != "" || params.Locked != ""
+		params.Location != "" || params.Locked != "" || params.Source != ""
 
 	switch params.QueryType {
 	case "hourly":
@@ -538,11 +540,17 @@ func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note, in
 
 // noteToDetectionResponse converts a single note to a detection response
 func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
+	// Prefer persisted SourceLabel, fall back to runtime Source.DisplayName
+	sourceLabel := note.SourceLabel
+	if sourceLabel == "" && note.Source != (datastore.AudioSource{}) && note.Source.DisplayName != "" {
+		sourceLabel = note.Source.DisplayName
+	}
+
 	detection := DetectionResponse{
 		ID:             note.ID,
 		Date:           note.Date,
 		Time:           note.Time,
-		Source:         note.Source.SafeString,
+		Source:         sourceLabel,
 		BeginTime:      note.BeginTime.Format(time.RFC3339),
 		EndTime:        note.EndTime.Format(time.RFC3339),
 		SpeciesCode:    note.SpeciesCode,
@@ -886,6 +894,11 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 	if params.Locked != "" {
 		locked := params.Locked == QueryValueTrue
 		filters.Locked = &locked
+	}
+
+	// Apply source filter
+	if params.Source != "" {
+		filters.Source = []string{params.Source}
 	}
 
 	return filters
