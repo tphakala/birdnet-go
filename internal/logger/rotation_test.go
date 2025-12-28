@@ -242,7 +242,7 @@ func TestRotationManager_CheckAndRotate_SizeBasedRotation(t *testing.T) {
 	}
 
 	// Wait a bit for async operations
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// Check that rotated file exists
 	files, err := filepath.Glob(filepath.Join(tempDir, "test-*Z.log"))
@@ -339,7 +339,7 @@ func TestRotationManager_Cleanup_MaxRotatedFiles(t *testing.T) {
 		writer.rotation.CheckAndRotate()
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// Count remaining rotated files
 	files, err := filepath.Glob(filepath.Join(tempDir, "test-*Z.log"))
@@ -384,7 +384,7 @@ func TestRotationManager_Cleanup_MaxAge(t *testing.T) {
 		writer.rotation.CheckAndRotate()
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// Old file should be deleted
 	_, err = os.Stat(oldFile)

@@ -187,27 +187,37 @@ func (rm *RotationManager) rotateLocked() {
 	}
 
 	// Step 4: Rename old log file to timestamped name
+	newFilePath := rm.filePath + ".new"
+	renameOldOK := true
 	if err := os.Rename(rm.filePath, rotatedPath); err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to rename old file: %v\n", err)
-		// Continue anyway - the new file is already active
+		renameOldOK = false
 	}
 
-	// Rename the new file to the original path
-	// The new file was created with a .new suffix, now move it to the main path
-	newFilePath := rm.filePath + ".new"
-	if err := os.Rename(newFilePath, rm.filePath); err != nil {
-		fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
+	// Step 5: Rename the new file to the original path
+	// Skip if old file rename failed (original still exists, can't overwrite)
+	if renameOldOK {
+		if err := os.Rename(newFilePath, rm.filePath); err != nil {
+			// Rename failed (possibly due to open file handle on Windows)
+			// Update filePath to actual location so future rotation checks work
+			fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
+			rm.filePath = newFilePath
+		} else {
+			// Update writer's internal path to match the renamed file
+			rm.writer.SetFilePath(rm.filePath)
+		}
 	} else {
-		// Update writer's internal path to match the renamed file
-		rm.writer.SetFilePath(rm.filePath)
+		// Old file couldn't be renamed, so we continue logging to .new path
+		// Update filePath to actual location so future rotation checks work
+		rm.filePath = newFilePath
 	}
 
-	// Step 5: Compress if enabled (async)
+	// Step 6: Compress if enabled (async)
 	if rm.config.Compress {
 		go rm.compressFile(rotatedPath)
 	}
 
-	// Step 6: Cleanup old files
+	// Step 7: Cleanup old files
 	rm.cleanup()
 
 	// If we were in fallback mode, we successfully rotated, so disable fallback
