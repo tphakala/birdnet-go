@@ -43,33 +43,38 @@ func main() {
 }
 
 func mainWithExitCode() int {
+	// Create bootstrap logger for pre-initialization messages
+	bootLog := logger.NewConsoleLogger("main", logger.LogLevelInfo)
+
 	// Ensure all systems are properly shut down on exit
 	defer func() {
 		if err := telemetry.ShutdownSystem(5 * time.Second); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: system shutdown incomplete: %v\n", err)
+			// Use fmt here as logger may be closed
+			fmt.Fprintf(os.Stderr, "WARN  [main] System shutdown incomplete error=%v\n", err)
 		}
 	}()
 
 	// Check if profiling is enabled
 	if os.Getenv("BIRDNET_GO_PROFILE") == "1" {
-		fmt.Println("Profiling enabled")
+		bootLog.Info("CPU profiling enabled")
 		// Create a unique profile name with timestamp
 		now := time.Now()
 		profilePath := fmt.Sprintf("profile_%s.pprof", now.Format("20060102_150405"))
 
 		f, err := os.Create(profilePath) //nolint:gosec // G304: profilePath is programmatically constructed with timestamp
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating profile file: %v\n", err)
+			bootLog.Error("Failed to create profile file", logger.String("error", err.Error()))
 			return 1
 		}
 		defer func() {
 			if err := f.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error closing profile file: %v\n", err)
+				// Use fmt here as logger may be closed
+				fmt.Fprintf(os.Stderr, "WARN  [main] Failed to close profile file error=%v\n", err)
 			}
 		}()
 
 		if err := pprof.StartCPUProfile(f); err != nil {
-			fmt.Fprintf(os.Stderr, "Error starting CPU profile: %v\n", err)
+			bootLog.Error("Failed to start CPU profile", logger.String("error", err.Error()))
 			return 1
 		}
 		defer pprof.StopCPUProfile()
@@ -86,7 +91,7 @@ func mainWithExitCode() int {
 	// Load the configuration
 	settings := conf.Setting()
 	if settings == nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration\n")
+		bootLog.Error("Failed to load configuration")
 		return 1
 	}
 
@@ -97,7 +102,7 @@ func mainWithExitCode() int {
 	// Initialize the centralized logger
 	centralLogger, err := logger.NewCentralLogger(&settings.Logging)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
+		bootLog.Error("Failed to initialize logger", logger.String("error", err.Error()))
 		return 1
 	}
 	logger.SetGlobal(centralLogger)
@@ -106,38 +111,42 @@ func mainWithExitCode() int {
 		mainLog := centralLogger.Module("main")
 		mainLog.Info("Application stopped")
 		if err := centralLogger.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error closing logger: %v\n", err)
+			// Use fmt here as logger is being closed
+			fmt.Fprintf(os.Stderr, "WARN  [main] Failed to close logger error=%v\n", err)
 		}
 	}()
 
-	// Log application start
+	// Create main module logger
 	mainLog := centralLogger.Module("main")
-	mainLog.Info("Application started",
-		logger.String("version", settings.Version),
-		logger.String("build_date", settings.BuildDate),
-		logger.String("config_file", viper.ConfigFileUsed()))
 
 	// Load or create system ID for telemetry
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to load system ID: %v\n", err)
+		mainLog.Warn("Failed to load system ID, using temporary ID",
+			logger.String("error", err.Error()))
 		// Generate a temporary one for this session
 		systemID, _ = telemetry.GenerateSystemID()
 	}
 	settings.SystemID = systemID
 
-	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
-		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
+	mainLog.Info("BirdNET-Go starting",
+		logger.String("version", settings.Version),
+		logger.String("build_date", settings.BuildDate),
+		logger.String("config_file", viper.ConfigFileUsed()))
 
 	// Initialize core systems (telemetry and notification)
+	// Note: Telemetry is opt-in; errors here are expected if not enabled
 	if err := telemetry.InitializeSystem(settings); err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing core systems: %v\n", err)
+		mainLog.Debug("Core systems not initialized",
+			logger.String("error", err.Error()))
 		// Continue - these are not critical for basic operation
 	}
 
 	// Wait for core systems to be ready (with timeout)
+	// Note: This is expected when telemetry is opt-in and not enabled
 	if err := telemetry.WaitForReady(5 * time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: core systems initialization incomplete: %v\n", err)
+		mainLog.Debug("Core systems initialization incomplete",
+			logger.String("error", err.Error()))
 		// Continue - not critical for operation
 	}
 
@@ -149,7 +158,7 @@ func mainWithExitCode() int {
 		// Enable block profiling for detecting blocking operations
 		runtime.SetBlockProfileRate(1)
 
-		fmt.Println("🐛 Runtime profiling enabled (mutex and block profiling active)")
+		mainLog.Debug("Runtime profiling enabled (mutex and block profiling active)")
 	}
 
 	// Process configuration validation warnings that occurred before Sentry initialization
@@ -173,7 +182,7 @@ func mainWithExitCode() int {
 			// Clean exit for user-initiated cancellation
 			return 0
 		}
-		fmt.Fprintf(os.Stderr, "Command execution error: %v\n", err)
+		mainLog.Error("Command execution failed", logger.String("error", err.Error()))
 		return 1
 	}
 
