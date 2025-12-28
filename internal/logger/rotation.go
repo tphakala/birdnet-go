@@ -110,7 +110,11 @@ type RotationManager struct {
 }
 
 // NewRotationManager creates a new rotation manager for the given file path.
+// Returns nil if writer is nil to prevent panics during rotation.
 func NewRotationManager(filePath string, config RotationConfig, writer *BufferedFileWriter) *RotationManager {
+	if writer == nil {
+		return nil
+	}
 	return &RotationManager{
 		config:   config,
 		filePath: filePath,
@@ -194,23 +198,21 @@ func (rm *RotationManager) rotateLocked() {
 		renameOldOK = false
 	}
 
-	// Step 5: Rename the new file to the original path
-	// Skip if old file rename failed (original still exists, can't overwrite)
+	// Step 5: Rename the new file to the original path and sync paths.
+	// The final path depends on whether renames succeed.
+	finalLogPath := newFilePath // Default: logging to .new path
 	if renameOldOK {
-		if err := os.Rename(newFilePath, rm.filePath); err != nil {
-			// Rename failed (possibly due to open file handle on Windows)
-			// Update filePath to actual location so future rotation checks work
-			fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
-			rm.filePath = newFilePath
+		if err := os.Rename(newFilePath, rm.filePath); err == nil {
+			// Success: new log is at the original path
+			finalLogPath = rm.filePath
 		} else {
-			// Update writer's internal path to match the renamed file
-			rm.writer.SetFilePath(rm.filePath)
+			// Failure: new log remains at the .new path
+			fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
 		}
-	} else {
-		// Old file couldn't be renamed, so we continue logging to .new path
-		// Update filePath to actual location so future rotation checks work
-		rm.filePath = newFilePath
 	}
+	// Update both rotation manager and writer to the final canonical path
+	rm.filePath = finalLogPath
+	rm.writer.SetFilePath(finalLogPath)
 
 	// Step 6: Compress if enabled (async)
 	if rm.config.Compress {
@@ -295,7 +297,11 @@ func (rm *RotationManager) compressFile(srcPath string) {
 		fmt.Fprintf(os.Stderr, "rotation: failed to open file for compression: %v\n", err)
 		return
 	}
-	defer func() { _ = src.Close() }()
+	defer func() {
+		if err := src.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "rotation: failed to close source file: %v\n", err)
+		}
+	}()
 
 	// Create destination .gz file
 	dst, err := os.Create(dstPath) //nolint:gosec // path derived from rotation
