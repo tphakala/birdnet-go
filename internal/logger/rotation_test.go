@@ -111,6 +111,9 @@ func TestRotationConfigFromFileOutput(t *testing.T) {
 }
 
 func TestRotationConfigFromModuleOutput(t *testing.T) {
+	// Helper to create *bool
+	boolPtr := func(b bool) *bool { return &b }
+
 	defaultFo := &FileOutput{
 		MaxSize:         100,
 		MaxAge:          30,
@@ -141,7 +144,7 @@ func TestRotationConfigFromModuleOutput(t *testing.T) {
 				MaxSize:         50,
 				MaxAge:          15,
 				MaxRotatedFiles: 5,
-				Compress:        false,
+				Compress:        boolPtr(false), // Explicit false
 			},
 			defaultFo: defaultFo,
 			expected: RotationConfig{
@@ -152,19 +155,31 @@ func TestRotationConfigFromModuleOutput(t *testing.T) {
 			},
 		},
 		{
-			name: "zero module values fall back to defaults",
+			name: "nil compress falls back to FileOutput default",
 			module: &ModuleOutput{
-				MaxSize:         0, // Should use default
-				MaxAge:          0, // Should use default
-				MaxRotatedFiles: 0, // Should use default
-				Compress:        false,
+				MaxSize:         0,   // Should use default
+				MaxAge:          0,   // Should use default
+				MaxRotatedFiles: 0,   // Should use default
+				Compress:        nil, // Should use FileOutput default (true)
 			},
 			defaultFo: defaultFo,
 			expected: RotationConfig{
 				MaxSize:         100 * bytesPerMB,
 				MaxAge:          30,
 				MaxRotatedFiles: 10,
-				Compress:        false, // Module's explicit false
+				Compress:        true, // Inherited from FileOutput
+			},
+		},
+		{
+			name: "explicit compress true overrides default",
+			module: &ModuleOutput{
+				MaxSize:  50,
+				Compress: boolPtr(true),
+			},
+			defaultFo: &FileOutput{Compress: false},
+			expected: RotationConfig{
+				MaxSize:  50 * bytesPerMB,
+				Compress: true,
 			},
 		},
 	}

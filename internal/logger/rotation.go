@@ -47,7 +47,7 @@ func RotationConfigFromFileOutput(fo *FileOutput) RotationConfig {
 }
 
 // RotationConfigFromModuleOutput creates a RotationConfig from ModuleOutput settings.
-// If module settings are zero, it falls back to the provided FileOutput defaults.
+// If module settings are zero/nil, it falls back to the provided FileOutput defaults.
 func RotationConfigFromModuleOutput(mo *ModuleOutput, defaultFo *FileOutput) RotationConfig {
 	if mo == nil {
 		return RotationConfigFromFileOutput(defaultFo)
@@ -69,8 +69,13 @@ func RotationConfigFromModuleOutput(mo *ModuleOutput, defaultFo *FileOutput) Rot
 		maxRotatedFiles = defaultFo.MaxRotatedFiles
 	}
 
-	// Compress uses module value (no zero-value fallback since false is meaningful)
-	compress := mo.Compress
+	// Compress: use module value if set, otherwise fall back to FileOutput default
+	compress := false
+	if mo.Compress != nil {
+		compress = *mo.Compress
+	} else if defaultFo != nil {
+		compress = defaultFo.Compress
+	}
 
 	return RotationConfig{
 		MaxSize:         int64(maxSize) * bytesPerMB,
@@ -192,6 +197,9 @@ func (rm *RotationManager) rotateLocked() {
 	newFilePath := rm.filePath + ".new"
 	if err := os.Rename(newFilePath, rm.filePath); err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
+	} else {
+		// Update writer's internal path to match the renamed file
+		rm.writer.SetFilePath(rm.filePath)
 	}
 
 	// Step 5: Compress if enabled (async)
@@ -323,9 +331,15 @@ func (rm *RotationManager) cleanup() {
 
 	now := time.Now()
 	maxAge := time.Duration(rm.config.MaxAge) * 24 * time.Hour
-	kept := 0
 
-	for _, f := range fileInfos {
+	// Calculate how many oldest files to delete to meet MaxRotatedFiles limit.
+	// Files are sorted oldest first, so we delete the first N excess files.
+	deleteForCount := 0
+	if rm.config.MaxRotatedFiles > 0 && len(fileInfos) > rm.config.MaxRotatedFiles {
+		deleteForCount = len(fileInfos) - rm.config.MaxRotatedFiles
+	}
+
+	for i, f := range fileInfos {
 		shouldDelete := false
 
 		// Check MaxAge limit
@@ -336,21 +350,15 @@ func (rm *RotationManager) cleanup() {
 			}
 		}
 
-		// Check MaxRotatedFiles limit (count from newest, delete oldest excess)
-		if !shouldDelete && rm.config.MaxRotatedFiles > 0 {
-			// We iterate oldest first, so we need to count how many we'd keep
-			remaining := len(fileInfos) - kept
-			if remaining > rm.config.MaxRotatedFiles {
-				shouldDelete = true
-			}
+		// Check MaxRotatedFiles limit (delete oldest excess files)
+		if !shouldDelete && i < deleteForCount {
+			shouldDelete = true
 		}
 
 		if shouldDelete {
 			if err := os.Remove(f.path); err != nil {
 				fmt.Fprintf(os.Stderr, "rotation: failed to remove old file %s: %v\n", f.path, err)
 			}
-		} else {
-			kept++
 		}
 	}
 }

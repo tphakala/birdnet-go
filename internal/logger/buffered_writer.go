@@ -303,6 +303,14 @@ func (w *BufferedFileWriter) FilePath() string {
 	return w.filePath
 }
 
+// SetFilePath updates the internal file path after external rename.
+// This is used after log rotation renames the file to keep the path in sync.
+func (w *BufferedFileWriter) SetFilePath(path string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.filePath = path
+}
+
 // Buffered returns the number of bytes buffered but not yet written to disk
 func (w *BufferedFileWriter) Buffered() int {
 	w.mu.Lock()
