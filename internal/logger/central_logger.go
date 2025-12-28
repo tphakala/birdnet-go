@@ -194,8 +194,16 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 			return nil, fmt.Errorf("failed to create directory for module %s: %w", module, err)
 		}
 
+		// Build writer options including rotation if configured
+		// Module config falls back to FileOutput defaults for rotation settings
+		var writerOpts []BufferedWriterOption
+		rotationConfig := RotationConfigFromModuleOutput(&moduleConfig, cfg.FileOutput)
+		if rotationConfig.IsEnabled() {
+			writerOpts = append(writerOpts, WithRotation(rotationConfig))
+		}
+
 		// Create buffered writer for module log file
-		writer, err := NewBufferedFileWriter(moduleConfig.FilePath)
+		writer, err := NewBufferedFileWriter(moduleConfig.FilePath, writerOpts...)
 		if err != nil {
 			cl.closeAllWriters() // Clean up on error
 			return nil, fmt.Errorf("failed to create log writer for module %s: %w", module, err)
@@ -223,8 +231,15 @@ func (cl *CentralLogger) createBaseHandler() error {
 			return fmt.Errorf("failed to create log directory: %w", err)
 		}
 
+		// Build writer options including rotation if configured
+		var writerOpts []BufferedWriterOption
+		rotationConfig := RotationConfigFromFileOutput(cl.config.FileOutput)
+		if rotationConfig.IsEnabled() {
+			writerOpts = append(writerOpts, WithRotation(rotationConfig))
+		}
+
 		// Create buffered writer for main log file
-		writer, err := NewBufferedFileWriter(cl.config.FileOutput.Path)
+		writer, err := NewBufferedFileWriter(cl.config.FileOutput.Path, writerOpts...)
 		if err != nil {
 			return fmt.Errorf("failed to create log writer: %w", err)
 		}

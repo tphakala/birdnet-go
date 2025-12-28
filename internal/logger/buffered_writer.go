@@ -31,7 +31,8 @@ type BufferedFileWriter struct {
 	stopFlush   chan struct{}
 	flushDone   chan struct{}
 	flushTicker *time.Ticker
-	closed      bool // tracks if Close has been called
+	closed      bool             // tracks if Close has been called
+	rotation    *RotationManager // optional rotation manager
 }
 
 // BufferedWriterOption configures a BufferedFileWriter
@@ -55,6 +56,16 @@ func WithFlushInterval(interval time.Duration) BufferedWriterOption {
 		}
 		if interval > 0 {
 			w.flushTicker = time.NewTicker(interval)
+		}
+	}
+}
+
+// WithRotation enables log rotation with the given configuration.
+// Rotation is checked during each flush interval.
+func WithRotation(config RotationConfig) BufferedWriterOption {
+	return func(w *BufferedFileWriter) {
+		if config.IsEnabled() {
+			w.rotation = NewRotationManager(w.filePath, config, w)
 		}
 	}
 }
@@ -136,6 +147,10 @@ func (w *BufferedFileWriter) autoFlushLoop() {
 		case <-w.flushTicker.C:
 			// Ignore flush errors in background - they'll surface on next Write
 			_ = w.Flush()
+			// Check for rotation after flush
+			if w.rotation != nil {
+				w.rotation.CheckAndRotate()
+			}
 		}
 	}
 }
@@ -201,6 +216,38 @@ func (w *BufferedFileWriter) Sync() error {
 	return w.syncLocked()
 }
 
+// SwapFile atomically swaps the underlying file with a new one.
+// This is used for log rotation - the new file is prepared externally,
+// then swapped in with minimal lock duration.
+// Returns the old file handle (caller is responsible for closing it).
+func (w *BufferedFileWriter) SwapFile(newFile *os.File) (*os.File, error) {
+	if newFile == nil {
+		return nil, fmt.Errorf("new file cannot be nil")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return nil, fmt.Errorf("writer is closed")
+	}
+
+	// Flush current buffer to old file
+	if err := w.flushLocked(); err != nil {
+		return nil, fmt.Errorf("failed to flush before swap: %w", err)
+	}
+
+	// Swap the file
+	oldFile := w.file
+	w.file = newFile
+	w.filePath = newFile.Name()
+
+	// Reset the bufio.Writer to use the new file
+	w.writer.Reset(newFile)
+
+	return oldFile, nil
+}
+
 // Close flushes the buffer, syncs to disk, and closes the underlying file. Thread-safe.
 // Close is idempotent - calling it multiple times is safe.
 func (w *BufferedFileWriter) Close() error {
@@ -213,6 +260,11 @@ func (w *BufferedFileWriter) Close() error {
 	}
 	w.closed = true
 	w.mu.Unlock()
+
+	// Stop rotation manager first
+	if w.rotation != nil {
+		w.rotation.Close()
+	}
 
 	// Stop auto-flush goroutine if it was started
 	if w.flushTicker != nil {
