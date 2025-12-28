@@ -1310,11 +1310,9 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	// This ensures only ONE goroutine will trigger the daily range filter update,
 	// preventing concurrent updates that could cause species list inconsistencies
 	if p.Settings.ShouldUpdateRangeFilterToday() {
-		// Add structured logging
 		GetLogger().Info("Scheduling daily range filter update",
 			logger.Time("last_updated", p.Settings.GetLastRangeFilterUpdate()),
 			logger.String("operation", "update_range_filter"))
-		fmt.Println("Updating species range filter")
 		// Add UpdateRangeFilterAction if it hasn't been executed today
 		actions = append(actions, &UpdateRangeFilterAction{
 			Bn:       p.Bn,

@@ -4,27 +4,15 @@ package jobqueue
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// slogLogger is an slog.Logger used for test compatibility.
-// Tests can swap this out with a custom logger to capture output.
-// nolint:gochecknoglobals // Required for test compatibility
-var slogLogger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
 // getLog returns the jobqueue package logger.
 // Fetched dynamically to ensure it uses the current centralized logger.
 func getLog() logger.Logger {
-	return logger.Global().Module("birdnet")
-}
-
-// GetLogger returns the slog logger for test compatibility
-func GetLogger() *slog.Logger {
-	return slogLogger
+	return logger.Global().Module("analysis.jobqueue")
 }
 
 // LogJobEnqueued logs when a job is added to the queue

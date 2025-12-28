@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
@@ -38,16 +39,16 @@ func (h *multiWriterHandler) Handle(ctx context.Context, record slog.Record) err
 	if h == nil {
 		return nil
 	}
-	var firstErr error
+	var errs []error
 	for _, handler := range h.handlers {
 		if handler == nil {
 			continue
 		}
-		if err := handler.Handle(ctx, record); err != nil && firstErr == nil {
-			firstErr = err
+		if err := handler.Handle(ctx, record); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return firstErr
+	return errors.Join(errs...)
 }
 
 // WithAttrs returns a new handler with the attributes applied to all handlers

@@ -119,6 +119,7 @@ type CentralLogger struct {
 	config       *LoggingConfig
 	timezone     *time.Location
 	baseHandler  slog.Handler          // Default handler for modules without specific config
+	mainFile     *os.File              // Main log file handle (if file output enabled)
 	moduleFiles  map[string]*os.File   // Per-module file handles
 	moduleLevels map[string]slog.Level // Per-module log levels
 	mu           sync.RWMutex          // Protects concurrent access
@@ -205,6 +206,9 @@ func (cl *CentralLogger) createBaseHandler() error {
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}
+
+		// Store the file handle for proper cleanup
+		cl.mainFile = file
 
 		fileLevel := parseLogLevel(cl.config.FileOutput.Level)
 		opts := &slog.HandlerOptions{
@@ -303,6 +307,14 @@ func (cl *CentralLogger) Close() error {
 
 	var errs []error
 
+	// Close main log file
+	if cl.mainFile != nil {
+		if err := cl.mainFile.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close main log file: %w", err))
+		}
+		cl.mainFile = nil
+	}
+
 	// Close module files
 	for module, file := range cl.moduleFiles {
 		if err := file.Close(); err != nil {
@@ -323,6 +335,13 @@ func (cl *CentralLogger) Flush() error {
 	defer cl.mu.RUnlock()
 
 	var errs []error
+
+	// Sync main log file
+	if cl.mainFile != nil {
+		if err := cl.mainFile.Sync(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to sync main log file: %w", err))
+		}
+	}
 
 	// Sync module files
 	for module, file := range cl.moduleFiles {
