@@ -152,8 +152,8 @@ func (cl *CentralLogger) Flush() error
 
 **Features**:
 - Routes logs to different outputs based on module
-- Supports console output (JSON or pretty-print)
-- Supports main file output and per-module file outputs
+- Console output: human-readable text (no timestamps - journald/Docker adds them)
+- File output: JSON format with RFC3339 timestamps for log aggregation
 - Thread-safe with mutex protection
 - Configurable log levels per module
 
@@ -193,7 +193,7 @@ YAML-based configuration structure:
 ```go
 type LoggingConfig struct {
     DefaultLevel  string                  `yaml:"default_level"`   // "debug", "info", "warn", "error"
-    Timezone      string                  `yaml:"timezone"`        // e.g., "Europe/Helsinki"
+    Timezone      string                  `yaml:"timezone"`        // "Local", "UTC", or IANA name
     Console       *ConsoleOutput          `yaml:"console"`
     FileOutput    *FileOutput             `yaml:"file_output"`
     ModuleOutputs map[string]ModuleOutput `yaml:"modules"`         // Per-module outputs
@@ -201,19 +201,20 @@ type LoggingConfig struct {
     DebugWebhooks bool                    `yaml:"debug_webhooks"`  // App-specific flag
 }
 
+// Console output: text format, no timestamps (journald/Docker adds them)
 type ConsoleOutput struct {
     Enabled bool   `yaml:"enabled"`
-    Pretty  bool   `yaml:"pretty"`  // Human-readable vs JSON
     Level   string `yaml:"level"`
 }
 
+// File output: JSON format with RFC3339 timestamps
 type FileOutput struct {
     Enabled    bool   `yaml:"enabled"`
     Path       string `yaml:"path"`
-    MaxSize    int    `yaml:"max_size"`    // MB (not implemented yet)
-    MaxAge     int    `yaml:"max_age"`     // days (not implemented yet)
-    MaxBackups int    `yaml:"max_backups"` // (not implemented yet)
-    Compress   bool   `yaml:"compress"`    // (not implemented yet)
+    MaxSize    int    `yaml:"max_size"`    // MB
+    MaxAge     int    `yaml:"max_age"`     // days
+    MaxBackups int    `yaml:"max_backups"`
+    Compress   bool   `yaml:"compress"`
     Level      string `yaml:"level"`
 }
 
@@ -322,13 +323,14 @@ Add logging configuration to your `config.yaml`:
 ```yaml
 logging:
   default_level: "info"
-  timezone: "UTC"  # or "America/New_York", "Europe/Helsinki", etc.
+  timezone: "Local"  # "Local", "UTC", or IANA name like "Europe/Helsinki"
 
+  # Console: text format, no timestamps (journald/Docker adds them)
   console:
     enabled: true
     level: "info"
-    pretty: false  # true for dev, false for production
 
+  # File: JSON format with RFC3339 timestamps
   file_output:
     enabled: true
     path: "logs/app.log"
@@ -480,16 +482,22 @@ logging:
 
 #### Console Output
 
+Console output uses human-readable text format without timestamps.
+Timestamps are intentionally omitted following the Twelve-Factor App methodology -
+the execution environment (journald, Docker) adds them automatically.
+
 ```yaml
   console:
     enabled: true
     level: "info"   # Can be different from default_level
-    pretty: false   # true: colored, human-readable; false: JSON
 ```
 
-**When to use**:
-- `pretty: true` for local development (readable output)
-- `pretty: false` for production (machine-parseable JSON)
+**Output format**: `LEVEL  [module] message key=value`
+
+Example in journald:
+```
+Dec 28 13:43:08 myapp[1234]: INFO  [main] Application started version=1.0.0
+```
 
 #### File Output
 
@@ -542,29 +550,30 @@ logging:
 ```yaml
 logging:
   default_level: "debug"
-  timezone: "America/New_York"
+  timezone: "Local"  # Use system timezone
 
+  # Console: text format without timestamps (run interactively)
   console:
     enabled: true
     level: "debug"
-    pretty: true  # Human-readable output
 
   file_output:
     enabled: false  # No file logging in dev
 ```
 
-#### Production Configuration
+#### Production Configuration (systemd/Docker)
 
 ```yaml
 logging:
   default_level: "info"
   timezone: "UTC"
 
+  # Console: text format, no timestamps (journald adds them)
   console:
     enabled: true
     level: "info"
-    pretty: false  # JSON for log aggregation
 
+  # File: JSON format with RFC3339 timestamps for log aggregation
   file_output:
     enabled: true
     path: "/var/log/myapp/app.log"

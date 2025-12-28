@@ -86,13 +86,14 @@ sqliteLogger.Info("Query executed")
 ```yaml
 logging:
   default_level: "info"  # trace, debug, info, warn, error
-  timezone: "UTC"
+  timezone: "Local"      # "Local", "UTC", or IANA name like "Europe/Helsinki"
 
+  # Console: text format, no timestamps (journald/Docker adds them)
   console:
     enabled: true
     level: "info"
-    pretty: false  # true for dev, false for production
 
+  # File: JSON format with RFC3339 timestamps
   file_output:
     enabled: true
     path: "logs/app.log"
