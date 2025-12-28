@@ -170,7 +170,7 @@ func (rm *RotationManager) rotateLocked() {
 	oldFile, err := rm.writer.SwapFile(newFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to swap file: %v\n", err)
-		newFile.Close()
+		_ = newFile.Close() // Best effort cleanup
 		return
 	}
 
@@ -209,7 +209,7 @@ func (rm *RotationManager) rotateLocked() {
 // createNewFile creates a new log file with .new suffix for atomic swap.
 func (rm *RotationManager) createNewFile() (*os.File, error) {
 	newPath := rm.filePath + ".new"
-	return os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, LogFilePermissions)
+	return os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, LogFilePermissions) //nolint:gosec // path derived from config
 }
 
 // rotatedFilePath generates the path for a rotated file with timestamp.
@@ -234,15 +234,15 @@ func (rm *RotationManager) compressFile(srcPath string) {
 	dstPath := srcPath + ".gz"
 
 	// Open source file
-	src, err := os.Open(srcPath)
+	src, err := os.Open(srcPath) //nolint:gosec // path derived from rotation
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to open file for compression: %v\n", err)
 		return
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	// Create destination .gz file
-	dst, err := os.Create(dstPath)
+	dst, err := os.Create(dstPath) //nolint:gosec // path derived from rotation
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to create compressed file: %v\n", err)
 		return
@@ -251,16 +251,16 @@ func (rm *RotationManager) compressFile(srcPath string) {
 	// Compress with gzip
 	gz := gzip.NewWriter(dst)
 	if _, err := io.Copy(gz, src); err != nil {
-		gz.Close()
-		dst.Close()
-		os.Remove(dstPath) // Clean up partial file
+		_ = gz.Close()
+		_ = dst.Close()
+		_ = os.Remove(dstPath) // Clean up partial file
 		fmt.Fprintf(os.Stderr, "rotation: compression failed: %v\n", err)
 		return
 	}
 
 	if err := gz.Close(); err != nil {
-		dst.Close()
-		os.Remove(dstPath)
+		_ = dst.Close()
+		_ = os.Remove(dstPath)
 		fmt.Fprintf(os.Stderr, "rotation: failed to finalize compression: %v\n", err)
 		return
 	}
@@ -383,10 +383,7 @@ func (rm *RotationManager) recoverDiskSpace() bool {
 
 	// Delete oldest files until we free some space (or delete half)
 	deleted := 0
-	maxDelete := len(fileInfos) / 2
-	if maxDelete < 1 {
-		maxDelete = 1
-	}
+	maxDelete := max(len(fileInfos)/2, 1)
 
 	for _, f := range fileInfos {
 		if deleted >= maxDelete {
@@ -407,12 +404,12 @@ func (rm *RotationManager) recoverDiskSpace() bool {
 // testDiskSpace checks if we can create a file (disk has space).
 func (rm *RotationManager) testDiskSpace() bool {
 	testPath := rm.filePath + ".test"
-	f, err := os.Create(testPath)
+	f, err := os.Create(testPath) //nolint:gosec // path derived from config
 	if err != nil {
 		return false
 	}
-	f.Close()
-	os.Remove(testPath)
+	_ = f.Close()
+	_ = os.Remove(testPath)
 	return true
 }
 

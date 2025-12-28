@@ -198,7 +198,7 @@ func TestRotationManager_CheckAndRotate_SizeBasedRotation(t *testing.T) {
 	// Create writer with rotation
 	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write data exceeding MaxSize
 	data := strings.Repeat("x", 1500) // 1.5KB
@@ -238,7 +238,7 @@ func TestRotationManager_Compression(t *testing.T) {
 
 	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write data exceeding MaxSize
 	data := strings.Repeat("test data for compression ", 50) // ~1.4KB
@@ -263,11 +263,11 @@ func TestRotationManager_Compression(t *testing.T) {
 	if len(gzFiles) > 0 {
 		f, err := os.Open(gzFiles[0])
 		require.NoError(t, err)
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		gz, err := gzip.NewReader(f)
 		require.NoError(t, err)
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 
 		content, err := io.ReadAll(gz)
 		require.NoError(t, err)
@@ -297,7 +297,7 @@ func TestRotationManager_Cleanup_MaxRotatedFiles(t *testing.T) {
 
 	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write data to trigger rotation
 	_, err = writer.Write([]byte(strings.Repeat("x", 600)))
@@ -342,7 +342,7 @@ func TestRotationManager_Cleanup_MaxAge(t *testing.T) {
 
 	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write data to trigger rotation
 	_, err = writer.Write([]byte(strings.Repeat("x", 600)))
@@ -378,7 +378,7 @@ func TestRotationManager_ConcurrentWrites(t *testing.T) {
 
 	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write concurrently from multiple goroutines
 	var wg sync.WaitGroup
@@ -436,21 +436,21 @@ func TestBufferedFileWriter_SwapFile(t *testing.T) {
 	// Create original writer
 	writer, err := NewBufferedFileWriter(origPath)
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write some data
 	_, err = writer.Write([]byte("original data"))
 	require.NoError(t, err)
 
 	// Create new file for swap
-	newFile, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	newFile, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // test file
 	require.NoError(t, err)
 
 	// Swap
 	oldFile, err := writer.SwapFile(newFile)
 	require.NoError(t, err)
 	require.NotNil(t, oldFile)
-	oldFile.Close()
+	_ = oldFile.Close()
 
 	// Write to new file
 	_, err = writer.Write([]byte("new data"))
@@ -458,12 +458,12 @@ func TestBufferedFileWriter_SwapFile(t *testing.T) {
 	require.NoError(t, writer.Flush())
 
 	// Verify original file has original data (was flushed before swap)
-	origContent, err := os.ReadFile(origPath)
+	origContent, err := os.ReadFile(origPath) //nolint:gosec // test file
 	require.NoError(t, err)
 	assert.Equal(t, "original data", string(origContent))
 
 	// Verify new file has new data
-	newContent, err := os.ReadFile(newPath)
+	newContent, err := os.ReadFile(newPath) //nolint:gosec // test file
 	require.NoError(t, err)
 	assert.Equal(t, "new data", string(newContent))
 }
@@ -477,17 +477,17 @@ func TestBufferedFileWriter_SwapFile_Errors(t *testing.T) {
 
 	// Test nil file
 	_, err = writer.SwapFile(nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 
 	// Close writer
-	writer.Close()
+	_ = writer.Close()
 
 	// Test swap on closed writer
 	newFile, _ := os.CreateTemp(tempDir, "new*.log")
-	defer newFile.Close()
+	defer func() { _ = newFile.Close() }()
 	_, err = writer.SwapFile(newFile)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "closed")
 }
 
@@ -529,7 +529,7 @@ func TestWithRotation_DisabledWhenMaxSizeZero(t *testing.T) {
 
 	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
 	require.NoError(t, err)
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Rotation should not be set when disabled
 	assert.Nil(t, writer.rotation)
