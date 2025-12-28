@@ -5,10 +5,11 @@ package securefs
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // createFIFOPlatform creates a named pipe (FIFO) on Unix systems
@@ -18,7 +19,9 @@ func createFIFOPlatform(path string) (string, error) {
 	removeFIFO := func() {
 		if _, err := os.Stat(path); err == nil {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Printf("Warning: Error removing existing FIFO: %v", err)
+				GetLogger().Warn("Error removing existing FIFO",
+					logger.String("path", path),
+					logger.Error(err))
 			}
 		}
 	}
@@ -31,7 +34,7 @@ func createFIFOPlatform(path string) (string, error) {
 	for retry := range 3 {
 		fifoErr = syscall.Mkfifo(path, 0o600)
 		if fifoErr == nil {
-			log.Printf("Successfully created FIFO pipe: %s", path)
+			GetLogger().Debug("Successfully created FIFO pipe", logger.String("path", path))
 			return path, nil
 		}
 
@@ -39,7 +42,9 @@ func createFIFOPlatform(path string) (string, error) {
 			break // fatal – no point in retrying
 		}
 
-		log.Printf("Retry %d: FIFO already exists, removing and retrying", retry+1)
+		GetLogger().Debug("FIFO already exists, removing and retrying",
+			logger.Int("retry", retry+1),
+			logger.String("path", path))
 		removeFIFO()
 		time.Sleep(100 * time.Millisecond)
 	}

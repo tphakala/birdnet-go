@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // NormalizeClipPathStrict normalizes the audio clip path by removing the clips prefix if present.
@@ -179,10 +180,10 @@ func (c *Controller) requireQueryParam(ctx echo.Context, paramName, operation st
 	value := ctx.QueryParam(paramName)
 	if value == "" {
 		c.logErrorIfEnabled("Missing required parameter",
-			"parameter", paramName,
-			"operation", operation,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("parameter", paramName),
+			logger.String("operation", operation),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		_ = c.HandleError(ctx, nil, "Missing required parameter: "+paramName, http.StatusBadRequest)
 		return ErrResponseHandled
@@ -196,10 +197,10 @@ func (c *Controller) requireQueryArrayParam(ctx echo.Context, paramName, operati
 	values := ctx.QueryParams()[paramName]
 	if len(values) == 0 {
 		c.logErrorIfEnabled("Missing required parameter",
-			"parameter", paramName,
-			"operation", operation,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("parameter", paramName),
+			logger.String("operation", operation),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		_ = c.HandleError(ctx, nil, "Missing required parameter: "+paramName+" (array)", http.StatusBadRequest)
 		return ErrResponseHandled
@@ -212,11 +213,11 @@ func (c *Controller) requireQueryArrayParam(ctx echo.Context, paramName, operati
 func (c *Controller) validateBatchSize(ctx echo.Context, count, maxSize int, operation string) error {
 	if count > maxSize {
 		c.logErrorIfEnabled("Batch size exceeded limit",
-			"requested", count,
-			"max", maxSize,
-			"operation", operation,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.Int("requested", count),
+			logger.Int("max", maxSize),
+			logger.String("operation", operation),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		_ = c.HandleError(ctx, nil, fmt.Sprintf("Too many items requested. Maximum: %d", maxSize), http.StatusBadRequest)
 		return ErrResponseHandled
@@ -232,12 +233,12 @@ func (c *Controller) validateDateFormatWithResponse(ctx echo.Context, dateStr, p
 	}
 	if _, err := time.Parse("2006-01-02", dateStr); err != nil {
 		c.logErrorIfEnabled("Invalid date format",
-			"parameter", paramName,
-			"value", dateStr,
-			"operation", operation,
-			"error", err.Error(),
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("parameter", paramName),
+			logger.String("value", dateStr),
+			logger.String("operation", operation),
+			logger.Error(err),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		_ = c.HandleError(ctx, nil, "Invalid date format. Use YYYY-MM-DD", http.StatusBadRequest)
 		return ErrResponseHandled
@@ -253,11 +254,11 @@ func (c *Controller) validateDateFormatStrictWithResponse(ctx echo.Context, date
 	}
 	if !dateRegex.MatchString(dateStr) {
 		c.logErrorIfEnabled("Invalid date format",
-			"parameter", paramName,
-			"value", dateStr,
-			"operation", operation,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("parameter", paramName),
+			logger.String("value", dateStr),
+			logger.String("operation", operation),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		_ = c.HandleError(ctx, nil, "Invalid "+paramName+" format or contains invalid characters. Use YYYY-MM-DD", http.StatusBadRequest)
 		return ErrResponseHandled
@@ -275,11 +276,11 @@ func (c *Controller) parseOptionalPositiveInt(ctx echo.Context, paramName string
 	val, err := strconv.Atoi(str)
 	if err != nil || val <= 0 {
 		c.logWarnIfEnabled("Invalid parameter, using default",
-			"parameter", paramName,
-			"value", str,
-			"default", defaultVal,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("parameter", paramName),
+			logger.String("value", str),
+			logger.Int("default", defaultVal),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		return defaultVal
 	}
@@ -296,11 +297,11 @@ func (c *Controller) parseOptionalFloat(ctx echo.Context, paramName string, defa
 	val, err := strconv.ParseFloat(str, 64)
 	if err != nil {
 		c.logWarnIfEnabled("Invalid parameter, using default",
-			"parameter", paramName,
-			"value", str,
-			"default", defaultVal,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("parameter", paramName),
+			logger.String("value", str),
+			logger.Float64("default", defaultVal),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		return defaultVal
 	}
@@ -347,7 +348,9 @@ type hourlyDataItem interface {
 }
 
 // hourlyDistributionAdapter adapts HourlyDistributionData to hourlyDataItem.
-type hourlyDistributionAdapter struct{ d datastore.HourlyDistributionData }
+type hourlyDistributionAdapter struct {
+	d datastore.HourlyDistributionData
+}
 
 func (a hourlyDistributionAdapter) GetHour() int  { return a.d.Hour }
 func (a hourlyDistributionAdapter) GetCount() int { return a.d.Count }
@@ -429,12 +432,12 @@ func (c *Controller) validateDateOrderWithResponse(ctx echo.Context, startDate, 
 	end, _ := time.Parse("2006-01-02", endDate)
 	if start.After(end) {
 		c.logErrorIfEnabled("Invalid date range",
-			"start_date", startDate,
-			"end_date", endDate,
-			"error", "start_date cannot be after end_date",
-			"operation", operation,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("error", "start_date cannot be after end_date"),
+			logger.String("operation", operation),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
 		)
 		_ = c.HandleError(ctx, nil, "`start_date` cannot be after `end_date`", http.StatusBadRequest)
 		return ErrResponseHandled
@@ -822,31 +825,43 @@ func validateRequiredStringWhenEnabled(providerMap map[string]any, fieldName, pr
 // Logging Helpers
 // =============================================================================
 
+// GetLogger returns a logger instance for the API v2 package.
+// This provides consistent logging with module identification.
+func GetLogger() logger.Logger {
+	return logger.Global().Module("api")
+}
+
+// log returns a logger for the Controller methods.
+// This is a convenience helper for controller-level logging.
+func (c *Controller) log() logger.Logger {
+	return GetLogger()
+}
+
 // logInfoIfEnabled logs info message if apiLogger is enabled
-func (c *Controller) logInfoIfEnabled(msg string, args ...any) {
+func (c *Controller) logInfoIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Info(msg, args...)
+		c.apiLogger.Info(msg, fields...)
 	}
 }
 
 // logErrorIfEnabled logs error message if apiLogger is enabled
-func (c *Controller) logErrorIfEnabled(msg string, args ...any) {
+func (c *Controller) logErrorIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Error(msg, args...)
+		c.apiLogger.Error(msg, fields...)
 	}
 }
 
 // logWarnIfEnabled logs warning message if apiLogger is enabled
-func (c *Controller) logWarnIfEnabled(msg string, args ...any) {
+func (c *Controller) logWarnIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Warn(msg, args...)
+		c.apiLogger.Warn(msg, fields...)
 	}
 }
 
 // logDebugIfEnabled logs debug message if apiLogger is enabled
-func (c *Controller) logDebugIfEnabled(msg string, args ...any) {
+func (c *Controller) logDebugIfEnabled(msg string, fields ...logger.Field) {
 	if c.apiLogger != nil {
-		c.apiLogger.Debug(msg, args...)
+		c.apiLogger.Debug(msg, fields...)
 	}
 }
 
@@ -860,22 +875,31 @@ func (c *Controller) handleBatchResponse(ctx echo.Context, result any, successCo
 	// Log partial failures if any
 	if len(processingErrors) > 0 && successCount > 0 {
 		c.logWarnIfEnabled(operationName+" completed with partial failures",
-			"successful", successCount, "failed", len(processingErrors),
-			"errors", processingErrors, "ip", ip, "path", urlPath)
+			logger.Int("successful", successCount),
+			logger.Int("failed", len(processingErrors)),
+			logger.Any("errors", processingErrors),
+			logger.String("ip", ip),
+			logger.String("path", urlPath))
 	}
 
 	// Return error if all items failed
 	if successCount == 0 {
 		c.logErrorIfEnabled("All items in "+operationName+" failed",
-			"requested", requestedCount, "errors", processingErrors, "ip", ip, "path", urlPath)
+			logger.Int("requested", requestedCount),
+			logger.Any("errors", processingErrors),
+			logger.String("ip", ip),
+			logger.String("path", urlPath))
 		return c.HandleError(ctx, fmt.Errorf("failed to process any requested items"),
 			"Failed to process "+operationName, http.StatusInternalServerError)
 	}
 
 	// Log successful completion
 	c.logInfoIfEnabled(operationName+" completed",
-		"requested", requestedCount, "successful", successCount,
-		"failed", len(processingErrors), "ip", ip, "path", urlPath)
+		logger.Int("requested", requestedCount),
+		logger.Int("successful", successCount),
+		logger.Int("failed", len(processingErrors)),
+		logger.String("ip", ip),
+		logger.String("path", urlPath))
 
 	return ctx.JSON(http.StatusOK, result)
 }

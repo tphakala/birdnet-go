@@ -8,7 +8,6 @@ package diskmanager
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // ProductionMetrics collects runtime metrics for threshold tuning
@@ -227,14 +227,15 @@ func AnalyzeThresholds(metricsFiles []string) (*PoolConfig, error) {
 		config.MaxParseErrors = 100
 	}
 
-	log.Printf("Threshold Analysis Results:")
-	log.Printf("  Analyzed %d metric samples", len(allMetrics))
-	log.Printf("  Average audio files: %d", avgAudioFiles)
-	log.Printf("  Maximum audio files: %d", maxAudioFiles)
-	log.Printf("  Maximum capacity observed: %d", maxCapacity)
-	log.Printf("  Suggested InitialCapacity: %d", config.InitialCapacity)
-	log.Printf("  Suggested MaxPoolCapacity: %d", config.MaxPoolCapacity)
-	log.Printf("  Suggested MaxParseErrors: %d", config.MaxParseErrors)
+	log := GetLogger()
+	log.Info("Threshold analysis completed",
+		logger.Int("samples_analyzed", len(allMetrics)),
+		logger.Int("avg_audio_files", avgAudioFiles),
+		logger.Int("max_audio_files", maxAudioFiles),
+		logger.Uint64("max_capacity_observed", maxCapacity),
+		logger.Int("suggested_initial_capacity", config.InitialCapacity),
+		logger.Int("suggested_max_pool_capacity", config.MaxPoolCapacity),
+		logger.Int("suggested_max_parse_errors", config.MaxParseErrors))
 
 	return config, nil
 }
@@ -261,8 +262,9 @@ func EnableHeapProfiling(outputPath string) error {
 			Build()
 	}
 
-	log.Printf("Heap profile written to %s", outputPath)
-	log.Printf("Analyze with: go tool pprof %s", outputPath)
+	GetLogger().Info("Heap profile written",
+		logger.String("path", outputPath),
+		logger.String("analyze_command", "go tool pprof "+outputPath))
 	return nil
 }
 
@@ -287,19 +289,18 @@ func CollectAndSaveMetrics(baseDir string, db Interface) error {
 		return err
 	}
 
-	log.Printf("Metrics saved to %s", filename)
-
-	// Print summary
-	log.Printf("Metrics Summary:")
-	log.Printf("  Directory: %s", metrics.DirectoryPath)
-	log.Printf("  Total Files: %d", metrics.TotalFiles)
-	log.Printf("  Audio Files: %d", metrics.AudioFiles)
-	log.Printf("  Processing Time: %v", metrics.ProcessingTime)
-	log.Printf("  Files/Second: %.2f", metrics.FilesPerSecond)
-	log.Printf("  Pool Gets: %d", metrics.PoolMetrics.GetCount)
-	log.Printf("  Pool Puts: %d", metrics.PoolMetrics.PutCount)
-	log.Printf("  Pool Skips: %d", metrics.PoolMetrics.SkipCount)
-	log.Printf("  Max Capacity: %d", metrics.PoolMetrics.MaxCapacityObserved)
+	log := GetLogger()
+	log.Info("Metrics saved",
+		logger.String("filename", filename),
+		logger.String("directory", metrics.DirectoryPath),
+		logger.Int("total_files", metrics.TotalFiles),
+		logger.Int("audio_files", metrics.AudioFiles),
+		logger.Duration("processing_time", metrics.ProcessingTime),
+		logger.Float64("files_per_second", metrics.FilesPerSecond),
+		logger.Uint64("pool_gets", metrics.PoolMetrics.GetCount),
+		logger.Uint64("pool_puts", metrics.PoolMetrics.PutCount),
+		logger.Uint64("pool_skips", metrics.PoolMetrics.SkipCount),
+		logger.Uint64("max_capacity", metrics.PoolMetrics.MaxCapacityObserved))
 
 	return nil
 }

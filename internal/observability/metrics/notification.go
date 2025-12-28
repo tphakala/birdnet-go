@@ -11,23 +11,23 @@ import (
 // NotificationMetrics contains all Prometheus metrics related to notification and push provider operations.
 type NotificationMetrics struct {
 	// Provider delivery metrics
-	ProviderDeliveriesTotal   *prometheus.CounterVec // Total deliveries by provider, type, status
-	ProviderDeliveryDuration  *prometheus.HistogramVec // Latency by provider and type
-	ProviderDeliveryErrors    *prometheus.CounterVec // Errors by provider, type, error_category
+	ProviderDeliveriesTotal  *prometheus.CounterVec   // Total deliveries by provider, type, status
+	ProviderDeliveryDuration *prometheus.HistogramVec // Latency by provider and type
+	ProviderDeliveryErrors   *prometheus.CounterVec   // Errors by provider, type, error_category
 
 	// Provider health metrics
-	ProviderHealthStatus      *prometheus.GaugeVec // Current health status (1=healthy, 0=unhealthy) by provider
+	ProviderHealthStatus        *prometheus.GaugeVec // Current health status (1=healthy, 0=unhealthy) by provider
 	ProviderCircuitBreakerState *prometheus.GaugeVec // Circuit breaker state (0=closed, 1=half-open, 2=open) by provider
 	ProviderConsecutiveFailures *prometheus.GaugeVec // Consecutive failure count by provider
-	ProviderLastSuccessTime   *prometheus.GaugeVec // Timestamp of last successful delivery by provider
+	ProviderLastSuccessTime     *prometheus.GaugeVec // Timestamp of last successful delivery by provider
 
 	// Retry metrics
-	ProviderRetryAttempts     *prometheus.CounterVec // Retry attempts by provider
-	ProviderRetrySuccesses    *prometheus.CounterVec // Successful retries by provider
+	ProviderRetryAttempts  *prometheus.CounterVec // Retry attempts by provider
+	ProviderRetrySuccesses *prometheus.CounterVec // Successful retries by provider
 
 	// Filter metrics
-	FilterMatchesTotal        *prometheus.CounterVec // Notifications matched by filter type
-	FilterRejectionsTotal     *prometheus.CounterVec // Notifications rejected by filter reason
+	FilterMatchesTotal    *prometheus.CounterVec // Notifications matched by filter type
+	FilterRejectionsTotal *prometheus.CounterVec // Notifications rejected by filter reason
 
 	// Dispatcher metrics
 	NotificationDispatchTotal  prometheus.Counter // Total notifications dispatched
@@ -35,7 +35,7 @@ type NotificationMetrics struct {
 	NotificationQueueDepth     prometheus.Gauge   // Notification queue depth (if buffered)
 
 	// Provider-specific metadata
-	ProviderTimeouts          *prometheus.CounterVec // Timeout occurrences by provider
+	ProviderTimeouts *prometheus.CounterVec // Timeout occurrences by provider
 
 	registry *prometheus.Registry
 }

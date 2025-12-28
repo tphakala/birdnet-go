@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -120,9 +121,9 @@ func (ds *DataStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, er
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Cleaned up expired dynamic thresholds",
-			"count", result.RowsAffected,
-			"before", before.Format(time.RFC3339))
+		GetLogger().Info("Cleaned up expired dynamic thresholds",
+			logger.Int64("count", result.RowsAffected),
+			logger.String("before", before.Format(time.RFC3339)))
 	}
 
 	return result.RowsAffected, nil
@@ -227,8 +228,8 @@ func (ds *DataStore) DeleteAllDynamicThresholds() (int64, error) {
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Reset all dynamic thresholds",
-			"count", result.RowsAffected)
+		GetLogger().Info("Reset all dynamic thresholds",
+			logger.Int64("count", result.RowsAffected))
 	}
 
 	return result.RowsAffected, nil
@@ -330,8 +331,8 @@ func (ds *DataStore) DeleteAllThresholdEvents() (int64, error) {
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Deleted all threshold events",
-			"count", result.RowsAffected)
+		GetLogger().Info("Deleted all threshold events",
+			logger.Int64("count", result.RowsAffected))
 	}
 
 	return result.RowsAffected, nil

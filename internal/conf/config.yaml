@@ -2,16 +2,150 @@
 
 debug: false              # print debug messages, can help with problem solving
 
+# Centralized logging configuration
+logging:
+  default_level: info     # default log level: debug, info, warn, error
+  # Timezone for JSON file timestamps. Console output has no timestamps
+  # (journald/Docker adds them). Use "Local" for system timezone, "UTC",
+  # or IANA timezone name like "Europe/Helsinki", "America/New_York"
+  timezone: "Local"
+
+  # Console output configuration
+  # Note: Console uses human-readable text format without timestamps.
+  # When running as systemd service or Docker container, the execution
+  # environment adds timestamps automatically.
+  console:
+    enabled: true         # enable console output
+    level: info           # log level for console output
+
+  # Default file output configuration
+  # Note: File output uses JSON format with RFC3339 timestamps for
+  # machine parsing and log aggregation (ELK, Loki, etc.)
+  file_output:
+    enabled: true         # enable file output
+    path: logs/birdnet.log # default log file path
+    max_size: 100         # maximum size in MB before rotation
+    max_age: 30           # maximum age in days to keep old logs
+    max_backups: 10       # maximum number of old log files to keep
+    compress: true        # compress rotated logs
+    level: info           # log level for file output
+
+  # Per-module output configuration
+  # Each module can have its own dedicated log file
+  # Sub-modules (e.g., analysis.processor) inherit from parent unless specified
+  modules:
+    # Core processing modules
+    analysis:
+      enabled: true
+      file_path: logs/analysis.log
+      level: info
+    birdnet:
+      enabled: true
+      file_path: logs/birdnet.log
+      level: info
+    audio:
+      enabled: true
+      file_path: logs/audio.log
+      level: info
+    datastore:
+      enabled: true
+      file_path: logs/datastore.log
+      level: info
+    spectrogram:
+      enabled: true
+      file_path: logs/spectrogram.log
+      level: info
+
+    # API and web modules
+    api:
+      enabled: true
+      file_path: logs/api.log
+      level: info
+    access:
+      enabled: true
+      file_path: logs/access.log
+      level: info
+    auth:
+      enabled: true
+      file_path: logs/auth.log
+      level: info
+    security:
+      enabled: true
+      file_path: logs/security.log
+      level: info
+
+    # Integration modules
+    mqtt:
+      enabled: false      # enable if using MQTT
+      file_path: logs/mqtt.log
+      level: info
+    birdweather:
+      enabled: false      # enable if using BirdWeather
+      file_path: logs/birdweather.log
+      level: info
+    weather:
+      enabled: false      # enable if using weather provider
+      file_path: logs/weather.log
+      level: info
+    ebird:
+      enabled: false      # enable if using eBird integration
+      file_path: logs/ebird.log
+      level: info
+
+    # System and support modules
+    backup:
+      enabled: true
+      file_path: logs/backup.log
+      level: info
+    config:
+      enabled: true
+      file_path: logs/config.log
+      level: info
+    diskmanager:
+      enabled: true
+      file_path: logs/diskmanager.log
+      level: info
+    events:
+      enabled: true
+      file_path: logs/events.log
+      level: info
+    imageprovider:
+      enabled: true
+      file_path: logs/imageprovider.log
+      level: info
+    monitor:
+      enabled: true
+      file_path: logs/monitor.log
+      level: info
+    notifications:
+      enabled: true
+      file_path: logs/notifications.log
+      level: info
+    securefs:
+      enabled: true
+      file_path: logs/securefs.log
+      level: info
+    support:
+      enabled: true
+      file_path: logs/support.log
+      level: info
+    telemetry:
+      enabled: true
+      file_path: logs/telemetry.log
+      level: info
+
+  # Per-module log level overrides (without separate files)
+  # Use this to adjust verbosity for specific modules
+  # Sub-modules can be specified with dot notation (e.g., analysis.processor)
+  module_levels:
+    # telemetry: warn     # reduce telemetry verbosity
+    # spectrogram: debug  # increase spectrogram verbosity for debugging
+    # analysis.processor: debug  # debug processor sub-module
+
 # Node specific settings
 main:
   name: BirdNET-Go        # name of node, can be used to identify source of notes
   timeas24h: true         # true for 24-hour time format, false for 12-hour time format
-  log:
-    enabled: true         # true to enable log file
-    path: birdnet.log     # path to log file
-    rotation: daily       # daily, weekly or size
-    maxsize: 1048576      # max size in bytes for size rotation
-    rotationday: "Sunday" # day of the week for weekly rotation, 0 = Sunday
 
 # BirdNET model specific settings
 birdnet:

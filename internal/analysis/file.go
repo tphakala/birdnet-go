@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
@@ -85,10 +85,10 @@ func FileAnalysis(settings *conf.Settings, ctx context.Context) error {
 		if len(notes) > 0 {
 			// Add structured logging
 			GetLogger().Info("Writing partial results before exiting due to error",
-				"component", "analysis.file",
-				"notes_count", len(notes),
-				"error", err,
-				"operation", "write_partial_results")
+				logger.String("component", "analysis.file"),
+				logger.Int("notes_count", len(notes)),
+				logger.Error(err),
+				logger.String("operation", "write_partial_results"))
 			fmt.Printf("\n\033[33m⚠️  Writing partial results before exiting due to error\033[0m\n")
 			if writeErr := writeResults(settings, notes); writeErr != nil {
 				return fmt.Errorf("analysis error: %w; failed to write partial results: %w", err, writeErr)
@@ -130,13 +130,11 @@ func validateAudioFile(filePath string) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			// Add structured logging
-			GetLogger().Warn("Failed to close audio file",
-				"component", "analysis.file",
-				"error", err,
-				"file_path", filePath,
-				"operation", "close_audio_file")
-			log.Printf("Failed to close audio file: %v", err)
+			GetLogger().Warn("failed to close audio file",
+				logger.String("component", "analysis.file"),
+				logger.Error(err),
+				logger.String("file_path", filePath),
+				logger.String("operation", "close_audio_file"))
 		}
 	}()
 
@@ -304,10 +302,10 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 
 	for workerID := range numWorkers {
 		go func(workerID int) {
-			logger := GetLogger()
-			logger.Debug("Worker started", "worker_id", workerID, "component", "analysis.file", "operation", "worker_start")
+			log := GetLogger()
+			log.Debug("Worker started", logger.Int("worker_id", workerID), logger.String("component", "analysis.file"), logger.String("operation", "worker_start"))
 			defer func() {
-				logger.Debug("Worker finished", "worker_id", workerID, "component", "analysis.file", "operation", "worker_finish")
+				log.Debug("Worker finished", logger.Int("worker_id", workerID), logger.String("component", "analysis.file"), logger.String("operation", "worker_finish"))
 			}()
 
 			for chunk := range chunkChan {
@@ -322,7 +320,7 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 				}
 
 				if err := processChunk(ctx, chunk, settings, resultChan, errorChan); err != nil {
-					logger.Warn("Worker encountered error", "worker_id", workerID, "error", err, "component", "analysis.file", "operation", "process_chunk")
+					log.Warn("Worker encountered error", logger.Int("worker_id", workerID), logger.Error(err), logger.String("component", "analysis.file"), logger.String("operation", "process_chunk"))
 					return
 				}
 			}
@@ -352,10 +350,10 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	// Set number of workers to 1
 	numWorkers := 1
 
-	logger.Debug("Starting analysis",
-		"total_chunks", totalChunks,
-		"num_workers", numWorkers,
-		"file", filename)
+	GetLogger().Debug("Starting analysis",
+		logger.Int("total_chunks", totalChunks),
+		logger.Int("num_workers", numWorkers),
+		logger.String("file", filename))
 
 	// Setup processing channels
 	processingChannels := setupProcessingChannels()
@@ -400,10 +398,10 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		errHolder,
 	)
 
-	logger.Debug("Finished reading audio file")
+	GetLogger().Debug("Finished reading audio file")
 	close(processingChannels.chunkChan)
 
-	logger.Debug("Waiting for processing to complete")
+	GetLogger().Debug("Waiting for processing to complete")
 	<-processingChannels.doneChan // Wait for processing to complete
 
 	// Handle errors
@@ -439,7 +437,7 @@ func collectResults(
 	errHolder *errorHolder,
 	shutdown func(),
 ) {
-	logger.Debug("Result collector started")
+	GetLogger().Debug("Result collector started")
 	defer shutdown()
 
 	for i := 1; i <= expectedChunks; i++ {
@@ -450,8 +448,8 @@ func collectResults(
 		case notes := <-channels.resultChan:
 			// Sample logging: only log every 10th chunk to reduce overhead
 			currentChunkNum := atomic.LoadInt64(chunkCount)
-			if currentChunkNum % 10 == 0 || currentChunkNum == 1 {
-				logger.Debug("Received results for chunk", "chunk_number", currentChunkNum)
+			if currentChunkNum%10 == 0 || currentChunkNum == 1 {
+				GetLogger().Debug("Received results for chunk", logger.Int64("chunk_number", currentChunkNum))
 			}
 			*allNotes = append(*allNotes, notes...)
 			atomic.AddInt64(chunkCount, 1)
@@ -459,9 +457,9 @@ func collectResults(
 			// If EOF was reached and we've processed all chunks we've sent, we're done
 			if atomic.LoadInt32(eofReached) == 1 &&
 				atomic.LoadInt64(chunkCount) > int64(i) {
-				logger.Debug("EOF reached and all chunks processed",
-					"actual_chunks", i,
-					"expected_chunks", expectedChunks)
+				GetLogger().Debug("EOF reached and all chunks processed",
+					logger.Int("actual_chunks", i),
+					logger.Int("expected_chunks", expectedChunks))
 				return
 			}
 
@@ -469,7 +467,7 @@ func collectResults(
 				return
 			}
 		case err := <-channels.errorChan:
-			logger.Warn("Collector received error", "error", err)
+			GetLogger().Warn("Collector received error", logger.Error(err))
 			errHolder.setError(err)
 			return
 		case <-channels.eofChan:
@@ -479,12 +477,12 @@ func collectResults(
 			return
 		}
 	}
-	logger.Debug("Collector finished normally")
+	GetLogger().Debug("Collector finished normally")
 }
 
 // handleEOFSignal processes EOF notification
 func handleEOFSignal(eofReached *int32, chunkCount *int64, currentChunk int) bool {
-	logger.Debug("Received EOF signal, waiting for remaining chunks to process")
+	GetLogger().Debug("Received EOF signal, waiting for remaining chunks to process")
 	// Mark EOF as reached - we still need to process any chunks in flight
 	atomic.StoreInt32(eofReached, 1)
 
@@ -505,11 +503,11 @@ func handleTimeout(
 ) {
 	// If EOF was reached but we're still waiting for chunks, something is wrong
 	if atomic.LoadInt32(eofReached) == 1 {
-		logger.Warn("Timeout waiting after EOF", "processed_chunks", currentChunk-1)
+		GetLogger().Warn("Timeout waiting after EOF", logger.Int("processed_chunks", currentChunk-1))
 		return
 	}
 
-	logger.Warn("Timeout waiting for chunk results", "chunk_number", currentChunk)
+	GetLogger().Warn("Timeout waiting for chunk results", logger.Int("chunk_number", currentChunk))
 	currentCount := atomic.LoadInt64(chunkCount)
 	errHolder.setError(fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", currentCount, totalChunks))
 }
@@ -550,7 +548,7 @@ func handleAudioChunk(
 	if isEOF && len(chunkData) == 0 {
 		select {
 		case channels.eofChan <- struct{}{}:
-			logger.Debug("Sent EOF signal without data")
+			GetLogger().Debug("Sent EOF signal without data")
 		default:
 			// Channel full, that's okay
 		}
@@ -572,7 +570,7 @@ func handleAudioChunk(
 			if isEOF {
 				select {
 				case channels.eofChan <- struct{}{}:
-					logger.Debug("Sent EOF signal with data")
+					GetLogger().Debug("Sent EOF signal with data")
 				default:
 					// Channel full, that's okay
 				}
@@ -595,7 +593,7 @@ func handleAudioChunk(
 // handleProcessingErrors processes errors from audio analysis
 func handleProcessingErrors(err, processingError error) error {
 	if err != nil {
-		logger.Error("File processing error", "error", err)
+		GetLogger().Error("File processing error", logger.Error(err))
 		if errors.Is(err, context.Canceled) {
 			return ErrAnalysisCanceled
 		}
@@ -603,7 +601,7 @@ func handleProcessingErrors(err, processingError error) error {
 	}
 
 	if processingError != nil {
-		logger.Error("Processing error encountered", "error", processingError)
+		GetLogger().Error("Processing error encountered", logger.Error(processingError))
 		if errors.Is(processingError, context.Canceled) {
 			return ErrAnalysisCanceled
 		}
@@ -615,10 +613,10 @@ func handleProcessingErrors(err, processingError error) error {
 
 // displayProcessingResults shows final processing statistics
 func displayProcessingResults(filename string, duration time.Duration, chunkCount int64, startTime time.Time) {
-	logger.Info("Analysis completed successfully",
-		"file", filename,
-		"duration", duration,
-		"processing_time", time.Since(startTime))
+	GetLogger().Info("Analysis completed successfully",
+		logger.String("file", filename),
+		logger.Duration("duration", duration),
+		logger.Duration("processing_time", time.Since(startTime)))
 
 	// Calculate actual processed chunks
 	actualChunks := int(atomic.LoadInt64(&chunkCount)) - 1
@@ -645,15 +643,15 @@ func displayProcessingResults(filename string, duration time.Duration, chunkCoun
 	))
 	// Add structured logging
 	GetLogger().Info("File analysis completed",
-		"component", "analysis.file",
-		"filename", filename,
-		"duration", duration.String(),
-		"duration_ms", duration.Milliseconds(),
-		"chunks_processed", actualChunks,
-		"processing_time", totalTime.String(),
-		"processing_time_ms", totalTime.Milliseconds(),
-		"avg_chunks_per_sec", avgChunksPerSec,
-		"operation", "file_analysis_complete")
+		logger.String("component", "analysis.file"),
+		logger.String("filename", filename),
+		logger.String("duration", duration.String()),
+		logger.Int64("duration_ms", duration.Milliseconds()),
+		logger.Int("chunks_processed", actualChunks),
+		logger.String("processing_time", totalTime.String()),
+		logger.Int64("processing_time_ms", totalTime.Milliseconds()),
+		logger.Float64("avg_chunks_per_sec", avgChunksPerSec),
+		logger.String("operation", "file_analysis_complete"))
 	fmt.Println() // Add newline after completion
 }
 

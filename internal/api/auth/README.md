@@ -60,10 +60,11 @@ The package aims to decouple authentication logic from the specific API route ha
 
 ```go
 // Example (simplified setup)
-logger := slog.Default() // Or your configured logger
+// Note: auth package accepts *slog.Logger for compatibility with security package
+slogLogger := slog.Default()
 oauthServer := security.NewOAuth2Server(...) // Initialize your security server
-authService := auth.NewSecurityAdapter(oauthServer, logger)
-authMiddleware := auth.NewMiddleware(authService, logger)
+authService := auth.NewSecurityAdapter(oauthServer, slogLogger)
+authMiddleware := auth.NewMiddleware(authService, slogLogger)
 
 apiGroup := e.Group("/api/v2")
 apiGroup.Use(authMiddleware.Authenticate) // Apply middleware
@@ -77,5 +78,5 @@ apiGroup.GET("/protected/resource", handlerFunc)
 - `github.com/labstack/echo/v4`: Web framework.
 - `github.com/markbates/goth/gothic`: Session management, particularly for OAuth and storing user IDs post-login.
 - `github.com/tphakala/birdnet-go/internal/security`: Provides the underlying authentication logic adapted by `SecurityAdapter`.
-- `log/slog`: Structured logging.
+- `log/slog`: Structured logging (used for compatibility with security package).
 - `golang.org/x/tools/cmd/stringer`: Used via `go generate` for `AuthMethod`.

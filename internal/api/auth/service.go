@@ -1,4 +1,4 @@
-// internal/api/v2/auth/service.go
+// internal/api/auth/service.go
 package auth
 
 import (
@@ -6,16 +6,22 @@ import (
 	"errors"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// GetLogger returns the auth package logger.
+func GetLogger() logger.Logger {
+	return logger.Global().Module("auth")
+}
 
 // Sentinel errors for authentication failures.
 var (
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrInvalidToken        = errors.New("invalid or expired token")
-	ErrSessionNotFound     = errors.New("session not found or expired")
-	ErrLogoutFailed        = errors.New("logout operation failed")
-	ErrBasicAuthDisabled   = errors.New("basic authentication is disabled")
-	ErrAuthCodeGeneration  = errors.New("failed to generate authorization code")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrInvalidToken       = errors.New("invalid or expired token")
+	ErrSessionNotFound    = errors.New("session not found or expired")
+	ErrLogoutFailed       = errors.New("logout operation failed")
+	ErrBasicAuthDisabled  = errors.New("basic authentication is disabled")
+	ErrAuthCodeGeneration = errors.New("failed to generate authorization code")
 )
 
 //go:generate go run golang.org/x/tools/cmd/stringer -type=AuthMethod

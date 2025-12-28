@@ -5,8 +5,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,10 +24,9 @@ func TestGetGenusSpecies(t *testing.T) {
 	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	// Create a minimal controller with taxonomy DB and logger
+	// Create a minimal controller with taxonomy DB
 	c := &Controller{
 		TaxonomyDB: taxonomyDB,
-		logger:     log.New(io.Discard, "", 0), // Discard logs in tests
 	}
 
 	tests := []struct {
@@ -129,7 +126,6 @@ func TestGetFamilySpecies(t *testing.T) {
 
 	c := &Controller{
 		TaxonomyDB: taxonomyDB,
-		logger:     log.New(io.Discard, "", 0),
 	}
 
 	tests := []struct {
@@ -210,7 +206,6 @@ func TestGetSpeciesTree(t *testing.T) {
 
 	c := &Controller{
 		TaxonomyDB: taxonomyDB,
-		logger:     log.New(io.Discard, "", 0),
 	}
 
 	tests := []struct {

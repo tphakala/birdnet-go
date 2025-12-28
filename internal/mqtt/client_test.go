@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -771,11 +772,13 @@ func TestCheckConnectionCooldown(t *testing.T) {
 			}
 
 			// Create logger for test
-			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+			testLog := GetLogger().With(
+				logger.String("broker", config.Broker),
+				logger.String("client_id", config.ClientID))
 
 			// Test the method - acquire read lock as required by the method
 			c.mu.RLock()
-			err := c.checkConnectionCooldownLocked(logger)
+			err := c.checkConnectionCooldownLocked(testLog)
 			c.mu.RUnlock()
 
 			// Verify results
@@ -865,8 +868,10 @@ func runConfigureClientOptionsTest(t *testing.T, setupConfig func(*Config), expe
 		reconnectStop: make(chan struct{}),
 	}
 
-	logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
-	opts, err := c.configureClientOptions(logger)
+	testLog := GetLogger().With(
+		logger.String("broker", config.Broker),
+		logger.String("client_id", config.ClientID))
+	opts, err := c.configureClientOptions(testLog)
 
 	verifyConfigureClientOptionsResult(t, opts, err, expectError, errorSubstr, verifyOpts)
 }
@@ -951,10 +956,12 @@ func TestPerformDNSResolution(t *testing.T) {
 			defer cancel()
 
 			// Create logger for test
-			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+			testLog := GetLogger().With(
+				logger.String("broker", config.Broker),
+				logger.String("client_id", config.ClientID))
 
 			// Test the method
-			err := c.performDNSResolution(ctx, logger)
+			err := c.performDNSResolution(ctx, testLog)
 
 			// Verify results
 			if tt.expectError {
@@ -1088,7 +1095,9 @@ func runPerformConnectionAttemptTest(t *testing.T, setupConfig func(*Config), ex
 	c := &client{config: config, metrics: metrics.MQTT, reconnectStop: make(chan struct{})}
 	defer c.Disconnect()
 
-	logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+	testLog := GetLogger().With(
+		logger.String("broker", config.Broker),
+		logger.String("client_id", config.ClientID))
 
 	timeout := 2 * time.Second
 	if shortContext {
@@ -1097,14 +1106,14 @@ func runPerformConnectionAttemptTest(t *testing.T, setupConfig func(*Config), ex
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	opts, optsErr := c.configureClientOptions(logger)
+	opts, optsErr := c.configureClientOptions(testLog)
 	if optsErr != nil {
 		verifyConnectionAttemptError(t, optsErr, expectError, errorSubstr)
 		return
 	}
 
 	clientToConnect := paho.NewClient(opts)
-	err := c.performConnectionAttempt(ctx, clientToConnect, logger)
+	err := c.performConnectionAttempt(ctx, clientToConnect, testLog)
 	verifyConnectionAttemptError(t, err, expectError, errorSubstr)
 }
 
@@ -1273,11 +1282,13 @@ func TestTimeRoundingEdgeCase(t *testing.T) {
 				reconnectStop:   make(chan struct{}),
 			}
 
-			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+			testLog := GetLogger().With(
+				logger.String("broker", config.Broker),
+				logger.String("client_id", config.ClientID))
 
 			// Test the checkConnectionCooldownLocked method
 			c.mu.RLock()
-			err := c.checkConnectionCooldownLocked(logger)
+			err := c.checkConnectionCooldownLocked(testLog)
 			c.mu.RUnlock()
 
 			// Should always error since we're within cooldown

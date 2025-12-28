@@ -3,7 +3,7 @@ package observability
 
 import (
 	"fmt"
-	"log"
+	stdlog "log"
 	"net/http"
 	"os"
 
@@ -126,7 +126,7 @@ func (m *Metrics) RegisterHandlers(mux *http.ServeMux) {
 // metricsHandler is the HTTP handler for the /metrics endpoint.
 func (m *Metrics) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	h := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{
-		ErrorLog:      log.New(os.Stderr, "metrics handler: ", log.LstdFlags),
+		ErrorLog:      stdlog.New(os.Stderr, "metrics handler: ", stdlog.LstdFlags),
 		ErrorHandling: promhttp.HTTPErrorOnError,
 	})
 	h.ServeHTTP(w, r)

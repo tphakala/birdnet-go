@@ -145,7 +145,7 @@ func runGoroutineOperations(tracker *SpeciesTracker, species []string,
 	operationsPerGR, grID int, totalOps, successCount, errorCount *int64) {
 
 	seed := uint64(time.Now().UnixNano()) + uint64(grID) //nolint:gosec // UnixNano is always positive for current time
-	rnd := rand.New(rand.NewPCG(seed, seed))            //nolint:gosec // Cryptographic randomness not needed for tests
+	rnd := rand.New(rand.NewPCG(seed, seed))             //nolint:gosec // Cryptographic randomness not needed for tests
 
 	for range operationsPerGR {
 		atomic.AddInt64(totalOps, 1)
@@ -257,6 +257,7 @@ func validateSystemState(t *testing.T, maxSpeciesCount int) {
 
 // TestDatabaseFailureRecovery tests how the tracker handles database failures
 // Critical for data integrity and system stability
+//
 //nolint:gocognit // Table-driven test for database failure recovery scenarios
 func TestDatabaseFailureRecovery(t *testing.T) {
 	t.Parallel()

@@ -4,8 +4,7 @@ import (
 	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
-	"log/slog"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 var (
@@ -15,30 +14,28 @@ var (
 	resourceWorker *ResourceEventWorker
 	// detectionConsumer is the singleton detection notification consumer
 	detectionConsumer *DetectionNotificationConsumer
-	logger         *slog.Logger
 )
 
-func init() {
-	logger = logging.ForService("notification-integration")
-	if logger == nil {
-		logger = slog.Default().With("service", "notification-integration")
-	}
+// getIntegrationLogger returns the logger for notification integration.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getIntegrationLogger() logger.Logger {
+	return logger.Global().Module("notification-integration")
 }
 
 // InitializeEventBusIntegration sets up the notification worker as an event consumer
 // This should be called after both the notification service and event bus are initialized
 func InitializeEventBusIntegration() error {
-	logger.Info("initializing notification event bus integration")
+	getIntegrationLogger().Info("initializing notification event bus integration")
 
 	// Check if notification service is initialized
 	if !IsInitialized() {
-		logger.Warn("notification service not initialized, skipping event bus integration")
+		getIntegrationLogger().Warn("notification service not initialized, skipping event bus integration")
 		return nil
 	}
 
 	// Check if event bus is initialized
 	if !events.IsInitialized() {
-		logger.Warn("event bus not initialized, skipping notification integration")
+		getIntegrationLogger().Warn("event bus not initialized, skipping notification integration")
 		return nil
 	}
 
@@ -73,16 +70,15 @@ func InitializeEventBusIntegration() error {
 	// Store reference for stats/monitoring
 	notificationWorker = worker
 
-	logger.Info("notification worker registered with event bus",
-		"consumer", worker.Name(),
-		"supports_batching", worker.SupportsBatching(),
-		"batching_enabled", config.BatchingEnabled,
-		"batch_size", config.BatchSize,
-		"batch_timeout", config.BatchTimeout,
-		"circuit_breaker_threshold", config.FailureThreshold,
-		"recovery_timeout", config.RecoveryTimeout,
-		"debug", config.Debug,
-	)
+	getIntegrationLogger().Info("notification worker registered with event bus",
+		logger.String("consumer", worker.Name()),
+		logger.Bool("supports_batching", worker.SupportsBatching()),
+		logger.Bool("batching_enabled", config.BatchingEnabled),
+		logger.Int("batch_size", config.BatchSize),
+		logger.Duration("batch_timeout", config.BatchTimeout),
+		logger.Int("circuit_breaker_threshold", config.FailureThreshold),
+		logger.Duration("recovery_timeout", config.RecoveryTimeout),
+		logger.Bool("debug", config.Debug))
 
 	// Create and register resource event worker
 	resourceConfig := DefaultResourceWorkerConfig()
@@ -103,11 +99,10 @@ func InitializeEventBusIntegration() error {
 	// Store reference
 	resourceWorker = resWorker
 
-	logger.Info("resource worker registered with event bus",
-		"consumer", resWorker.Name(),
-		"alert_throttle", resourceConfig.AlertThrottle,
-		"debug", resourceConfig.Debug,
-	)
+	getIntegrationLogger().Info("resource worker registered with event bus",
+		logger.String("consumer", resWorker.Name()),
+		logger.Duration("alert_throttle", resourceConfig.AlertThrottle),
+		logger.Bool("debug", resourceConfig.Debug))
 
 	// Create and register detection notification consumer
 	detectionConsumer = NewDetectionNotificationConsumer(service)
@@ -115,10 +110,9 @@ func InitializeEventBusIntegration() error {
 		return fmt.Errorf("failed to register detection notification consumer: %w", err)
 	}
 
-	logger.Info("detection notification consumer registered with event bus",
-		"consumer", detectionConsumer.Name(),
-		"debug", resourceConfig.Debug,
-	)
+	getIntegrationLogger().Info("detection notification consumer registered with event bus",
+		logger.String("consumer", detectionConsumer.Name()),
+		logger.Bool("debug", resourceConfig.Debug))
 
 	return nil
 }

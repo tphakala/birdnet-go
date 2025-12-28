@@ -4,7 +4,6 @@ package conf
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os/exec"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"text/template"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // MinSoundLevelInterval is the minimum sound level interval in seconds to prevent excessive CPU usage
@@ -419,7 +419,7 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 
 	// Handle warnings (side effects: logging + storing in settings)
 	for _, warning := range result.Warnings {
-		log.Printf("Configuration warning: %s", warning)
+		GetLogger().Warn("Configuration warning", logger.String("message", warning))
 
 		// Store the validation warning for telemetry reporting
 		if settings.ValidationWarnings == nil {
@@ -487,12 +487,9 @@ func validateSecuritySettings(settings *Security) error {
 
 		// Warning about port requirements when running in container
 		if RunningInContainer() {
-			log.Println("WARNING: AutoTLS requires ports 80 and 443 to be exposed.")
-			log.Println("Ensure your Docker configuration maps these ports:")
-			log.Println("  ports:")
-			log.Println("    - \"80:80\"    # Required for ACME HTTP-01 challenge")
-			log.Println("    - \"443:443\"  # Required for HTTPS/AutoTLS")
-			log.Println("Consider using docker-compose.autotls.yml for proper AutoTLS configuration.")
+			GetLogger().Warn("AutoTLS requires ports 80 and 443 to be exposed",
+				logger.String("ports", "80:80 (ACME HTTP-01), 443:443 (HTTPS)"),
+				logger.String("hint", "Consider using docker-compose.autotls.yml for proper AutoTLS configuration"))
 		}
 	}
 
@@ -608,7 +605,7 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 
 	// Handle warnings (side effect: logging)
 	for _, warning := range result.Warnings {
-		log.Println(warning)
+		GetLogger().Warn("Birdweather validation warning", logger.String("message", warning))
 	}
 
 	// Return errors if validation failed
@@ -628,7 +625,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 	// Validate and determine the effective FFmpeg path
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
 	if ffmpegErr != nil {
-		log.Printf("FFmpeg validation failed: %v. Audio export/conversion requiring FFmpeg might be disabled or use defaults.", ffmpegErr)
+		GetLogger().Warn("FFmpeg validation failed", logger.Error(ffmpegErr), logger.String("impact", "Audio export/conversion requiring FFmpeg might be disabled or use defaults"))
 		// Log validation warning for telemetry
 		logValidationWarning(ffmpegErr, "audio-tool-ffmpeg", "ffmpeg-not-available")
 		settings.FfmpegPath = "" // Ensure path is empty if validation failed
@@ -642,9 +639,9 @@ func validateAudioSettings(settings *AudioSettings) error {
 		settings.FfmpegMinor = minor
 
 		if major > 0 {
-			log.Printf("Detected FFmpeg version: %s (major: %d, minor: %d)", version, major, minor)
+			GetLogger().Debug("Detected FFmpeg version", logger.String("version", version), logger.Int("major", major), logger.Int("minor", minor))
 		} else {
-			log.Printf("Warning: Could not detect FFmpeg version from: %s", version)
+			GetLogger().Warn("Could not detect FFmpeg version", logger.String("version_string", version))
 		}
 	}
 
@@ -654,7 +651,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 	if soxLookPathErr != nil {
 		settings.SoxPath = ""
 		settings.SoxAudioTypes = nil
-		log.Println("SoX not found in system PATH. Audio source processing requiring SoX might be disabled.")
+		GetLogger().Warn("SoX not found in system PATH", logger.String("impact", "Audio source processing requiring SoX might be disabled"))
 	} else {
 		settings.SoxPath = soxPath
 		// Get supported formats if SoX is found
@@ -733,13 +730,13 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 			// Warn if gain is also set (normalization takes precedence)
 			if settings.Export.Gain != 0 {
-				log.Printf("WARNING: Both gain and normalization are configured. Normalization will take precedence, gain setting will be ignored.")
+				GetLogger().Warn("Both gain and normalization are configured", logger.String("action", "Normalization will take precedence, gain setting will be ignored"))
 			}
 		}
 
 		if settings.FfmpegPath == "" {
 			settings.Export.Type = "wav"
-			log.Printf("FFmpeg not available, using WAV format for audio export")
+			GetLogger().Warn("FFmpeg not available, using WAV format for audio export")
 		} else {
 			// Validate audio type and bitrate
 			switch settings.Export.Type {
@@ -800,7 +797,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 		isValid := slices.Contains(validLocales, settings.Locale)
 		if !isValid {
 			// Log warning but don't fail - fallback to default
-			log.Printf("WARNING: Invalid UI locale '%s', will use default 'en'", settings.Locale)
+			GetLogger().Warn("Invalid UI locale, will use default", logger.String("invalid_locale", settings.Locale), logger.String("fallback", "en"))
 			settings.Locale = "en"
 		}
 	}
@@ -811,15 +808,20 @@ func validateDashboardSettings(settings *Dashboard) error {
 		isValid := slices.Contains(validModes, settings.Spectrogram.Mode)
 		if !isValid {
 			// Log warning but don't fail - GetMode() will handle fallback
-			log.Printf("WARNING: Invalid spectrogram mode '%s', valid modes are: auto, prerender, user-requested. Using GetMode() fallback.", settings.Spectrogram.Mode)
+			GetLogger().Warn("Invalid spectrogram mode, using GetMode() fallback",
+				logger.String("invalid_mode", settings.Spectrogram.Mode),
+				logger.String("valid_modes", "auto, prerender, user-requested"))
 		}
 	}
 
 	// Log the effective spectrogram mode at startup for troubleshooting
 	effectiveMode := settings.Spectrogram.GetMode()
-	log.Printf("Spectrogram configuration: enabled=%v, mode='%s', effective_mode='%s', size='%s', raw=%v",
-		settings.Spectrogram.Enabled, settings.Spectrogram.Mode, effectiveMode,
-		settings.Spectrogram.Size, settings.Spectrogram.Raw)
+	GetLogger().Debug("Spectrogram configuration",
+		logger.Bool("enabled", settings.Spectrogram.Enabled),
+		logger.String("mode", settings.Spectrogram.Mode),
+		logger.String("effective_mode", effectiveMode),
+		logger.String("size", settings.Spectrogram.Size),
+		logger.Bool("raw", settings.Spectrogram.Raw))
 
 	return nil
 }

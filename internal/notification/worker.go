@@ -9,22 +9,10 @@ import (
 	"text/template"
 	"time"
 
-	"log/slog"
-
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
-	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
-
-// getLoggerSafe returns a logger for the service, falling back to default if logging not initialized
-func getLoggerSafe(service string) *slog.Logger {
-	logger := logging.ForService(service)
-	if logger == nil {
-		logger = slog.Default().With("service", service)
-	}
-	return logger
-}
 
 // NotificationWorker implements EventConsumer to process error events
 type NotificationWorker struct {
@@ -39,7 +27,7 @@ type NotificationWorker struct {
 	eventsDropped   atomic.Uint64
 	eventsFailed    atomic.Uint64
 
-	logger *slog.Logger
+	log logger.Logger
 }
 
 // WorkerConfig holds configuration for the notification worker
@@ -78,7 +66,7 @@ type CircuitBreaker struct {
 	lastFailureTime time.Time
 	successCount    int
 	config          *WorkerConfig
-	logger          *slog.Logger
+	log             logger.Logger
 }
 
 // NewNotificationWorker creates a new notification worker
@@ -91,7 +79,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		config = DefaultWorkerConfig()
 	}
 
-	logger := getFileLogger(config.Debug)
+	log := logger.Global().Module("notifications")
 	worker := &NotificationWorker{
 		service:   service,
 		templates: make(map[string]*template.Template),
@@ -99,9 +87,9 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		circuitBreaker: &CircuitBreaker{
 			state:  circuitStateClosed,
 			config: config,
-			logger: logger,
+			log:    log,
 		},
-		logger: logger,
+		log: log,
 	}
 
 	// Pre-compile templates
@@ -114,13 +102,13 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 	}
 
 	// Log worker initialization
-	logger.Info("notification worker initialized",
-		"batch_size", config.BatchSize,
-		"batch_timeout", config.BatchTimeout,
-		"failure_threshold", config.FailureThreshold,
-		"recovery_timeout", config.RecoveryTimeout,
-		"half_open_max_events", config.HalfOpenMaxEvents,
-		"debug", config.Debug)
+	log.Info("notification worker initialized",
+		logger.Int("batch_size", config.BatchSize),
+		logger.Duration("batch_timeout", config.BatchTimeout),
+		logger.Int("failure_threshold", config.FailureThreshold),
+		logger.Duration("recovery_timeout", config.RecoveryTimeout),
+		logger.Int("half_open_max_events", config.HalfOpenMaxEvents),
+		logger.Bool("debug", config.Debug))
 
 	return worker, nil
 }
@@ -144,8 +132,8 @@ func (w *NotificationWorker) initTemplates() error {
 	}
 
 	if w.config.Debug {
-		w.logger.Debug("notification templates initialized",
-			"template_count", len(templates))
+		w.log.Debug("notification templates initialized",
+			logger.Int("template_count", len(templates)))
 	}
 
 	return nil
@@ -181,21 +169,20 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 // logEventProcessingStart logs debug info when processing starts.
 func (w *NotificationWorker) logEventProcessingStart(event events.ErrorEvent) {
 	if w.config.Debug {
-		w.logger.Debug("processing error event",
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
-			"error_message_length", len(event.GetMessage()),
-			"context", scrubContextMap(event.GetContext()))
+		w.log.Debug("processing error event",
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
+			logger.Int("error_message_length", len(event.GetMessage())),
+			logger.Any("context", scrubContextMap(event.GetContext())))
 	}
 }
 
 // handleCircuitBreakerOpen handles the case when circuit breaker is open.
 func (w *NotificationWorker) handleCircuitBreakerOpen(event events.ErrorEvent) error {
 	w.eventsDropped.Add(1)
-	w.logger.Debug("circuit breaker open, dropping event",
-		"component", event.GetComponent(),
-		"category", event.GetCategory(),
-	)
+	w.log.Debug("circuit breaker open, dropping event",
+		logger.String("component", event.GetComponent()),
+		logger.String("category", event.GetCategory()))
 	return nil
 }
 
@@ -213,11 +200,10 @@ func (w *NotificationWorker) shouldSkipLowPriority(event events.ErrorEvent, prio
 	if priority != PriorityLow {
 		return false
 	}
-	w.logger.Debug("skipping low priority error notification",
-		"category", event.GetCategory(),
-		"priority", priority,
-		"component", event.GetComponent(),
-	)
+	w.log.Debug("skipping low priority error notification",
+		logger.String("category", event.GetCategory()),
+		logger.String("priority", string(priority)),
+		logger.String("component", event.GetComponent()))
 	return true
 }
 
@@ -247,11 +233,10 @@ func (w *NotificationWorker) handleNotificationCreationError(event events.ErrorE
 		return nil
 	}
 
-	w.logger.Error("failed to create notification",
-		"error", privacy.ScrubMessage(err.Error()),
-		"component", event.GetComponent(),
-		"category", event.GetCategory(),
-	)
+	w.log.Error("failed to create notification",
+		logger.Error(err),
+		logger.String("component", event.GetComponent()),
+		logger.String("category", event.GetCategory()))
 	return err
 }
 
@@ -282,13 +267,13 @@ func (w *NotificationWorker) enrichNotificationWithContext(notification *Notific
 // logNotificationCreated logs debug info after successful notification creation.
 func (w *NotificationWorker) logNotificationCreated(notification *Notification, event events.ErrorEvent, priority Priority) {
 	if w.config.Debug {
-		w.logger.Debug("created error notification",
-			"notification_id", notification.ID,
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
-			"priority", priority,
-			"metadata_count", len(event.GetContext()),
-			"scrubbed_context", scrubContextMap(event.GetContext()))
+		w.log.Debug("created error notification",
+			logger.String("notification_id", notification.ID),
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
+			logger.String("priority", string(priority)),
+			logger.Int("metadata_count", len(event.GetContext())),
+			logger.Any("scrubbed_context", scrubContextMap(event.GetContext())))
 	}
 }
 
@@ -306,18 +291,18 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 	}
 
 	if w.config.Debug {
-		w.logger.Debug("processing event batch", "batch_size", len(errorEvents))
+		w.log.Debug("processing event batch",
+			logger.Int("batch_size", len(errorEvents)))
 	}
 
 	eventGroups := w.groupEventsByKey(errorEvents)
 	aggregatedErrors, successCount := w.processEventGroups(eventGroups)
 
-	w.logger.Debug("processed event batch with aggregation",
-		"total", len(errorEvents),
-		"groups", len(eventGroups),
-		"success", successCount,
-		"failed", len(errorEvents)-successCount,
-	)
+	w.log.Debug("processed event batch with aggregation",
+		logger.Int("total", len(errorEvents)),
+		logger.Int("groups", len(eventGroups)),
+		logger.Int("success", successCount),
+		logger.Int("failed", len(errorEvents)-successCount))
 
 	if len(aggregatedErrors) > 0 {
 		return errors.Join(aggregatedErrors...)
@@ -371,11 +356,10 @@ func (w *NotificationWorker) processEventGroup(key eventKey, groupEvents []event
 
 	if !w.circuitBreaker.Allow() {
 		w.eventsDropped.Add(uint64(eventCount))
-		w.logger.Debug("circuit breaker open, dropping event group",
-			"component", key.component,
-			"category", key.category,
-			"count", eventCount,
-		)
+		w.log.Debug("circuit breaker open, dropping event group",
+			logger.String("component", key.component),
+			logger.String("category", key.category),
+			logger.Int("count", eventCount))
 		return nil
 	}
 
@@ -509,10 +493,9 @@ func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority P
 	// Execute template
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
-		w.logger.Error("failed to execute notification template",
-			"template", templateName,
-			"error", err,
-		)
+		w.log.Error("failed to execute notification template",
+			logger.String("template", templateName),
+			logger.Error(err))
 		// Fallback to simple message
 		return w.truncateMessage(event.GetMessage(), DefaultMessageTruncateLength)
 	}
@@ -575,11 +558,11 @@ func (cb *CircuitBreaker) Allow() bool {
 			oldState := cb.state
 			cb.state = circuitStateHalfOpen
 			cb.successCount = 0
-			if cb.config.Debug && cb.logger != nil {
-				cb.logger.Debug("circuit breaker state transition",
-					"from", oldState,
-					"to", cb.state,
-					"recovery_timeout", cb.config.RecoveryTimeout)
+			if cb.config.Debug && cb.log != nil {
+				cb.log.Debug("circuit breaker state transition",
+					logger.String("from", oldState),
+					logger.String("to", cb.state),
+					logger.Duration("recovery_timeout", cb.config.RecoveryTimeout))
 			}
 			return true
 		}
@@ -606,11 +589,11 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		if cb.successCount >= cb.config.HalfOpenMaxEvents {
 			oldState := cb.state
 			cb.state = circuitStateClosed
-			if cb.config.Debug && cb.logger != nil {
-				cb.logger.Debug("circuit breaker state transition",
-					"from", oldState,
-					"to", cb.state,
-					"reason", "successful operations threshold reached")
+			if cb.config.Debug && cb.log != nil {
+				cb.log.Debug("circuit breaker state transition",
+					logger.String("from", oldState),
+					logger.String("to", cb.state),
+					logger.String("reason", "successful operations threshold reached"))
 			}
 		}
 	}
@@ -627,23 +610,23 @@ func (cb *CircuitBreaker) RecordFailure() {
 	if cb.failures >= cb.config.FailureThreshold {
 		oldState := cb.state
 		cb.state = circuitStateOpen
-		if cb.config.Debug && cb.logger != nil && oldState != circuitStateOpen {
-			cb.logger.Debug("circuit breaker state transition",
-				"from", oldState,
-				"to", cb.state,
-				"failures", cb.failures,
-				"threshold", cb.config.FailureThreshold)
+		if cb.config.Debug && cb.log != nil && oldState != circuitStateOpen {
+			cb.log.Debug("circuit breaker state transition",
+				logger.String("from", oldState),
+				logger.String("to", cb.state),
+				logger.Int("failures", cb.failures),
+				logger.Int("threshold", cb.config.FailureThreshold))
 		}
 	}
 
 	if cb.state == circuitStateHalfOpen {
 		oldState := cb.state
 		cb.state = circuitStateOpen
-		if cb.config.Debug && cb.logger != nil {
-			cb.logger.Debug("circuit breaker state transition",
-				"from", oldState,
-				"to", cb.state,
-				"reason", "failure in half-open state")
+		if cb.config.Debug && cb.log != nil {
+			cb.log.Debug("circuit breaker state transition",
+				logger.String("from", oldState),
+				logger.String("to", cb.state),
+				logger.String("reason", "failure in half-open state"))
 		}
 	}
 }

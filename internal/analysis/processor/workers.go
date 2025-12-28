@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TaskType defines types of tasks that can be handled by the worker.
@@ -26,14 +27,14 @@ const (
 // Sentinel errors for processor operations
 var (
 	ErrNilTask = errors.Newf("cannot enqueue nil task").
-		Component("analysis.processor").
-		Category(errors.CategoryValidation).
-		Build()
-	
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Build()
+
 	ErrNilAction = errors.Newf("cannot enqueue task with nil action").
-		Component("analysis.processor").
-		Category(errors.CategoryValidation).
-		Build()
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Build()
 )
 
 // Task represents a unit of work, encapsulating the detection and the action to be performed.
@@ -50,20 +51,20 @@ var testRetryConfigOverride func(action Action) (jobqueue.RetryConfig, bool)
 // This is kept for backward compatibility but now simply ensures the job queue is started.
 func (p *Processor) startWorkerPool() {
 	// Performance metrics logging pattern
-	logger := GetLogger()
+	log := GetLogger()
 	startTime := time.Now()
 	defer func() {
-		logger.Debug("Worker pool initialization completed",
-			"duration_ms", time.Since(startTime).Milliseconds(),
-			"max_capacity", p.JobQueue.GetMaxJobs(),
-			"component", "analysis.processor",
-			"operation", "worker_pool_start")
+		log.Debug("Worker pool initialization completed",
+			logger.Int64("duration_ms", time.Since(startTime).Milliseconds()),
+			logger.Int("max_capacity", p.JobQueue.GetMaxJobs()),
+			logger.String("component", "analysis.processor"),
+			logger.String("operation", "worker_pool_start"))
 	}()
 
 	// State transition logging pattern
-	logger.Info("Starting worker pool",
-		"max_capacity", p.JobQueue.GetMaxJobs(),
-		"component", "analysis.processor")
+	log.Info("Starting worker pool",
+		logger.Int("max_capacity", p.JobQueue.GetMaxJobs()),
+		logger.String("component", "analysis.processor"))
 
 	// Create a cancellable context for the job queue
 	ctx, cancel := context.WithCancel(context.Background())
@@ -75,10 +76,10 @@ func (p *Processor) startWorkerPool() {
 	p.JobQueue.StartWithContext(ctx)
 
 	// State transition logging - final state
-	logger.Info("Worker pool started successfully",
-		"max_capacity", p.JobQueue.GetMaxJobs(),
-		"component", "analysis.processor",
-		"operation", "worker_pool_start")
+	log.Info("Worker pool started successfully",
+		logger.Int("max_capacity", p.JobQueue.GetMaxJobs()),
+		logger.String("component", "analysis.processor"),
+		logger.String("operation", "worker_pool_start"))
 }
 
 // Pre-compiled regex patterns for performance
@@ -86,11 +87,11 @@ var (
 	// URL credential patterns
 	rtspRegex = regexp.MustCompile(`(?i)rtsp://[^:]+:[^@]+@`)
 	mqttRegex = regexp.MustCompile(`(?i)mqtt://[^:]+:[^@]+@`)
-	
-	// Security token patterns  
-	apiKeyRegex = regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
-	passwordRegex = regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
-	oauthRegex = regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
+
+	// Security token patterns
+	apiKeyRegex         = regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
+	passwordRegex       = regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
+	oauthRegex          = regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
 	otherSensitiveRegex = regexp.MustCompile(`(?i)(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
 )
 
@@ -124,7 +125,7 @@ func sanitizeString(input string) string {
 	result = passwordRegex.ReplaceAllString(result, "$1=[REDACTED]")
 	result = oauthRegex.ReplaceAllString(result, "$1 [REDACTED]")
 	result = otherSensitiveRegex.ReplaceAllString(result, "$1=[REDACTED]")
-	
+
 	return result
 }
 
@@ -171,7 +172,7 @@ func (p *Processor) EnqueueTask(task *Task) error {
 // EnqueueTaskCtx adds a task directly to the job queue for processing with context.
 //
 // This method respects the provided context for cancellation and timeouts.
-// If the context does not have a deadline, a default timeout of 
+// If the context does not have a deadline, a default timeout of
 // DefaultEnqueueTimeout (5 seconds) is automatically applied to prevent
 // indefinite blocking during enqueue operations.
 //
@@ -202,13 +203,13 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 	}
 
 	// Performance metrics logging pattern
-	logger := GetLogger()
+	log := GetLogger()
 	startTime := time.Now()
 	defer func() {
-		logger.Debug("Task enqueue operation completed",
-			"duration_ms", time.Since(startTime).Milliseconds(),
-			"component", "analysis.processor",
-			"operation", "enqueue_task")
+		log.Debug("Task enqueue operation completed",
+			logger.Int64("duration_ms", time.Since(startTime).Milliseconds()),
+			logger.String("component", "analysis.processor"),
+			logger.String("operation", "enqueue_task"))
 	}()
 
 	// Add timeout if context doesn't have one
@@ -243,7 +244,7 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 	// Get action description for logging and error context
 	actionDesc := task.Action.GetDescription()
 	sanitizedDesc := sanitizeString(actionDesc)
-	
+
 	// Get species name for enhanced context
 	speciesName := "unknown"
 	if task.Detection.Note.CommonName != "" {
@@ -255,12 +256,12 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 
 	// State transition logging - task received
 	if p.Settings.Debug {
-		logger.Debug("Task received for enqueueing",
-			"task_description", sanitizedDesc,
-			"species", speciesName,
-			"retry_enabled", jqRetryConfig.Enabled,
-			"max_retries", jqRetryConfig.MaxRetries,
-			"component", "analysis.processor")
+		log.Debug("Task received for enqueueing",
+			logger.String("task_description", sanitizedDesc),
+			logger.String("species", speciesName),
+			logger.Bool("retry_enabled", jqRetryConfig.Enabled),
+			logger.Int("max_retries", jqRetryConfig.MaxRetries),
+			logger.String("component", "analysis.processor"))
 	}
 
 	// Enqueue the task to the job queue using provided context
@@ -270,7 +271,7 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 		switch {
 		case errors.Is(err, jobqueue.ErrQueueFull):
 			queueSize := p.JobQueue.GetMaxJobs()
-			
+
 			// Enhanced queue full error
 			enhancedErr := errors.Newf("job queue is full (capacity: %d): %w", queueSize, err).
 				Component("analysis.processor").
@@ -283,11 +284,11 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 				Context("retryable", true).
 				Build()
 
-			logger.Warn("Job queue is full, dropping task",
-				"queue_capacity", queueSize,
-				"task_description", sanitizedDesc,
-				"species", speciesName,
-				"component", "analysis.processor")
+			log.Warn("Job queue is full, dropping task",
+				logger.Int("queue_capacity", queueSize),
+				logger.String("task_description", sanitizedDesc),
+				logger.String("species", speciesName),
+				logger.String("component", "analysis.processor"))
 
 			return enhancedErr
 
@@ -303,10 +304,10 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 				Context("retryable", false).
 				Build()
 
-			logger.Error("Cannot enqueue task, job queue has been stopped",
-				"task_description", sanitizedDesc,
-				"species", speciesName,
-				"component", "analysis.processor")
+			log.Error("Cannot enqueue task, job queue has been stopped",
+				logger.String("task_description", sanitizedDesc),
+				logger.String("species", speciesName),
+				logger.String("component", "analysis.processor"))
 
 			return enhancedErr
 
@@ -323,11 +324,11 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 				Context("retryable", true).
 				Build()
 
-			logger.Error("Failed to enqueue task",
-				"task_description", sanitizedDesc,
-				"species", speciesName,
-				"error", sanitizeString(err.Error()),
-				"component", "analysis.processor")
+			log.Error("Failed to enqueue task",
+				logger.String("task_description", sanitizedDesc),
+				logger.String("species", speciesName),
+				logger.String("error", sanitizeString(err.Error())),
+				logger.String("component", "analysis.processor"))
 
 			return enhancedErr
 		}
@@ -335,11 +336,11 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 
 	// State transition logging - task successfully enqueued
 	if p.Settings.Debug {
-		logger.Debug("Task enqueued successfully",
-			"task_description", sanitizedDesc,
-			"job_id", job.ID,
-			"species", speciesName,
-			"component", "analysis.processor")
+		log.Debug("Task enqueued successfully",
+			logger.String("task_description", sanitizedDesc),
+			logger.String("job_id", job.ID),
+			logger.String("species", speciesName),
+			logger.String("component", "analysis.processor"))
 	}
 
 	return nil

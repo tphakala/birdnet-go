@@ -3,7 +3,6 @@ package myaudio
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/go-audio/wav"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // seekableBuffer extends bytes.Buffer to add a Seek method, making it compatible with io.WriteSeeker.
@@ -41,6 +41,7 @@ func recordFileOperationErrorWithValidation(operation, format, errorType, valida
 
 // SavePCMDataToWAV saves the given PCM data as a WAV file at the specified filePath.
 func SavePCMDataToWAV(filePath string, pcmData []byte) error {
+	log := GetLogger()
 	start := time.Now()
 
 	// Validate inputs
@@ -106,7 +107,9 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 	}
 	defer func() {
 		if err := outFile.Close(); err != nil {
-			log.Printf("Failed to close WAV file: %v", err)
+			log.Warn("failed to close WAV file",
+				logger.Error(err),
+				logger.String("file_path", filePath))
 		}
 	}()
 

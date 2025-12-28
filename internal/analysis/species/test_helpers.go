@@ -20,8 +20,8 @@ import (
 //   - GetNewSpeciesDetections: Called .Once() during InitFromDatabase (lifetime tracking)
 //   - GetActiveNotificationHistory: Called .Once() if NotificationSuppressionHours > 0
 //   - GetSpeciesFirstDetectionInPeriod: Called .Once() per enabled period tracker:
-//     * Once for YearlyTracking if enabled
-//     * Once for SeasonalTracking if enabled
+//   - Once for YearlyTracking if enabled
+//   - Once for SeasonalTracking if enabled
 //   - SaveNotificationHistory: Called asynchronously, use .Maybe()
 //   - DeleteExpiredNotificationHistory: Called asynchronously, use .Maybe()
 //

@@ -2,7 +2,6 @@ package spectrogram
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // testSoxPath is used in tests to set a Sox path that won't be called
@@ -21,7 +21,7 @@ const testSoxPath = "/usr/bin/sox"
 func TestNewGenerator(t *testing.T) {
 	env := setupTestEnv(t)
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 	require.NotNil(t, gen, "NewGenerator() returned nil")
 	assert.Equal(t, env.Settings, gen.settings, "NewGenerator() did not set settings correctly")
 	assert.Equal(t, env.SFS, gen.sfs, "NewGenerator() did not set sfs correctly")
@@ -34,7 +34,7 @@ func TestNewGenerator(t *testing.T) {
 func TestGenerator_EnsureOutputDirectory(t *testing.T) {
 	env := setupTestEnv(t)
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	// Test creating a nested directory
 	outputPath := filepath.Join(env.TempDir, "subdir", "test.png")
@@ -51,7 +51,7 @@ func TestGenerator_EnsureOutputDirectory(t *testing.T) {
 func TestGenerator_EnsureOutputDirectory_PathTraversal(t *testing.T) {
 	env := setupTestEnv(t)
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	// Test path traversal attempt
 	outputPath := filepath.Join(env.TempDir, "..", "escape", "test.png")
@@ -128,7 +128,7 @@ func createTestGenerator(t *testing.T, ffmpegMajor int, hasFfmpegVer bool) (gen 
 		env.Settings.Realtime.Audio.FfmpegVersion = "test"
 	}
 
-	return NewGenerator(env.Settings, env.SFS, slog.Default()), env.TempDir
+	return NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test")), env.TempDir
 }
 
 // TestGenerator_GetSoxArgs tests full Sox argument building for file input
@@ -137,7 +137,7 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 	env.Settings.Realtime.Audio.Export.Length = 15
 	env.Settings.Realtime.Audio.FfmpegMajor = 7 // Use FFmpeg 7.x to avoid -d parameter
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
@@ -157,7 +157,7 @@ func TestGenerator_GenerateFromPCM_MissingBinary(t *testing.T) {
 	env := setupTestEnv(t)
 	// Don't set SoxPath - simulate missing binary
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3}
@@ -171,7 +171,7 @@ func TestGenerator_GenerateFromFile_MissingBinaries(t *testing.T) {
 	env := setupTestEnv(t)
 	// Don't set SoxPath or FfmpegPath
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
@@ -363,7 +363,7 @@ func TestGenerateFromFile_Validation(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.SoxPath = testSoxPath // Will fail if called, but we're testing validation
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	tests := []struct {
 		name       string
@@ -426,7 +426,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.SoxPath = testSoxPath
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	tests := []struct {
 		name       string
@@ -578,7 +578,7 @@ func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
 	env := setupTestEnv(t)
 	// SoxPath intentionally not set
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
@@ -621,7 +621,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			env.Settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
 			env.Settings.Realtime.Audio.SoxPath = tt.soxPath
 
-			gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+			gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 			audioPath := filepath.Join(env.TempDir, "test.wav")
 			outputPath := filepath.Join(env.TempDir, "test.png")
@@ -638,7 +638,7 @@ func TestGenerateWithFFmpeg_MissingBinary(t *testing.T) {
 	env := setupTestEnv(t)
 	// FfmpegPath intentionally not set
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
@@ -653,7 +653,7 @@ func TestGenerateWithSoxPCM_MissingBinary(t *testing.T) {
 	env := setupTestEnv(t)
 	// SoxPath intentionally not set
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3, 4, 5, 6, 7}
@@ -668,7 +668,7 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
@@ -696,7 +696,7 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
@@ -717,7 +717,7 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
 
-	gen := NewGenerator(env.Settings, env.SFS, slog.Default())
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
 
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")

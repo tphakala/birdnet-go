@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -171,7 +171,7 @@ type wundergroundResponse struct {
 }
 
 // parseWundergroundError extracts and formats error messages from Weather Underground API responses
-func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units string, logger *slog.Logger) string {
+func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units string, log logger.Logger) string {
 	// Try to parse Weather Underground error response
 	var errorResp wundergroundErrorResponse
 
@@ -181,12 +181,12 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 		errorCode := errorResp.Errors[0].Error.Code
 
 		// Log the structured error
-		logger.Error("Weather Underground API error",
-			"status_code", statusCode,
-			"error_code", errorCode,
-			"error_message", errorMessage,
-			"station", stationId,
-			"units", units)
+		log.Error("Weather Underground API error",
+			logger.Int("status_code", statusCode),
+			logger.String("error_code", errorCode),
+			logger.String("error_message", errorMessage),
+			logger.String("station", stationId),
+			logger.String("units", units))
 
 		// Provide user-friendly error messages based on error code
 		switch errorCode {
@@ -215,7 +215,9 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 		bodyPreview = strings.ReplaceAll(string(bodyBytes), "\n", " ")
 	}
 
-	logger.Error("Received non-OK status code", "status_code", statusCode, "response_preview", bodyPreview)
+	log.Error("Received non-OK status code",
+		logger.Int("status_code", statusCode),
+		logger.String("response_preview", bodyPreview))
 
 	// Generic error message based on status code
 	switch statusCode {
@@ -258,7 +260,7 @@ func validateWundergroundConfig(settings *conf.Settings) (*wundergroundConfig, e
 		cfg.units = "e"
 	}
 	if cfg.units != "e" && cfg.units != "m" && cfg.units != "h" {
-		weatherLogger.Warn("Invalid units value, falling back to imperial", "units", cfg.units)
+		getLogger().Warn("Invalid units value, falling back to imperial", logger.String("units", cfg.units))
 		cfg.units = "e"
 	}
 	if cfg.apiKey == "" || cfg.stationID == "" {
@@ -306,11 +308,11 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		return nil, err
 	}
 
-	logger := weatherLogger.With("provider", wundergroundProviderName)
-	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "apiKey"))
+	providerLogger := getLogger().With(logger.String("provider", wundergroundProviderName))
+	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "apiKey")))
 
 	// Execute request
-	body, err := p.executeRequest(apiURL, cfg, logger)
+	body, err := p.executeRequest(apiURL, cfg, providerLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -321,12 +323,12 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		return nil, err
 	}
 
-	logger.Info("Successfully received and parsed weather data")
-	return mapWundergroundResponse(wuResp, cfg.units, logger), nil
+	providerLogger.Info("Successfully received and parsed weather data")
+	return mapWundergroundResponse(wuResp, cfg.units, providerLogger), nil
 }
 
 // executeRequest performs the HTTP request with context timeout
-func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundConfig, logger *slog.Logger) ([]byte, error) {
+func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundConfig, log logger.Logger) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel()
 
@@ -345,7 +347,7 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, logger)
+		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, log)
 		return nil, newWeatherError(
 			fmt.Errorf("%s", errorMessage),
 			errors.CategoryNetwork, "weather_api_response", wundergroundProviderName,
@@ -385,12 +387,12 @@ func parseWundergroundResponse(body []byte) (*wundergroundResponse, error) {
 }
 
 // mapWundergroundResponse converts wundergroundResponse to WeatherData
-func mapWundergroundResponse(wuResp *wundergroundResponse, units string, logger *slog.Logger) *WeatherData {
+func mapWundergroundResponse(wuResp *wundergroundResponse, units string, log logger.Logger) *WeatherData {
 	obs := wuResp.Observations[0]
 
 	obsTime, err := time.Parse(time.RFC3339, obs.ObsTimeUtc)
 	if err != nil {
-		logger.Warn("Failed to parse observation time; using current UTC", "obs_time_utc", obs.ObsTimeUtc)
+		log.Warn("Failed to parse observation time; using current UTC", logger.String("obs_time_utc", obs.ObsTimeUtc))
 		obsTime = time.Now().UTC()
 	}
 

@@ -118,7 +118,7 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 	require.True(t, ok, "JSON should contain config field")
 	configMap, ok := configInterface.(map[string]any)
 	require.True(t, ok, "config field should be a map")
-	
+
 	rareBirdInterface, ok := configMap["Rare Bird"]
 	require.True(t, ok, "config should contain Rare Bird entry")
 	rareBird, ok := rareBirdInterface.(map[string]any)
@@ -153,7 +153,7 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 // TestSettingsSaveAndLoad tests the full save/load cycle with species configs
 func TestSettingsSaveAndLoad(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create temp directory for test
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test_config.yaml")
@@ -161,9 +161,8 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	// Create settings with species config containing zero values
 	settings := &Settings{
 		Main: struct {
-			Name      string    `json:"name"`
-			TimeAs24h bool      `json:"timeAs24h"`
-			Log       LogConfig `json:"log"`
+			Name      string `json:"name"`
+			TimeAs24h bool   `json:"timeAs24h"`
 		}{
 			Name: "TestNode",
 		},
@@ -218,17 +217,17 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	require.True(t, ok, "config section should exist in species")
 	configMap, ok := configMapRaw.(map[string]any)
 	require.True(t, ok, "config should be a map")
-	
+
 	// Check Zero Values Bird with safe type assertion
 	zeroValuesBirdRaw, ok := configMap["Zero Values Bird"]
 	require.True(t, ok, "Zero Values Bird should exist in config")
 	zeroValuesBird, ok := zeroValuesBirdRaw.(map[string]any)
 	require.True(t, ok, "Zero Values Bird should be a map")
-	
+
 	// Regression guard: ensure interval field persists even when zero
 	_, hasInterval := zeroValuesBird["interval"]
 	assert.True(t, hasInterval, "interval field should be saved even when zero")
-	
+
 	_, hasThreshold := zeroValuesBird["threshold"]
 	assert.True(t, hasThreshold, "threshold field should be saved")
 
@@ -256,7 +255,7 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 // TestSpeciesConfigUpdate tests updating existing species config
 func TestSpeciesConfigUpdate(t *testing.T) {
 	t.Parallel()
-	
+
 	// Initial settings with one species config
 	settings := &Settings{
 		Realtime: RealtimeSettings{

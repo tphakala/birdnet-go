@@ -5,11 +5,16 @@ package api
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// GetLogger returns the api package logger.
+func GetLogger() logger.Logger {
+	return logger.Global().Module("api")
+}
 
 // Default constants for the HTTP server.
 const (
@@ -37,7 +42,7 @@ type Config struct {
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
 
 	// Security settings
-	RedirectToHTTPS bool   // Redirect HTTP to HTTPS
+	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
 	AllowedOrigins  []string // CORS allowed origins
 
 	// Timeouts
@@ -50,8 +55,8 @@ type Config struct {
 	BodyLimit string // Maximum request body size (e.g., "1M", "10M")
 
 	// Logging
-	Debug    bool         // Enable debug mode
-	LogLevel slog.Level   // Logging level
+	Debug    bool            // Enable debug mode
+	LogLevel logger.LogLevel // Logging level
 
 	// Development mode
 	DevMode bool // Enable development mode features
@@ -72,7 +77,7 @@ func DefaultConfig() *Config {
 		ShutdownTimeout: DefaultShutdownTimeout,
 		BodyLimit:       "10M",
 		Debug:           false,
-		LogLevel:        slog.LevelInfo,
+		LogLevel:        logger.LogLevelInfo,
 		DevMode:         false,
 	}
 }
@@ -95,7 +100,7 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	// Debug mode
 	cfg.Debug = settings.WebServer.Debug || settings.Debug
 	if cfg.Debug {
-		cfg.LogLevel = slog.LevelDebug
+		cfg.LogLevel = logger.LogLevelDebug
 	}
 
 	return cfg

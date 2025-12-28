@@ -98,31 +98,22 @@ import (
     "github.com/tphakala/birdnet-go/internal/birdweather"
 )
 
-func main() {
-    settings := &conf.Settings{
-        Realtime: conf.Realtime{
-            Birdweather: conf.Birdweather{
-                ID:               "your-station-id",
-                LocationAccuracy: 1000, // Accuracy in meters
-            },
-            Audio: conf.AudioSettings{
-                FfmpegPath: "/path/to/ffmpeg", // Path to FFmpeg binary
-            },
-        },
-        BirdNET: conf.BirdNET{
-            Latitude:  60.1234,
-            Longitude: 24.5678,
-        },
-    }
+func initBirdWeather(settings *conf.Settings) (*birdweather.BwClient, error) {
+    // settings should contain:
+    // - Realtime.Birdweather.ID: "your-station-id"
+    // - Realtime.Birdweather.LocationAccuracy: 1000 (meters)
+    // - Realtime.Audio.FfmpegPath: "/path/to/ffmpeg"
+    // - BirdNET.Latitude: 60.1234
+    // - BirdNET.Longitude: 24.5678
 
     client, err := birdweather.New(settings)
     if err != nil {
-        log.Fatalf("Failed to create BirdWeather client: %v", err)
+        return nil, fmt.Errorf("failed to create BirdWeather client: %w", err)
     }
-    defer client.Close()
-
-    // Use the client...
+    return client, nil
 }
+
+// Remember to call client.Close() when done
 ```
 
 ### Publishing a Detection

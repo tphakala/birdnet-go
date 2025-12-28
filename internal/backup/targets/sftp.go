@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"github.com/pkg/sftp"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -50,7 +50,7 @@ type SFTPTarget struct {
 	mu          sync.Mutex // Protects connPool operations
 	tempFiles   map[string]bool
 	tempFilesMu sync.Mutex // Protects tempFiles map
-	logger      *slog.Logger
+	log         logger.Logger
 }
 
 // ProgressReader wraps an io.Reader to track progress
@@ -68,7 +68,7 @@ func (r *SFTPProgressReader) Read(p []byte) (n int, err error) {
 }
 
 // NewSFTPTarget creates a new SFTP target with the given configuration
-func NewSFTPTarget(settings map[string]any, logger *slog.Logger) (*SFTPTarget, error) {
+func NewSFTPTarget(settings map[string]any, lg logger.Logger) (*SFTPTarget, error) {
 	p := NewSettingsParser(settings)
 
 	config := SFTPTargetConfig{
@@ -95,11 +95,15 @@ func NewSFTPTarget(settings map[string]any, logger *slog.Logger) (*SFTPTarget, e
 		return nil, err
 	}
 
+	if lg == nil {
+		lg = logger.Global().Module("backup")
+	}
+
 	return &SFTPTarget{
 		config:    config,
 		connPool:  make(chan *sftp.Client, config.MaxConns),
 		tempFiles: make(map[string]bool),
-		logger:    logger,
+		log:       lg.Module("sftp"),
 	}, nil
 }
 
@@ -119,7 +123,7 @@ func (t *SFTPTarget) getConnection(ctx context.Context) (*sftp.Client, error) {
 		// Connection is dead, close it and create a new one
 		if err := client.Close(); err != nil {
 			if t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close dead connection", "error", err)
+				t.log.Debug("SFTP: Failed to close dead connection", logger.Error(err))
 			}
 		}
 	default:
@@ -142,7 +146,7 @@ func (t *SFTPTarget) returnConnection(client *sftp.Client) {
 		// Pool is full, close the connection
 		if err := client.Close(); err != nil {
 			if t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close excess connection", "error", err)
+				t.log.Debug("SFTP: Failed to close excess connection", logger.Error(err))
 			}
 		}
 	}
@@ -196,7 +200,7 @@ func (t *SFTPTarget) withRetry(ctx context.Context, op func(*sftp.Client) error)
 
 		lastErr = err
 		if closeErr := client.Close(); closeErr != nil && t.config.Debug {
-			t.logger.Debug("SFTP: Failed to close connection after operation error", "error", closeErr)
+			t.log.Debug("SFTP: Failed to close connection after operation error", logger.Error(closeErr))
 		}
 
 		if !t.isTransientError(err) {
@@ -204,10 +208,10 @@ func (t *SFTPTarget) withRetry(ctx context.Context, op func(*sftp.Client) error)
 		}
 
 		if t.config.Debug {
-			t.logger.Debug("SFTP: Retrying operation after error",
-				"error", err,
-				"attempt", attempt+1,
-				"max_retries", t.config.MaxRetries)
+			t.log.Debug("SFTP: Retrying operation after error",
+				logger.Error(err),
+				logger.Int("attempt", attempt+1),
+				logger.Int("max_retries", t.config.MaxRetries))
 		}
 		time.Sleep(t.config.RetryBackoff * time.Duration(attempt+1))
 	}
@@ -315,7 +319,7 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		client, err := sftp.NewClient(sshConn)
 		if err != nil {
 			if closeErr := sshConn.Close(); closeErr != nil && t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close SSH connection after client creation failure", "error", closeErr)
+				t.log.Debug("SFTP: Failed to close SSH connection after client creation failure", logger.Error(closeErr))
 			}
 			resultChan <- connResult{nil, errors.New(err).
 				Component("backup").
@@ -424,12 +428,12 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 	tempName := tempFile.Name()
 	if err := tempFile.Close(); err != nil {
 		if t.config.Debug {
-			t.logger.Debug("SFTP: Failed to close temp file", "path", tempName, "error", err)
+			t.log.Debug("SFTP: Failed to close temp file", logger.String("path", tempName), logger.Error(err))
 		}
 	}
 	if err := os.Remove(tempName); err != nil && !os.IsNotExist(err) {
 		if t.config.Debug {
-			t.logger.Debug("SFTP: Failed to remove local temp file", "path", tempName, "error", err)
+			t.log.Debug("SFTP: Failed to remove local temp file", logger.String("path", tempName), logger.Error(err))
 		}
 	}
 
@@ -480,7 +484,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 	defer func() {
 		if err := file.Close(); err != nil {
 			if t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close local file", "path", localPath, "error", err)
+				t.log.Debug("SFTP: Failed to close local file", logger.String("path", localPath), logger.Error(err))
 			}
 		}
 	}()
@@ -497,7 +501,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 	defer func() {
 		if err := dstFile.Close(); err != nil {
 			if t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close remote file", "path", remotePath, "error", err)
+				t.log.Debug("SFTP: Failed to close remote file", logger.String("path", remotePath), logger.Error(err))
 			}
 		}
 	}()
@@ -514,7 +518,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 		defer func() {
 			if err := pw.Close(); err != nil {
 				if t.config.Debug {
-					t.logger.Debug("SFTP: Failed to close pipe writer", "error", err)
+					t.log.Debug("SFTP: Failed to close pipe writer", logger.Error(err))
 				}
 			}
 		}()
@@ -573,8 +577,8 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 // List implements the backup.Target interface
 func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		t.logger.Debug("SFTP: Listing backups",
-			"host", t.config.Host)
+		t.log.Debug("SFTP: Listing backups",
+			logger.String("host", t.config.Host))
 	}
 
 	var backups []backup.BackupInfo
@@ -631,9 +635,9 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface
 func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		t.logger.Debug("SFTP: Deleting backup",
-			"target", target,
-			"host", t.config.Host)
+		t.log.Debug("SFTP: Deleting backup",
+			logger.String("target", target),
+			logger.String("host", t.config.Host))
 	}
 
 	// Validate the target path
@@ -658,8 +662,8 @@ func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 		_ = client.Remove(metadataPath)
 
 		if t.config.Debug {
-			t.logger.Debug("SFTP: Successfully deleted backup",
-				"target", target)
+			t.log.Debug("SFTP: Successfully deleted backup",
+				logger.String("target", target))
 		}
 
 		return nil
@@ -696,7 +700,7 @@ func (t *SFTPTarget) Validate() error {
 		defer func() {
 			if err := os.Remove(tempFile.Name()); err != nil && !os.IsNotExist(err) {
 				if t.config.Debug {
-					t.logger.Debug("SFTP: Failed to remove test file", "path", tempFile.Name(), "error", err)
+					t.log.Debug("SFTP: Failed to remove test file", logger.String("path", tempFile.Name()), logger.Error(err))
 				}
 			}
 		}()
@@ -726,16 +730,16 @@ func (t *SFTPTarget) Validate() error {
 
 		// Test file deletion
 		if err := client.Remove(testFile); err != nil {
-			t.logger.Warn("SFTP: Failed to delete test file",
-				"test_file", testFile,
-				"error", err)
+			t.log.Warn("SFTP: Failed to delete test file",
+				logger.String("test_file", testFile),
+				logger.Error(err))
 		}
 
 		// Test directory deletion
 		if err := client.RemoveDirectory(testDir); err != nil {
-			t.logger.Warn("SFTP: Failed to remove test directory",
-				"test_dir", testDir,
-				"error", err)
+			t.log.Warn("SFTP: Failed to remove test directory",
+				logger.String("test_dir", testDir),
+				logger.Error(err))
 		}
 
 		return nil
@@ -768,8 +772,8 @@ func (t *SFTPTarget) Close() error {
 			if err := client.Close(); err != nil {
 				lastErr = err
 				if t.config.Debug {
-					t.logger.Warn("Failed to close SFTP connection",
-						"error", err)
+					t.log.Warn("Failed to close SFTP connection",
+						logger.Error(err))
 				}
 			}
 		default:
@@ -818,9 +822,9 @@ func (t *SFTPTarget) cleanupTempFiles(client *sftp.Client) {
 	for _, path := range tempFiles {
 		if err := client.Remove(path); err != nil {
 			if t.config.Debug {
-				t.logger.Warn("SFTP: Failed to clean up temporary file",
-					"path", path,
-					"error", err)
+				t.log.Warn("SFTP: Failed to clean up temporary file",
+					logger.String("path", path),
+					logger.Error(err))
 			}
 		} else {
 			t.untrackTempFile(path)
@@ -850,9 +854,9 @@ func knownHostsCallback(knownHostsFile string) (ssh.HostKeyCallback, error) {
 				Build()
 		}
 		// Warn user that SSH connections will fail until host keys are added
-		slog.Warn("Created empty known_hosts file - SSH connections will fail until host keys are added",
-			"path", knownHostsFile,
-			"hint", "Run 'ssh-keyscan <hostname> >> "+knownHostsFile+"' to add host keys")
+		GetLogger().Warn("Created empty known_hosts file - SSH connections will fail until host keys are added",
+			logString("path", knownHostsFile),
+			logString("hint", "Run 'ssh-keyscan <hostname> >> "+knownHostsFile+"' to add host keys"))
 	}
 
 	callback, err := knownhosts.New(knownHostsFile)

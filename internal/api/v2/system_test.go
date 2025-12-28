@@ -4,8 +4,6 @@ package api
 
 import (
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +32,6 @@ func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller) {
 		Echo:     e,
 		Group:    e.Group("/api/v2"),
 		Settings: settings,
-		logger:   log.New(io.Discard, "", 0),
 	}
 
 	return e, controller
@@ -587,7 +584,6 @@ func TestGetActiveAudioDevice(t *testing.T) {
 			Echo:     e,
 			Group:    e.Group("/api/v2"),
 			Settings: settings,
-			logger:   log.New(io.Discard, "", 0),
 		}
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)

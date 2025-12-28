@@ -2,13 +2,13 @@ package notification
 
 import (
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/events"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 type TemplateData struct {
@@ -136,14 +136,15 @@ func BuildBaseURL(host, port string, autoTLS bool) string {
 		// Priority 2: Try BIRDNET_HOST environment variable
 		if envHost := os.Getenv("BIRDNET_HOST"); envHost != "" {
 			host = strings.TrimSpace(envHost)
-			slog.Debug("Using BIRDNET_HOST environment variable for notification URLs", "host", host)
+			GetLogger().Debug("using BIRDNET_HOST environment variable for notification URLs",
+				logger.String("host", host))
 		}
 	}
 
 	// Priority 3: Fallback to localhost with warning
 	if host == "" {
 		host = "localhost"
-		slog.Warn("Using localhost for notification URLs. Set security.host in config or BIRDNET_HOST environment variable for proper URL generation when using reverse proxy or remote access")
+		GetLogger().Warn("using localhost for notification URLs; set security.host in config or BIRDNET_HOST environment variable for proper URL generation when using reverse proxy or remote access")
 	}
 
 	// Omit default ports for cleaner URLs

@@ -14,6 +14,7 @@ import (
 
 // TestPruneOldEntries_CriticalReliability tests old entry pruning to prevent memory leaks
 // CRITICAL: Without proper pruning, tracker will consume unbounded memory over time
+//
 //nolint:gocognit // Table-driven test with comprehensive scenario coverage requires complex verification
 func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 	t.Parallel()

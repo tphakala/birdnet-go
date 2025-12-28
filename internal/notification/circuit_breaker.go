@@ -3,11 +3,11 @@ package notification
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -130,10 +130,10 @@ type PushCircuitBreaker struct {
 func NewPushCircuitBreaker(config CircuitBreakerConfig, notificationMetrics *metrics.NotificationMetrics, providerName string) *PushCircuitBreaker {
 	// Validate configuration and warn if invalid (but don't override for test flexibility)
 	if err := config.Validate(); err != nil {
-		slog.Warn("Circuit breaker config validation failed",
-			"provider", providerName,
-			"error", err,
-			"action", "proceeding with provided config")
+		GetLogger().Warn("circuit breaker config validation failed",
+			logger.String("provider", providerName),
+			logger.Error(err),
+			logger.String("action", "proceeding with provided config"))
 	}
 
 	cb := &PushCircuitBreaker{
@@ -289,12 +289,12 @@ func (cb *PushCircuitBreaker) setState(newState CircuitState) {
 	}
 
 	// Log state transitions for operational visibility
-	slog.Info("Circuit breaker state transition",
-		"provider", cb.providerName,
-		"old_state", oldState.String(),
-		"new_state", newState.String(),
-		"consecutive_failures", cb.failures,
-		"last_failure", cb.lastFailureTime.Format(time.RFC3339))
+	GetLogger().Info("circuit breaker state transition",
+		logger.String("provider", cb.providerName),
+		logger.String("old_state", oldState.String()),
+		logger.String("new_state", newState.String()),
+		logger.Int("consecutive_failures", cb.failures),
+		logger.String("last_failure", cb.lastFailureTime.Format(time.RFC3339)))
 
 	// Report telemetry for state transitions (with debouncing to prevent spam)
 	if cb.telemetry != nil {
@@ -323,11 +323,11 @@ func (cb *PushCircuitBreaker) setState(newState CircuitState) {
 			)
 			cb.lastTelemetryReport = now
 		} else {
-			slog.Debug("Telemetry report debounced (too soon since last report)",
-				"provider", cb.providerName,
-				"transition", fmt.Sprintf("%s → %s", oldState.String(), newState.String()),
-				"time_since_last_report", timeSinceLastReport,
-				"min_interval", MinTelemetryReportInterval)
+			GetLogger().Debug("telemetry report debounced (too soon since last report)",
+				logger.String("provider", cb.providerName),
+				logger.String("transition", fmt.Sprintf("%s → %s", oldState.String(), newState.String())),
+				logger.Duration("time_since_last_report", timeSinceLastReport),
+				logger.Duration("min_interval", MinTelemetryReportInterval))
 		}
 	}
 }
@@ -382,19 +382,19 @@ func (cb *PushCircuitBreaker) GetStats() CircuitBreakerStats {
 	defer cb.mu.RUnlock()
 
 	return CircuitBreakerStats{
-		State:              cb.state,
-		Failures:           cb.failures,
-		LastFailureTime:    cb.lastFailureTime,
-		LastStateChange:    cb.lastStateChange,
-		HalfOpenRequests:   cb.halfOpenRequests,
+		State:            cb.state,
+		Failures:         cb.failures,
+		LastFailureTime:  cb.lastFailureTime,
+		LastStateChange:  cb.lastStateChange,
+		HalfOpenRequests: cb.halfOpenRequests,
 	}
 }
 
 // CircuitBreakerStats contains statistics about a circuit breaker's state.
 type CircuitBreakerStats struct {
-	State              CircuitState
-	Failures           int
-	LastFailureTime    time.Time
-	LastStateChange    time.Time
-	HalfOpenRequests   int
+	State            CircuitState
+	Failures         int
+	LastFailureTime  time.Time
+	LastStateChange  time.Time
+	HalfOpenRequests int
 }

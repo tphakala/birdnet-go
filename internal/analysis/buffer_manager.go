@@ -2,12 +2,12 @@ package analysis
 
 import (
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -17,7 +17,7 @@ type BufferManager struct {
 	bn       *birdnet.BirdNET
 	quitChan chan struct{}
 	wg       *sync.WaitGroup
-	logger   *slog.Logger
+	logger   logger.Logger
 }
 
 // NewBufferManager creates a new buffer manager with validation.
@@ -56,7 +56,7 @@ func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.Wait
 			Context("operation", "new_buffer_manager").
 			Build()
 	}
-	
+
 	return &BufferManager{
 		bn:       bn,
 		quitChan: quitChan,
@@ -114,14 +114,14 @@ func (m *BufferManager) AddMonitor(source string) error {
 
 	// Create a monitor-specific quit channel
 	monitorQuit := make(chan struct{})
-	
+
 	// Use LoadOrStore to atomically check and store, preventing race conditions
 	actual, loaded := m.monitors.LoadOrStore(source, monitorQuit)
 	if loaded {
 		// Monitor already exists for this source - not an error
 		return nil
 	}
-	
+
 	// Use the channel we just stored (actual is our monitorQuit channel)
 	monitorQuit = actual.(chan struct{})
 
@@ -132,11 +132,11 @@ func (m *BufferManager) AddMonitor(source string) error {
 			// Panic recovery for the monitor goroutine
 			if r := recover(); r != nil {
 				m.logger.Error("Monitor goroutine panicked",
-					"source", source,
-					"panic", r,
-					"component", "analysis.buffer")
+					logger.String("source", source),
+					logger.Any("panic", r),
+					logger.String("component", "analysis.buffer"))
 			}
-			
+
 			m.wg.Done()
 			// Clean up monitor from map if it exits unexpectedly
 			if quitChanIface, exists := m.monitors.Load(source); exists {
@@ -153,7 +153,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 				m.monitors.Delete(source)
 			}
 		}()
-		
+
 		// Run the monitor
 		myaudio.AnalysisBufferMonitor(m.wg, m.bn, monitorQuit, source)
 	}()
@@ -185,9 +185,9 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 		m.safeCloseChannel(quitChanTyped, source)
 	} else {
 		m.logger.Warn("Invalid quit channel type during monitor removal",
-			"source", source,
-			"type", fmt.Sprintf("%T", quitChan),
-			"component", "analysis.buffer")
+			logger.String("source", source),
+			logger.String("type", fmt.Sprintf("%T", quitChan)),
+			logger.String("component", "analysis.buffer"))
 	}
 	// Remove from the map
 	m.monitors.Delete(source)
@@ -198,7 +198,7 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 // RemoveAllMonitors stops all running monitors
 func (m *BufferManager) RemoveAllMonitors() []error {
 	var removalErrors []error
-	
+
 	m.monitors.Range(func(key, value any) bool {
 		source := key.(string)
 		if err := m.RemoveMonitor(source); err != nil {
@@ -213,7 +213,7 @@ func (m *BufferManager) RemoveAllMonitors() []error {
 		}
 		return true
 	})
-	
+
 	return removalErrors
 }
 
@@ -223,10 +223,10 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 	startTime := time.Now()
 	defer func() {
 		m.logger.Debug("Buffer monitors updated",
-			"duration_ms", time.Since(startTime).Milliseconds(),
-			"source_count", len(sources),
-			"component", "analysis.buffer",
-			"operation", "update_monitors")
+			logger.Int64("duration_ms", time.Since(startTime).Milliseconds()),
+			logger.Int("source_count", len(sources)),
+			logger.String("component", "analysis.buffer"),
+			logger.String("operation", "update_monitors"))
 	}()
 
 	// Treat nil sources as empty slice to allow removing all monitors
@@ -245,9 +245,9 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 
 	// State transition logging pattern
 	m.logger.Info("Updating buffer monitors",
-		"current_monitors", currentCount,
-		"requested_sources", len(sources),
-		"component", "analysis.buffer")
+		logger.Int("current_monitors", currentCount),
+		logger.Int("requested_sources", len(sources)),
+		logger.String("component", "analysis.buffer"))
 
 	var addErrors []error
 	var removeErrors []error
@@ -258,7 +258,7 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 		if source != "" {
 			wasExisting := toRemove[source]
 			delete(toRemove, source)
-			
+
 			if !wasExisting {
 				if err := m.AddMonitor(source); err != nil {
 					wrappedErr := errors.New(err).
@@ -296,12 +296,12 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 	// State transition logging - final state
 	newCount := currentCount - removedCount + addedCount
 	m.logger.Info("Buffer monitor update completed",
-		"monitors_added", addedCount,
-		"monitors_removed", removedCount, 
-		"final_monitor_count", newCount,
-		"add_errors", len(addErrors),
-		"remove_errors", len(removeErrors),
-		"component", "analysis.buffer")
+		logger.Int("monitors_added", addedCount),
+		logger.Int("monitors_removed", removedCount),
+		logger.Int("final_monitor_count", newCount),
+		logger.Int("add_errors", len(addErrors)),
+		logger.Int("remove_errors", len(removeErrors)),
+		logger.String("component", "analysis.buffer"))
 
 	// Return combined error if any operations failed
 	if len(addErrors) > 0 || len(removeErrors) > 0 {
@@ -309,10 +309,10 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 		allErrors := make([]error, 0, len(addErrors)+len(removeErrors))
 		allErrors = append(allErrors, addErrors...)
 		allErrors = append(allErrors, removeErrors...)
-		
+
 		// Join all errors to preserve individual error details
 		combinedErr := errors.Join(allErrors...)
-		
+
 		// Wrap with structured metadata
 		return errors.New(combinedErr).
 			Component("analysis.buffer").
@@ -337,11 +337,11 @@ func (m *BufferManager) safeCloseChannel(ch chan struct{}, source string) {
 		if r := recover(); r != nil {
 			// Double-close is expected in concurrent scenarios, log at debug level
 			m.logger.Debug("Channel already closed",
-				"source", source,
-				"component", "analysis.buffer")
+				logger.String("source", source),
+				logger.String("component", "analysis.buffer"))
 		}
 	}()
-	
+
 	// Simply close the channel - panic recovery handles double-close
 	close(ch)
 }

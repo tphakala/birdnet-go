@@ -693,7 +693,7 @@ func parseTableFromOperation(operation string) (op, table string) {
 func (m *DatastoreMetrics) RecordOperation(operation, status string) {
 	// Parse table from operation for database operations
 	op, table := parseTableFromOperation(operation)
-	
+
 	// Map generic operations to specific datastore operations
 	switch op {
 	case OpDbQuery, OpDbInsert, OpDbUpdate, OpDbDelete:
@@ -725,7 +725,7 @@ func (m *DatastoreMetrics) RecordOperation(operation, status string) {
 func (m *DatastoreMetrics) RecordDuration(operation string, seconds float64) {
 	// Parse table from operation for database operations
 	op, table := parseTableFromOperation(operation)
-	
+
 	switch op {
 	case OpDbQuery, OpDbInsert, OpDbUpdate, OpDbDelete:
 		m.dbOperationDuration.WithLabelValues(op, table).Observe(seconds)
@@ -756,7 +756,7 @@ func (m *DatastoreMetrics) RecordDuration(operation string, seconds float64) {
 func (m *DatastoreMetrics) RecordError(operation, errorType string) {
 	// Parse table from operation for database operations
 	op, table := parseTableFromOperation(operation)
-	
+
 	switch op {
 	case OpDbQuery, OpDbInsert, OpDbUpdate, OpDbDelete:
 		m.dbOperationErrorsTotal.WithLabelValues(op, table, errorType).Inc()

@@ -6,13 +6,12 @@ package species
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Constants for better maintainability and avoiding magic numbers
@@ -68,47 +67,13 @@ const (
 )
 
 // Package-level logger for species tracking
-var (
-	logger          *slog.Logger
-	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
-	closeLogger     func() error
-)
-
 // daysInMonth contains the number of days in each month (non-leap year, Jan=index 0)
 var daysInMonth = [12]int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
-func init() {
-	// Initialize species tracking logger
-	// This creates a dedicated log file at logs/species-tracking.log
-	var err error
-
-	// Set initial level to Debug for comprehensive logging
-	serviceLevelVar.Set(slog.LevelDebug)
-
-	logger, closeLogger, err = logging.NewFileLogger(
-		"logs/species-tracking.log",
-		"species-tracking",
-		serviceLevelVar,
-	)
-
-	if err != nil || logger == nil {
-		// Fallback to default logger if file logger creation fails
-		logger = slog.Default().With("service", "species-tracking")
-		closeLogger = func() error { return nil }
-		// Log the error so we know why the file logger failed
-		if err != nil {
-			logger.Error("Failed to initialize species tracking file logger", "error", err)
-		}
-	}
-}
-
-// Close releases the file logger resources to prevent resource leaks.
-// This should be called during application shutdown or when the logger is no longer needed.
-func Close() error {
-	if closeLogger != nil {
-		return closeLogger()
-	}
-	return nil
+// getLog returns the species tracker logger.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getLog() logger.Logger {
+	return logger.Global().Module("analysis.species")
 }
 
 // SpeciesDatastore defines the minimal interface needed by SpeciesTracker
@@ -214,12 +179,12 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 	now := time.Now() // Uses system local timezone
 
 	// Log initialization
-	logger.Debug("Creating new species tracker",
-		"enabled", settings.Enabled,
-		"window_days", settings.NewSpeciesWindowDays,
-		"yearly_enabled", settings.YearlyTracking.Enabled,
-		"seasonal_enabled", settings.SeasonalTracking.Enabled,
-		"current_time", now.Format("2006-01-02 15:04:05"))
+	getLog().Debug("Creating new species tracker",
+		logger.Bool("enabled", settings.Enabled),
+		logger.Int("window_days", settings.NewSpeciesWindowDays),
+		logger.Bool("yearly_enabled", settings.YearlyTracking.Enabled),
+		logger.Bool("seasonal_enabled", settings.SeasonalTracking.Enabled),
+		logger.String("current_time", now.Format("2006-01-02 15:04:05")))
 
 	tracker := &SpeciesTracker{
 		// Lifetime tracking
@@ -259,21 +224,21 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		for name, season := range settings.SeasonalTracking.Seasons {
 			// Validate season date
 			if err := validateSeasonDate(season.StartMonth, season.StartDay); err != nil {
-				logger.Error("Invalid season date, skipping",
-					"season", name,
-					"month", season.StartMonth,
-					"day", season.StartDay,
-					"error", err)
+				getLog().Error("Invalid season date, skipping",
+					logger.String("season", name),
+					logger.Int("month", season.StartMonth),
+					logger.Int("day", season.StartDay),
+					logger.Error(err))
 				continue
 			}
 			tracker.seasons[name] = seasonDates{
 				month: season.StartMonth,
 				day:   season.StartDay,
 			}
-			logger.Debug("Configured season",
-				"name", name,
-				"start_month", season.StartMonth,
-				"start_day", season.StartDay)
+			getLog().Debug("Configured season",
+				logger.String("name", name),
+				logger.Int("start_month", season.StartMonth),
+				logger.Int("start_day", season.StartDay))
 		}
 	} else {
 		tracker.initializeDefaultSeasons()
@@ -286,10 +251,10 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 
 	tracker.currentSeason = tracker.getCurrentSeason(now)
 
-	logger.Debug("Species tracker initialized",
-		"current_season", tracker.currentSeason,
-		"current_year", tracker.currentYear,
-		"total_seasons", len(tracker.seasons))
+	getLog().Debug("Species tracker initialized",
+		logger.String("current_season", tracker.currentSeason),
+		logger.Int("current_year", tracker.currentYear),
+		logger.Int("total_seasons", len(tracker.seasons)))
 
 	// Set notification suppression window from configuration
 	// 0 is valid (disabled), negative values get default

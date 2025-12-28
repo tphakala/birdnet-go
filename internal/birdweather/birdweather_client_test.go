@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -105,11 +105,13 @@ func TestMain(m *testing.M) {
 
 // cleanupTestArtifacts removes directories created during tests
 func cleanupTestArtifacts() {
+	log := GetLogger()
+
 	// Clean up debug directory if it exists
 	debugDir := "debug"
 	if _, err := os.Stat(debugDir); err == nil {
 		if err := os.RemoveAll(debugDir); err != nil {
-			log.Printf("Failed to remove debug directory: %v", err)
+			log.Warn("Failed to remove debug directory", logger.Error(err))
 		}
 	}
 
@@ -117,7 +119,7 @@ func cleanupTestArtifacts() {
 	logsDir := "logs"
 	if _, err := os.Stat(logsDir); err == nil {
 		if err := os.RemoveAll(logsDir); err != nil {
-			log.Printf("Failed to remove logs directory: %v", err)
+			log.Warn("Failed to remove logs directory", logger.Error(err))
 		}
 	}
 }

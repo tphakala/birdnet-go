@@ -3,7 +3,6 @@ package birdnet
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -164,7 +164,7 @@ func (s *TracingSpan) Finish() {
 
 // TraceAnalysis traces audio analysis operations
 func TraceAnalysis(ctx context.Context, operation string, fn func() error) error {
-	span, _ := StartSpan(ctx, fmt.Sprintf("birdnet.%s", operation), operation)
+	span, _ := StartSpan(ctx, "birdnet."+operation, operation)
 	defer span.Finish()
 
 	err := fn()
@@ -211,7 +211,9 @@ func RecordMetric(name string, value float64, tags map[string]string) {
 	// Log if debug is enabled
 	settings := conf.GetSettings()
 	if settings != nil && settings.Debug {
-		fmt.Printf("[METRIC] %s: %.2f tags=%v\n", name, value, tags)
+		GetLogger().Debug("Metric recorded",
+			logger.String("metric_name", name),
+			logger.Float64("value", value))
 	}
 
 	// Note: Detailed metrics are now recorded via spans automatically

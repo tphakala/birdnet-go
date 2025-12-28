@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"hash/crc32"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // OS name constant for runtime.GOOS comparisons.
@@ -126,7 +127,10 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 		}
 
 		if i == 0 || (i+1)%5 == 0 {
-			log.Printf("FIFO %s: writer waiting (attempt %d): %v", fifoPath, i+1, openErr)
+			GetLogger().Debug("FIFO writer waiting",
+				logger.String("path", fifoPath),
+				logger.Int("attempt", i+1),
+				logger.Error(openErr))
 		}
 
 		if err := waitWithContext(ctx, retryInterval); err != nil {

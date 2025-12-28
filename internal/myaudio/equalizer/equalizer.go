@@ -14,9 +14,10 @@ package equalizer
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sync"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Mode represents the kind of digital filters.
@@ -394,11 +395,12 @@ func (fc *FilterChain) ApplyBatch(input []float64) {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
+	log := logger.Global().Module("audio").Module("equalizer")
 	for _, filter := range fc.filters {
 		if filter != nil {
 			filter.ApplyBatch(input)
 		} else {
-			log.Println("Warning: Encountered a nil filter in the audio EQ filter chain")
+			log.Warn("encountered nil filter in audio EQ filter chain")
 		}
 	}
 }

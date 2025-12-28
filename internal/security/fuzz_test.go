@@ -592,10 +592,10 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 		"test\x00test",
 		string([]byte{0x00, 0x01, 0x02}),
 		// Unicode edge cases
-		"\uFEFF", // BOM
-		"\u202E", // RTL override
-		"\u0000", // Null
-		"\uFFFF", // Invalid
+		"\uFEFF",                   // BOM
+		"\u202E",                   // RTL override
+		"\u0000",                   // Null
+		"\uFFFF",                   // Invalid
 		string([]byte{0xC0, 0xAF}), // Overlong encoding
 		// Control characters
 		"\x01\x02\x03\x04\x05",
@@ -652,11 +652,11 @@ func TestUnicodeSecurityBypass(t *testing.T) {
 		name  string
 		input string
 	}{
-		{"Greek omicron for o", "/lοcalhost"}, // ο = Greek omicron
-		{"Cyrillic a for a", "/locаlhost"},    // а = Cyrillic a
-		{"Full-width slash", "/path／test"},   // ／ = full-width slash
-		{"Fraction slash", "/path⁄test"},      // ⁄ = fraction slash
-		{"Division slash", "/path∕test"},      // ∕ = division slash
+		{"Greek omicron for o", "/lοcalhost"},  // ο = Greek omicron
+		{"Cyrillic a for a", "/locаlhost"},     // а = Cyrillic a
+		{"Full-width slash", "/path／test"},     // ／ = full-width slash
+		{"Fraction slash", "/path⁄test"},       // ⁄ = fraction slash
+		{"Division slash", "/path∕test"},       // ∕ = division slash
 		{"Combining dot", "/path\u0307\u0307"}, // combining dots
 	}
 
@@ -731,10 +731,10 @@ func TestAdvancedPathTraversalAttacks(t *testing.T) {
 		{"Triple encoded traversal", "/path/%25252e%25252e/etc", false},
 
 		// Unicode normalization attacks - NFKC normalizes these to ASCII equivalents
-		{"Unicode dot (fullwidth)", "/path\uff0e\uff0e/etc", false},  // ．．→ .. after NFKC
-		{"Unicode slash (fullwidth)", "/path\uff0fetc", true},        // ／ → / after NFKC, becomes /path/etc (valid)
-		{"Unicode double slash", "/\uff0f/evil.com", false},          // ／/ → // after NFKC (protocol-relative)
-		{"Unicode traversal", "/path/\uff0e\uff0e/etc", false},       // ．．→ .. after NFKC
+		{"Unicode dot (fullwidth)", "/path\uff0e\uff0e/etc", false}, // ．．→ .. after NFKC
+		{"Unicode slash (fullwidth)", "/path\uff0fetc", true},       // ／ → / after NFKC, becomes /path/etc (valid)
+		{"Unicode double slash", "/\uff0f/evil.com", false},         // ／/ → // after NFKC (protocol-relative)
+		{"Unicode traversal", "/path/\uff0e\uff0e/etc", false},      // ．．→ .. after NFKC
 
 		// Case variation attacks
 		{"Mixed case encoded", "/path/%2E%2e/etc", false},
@@ -773,11 +773,11 @@ func TestAdvancedCRLFInjectionAttacks(t *testing.T) {
 		expected bool // should containsCRLF return true?
 	}{
 		// Unicode line terminators
-		{"Unicode line separator", "test\u2028test", false},       // Line Separator
-		{"Unicode paragraph separator", "test\u2029test", false},  // Paragraph Separator
-		{"Unicode next line", "test\u0085test", false},            // Next Line (NEL)
-		{"Vertical tab", "test\x0Btest", false},                   // VT - not a line ending
-		{"Form feed", "test\x0Ctest", false},                      // FF - not a line ending
+		{"Unicode line separator", "test\u2028test", false},      // Line Separator
+		{"Unicode paragraph separator", "test\u2029test", false}, // Paragraph Separator
+		{"Unicode next line", "test\u0085test", false},           // Next Line (NEL)
+		{"Vertical tab", "test\x0Btest", false},                  // VT - not a line ending
+		{"Form feed", "test\x0Ctest", false},                     // FF - not a line ending
 
 		// Various CRLF combinations
 		{"LF only", "test\ntest", true},
@@ -886,10 +886,10 @@ func TestAdvancedIPAddressEdgeCases(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name     string
-		ip       string
-		isValid  bool // should net.ParseIP return non-nil?
-		isIPv4   bool // if valid, is it IPv4?
+		name    string
+		ip      string
+		isValid bool // should net.ParseIP return non-nil?
+		isIPv4  bool // if valid, is it IPv4?
 	}{
 		// Standard formats
 		{"Standard IPv4", "192.168.1.1", true, true},
@@ -907,8 +907,8 @@ func TestAdvancedIPAddressEdgeCases(t *testing.T) {
 		{"Max IPv6", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", true, false},
 
 		// Invalid formats
-		{"Octal IPv4", "0300.0250.01.01", false, false},      // Go doesn't support octal
-		{"Hex IPv4", "0xC0.0xA8.0x01.0x01", false, false},    // Go doesn't support hex
+		{"Octal IPv4", "0300.0250.01.01", false, false},   // Go doesn't support octal
+		{"Hex IPv4", "0xC0.0xA8.0x01.0x01", false, false}, // Go doesn't support hex
 		{"Overflow IPv4", "256.256.256.256", false, false},
 		{"Negative IPv4", "-1.0.0.0", false, false},
 		{"Too many octets", "1.2.3.4.5", false, false},

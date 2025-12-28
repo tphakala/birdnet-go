@@ -583,7 +583,7 @@ func FuzzParseHourFilter(f *testing.F) {
 		// Invalid ranges
 		"-1-10",
 		"10-24",
-		"10-5",      // inverted
+		"10-5", // inverted
 		"abc",
 		"10-abc",
 		"abc-10",
@@ -698,10 +698,10 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 		"test\x00test",
 		string([]byte{0x00, 0x01, 0x02}),
 		// Unicode edge cases
-		"\uFEFF", // BOM
-		"\u202E", // RTL override
-		"\u0000", // Null
-		"\uFFFF", // Invalid
+		"\uFEFF",                   // BOM
+		"\u202E",                   // RTL override
+		"\u0000",                   // Null
+		"\uFFFF",                   // Invalid
 		string([]byte{0xC0, 0xAF}), // Overlong encoding
 		// Control characters
 		"\x01\x02\x03\x04\x05",

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -121,9 +122,9 @@ func (ds *DataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, 
 	}
 
 	if result.RowsAffected > 0 {
-		getLogger().Info("Cleaned up expired notification history",
-			"count", result.RowsAffected,
-			"before", before.Format(time.RFC3339))
+		GetLogger().Info("Cleaned up expired notification history",
+			logger.Int64("count", result.RowsAffected),
+			logger.String("before", before.Format(time.RFC3339)))
 	}
 
 	return result.RowsAffected, nil

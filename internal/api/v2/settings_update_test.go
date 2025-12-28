@@ -3,8 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -447,7 +445,6 @@ func TestValidationErrors(t *testing.T) {
 			controller := &Controller{
 				Echo:        e,
 				controlChan: make(chan string, 10),
-				logger:      log.New(io.Discard, "TEST: ", log.LstdFlags), // Add logger for tests (silent)
 			}
 
 			var body []byte

@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"golang.org/x/time/rate"
@@ -22,7 +22,7 @@ const (
 	streamHealthPollInterval = 1 * time.Second
 
 	// Rate limiting for stream health SSE endpoint
-	streamHealthRateLimitRequests = 5                // Requests per window
+	streamHealthRateLimitRequests = 5               // Requests per window
 	streamHealthRateLimitWindow   = 1 * time.Minute // Rate limit window
 )
 
@@ -34,13 +34,13 @@ type SSEStreamHealthData struct {
 
 // StreamHealthResponse represents the API response for a single stream's health
 type StreamHealthResponse struct {
-	URL              string                       `json:"url"`               // Sanitized RTSP URL
-	IsHealthy        bool                         `json:"is_healthy"`        // Overall health status
-	ProcessState     string                       `json:"process_state"`     // Current process state (idle, starting, running, etc.)
-	LastDataReceived *time.Time                   `json:"last_data_received"` // When data was last received (null if never)
-	TimeSinceData    *float64                     `json:"time_since_data_seconds,omitempty"` // Seconds since last data (omitempty for never)
-	RestartCount     int                          `json:"restart_count"`     // Number of times stream has been restarted
-	Error            string                       `json:"error,omitempty"`   // Current error message if any
+	URL              string     `json:"url"`                               // Sanitized RTSP URL
+	IsHealthy        bool       `json:"is_healthy"`                        // Overall health status
+	ProcessState     string     `json:"process_state"`                     // Current process state (idle, starting, running, etc.)
+	LastDataReceived *time.Time `json:"last_data_received"`                // When data was last received (null if never)
+	TimeSinceData    *float64   `json:"time_since_data_seconds,omitempty"` // Seconds since last data (omitempty for never)
+	RestartCount     int        `json:"restart_count"`                     // Number of times stream has been restarted
+	Error            string     `json:"error,omitempty"`                   // Current error message if any
 	// Data statistics
 	TotalBytesReceived int64   `json:"total_bytes_received"` // Total bytes received
 	BytesPerSecond     float64 `json:"bytes_per_second"`     // Current data rate
@@ -54,17 +54,17 @@ type StreamHealthResponse struct {
 
 // ErrorContextResponse represents the API response for FFmpeg error context
 type ErrorContextResponse struct {
-	ErrorType          string    `json:"error_type"`                     // e.g., "connection_timeout", "rtsp_404"
-	PrimaryMessage     string    `json:"primary_message"`                // Main error message
-	UserFacingMessage  string    `json:"user_facing_msg"`                // User-friendly explanation
-	TroubleshootingSteps []string `json:"troubleshooting_steps,omitempty"` // List of troubleshooting steps
-	Timestamp          time.Time `json:"timestamp"`                      // When error was detected
+	ErrorType            string    `json:"error_type"`                      // e.g., "connection_timeout", "rtsp_404"
+	PrimaryMessage       string    `json:"primary_message"`                 // Main error message
+	UserFacingMessage    string    `json:"user_facing_msg"`                 // User-friendly explanation
+	TroubleshootingSteps []string  `json:"troubleshooting_steps,omitempty"` // List of troubleshooting steps
+	Timestamp            time.Time `json:"timestamp"`                       // When error was detected
 	// Technical details (optional, for advanced users)
-	TargetHost      string  `json:"target_host,omitempty"`       // Host/IP address
-	TargetPort      int     `json:"target_port,omitempty"`       // Port number
-	TimeoutDuration *string `json:"timeout_duration,omitempty"`  // Timeout duration as string (e.g., "10s")
-	HTTPStatus      int     `json:"http_status,omitempty"`       // HTTP/RTSP status code
-	RTSPMethod      string  `json:"rtsp_method,omitempty"`       // RTSP method that failed
+	TargetHost      string  `json:"target_host,omitempty"`      // Host/IP address
+	TargetPort      int     `json:"target_port,omitempty"`      // Port number
+	TimeoutDuration *string `json:"timeout_duration,omitempty"` // Timeout duration as string (e.g., "10s")
+	HTTPStatus      int     `json:"http_status,omitempty"`      // HTTP/RTSP status code
+	RTSPMethod      string  `json:"rtsp_method,omitempty"`      // RTSP method that failed
 	// Action recommendations
 	ShouldOpenCircuit bool `json:"should_open_circuit"` // Whether circuit breaker should open
 	ShouldRestart     bool `json:"should_restart"`      // Whether stream should restart
@@ -72,27 +72,27 @@ type ErrorContextResponse struct {
 
 // StateTransitionResponse represents a state transition event
 type StateTransitionResponse struct {
-	FromState string    `json:"from_state"` // Previous state
-	ToState   string    `json:"to_state"`   // New state
-	Timestamp time.Time `json:"timestamp"`  // When transition occurred
+	FromState string    `json:"from_state"`       // Previous state
+	ToState   string    `json:"to_state"`         // New state
+	Timestamp time.Time `json:"timestamp"`        // When transition occurred
 	Reason    string    `json:"reason,omitempty"` // Reason for transition
 }
 
 // StreamsStatusSummaryResponse provides a high-level summary of all streams
 type StreamsStatusSummaryResponse struct {
-	TotalStreams    int                     `json:"total_streams"`    // Total number of configured streams
-	HealthyStreams  int                     `json:"healthy_streams"`  // Number of healthy streams
-	UnhealthyStreams int                    `json:"unhealthy_streams"` // Number of unhealthy streams
-	StreamsSummary  []StreamSummaryResponse `json:"streams_summary"`  // Brief summary of each stream
-	Timestamp       time.Time               `json:"timestamp"`        // When this status was generated
+	TotalStreams     int                     `json:"total_streams"`     // Total number of configured streams
+	HealthyStreams   int                     `json:"healthy_streams"`   // Number of healthy streams
+	UnhealthyStreams int                     `json:"unhealthy_streams"` // Number of unhealthy streams
+	StreamsSummary   []StreamSummaryResponse `json:"streams_summary"`   // Brief summary of each stream
+	Timestamp        time.Time               `json:"timestamp"`         // When this status was generated
 }
 
 // StreamSummaryResponse provides a brief summary of a single stream
 type StreamSummaryResponse struct {
-	URL           string  `json:"url"`            // Sanitized RTSP URL
-	IsHealthy     bool    `json:"is_healthy"`     // Health status
-	ProcessState  string  `json:"process_state"`  // Current state
-	LastErrorType string  `json:"last_error_type,omitempty"` // Type of last error if any
+	URL           string   `json:"url"`                               // Sanitized RTSP URL
+	IsHealthy     bool     `json:"is_healthy"`                        // Health status
+	ProcessState  string   `json:"process_state"`                     // Current state
+	LastErrorType string   `json:"last_error_type,omitempty"`         // Type of last error if any
 	TimeSinceData *float64 `json:"time_since_data_seconds,omitempty"` // Seconds since last data
 }
 
@@ -113,7 +113,7 @@ func (c *Controller) initStreamHealthRoutes() {
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
 				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / float64(SecondsPerMinute)), // 5 per 60 seconds
-				Burst:     streamHealthRateLimitRequests,                              // Allow 5 immediate connections
+				Burst:     streamHealthRateLimitRequests,                                                  // Allow 5 immediate connections
 				ExpiresIn: streamHealthRateLimitWindow,
 			},
 		),
@@ -189,9 +189,9 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	// Find the matching stream (case-sensitive exact match)
 	health, exists := healthData[decodedURL]
 	if !exists {
-		c.logAPIRequest(ctx, slog.LevelWarn, "Stream not found",
-			"requested_url", privacy.SanitizeRTSPUrl(decodedURL),
-			"active_streams", len(healthData))
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
+			logger.String("requested_url", privacy.SanitizeRTSPUrl(decodedURL)),
+			logger.Int("active_streams", len(healthData)))
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
@@ -215,11 +215,11 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 
 	// Build summary
 	summary := StreamsStatusSummaryResponse{
-		TotalStreams:    len(healthData),
-		HealthyStreams:  0,
+		TotalStreams:     len(healthData),
+		HealthyStreams:   0,
 		UnhealthyStreams: 0,
-		StreamsSummary:  make([]StreamSummaryResponse, 0, len(healthData)),
-		Timestamp:       time.Now(),
+		StreamsSummary:   make([]StreamSummaryResponse, 0, len(healthData)),
+		Timestamp:        time.Now(),
 	}
 
 	for rawURL := range healthData {
@@ -351,8 +351,8 @@ func convertErrorContextToResponse(errCtx *myaudio.ErrorContext) *ErrorContextRe
 func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
 	if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
 		c.logDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
-			"client_id", clientID,
-			"error", err.Error())
+			logger.String("client_id", clientID),
+			logger.Error(err))
 		return err
 	}
 	return nil
@@ -421,21 +421,21 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 
 // streamHealthSnapshot captures key health metrics for change detection
 type streamHealthSnapshot struct {
-	IsHealthy        bool
-	ProcessState     string
-	LastErrorType    string
-	RestartCount     int
-	IsReceivingData  bool
+	IsHealthy          bool
+	ProcessState       string
+	LastErrorType      string
+	RestartCount       int
+	IsReceivingData    bool
 	TotalBytesReceived int64
 }
 
 // createHealthSnapshot creates a snapshot of stream health for comparison
 func createHealthSnapshot(health *myaudio.StreamHealth) streamHealthSnapshot {
 	snapshot := streamHealthSnapshot{
-		IsHealthy:        health.IsHealthy,
-		ProcessState:     health.ProcessState.String(),
-		RestartCount:     health.RestartCount,
-		IsReceivingData:  health.IsReceivingData,
+		IsHealthy:          health.IsHealthy,
+		ProcessState:       health.ProcessState.String(),
+		RestartCount:       health.RestartCount,
+		IsReceivingData:    health.IsReceivingData,
 		TotalBytesReceived: health.TotalBytesReceived,
 	}
 
@@ -494,9 +494,9 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
 				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
-					"url", privacy.SanitizeRTSPUrl(rawURL),
-					"client_id", clientID,
-					"error", err.Error())
+					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("client_id", clientID),
+					logger.Error(err))
 				return err
 			}
 		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
@@ -504,12 +504,12 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			eventType := determineEventType(previousSnapshot, currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
 				c.logDebugIfEnabled("Failed to send health update, client disconnected",
-					"url", privacy.SanitizeRTSPUrl(rawURL),
-					"event_type", eventType,
-					"client_id", clientID,
-					"previous_state", previousSnapshot.ProcessState,
-					"current_state", currentSnapshot.ProcessState,
-					"error", err.Error())
+					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("event_type", eventType),
+					logger.String("client_id", clientID),
+					logger.String("previous_state", previousSnapshot.ProcessState),
+					logger.String("current_state", currentSnapshot.ProcessState),
+					logger.Error(err))
 				return err
 			}
 		}
@@ -544,8 +544,8 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 		delete(previousState, prevURL)
 
 		c.logInfoIfEnabled("Stream removed",
-			"url", sanitizedURL,
-			"client_id", clientID)
+			logger.String("url", sanitizedURL),
+			logger.String("client_id", clientID))
 	}
 
 	return nil
@@ -564,10 +564,10 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 	}
 
 	c.logDebugIfEnabled("Stream health update sent",
-		"url", privacy.SanitizeRTSPUrl(rawURL),
-		"event_type", eventType,
-		"is_healthy", health.IsHealthy,
-		"state", health.ProcessState.String())
+		logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+		logger.String("event_type", eventType),
+		logger.Bool("is_healthy", health.IsHealthy),
+		logger.String("state", health.ProcessState.String()))
 
 	return nil
 }

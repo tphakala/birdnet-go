@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -192,7 +192,7 @@ func (c *Controller) initAudioLevelRoutes() {
 func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Early nil check for audio level channel
 	if c.audioLevelChan == nil {
-		c.logAPIRequest(ctx, slog.LevelWarn, "Audio level stream unavailable - channel not configured")
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Audio level stream unavailable - channel not configured")
 		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
 			"error": "Audio level stream is not available",
 		})
@@ -211,10 +211,10 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	}
 	if count >= audioLevelMaxConnectionsPerIP {
 		audioLevelMgr.connectionMu.Unlock()
-		c.logAPIRequest(ctx, slog.LevelWarn, "Rejected audio level SSE connection - max per IP reached",
-			"reason", "max_connections_per_ip",
-			"current_count", count,
-			"max_allowed", audioLevelMaxConnectionsPerIP)
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Rejected audio level SSE connection - max per IP reached",
+			logger.String("reason", "max_connections_per_ip"),
+			logger.Int("current_count", int(count)),
+			logger.Int("max_allowed", audioLevelMaxConnectionsPerIP))
 		return ctx.JSON(http.StatusTooManyRequests, map[string]string{
 			"error": fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerIP),
 		})
@@ -293,9 +293,9 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	}
 
 	// Log connection
-	c.logAPIRequest(ctx, slog.LevelInfo, "Audio level SSE client connected",
-		"authenticated", isAuthenticated,
-		"total_connections", atomic.LoadInt64(&audioLevelMgr.totalConnections))
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE client connected",
+		logger.Bool("authenticated", isAuthenticated),
+		logger.Int64("total_connections", atomic.LoadInt64(&audioLevelMgr.totalConnections)))
 
 	// Send initial empty update to establish connection
 	if err := c.sendAudioLevelUpdate(ctx, levels); err != nil {
@@ -314,8 +314,8 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			c.logAPIRequest(ctx, slog.LevelInfo, "Audio level SSE connection closed",
-				"reason", "timeout_or_cancelled")
+			c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
+				logger.String("reason", "timeout_or_cancelled"))
 			return nil
 
 		case audioData, ok := <-subscriberChan:
@@ -561,7 +561,7 @@ func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
 func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
 	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
 		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.logDebugIfEnabled("Failed to set write deadline for "+operation, "error", err.Error())
+			c.logDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
 		}
 	}
 }

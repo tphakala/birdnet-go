@@ -6,8 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"log"
-	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -21,6 +19,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -35,21 +34,21 @@ const (
 	hlsNewStreamGracePeriod    = 30 * time.Second // Grace period for new streams before cleanup
 
 	// Logging
-	hlsLogCooldown         = 60 * time.Second      // Only log client connections once per this duration
-	hlsVerboseEnvVar       = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
-	hlsVerboseTimeout      = 5 * time.Minute       // Verbose logging window at startup
-	hlsClientLogRetention  = 24 * time.Hour        // Retention period for client log timestamps
+	hlsLogCooldown        = 60 * time.Second      // Only log client connections once per this duration
+	hlsVerboseEnvVar      = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
+	hlsVerboseTimeout     = 5 * time.Minute       // Verbose logging window at startup
+	hlsClientLogRetention = 24 * time.Hour        // Retention period for client log timestamps
 
 	// Audio encoding
-	hlsMinSegments        = 2     // Minimum HLS segments required
-	hlsDefaultSegmentLen  = 2     // Default HLS segment length in seconds
-	hlsMinSegmentLen      = 1     // Minimum HLS segment length in seconds
-	hlsMaxSegmentLen      = 30    // Maximum HLS segment length in seconds
-	hlsAudioBitDepth      = 16    // Audio bit depth for encoding
-	hlsMinBitrate         = 16    // Minimum audio bitrate in kbps
-	hlsMaxBitrate         = 320   // Maximum audio bitrate in kbps
-	hlsDefaultSampleRate  = 48000 // Default audio sample rate in Hz
-	hlsCleanupDelay       = 5     // Delay in seconds before cleanup
+	hlsMinSegments       = 2     // Minimum HLS segments required
+	hlsDefaultSegmentLen = 2     // Default HLS segment length in seconds
+	hlsMinSegmentLen     = 1     // Minimum HLS segment length in seconds
+	hlsMaxSegmentLen     = 30    // Maximum HLS segment length in seconds
+	hlsAudioBitDepth     = 16    // Audio bit depth for encoding
+	hlsMinBitrate        = 16    // Minimum audio bitrate in kbps
+	hlsMaxBitrate        = 320   // Maximum audio bitrate in kbps
+	hlsDefaultSampleRate = 48000 // Default audio sample rate in Hz
+	hlsCleanupDelay      = 5     // Delay in seconds before cleanup
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -66,9 +65,9 @@ type HLSStreamInfo struct {
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
 type HLSStreamStatus struct {
-	Status        string `json:"status"`                   // "starting" or "ready"
-	Source        string `json:"source"`                   // Source identifier (URL-encoded)
-	PlaylistURL   string `json:"playlist_url,omitempty"`   // API URL for the playlist (not filesystem path)
+	Status        string `json:"status"`                 // "starting" or "ready"
+	Source        string `json:"source"`                 // Source identifier (URL-encoded)
+	PlaylistURL   string `json:"playlist_url,omitempty"` // API URL for the playlist (not filesystem path)
 	ActiveClients int    `json:"active_clients"`
 	PlaylistReady bool   `json:"playlist_ready"`
 }
@@ -159,10 +158,10 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	// Check for force restart query param
 	forceRestart := ctx.QueryParam("force") == QueryValueTrue
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "HLS stream start requested",
-		"source_id", privacy.SanitizeRTSPUrl(sourceID),
-		"client_id", clientID,
-		"force_restart", forceRestart)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "HLS stream start requested",
+		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+		logger.String("client_id", clientID),
+		logger.Bool("force_restart", forceRestart))
 
 	// Verify source exists
 	if !myaudio.HasCaptureBuffer(sourceID) {
@@ -173,9 +172,9 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	if existingStream := c.getHLSStream(sourceID); existingStream != nil && !forceRestart {
 		// Existing stream found - register client and reuse it
 		c.updateHLSActivity(sourceID, clientID, "stream_join", hlsNewStreamGracePeriod)
-		c.logAPIRequest(ctx, slog.LevelInfo, "Reusing existing HLS stream",
-			"source_id", privacy.SanitizeRTSPUrl(sourceID),
-			"client_id", clientID)
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "Reusing existing HLS stream",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.String("client_id", clientID))
 		return c.buildHLSStreamResponse(ctx, sourceID, existingStream)
 	}
 
@@ -190,9 +189,9 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	// Create or get the HLS stream
 	stream, err := c.getOrCreateHLSStream(ctx.Request().Context(), sourceID)
 	if err != nil {
-		c.logAPIRequest(ctx, slog.LevelError, "Failed to create HLS stream",
-			"source_id", privacy.SanitizeRTSPUrl(sourceID),
-			"error", err.Error())
+		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to create HLS stream",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to start audio stream", http.StatusInternalServerError)
 	}
 
@@ -223,9 +222,9 @@ func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, s
 	status := "starting"
 	if isReady {
 		status = "ready"
-		c.logAPIRequest(ctx, slog.LevelInfo, "HLS stream ready",
-			"source_id", privacy.SanitizeRTSPUrl(sourceID),
-			"playlist_url", playlistURL)
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "HLS stream ready",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.String("playlist_url", playlistURL))
 	}
 
 	return ctx.JSON(http.StatusOK, HLSStreamStatus{
@@ -254,7 +253,7 @@ func (c *Controller) checkHLSPlaylistReady(stream *HLSStreamInfo) bool {
 	}
 	defer func() {
 		if err := secFS.Close(); err != nil {
-			log.Printf("Failed to close secure filesystem: %v", err)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
 		}
 	}()
 
@@ -280,9 +279,9 @@ func (c *Controller) StopHLSStream(ctx echo.Context) error {
 
 	clientID := c.generateClientID(ctx)
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "HLS stream stop requested",
-		"source_id", privacy.SanitizeRTSPUrl(sourceID),
-		"client_id", clientID)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "HLS stream stop requested",
+		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+		logger.String("client_id", clientID))
 
 	// Remove client from tracking
 	lastClient := c.removeHLSClient(sourceID, clientID)
@@ -315,8 +314,8 @@ func (c *Controller) HLSHeartbeat(ctx echo.Context) error {
 	// Validate stream exists
 	if !c.hlsStreamExists(heartbeat.SourceID) {
 		if hlsMgr.verboseLogging {
-			c.logAPIRequest(ctx, slog.LevelWarn, "Heartbeat for non-existent stream",
-				"source_id", privacy.SanitizeRTSPUrl(heartbeat.SourceID))
+			c.logAPIRequest(ctx, logger.LogLevelWarn, "Heartbeat for non-existent stream",
+				logger.String("source_id", privacy.SanitizeRTSPUrl(heartbeat.SourceID)))
 		}
 		return ctx.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	}
@@ -391,7 +390,7 @@ func (c *Controller) ServeHLSPlaylist(ctx echo.Context) error {
 	}
 	defer func() {
 		if err := secFS.Close(); err != nil {
-			log.Printf("Failed to close secure filesystem: %v", err)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
 		}
 	}()
 
@@ -464,7 +463,7 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 	}
 	defer func() {
 		if err := secFS.Close(); err != nil {
-			log.Printf("Failed to close secure filesystem: %v", err)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
 		}
 	}()
 
@@ -583,7 +582,7 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 		return stream, nil
 	}
 
-	log.Printf("Creating new HLS stream for source: %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Info("Creating new HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
 	// Generate filesystem-safe name
 	filesystemSafeID := generateFilesystemSafeName(sourceID)
@@ -608,7 +607,7 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 	}
 	defer func() {
 		if err := secFS.Close(); err != nil {
-			log.Printf("Failed to close secure filesystem: %v", err)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
 		}
 	}()
 
@@ -630,7 +629,7 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 	fifoPath, pipeName, err := c.setupHLSFifo(secFS, hlsBaseDir, outputDir)
 	if err != nil {
 		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-			log.Printf("Failed to remove output directory: %v", removeErr)
+			GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
 		}
 		streamCancel()
 		return nil, err
@@ -685,23 +684,23 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 		stream.cancel()
 		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
 			if killErr := stream.FFmpegCmd.Process.Kill(); killErr != nil {
-				log.Printf("Failed to kill FFmpeg process: %v", killErr)
+				GetLogger().Error("Failed to kill FFmpeg process", logger.Error(killErr))
 			}
 			if _, waitErr := stream.FFmpegCmd.Process.Wait(); waitErr != nil {
-				log.Printf("Failed to wait for FFmpeg process: %v", waitErr)
+				GetLogger().Error("Failed to wait for FFmpeg process", logger.Error(waitErr))
 			}
 		}
 		// Close log file after process exits
 		if stream.logFile != nil {
 			if closeErr := stream.logFile.Close(); closeErr != nil {
-				log.Printf("Failed to close log file: %v", closeErr)
+				GetLogger().Error("Failed to close log file", logger.Error(closeErr))
 			}
 		}
 		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-			log.Printf("Failed to remove output directory: %v", removeErr)
+			GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
 		}
 
-		log.Printf("Race condition detected, using existing stream for %s", privacy.SanitizeRTSPUrl(sourceID))
+		GetLogger().Debug("Race condition detected, using existing stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 		return existingStream, nil
 	}
 
@@ -860,14 +859,14 @@ func (c *Controller) setupWindowsAudioFeed(ctx context.Context, sourceID string,
 	go func() {
 		defer func() {
 			if err := stdin.Close(); err != nil {
-				log.Printf("Failed to close stdin: %v", err)
+				GetLogger().Error("Failed to close stdin", logger.Error(err))
 			}
 		}()
-		log.Printf("Starting audio feed via stdin for source %s", privacy.SanitizeRTSPUrl(sourceID))
+		GetLogger().Debug("Starting audio feed via stdin", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
 		audioChan, cleanup, err := c.setupAudioCallback(sourceID)
 		if err != nil {
-			log.Printf("Error setting up audio callback: %v", err)
+			GetLogger().Error("Error setting up audio callback", logger.Error(err))
 			return
 		}
 		defer cleanup()
@@ -875,11 +874,11 @@ func (c *Controller) setupWindowsAudioFeed(ctx context.Context, sourceID string,
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("Audio feed terminated: context cancelled for source %s", privacy.SanitizeRTSPUrl(sourceID))
+				GetLogger().Debug("Audio feed terminated due to context cancellation", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 				return
 			case data, ok := <-audioChan:
 				if !ok {
-					log.Printf("Audio channel closed for source %s", privacy.SanitizeRTSPUrl(sourceID))
+					GetLogger().Debug("Audio channel closed", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 					return
 				}
 
@@ -887,7 +886,7 @@ func (c *Controller) setupWindowsAudioFeed(ctx context.Context, sourceID string,
 				for written < len(data) {
 					n, err := stdin.Write(data[written:])
 					if err != nil {
-						log.Printf("Error writing to FFmpeg stdin: %v", err)
+						GetLogger().Error("Error writing to FFmpeg stdin", logger.Error(err))
 						return
 					}
 					written += n
@@ -920,12 +919,12 @@ func (c *Controller) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd,
 
 	if err := cmd.Start(); err != nil {
 		if closeErr := logFile.Close(); closeErr != nil {
-			log.Printf("Failed to close log file: %v", closeErr)
+			GetLogger().Error("Failed to close log file", logger.Error(closeErr))
 		}
 		return nil, fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
-	log.Printf("FFmpeg process started for output: %s", outputDir)
+	GetLogger().Debug("FFmpeg process started", logger.String("output_dir", outputDir))
 	return logFile, nil
 }
 
@@ -949,11 +948,11 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	}
 
 	myaudio.RegisterBroadcastCallback(sourceID, callback)
-	log.Printf("Registered audio callback for source: %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Debug("Registered audio callback", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
 	cleanup = func() {
 		myaudio.UnregisterBroadcastCallback(sourceID)
-		log.Printf("Unregistered audio callback for source: %s", privacy.SanitizeRTSPUrl(sourceID))
+		GetLogger().Debug("Unregistered audio callback", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 	}
 
 	return audioChan, cleanup, nil
@@ -962,66 +961,66 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 // feedAudioToFFmpeg feeds audio data to FFmpeg via FIFO (Unix platforms)
 func (c *Controller) feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
-	log.Printf("Starting audio feed for source %s to pipe %s", sanitizedID, pipePath)
+	GetLogger().Debug("Starting audio feed", logger.String("source_id", sanitizedID), logger.String("pipe_path", pipePath))
 
 	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
-		log.Printf("Error getting HLS directory: %v", err)
+		GetLogger().Error("Error getting HLS directory", logger.Error(err))
 		return
 	}
 
 	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
-		log.Printf("Error creating secure filesystem: %v", err)
+		GetLogger().Error("Error creating secure filesystem", logger.Error(err))
 		return
 	}
 	defer func() {
 		if err := secFS.Close(); err != nil {
-			log.Printf("Failed to close secure filesystem: %v", err)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
 		}
 	}()
 
 	// Open FIFO
 	fifo, err := secFS.OpenFile(pipePath, os.O_WRONLY, 0)
 	if err != nil {
-		log.Printf("Error opening pipe: %v", err)
+		GetLogger().Error("Error opening pipe", logger.Error(err))
 		return
 	}
 	defer func() {
 		if err := fifo.Close(); err != nil {
-			log.Printf("Failed to close FIFO: %v", err)
+			GetLogger().Error("Failed to close FIFO", logger.Error(err))
 		}
 	}()
 
 	// Setup audio callback
 	audioChan, cleanup, err := c.setupAudioCallback(sourceID)
 	if err != nil {
-		log.Printf("Error setting up audio callback: %v", err)
+		GetLogger().Error("Error setting up audio callback", logger.Error(err))
 		return
 	}
 	defer cleanup()
 
-	log.Printf("Audio feed ready for source %s", sanitizedID)
+	GetLogger().Debug("Audio feed ready", logger.String("source_id", sanitizedID))
 
 	dataWritten := false
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Audio feed stopped: context cancelled for source %s", sanitizedID)
+			GetLogger().Debug("Audio feed stopped due to context cancellation", logger.String("source_id", sanitizedID))
 			return
 		case data, ok := <-audioChan:
 			if !ok {
-				log.Printf("Audio channel closed for source %s", sanitizedID)
+				GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
 				return
 			}
 
 			if _, err := fifo.Write(data); err != nil {
-				log.Printf("Error writing to FIFO: %v", err)
+				GetLogger().Error("Error writing to FIFO", logger.Error(err))
 				return
 			}
 
 			if !dataWritten {
-				log.Printf("First audio data written for source %s", sanitizedID)
+				GetLogger().Debug("First audio data written", logger.String("source_id", sanitizedID))
 				dataWritten = true
 			}
 		}
@@ -1089,17 +1088,17 @@ func (c *Controller) handleHLSDisconnect(ctx echo.Context, sourceID, clientID st
 	if lastTime, exists := hlsMgr.clientActivity[sourceID+":"+clientID]; exists {
 		if time.Since(lastTime) < 10*time.Second {
 			hlsMgr.activityMu.Unlock()
-			c.logAPIRequest(ctx, slog.LevelWarn, "Ignoring premature disconnect",
-				"source_id", privacy.SanitizeRTSPUrl(sourceID))
+			c.logAPIRequest(ctx, logger.LogLevelWarn, "Ignoring premature disconnect",
+				logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 			c.updateHLSActivity(sourceID, clientID, "continued-connection")
 			return ctx.JSON(http.StatusOK, map[string]string{"status": "ok"})
 		}
 	}
 	hlsMgr.activityMu.Unlock()
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Client announced disconnection",
-		"source_id", privacy.SanitizeRTSPUrl(sourceID),
-		"client_id", clientID)
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Client announced disconnection",
+		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+		logger.String("client_id", clientID))
 
 	c.removeHLSClient(sourceID, clientID)
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -1116,7 +1115,7 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 		return
 	}
 
-	log.Printf("Cleaning up existing stream for source %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Debug("Cleaning up existing stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
 	if stream.cancel != nil {
 		stream.cancel()
@@ -1135,14 +1134,14 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 	// Wait for process termination
 	if cmd != nil && cmd.Process != nil {
 		if _, err := cmd.Process.Wait(); err != nil {
-			log.Printf("Failed to wait for FFmpeg process: %v", err)
+			GetLogger().Error("Failed to wait for FFmpeg process", logger.Error(err))
 		}
 	}
 
 	// Close log file after process exits (must be done after Wait())
 	if logFile != nil {
 		if closeErr := logFile.Close(); closeErr != nil {
-			log.Printf("Failed to close log file: %v", closeErr)
+			GetLogger().Error("Failed to close log file", logger.Error(closeErr))
 		}
 	}
 
@@ -1153,12 +1152,12 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 			if secFS, err := securefs.New(hlsBaseDir); err == nil {
 				defer func() {
 					if closeErr := secFS.Close(); closeErr != nil {
-						log.Printf("Failed to close secure filesystem: %v", closeErr)
+						GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
 					}
 				}()
 				if secFS.ExistsNoErr(outputDir) {
 					if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-						log.Printf("Failed to remove output directory: %v", removeErr)
+						GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
 					}
 				}
 			}
@@ -1175,7 +1174,7 @@ func (c *Controller) cleanupHLSStream(sourceID string) {
 		return
 	}
 
-	log.Printf("Cleaning up HLS stream for source: %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Debug("Cleaning up HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 	delete(hlsMgr.streams, sourceID)
 	hlsMgr.streamsMu.Unlock()
 
@@ -1191,7 +1190,7 @@ func (c *Controller) stopHLSStream(sourceID, reason string) {
 		return
 	}
 
-	log.Printf("Stopping HLS stream for source %s: %s", privacy.SanitizeRTSPUrl(sourceID), reason)
+	GetLogger().Info("Stopping HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("reason", reason))
 	delete(hlsMgr.streams, sourceID)
 	hlsMgr.streamsMu.Unlock()
 
@@ -1200,7 +1199,7 @@ func (c *Controller) stopHLSStream(sourceID, reason string) {
 
 // performHLSCleanup performs the actual cleanup of stream resources
 func (c *Controller) performHLSCleanup(sourceID string, stream *HLSStreamInfo, reason string) {
-	log.Printf("Performing HLS cleanup for source %s: %s", privacy.SanitizeRTSPUrl(sourceID), reason)
+	GetLogger().Debug("Performing HLS cleanup", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("reason", reason))
 
 	// Cancel context
 	if stream.cancel != nil {
@@ -1216,7 +1215,7 @@ func (c *Controller) performHLSCleanup(sourceID string, stream *HLSStreamInfo, r
 	// Clean up tracking data
 	c.cleanupStreamTracking(sourceID)
 
-	log.Printf("HLS stream cleanup completed for source %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Debug("HLS stream cleanup completed", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 }
 
 // cleanupFFmpegProcess terminates the FFmpeg process and closes the log file.
@@ -1233,10 +1232,10 @@ func (c *Controller) cleanupFFmpegProcess(sourceID string, stream *HLSStreamInfo
 // waitForFFmpegProcess waits for FFmpeg to exit and cleans up resources.
 func (c *Controller) waitForFFmpegProcess(sourceID string, cmd *exec.Cmd, logFile *os.File) {
 	if _, err := cmd.Process.Wait(); err != nil {
-		log.Printf("FFmpeg process wait error: %v", err)
+		GetLogger().Error("FFmpeg process wait error", logger.Error(err))
 	}
 	closeLogFile(logFile)
-	log.Printf("FFmpeg process terminated for source %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Debug("FFmpeg process terminated", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 }
 
 // closeLogFile safely closes a log file if it's not nil.
@@ -1245,7 +1244,7 @@ func closeLogFile(f *os.File) {
 		return
 	}
 	if err := f.Close(); err != nil {
-		log.Printf("Failed to close log file: %v", err)
+		GetLogger().Error("Failed to close log file", logger.Error(err))
 	}
 }
 
@@ -1266,14 +1265,14 @@ func (c *Controller) cleanupStreamDirectory(outputDir string) {
 	}
 	defer func() {
 		if closeErr := secFS.Close(); closeErr != nil {
-			log.Printf("Failed to close secure filesystem: %v", closeErr)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
 		}
 	}()
 
 	if secFS.ExistsNoErr(outputDir) {
-		log.Printf("Removing stream directory: %s", outputDir)
+		GetLogger().Debug("Removing stream directory", logger.String("output_dir", outputDir))
 		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-			log.Printf("Failed to remove stream directory: %v", removeErr)
+			GetLogger().Error("Failed to remove stream directory", logger.Error(removeErr))
 		}
 	}
 }
@@ -1308,7 +1307,7 @@ func (c *Controller) waitForHLSPlaylist(ctx echo.Context, sourceID string, strea
 	}
 	defer func() {
 		if err := secFS.Close(); err != nil {
-			log.Printf("Failed to close secure filesystem: %v", err)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
 		}
 	}()
 
@@ -1361,8 +1360,10 @@ func (c *Controller) logHLSClientConnection(sourceID, clientIP, requestPath stri
 		if strings.HasPrefix(requestPath, "segment00") {
 			streamStartMsg = " (streaming started)"
 		}
-		log.Printf("HLS stream for source: %s from %s%s",
-			privacy.SanitizeRTSPUrl(sourceID), clientIP, streamStartMsg)
+		GetLogger().Info("HLS stream request",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.String("client_ip", clientIP),
+			logger.String("status", streamStartMsg))
 	}
 }
 
@@ -1404,7 +1405,7 @@ func (c *Controller) cleanupHLSDirectories() error {
 	}
 	defer func() {
 		if closeErr := secFS.Close(); closeErr != nil {
-			log.Printf("Failed to close secure filesystem: %v", closeErr)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
 		}
 	}()
 
@@ -1416,9 +1417,9 @@ func (c *Controller) cleanupHLSDirectories() error {
 	for _, entry := range entries {
 		if entry.IsDir() && strings.HasPrefix(entry.Name(), "stream_") {
 			streamDir := filepath.Join(hlsBaseDir, entry.Name())
-			log.Printf("Removing HLS stream directory: %s", streamDir)
+			GetLogger().Debug("Removing HLS stream directory", logger.String("stream_dir", streamDir))
 			if removeErr := secFS.RemoveAll(streamDir); removeErr != nil {
-				log.Printf("Failed to remove stream directory: %v", removeErr)
+				GetLogger().Error("Failed to remove stream directory", logger.Error(removeErr))
 			}
 		}
 	}
@@ -1434,7 +1435,7 @@ func runHLSActivitySync(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("HLS activity sync stopped")
+			GetLogger().Info("HLS activity sync stopped")
 			return
 		case <-ticker.C:
 			syncHLSActivity()
@@ -1510,8 +1511,11 @@ func shouldCleanupStream(sourceID string) bool {
 	}
 
 	clientCount := getStreamClientCount(sourceID)
-	log.Printf("Stream %s inactive for %v (timeout %v), clients: %d - marking for cleanup",
-		privacy.SanitizeRTSPUrl(sourceID), inactiveDuration, hlsStreamInactivityTimeout, clientCount)
+	GetLogger().Info("Stream inactive, marking for cleanup",
+		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+		logger.Duration("inactive_duration", inactiveDuration),
+		logger.Duration("timeout", hlsStreamInactivityTimeout),
+		logger.Int("client_count", clientCount))
 	return true
 }
 
@@ -1558,19 +1562,19 @@ func cleanupStream(s *HLSStreamInfo, sourceID string) {
 
 	if s.FFmpegCmd != nil && s.FFmpegCmd.Process != nil {
 		if _, err := s.FFmpegCmd.Process.Wait(); err != nil {
-			log.Printf("Failed to wait for FFmpeg process: %v", err)
+			GetLogger().Error("Failed to wait for FFmpeg process", logger.Error(err))
 		}
 	}
 
 	// Close log file after process exits (must be done after Wait())
 	if s.logFile != nil {
 		if closeErr := s.logFile.Close(); closeErr != nil {
-			log.Printf("Failed to close log file: %v", closeErr)
+			GetLogger().Error("Failed to close log file", logger.Error(closeErr))
 		}
 	}
 
 	cleanupStreamDirectory(s.OutputDir)
-	log.Printf("Cleaned up inactive stream: %s", privacy.SanitizeRTSPUrl(sourceID))
+	GetLogger().Debug("Cleaned up inactive stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 }
 
 // cleanupStreamDirectory removes the stream's output directory
@@ -1581,22 +1585,22 @@ func cleanupStreamDirectory(outputDir string) {
 
 	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
-		log.Printf("Failed to get HLS directory: %v", err)
+		GetLogger().Error("Failed to get HLS directory", logger.Error(err))
 		return
 	}
 
 	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
-		log.Printf("Failed to create secure filesystem: %v", err)
+		GetLogger().Error("Failed to create secure filesystem", logger.Error(err))
 		return
 	}
 	defer func() {
 		if closeErr := secFS.Close(); closeErr != nil {
-			log.Printf("Failed to close secure filesystem: %v", closeErr)
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
 		}
 	}()
 
 	if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-		log.Printf("Failed to remove output directory: %v", removeErr)
+		GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
 	}
 }

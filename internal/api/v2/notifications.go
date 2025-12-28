@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -110,7 +111,9 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 
 	service := notification.GetService()
 	if err := action.operation(service, id); err != nil {
-		c.logErrorIfEnabled(action.errorLogMsg, "error", err, "id", id)
+		c.logErrorIfEnabled(action.errorLogMsg,
+			logger.Error(err),
+			logger.String("id", id))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": action.errorRespMsg,
 		})
@@ -411,19 +414,21 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 
 	if c.Settings != nil && c.Settings.WebServer.Debug && connected {
 		c.logDebugIfEnabled("notification SSE client "+action,
-			"clientId", clientID,
-			"ip", privacy.AnonymizeIP(ip),
-			"user_agent", privacy.RedactUserAgent(userAgent))
+			logger.String("clientId", clientID),
+			logger.String("ip", privacy.AnonymizeIP(ip)),
+			logger.String("user_agent", privacy.RedactUserAgent(userAgent)))
 	} else {
 		c.logInfoIfEnabled("notification SSE client "+action,
-			"clientId", clientID,
-			"ip", privacy.AnonymizeIP(ip))
+			logger.String("clientId", clientID),
+			logger.String("ip", privacy.AnonymizeIP(ip)))
 	}
 }
 
 // logNotificationError logs SSE errors
 func (c *Controller) logNotificationError(message string, err error, clientID string) {
-	c.logErrorIfEnabled(message, "error", err, "clientId", clientID)
+	c.logErrorIfEnabled(message,
+		logger.Error(err),
+		logger.String("clientId", clientID))
 }
 
 // logToastSent logs successful toast sending
@@ -431,10 +436,10 @@ func (c *Controller) logToastSent(clientID string, notif *notification.Notificat
 	if c.Settings != nil && c.Settings.WebServer.Debug {
 		toastType, _ := notif.Metadata["toastType"].(string)
 		c.logDebugIfEnabled("toast sent via SSE",
-			"clientId", clientID,
-			"toast_id", notif.Metadata["toastId"],
-			"type", toastType,
-			"component", notif.Component)
+			logger.String("clientId", clientID),
+			logger.Any("toast_id", notif.Metadata["toastId"]),
+			logger.String("type", toastType),
+			logger.String("component", notif.Component))
 	}
 }
 
@@ -442,10 +447,10 @@ func (c *Controller) logToastSent(clientID string, notif *notification.Notificat
 func (c *Controller) logNotificationSent(clientID string, notif *notification.Notification) {
 	if c.Settings != nil && c.Settings.WebServer.Debug {
 		c.logDebugIfEnabled("notification sent via SSE",
-			"clientId", clientID,
-			"notification_id", notif.ID,
-			"type", notif.Type,
-			"priority", notif.Priority)
+			logger.String("clientId", clientID),
+			logger.String("notification_id", notif.ID),
+			logger.String("type", string(notif.Type)),
+			logger.String("priority", string(notif.Priority)))
 	}
 }
 
@@ -495,17 +500,17 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 
 	if c.Settings != nil && c.Settings.WebServer.Debug {
 		c.logDebugIfEnabled("listing notifications",
-			"status", filter.Status,
-			"types", filter.Types,
-			"priorities", filter.Priorities,
-			"limit", filter.Limit,
-			"offset", filter.Offset)
+			logger.Any("status", filter.Status),
+			logger.Any("types", filter.Types),
+			logger.Any("priorities", filter.Priorities),
+			logger.Int("limit", filter.Limit),
+			logger.Int("offset", filter.Offset))
 	}
 
 	// Get notifications
 	notifications, err := service.List(filter)
 	if err != nil {
-		c.logErrorIfEnabled("failed to list notifications", "error", err)
+		c.logErrorIfEnabled("failed to list notifications", logger.Error(err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notifications",
 		})
@@ -514,12 +519,12 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	if c.Settings != nil && c.Settings.WebServer.Debug {
 		unreadCount, err := service.GetUnreadCount()
 		if err != nil {
-			c.logErrorIfEnabled("failed to get unread count", "error", err)
+			c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
 			unreadCount = -1 // Indicate error in debug log
 		}
 		c.logDebugIfEnabled("notifications retrieved",
-			"count", len(notifications),
-			"total_unread", unreadCount)
+			logger.Int("count", len(notifications)),
+			logger.Int("total_unread", unreadCount))
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -553,7 +558,9 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 				"error": "Notification not found",
 			})
 		}
-		c.logErrorIfEnabled("failed to get notification", "error", err, "id", id)
+		c.logErrorIfEnabled("failed to get notification",
+			logger.Error(err),
+			logger.String("id", id))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notification",
 		})
@@ -580,14 +587,16 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	service := notification.GetService()
 
 	if err := service.MarkAsRead(id); err != nil {
-		c.logErrorIfEnabled("failed to mark notification as read", "error", err, "id", id)
+		c.logErrorIfEnabled("failed to mark notification as read",
+			logger.Error(err),
+			logger.String("id", id))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to mark notification as read",
 		})
 	}
 
 	if c.Settings != nil && c.Settings.WebServer.Debug {
-		c.logDebugIfEnabled("notification marked as read", "id", id)
+		c.logDebugIfEnabled("notification marked as read", logger.String("id", id))
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{
@@ -626,7 +635,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	service := notification.GetService()
 	count, err := service.GetUnreadCount()
 	if err != nil {
-		c.logErrorIfEnabled("failed to get unread count", "error", err)
+		c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to get unread count",
 		})
@@ -687,12 +696,12 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	title := renderTemplateWithDefault("title",
 		c.Settings.Notification.Templates.NewSpecies.Title,
 		"New Species: Test Bird Species",
-		testTemplateData, c.logErrorIfEnabled)
+		testTemplateData, nil)
 
 	message := renderTemplateWithDefault("message",
 		c.Settings.Notification.Templates.NewSpecies.Message,
 		"First detection of Test Bird Species (Testus birdicus) at Fake Test Location",
-		testTemplateData, c.logErrorIfEnabled)
+		testTemplateData, nil)
 
 	testNotification := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, title, message).
 		WithComponent("detection").
@@ -712,7 +721,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Use CreateWithMetadata to persist and broadcast
 	if err := service.CreateWithMetadata(testNotification); err != nil {
-		c.logErrorIfEnabled("failed to create test notification", "error", err)
+		c.logErrorIfEnabled("failed to create test notification", logger.Error(err))
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to create test notification",
 		})
@@ -720,10 +729,10 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	if c.Settings != nil && c.Settings.WebServer.Debug {
 		c.logDebugIfEnabled("test new species notification created",
-			"notification_id", testNotification.ID,
-			"species", testTemplateData.CommonName,
-			"rendered_title", title,
-			"rendered_message", message)
+			logger.String("notification_id", testNotification.ID),
+			logger.String("species", testTemplateData.CommonName),
+			logger.String("rendered_title", title),
+			logger.String("rendered_message", message))
 	}
 
 	return ctx.JSON(http.StatusOK, testNotification)

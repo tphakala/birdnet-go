@@ -1,38 +1,20 @@
+// Package backup provides backup functionality for BirdNET-Go.
 package backup
 
-import "log"
+import "github.com/tphakala/birdnet-go/internal/logger"
 
-// Logger is an interface for logging backup operations
-//
-// Deprecated: This interface is being phased out in favor of *slog.Logger
-// for structured logging. New code should use slog.Logger directly.
-// This interface remains for backward compatibility with existing target
-// implementations (ftp.go, gdrive.go, rsync.go) that haven't been migrated yet.
-type Logger interface {
-	Printf(format string, v ...any)
-	Println(v ...any)
+// GetLogger returns the backup package logger scoped to the backup module.
+// The logger is fetched from the global logger each time to ensure it uses
+// the current centralized logger (which may be set after package init).
+func GetLogger() logger.Logger {
+	return logger.Global().Module("backup")
 }
 
-// defaultLogger implements the Logger interface using the standard log package
-type defaultLogger struct {
-	logger *log.Logger
-}
-
-// DefaultLogger returns a new default logger
-//
-// Deprecated: Use slog.Default() or create a new *slog.Logger instead.
-func DefaultLogger() Logger {
-	return &defaultLogger{
-		logger: log.Default(),
-	}
-}
-
-// Printf implements Logger.Printf
-func (l *defaultLogger) Printf(format string, v ...any) {
-	l.logger.Printf(format, v...)
-}
-
-// Println implements Logger.Println
-func (l *defaultLogger) Println(v ...any) {
-	l.logger.Println(v...)
-}
+// Field constructors re-exported for use in this package.
+// This avoids import shadowing issues with function parameters named "logger".
+var (
+	logString = logger.String
+	logError  = logger.Error
+	logInt    = logger.Int
+	logBool   = logger.Bool
+)

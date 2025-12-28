@@ -3,18 +3,18 @@ package notification
 import (
 	"bytes"
 	"fmt"
-	"log/slog"
 	"sync"
 	"text/template"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 type DetectionNotificationConsumer struct {
 	service *Service
-	logger  *slog.Logger
+	logger  logger.Logger
 	// speciesCooldowns tracks the last notification time for each species
 	speciesCooldowns map[string]time.Time
 	cooldownMu       sync.RWMutex
@@ -56,10 +56,9 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	if settings != nil && settings.Notification.Push.MinConfidenceThreshold > 0 {
 		if event.GetConfidence() < settings.Notification.Push.MinConfidenceThreshold {
 			c.logger.Debug("detection below confidence threshold, skipping notification",
-				"species", event.GetSpeciesName(),
-				"confidence", event.GetConfidence(),
-				"threshold", settings.Notification.Push.MinConfidenceThreshold,
-			)
+				logger.String("species", event.GetSpeciesName()),
+				logger.Float64("confidence", event.GetConfidence()),
+				logger.Float64("threshold", settings.Notification.Push.MinConfidenceThreshold))
 			return nil
 		}
 	}
@@ -68,9 +67,8 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	if settings != nil && settings.Notification.Push.SpeciesCooldownMinutes > 0 {
 		if c.isWithinCooldown(event.GetSpeciesName(), settings.Notification.Push.SpeciesCooldownMinutes) {
 			c.logger.Debug("species within cooldown period, skipping notification",
-				"species", event.GetSpeciesName(),
-				"cooldownMinutes", settings.Notification.Push.SpeciesCooldownMinutes,
-			)
+				logger.String("species", event.GetSpeciesName()),
+				logger.Int("cooldownMinutes", settings.Notification.Push.SpeciesCooldownMinutes))
 			return nil
 		}
 	}
@@ -81,9 +79,8 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 	if err := c.service.store.Save(notification); err != nil {
 		c.logger.Error("failed to save new species notification",
-			"species", event.GetSpeciesName(),
-			"error", err,
-		)
+			logger.String("species", event.GetSpeciesName()),
+			logger.Error(err))
 		return fmt.Errorf("failed to save notification: %w", err)
 	}
 
@@ -95,10 +92,9 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	}
 
 	c.logger.Info("created new species notification",
-		"species", event.GetSpeciesName(),
-		"confidence", event.GetConfidence(),
-		"location", event.GetLocation(),
-	)
+		logger.String("species", event.GetSpeciesName()),
+		logger.Float64("confidence", event.GetConfidence()),
+		logger.String("location", event.GetLocation()))
 
 	return nil
 }
@@ -142,8 +138,8 @@ func (c *DetectionNotificationConsumer) createTemplateData(event events.Detectio
 	settings := conf.GetSettings()
 	if settings == nil {
 		c.logger.Warn("Settings unavailable during detection notification, using localhost for URL fields",
-			"species", event.GetSpeciesName(),
-			"confidence", event.GetConfidence())
+			logger.String("species", event.GetSpeciesName()),
+			logger.Float64("confidence", event.GetConfidence()))
 		return NewTemplateData(event, "http://localhost", true)
 	}
 
@@ -181,9 +177,8 @@ func (c *DetectionNotificationConsumer) renderTemplateField(field string, event 
 	rendered, err := renderTemplate(field, templateStr, templateData)
 	if err != nil {
 		c.logger.Error("failed to render "+field+" template, using default",
-			"error", err,
-			"template", templateStr,
-		)
+			logger.Error(err),
+			logger.String("template", templateStr))
 		return c.getDefaultValue(field, event)
 	}
 	return rendered

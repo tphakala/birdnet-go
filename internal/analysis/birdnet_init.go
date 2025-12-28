@@ -28,7 +28,7 @@ func initializeBirdNET(settings *conf.Settings) error {
 		if err := birdnet.BuildRangeFilter(bn); err != nil {
 			return fmt.Errorf("failed to initialize BirdNET: %w", err)
 		}
-		
+
 		// Initialize float32 pool for audio conversion
 		if err := myaudio.InitFloat32Pool(); err != nil {
 			return fmt.Errorf("failed to initialize float32 pool: %w", err)
@@ -39,12 +39,12 @@ func initializeBirdNET(settings *conf.Settings) error {
 
 // UpdateBirdNETModelLoadedMetric updates the model loaded metric status.
 // This should be called after metrics are initialized to report model status.
-// 
-// IMPORTANT: This function relies on the package-global 'bn' variable being 
-// initialized first via initializeBirdNET(). Calling this function before 
+//
+// IMPORTANT: This function relies on the package-global 'bn' variable being
+// initialized first via initializeBirdNET(). Calling this function before
 // BirdNET initialization will result in no metric update.
 //
-// Note: This is only used in realtime mode as metrics are not used for 
+// Note: This is only used in realtime mode as metrics are not used for
 // on-demand file/directory analysis operations.
 func UpdateBirdNETModelLoadedMetric(birdnetMetrics *metrics.BirdNETMetrics) {
 	if birdnetMetrics != nil && bn != nil {

@@ -54,8 +54,8 @@ type ThresholdStatsResponse struct {
 	ActiveCount       int64           `json:"activeCount"`
 	AtMinimumCount    int64           `json:"atMinimumCount"`
 	LevelDistribution []LevelStatItem `json:"levelDistribution"`
-	ValidHours        int             `json:"validHours"`    // Configured threshold validity period in hours
-	MinThreshold      float64         `json:"minThreshold"`  // Configured minimum threshold value
+	ValidHours        int             `json:"validHours"`   // Configured threshold validity period in hours
+	MinThreshold      float64         `json:"minThreshold"` // Configured minimum threshold value
 }
 
 // LevelStatItem represents count for a specific level
@@ -406,4 +406,3 @@ func (c *Controller) ResetAllDynamicThresholds(ctx echo.Context) error {
 		"count":   count,
 	})
 }
-

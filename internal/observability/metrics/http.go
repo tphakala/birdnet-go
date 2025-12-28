@@ -3,10 +3,10 @@ package metrics
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // HTTPMetrics contains Prometheus metrics for HTTP handler operations
@@ -38,11 +38,11 @@ type HTTPMetrics struct {
 	templateRenderErrors   *prometheus.CounterVec
 
 	// SSE (Server-Sent Events) metrics
-	sseActiveConnections   prometheus.Gauge
-	sseTotalConnections    *prometheus.CounterVec
-	sseConnectionDuration  *prometheus.HistogramVec
-	sseMessagesSent        *prometheus.CounterVec
-	sseErrors              *prometheus.CounterVec
+	sseActiveConnections  prometheus.Gauge
+	sseTotalConnections   *prometheus.CounterVec
+	sseConnectionDuration *prometheus.HistogramVec
+	sseMessagesSent       *prometheus.CounterVec
+	sseErrors             *prometheus.CounterVec
 }
 
 // NewHTTPMetrics creates and registers new HTTP handler metrics
@@ -366,7 +366,7 @@ func (m *HTTPMetrics) SSEConnectionClosed(endpoint string, duration float64, rea
 	default:
 		reason = SSECloseReasonError
 	}
-	
+
 	m.sseActiveConnections.Dec()
 	m.sseTotalConnections.WithLabelValues(endpoint, reason).Inc()
 	m.sseConnectionDuration.WithLabelValues(endpoint).Observe(duration)
@@ -387,7 +387,7 @@ func (m *HTTPMetrics) GetActiveSSEConnections() float64 {
 	metric := &dto.Metric{}
 	if err := m.sseActiveConnections.Write(metric); err != nil {
 		// Log the error with context for debugging metric registration issues
-		log.Printf("HTTPMetrics: Failed to write SSE active connections metric: %v", err)
+		GetLogger().Warn("Failed to write SSE active connections metric", logger.Error(err))
 		return 0
 	}
 	if metric.Gauge != nil && metric.Gauge.Value != nil {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log"
-	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -25,7 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/monitor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -143,11 +141,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	sources, err := initializeAudioSources(settings)
 	if err != nil {
 		// Non-fatal error, continue with available sources
-		// Add structured logging
-		GetLogger().Warn("Audio source initialization warning",
-			"error", err,
-			"operation", "initialize_audio_sources")
-		log.Printf("⚠️  Audio source initialization warning: %v", err)
+		GetLogger().Warn("audio source initialization warning",
+			logger.Error(err),
+			logger.String("operation", "initialize_audio_sources"))
 	}
 
 	// Queue is now initialized at package level in birdnet package
@@ -192,28 +188,19 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize bird image cache if needed
 	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
 
-	// Initialize processor
-	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
+	// Initialize processor with analysis logger for hierarchical logging
+	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache, GetLogger())
 
-	// Initialize Backup system
-	backupLogger := logging.ForService("backup") // Get logger first
-	if backupLogger == nil {
-		// Add structured logging
-		GetLogger().Error("Backup logger is nil, logging may not be initialized",
-			"operation", "backup_logger_init")
-		log.Println("Error: Backup logger is nil. Logging may not be initialized.")
-		backupLogger = slog.Default() // Use default as fallback
-	}
-	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLogger)
+	// Initialize Backup system using centralized logger
+	backupLog := logger.Global().Module("backup")
+	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLog)
 	if err != nil {
 		// Log the specific error from initialization
-		backupLogger.Error("Failed to initialize backup system", "error", err)
+		backupLog.Error("Failed to initialize backup system", logger.Error(err))
 		// Don't make this fatal - continue without backup system
-		// Add structured logging
-		GetLogger().Warn("Backup system initialization failed",
-			"error", err,
-			"operation", "backup_system_init")
-		log.Printf("Warning: Backup system initialization failed: %v", err)
+		GetLogger().Warn("backup system initialization failed",
+			logger.Error(err),
+			logger.String("operation", "backup_system_init"))
 	} else {
 		// Store backup manager and scheduler in the processor for access by control monitor
 		proc.SetBackupManager(backupManager)
@@ -222,11 +209,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize async services (event bus, notification workers, telemetry workers)
 	if err := telemetry.InitializeAsyncSystems(); err != nil {
-		// Add structured logging
-		GetLogger().Error("Failed to initialize critical async services (event bus, notifications, telemetry)",
-			"error", err,
-			"operation", "initialize_async_systems")
-		log.Printf("Error: Failed to initialize critical async services: %v", err)
+		GetLogger().Error("failed to initialize critical async services",
+			logger.Error(err),
+			logger.String("operation", "initialize_async_systems"))
 		return errors.New(err).
 			Component("analysis.realtime").
 			Category(errors.CategorySystem).
@@ -238,7 +223,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	systemMonitor := initializeSystemMonitor(settings)
 
 	// Initialize and start the HTTP server
-	log.Println("📡 Starting HTTP server")
+	GetLogger().Info("starting HTTP server")
 	oauth2Server := security.NewOAuth2Server()
 	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 	apiServer, err := api.New(
@@ -268,28 +253,21 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if err := bufferManager.UpdateMonitors(sources); err != nil {
 			// Use structured logging to improve error visibility and triage
-			logger := GetLogger()
-
 			// Extract error details from the enhanced error if available
 			errorStr := err.Error()
-			logger.Warn("Buffer monitor setup completed with errors",
-				"error", errorStr,
-				"source_count", len(sources),
-				"sources", sources,
-				"component", "analysis.realtime",
-				"operation", "buffer_monitor_setup")
-
-			// Also log to console for immediate visibility during startup
-			log.Printf("⚠️  Warning: Buffer monitor setup completed with errors: %v", err)
+			GetLogger().Warn("buffer monitor setup completed with errors",
+				logger.String("error", errorStr),
+				logger.Int("source_count", len(sources)),
+				logger.Any("sources", sources),
+				logger.String("component", "analysis.realtime"),
+				logger.String("operation", "buffer_monitor_setup"))
 			// Note: We continue execution as buffer monitoring errors are not critical for startup
 		}
 	} else {
-		// Add structured logging
-		GetLogger().Warn("Starting without active audio sources",
-			"rtsp_urls", len(settings.Realtime.RTSP.URLs),
-			"audio_source", settings.Realtime.Audio.Source,
-			"operation", "startup_audio_check")
-		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+		GetLogger().Warn("starting without active audio sources",
+			logger.Int("rtsp_urls", len(settings.Realtime.RTSP.URLs)),
+			logger.String("audio_source", settings.Realtime.Audio.Source),
+			logger.String("operation", "startup_audio_check"))
 	}
 
 	// start audio capture
@@ -300,11 +278,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// RTSP health monitoring is now built into the FFmpeg manager
 	if len(settings.Realtime.RTSP.URLs) > 0 {
-		// Add structured logging
 		GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
-			"stream_count", len(settings.Realtime.RTSP.URLs),
-			"operation", "rtsp_monitoring_setup")
-		log.Println("🔍 RTSP streams will be monitored by FFmpeg manager")
+			logger.Int("stream_count", len(settings.Realtime.RTSP.URLs)),
+			logger.String("operation", "rtsp_monitoring_setup"))
 	}
 
 	// start cleanup of clips
@@ -337,11 +313,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	for {
 		select {
 		case <-quitChan:
-			// Add structured logging
-			GetLogger().Info("Initiating graceful shutdown sequence",
-				"shutdown_timeout_seconds", shutdownTimeout.Seconds(),
-				"operation", "graceful_shutdown")
-			log.Println("🛑 Initiating graceful shutdown sequence...")
+			log := GetLogger()
+			log.Info("initiating graceful shutdown sequence",
+				logger.Float64("shutdown_timeout_seconds", shutdownTimeout.Seconds()),
+				logger.String("operation", "graceful_shutdown"))
 			shutdownStart := time.Now()
 
 			// Create context with timeout for the entire shutdown process
@@ -353,185 +328,146 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				defer close(shutdownComplete)
 
 				// Step 1: Signal shutdown started (but don't close controlChan yet)
-				// Add structured logging
-				GetLogger().Info("Shutdown step 1: Beginning shutdown sequence",
-					"step", 1,
-					"operation", "shutdown_begin")
-				log.Println("  1️⃣ Beginning shutdown sequence...")
+				log.Info("shutdown step 1: beginning shutdown sequence",
+					logger.Int("step", 1),
+					logger.String("operation", "shutdown_begin"))
 
 				// Check context cancellation between steps
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 1",
-						"step", 1,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 1")
+					log.Warn("shutdown context cancelled after step 1",
+						logger.Int("step", 1),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 2: Stop control monitor
 				if ctrlMonitorRef != nil {
-					// Add structured logging
-					GetLogger().Info("Shutdown step 2: Stopping control monitor",
-						"step", 2,
-						"operation", "shutdown_control_monitor")
-					log.Println("  2️⃣ Stopping control monitor...")
+					log.Info("shutdown step 2: stopping control monitor",
+						logger.Int("step", 2),
+						logger.String("operation", "shutdown_control_monitor"))
 					ctrlMonitorRef.Stop()
 				}
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 2",
-						"step", 2,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 2")
+					log.Warn("shutdown context cancelled after step 2",
+						logger.Int("step", 2),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 3: Stop analysis buffer monitors
-				// Add structured logging
-				GetLogger().Info("Shutdown step 3: Stopping analysis buffer monitors",
-					"step", 3,
-					"operation", "shutdown_buffer_monitors")
-				log.Println("  3️⃣ Stopping analysis buffer monitors...")
+				log.Info("shutdown step 3: stopping analysis buffer monitors",
+					logger.Int("step", 3),
+					logger.String("operation", "shutdown_buffer_monitors"))
 				bufferManager.RemoveAllMonitors()
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 3",
-						"step", 3,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 3")
+					log.Warn("shutdown context cancelled after step 3",
+						logger.Int("step", 3),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 4: Clean up HLS resources asynchronously with timeout
-				// Add structured logging
-				GetLogger().Info("Shutdown step 4: Cleaning up HLS resources",
-					"step", 4,
-					"operation", "shutdown_hls_cleanup")
-				log.Println("  4️⃣ Cleaning up HLS resources...")
+				log.Info("shutdown step 4: cleaning up HLS resources",
+					logger.Int("step", 4),
+					logger.String("operation", "shutdown_hls_cleanup"))
 				cleanupHLSWithTimeout(ctx)
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 4",
-						"step", 4,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 4")
+					log.Warn("shutdown context cancelled after step 4",
+						logger.Int("step", 4),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 5: Shutdown HTTP server
 				if httpServerRef != nil {
-					// Add structured logging
-					GetLogger().Info("Shutdown step 5: Shutting down HTTP server",
-						"step", 5,
-						"operation", "shutdown_http_server")
-					log.Println("  5️⃣ Shutting down HTTP server...")
+					log.Info("shutdown step 5: shutting down HTTP server",
+						logger.Int("step", 5),
+						logger.String("operation", "shutdown_http_server"))
 					if err := httpServerRef.Shutdown(); err != nil {
-						// Add structured logging
-						GetLogger().Warn("Error shutting down HTTP server",
-							"error", err,
-							"step", 5,
-							"operation", "shutdown_http_server")
-						log.Printf("  ⚠️ Warning: Error shutting down HTTP server: %v", err)
+						log.Warn("error shutting down HTTP server",
+							logger.Error(err),
+							logger.Int("step", 5),
+							logger.String("operation", "shutdown_http_server"))
 					}
 				}
 
 				// Now it's safe to close controlChan after HTTP server is down
-				// Add structured logging
-				GetLogger().Info("Closing control channel after producers shutdown",
-					"operation", "close_control_channel")
+				log.Info("closing control channel after producers shutdown",
+					logger.String("operation", "close_control_channel"))
 				close(controlChan)
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 5",
-						"step", 5,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 5")
+					log.Warn("shutdown context cancelled after step 5",
+						logger.Int("step", 5),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 6: Wait for all goroutines
-				// Add structured logging
-				GetLogger().Info("Shutdown step 6: Waiting for goroutines to finish",
-					"step", 6,
-					"operation", "shutdown_wait_goroutines")
-				log.Println("  6️⃣ Waiting for goroutines to finish...")
+				log.Info("shutdown step 6: waiting for goroutines to finish",
+					logger.Int("step", 6),
+					logger.String("operation", "shutdown_wait_goroutines"))
 				wg.Wait()
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 6",
-						"step", 6,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 6")
+					log.Warn("shutdown context cancelled after step 6",
+						logger.Int("step", 6),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 7: Stop system monitor
 				if systemMonitorRef != nil {
-					// Add structured logging
-					GetLogger().Info("Shutdown step 7: Stopping system monitor",
-						"step", 7,
-						"operation", "shutdown_system_monitor")
-					log.Println("  7️⃣ Stopping system monitor...")
+					log.Info("shutdown step 7: stopping system monitor",
+						logger.Int("step", 7),
+						logger.String("operation", "shutdown_system_monitor"))
 					systemMonitorRef.Stop()
 				}
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 7",
-						"step", 7,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 7")
+					log.Warn("shutdown context cancelled after step 7",
+						logger.Int("step", 7),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 8: Stop notification service
 				if notification.IsInitialized() {
-					// Add structured logging
-					GetLogger().Info("Shutdown step 8: Stopping notification service",
-						"step", 8,
-						"operation", "shutdown_notification_service")
-					log.Println("  8️⃣ Stopping notification service...")
+					log.Info("shutdown step 8: stopping notification service",
+						logger.Int("step", 8),
+						logger.String("operation", "shutdown_notification_service"))
 					if service := notification.GetService(); service != nil {
 						service.Stop()
 					}
 				}
 
 				if ctx.Err() != nil {
-					// Add structured logging
-					GetLogger().Warn("Shutdown context cancelled after step 8",
-						"step", 8,
-						"error", ctx.Err(),
-						"operation", "shutdown_timeout")
-					log.Printf("  ⚠️ Shutdown context cancelled after step 8")
+					log.Warn("shutdown context cancelled after step 8",
+						logger.Int("step", 8),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
 					return
 				}
 
 				// Step 9: Delete BirdNET interpreter
-				// Add structured logging
-				GetLogger().Info("Shutdown step 9: Cleaning up BirdNET interpreter",
-					"step", 9,
-					"operation", "shutdown_birdnet_cleanup")
-				log.Println("  9️⃣ Cleaning up BirdNET interpreter...")
+				log.Info("shutdown step 9: cleaning up BirdNET interpreter",
+					logger.Int("step", 9),
+					logger.String("operation", "shutdown_birdnet_cleanup"))
 				bn.Delete()
 
-				// Add structured logging
-				GetLogger().Info("Graceful shutdown completed",
-					"duration_ms", time.Since(shutdownStart).Milliseconds(),
-					"operation", "shutdown_complete")
-				log.Printf("✅ Graceful shutdown completed in %v", time.Since(shutdownStart))
+				log.Info("graceful shutdown completed",
+					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
+					logger.String("operation", "shutdown_complete"))
 			}()
 
 			// Wait for shutdown to complete or context timeout
@@ -541,21 +477,17 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				cancel()
 				return nil
 			case <-ctx.Done():
-				// Add structured logging
-				GetLogger().Warn("Shutdown timeout exceeded, forcing exit",
-					"timeout_seconds", shutdownTimeout.Seconds(),
-					"operation", "shutdown_forced_exit")
-				log.Printf("⚠️ Shutdown timeout exceeded (%v), forcing exit", shutdownTimeout)
+				GetLogger().Warn("shutdown timeout exceeded, forcing exit",
+					logger.Float64("timeout_seconds", shutdownTimeout.Seconds()),
+					logger.String("operation", "shutdown_forced_exit"))
 				cancel()
 				return nil
 			}
 
 		case <-restartChan:
 			// Handle the restart signal.
-			// Add structured logging
-			GetLogger().Info("Restarting audio capture",
-				"operation", "restart_audio_capture")
-			fmt.Println("🔄 Restarting audio capture")
+			GetLogger().Info("restarting audio capture",
+				logger.String("operation", "restart_audio_capture"))
 			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 		}
 	}
@@ -632,11 +564,9 @@ func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore 
 	// Create new weather service
 	weatherService, err := weather.NewService(settings, dataStore, metrics.Weather)
 	if err != nil {
-		// Add structured logging
-		GetLogger().Error("Failed to initialize weather service",
-			"error", err,
-			"operation", "initialize_weather_service")
-		log.Printf("⛈️ Failed to initialize weather service: %v", err)
+		GetLogger().Error("failed to initialize weather service",
+			logger.Error(err),
+			logger.String("operation", "initialize_weather_service"))
 		return
 	}
 
@@ -655,57 +585,46 @@ func monitorShutdownSignals(quitChan chan struct{}) {
 
 		sig := <-sigChan // Block until a signal is received
 
-		// Add structured logging
-		GetLogger().Info("Received shutdown signal",
-			"signal", sig.String(),
-			"operation", "shutdown_signal_received")
-		log.Printf("Received %s signal, initiating graceful shutdown", sig)
+		GetLogger().Info("received shutdown signal",
+			logger.String("signal", sig.String()),
+			logger.String("operation", "shutdown_signal_received"))
 		close(quitChan) // Close the quit channel to signal other goroutines to stop
 	}()
 }
 
 // closeDataStore attempts to close the database connection and logs the result.
 func closeDataStore(store datastore.Interface) {
+	log := GetLogger()
 	// If this is an SQLite store, perform WAL checkpoint before closing
 	if sqliteStore, ok := store.(*datastore.SQLiteStore); ok {
-		// Add structured logging
-		GetLogger().Info("Performing SQLite WAL checkpoint",
-			"operation", "wal_checkpoint_before_shutdown")
-		log.Println("📝 Performing SQLite WAL checkpoint before shutdown...")
+		log.Info("performing SQLite WAL checkpoint",
+			logger.String("operation", "wal_checkpoint_before_shutdown"))
 		if err := sqliteStore.CheckpointWAL(); err != nil {
 			// Enhanced error handling - check for specific error conditions
 			errStr := err.Error()
 			if strings.Contains(errStr, "database is closed") || strings.Contains(errStr, "nil pointer") {
 				// Database is likely already closed or connection is nil
-				// Add structured logging
-				GetLogger().Warn("Database already closed during WAL checkpoint",
-					"operation", "wal_checkpoint",
-					"error_type", "database_closed")
-				log.Printf("⚠️ Warning: Database already closed or invalid state during WAL checkpoint")
+				log.Warn("database already closed during WAL checkpoint",
+					logger.String("operation", "wal_checkpoint"),
+					logger.String("error_type", "database_closed"))
 			} else {
 				// Other checkpoint failures - log but continue with shutdown
-				// Add structured logging
-				GetLogger().Warn("WAL checkpoint failed",
-					"error", err,
-					"operation", "wal_checkpoint",
-					"continuing_shutdown", true)
-				log.Printf("⚠️ Warning: WAL checkpoint failed (continuing shutdown): %v", err)
+				log.Warn("WAL checkpoint failed",
+					logger.Error(err),
+					logger.String("operation", "wal_checkpoint"),
+					logger.Bool("continuing_shutdown", true))
 			}
 		}
 	}
 
 	// Close the database connection
 	if err := store.Close(); err != nil {
-		// Add structured logging
-		GetLogger().Error("Failed to close database",
-			"error", err,
-			"operation", "close_database")
-		log.Printf("Failed to close database: %v", err)
+		log.Error("failed to close database",
+			logger.Error(err),
+			logger.String("operation", "close_database"))
 	} else {
-		// Add structured logging
-		GetLogger().Info("Successfully closed database",
-			"operation", "close_database")
-		log.Println("Successfully closed database")
+		log.Info("successfully closed database",
+			logger.String("operation", "close_database"))
 	}
 }
 
@@ -727,65 +646,57 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	diskManagerLogger := diskmanager.GetLogger()
 
 	policy := retention.Policy
-	// Add structured logging
-	GetLogger().Info("Clip cleanup monitor initialized",
-		"policy", policy,
-		"check_interval_minutes", checkInterval,
-		"operation", "clip_cleanup_init")
-	log.Printf("Clip retention policy: %s, check interval: %d minutes", policy, checkInterval)
+	GetLogger().Info("clip cleanup monitor initialized",
+		logger.String("policy", policy),
+		logger.Int("check_interval_minutes", checkInterval),
+		logger.String("operation", "clip_cleanup_init"))
 	diskManagerLogger.Info("Cleanup timer started",
-		"policy", policy,
-		"interval_minutes", checkInterval,
-		"timestamp", time.Now().Format(time.RFC3339))
+		logger.String("policy", policy),
+		logger.Int("interval_minutes", checkInterval),
+		logger.String("timestamp", time.Now().Format(time.RFC3339)))
 
 	for {
 		select {
 		case <-quitChan:
 			// Handle quit signal to stop the monitor
 			diskManagerLogger.Info("Cleanup timer stopped",
-				"reason", "quit signal received",
-				"timestamp", time.Now().Format(time.RFC3339))
+				logger.String("reason", "quit signal received"),
+				logger.String("timestamp", time.Now().Format(time.RFC3339)))
 			// Ensure clean shutdown
 			if err := diskmanager.CloseLogger(); err != nil {
-				diskManagerLogger.Error("Failed to close diskmanager logger", "error", err)
+				diskManagerLogger.Error("Failed to close diskmanager logger", logger.Error(err))
 			}
 			return
 
 		case t := <-ticker.C:
-			// Add structured logging
-			GetLogger().Info("Starting clip cleanup task",
-				"timestamp", t.Format(time.RFC3339),
-				"policy", conf.Setting().Realtime.Audio.Export.Retention.Policy,
-				"operation", "clip_cleanup_task")
-			log.Println("🧹 Running clip cleanup task")
+			GetLogger().Info("starting clip cleanup task",
+				logger.String("timestamp", t.Format(time.RFC3339)),
+				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy),
+				logger.String("operation", "clip_cleanup_task"))
 			diskManagerLogger.Info("Cleanup timer triggered",
-				"timestamp", t.Format(time.RFC3339),
-				"policy", conf.Setting().Realtime.Audio.Export.Retention.Policy)
+				logger.String("timestamp", t.Format(time.RFC3339)),
+				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy))
 
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
 				diskManagerLogger.Debug("Starting age-based cleanup via timer")
 				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					// Add structured logging
-					GetLogger().Error("Age-based cleanup failed",
-						"error", result.Err,
-						"operation", "age_based_cleanup")
-					log.Printf("Error during age-based cleanup: %v", result.Err)
+					GetLogger().Error("age-based cleanup failed",
+						logger.Error(result.Err),
+						logger.String("operation", "age_based_cleanup"))
 					diskManagerLogger.Error("Age-based cleanup failed",
-						"error", result.Err,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Error(result.Err),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					// Add structured logging
-					GetLogger().Info("Age-based cleanup completed successfully",
-						"clips_removed", result.ClipsRemoved,
-						"disk_utilization_percent", result.DiskUtilization,
-						"operation", "age_based_cleanup")
-					log.Printf("🧹 Age-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+					GetLogger().Info("age-based cleanup completed successfully",
+						logger.Int("clips_removed", result.ClipsRemoved),
+						logger.Int("disk_utilization_percent", result.DiskUtilization),
+						logger.String("operation", "age_based_cleanup"))
 					diskManagerLogger.Info("Age-based cleanup completed via timer",
-						"clips_removed", result.ClipsRemoved,
-						"disk_utilization", result.DiskUtilization,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Int("clips_removed", result.ClipsRemoved),
+						logger.Int("disk_utilization", result.DiskUtilization),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 
@@ -799,12 +710,12 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 
 				if err != nil {
 					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",
-						"error", err,
-						"continuing_with_cleanup", true)
+						logger.Error(err),
+						logger.Bool("continuing_with_cleanup", true))
 				} else if skip {
 					diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
-						"current_usage", utilization,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Int("current_usage", utilization),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 					continue // Skip to next timer tick
 				}
 
@@ -812,25 +723,21 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 				diskManagerLogger.Debug("Starting usage-based cleanup via timer")
 				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					// Add structured logging
-					GetLogger().Error("Usage-based cleanup failed",
-						"error", result.Err,
-						"operation", "usage_based_cleanup")
-					log.Printf("Error during usage-based cleanup: %v", result.Err)
+					GetLogger().Error("usage-based cleanup failed",
+						logger.Error(result.Err),
+						logger.String("operation", "usage_based_cleanup"))
 					diskManagerLogger.Error("Usage-based cleanup failed",
-						"error", result.Err,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Error(result.Err),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					// Add structured logging
-					GetLogger().Info("Usage-based cleanup completed successfully",
-						"clips_removed", result.ClipsRemoved,
-						"disk_utilization_percent", result.DiskUtilization,
-						"operation", "usage_based_cleanup")
-					log.Printf("🧹 Usage-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+					GetLogger().Info("usage-based cleanup completed successfully",
+						logger.Int("clips_removed", result.ClipsRemoved),
+						logger.Int("disk_utilization_percent", result.DiskUtilization),
+						logger.String("operation", "usage_based_cleanup"))
 					diskManagerLogger.Info("Usage-based cleanup completed via timer",
-						"clips_removed", result.ClipsRemoved,
-						"disk_utilization", result.DiskUtilization,
-						"timestamp", time.Now().Format(time.RFC3339))
+						logger.Int("clips_removed", result.ClipsRemoved),
+						logger.Int("disk_utilization", result.DiskUtilization),
+						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 		}
@@ -845,20 +752,17 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 // and registers the default providers (Wikimedia, AviCommons).
 func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics) (*imageprovider.ImageProviderRegistry, error) {
 	// Use the global registry if available, otherwise create a new one
+	log := GetLogger()
 	var registry *imageprovider.ImageProviderRegistry
 	if api.ImageProviderRegistry != nil {
 		registry = api.ImageProviderRegistry
-		// Add structured logging
-		GetLogger().Info("Using existing image provider registry",
-			"operation", "setup_image_registry")
-		log.Println("Using global image provider registry")
+		log.Info("using existing image provider registry",
+			logger.String("operation", "setup_image_registry"))
 	} else {
 		registry = imageprovider.NewImageProviderRegistry()
 		api.ImageProviderRegistry = registry // Assign back to global
-		// Add structured logging
-		GetLogger().Info("Created new image provider registry",
-			"operation", "setup_image_registry")
-		log.Println("Created new image provider registry")
+		log.Info("created new image provider registry",
+			logger.String("operation", "setup_image_registry"))
 	}
 
 	var errs []error // Slice to collect errors
@@ -867,12 +771,10 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 	if _, ok := registry.GetCache("wikimedia"); !ok {
 		wikiCache, err := imageprovider.CreateDefaultCache(metrics, ds)
 		if err != nil {
-			// Add structured logging
-			GetLogger().Error("Failed to create WikiMedia image cache",
-				"error", err,
-				"provider", "wikimedia",
-				"operation", "create_image_cache")
-			log.Printf("Failed to create WikiMedia image cache: %v", err)
+			log.Error("failed to create WikiMedia image cache",
+				logger.Error(err),
+				logger.String("provider", "wikimedia"),
+				logger.String("operation", "create_image_cache"))
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
 				Category(errors.CategoryImageProvider).
@@ -882,12 +784,10 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 			// Continue even if one provider fails
 		} else {
 			if err := registry.Register("wikimedia", wikiCache); err != nil {
-				// Add structured logging
-				GetLogger().Error("Failed to register WikiMedia image provider",
-					"error", err,
-					"provider", "wikimedia",
-					"operation", "register_image_provider")
-				log.Printf("Failed to register WikiMedia image provider: %v", err)
+				log.Error("failed to register WikiMedia image provider",
+					logger.Error(err),
+					logger.String("provider", "wikimedia"),
+					logger.String("operation", "register_image_provider"))
 				errs = append(errs, errors.New(err).
 					Component("realtime-analysis").
 					Category(errors.CategoryImageProvider).
@@ -895,68 +795,52 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 					Context("provider", "wikimedia").
 					Build())
 			} else {
-				// Add structured logging
-				GetLogger().Info("Successfully registered image provider",
-					"provider", "wikimedia",
-					"operation", "register_image_provider")
-				log.Println("Registered WikiMedia image provider")
+				log.Info("successfully registered image provider",
+					logger.String("provider", "wikimedia"),
+					logger.String("operation", "register_image_provider"))
 			}
 		}
 	} else {
-		// Add structured logging
-		GetLogger().Info("Using existing image provider",
-			"provider", "wikimedia",
-			"operation", "setup_image_provider")
-		log.Println("Using existing WikiMedia image provider")
+		log.Info("using existing image provider",
+			logger.String("provider", "wikimedia"),
+			logger.String("operation", "setup_image_provider"))
 	}
 
 	// Attempt to register AviCommons
 	if _, ok := registry.GetCache("avicommons"); !ok {
-		// Add structured logging
-		GetLogger().Info("Attempting to register AviCommons provider",
-			"provider", "avicommons",
-			"operation", "register_image_provider")
-		log.Println("Attempting to register AviCommons provider...")
+		log.Info("attempting to register AviCommons provider",
+			logger.String("provider", "avicommons"),
+			logger.String("operation", "register_image_provider"))
 
 		// Debug logging for embedded filesystem if enabled
 		if conf.Setting().Realtime.Dashboard.Thumbnails.Debug {
-			// Add structured logging
-			GetLogger().Debug("Listing embedded filesystem contents",
-				"operation", "debug_filesystem")
-			log.Println("Embedded filesystem contents:")
+			log.Debug("listing embedded filesystem contents",
+				logger.String("operation", "debug_filesystem"))
 			if err := fs.WalkDir(api.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
-					// Add structured logging
-					GetLogger().Debug("Error walking filesystem path",
-						"path", path,
-						"error", err,
-						"operation", "debug_filesystem")
-					log.Printf("  Error walking path %s: %v", path, err)
+					log.Debug("error walking filesystem path",
+						logger.String("path", path),
+						logger.Error(err),
+						logger.String("operation", "debug_filesystem"))
 					return nil
 				}
-				// Add structured logging
-				GetLogger().Debug("Filesystem entry found",
-					"path", path,
-					"is_dir", d.IsDir(),
-					"operation", "debug_filesystem")
-				log.Printf("  %s (%v)", path, d.IsDir())
+				log.Debug("filesystem entry found",
+					logger.String("path", path),
+					logger.Bool("is_dir", d.IsDir()),
+					logger.String("operation", "debug_filesystem"))
 				return nil
 			}); err != nil {
-				// Add structured logging
-				GetLogger().Error("Error walking embedded filesystem",
-					"error", err,
-					"operation", "debug_filesystem")
-				log.Printf("Error walking embedded filesystem: %v", err)
+				log.Error("error walking embedded filesystem",
+					logger.Error(err),
+					logger.String("operation", "debug_filesystem"))
 			}
 		}
 
 		if err := imageprovider.RegisterAviCommonsProvider(registry, api.ImageDataFs, metrics, ds); err != nil {
-			// Add structured logging
-			GetLogger().Error("Failed to register AviCommons provider",
-				"error", err,
-				"provider", "avicommons",
-				"operation", "register_image_provider")
-			log.Printf("Failed to register AviCommons provider: %v", err)
+			log.Error("failed to register AviCommons provider",
+				logger.Error(err),
+				logger.String("provider", "avicommons"),
+				logger.String("operation", "register_image_provider"))
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
 				Category(errors.CategoryImageProvider).
@@ -965,33 +849,25 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 				Build())
 			// Check if we can read the data file for debugging
 			if _, errRead := fs.ReadFile(api.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
-				// Add structured logging
-				GetLogger().Error("Error reading AviCommons data file",
-					"error", errRead,
-					"provider", "avicommons",
-					"file_path", "internal/imageprovider/data/latest.json",
-					"operation", "read_data_file")
-				log.Printf("Error reading AviCommons data file: %v", errRead)
+				log.Error("error reading AviCommons data file",
+					logger.Error(errRead),
+					logger.String("provider", "avicommons"),
+					logger.String("file_path", "internal/imageprovider/data/latest.json"),
+					logger.String("operation", "read_data_file"))
 			} else {
-				// Add structured logging
-				GetLogger().Warn("AviCommons data file exists but registration failed",
-					"provider", "avicommons",
-					"operation", "register_image_provider")
-				log.Println("AviCommons data file exists but provider registration failed.")
+				log.Warn("AviCommons data file exists but registration failed",
+					logger.String("provider", "avicommons"),
+					logger.String("operation", "register_image_provider"))
 			}
 		} else {
-			// Add structured logging
-			GetLogger().Info("Successfully registered image provider",
-				"provider", "avicommons",
-				"operation", "register_image_provider")
-			log.Println("Successfully registered AviCommons image provider")
+			log.Info("successfully registered image provider",
+				logger.String("provider", "avicommons"),
+				logger.String("operation", "register_image_provider"))
 		}
 	} else {
-		// Add structured logging
-		GetLogger().Info("Using existing image provider",
-			"provider", "avicommons",
-			"operation", "setup_image_provider")
-		log.Println("Using existing AviCommons image provider")
+		log.Info("using existing image provider",
+			logger.String("provider", "avicommons"),
+			logger.String("operation", "setup_image_provider"))
 	}
 
 	// Set the registry in each provider for fallback support
@@ -1010,52 +886,43 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 
 // selectDefaultImageProvider determines the default image provider based on configuration
 func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *imageprovider.BirdImageCache {
+	log := GetLogger()
 	preferredProvider := conf.Setting().Realtime.Dashboard.Thumbnails.ImageProvider
 	var defaultCache *imageprovider.BirdImageCache
 
 	if preferredProvider == "auto" {
 		// Use wikimedia as the default provider in auto mode, if available
 		defaultCache, _ = registry.GetCache("wikimedia")
-		// Add structured logging
-		GetLogger().Info("Selected default image provider",
-			"provider", "wikimedia",
-			"mode", "auto",
-			"operation", "select_default_provider")
-		log.Println("Using WikiMedia as the default image provider (auto mode)")
+		log.Info("selected default image provider",
+			logger.String("provider", "wikimedia"),
+			logger.String("mode", "auto"),
+			logger.String("operation", "select_default_provider"))
 	} else {
 		// User has specified a specific provider
 		if cache, ok := registry.GetCache(preferredProvider); ok {
 			defaultCache = cache
-			// Add structured logging
-			GetLogger().Info("Selected preferred image provider",
-				"provider", preferredProvider,
-				"operation", "select_default_provider")
-			log.Printf("Using %s as the preferred image provider", preferredProvider)
+			log.Info("selected preferred image provider",
+				logger.String("provider", preferredProvider),
+				logger.String("operation", "select_default_provider"))
 		} else {
 			// Fallback to wikimedia if preferred provider doesn't exist or isn't registered
 			defaultCache, _ = registry.GetCache("wikimedia")
-			// Add structured logging
-			GetLogger().Warn("Preferred provider not available, falling back",
-				"preferred_provider", preferredProvider,
-				"fallback_provider", "wikimedia",
-				"operation", "select_default_provider")
-			log.Printf("Preferred provider '%s' not available, falling back to WikiMedia (if available)", preferredProvider)
+			log.Warn("preferred provider not available, falling back",
+				logger.String("preferred_provider", preferredProvider),
+				logger.String("fallback_provider", "wikimedia"),
+				logger.String("operation", "select_default_provider"))
 		}
 	}
 
 	// If we still don't have a default cache (e.g., wikimedia failed registration), try any available provider.
 	if defaultCache == nil {
-		// Add structured logging
-		GetLogger().Warn("No default image provider found, searching for alternatives",
-			"operation", "select_default_provider")
-		log.Println("No default image provider assigned yet, checking for any registered provider")
+		log.Warn("no default image provider found, searching for alternatives",
+			logger.String("operation", "select_default_provider"))
 		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
 			defaultCache = cache
-			// Add structured logging
-			GetLogger().Info("Selected fallback default image provider",
-				"provider", name,
-				"operation", "select_default_provider")
-			log.Printf("Using %s as the fallback default image provider", name)
+			log.Info("selected fallback default image provider",
+				logger.String("provider", name),
+				logger.String("operation", "select_default_provider"))
 			return false // Stop at the first provider found
 		})
 	}
@@ -1066,11 +933,10 @@ func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *
 // warmUpImageCacheInBackground fetches existing cache data and starts background tasks
 // to fetch images for species not yet cached by any provider.
 func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovider.ImageProviderRegistry, defaultCache *imageprovider.BirdImageCache, speciesList []datastore.Note) {
-	// Add structured logging
-	GetLogger().Info("Starting background image cache warm-up",
-		"species_count", len(speciesList),
-		"operation", "image_cache_warmup")
-	log.Println("Starting background image cache warm-up...")
+	log := GetLogger()
+	log.Info("starting background image cache warm-up",
+		logger.Int("species_count", len(speciesList)),
+		logger.String("operation", "image_cache_warmup"))
 
 	// Pre-fetch all cached image records from the database per provider
 	allCachedImages := make(map[string]map[string]bool) // providerName -> scientificName -> exists
@@ -1078,31 +944,25 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
 			providerCache, err := ds.GetAllImageCaches(name)
 			if err != nil {
-				// Add structured logging
-				GetLogger().Warn("Failed to get cached images for provider",
-					"provider", name,
-					"error", err,
-					"operation", "image_cache_warmup")
-				log.Printf("Warning: Failed to get cached images for provider '%s': %v", name, err)
+				log.Warn("failed to get cached images for provider",
+					logger.String("provider", name),
+					logger.Error(err),
+					logger.String("operation", "image_cache_warmup"))
 				return true // Continue to next provider
 			}
 			allCachedImages[name] = make(map[string]bool)
 			for i := range providerCache {
 				allCachedImages[name][providerCache[i].ScientificName] = true
 			}
-			// Add structured logging
-			GetLogger().Info("Pre-fetched cached image records",
-				"provider", name,
-				"cached_count", len(providerCache),
-				"operation", "image_cache_warmup")
-			log.Printf("Pre-fetched %d cached image records for provider '%s'", len(providerCache), name)
+			log.Info("pre-fetched cached image records",
+				logger.String("provider", name),
+				logger.Int("cached_count", len(providerCache)),
+				logger.String("operation", "image_cache_warmup"))
 			return true // Continue ranging
 		})
 	} else {
-		// Add structured logging
-		GetLogger().Warn("Datastore is nil, cannot pre-fetch cached images",
-			"operation", "image_cache_warmup")
-		log.Println("Warning: Datastore is nil, cannot pre-fetch cached images.")
+		log.Warn("datastore is nil, cannot pre-fetch cached images",
+			logger.String("operation", "image_cache_warmup"))
 	}
 
 	// Start background fetching of images for species not found in any cache
@@ -1117,10 +977,8 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 
 			// Skip empty scientific names
 			if sciName == "" {
-				// Add structured logging
-				GetLogger().Warn("Skipping empty scientific name during warm-up",
-					"operation", "image_cache_warmup")
-				log.Printf("Warning: Skipping empty scientific name during image cache warm-up")
+				log.Warn("skipping empty scientific name during warm-up",
+					logger.String("operation", "image_cache_warmup"))
 				continue
 			}
 
@@ -1141,53 +999,41 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 			wg.Add(1)
 			// The defaultCache.Get call below will handle initialization and locking.
 			// No need to manually manipulate the Initializing map here.
-			// defaultCache.Initializing.Store(sciName, struct{}{}) // REMOVED - Incorrect usage
 
 			go func(name string) {
 				defer wg.Done()
 				// The tryInitialize function called by Get handles mutex cleanup.
-				// defer defaultCache.Initializing.Delete(name) // REMOVED - Handled by tryInitialize
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
 				// Skip empty scientific names (double check)
 				if name == "" {
-					// Add structured logging
-					GetLogger().Warn("Empty scientific name in fetch goroutine",
-						"operation", "image_cache_warmup")
-					log.Printf("Warning: Caught empty scientific name in fetch goroutine")
+					log.Warn("empty scientific name in fetch goroutine",
+						logger.String("operation", "image_cache_warmup"))
 					return
 				}
 
 				if _, err := defaultCache.Get(name); err != nil {
-					// Add structured logging
-					GetLogger().Debug("Failed to fetch image during warm-up",
-						"species", name,
-						"error", err,
-						"operation", "image_cache_warmup")
-					log.Printf("Failed to fetch image for %s during warm-up: %v", name, err)
+					log.Debug("failed to fetch image during warm-up",
+						logger.String("species", name),
+						logger.Error(err),
+						logger.String("operation", "image_cache_warmup"))
 				}
 			}(sciName) // Pass the captured name
 		}
 
 		if needsImage > 0 {
-			// Add structured logging
-			GetLogger().Info("Cache warm-up: species require image fetching",
-				"species_needing_images", needsImage,
-				"operation", "image_cache_warmup")
-			log.Printf("Cache warm-up: %d species require image fetching.", needsImage)
+			log.Info("cache warm-up: species require image fetching",
+				logger.Int("species_needing_images", needsImage),
+				logger.String("operation", "image_cache_warmup"))
 			wg.Wait()
-			// Add structured logging
-			GetLogger().Info("BirdImageCache initialization complete",
-				"species_fetched", needsImage,
-				"operation", "image_cache_warmup")
-			log.Printf("Finished initializing BirdImageCache (%d species fetched/attempted)", needsImage)
+			log.Info("BirdImageCache initialization complete",
+				logger.Int("species_fetched", needsImage),
+				logger.String("operation", "image_cache_warmup"))
 		} else {
-			// Add structured logging
-			GetLogger().Info("BirdImageCache initialized",
-				"status", "all_images_cached",
-				"operation", "image_cache_warmup")
-			log.Println("BirdImageCache initialized (all species images already present in DB cache)")
+			log.Info("BirdImageCache initialized",
+				logger.String("status", "all_images_cached"),
+				logger.String("operation", "image_cache_warmup"))
 		}
 	}()
 }
@@ -1195,25 +1041,22 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 // initBirdImageCache initializes the bird image cache by setting up providers,
 // selecting a default, and starting a background warm-up process.
 func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) *imageprovider.BirdImageCache {
+	log := GetLogger()
 	// 1. Set up the registry and register known providers
 	registry, regErr := setupImageProviderRegistry(ds, metrics)
 	if regErr != nil {
 		// Log errors encountered during provider registration
-		// Add structured logging
-		GetLogger().Warn("Image provider registry initialization encountered errors",
-			"error", regErr,
-			"operation", "init_image_cache")
-		log.Printf("Warning: Image provider registry initialization encountered errors: %v", regErr)
+		log.Warn("image provider registry initialization encountered errors",
+			logger.Error(regErr),
+			logger.String("operation", "init_image_cache"))
 		// Note: We continue even if some providers fail, as others might succeed.
 		// The selectDefaultImageProvider logic will handle finding an available provider.
 	}
 
 	// Defensive check: Ensure registry is not nil before proceeding.
 	if registry == nil {
-		// Add structured logging
-		GetLogger().Error("Image provider registry could not be initialized",
-			"operation", "init_image_cache")
-		log.Println("Error: Image provider registry could not be initialized.")
+		log.Error("image provider registry could not be initialized",
+			logger.String("operation", "init_image_cache"))
 		return nil
 	}
 
@@ -1222,21 +1065,17 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 
 	// If no provider could be initialized or selected, return nil
 	if defaultCache == nil {
-		// Add structured logging
-		GetLogger().Error("No image providers available or could be initialized",
-			"operation", "init_image_cache")
-		log.Println("Error: No image providers available or could be initialized.")
+		log.Error("no image providers available or could be initialized",
+			logger.String("operation", "init_image_cache"))
 		return nil
 	}
 
 	// 3. Get the list of all detected species
 	speciesList, err := ds.GetAllDetectedSpecies()
 	if err != nil {
-		// Add structured logging
-		GetLogger().Warn("Failed to get detected species list",
-			"error", err,
-			"operation", "init_image_cache")
-		log.Printf("Failed to get detected species list: %v. Cache warm-up may be incomplete.", err)
+		log.Warn("failed to get detected species list",
+			logger.Error(err),
+			logger.String("operation", "init_image_cache"))
 		// Continue with an empty list if DB fails, warm-up won't happen
 		speciesList = []datastore.Note{}
 	}
@@ -1247,21 +1086,17 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 		if speciesList[i].ScientificName != "" {
 			validSpeciesList = append(validSpeciesList, speciesList[i])
 		} else {
-			// Add structured logging
-			GetLogger().Warn("Found species entry with empty scientific name",
-				"operation", "init_image_cache")
-			log.Printf("Warning: Found species entry with empty scientific name in database, skipping for image cache")
+			log.Warn("found species entry with empty scientific name",
+				logger.String("operation", "init_image_cache"))
 		}
 	}
 
 	if len(validSpeciesList) < len(speciesList) {
-		// Add structured logging
-		GetLogger().Info("Filtered species entries with empty scientific names",
-			"filtered_count", len(speciesList)-len(validSpeciesList),
-			"total_count", len(speciesList),
-			"valid_count", len(validSpeciesList),
-			"operation", "init_image_cache")
-		log.Printf("Filtered %d species entries with empty scientific names from warm-up list", len(speciesList)-len(validSpeciesList))
+		log.Info("filtered species entries with empty scientific names",
+			logger.Int("filtered_count", len(speciesList)-len(validSpeciesList)),
+			logger.Int("total_count", len(speciesList)),
+			logger.Int("valid_count", len(validSpeciesList)),
+			logger.String("operation", "init_image_cache"))
 	}
 
 	// 4. Start the background cache warm-up process with validated species list
@@ -1329,19 +1164,25 @@ func cleanupHLSWithTimeout(ctx context.Context) {
 	cleanupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
+	log := GetLogger()
 	select {
 	case err := <-cleanupDone:
 		if err != nil {
-			log.Printf("  ⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+			log.Warn("failed to clean up HLS streaming files",
+				logger.Error(err),
+				logger.String("operation", "cleanup_hls_files"))
 		}
 	case <-cleanupCtx.Done():
-		log.Printf("  ⚠️ Warning: HLS cleanup timeout exceeded (2s), continuing shutdown")
+		log.Warn("HLS cleanup timeout exceeded, continuing shutdown",
+			logger.Duration("timeout", 2*time.Second),
+			logger.String("operation", "cleanup_hls_files"))
 	}
 }
 
 // cleanupHLSStreamingFiles removes any leftover HLS streaming files and directories
 // from previous runs of the application to avoid accumulation of unused files.
 func cleanupHLSStreamingFiles() error {
+	log := GetLogger()
 	// Get the HLS directory where all streaming files are stored
 	hlsDir, err := conf.GetHLSDirectory()
 	if err != nil {
@@ -1383,15 +1224,16 @@ func cleanupHLSStreamingFiles() error {
 	for _, entry := range entries {
 		if entry.IsDir() && strings.HasPrefix(entry.Name(), "stream_") {
 			path := filepath.Join(hlsDir, entry.Name())
-			// Add structured logging
-			GetLogger().Info("Removing HLS stream directory",
-				"path", path,
-				"operation", "cleanup_hls_files")
-			log.Printf("🧹 Removing HLS stream directory: %s", path)
+			log.Info("removing HLS stream directory",
+				logger.String("path", path),
+				logger.String("operation", "cleanup_hls_files"))
 
 			// Remove the directory and all its contents
 			if err := os.RemoveAll(path); err != nil {
-				log.Printf("⚠️ Warning: Failed to remove HLS stream directory %s: %v", path, err)
+				log.Warn("failed to remove HLS stream directory",
+					logger.String("path", path),
+					logger.Error(err),
+					logger.String("operation", "cleanup_hls_files"))
 				cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
 				// Continue with other directories
 			}
@@ -1414,25 +1256,22 @@ func cleanupHLSStreamingFiles() error {
 
 // logHLSCleanup logs the result of HLS cleanup operation consistently
 func logHLSCleanup(err error) {
+	log := GetLogger()
 	if err != nil {
-		// Add structured logging
-		GetLogger().Warn("Failed to clean up HLS streaming files",
-			"error", err,
-			"operation", "cleanup_hls_files")
-		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+		log.Warn("failed to clean up HLS streaming files",
+			logger.Error(err),
+			logger.String("operation", "cleanup_hls_files"))
 	} else {
-		// Add structured logging
-		GetLogger().Info("Cleaned up leftover HLS streaming files",
-			"operation", "cleanup_hls_files")
-		log.Println("🧹 Cleaned up leftover HLS streaming files")
+		log.Info("cleaned up leftover HLS streaming files",
+			logger.String("operation", "cleanup_hls_files"))
 	}
 }
 
 // initializeBackupSystem sets up the backup manager and scheduler.
-func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) (*backup.Manager, *backup.Scheduler, error) {
-	backupLogger.Info("Initializing backup system...")
+func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*backup.Manager, *backup.Scheduler, error) {
+	backupLog.Info("Initializing backup system...")
 
-	stateManager, err := backup.NewStateManager(backupLogger)
+	stateManager, err := backup.NewStateManager(backupLog)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").
@@ -1442,7 +1281,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	}
 
 	// Use settings.Version for the app version
-	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
+	backupManager, err := backup.NewManager(settings, backupLog, stateManager, settings.Version)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").
@@ -1450,7 +1289,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 			Context("operation", "initialize_backup_manager").
 			Build()
 	}
-	backupScheduler, err := backup.NewScheduler(backupManager, backupLogger, stateManager)
+	backupScheduler, err := backup.NewScheduler(backupManager, backupLog, stateManager)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").
@@ -1462,59 +1301,59 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	// Load schedule for backupScheduler if backup is enabled
 	switch {
 	case settings.Backup.Enabled && len(settings.Backup.Schedules) > 0:
-		backupLogger.Info("Loading backup schedule from configuration")
+		backupLog.Info("Loading backup schedule from configuration")
 		if err := backupScheduler.LoadFromConfig(&settings.Backup); err != nil {
 			// Log the error but don't necessarily stop initialization
-			backupLogger.Error("Failed to load backup schedule from config", "error", err)
+			backupLog.Error("Failed to load backup schedule from config", logger.Error(err))
 		}
 	case settings.Backup.Enabled:
 		// This case is reached if backup is enabled but no schedules are defined.
-		backupLogger.Info("Backup enabled, but no schedules configured.")
+		backupLog.Info("Backup enabled, but no schedules configured.")
 	default:
 		// This case is reached if backup is disabled.
-		backupLogger.Info("Backup system is disabled.")
+		backupLog.Info("Backup system is disabled.")
 	}
 
 	// Start backupManager and backupScheduler if backup is enabled
 	if settings.Backup.Enabled {
-		backupLogger.Info("Starting backup manager")
+		backupLog.Info("Starting backup manager")
 		if err := backupManager.Start(); err != nil {
 			// Log the error but don't necessarily stop initialization
-			backupLogger.Error("Failed to start backup manager", "error", err)
+			backupLog.Error("Failed to start backup manager", logger.Error(err))
 		}
-		backupLogger.Info("Starting backup scheduler")
+		backupLog.Info("Starting backup scheduler")
 		backupScheduler.Start() // Start the scheduler
 	}
 
-	backupLogger.Info("Backup system initialized.")
+	backupLog.Info("Backup system initialized.")
 	return backupManager, backupScheduler, nil
 }
 
 // initializeSystemMonitor initializes and starts the system resource monitor if enabled
 func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
-	logging.Info("initializeSystemMonitor called",
-		"monitoring_enabled", settings.Realtime.Monitoring.Enabled,
-		"check_interval", settings.Realtime.Monitoring.CheckInterval,
+	GetLogger().Info("initializeSystemMonitor called",
+		logger.Bool("monitoring_enabled", settings.Realtime.Monitoring.Enabled),
+		logger.Int("check_interval", settings.Realtime.Monitoring.CheckInterval),
 	)
 
 	if !settings.Realtime.Monitoring.Enabled {
-		logging.Warn("System monitoring is disabled in settings")
+		GetLogger().Warn("System monitoring is disabled in settings")
 		return nil
 	}
 
-	logging.Info("Creating system monitor instance")
+	GetLogger().Info("Creating system monitor instance")
 	systemMonitor := monitor.NewSystemMonitor(settings)
 	if systemMonitor == nil {
-		logging.Error("Failed to create system monitor instance")
+		GetLogger().Error("Failed to create system monitor instance")
 		return nil
 	}
 
-	logging.Info("Starting system monitor")
+	GetLogger().Info("Starting system monitor")
 	systemMonitor.Start()
 
-	logging.Info("System resource monitoring initialized",
-		"component", "monitor",
-		"interval", settings.Realtime.Monitoring.CheckInterval)
+	GetLogger().Info("System resource monitoring initialized",
+		logger.String("component", "monitor"),
+		logger.Int("interval", settings.Realtime.Monitoring.CheckInterval))
 	return systemMonitor
 }
 
@@ -1539,12 +1378,13 @@ func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datasto
 	}
 	// Always initialize the cache so the settings UI can show available providers
 	// even when thumbnails are disabled - the cache will just not be used for actual image fetching
-	log.Println("Initializing bird image cache for settings UI (thumbnails disabled)")
+	GetLogger().Debug("initializing bird image cache for settings UI (thumbnails disabled)")
 	return initBirdImageCache(dataStore, metrics)
 }
 
 // initializeAudioSources prepares and validates audio sources
 func initializeAudioSources(settings *conf.Settings) ([]string, error) {
+	log := GetLogger()
 	var sources []string
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if len(settings.Realtime.RTSP.URLs) > 0 {
@@ -1557,7 +1397,7 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			var failedSources []string
 			for _, url := range settings.Realtime.RTSP.URLs {
 				if url == "" {
-					log.Printf("⚠️ Skipping empty RTSP URL")
+					log.Warn("skipping empty RTSP URL")
 					continue
 				}
 
@@ -1569,7 +1409,9 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 				})
 				if err != nil {
 					safeURL := privacy.SanitizeRTSPUrl(url)
-					log.Printf("❌ Failed to register RTSP source %s: %v", safeURL, err)
+					log.Error("failed to register RTSP source",
+						logger.String("rtsp_url", safeURL),
+						logger.Error(err))
 					failedSources = append(failedSources, safeURL)
 					continue
 				}
@@ -1579,8 +1421,10 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 
 			// If some sources failed to register, log a summary
 			if len(failedSources) > 0 {
-				log.Printf("⚠️  %d out of %d RTSP sources failed to register: %v",
-					len(failedSources), len(settings.Realtime.RTSP.URLs), failedSources)
+				log.Warn("some RTSP sources failed to register",
+					logger.Int("failed_count", len(failedSources)),
+					logger.Int("total_count", len(settings.Realtime.RTSP.URLs)),
+					logger.Any("failed_sources", failedSources))
 			}
 		}
 		if settings.Realtime.Audio.Source != "" {
@@ -1592,7 +1436,9 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 				DisplayName: settings.Realtime.Audio.Source,
 			})
 			if err != nil {
-				log.Printf("⚠️  Failed to register audio device source: %v", err)
+				log.Warn("failed to register audio device source",
+					logger.String("source", settings.Realtime.Audio.Source),
+					logger.Error(err))
 			} else {
 				sources = append(sources, source.ID)
 			}
@@ -1602,21 +1448,23 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 		if err := initializeBuffers(sources); err != nil {
 			// If buffer initialization fails, log the error but continue
 			// Some sources might still work
-			log.Printf("⚠️  Error initializing buffers: %v", err)
-			log.Println("⚠️  Some audio sources might not be available.")
+			log.Warn("error initializing buffers, some audio sources might not be available",
+				logger.Error(err))
 		}
 	} else {
-		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+		log.Warn("starting without active audio sources, configure audio devices or RTSP streams through the web interface")
 	}
 	return sources, nil
 }
 
 // printSystemDetails prints system information and analyzer configuration
 func printSystemDetails(settings *conf.Settings) {
+	log := GetLogger()
+
 	// Get system details with gopsutil
 	info, err := host.Info()
 	if err != nil {
-		fmt.Printf("❌ Error retrieving host info: %v\n", err)
+		log.Warn("Failed to retrieve host info", logger.Error(err))
 	}
 
 	var hwModel string
@@ -1629,13 +1477,17 @@ func printSystemDetails(settings *conf.Settings) {
 		hwModel = "unknown"
 	}
 
-	// Print platform, OS etc. details
-	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
+	// Log system details
+	log.Info("System details",
+		logger.String("os", info.OS),
+		logger.String("platform", info.Platform),
+		logger.String("platform_version", info.PlatformVersion),
+		logger.String("hardware", hwModel))
 
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
-	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, overlap: %v, sensitivity: %v, interval: %v\n",
-		settings.BirdNET.Threshold,
-		settings.BirdNET.Overlap,
-		settings.BirdNET.Sensitivity,
-		settings.Realtime.Interval)
+	log.Info("Starting analyzer in realtime mode",
+		logger.Float64("threshold", settings.BirdNET.Threshold),
+		logger.Float64("overlap", settings.BirdNET.Overlap),
+		logger.Float64("sensitivity", settings.BirdNET.Sensitivity),
+		logger.Int("interval", settings.Realtime.Interval))
 }

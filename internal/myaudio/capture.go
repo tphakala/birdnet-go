@@ -4,9 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"math"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -14,9 +12,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/fatih/color"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/malgo"
 )
 
@@ -48,8 +46,10 @@ func RegisterBroadcastCallback(sourceID string, callback AudioDataCallback) {
 			displayName = source.DisplayName
 		}
 	}
-	log.Printf("🎧 Registered audio callback for source: %s, total callbacks: %d",
-		displayName, len(broadcastCallbacks))
+	log := GetLogger()
+	log.Info("registered audio callback",
+		logger.String("source", displayName),
+		logger.Int("total_callbacks", len(broadcastCallbacks)))
 }
 
 // UnregisterBroadcastCallback removes a callback function for a specific source
@@ -65,8 +65,10 @@ func UnregisterBroadcastCallback(sourceID string) {
 			displayName = source.DisplayName
 		}
 	}
-	log.Printf("🎧 Unregistered audio callback for source: %s, remaining callbacks: %d",
-		displayName, len(broadcastCallbacks))
+	log := GetLogger()
+	log.Info("unregistered audio callback",
+		logger.String("source", displayName),
+		logger.Int("remaining_callbacks", len(broadcastCallbacks)))
 }
 
 // broadcastAudioData sends audio data to all registered callbacks
@@ -90,7 +92,9 @@ func broadcastAudioData(sourceID string, data []byte) {
 			}
 			keys = append(keys, displayName)
 		}
-		log.Printf("🔊 Active audio broadcast callbacks: %v", keys)
+		log := GetLogger()
+		log.Debug("active audio broadcast callbacks",
+			logger.Any("callbacks", keys))
 		lastCallbackLogTime.Store(time.Now().UnixNano())
 	}
 
@@ -108,8 +112,10 @@ func broadcastAudioData(sourceID string, data []byte) {
 					displayName = source.DisplayName
 				}
 			}
-			log.Printf("⚠️ No broadcast callback registered for source: %s, data length: %d bytes",
-				displayName, len(data))
+			log := GetLogger()
+			log.Warn("no broadcast callback registered for source",
+				logger.String("source", displayName),
+				logger.Int("data_length", len(data)))
 			lastMissingCallbackLogTime.Store(time.Now().UnixNano())
 		}
 		return
@@ -167,7 +173,9 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	// Ensure the context is uninitialized when the function returns
 	defer func() {
 		if err := ctx.Uninit(); err != nil {
-			log.Printf("❌ failed to uninitialize context: %v", err)
+			log := GetLogger()
+			log.Error("failed to uninitialize context",
+				logger.Error(err))
 		}
 	}()
 
@@ -190,7 +198,10 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 		// Decode the device ID from hexadecimal to ASCII
 		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
-			log.Printf("❌ Error decoding ID for device %d: %v\n", i, err)
+			log := GetLogger()
+			log.Error("error decoding device ID",
+				logger.Int("device_index", i),
+				logger.Error(err))
 			continue
 		}
 
@@ -211,7 +222,9 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 	// Use the FFmpeg manager's sync function to handle all configuration changes
 	// This will properly start/stop streams as needed based on the current configuration
 	if err := SyncRTSPStreamsWithConfig(unifiedAudioChan); err != nil {
-		log.Printf("❌ Error syncing RTSP streams with configuration: %v", err)
+		log := GetLogger()
+		log.Error("error syncing RTSP streams with configuration",
+			logger.Error(err))
 	}
 
 	// Note: Buffer management is handled by the FFmpegManager via the StartStream/StopStream
@@ -234,8 +247,10 @@ func initializeBuffersForSource(sourceID string) error {
 		if err := AllocateAnalysisBuffer(conf.BufferSize*3, sourceID); err != nil {
 			return fmt.Errorf("failed to initialize analysis buffer: %w", err)
 		}
-	} else {
-		log.Printf("✅ Reusing existing analysis buffer for source ID: %s", sourceID)
+	} else if conf.Setting().Debug {
+		log := GetLogger()
+		log.Debug("reusing existing analysis buffer",
+			logger.String("source_id", sourceID))
 	}
 
 	// Check if capture buffer exists using the source ID
@@ -250,13 +265,18 @@ func initializeBuffersForSource(sourceID string) error {
 			// Clean up the analysis buffer if we just created it and capture buffer init fails
 			if !abExists {
 				if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
-					log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
+					log := GetLogger()
+					log.Error("failed to cleanup analysis buffer after capture buffer init failure",
+						logger.String("source_id", sourceID),
+						logger.Error(cleanupErr))
 				}
 			}
 			return fmt.Errorf("failed to initialize capture buffer: %w", err)
 		}
-	} else {
-		log.Printf("✅ Reusing existing capture buffer for source: %s (ID: %s)", sourceID, sourceID)
+	} else if conf.Setting().Debug {
+		log := GetLogger()
+		log.Debug("reusing existing capture buffer",
+			logger.String("source_id", sourceID))
 	}
 
 	return nil
@@ -278,15 +298,19 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 
 	// Handle sound card source if configured
 	if settings.Realtime.Audio.Source != "" {
+		log := GetLogger()
+
 		// Validate audio device
 		if err := ValidateAudioDevice(settings); err != nil {
-			log.Printf("⚠️ Audio device validation failed: %v", err)
+			log.Warn("audio device validation failed",
+				logger.Error(err))
 			return
 		}
 
 		selectedSource, err := selectCaptureSource(settings)
 		if err != nil {
-			log.Printf("❌ Audio device selection failed: %v", err)
+			log.Error("audio device selection failed",
+				logger.Error(err))
 			return
 		}
 
@@ -295,7 +319,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		registry := GetRegistry()
 		// Guard against nil registry during initialization to prevent panic
 		if registry == nil {
-			log.Printf("❌ Registry not available during audio capture initialization, unable to register source")
+			log.Error("registry not available during audio capture initialization, unable to register source")
 			return
 		}
 
@@ -303,14 +327,16 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			Type: SourceTypeAudioCard,
 		})
 		if err != nil {
-			log.Printf("❌ Failed to register audio device source: %v", err)
+			log.Error("failed to register audio device source",
+				logger.Error(err))
 			return
 		}
 
 		// Initialize buffers using the registry source ID (UUID-based)
 		// This ensures consistency with the AnalysisBufferMonitor
 		if err := initializeBuffersForSource(source.ID); err != nil {
-			log.Printf("❌ Failed to initialize buffers for device capture: %v", err)
+			log.Error("failed to initialize buffers for device capture",
+				logger.Error(err))
 			return
 		}
 
@@ -436,6 +462,8 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 
 // selectCaptureSource selects and tests an appropriate capture device based on the provided settings.
 func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
+	log := GetLogger()
+
 	var backend malgo.Backend
 	switch runtime.GOOS {
 	case osLinux:
@@ -448,7 +476,7 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, func(message string) {
 		if settings.Debug {
-			fmt.Print(message)
+			log.Debug("malgo context message", logger.String("message", message))
 		}
 	})
 	if err != nil {
@@ -462,32 +490,40 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 		return captureSource{}, fmt.Errorf("failed to get capture devices: %w", err)
 	}
 
-	fmt.Println("Available Capture Sources:")
+	log.Info("Available capture sources", logger.Int("count", len(infos)))
 	for i := range infos {
 		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
-			fmt.Printf("❌ Error decoding ID for device %d: %v\n", i, err)
+			log.Warn("Error decoding device ID",
+				logger.Int("device_index", i),
+				logger.Error(err))
 			continue
 		}
 
-		output := fmt.Sprintf("  %d: %s", i, infos[i].Name())
+		deviceInfo := infos[i].Name()
 		if runtime.GOOS == osLinux {
-			output = fmt.Sprintf("%s, %s", output, decodedID)
+			deviceInfo = deviceInfo + ", " + decodedID
 		}
 
 		if matchesDeviceSettings(decodedID, &infos[i], settings.Realtime.Audio.Source) {
 			if TestCaptureDevice(malgoCtx, &infos[i]) {
-				fmt.Printf("%s (✅ selected)\n", output)
+				log.Info("Audio device selected",
+					logger.Int("index", i),
+					logger.String("device", deviceInfo))
 				return captureSource{
 					Name:    infos[i].Name(),
 					ID:      decodedID,
 					Pointer: infos[i].ID.Pointer(),
 				}, nil
 			}
-			fmt.Printf("%s (❌ device test failed)\n", output)
+			log.Warn("Audio device test failed",
+				logger.Int("index", i),
+				logger.String("device", deviceInfo))
 			continue
 		}
-		fmt.Println(output)
+		log.Debug("Audio device available",
+			logger.Int("index", i),
+			logger.String("device", deviceInfo))
 	}
 
 	return captureSource{}, fmt.Errorf("no working capture device found matching '%s'", settings.Realtime.Audio.Source)
@@ -530,6 +566,7 @@ func processAudioFrame(
 	unifiedAudioChan chan UnifiedAudioData,
 ) (finalBufferPtr *[]byte, fromPool bool, err error) { // Updated return signature
 
+	log := GetLogger()
 	processedSamples := pSamples  // Start with original samples
 	needsReturn := false          // Flag if we got something from pool
 	currentBufferPtr := &pSamples // Track the buffer source/identity
@@ -541,7 +578,7 @@ func processAudioFrame(
 		var convertedBufferPtr *[]byte
 		convertedBufferPtr, poolUsed, conversionError = ConvertToS16(pSamples, formatType, convertBuffer)
 		if conversionError != nil {
-			log.Printf("❌ Error converting audio format: %v", conversionError)
+			log.Error("error converting audio format", logger.Error(conversionError))
 			return nil, false, conversionError // Return the specific error
 		}
 		// Update to use the converted data
@@ -595,18 +632,18 @@ func processAudioFrame(
 	// Apply audio EQ filters if enabled (use the safe bufferToUse)
 	if settings.Realtime.Audio.Equalizer.Enabled {
 		if eqErr := ApplyFilters(bufferToUse); eqErr != nil {
-			log.Printf("❌ Error applying audio EQ filters: %v", eqErr)
+			log.Warn("error applying audio EQ filters", logger.Error(eqErr))
 			// Non-fatal, just log
 		}
 	}
 
 	// Write to buffers using source ID (use the safe bufferToUse)
 	if writeErr := WriteToAnalysisBuffer(sourceID, bufferToUse); writeErr != nil {
-		log.Printf("❌ Error writing to analysis buffer: %v", writeErr)
+		log.Warn("error writing to analysis buffer", logger.Error(writeErr))
 		// Potentially non-fatal, log and continue
 	}
 	if writeErr := WriteToCaptureBuffer(sourceID, bufferToUse); writeErr != nil {
-		log.Printf("❌ Error writing to capture buffer: %v", writeErr)
+		log.Warn("error writing to capture buffer", logger.Error(writeErr))
 		// Potentially non-fatal, log and continue
 	}
 
@@ -627,7 +664,9 @@ func processAudioFrame(
 		if soundLevelData, err := ProcessSoundLevelData(sourceID, bufferToUse); err != nil {
 			// Only log actual errors, not normal conditions
 			if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
-				log.Printf("❌ Error processing sound level data: %v", err)
+				log.Warn("error processing sound level data",
+					logger.Error(err),
+					logger.String("source_id", sourceID))
 			}
 		} else if soundLevelData != nil {
 			// Attach sound level data when available
@@ -647,7 +686,8 @@ func processAudioFrame(
 		select {
 		case unifiedAudioChan <- unifiedData:
 		default:
-			log.Printf("⚠️ Unified audio channel full even after clearing for source %s", source.Name)
+			log.Warn("unified audio channel full even after clearing",
+				logger.String("source", source.Name))
 		}
 	}
 
@@ -657,6 +697,7 @@ func processAudioFrame(
 // handleDeviceStop contains the logic for attempting to restart the audio device
 // when it stops unexpectedly.
 func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan struct{}, settings *conf.Settings, restarting *atomic.Int32) {
+	log := GetLogger()
 	// Ensure the flag is reset when this attempt concludes.
 	defer restarting.Store(0)
 
@@ -666,12 +707,10 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 		return
 	case <-time.After(100 * time.Millisecond):
 		// Wait briefly before restarting
-		if settings.Debug {
-			fmt.Println("🔄 Attempting to restart audio device.")
-		}
+		log.Debug("Attempting to restart audio device")
 		if err := captureDevice.Start(); err != nil {
-			log.Printf("❌ Failed to restart audio device: %v", err)
-			log.Println("🔄 Attempting full audio context restart in 1 second.")
+			log.Error("failed to restart audio device", logger.Error(err))
+			log.Info("attempting full audio context restart in 1 second")
 			time.Sleep(1 * time.Second)
 			// Before sending the signal, check if we are already quitting.
 			select {
@@ -684,8 +723,8 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 				case <-quitChan:
 				}
 			}
-		} else if settings.Debug {
-			fmt.Println("🔄 Audio device restarted successfully.")
+		} else {
+			log.Debug("Audio device restarted successfully")
 			// Flag reset by defer
 		}
 	}
@@ -695,12 +734,12 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	wg.Add(1)
 	defer wg.Done()
 
+	log := GetLogger()
+
 	// Clean up sound level processor when function exits
 	defer UnregisterSoundLevelProcessor(sourceID)
 
-	if settings.Debug {
-		fmt.Println("Initializing context")
-	}
+	log.Debug("Initializing audio context")
 
 	var backend malgo.Backend
 	switch runtime.GOOS {
@@ -714,13 +753,11 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, func(message string) {
 		if settings.Debug {
-			fmt.Print(message)
+			log.Debug("malgo context message", logger.String("message", message))
 		}
 	})
 	if err != nil {
-		if _, printErr := color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ context init failed:", err); printErr != nil {
-			log.Printf("Failed to print error message: %v", printErr)
-		}
+		log.Error("Audio context initialization failed", logger.Error(err))
 		return
 	}
 	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
@@ -734,13 +771,16 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 
 	// Initialize the filter chain
 	if err := InitializeFilterChain(settings); err != nil {
-		log.Printf("❌ Error initializing filter chain: %v", err)
+		log.Warn("error initializing filter chain", logger.Error(err))
 	}
 
 	// Initialize sound level processor for this source if enabled
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		if err := RegisterSoundLevelProcessor(sourceID, source.Name); err != nil {
-			log.Printf("❌ Error initializing sound level processor: %v", err)
+			log.Warn("error initializing sound level processor",
+				logger.Error(err),
+				logger.String("source_id", sourceID),
+				logger.String("source_name", source.Name))
 		}
 	}
 
@@ -787,9 +827,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	// Initialize the capture device
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
-		if _, printErr := color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device initialization failed:", err); printErr != nil {
-			log.Printf("Failed to print error message: %v", printErr)
-		}
+		log.Error("Device initialization failed", logger.Error(err))
 		conf.PrintUserInfo()
 		return
 	}
@@ -797,42 +835,32 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	// Get the actual format of the capture device
 	formatType = captureDevice.CaptureFormat()
 
-	// Print device info if in debug mode
+	// Log device info if in debug mode
 	if settings.Debug {
-		printDeviceInfo(captureDevice, formatType)
+		logDeviceInfo(log, captureDevice, formatType)
 	}
 
-	if settings.Debug {
-		fmt.Println("Starting device")
-	}
+	log.Debug("Starting audio device")
 	err = captureDevice.Start()
 	if err != nil {
-		if _, printErr := color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device start failed:", err); printErr != nil {
-			log.Printf("Failed to print error message: %v", printErr)
-		}
+		log.Error("Device start failed", logger.Error(err))
 		return
 	}
 	defer captureDevice.Stop() //nolint:errcheck // We handle errors in the caller
 
-	if settings.Debug {
-		fmt.Println("Device started")
-	}
-	// print audio device we are attached to
-	if _, err := color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", source.Name, source.ID); err != nil {
-		log.Printf("Failed to print device info: %v", err)
-	}
+	log.Info("Listening on audio source",
+		logger.String("name", source.Name),
+		logger.String("id", source.ID))
 
 	// Loop until quit or restart signal
 	for {
 		select {
 		case <-quitChan:
-			fmt.Println("🛑 Stopping audio capture due to quit signal.")
+			log.Info("Stopping audio capture due to quit signal")
 			time.Sleep(100 * time.Millisecond) // Allow Stop() to execute
 			return
 		case <-restartChan:
-			if settings.Debug {
-				fmt.Println("🔄 Restarting audio capture.")
-			}
+			log.Debug("Restarting audio capture")
 			return
 		default:
 			time.Sleep(100 * time.Millisecond)
@@ -840,8 +868,8 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	}
 }
 
-// printDeviceInfo prints detailed information about the initialized capture device.
-func printDeviceInfo(dev *malgo.Device, format malgo.FormatType) {
+// logDeviceInfo logs detailed information about the initialized capture device.
+func logDeviceInfo(log logger.Logger, dev *malgo.Device, format malgo.FormatType) {
 	var bitDepth int
 	switch format {
 	case malgo.FormatU8:
@@ -855,11 +883,11 @@ func printDeviceInfo(dev *malgo.Device, format malgo.FormatType) {
 	default:
 		bitDepth = 0 // Unknown
 	}
-	fmt.Printf("🎤 Initialized capture device:\n")
-	fmt.Printf("   Format: %v (%d-bit)\n", format, bitDepth)
-	fmt.Printf("   Channels: %d\n", dev.CaptureChannels())
-	fmt.Printf("   Sample Rate: %d Hz\n", dev.SampleRate())
-	// Add more device info if needed using dev methods
+	log.Debug("Initialized capture device",
+		logger.Int("format_type", int(format)),
+		logger.Int("bit_depth", bitDepth),
+		logger.Int("channels", int(dev.CaptureChannels())),
+		logger.Int("sample_rate", int(dev.SampleRate())))
 }
 
 // calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples

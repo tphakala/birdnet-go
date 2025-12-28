@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -63,12 +63,12 @@ type yrNoRequestResult struct {
 }
 
 // readYrNoResponseBody reads and optionally decompresses the response body
-func readYrNoResponseBody(resp *http.Response, logger *slog.Logger) ([]byte, error) {
+func readYrNoResponseBody(resp *http.Response, log logger.Logger) ([]byte, error) {
 	var reader io.Reader = resp.Body
 	var gzReader *gzip.Reader
 
 	if resp.Header.Get("Content-Encoding") == "gzip" {
-		logger.Debug("Response is gzip encoded, creating reader")
+		log.Debug("Response is gzip encoded, creating reader")
 		var err error
 		gzReader, err = gzip.NewReader(resp.Body)
 		if err != nil {
@@ -85,7 +85,7 @@ func readYrNoResponseBody(resp *http.Response, logger *slog.Logger) ([]byte, err
 	body, err := io.ReadAll(reader)
 	if gzReader != nil {
 		if closeErr := gzReader.Close(); closeErr != nil {
-			logger.Debug("Failed to close gzip reader", "error", closeErr)
+			log.Debug("Failed to close gzip reader", logger.Error(closeErr))
 		}
 	}
 	if err != nil {
@@ -101,13 +101,13 @@ func readYrNoResponseBody(resp *http.Response, logger *slog.Logger) ([]byte, err
 }
 
 // handleYrNoResponse processes a single HTTP response and returns the result
-func handleYrNoResponse(resp *http.Response, logger *slog.Logger, isLastAttempt bool) (*yrNoRequestResult, error) {
+func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bool) (*yrNoRequestResult, error) {
 	result := &yrNoRequestResult{}
 
 	// Handle Not Modified
 	if resp.StatusCode == http.StatusNotModified {
 		if err := resp.Body.Close(); err != nil {
-			logger.Debug("Failed to close response body", "error", err)
+			log.Debug("Failed to close response body", logger.Error(err))
 		}
 		result.notModified = true
 		return result, nil
@@ -117,10 +117,12 @@ func handleYrNoResponse(resp *http.Response, logger *slog.Logger, isLastAttempt 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		if err := resp.Body.Close(); err != nil {
-			logger.Debug("Failed to close response body", "error", err)
+			log.Debug("Failed to close response body", logger.Error(err))
 		}
 		responseBodyStr := truncateBodyPreview(string(bodyBytes))
-		logger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", responseBodyStr)
+		log.Warn("Received non-OK status code",
+			logger.Int("status_code", resp.StatusCode),
+			logger.String("response_body", responseBodyStr))
 
 		if isLastAttempt {
 			return nil, errors.New(fmt.Errorf("received non-OK response (%d) after %d retries", resp.StatusCode, MaxRetries)).
@@ -138,9 +140,9 @@ func handleYrNoResponse(resp *http.Response, logger *slog.Logger, isLastAttempt 
 
 	// Status is OK - read body
 	result.lastMod = resp.Header.Get("Last-Modified")
-	body, err := readYrNoResponseBody(resp, logger)
+	body, err := readYrNoResponseBody(resp, log)
 	if closeErr := resp.Body.Close(); closeErr != nil {
-		logger.Debug("Failed to close response body", "error", closeErr)
+		log.Debug("Failed to close response body", logger.Error(closeErr))
 	}
 	if err != nil {
 		return nil, err
@@ -193,8 +195,8 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		settings.BirdNET.Latitude,
 		settings.BirdNET.Longitude)
 
-	logger := weatherLogger.With("provider", yrNoProviderName)
-	logger.Info("Fetching weather data", "url", apiURL)
+	providerLogger := getLogger().With(logger.String("provider", yrNoProviderName))
+	providerLogger.Info("Fetching weather data", logger.String("url", apiURL))
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
@@ -207,7 +209,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	}
 
 	// Execute request with retry
-	body, err := p.executeWithRetry(req, logger)
+	body, err := p.executeWithRetry(req, providerLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -227,23 +229,27 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		)
 	}
 
-	logger.Info("Successfully received and parsed weather data")
+	providerLogger.Info("Successfully received and parsed weather data")
 	mappedData := mapYrResponseToWeatherData(&response, settings)
-	logger.Debug("Mapped API response to WeatherData structure", "time", mappedData.Time, "temp", mappedData.Temperature.Current)
+	providerLogger.Debug("Mapped API response to WeatherData structure",
+		logger.Time("time", mappedData.Time),
+		logger.Float64("temp", mappedData.Temperature.Current))
 	return mappedData, nil
 }
 
 // executeWithRetry executes the HTTP request with retry logic
-func (p *YrNoProvider) executeWithRetry(req *http.Request, logger *slog.Logger) ([]byte, error) {
+func (p *YrNoProvider) executeWithRetry(req *http.Request, log logger.Logger) ([]byte, error) {
 	client := &http.Client{Timeout: RequestTimeout}
 
 	for i := range MaxRetries {
 		isLastAttempt := i == MaxRetries-1
-		attemptLogger := logger.With("attempt", i+1, "max_attempts", MaxRetries)
+		attemptLogger := log.With(
+			logger.Int("attempt", i+1),
+			logger.Int("max_attempts", MaxRetries))
 
 		resp, err := client.Do(req)
 		if err != nil {
-			attemptLogger.Warn("HTTP request failed", "error", err)
+			attemptLogger.Warn("HTTP request failed", logger.Error(err))
 			if isLastAttempt {
 				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", yrNoProviderName)
 			}
@@ -251,14 +257,14 @@ func (p *YrNoProvider) executeWithRetry(req *http.Request, logger *slog.Logger) 
 			continue
 		}
 
-		attemptLogger.Debug("Received HTTP response", "status_code", resp.StatusCode)
+		attemptLogger.Debug("Received HTTP response", logger.Int("status_code", resp.StatusCode))
 		result, err := handleYrNoResponse(resp, attemptLogger, isLastAttempt)
 		if err != nil {
 			return nil, err
 		}
 
 		if result.notModified {
-			logger.Info("Weather data not modified since last fetch", "last_modified", p.lastModified)
+			log.Info("Weather data not modified since last fetch", logger.String("last_modified", p.lastModified))
 			return nil, ErrWeatherDataNotModified
 		}
 

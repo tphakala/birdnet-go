@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // initializeDefaultSeasons sets up the default Northern Hemisphere seasons
@@ -23,9 +24,9 @@ func (t *SpeciesTracker) initializeDefaultSeasons() {
 func (t *SpeciesTracker) validateSeasonOrder(seasonOrder []string, seasonType string) bool {
 	for _, required := range seasonOrder {
 		if _, exists := t.seasons[required]; !exists {
-			logger.Warn("Missing "+seasonType+" season in configuration",
-				"missing_season", required,
-				"available_seasons", t.seasons)
+			getLog().Warn("Missing "+seasonType+" season in configuration",
+				logger.String("missing_season", required),
+				logger.Any("available_seasons", t.seasons))
 			return false
 		}
 	}
@@ -54,9 +55,9 @@ func (t *SpeciesTracker) initializeSeasonOrder() {
 	// Fall back to using all available seasons if non-standard configuration
 	t.cachedSeasonOrder = slices.Collect(maps.Keys(t.seasons))
 
-	logger.Debug("Initialized season order cache",
-		"order", t.cachedSeasonOrder,
-		"count", len(t.cachedSeasonOrder))
+	getLog().Debug("Initialized season order cache",
+		logger.Any("order", t.cachedSeasonOrder),
+		logger.Int("count", len(t.cachedSeasonOrder)))
 }
 
 // validateSeasonDate validates that a month/day combination is valid
@@ -207,25 +208,25 @@ func (t *SpeciesTracker) calculateSeasonStartDate(seasonName string, seasonStart
 	// Handle seasons that might cross year boundaries
 	if t.shouldAdjustYearForSeason(currentTime, time.Month(seasonStart.month), false) {
 		seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
-		logger.Debug("Adjusting season to previous year",
-			"season", seasonName,
-			"adjusted_date", seasonDate.Format("2006-01-02"))
+		getLog().Debug("Adjusting season to previous year",
+			logger.String("season", seasonName),
+			logger.String("adjusted_date", seasonDate.Format("2006-01-02")))
 	}
 	return seasonDate
 }
 
 // computeCurrentSeason performs the actual season calculation
 func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
-	logger.Debug("Computing current season",
-		"input_time", currentTime.Format("2006-01-02 15:04:05"),
-		"current_month", int(currentTime.Month()),
-		"current_day", currentTime.Day(),
-		"current_year", currentTime.Year())
+	getLog().Debug("Computing current season",
+		logger.String("input_time", currentTime.Format("2006-01-02 15:04:05")),
+		logger.Int("current_month", int(currentTime.Month())),
+		logger.Int("current_day", currentTime.Day()),
+		logger.Int("current_year", currentTime.Year()))
 
 	// Use cached season order for efficiency (built once at initialization)
 	seasonOrder := t.cachedSeasonOrder
 	if len(seasonOrder) == 0 {
-		logger.Warn("Season order cache was empty, rebuilding", "seasons", t.seasons)
+		getLog().Warn("Season order cache was empty, rebuilding", logger.Any("seasons", t.seasons))
 		t.initializeSeasonOrder()
 		seasonOrder = t.cachedSeasonOrder
 	}
@@ -254,12 +255,12 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	// Default to winter if we couldn't determine the season
 	if currentSeason == "" {
 		currentSeason = "winter"
-		logger.Debug("Defaulting to winter season - no match found")
+		getLog().Debug("Defaulting to winter season - no match found")
 	}
 
-	logger.Debug("Computed season result",
-		"season", currentSeason,
-		"season_start_date", latestDate.Format("2006-01-02"))
+	getLog().Debug("Computed season result",
+		logger.String("season", currentSeason),
+		logger.String("season_start_date", latestDate.Format("2006-01-02")))
 
 	return currentSeason
 }
@@ -273,10 +274,10 @@ func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 		t.currentYear = t.getTrackingYear(currentTime) // Use tracking year, not calendar year
 		// Clear status cache when year resets to ensure fresh calculations
 		t.statusCache = make(map[string]cachedSpeciesStatus)
-		logger.Debug("Reset yearly tracking",
-			"old_year", oldYear,
-			"new_year", t.currentYear,
-			"check_time", currentTime.Format("2006-01-02 15:04:05"))
+		getLog().Debug("Reset yearly tracking",
+			logger.Int("old_year", oldYear),
+			logger.Int("new_year", t.currentYear),
+			logger.String("check_time", currentTime.Format("2006-01-02 15:04:05")))
 	}
 
 	// Check for seasonal reset

@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 type ExecuteCommandAction struct {
@@ -37,8 +38,8 @@ func (a ExecuteCommandAction) Execute(data any) error {
 
 // ExecuteContext implements the ContextAction interface for proper context propagation
 func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) error {
-	logger := GetLogger()
-	logger.Info("Executing command", "command", a.Command, "params", a.Params)
+	log := GetLogger()
+	log.Info("Executing command", logger.String("command", a.Command), logger.Any("params", a.Params))
 
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
@@ -79,13 +80,13 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 			Build()
 	}
 
-	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
+	log.Debug("Executing command with arguments", logger.String("command_path", cmdPath), logger.Any("args", args))
 
 	// Create command with timeout, inheriting from parent context
 	// This ensures cancellation propagates from CompositeAction
 	cmdCtx, cancel := context.WithTimeout(ctx, ExecuteCommandTimeout)
 	defer cancel()
-	
+
 	cmd := exec.CommandContext(cmdCtx, cmdPath, args...) //nolint:gosec // G204: cmdPath validated by validateCommandPath(), args by buildSafeArguments()
 
 	// Set a clean environment
@@ -96,14 +97,14 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
 	executionDuration := time.Since(startTime)
-	
+
 	if err != nil {
 		// Get exit code if available
 		exitCode := -1
 		if cmd.ProcessState != nil {
 			exitCode = cmd.ProcessState.ExitCode()
 		}
-		
+
 		// Command execution failures are not retryable because:
 		// - Script logic errors won't be fixed by retrying
 		// - Non-zero exit codes indicate the script ran but failed
@@ -126,10 +127,10 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	if len(outputStr) > 200 {
 		preview = outputStr[:200] + "... (truncated)"
 	}
-	logger.Info("Command executed successfully", 
-		"output_size_bytes", len(output),
-		"execution_duration_ms", executionDuration.Milliseconds(),
-		"output_preview", preview)
+	log.Info("Command executed successfully",
+		logger.Int("output_size_bytes", len(output)),
+		logger.Int64("execution_duration_ms", executionDuration.Milliseconds()),
+		logger.String("output_preview", preview))
 	return nil
 }
 
@@ -166,7 +167,7 @@ func validateCommandPath(command string) (string, error) {
 		default:
 			classification = "file_access_error"
 		}
-		
+
 		// File system errors are not retryable as they indicate permanent issues:
 		// - Missing files won't suddenly appear
 		// - Permission denials require manual intervention
@@ -213,7 +214,7 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 
 	for _, key := range keys {
 		value := params[key]
-		
+
 		// Validate parameter name (allow only alphanumeric and _-)
 		if !isValidParamName(key) {
 			return nil, errors.Newf("invalid parameter name").

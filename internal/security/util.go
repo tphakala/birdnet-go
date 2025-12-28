@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -180,7 +181,7 @@ func IsValidRedirect(redirectPath string) bool {
 	isSafe := IsSafePath(redirectPath) // Use the exported function
 	if !isSafe {
 		// Log potentially unsafe redirect attempt using the security logger
-		LogWarn("Invalid or potentially unsafe redirect path detected", "path", redirectPath)
+		GetLogger().Warn("invalid or potentially unsafe redirect path detected", logger.String("path", redirectPath))
 	}
 	return isSafe
 }

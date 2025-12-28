@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
@@ -836,13 +837,19 @@ func TestParseBasicAuthRedirectURI(t *testing.T) {
 	}
 }
 
-// testLogger is a mock logger that implements the required interface for testing
+// testLogger is a mock logger that implements the logger.Logger interface for testing
 type testLogger struct{}
 
-func (testLogger) Debug(_ string, _ ...any) {}
-func (testLogger) Info(_ string, _ ...any)  {}
-func (testLogger) Warn(_ string, _ ...any)  {}
-func (testLogger) Error(_ string, _ ...any) {}
+func (testLogger) Module(_ string) logger.Logger                      { return testLogger{} }
+func (testLogger) Trace(_ string, _ ...logger.Field)                  {}
+func (testLogger) Debug(_ string, _ ...logger.Field)                  {}
+func (testLogger) Info(_ string, _ ...logger.Field)                   {}
+func (testLogger) Warn(_ string, _ ...logger.Field)                   {}
+func (testLogger) Error(_ string, _ ...logger.Field)                  {}
+func (testLogger) With(_ ...logger.Field) logger.Logger               { return testLogger{} }
+func (testLogger) WithContext(_ context.Context) logger.Logger        { return testLogger{} }
+func (testLogger) Log(_ logger.LogLevel, _ string, _ ...logger.Field) {}
+func (testLogger) Flush() error                                       { return nil }
 
 // TestCheckBasicAuthToken tests the basic auth token validation helper
 func TestCheckBasicAuthToken(t *testing.T) {

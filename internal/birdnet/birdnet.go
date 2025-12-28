@@ -6,7 +6,6 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
-	"log"
 	"maps"
 	"os"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	tflite "github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
@@ -179,13 +179,12 @@ func (bn *BirdNET) initializeModel() error {
 	options := tflite.NewInterpreterOptions()
 
 	// Try to use XNNPACK delegate if enabled in settings
+	log := GetLogger()
 	if bn.Settings.BirdNET.UseXNNPACK {
 		delegate := xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(max(1, threads-1))}) //nolint:gosec // G115: thread count bounded by CPU count, safe conversion
 		if delegate == nil {
-			fmt.Println("⚠️ Failed to create XNNPACK delegate, falling back to default CPU")
-			fmt.Println("Please download updated tensorflow lite C API library from:")
-			fmt.Println("https://github.com/tphakala/tflite_c/releases/tag/v2.17.1")
-			fmt.Println("and install it to enable use of XNNPACK delegate")
+			log.Warn("Failed to create XNNPACK delegate, falling back to default CPU",
+				logger.String("tflite_download", "https://github.com/tphakala/tflite_c/releases/tag/v2.17.1"))
 			options.SetNumThread(threads)
 		} else {
 			options.AddDelegate(delegate)
@@ -196,7 +195,7 @@ func (bn *BirdNET) initializeModel() error {
 	}
 
 	options.SetErrorReporter(func(msg string, user_data any) {
-		fmt.Println(msg)
+		GetLogger().Error("TFLite error", logger.String("message", msg))
 	}, nil)
 
 	// Create and allocate the TensorFlow Lite interpreter.
@@ -225,22 +224,28 @@ func (bn *BirdNET) initializeModel() error {
 		modelVersion = bn.Settings.BirdNET.ModelPath
 	}
 
-	// Get CPU information for detailed message
-	var initMessage string
+	// Log model initialization details
 	if bn.Settings.BirdNET.Threads == 0 {
 		spec := cpuspec.GetCPUSpec()
 		if spec.PerformanceCores > 0 {
-			initMessage = fmt.Sprintf("%s model initialized, optimized to use %v threads on %v P-cores (system has %v total CPUs)",
-				modelVersion, threads, spec.PerformanceCores, runtime.NumCPU())
+			log.Info("BirdNET model initialized",
+				logger.String("model", modelVersion),
+				logger.Int("threads", threads),
+				logger.Int("performance_cores", spec.PerformanceCores),
+				logger.Int("total_cpus", runtime.NumCPU()))
 		} else {
-			initMessage = fmt.Sprintf("%s model initialized, using %v threads of available %v CPUs",
-				modelVersion, threads, runtime.NumCPU())
+			log.Info("BirdNET model initialized",
+				logger.String("model", modelVersion),
+				logger.Int("threads", threads),
+				logger.Int("total_cpus", runtime.NumCPU()))
 		}
 	} else {
-		initMessage = fmt.Sprintf("%s model initialized, using configured %v threads of available %v CPUs",
-			modelVersion, threads, runtime.NumCPU())
+		log.Info("BirdNET model initialized",
+			logger.String("model", modelVersion),
+			logger.Int("threads", threads),
+			logger.Int("total_cpus", runtime.NumCPU()),
+			logger.Bool("threads_configured", true))
 	}
-	fmt.Println(initMessage)
 	return nil
 }
 
@@ -275,7 +280,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 				Build()
 		}
 
-		fmt.Printf("📁 Loaded range filter model from: %s\n", modelPath)
+		GetLogger().Info("Loaded range filter model", logger.String("path", modelPath))
 		return data, nil
 	}
 
@@ -285,7 +290,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		modelFileName := DefaultRangeFilterV2ModelName
 		if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
 			modelFileName = DefaultRangeFilterV1ModelName
-			fmt.Printf("⚠️ Looking for legacy range filter model\n")
+			GetLogger().Warn("Looking for legacy range filter model")
 		}
 
 		data, path, err := tryLoadModelFromStandardPaths(modelFileName, "range filter")
@@ -295,7 +300,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 				Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
 				Build()
 		}
-		fmt.Printf("📁 Loaded range filter model from standard path: %s\n", path)
+		GetLogger().Info("Loaded range filter model from standard path", logger.String("path", path))
 		bn.Debug("Loaded range filter model from standard path: %s", path)
 		return data, nil
 	}
@@ -303,7 +308,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 	// Fall back to embedded models
 	var data []byte
 	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
-		fmt.Printf("⚠️ Using legacy range filter model\n")
+		GetLogger().Warn("Using legacy range filter model")
 		data = metaModelDataV1
 	} else {
 		data = metaModelDataV2
@@ -343,7 +348,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 	options := tflite.NewInterpreterOptions()
 	options.SetNumThread(1)
 	options.SetErrorReporter(func(msg string, user_data any) {
-		fmt.Println(msg)
+		GetLogger().Error("TFLite meta model error", logger.String("message", msg))
 	}, nil)
 
 	// Create and allocate the TensorFlow Lite interpreter for the meta model.
@@ -413,7 +418,8 @@ func (bn *BirdNET) loadLabels() error {
 func (bn *BirdNET) loadEmbeddedLabels() error {
 	// if locale is not set use english as default
 	if bn.Settings.BirdNET.Locale == "" {
-		fmt.Printf("BirdNET locale not set, using %s as default\n", conf.DefaultFallbackLocale)
+		GetLogger().Info("BirdNET locale not set, using default",
+			logger.String("default_locale", conf.DefaultFallbackLocale))
 		bn.Settings.BirdNET.Locale = conf.DefaultFallbackLocale
 	}
 
@@ -446,9 +452,10 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 			"birdnet-label-loading",
 		)
 
-		// Also log to console so users see it immediately
-		fmt.Printf("⚠️  Label file warning: locale '%s' not available, using '%s' instead\n",
-			result.RequestedLocale, result.ActualLocale)
+		// Also log so users see it immediately
+		GetLogger().Warn("Label file locale not available, using fallback",
+			logger.String("requested_locale", result.RequestedLocale),
+			logger.String("actual_locale", result.ActualLocale))
 	}
 
 	data := result.Data
@@ -499,7 +506,9 @@ func (bn *BirdNET) loadExternalLabels() error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close label file: %v", err)
+			GetLogger().Warn("Failed to close label file",
+				logger.Error(err),
+				logger.String("path", bn.Settings.BirdNET.LabelPath))
 		}
 	}()
 
@@ -803,7 +812,7 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("📁 Loaded BirdNET model from standard path: %s\n", path)
+		GetLogger().Info("Loaded BirdNET model from standard path", logger.String("path", path))
 		bn.Debug("Loaded model from standard path: %s (size: %d MB)", path, len(data)/1024/1024)
 		return data, nil
 	}
@@ -970,14 +979,11 @@ func (bn *BirdNET) GetSpeciesWithScientificAndCommonName(label string) (scientif
 	return SplitSpeciesName(label)
 }
 
-// Debug prints debug messages if debug mode is enabled
+// Debug prints debug messages if debug mode is enabled.
+// Uses the centralized logger for structured logging.
 func (bn *BirdNET) Debug(format string, v ...any) {
 	if bn.Settings.BirdNET.Debug {
-		if len(v) == 0 {
-			log.Print("[birdnet] " + format)
-		} else {
-			log.Printf("[birdnet] "+format, v...)
-		}
+		GetLogger().Debug(fmt.Sprintf(format, v...))
 	}
 }
 

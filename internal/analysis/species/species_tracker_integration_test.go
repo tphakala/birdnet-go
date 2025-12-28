@@ -517,6 +517,7 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 
 // TestFullWorkflow_PerformanceUnderLoad tests system performance
 // CRITICAL: Tests system behavior under stress conditions
+//
 //nolint:gocognit // Performance test with load simulation requires complex setup
 func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 	if testing.Short() {

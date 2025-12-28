@@ -7,21 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"log/slog"
-
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
-
-// getLoggerSafe returns a logger for the service, falling back to default if logging not initialized
-func getLoggerSafe(service string) *slog.Logger {
-	logger := logging.ForService(service)
-	if logger == nil {
-		logger = slog.Default().With("service", service)
-	}
-	return logger
-}
 
 // TelemetryWorker implements EventConsumer to process error events and send them to Sentry
 type TelemetryWorker struct {
@@ -41,7 +30,7 @@ type TelemetryWorker struct {
 	// Sentry reporter (using interface for testability)
 	sentryReporter errors.TelemetryReporter
 
-	logger *slog.Logger
+	logger logger.Logger
 }
 
 // Default worker configuration values
@@ -154,7 +143,7 @@ func NewTelemetryWorker(enabled bool, config *WorkerConfig) (*TelemetryWorker, e
 			timeSource: RealTimeSource{}, // Use real time by default
 		},
 		sentryReporter: errors.NewSentryReporter(enabled),
-		logger:         getLoggerSafe("telemetry-worker"),
+		logger:         logger.Global().Module("telemetry").Module("worker"),
 	}
 
 	return worker, nil
@@ -176,8 +165,8 @@ func (w *TelemetryWorker) ProcessEvent(event events.ErrorEvent) error {
 	if !w.circuitBreaker.Allow() {
 		w.eventsDropped.Add(1)
 		w.logger.Debug("circuit breaker open, dropping event",
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
 		)
 		return nil
 	}
@@ -186,8 +175,8 @@ func (w *TelemetryWorker) ProcessEvent(event events.ErrorEvent) error {
 	if !w.rateLimiter.Allow() {
 		w.eventsDropped.Add(1)
 		w.logger.Debug("rate limit exceeded, dropping event",
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
 		)
 		return nil
 	}
@@ -209,9 +198,9 @@ func (w *TelemetryWorker) ProcessEvent(event events.ErrorEvent) error {
 		w.eventsFailed.Add(1)
 		w.circuitBreaker.RecordFailure()
 		w.logger.Error("failed to report to Sentry",
-			"error", err,
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
+			logger.Error(err),
+			logger.String("component", event.GetComponent()),
+			logger.String("category", event.GetCategory()),
 		)
 		return err
 	}
@@ -245,9 +234,9 @@ func (w *TelemetryWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
 	}
 
 	w.logger.Debug("processed telemetry batch",
-		"total", len(errorEvents),
-		"success", successCount,
-		"failed", len(errorEvents)-successCount,
+		logger.Int("total", len(errorEvents)),
+		logger.Int("success", successCount),
+		logger.Int("failed", len(errorEvents)-successCount),
 	)
 
 	return firstError

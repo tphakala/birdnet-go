@@ -8,15 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 //nolint:gocognit // test requires multiple scenarios for comprehensive coverage
 func TestTelemetryWorker_ProcessEvent(t *testing.T) {
 	t.Parallel()
-
-	// Initialize logging
-	logging.Init()
 
 	tests := []struct {
 		name         string
@@ -69,9 +65,6 @@ func TestTelemetryWorker_ProcessEvent(t *testing.T) {
 
 func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	t.Parallel()
-
-	// Initialize logging
-	logging.Init()
 
 	// Create a fake time source starting at a fixed time
 	fakeTime := NewFakeTimeSource(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -128,9 +121,6 @@ func TestTelemetryWorker_CircuitBreaker(t *testing.T) {
 
 	// Use synctest for deterministic time-based testing
 	synctest.Test(t, func(t *testing.T) {
-		// Initialize logging
-		logging.Init()
-
 		// This test verifies circuit breaker behavior
 		// Since we can't easily simulate Sentry failures in unit tests,
 		// we'll test the circuit breaker logic directly
@@ -178,9 +168,6 @@ func TestTelemetryWorker_CircuitBreaker(t *testing.T) {
 func TestTelemetryWorker_Sampling(t *testing.T) {
 	t.Parallel()
 
-	// Initialize logging
-	logging.Init()
-
 	// Create worker with 50% sampling
 	config := &WorkerConfig{
 		FailureThreshold:   10,
@@ -222,9 +209,6 @@ func TestTelemetryWorker_Sampling(t *testing.T) {
 func TestTelemetryWorker_BatchProcessing(t *testing.T) {
 	t.Parallel()
 
-	// Initialize logging
-	logging.Init()
-
 	config := &WorkerConfig{
 		FailureThreshold:   10,
 		RecoveryTimeout:    60 * time.Second,
@@ -260,9 +244,6 @@ func TestTelemetryWorker_BatchProcessing(t *testing.T) {
 func TestTelemetryWorker_ReportToSentry_WithContext(t *testing.T) {
 	t.Parallel()
 
-	// Initialize logging
-	logging.Init()
-
 	// Create worker
 	worker, err := NewTelemetryWorker(true, nil)
 	require.NoError(t, err, "Failed to create worker")
@@ -284,9 +265,6 @@ func TestTelemetryWorker_ReportToSentry_WithContext(t *testing.T) {
 
 func TestTelemetryWorker_ReportToSentry_NilContextSafe(t *testing.T) {
 	t.Parallel()
-
-	// Initialize logging
-	logging.Init()
 
 	// Create worker
 	worker, err := NewTelemetryWorker(true, nil)

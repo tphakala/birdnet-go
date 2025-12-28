@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // OS name constants for runtime.GOOS comparisons.
@@ -188,7 +188,7 @@ func PrintUserInfo() {
 		// Get group memberships for the current user
 		groupIDs, err := currentUser.GroupIds()
 		if err != nil {
-			log.Printf("Failed to get group memberships: %v\n", err)
+			GetLogger().Warn("Failed to get group memberships", logger.Error(err))
 			return
 		}
 
@@ -197,7 +197,7 @@ func PrintUserInfo() {
 			// Look up the group information for each group ID
 			group, err := user.LookupGroupId(gid)
 			if err != nil {
-				log.Printf("Failed to lookup group for ID %s: %v\n", gid, err)
+				GetLogger().Warn("Failed to lookup group", logger.String("gid", gid), logger.Error(err))
 				continue
 			}
 			// Uncomment the following line to print group information
@@ -211,8 +211,9 @@ func PrintUserInfo() {
 
 		// If the user is not a member of the 'audio' group, print an error message
 		if !audioMember {
-			log.Printf("ERROR: User '%s' is not member of audio group, add user to audio group by executing", currentUser.Username)
-			log.Println("sudo usermod -a -G audio", currentUser.Username)
+			GetLogger().Error("User is not member of audio group",
+				logger.String("username", currentUser.Username),
+				logger.String("fix_command", fmt.Sprintf("sudo usermod -a -G audio %s", currentUser.Username)))
 		}
 	}
 }
@@ -242,7 +243,7 @@ func RunningInContainer() bool {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.Printf("Failed to close /proc/self/cgroup: %v", err)
+			GetLogger().Warn("Failed to close /proc/self/cgroup", logger.Error(err))
 		}
 	}()
 
@@ -351,11 +352,6 @@ func ParseWeekday(day string) (time.Weekday, error) {
 	default:
 		return time.Sunday, fmt.Errorf("invalid weekday: %s", day)
 	}
-}
-
-// GetRotationDay returns the time.Weekday representation of RotationDay
-func (lc *LogConfig) GetRotationDay() (time.Weekday, error) {
-	return ParseWeekday(lc.RotationDay)
 }
 
 // GetLocalTimezone returns the local time zone of the system.
@@ -594,7 +590,9 @@ func ValidateToolPath(configuredPath, toolName string) (string, error) {
 			return configuredPath, nil
 		}
 		// If configured path is invalid, log a warning but still check PATH as a fallback
-		log.Printf("Warning: Configured path '%s' for tool '%s' is invalid or not found. Checking system PATH.", configuredPath, toolName)
+		GetLogger().Warn("Configured tool path invalid or not found, checking system PATH",
+			logger.String("configured_path", configuredPath),
+			logger.String("tool", toolName))
 	}
 
 	// If no configured path or the configured path was invalid, check the system PATH
@@ -634,7 +632,7 @@ func moveFile(src, dst string) error {
 	}
 	defer func() {
 		if err := srcFile.Close(); err != nil {
-			log.Printf("Failed to close source file: %v", err)
+			GetLogger().Warn("Failed to close source file", logger.Error(err))
 		}
 	}() // Ensure the source file is closed when we're done
 
@@ -644,7 +642,7 @@ func moveFile(src, dst string) error {
 	}
 	defer func() {
 		if err := dstFile.Close(); err != nil {
-			log.Printf("Failed to close destination file: %v", err)
+			GetLogger().Warn("Failed to close destination file", logger.Error(err))
 		}
 	}() // Ensure the destination file is closed when we're done
 
@@ -729,7 +727,7 @@ func resolveGatewayFromRoute() net.IP {
 	defer func() {
 		if err := file.Close(); err != nil {
 			// Log error but don't fail - this is a best-effort operation
-			log.Printf("warning: failed to close /proc/net/route: %v", err)
+			GetLogger().Warn("Failed to close /proc/net/route", logger.Error(err))
 		}
 	}()
 
@@ -789,7 +787,7 @@ func IsInHostSubnet(clientIP net.IP) bool {
 	// Get the host IP
 	hostIP, err := GetHostIP()
 	if err != nil {
-		log.Printf("Error getting host IP: %v", err)
+		GetLogger().Warn("Error getting host IP", logger.Error(err))
 		return false
 	}
 

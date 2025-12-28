@@ -3,8 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -427,9 +425,8 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (e
 	controller := &Controller{
 		Settings: &conf.Settings{
 			Main: struct {
-				Name      string         `json:"name"`
-				TimeAs24h bool           `json:"timeAs24h"`
-				Log       conf.LogConfig `json:"log"`
+				Name      string `json:"name"`
+				TimeAs24h bool   `json:"timeAs24h"`
 			}{
 				Name: "TestNode",
 			},
@@ -516,6 +513,5 @@ func createTestController(t *testing.T) *Controller {
 			},
 		},
 		DisableSaveSettings: true,
-		logger:              log.New(io.Discard, "", 0), // Add a discard logger for tests
 	}
 }

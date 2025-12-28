@@ -3,10 +3,10 @@
 package species
 
 import (
-	"context"
-	"log/slog"
 	"slices"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // GetSpeciesStatus returns the tracking status for a species with caching for performance
@@ -39,37 +39,17 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 	// Build fresh status using the same logic as buildSpeciesStatusLocked but with buffer reuse
 	status := t.buildSpeciesStatusWithBuffer(scientificName, currentTime, currentSeason)
 
-	// Only perform expensive string formatting if debug logging is enabled
-	if logger.Enabled(context.Background(), slog.LevelDebug) {
-		firstSeenStr := "never"
-		if !status.FirstSeenTime.IsZero() {
-			firstSeenStr = status.FirstSeenTime.Format("2006-01-02")
-		}
-
-		firstThisYearStr := "nil"
-		if status.FirstThisYear != nil {
-			firstThisYearStr = status.FirstThisYear.Format("2006-01-02")
-		}
-
-		firstThisSeasonStr := "nil"
-		if status.FirstThisSeason != nil {
-			firstThisSeasonStr = status.FirstThisSeason.Format("2006-01-02")
-		}
-
-		logger.Debug("Species status computed",
-			"species", scientificName,
-			"current_time", currentTime.Format("2006-01-02 15:04:05"),
-			"current_season", currentSeason,
-			"is_new", status.IsNew,
-			"is_new_this_year", status.IsNewThisYear,
-			"is_new_this_season", status.IsNewThisSeason,
-			"days_since_first", status.DaysSinceFirst,
-			"days_this_year", status.DaysThisYear,
-			"days_this_season", status.DaysThisSeason,
-			"first_seen", firstSeenStr,
-			"first_this_year", firstThisYearStr,
-			"first_this_season", firstThisSeasonStr)
-	}
+	// Log computed status for debugging
+	getLog().Debug("Species status computed",
+		logger.String("species", scientificName),
+		logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")),
+		logger.String("current_season", currentSeason),
+		logger.Bool("is_new", status.IsNew),
+		logger.Bool("is_new_this_year", status.IsNewThisYear),
+		logger.Bool("is_new_this_season", status.IsNewThisSeason),
+		logger.Int("days_since_first", status.DaysSinceFirst),
+		logger.Int("days_this_year", status.DaysThisYear),
+		logger.Int("days_this_season", status.DaysThisSeason))
 
 	// Cache the computed result for future requests
 	t.statusCache[scientificName] = cachedSpeciesStatus{
@@ -224,9 +204,9 @@ func (t *SpeciesTracker) evictOldestCacheEntries() {
 		delete(t.statusCache, entries[i].name)
 	}
 
-	logger.Debug("Cache cleanup completed",
-		"removed_count", entriesToRemove,
-		"remaining_count", len(t.statusCache))
+	getLog().Debug("Cache cleanup completed",
+		logger.Int("removed_count", entriesToRemove),
+		logger.Int("remaining_count", len(t.statusCache)))
 }
 
 // cleanupExpiredCacheWithForce allows forcing cleanup even if recently performed (for testing)

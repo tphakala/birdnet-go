@@ -776,15 +776,6 @@ func TestCloseMethod(t *testing.T) {
 	assert.NoError(t, err, "Multiple close calls should not error")
 }
 
-// TestPackageLevelClose tests the package-level Close function
-func TestPackageLevelClose(t *testing.T) {
-	t.Parallel()
-
-	// This tests the package-level Close() function
-	err := Close()
-	assert.NoError(t, err, "Package-level Close should not error")
-}
-
 // TestCheckAndResetPeriods tests period reset logic
 func TestCheckAndResetPeriods(t *testing.T) {
 	t.Parallel()

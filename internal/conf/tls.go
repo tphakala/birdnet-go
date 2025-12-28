@@ -111,10 +111,10 @@ func (tm *TLSManager) EnsureServiceDirectory(service string) error {
 func (tm *TLSManager) SaveCertificate(service string, certType TLSCertificateType, content string) (string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	
+
 	// Trim whitespace
 	content = strings.TrimSpace(content)
-	
+
 	// If content is empty, remove the certificate file if it exists
 	if content == "" {
 		return "", tm.removeCertificateUnlocked(service, certType)
@@ -201,7 +201,7 @@ func (tm *TLSManager) removeCertificateUnlocked(service string, certType TLSCert
 func (tm *TLSManager) RemoveAllCertificates(service string) error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	
+
 	certTypes := []TLSCertificateType{TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeKey}
 	for _, certType := range certTypes {
 		if err := tm.removeCertificateUnlocked(service, certType); err != nil {

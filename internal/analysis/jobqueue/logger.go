@@ -4,220 +4,176 @@ package jobqueue
 import (
 	"context"
 	"fmt"
-	"log"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"sync"
 	"time"
-	
-	"github.com/tphakala/birdnet-go/internal/logging"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// Service name constant to reduce duplication and improve maintainability
-const serviceName = "analysis.jobqueue"
-
-// Package-level logger for job queue operations
-var (
-	logger       *slog.Logger
-	levelVar     = new(slog.LevelVar) // Dynamic level control
-	closeLogger  func() error
-	once         sync.Once            // Thread-safe initialization
-)
-
-func init() {
-	var err error
-	// Define log file path for job queue operations
-	logFilePath := filepath.Join("logs", "analysis-jobqueue.log")
-	initialLevel := slog.LevelInfo // Default to Info level
-	levelVar.Set(initialLevel)
-	
-	// Initialize the jobqueue-specific file logger
-	logger, closeLogger, err = logging.NewFileLogger(logFilePath, serviceName, levelVar)
-	if err != nil {
-		// Fallback: Log error to standard log and use console logging
-		log.Printf("Failed to initialize jobqueue file logger at %s: %v. Using console logging.", logFilePath, err)
-		// Set logger to console handler for actual console output
-		fbHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: levelVar})
-		logger = slog.New(fbHandler).With("service", serviceName, "component", "jobqueue")
-		closeLogger = func() error { return nil } // No-op closer
-	} else {
-		// Add component field to the successfully initialized file logger
-		logger = logger.With("component", "jobqueue")
-	}
-}
-
-// GetLogger returns the jobqueue package logger
-// Useful for external packages that need access to jobqueue logging
-func GetLogger() *slog.Logger {
-	once.Do(func() {
-		if logger == nil {
-			// Initialize logger with default if not already done
-			logger = slog.Default().With("service", serviceName, "component", "jobqueue")
-		}
-	})
-	return logger
-}
-
-// CloseLogger closes the log file and releases resources
-func CloseLogger() error {
-	if closeLogger != nil {
-		return closeLogger()
-	}
-	return nil
+// getLog returns the jobqueue package logger.
+// Fetched dynamically to ensure it uses the current centralized logger.
+func getLog() logger.Logger {
+	return logger.Global().Module("analysis.jobqueue")
 }
 
 // LogJobEnqueued logs when a job is added to the queue
 func LogJobEnqueued(ctx context.Context, jobID, actionType string, retryable bool) {
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionType,
-		"retryable", retryable,
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionType),
+		logger.Bool("retryable", retryable),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Job enqueued", args...)
+	getLog().WithContext(ctx).Info("Job enqueued", fields...)
 }
 
 // LogJobStarted logs when a job begins execution
 func LogJobStarted(ctx context.Context, jobID, actionType string) {
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionType,
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionType),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Job started", args...)
+	getLog().WithContext(ctx).Info("Job started", fields...)
 }
 
 // LogJobCompleted logs when a job finishes successfully
 func LogJobCompleted(ctx context.Context, jobID, actionType string, duration time.Duration) {
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionType,
-		"duration_ms", duration.Milliseconds(),
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionType),
+		logger.Int64("duration_ms", duration.Milliseconds()),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Job completed", args...)
+	getLog().WithContext(ctx).Info("Job completed", fields...)
 }
 
 // LogJobFailed logs when a job fails
 func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxAttempts int, err error) {
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionType,
-		"attempt", attempt,
-		"max_attempts", maxAttempts,
-		"error", err,
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionType),
+		logger.Int("attempt", attempt),
+		logger.Int("max_attempts", maxAttempts),
+		logger.Error(err),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
 
+	contextLogger := getLog().WithContext(ctx)
 	// Use Error level for final failure, Warn for retryable failures
 	if attempt >= maxAttempts {
-		logger.ErrorContext(ctx, "Job failed permanently", args...)
+		contextLogger.Error("Job failed permanently", fields...)
 	} else {
-		logger.WarnContext(ctx, "Job failed, will retry", args...)
+		contextLogger.Warn("Job failed, will retry", fields...)
 	}
 }
 
 // LogQueueStats logs queue statistics
 func LogQueueStats(ctx context.Context, pending, running, completed, failed int) {
-	args := []any{
-		"pending", pending,
-		"running", running,
-		"completed", completed,
-		"failed", failed,
+	fields := []logger.Field{
+		logger.Int("pending", pending),
+		logger.Int("running", running),
+		logger.Int("completed", completed),
+		logger.Int("failed", failed),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Queue statistics", args...)
+	getLog().WithContext(ctx).Info("Queue statistics", fields...)
 }
 
 // LogJobDropped logs when a job is dropped due to queue being full
 func LogJobDropped(ctx context.Context, jobID, actionDesc string) {
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionDesc,
-		"reason", "queue_full",
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionDesc),
+		logger.String("reason", "queue_full"),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.WarnContext(ctx, "Job dropped", args...)
+	getLog().WithContext(ctx).Warn("Job dropped", fields...)
 }
 
 // LogQueueStopped logs when the job queue processing is stopped
 func LogQueueStopped(ctx context.Context, reason string, details ...any) {
-	args := []any{
-		"reason", reason,
+	fields := []logger.Field{
+		logger.String("reason", reason),
 	}
 	if len(details) > 0 {
 		if len(details)%2 != 0 {
 			// Append marker for odd length to prevent silent data loss
 			details = append(details, "missing_value")
 		}
-		args = append(args, details...)
+		// Convert variadic key-value pairs to Fields
+		for i := 0; i < len(details); i += 2 {
+			key, ok := details[i].(string)
+			if !ok {
+				continue
+			}
+			fields = append(fields, logger.Any(key, details[i+1]))
+		}
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Queue processing stopped", args...)
+	getLog().WithContext(ctx).Info("Queue processing stopped", fields...)
 }
 
 // LogJobRetrying logs when a job is being retried (at execution start)
 func LogJobRetrying(ctx context.Context, jobID, actionDesc string, attempt, maxAttempts int) {
 	remainingAttempts := maxAttempts - attempt
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionDesc,
-		"attempt", attempt,
-		"max_attempts", maxAttempts,
-		"remaining_attempts", remainingAttempts,
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionDesc),
+		logger.Int("attempt", attempt),
+		logger.Int("max_attempts", maxAttempts),
+		logger.Int("remaining_attempts", remainingAttempts),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Job retry execution starting", args...)
+	getLog().WithContext(ctx).Info("Job retry execution starting", fields...)
 }
 
 // LogJobRetryScheduled logs when a job is scheduled for retry after failure
 func LogJobRetryScheduled(ctx context.Context, jobID, actionDesc string, attempt, maxAttempts int, delay time.Duration, nextRetryAt time.Time, lastErr error) {
 	remainingAttempts := maxAttempts - attempt
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionDesc,
-		"attempt", attempt,
-		"max_attempts", maxAttempts,
-		"remaining_attempts", remainingAttempts,
-		"retry_delay_ms", delay.Milliseconds(),
-		"next_retry_at", nextRetryAt,
-		"error", lastErr,
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionDesc),
+		logger.Int("attempt", attempt),
+		logger.Int("max_attempts", maxAttempts),
+		logger.Int("remaining_attempts", remainingAttempts),
+		logger.Int64("retry_delay_ms", delay.Milliseconds()),
+		logger.Time("next_retry_at", nextRetryAt),
+		logger.Error(lastErr),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.WarnContext(ctx, "Job scheduled for retry after failure", args...)
+	getLog().WithContext(ctx).Warn("Job scheduled for retry after failure", fields...)
 }
 
 // LogJobSuccess logs when a job completes successfully
 func LogJobSuccess(ctx context.Context, jobID, actionDesc string, attempt int) {
-	args := []any{
-		"job_id", jobID,
-		"action_type", actionDesc,
-		"attempt", attempt,
-		"first_attempt", attempt == 1,
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionDesc),
+		logger.Int("attempt", attempt),
+		logger.Bool("first_attempt", attempt == 1),
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
-		args = append(args, "trace_id", traceID)
+		fields = append(fields, logger.String("trace_id", traceID))
 	}
-	logger.InfoContext(ctx, "Job succeeded", args...)
+	getLog().WithContext(ctx).Info("Job succeeded", fields...)
 }
 
 // Context key types for safe context value retrieval
@@ -232,8 +188,9 @@ const (
 // This helper ensures consistent trace ID storage and retrieval across the jobqueue package.
 //
 // Example usage:
-//   ctx = WithTraceID(ctx, "trace-12345")
-//   LogJobStarted(ctx, jobID, actionType)
+//
+//	ctx = WithTraceID(ctx, "trace-12345")
+//	LogJobStarted(ctx, jobID, actionType)
 func WithTraceID(ctx context.Context, traceID string) context.Context {
 	return context.WithValue(ctx, contextKeyTraceID, traceID)
 }
@@ -244,7 +201,7 @@ func extractTraceID(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	
+
 	if traceID := ctx.Value(contextKeyTraceID); traceID != nil {
 		switch v := traceID.(type) {
 		case string:

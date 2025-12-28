@@ -16,9 +16,9 @@ type ErrorCode int
 
 // Error prefix emoji constants for user-facing messages.
 const (
-	emojiError    = "❌" // General error
+	emojiError    = "❌"  // General error
 	emojiWarning  = "⚠️" // Warning for config/timeout issues
-	emojiCritical = "🚨" // Critical for media/database failures
+	emojiCritical = "🚨"  // Critical for media/database failures
 	emojiInfo     = "ℹ️" // Info for cancellations
 )
 

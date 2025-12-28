@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // App config endpoint constants
@@ -16,9 +17,9 @@ const (
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
-	CSRFToken string               `json:"csrfToken"`
-	Security  SecurityConfigDTO    `json:"security"`
-	Version   string               `json:"version"`
+	CSRFToken string            `json:"csrfToken"`
+	Security  SecurityConfigDTO `json:"security"`
+	Version   string            `json:"version"`
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -84,9 +85,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	}
 
 	c.logDebugIfEnabled("Serving app config",
-		"security_enabled", securityEnabled,
-		"access_allowed", accessAllowed,
-		"ip", ctx.RealIP(),
+		logger.Bool("security_enabled", securityEnabled),
+		logger.Bool("access_allowed", accessAllowed),
+		logger.String("ip", ctx.RealIP()),
 	)
 
 	return ctx.JSON(http.StatusOK, response)

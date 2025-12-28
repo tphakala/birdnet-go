@@ -3,13 +3,13 @@ package backup
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // BackupSchedule represents a scheduled backup task
@@ -30,23 +30,20 @@ type Scheduler struct {
 	cancel        context.CancelFunc
 	mu            sync.RWMutex
 	runningBackup sync.Mutex
-	logger        *slog.Logger
+	logger        logger.Logger
 	state         *StateManager
 }
 
 // NewScheduler creates a new backup scheduler
-func NewScheduler(manager *Manager, logger *slog.Logger, stateManager *StateManager) (*Scheduler, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func NewScheduler(manager *Manager, _ logger.Logger, stateManager *StateManager) (*Scheduler, error) {
 	if stateManager == nil {
-		logger.Error("StateManager provided to NewScheduler cannot be nil")
+		GetLogger().Error("StateManager provided to NewScheduler cannot be nil")
 		return nil, fmt.Errorf("state manager cannot be nil")
 	}
 
 	return &Scheduler{
 		manager: manager,
-		logger:  logger.With("service", "backup_scheduler"),
+		logger:  GetLogger().Module("scheduler"),
 		state:   stateManager,
 	}, nil
 }
@@ -136,7 +133,7 @@ func (s *Scheduler) GetMissedRuns() []time.Time {
 // ClearMissedRuns clears the list of missed runs
 func (s *Scheduler) ClearMissedRuns() {
 	if err := s.state.ClearMissedBackups(); err != nil {
-		s.logger.Error("Failed to clear missed backups", "error", err)
+		s.logger.Error("Failed to clear missed backups", logger.Error(err))
 	}
 }
 
@@ -173,9 +170,9 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 					scheduleTime.Format(time.RFC3339))
 
 				if err := s.state.AddMissedBackup(schedule, reason); err != nil {
-					s.logger.Warn("Failed to record missed backup state", "scheduled_time", scheduleTime, "error", err)
+					s.logger.Warn("Failed to record missed backup state", logger.Time("scheduled_time", scheduleTime), logger.Error(err))
 				}
-				s.logger.Warn("Missed backup schedule", "scheduled_time", scheduleTime, "current_time", now, "reason", reason)
+				s.logger.Warn("Missed backup schedule", logger.Time("scheduled_time", scheduleTime), logger.Time("current_time", now), logger.String("reason", reason))
 			} else {
 				// Try to acquire the lock to prevent concurrent backups
 				if s.runningBackup.TryLock() {
@@ -183,15 +180,15 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 					go s.runBackup(schedule)
 				} else {
 					s.logger.Warn("Skipping backup - another backup is already running",
-						"scheduled_time", scheduleTime,
-						"schedule_type", s.getScheduleType(schedule))
+						logger.Time("scheduled_time", scheduleTime),
+						logger.String("schedule_type", s.getScheduleType(schedule)))
 				}
 			}
 
 			// Calculate next run time
 			schedule.LastRun = now // Record the time we *checked* this schedule
 			schedule.NextRun = s.calculateNextRun(now, schedule.Hour, schedule.Minute, schedule.Weekday, schedule.IsWeekly)
-			s.logger.Debug("Calculated next run time for schedule", "schedule_type", s.getScheduleType(schedule), "next_run", schedule.NextRun)
+			s.logger.Debug("Calculated next run time for schedule", logger.String("schedule_type", s.getScheduleType(schedule)), logger.Time("next_run", schedule.NextRun))
 		}
 	}
 }
@@ -202,7 +199,7 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	defer s.runningBackup.Unlock()
 
 	scheduleType := s.getScheduleType(schedule)
-	s.logger.Info("Running scheduled backup", "schedule_type", scheduleType)
+	s.logger.Info("Running scheduled backup", logger.String("schedule_type", scheduleType))
 	start := time.Now()
 
 	// Use manager's backup timeout duration
@@ -213,26 +210,26 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	// Run the backup
 	if err := s.manager.RunBackup(ctx); err != nil {
 		duration := time.Since(start)
-		s.logger.Error("Scheduled backup failed", "schedule_type", scheduleType, "error", err, "duration_ms", duration.Milliseconds())
+		s.logger.Error("Scheduled backup failed", logger.String("schedule_type", scheduleType), logger.Error(err), logger.Int64("duration_ms", duration.Milliseconds()))
 
 		// Record failure in state
 		if errState := s.state.UpdateScheduleState(schedule, false); errState != nil {
-			s.logger.Warn("Failed to update schedule state after failure", "schedule_type", scheduleType, "error", errState)
+			s.logger.Warn("Failed to update schedule state after failure", logger.String("schedule_type", scheduleType), logger.Error(errState))
 		}
 
 		// Record as missed backup (since it failed)
 		reason := fmt.Sprintf("Backup operation failed: %v", err)
 		if errState := s.state.AddMissedBackup(schedule, reason); errState != nil {
-			s.logger.Warn("Failed to record missed backup after failure", "schedule_type", scheduleType, "error", errState)
+			s.logger.Warn("Failed to record missed backup after failure", logger.String("schedule_type", scheduleType), logger.Error(errState))
 		}
 		return
 	}
 	duration := time.Since(start)
-	s.logger.Info("Scheduled backup completed successfully", "schedule_type", scheduleType, "duration_ms", duration.Milliseconds())
+	s.logger.Info("Scheduled backup completed successfully", logger.String("schedule_type", scheduleType), logger.Int64("duration_ms", duration.Milliseconds()))
 
 	// Update schedule state
 	if err := s.state.UpdateScheduleState(schedule, true); err != nil {
-		s.logger.Warn("Failed to update schedule state after success", "schedule_type", scheduleType, "error", err)
+		s.logger.Warn("Failed to update schedule state after success", logger.String("schedule_type", scheduleType), logger.Error(err))
 	}
 
 	// Validate backup counts and retention policy (use a separate context)
@@ -241,7 +238,7 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	defer validationCancel()
 	if err := s.manager.ValidateBackupCounts(validationCtx); err != nil {
 		// Log warning or error depending on severity desired
-		s.logger.Warn("Backup retention policy validation failed after backup", "schedule_type", scheduleType, "error", err)
+		s.logger.Warn("Backup retention policy validation failed after backup", logger.String("schedule_type", scheduleType), logger.Error(err))
 	}
 
 	// Get and log backup statistics (use a separate context)
@@ -250,27 +247,27 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	defer statsCancel()
 	stats, err := s.manager.GetBackupStats(statsCtx)
 	if err != nil {
-		s.logger.Warn("Failed to get backup statistics after backup", "schedule_type", scheduleType, "error", err)
+		s.logger.Warn("Failed to get backup statistics after backup", logger.String("schedule_type", scheduleType), logger.Error(err))
 		return // Don't proceed if stats failed
 	}
 
 	// Update statistics in state
 	if err := s.state.UpdateStats(stats); err != nil {
-		s.logger.Warn("Failed to update backup statistics in state", "schedule_type", scheduleType, "error", err)
+		s.logger.Warn("Failed to update backup statistics in state", logger.String("schedule_type", scheduleType), logger.Error(err))
 	}
 
 	// Log statistics for each target
 	for targetName := range stats {
 		targetStats := stats[targetName]
 		s.logger.Info("Backup stats",
-			"schedule_type", scheduleType,
-			"target_name", targetName,
-			"total_backups", targetStats.TotalBackups,
-			"daily_backups", targetStats.DailyBackups,
-			"weekly_backups", targetStats.WeeklyBackups,
-			"total_size_bytes", targetStats.TotalSize,
-			"oldest_backup_ts", targetStats.OldestBackup.Format(time.RFC3339),
-			"newest_backup_ts", targetStats.NewestBackup.Format(time.RFC3339),
+			logger.String("schedule_type", scheduleType),
+			logger.String("target_name", targetName),
+			logger.Int("total_backups", targetStats.TotalBackups),
+			logger.Int("daily_backups", targetStats.DailyBackups),
+			logger.Int("weekly_backups", targetStats.WeeklyBackups),
+			logger.Int64("total_size_bytes", targetStats.TotalSize),
+			logger.String("oldest_backup_ts", targetStats.OldestBackup.Format(time.RFC3339)),
+			logger.String("newest_backup_ts", targetStats.NewestBackup.Format(time.RFC3339)),
 		)
 	}
 
@@ -278,7 +275,7 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), s.manager.getCleanupTimeout())
 	defer cleanupCancel()
 	if err := s.manager.performBackupCleanup(cleanupCtx); err != nil {
-		s.logger.Error("Failed to perform post-backup cleanup", "schedule_type", scheduleType, "error", err)
+		s.logger.Error("Failed to perform post-backup cleanup", logger.String("schedule_type", scheduleType), logger.Error(err))
 	}
 }
 
@@ -373,18 +370,18 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 	defer s.mu.Unlock()
 
 	s.schedules = nil // Clear existing schedules before loading
-	s.logger.Info("Loading backup schedules from configuration", "schedule_count", len(config.Schedules))
+	s.logger.Info("Loading backup schedules from configuration", logger.Int("schedule_count", len(config.Schedules)))
 
 	for _, scheduleConf := range config.Schedules {
 		if !scheduleConf.Enabled {
-			s.logger.Debug("Skipping disabled schedule", "hour", scheduleConf.Hour, "minute", scheduleConf.Minute, "weekday", scheduleConf.Weekday)
+			s.logger.Debug("Skipping disabled schedule", logger.Int("hour", scheduleConf.Hour), logger.Int("minute", scheduleConf.Minute), logger.String("weekday", scheduleConf.Weekday))
 			continue
 		}
 
 		// Validate time
 		if scheduleConf.Hour < 0 || scheduleConf.Hour > 23 {
 			errMsg := fmt.Sprintf("invalid hour %d in schedule config", scheduleConf.Hour)
-			s.logger.Error(errMsg, "config", scheduleConf)
+			s.logger.Error(errMsg, logger.Any("config", scheduleConf))
 			return errors.Newf("%s", errMsg).
 				Component("backup").
 				Category(errors.CategoryConfiguration).
@@ -394,7 +391,7 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 		}
 		if scheduleConf.Minute < 0 || scheduleConf.Minute > 59 {
 			errMsg := fmt.Sprintf("invalid minute %d in schedule config", scheduleConf.Minute)
-			s.logger.Error(errMsg, "config", scheduleConf)
+			s.logger.Error(errMsg, logger.Any("config", scheduleConf))
 			return errors.Newf("%s", errMsg).
 				Component("backup").
 				Category(errors.CategoryConfiguration).
@@ -412,14 +409,14 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 			// Explicitly marked as weekly
 			isWeekly = true
 			if scheduleConf.Weekday == "" { // No weekday specified but marked as weekly
-				s.logger.Warn("Schedule marked as weekly but no weekday specified, defaulting to Sunday", "config", scheduleConf)
+				s.logger.Warn("Schedule marked as weekly but no weekday specified, defaulting to Sunday", logger.Any("config", scheduleConf))
 				weekday = time.Sunday
 			} else {
 				// Parse the specified weekday
 				parsedDay, err := parseWeekday(scheduleConf.Weekday)
 				if err != nil {
 					errMsg := fmt.Sprintf("invalid weekday '%s' in schedule config", scheduleConf.Weekday)
-					s.logger.Error(errMsg, "config", scheduleConf, "error", err)
+					s.logger.Error(errMsg, logger.Any("config", scheduleConf), logger.Error(err))
 					return errors.New(err).
 						Component("backup").
 						Category(errors.CategoryConfiguration).
@@ -435,7 +432,7 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 			parsedDay, err := parseWeekday(scheduleConf.Weekday)
 			if err != nil {
 				errMsg := fmt.Sprintf("invalid weekday '%s' in schedule config", scheduleConf.Weekday)
-				s.logger.Error(errMsg, "config", scheduleConf, "error", err)
+				s.logger.Error(errMsg, logger.Any("config", scheduleConf), logger.Error(err))
 				return errors.New(err).
 					Component("backup").
 					Category(errors.CategoryConfiguration).
@@ -464,11 +461,11 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 
 		s.schedules = append(s.schedules, schedule)
 		s.logger.Info("Loaded schedule",
-			"hour", schedule.Hour,
-			"minute", schedule.Minute,
-			"weekday", s.formatWeekday(schedule.Weekday),
-			"is_weekly", schedule.IsWeekly,
-			"next_run", schedule.NextRun.Format(time.RFC3339),
+			logger.Int("hour", schedule.Hour),
+			logger.Int("minute", schedule.Minute),
+			logger.String("weekday", s.formatWeekday(schedule.Weekday)),
+			logger.Bool("is_weekly", schedule.IsWeekly),
+			logger.String("next_run", schedule.NextRun.Format(time.RFC3339)),
 		)
 	}
 
@@ -506,7 +503,7 @@ func (s *Scheduler) TriggerBackup(ctx context.Context) error {
 	s.logger.Info("Manually triggering backup run...")
 	// Run the backup process directly (might block depending on implementation)
 	if err := s.manager.RunBackup(ctx); err != nil {
-		s.logger.Error("Manual backup trigger failed", "error", err)
+		s.logger.Error("Manual backup trigger failed", logger.Error(err))
 		return err
 	}
 	s.logger.Info("Manual backup trigger completed successfully")

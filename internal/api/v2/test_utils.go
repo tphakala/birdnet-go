@@ -4,8 +4,6 @@ package api
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -26,12 +24,10 @@ const (
 	testControlChannelBuf = 10      // Control channel buffer size for concurrent test scenarios
 )
 
-// newMinimalController creates a Controller with just a logger for simple validation tests.
+// newMinimalController creates a Controller for simple validation tests.
 // Use this for tests that only need to call handler methods without database or full infrastructure.
 func newMinimalController() *Controller {
-	return &Controller{
-		logger: log.New(io.Discard, "", 0),
-	}
+	return &Controller{}
 }
 
 // safeSlice is a helper for mock methods returning slices.
@@ -61,6 +57,7 @@ func safePointer[T any](args mock.Arguments, index int) *T {
 	}
 	return nil // Return nil if the argument itself is nil
 }
+
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.
@@ -98,9 +95,8 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 
 	// Create a controller with the test datastore
 	controller := &Controller{
-		Group:  e.Group("/api/v2"),
-		DS:     mockDS,
-		logger: log.New(io.Discard, "", 0),
+		Group: e.Group("/api/v2"),
+		DS:    mockDS,
 	}
 
 	// Don't initialize routes as it causes nil pointer dereference in tests
@@ -159,9 +155,6 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 		},
 	}
 
-	// Create a test logger (use io.Discard to avoid noisy stdout in CI)
-	logger := log.New(io.Discard, "API TEST: ", log.LstdFlags)
-
 	// Create a mock ImageProvider for testing
 	mockImageProvider := new(MockImageProvider)
 
@@ -189,7 +182,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	mockMetrics, _ := observability.NewMetrics()
 
 	// Create API controller without initializing routes to avoid starting background goroutines
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, false)
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
 	if err != nil {
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}

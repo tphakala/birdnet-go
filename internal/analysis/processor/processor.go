@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -23,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -46,6 +46,7 @@ type Processor struct {
 	Settings            *conf.Settings
 	Ds                  datastore.Interface
 	Bn                  *birdnet.BirdNET
+	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
 	BwClient            *birdweather.BwClient
 	bwClientMutex       sync.RWMutex // Mutex to protect BwClient access
 	MqttClient          mqtt.Client
@@ -128,17 +129,13 @@ func suggestLevelForDisabledFilter(overlap float64) {
 	recommendedLevel, _ := getRecommendedLevelForOverlap(overlap)
 	if recommendedLevel > 0 {
 		GetLogger().Info("False positive filtering is disabled",
-			"current_level", 0,
-			"current_overlap", overlap,
-			"recommended_level", recommendedLevel,
-			"recommended_level_name", getLevelName(recommendedLevel),
-			"recommendation", fmt.Sprintf("Consider enabling filtering with level %d (%s) which matches your current overlap %.1f",
-				recommendedLevel, getLevelName(recommendedLevel), overlap),
-			"operation", "false_positive_filter_config")
-		log.Printf("False positive filtering: DISABLED (level 0)")
-		log.Printf("💡 Suggestion: Your current overlap (%.1f) supports up to Level %d (%s) filtering",
-			overlap, recommendedLevel, getLevelName(recommendedLevel))
-		log.Printf("   Enable filtering to reduce false positives: set realtime.falsepositivefilter.level = %d", recommendedLevel)
+			logger.Int("current_level", 0),
+			logger.Float64("current_overlap", overlap),
+			logger.Int("recommended_level", recommendedLevel),
+			logger.String("recommended_level_name", getLevelName(recommendedLevel)),
+			logger.String("recommendation", fmt.Sprintf("Consider enabling filtering with level %d (%s) which matches your current overlap %.1f",
+				recommendedLevel, getLevelName(recommendedLevel), overlap)),
+			logger.String("operation", "false_positive_filter_config"))
 
 		// Notify users through the web UI
 		notification.NotifyInfo(
@@ -148,9 +145,8 @@ func suggestLevelForDisabledFilter(overlap float64) {
 		)
 	} else {
 		GetLogger().Info("False positive filtering is disabled",
-			"current_level", 0,
-			"operation", "false_positive_filter_config")
-		log.Printf("False positive filtering: DISABLED (level 0)")
+			logger.Int("current_level", 0),
+			logger.String("operation", "false_positive_filter_config"))
 	}
 }
 
@@ -159,22 +155,16 @@ func suggestLevelForDisabledFilter(overlap float64) {
 func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetections int) {
 	if overlap < minOverlap {
 		// Overlap is too low for this level
-		GetLogger().Warn("Overlap below recommended minimum for filtering level",
-			"level", level,
-			"level_name", getLevelName(level),
-			"min_overlap", minOverlap,
-			"current_overlap", overlap,
-			"min_detections", minDetections,
-			"hardware_req", getHardwareRequirementForLevel(level),
-			"operation", "false_positive_filter_config")
-		log.Printf("⚠️  False positive filtering: Level %d (%s) - OVERLAP TOO LOW",
-			level, getLevelName(level))
-		log.Printf("   Current overlap: %.1f, Recommended minimum: %.1f", overlap, minOverlap)
-		log.Printf("   Requires %d confirmations in 6 seconds", minDetections)
-		log.Printf("   Hardware: %s", getHardwareRequirementForLevel(level))
 		recommendedForCurrent, _ := getRecommendedLevelForOverlap(overlap)
-		log.Printf("   Consider increasing overlap or using Level %d for your current overlap",
-			recommendedForCurrent)
+		GetLogger().Warn("Overlap below recommended minimum for filtering level",
+			logger.Int("level", level),
+			logger.String("level_name", getLevelName(level)),
+			logger.Float64("min_overlap", minOverlap),
+			logger.Float64("current_overlap", overlap),
+			logger.Int("min_detections", minDetections),
+			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
+			logger.Int("recommended_level_for_overlap", recommendedForCurrent),
+			logger.String("operation", "false_positive_filter_config"))
 
 		// Warn users through the web UI
 		notification.NotifyWarning(
@@ -186,18 +176,13 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 	} else {
 		// Configuration is good
 		GetLogger().Info("False positive filtering configured",
-			"level", level,
-			"level_name", getLevelName(level),
-			"overlap", overlap,
-			"min_overlap", minOverlap,
-			"min_detections", minDetections,
-			"hardware_req", getHardwareRequirementForLevel(level),
-			"operation", "false_positive_filter_config")
-		log.Printf("False positive filtering: Level %d (%s)",
-			level, getLevelName(level))
-		log.Printf("  Overlap: %.1f (min required: %.1f) ✓", overlap, minOverlap)
-		log.Printf("  Requires %d confirmations in 6 seconds", minDetections)
-		log.Printf("  Hardware: %s", getHardwareRequirementForLevel(level))
+			logger.Int("level", level),
+			logger.String("level_name", getLevelName(level)),
+			logger.Float64("overlap", overlap),
+			logger.Float64("min_overlap", minOverlap),
+			logger.Int("min_detections", minDetections),
+			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
+			logger.String("operation", "false_positive_filter_config"))
 	}
 }
 
@@ -208,17 +193,16 @@ func warnAboutHardwareRequirements(level int, overlap float64) {
 		// Check if overlap is within valid range for calculation
 		if overlap >= 3.0 {
 			GetLogger().Warn("Overlap value too high for hardware calculation",
-				"overlap", overlap,
-				"max_valid", 2.9,
-				"operation", "false_positive_filter_config")
+				logger.Float64("overlap", overlap),
+				logger.Float64("max_valid", 2.9),
+				logger.String("operation", "false_positive_filter_config"))
 		} else {
 			stepSize := 3.0 - overlap
 			maxInferenceTime := stepSize * 1000 // Convert to ms
 			GetLogger().Warn("High filtering level requires fast hardware",
-				"level", level,
-				"required_inference_ms", maxInferenceTime,
-				"operation", "false_positive_filter_config")
-			log.Printf("  ⚠️  High level requires fast hardware: inference must complete in < %.0fms", maxInferenceTime)
+				logger.Int("level", level),
+				logger.Float64("required_inference_ms", maxInferenceTime),
+				logger.String("operation", "false_positive_filter_config"))
 		}
 	}
 }
@@ -229,11 +213,10 @@ func warnAboutHardwareRequirements(level int, overlap float64) {
 func validateAndLogFilterConfig(settings *conf.Settings) {
 	// Validate configuration
 	if err := settings.Realtime.FalsePositiveFilter.Validate(); err != nil {
-		GetLogger().Error("Invalid false positive filter configuration",
-			"error", err,
-			"operation", "false_positive_filter_validation")
-		log.Printf("⚠️  Configuration error: %v", err)
-		log.Printf("   Falling back to default: Level 0 (Off)")
+		GetLogger().Error("Invalid false positive filter configuration, falling back to level 0",
+			logger.Error(err),
+			logger.Int("fallback_level", 0),
+			logger.String("operation", "false_positive_filter_validation"))
 		// Reset to safe default
 		settings.Realtime.FalsePositiveFilter.Level = 0
 	}
@@ -255,12 +238,24 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	}
 }
 
-// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *observability.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
+// New creates a new Processor with the given dependencies.
+// The parentLog parameter should be the analysis package logger, which will be used to create
+// a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+	// Create child logger from parent for hierarchical logging
+	var procLog logger.Logger
+	if parentLog != nil {
+		procLog = parentLog.Module("processor")
+	} else {
+		// Fallback to global logger if parent not provided
+		procLog = logger.Global().Module("analysis.processor")
+	}
+
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,
 		Bn:             bn,
+		log:            procLog,
 		BirdImageCache: birdImageCache,
 		EventTracker: NewEventTrackerWithConfig(
 			time.Duration(settings.Realtime.Interval)*time.Second,
@@ -286,9 +281,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
 			healthCheckInterval = time.Hour
 			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
-				"requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds,
-				"capped_seconds", 3600,
-				"operation", "config_validation")
+				logger.Int("requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds),
+				logger.Int("capped_seconds", 3600),
+				logger.String("operation", "config_validation"))
 		} else {
 			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
 		}
@@ -310,14 +305,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	minRecommendedWindow := 3 * time.Second
 	if detectionWindow < minRecommendedWindow {
 		GetLogger().Warn("Detection window very short, may affect accuracy",
-			"window_seconds", detectionWindow.Seconds(),
-			"capture_length_seconds", captureLength.Seconds(),
-			"pre_capture_seconds", preCaptureLength.Seconds(),
-			"min_recommended_seconds", minRecommendedWindow.Seconds(),
-			"operation", "config_validation")
-		log.Printf("Warning: Detection window (%v) is very short, may affect overlap-based filtering accuracy. "+
-			"Minimum recommended: %v (capture_length=%v, pre_capture=%v)",
-			detectionWindow, minRecommendedWindow, captureLength, preCaptureLength)
+			logger.Float64("window_seconds", detectionWindow.Seconds()),
+			logger.Float64("capture_length_seconds", captureLength.Seconds()),
+			logger.Float64("pre_capture_seconds", preCaptureLength.Seconds()),
+			logger.Float64("min_recommended_seconds", minRecommendedWindow.Seconds()),
+			logger.String("operation", "config_validation"))
 	}
 
 	// Validate and log false positive filter configuration
@@ -327,11 +319,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	if settings.Realtime.SpeciesTracking.Enabled {
 		// Validate species tracking configuration
 		if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
-			// Add structured logging
-			GetLogger().Error("Invalid species tracking configuration",
-				"error", err,
-				"operation", "species_tracking_validation")
-			log.Printf("Invalid species tracking configuration: %v", err)
+			GetLogger().Error("Invalid species tracking configuration, disabling tracking",
+				logger.Error(err),
+				logger.String("operation", "species_tracking_validation"))
 			// Continue with defaults or disable tracking
 			settings.Realtime.SpeciesTracking.Enabled = false
 		} else {
@@ -348,27 +338,19 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 			// Initialize species tracker from database
 			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
-				// Add structured logging
-				GetLogger().Error("Failed to initialize species tracker from database",
-					"error", err,
-					"operation", "species_tracker_init")
-				log.Printf("Failed to initialize species tracker from database: %v", err)
+				GetLogger().Error("Failed to initialize species tracker from database, continuing with new detections",
+					logger.Error(err),
+					logger.String("operation", "species_tracker_init"))
 				// Continue anyway - tracker will work for new detections
 			}
 
 			hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
-			// Add structured logging
 			GetLogger().Info("Species tracking enabled",
-				"window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
-				"sync_interval_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
-				"hemisphere", hemisphere,
-				"latitude", settings.BirdNET.Latitude,
-				"operation", "species_tracking_config")
-			log.Printf("Species tracking enabled: window=%d days, sync=%d minutes, hemisphere=%s (lat=%.2f)",
-				settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
-				settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
-				hemisphere,
-				settings.BirdNET.Latitude)
+				logger.Int("window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays),
+				logger.Int("sync_interval_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
+				logger.String("hemisphere", hemisphere),
+				logger.Float64("latitude", settings.BirdNET.Latitude),
+				logger.String("operation", "species_tracking_config"))
 		}
 	}
 
@@ -386,12 +368,10 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		var err error
 		bwClient, err := birdweather.New(settings)
 		if err != nil {
-			// Add structured logging
 			GetLogger().Error("Failed to create BirdWeather client",
-				"error", err,
-				"operation", "birdweather_client_init",
-				"integration", "birdweather")
-			log.Printf("failed to create Birdweather client: %s", err)
+				logger.Error(err),
+				logger.String("operation", "birdweather_client_init"),
+				logger.String("integration", "birdweather"))
 		} else {
 			p.SetBwClient(bwClient) // Use setter for thread safety
 		}
@@ -407,8 +387,8 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	if settings.Realtime.DynamicThreshold.Enabled {
 		if err := p.loadDynamicThresholdsFromDB(); err != nil {
 			GetLogger().Debug("Starting with fresh dynamic thresholds",
-				"reason", err.Error(),
-				"operation", "load_dynamic_thresholds")
+				logger.String("reason", err.Error()),
+				logger.String("operation", "load_dynamic_thresholds"))
 			// This is normal on first run or if table doesn't exist yet
 			// System will start with fixed thresholds and learn from detections
 		}
@@ -432,7 +412,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 func (p *Processor) startDetectionProcessor() {
 	// Add structured logging for detection processor startup
 	GetLogger().Info("Starting detection processor",
-		"operation", "detection_processor_startup")
+		logger.String("operation", "detection_processor_startup"))
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range birdnet.ResultsQueue {
@@ -441,7 +421,7 @@ func (p *Processor) startDetectionProcessor() {
 		}
 		// Add structured logging when processor stops
 		GetLogger().Info("Detection processor stopped",
-			"operation", "detection_processor_shutdown")
+			logger.String("operation", "detection_processor_shutdown"))
 	}()
 }
 
@@ -452,11 +432,11 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item birdnet.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		"source", item.Source.DisplayName,
-		"start_time", item.StartTime,
-		"results_count", len(item.Results),
-		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
-		"operation", "process_detections_entry")
+		logger.String("source", item.Source.DisplayName),
+		logger.Time("start_time", item.StartTime),
+		logger.Int("results_count", len(item.Results)),
+		logger.Int64("elapsed_time_ms", item.ElapsedTime.Milliseconds()),
+		logger.String("operation", "process_detections_entry"))
 
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
@@ -492,11 +472,11 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				existing.LastUpdated = time.Now()
 				// Add structured logging for confidence update
 				GetLogger().Debug("Updated pending detection with higher confidence",
-					"species", commonName,
-					"old_confidence", oldConfidence,
-					"new_confidence", confidence,
-					"count", existing.Count+1,
-					"operation", "update_pending_detection")
+					logger.String("species", commonName),
+					logger.Float64("old_confidence", oldConfidence),
+					logger.Float64("new_confidence", confidence),
+					logger.Int("count", existing.Count+1),
+					logger.String("operation", "update_pending_detection"))
 			}
 			existing.Count++
 			p.pendingDetections[commonName] = existing
@@ -504,11 +484,11 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			// Create a new pending detection if it doesn't exist
 			// Add structured logging for new pending detection
 			GetLogger().Info("Created new pending detection",
-				"species", commonName,
-				"confidence", confidence,
-				"source", item.Source.DisplayName,
-				"flush_deadline", time.Now().Add(detectionWindow),
-				"operation", "create_pending_detection")
+				logger.String("species", commonName),
+				logger.Float64("confidence", confidence),
+				logger.String("source", item.Source.DisplayName),
+				logger.Time("flush_deadline", time.Now().Add(detectionWindow)),
+				logger.String("operation", "create_pending_detection"))
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
@@ -552,13 +532,13 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 		if scientificName == "" || commonName == "" {
 			if p.Settings.Debug {
 				GetLogger().Debug("Skipping partially parsed species",
-					"scientific_name", scientificName,
-					"common_name", commonName,
-					"species_code", speciesCode,
-					"species_lowercase", speciesLowercase,
-					"original_species", result.Species,
-					"confidence", result.Confidence,
-					"operation", "validate_species")
+					logger.String("scientific_name", scientificName),
+					logger.String("common_name", commonName),
+					logger.String("species_code", speciesCode),
+					logger.String("species_lowercase", speciesLowercase),
+					logger.String("original_species", result.Species),
+					logger.Float32("confidence", result.Confidence),
+					logger.String("operation", "validate_species"))
 			}
 			continue // Skip invalid or partially parsed species
 		}
@@ -601,10 +581,9 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdn
 	if commonName == "" || scientificName == "" {
 		if p.Settings.Debug {
 			GetLogger().Debug("Skipping species with invalid format",
-				"species", result.Species,
-				"confidence", result.Confidence,
-				"operation", "species_format_validation")
-			log.Printf("Skipping species with invalid format: %s", result.Species)
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("operation", "species_format_validation"))
 		}
 		return "", "", "", ""
 	}
@@ -612,12 +591,11 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdn
 	// Log placeholder taxonomy codes if using custom model
 	if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
 		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
-			GetLogger().Debug("Using placeholder taxonomy code",
-				"taxonomy_code", speciesCode,
-				"scientific_name", scientificName,
-				"common_name", commonName,
-				"operation", "taxonomy_code_assignment")
-			log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
+			GetLogger().Debug("using placeholder taxonomy code",
+				logger.String("taxonomy_code", speciesCode),
+				logger.String("scientific_name", scientificName),
+				logger.String("common_name", commonName),
+				logger.String("operation", "taxonomy_code_assignment"))
 		}
 	}
 
@@ -652,11 +630,11 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	if result.Confidence <= confidenceThreshold {
 		if p.Settings.Debug {
 			GetLogger().Debug("Detection filtered out due to low confidence",
-				"species", result.Species,
-				"confidence", result.Confidence,
-				"threshold", confidenceThreshold,
-				"source", p.getDisplayNameForSource(source),
-				"operation", "confidence_filter")
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.Float32("threshold", confidenceThreshold),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("operation", "confidence_filter"))
 		}
 		return true, confidenceThreshold
 	}
@@ -664,11 +642,10 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	// Check species inclusion filter
 	if !p.Settings.IsSpeciesIncluded(result.Species) {
 		if p.Settings.Debug {
-			GetLogger().Debug("Species not on included list",
-				"species", result.Species,
-				"confidence", result.Confidence,
-				"operation", "species_inclusion_filter")
-			log.Printf("Species not on included list: %s\n", result.Species)
+			GetLogger().Debug("species not on included list",
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("operation", "species_inclusion_filter"))
 		}
 		return true, confidenceThreshold
 	}
@@ -739,10 +716,9 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 				go func() {
 					defer p.syncInProgress.Store(false) // Always clear the flag when done
 					if err := tracker.SyncIfNeeded(); err != nil {
-						GetLogger().Error("Failed to sync species tracker",
-							"error", err,
-							"operation", "species_tracker_sync")
-						log.Printf("Failed to sync species tracker: %v", err)
+						GetLogger().Error("failed to sync species tracker",
+							logger.Error(err),
+							logger.String("operation", "species_tracker_sync"))
 					}
 				}()
 			}
@@ -757,13 +733,11 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
-		// Add structured logging
-		GetLogger().Info("Dog detection filtered",
-			"confidence", result.Confidence,
-			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
-			"source", item.Source.DisplayName,
-			"operation", "dog_bark_filter")
-		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source.DisplayName)
+		GetLogger().Info("dog detection filtered",
+			logger.Float32("confidence", result.Confidence),
+			logger.Float32("threshold", float32(p.Settings.Realtime.DogBarkFilter.Confidence)),
+			logger.String("source", item.Source.DisplayName),
+			logger.String("operation", "dog_bark_filter"))
 		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source.ID] = item.StartTime
 		p.detectionMutex.Unlock()
@@ -777,13 +751,11 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
-		// Add structured logging
-		GetLogger().Info("Human detection filtered",
-			"confidence", result.Confidence,
-			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
-			"source", item.Source.DisplayName,
-			"operation", "privacy_filter")
-		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source.DisplayName)
+		GetLogger().Info("human detection filtered",
+			logger.Float32("confidence", result.Confidence),
+			logger.Float32("threshold", float32(p.Settings.Realtime.PrivacyFilter.Confidence)),
+			logger.String("source", item.Source.DisplayName),
+			logger.String("operation", "privacy_filter"))
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
 		p.detectionMutex.Lock()
@@ -797,12 +769,10 @@ func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 
 	// Check if species has a custom threshold in the new structure
 	if config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]; exists {
 		if p.Settings.Debug {
-			// Add structured logging
-			GetLogger().Debug("Using custom confidence threshold",
-				"species", speciesLowercase,
-				"threshold", config.Threshold,
-				"operation", "custom_threshold_lookup")
-			log.Printf("\nUsing custom confidence threshold of %.2f for %s\n", config.Threshold, speciesLowercase)
+			GetLogger().Debug("using custom confidence threshold",
+				logger.String("species", speciesLowercase),
+				logger.Float64("threshold", config.Threshold),
+				logger.String("operation", "custom_threshold_lookup"))
 		}
 		return float32(config.Threshold)
 	}
@@ -846,11 +816,11 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	if item.Count < minDetections {
 		// Add structured logging for minimum count filtering
 		GetLogger().Debug("Detection discarded due to insufficient count",
-			"species", item.Detection.Note.CommonName,
-			"count", item.Count,
-			"minimum_required", minDetections,
-			"source", p.getDisplayNameForSource(item.Source),
-			"operation", "minimum_count_filter")
+			logger.String("species", item.Detection.Note.CommonName),
+			logger.Int("count", item.Count),
+			logger.Int("minimum_required", minDetections),
+			logger.String("source", p.getDisplayNameForSource(item.Source)),
+			logger.String("operation", "minimum_count_filter"))
 		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
 	}
 
@@ -862,11 +832,11 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		if exists && lastHumanDetection.After(item.FirstDetected) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
-				"species", item.Detection.Note.CommonName,
-				"detection_time", item.FirstDetected,
-				"last_human_detection", lastHumanDetection,
-				"source", p.getDisplayNameForSource(item.Source),
-				"operation", "privacy_filter")
+				logger.String("species", item.Detection.Note.CommonName),
+				logger.Time("detection_time", item.FirstDetected),
+				logger.Time("last_human_detection", lastHumanDetection),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("operation", "privacy_filter"))
 			return true, "privacy filter"
 		}
 	}
@@ -875,11 +845,9 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	if p.Settings.Realtime.DogBarkFilter.Enabled {
 		if p.Settings.Realtime.DogBarkFilter.Debug {
 			p.detectionMutex.RLock()
-			// Add structured logging
-			GetLogger().Debug("Last dog detection status",
-				"last_detections", p.LastDogDetection,
-				"operation", "dog_detection_debug")
-			log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+			GetLogger().Debug("last dog detection status",
+				logger.Any("last_detections", p.LastDogDetection),
+				logger.String("operation", "dog_detection_debug"))
 			p.detectionMutex.RUnlock()
 		}
 		p.detectionMutex.RLock()
@@ -889,11 +857,11 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
 			// Add structured logging for dog bark filter
 			GetLogger().Debug("Detection discarded by dog bark filter",
-				"species", item.Detection.Note.CommonName,
-				"detection_time", item.FirstDetected,
-				"last_dog_detection", lastDogDetection,
-				"source", p.getDisplayNameForSource(item.Source),
-				"operation", "dog_bark_filter")
+				logger.String("species", item.Detection.Note.CommonName),
+				logger.Time("detection_time", item.FirstDetected),
+				logger.Time("last_dog_detection", lastDogDetection),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("operation", "dog_bark_filter"))
 			return true, "recent dog bark"
 		}
 	}
@@ -909,16 +877,13 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		confidence = float64(item.Detection.Results[0].Confidence)
 	}
 
-	// Add structured logging
-	GetLogger().Info("Approving detection",
-		"species", speciesName,
-		"source", p.getDisplayNameForSource(item.Source),
-		"match_count", item.Count,
-		"confidence", confidence,
-		"has_results", len(item.Detection.Results) > 0,
-		"operation", "approve_detection")
-	log.Printf("Approving detection of %s from source %s, matched %d times\n",
-		speciesName, p.getDisplayNameForSource(item.Source), item.Count)
+	GetLogger().Info("approving detection",
+		logger.String("species", speciesName),
+		logger.String("source", p.getDisplayNameForSource(item.Source)),
+		logger.Int("match_count", item.Count),
+		logger.Float64("confidence", confidence),
+		logger.Bool("has_results", len(item.Detection.Results) > 0),
+		logger.String("operation", "approve_detection"))
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
@@ -927,20 +892,16 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		if err := p.EnqueueTask(task); err != nil {
 			// Check error message instead of using errors.Is to avoid import cycle
 			if err.Error() == "worker queue is full" {
-				// Add structured logging
-				GetLogger().Warn("Worker queue is full, dropping task",
-					"species", speciesName,
-					"operation", "enqueue_task",
-					"error", "queue_full")
-				log.Printf("❌ Worker queue is full, dropping task for %s", speciesName)
+				GetLogger().Warn("worker queue is full, dropping task",
+					logger.String("species", speciesName),
+					logger.String("operation", "enqueue_task"),
+					logger.String("error", "queue_full"))
 			} else {
 				sanitizedErr := sanitizeError(err)
-				// Add structured logging
-				GetLogger().Error("Failed to enqueue task",
-					"error", sanitizedErr,
-					"species", speciesName,
-					"operation", "enqueue_task")
-				log.Printf("Failed to enqueue task for %s: %v", speciesName, sanitizedErr)
+				GetLogger().Error("failed to enqueue task",
+					logger.Any("error", sanitizedErr),
+					logger.String("species", speciesName),
+					logger.String("operation", "enqueue_task"))
 			}
 			continue
 		}
@@ -1011,9 +972,9 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 	// Validate overlap is within valid range
 	if overlap >= chunkDurationSeconds {
 		GetLogger().Warn("Overlap equals or exceeds chunk duration",
-			"overlap", overlap,
-			"chunk_duration", chunkDurationSeconds,
-			"operation", "calculate_min_detections")
+			logger.Float64("overlap", overlap),
+			logger.Float64("chunk_duration", chunkDurationSeconds),
+			logger.String("operation", "calculate_min_detections"))
 		// Continue with safe fallback
 	}
 
@@ -1021,11 +982,11 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 	minOverlap := getMinimumOverlapForLevel(level)
 	if overlap < minOverlap {
 		GetLogger().Warn("Overlap too low for filtering level",
-			"level", level,
-			"level_name", getLevelName(level),
-			"min_overlap", minOverlap,
-			"current_overlap", overlap,
-			"operation", "calculate_min_detections")
+			logger.Int("level", level),
+			logger.String("level_name", getLevelName(level)),
+			logger.Float64("min_overlap", minOverlap),
+			logger.Float64("current_overlap", overlap),
+			logger.String("operation", "calculate_min_detections"))
 		// Continue with calculation - system will work but may not achieve target filtering
 	}
 
@@ -1060,8 +1021,8 @@ func (p *Processor) calculateMinDetections() int {
 func (p *Processor) pendingDetectionsFlusher() {
 	// Add structured logging for pending detections flusher startup
 	GetLogger().Info("Starting pending detections flusher",
-		"flush_interval_seconds", 1,
-		"operation", "pending_flusher_startup")
+		logger.Int("flush_interval_seconds", 1),
+		logger.String("operation", "pending_flusher_startup"))
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -1080,9 +1041,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 			// Log when minDetections changes due to config update
 			if lastMinDetections != -1 && minDetections != lastMinDetections {
 				GetLogger().Info("minDetections updated due to config change",
-					"old_value", lastMinDetections,
-					"new_value", minDetections,
-					"operation", "pending_flusher_config_update")
+					logger.Int("old_value", lastMinDetections),
+					logger.Int("new_value", minDetections),
+					logger.String("operation", "pending_flusher_config_update"))
 			}
 			lastMinDetections = minDetections
 
@@ -1094,27 +1055,24 @@ func (p *Processor) pendingDetectionsFlusher() {
 				if now.After(item.FlushDeadline) {
 					flushableCount++
 					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
-						// Add structured logging
-						GetLogger().Info("Discarding detection",
-							"species", species,
-							"source", p.getDisplayNameForSource(item.Source),
-							"reason", reason,
-							"count", item.Count,
-							"operation", "discard_detection")
-						log.Printf("Discarding detection of %s from source %s due to %s\n",
-							species, p.getDisplayNameForSource(item.Source), reason)
+						GetLogger().Info("discarding detection",
+							logger.String("species", species),
+							logger.String("source", p.getDisplayNameForSource(item.Source)),
+							logger.String("reason", reason),
+							logger.Int("count", item.Count),
+							logger.String("operation", "discard_detection"))
 						delete(p.pendingDetections, species)
 						continue
 					}
 
 					// Log when detection is flushed to help debug future timing issues
 					GetLogger().Debug("Flushing detection",
-						"species", species,
-						"source", p.getDisplayNameForSource(item.Source),
-						"deadline_reached", now.After(item.FlushDeadline),
-						"count", item.Count,
-						"required", minDetections,
-						"operation", "flush_detection")
+						logger.String("species", species),
+						logger.String("source", p.getDisplayNameForSource(item.Source)),
+						logger.Bool("deadline_reached", now.After(item.FlushDeadline)),
+						logger.Int("count", item.Count),
+						logger.Int("required", minDetections),
+						logger.String("operation", "flush_detection"))
 
 					p.processApprovedDetection(&item, species)
 					delete(p.pendingDetections, species)
@@ -1123,9 +1081,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 			// Add structured logging for flusher activity (only when there's activity)
 			if pendingCount > 0 || flushableCount > 0 {
 				GetLogger().Debug("Pending detections flusher cycle",
-					"pending_count", pendingCount,
-					"flushable_count", flushableCount,
-					"operation", "pending_flusher_cycle")
+					logger.Int("pending_count", pendingCount),
+					logger.Int("flushable_count", flushableCount),
+					logger.String("operation", "pending_flusher_cycle"))
 			}
 			p.pendingMutex.Unlock()
 
@@ -1141,11 +1099,9 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	// Check if species has custom configuration
 	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
 		if p.Settings.Debug {
-			// Add structured logging
-			GetLogger().Debug("Species config exists for custom actions",
-				"species", speciesName,
-				"operation", "custom_action_check")
-			log.Println("Species config exists for custom actions")
+			GetLogger().Debug("species config exists for custom actions",
+				logger.String("species", speciesName),
+				logger.String("operation", "custom_action_check"))
 		}
 
 		var actions []Action
@@ -1187,9 +1143,9 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	defaultActions := p.getDefaultActions(detection)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
-		"species", strings.ToLower(detection.Note.CommonName),
-		"actions_count", len(defaultActions),
-		"operation", "get_default_actions")
+		logger.String("species", strings.ToLower(detection.Note.CommonName)),
+		logger.Int("actions_count", len(defaultActions)),
+		logger.String("operation", "get_default_actions"))
 	return defaultActions
 }
 
@@ -1354,11 +1310,9 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	// This ensures only ONE goroutine will trigger the daily range filter update,
 	// preventing concurrent updates that could cause species list inconsistencies
 	if p.Settings.ShouldUpdateRangeFilterToday() {
-		// Add structured logging
 		GetLogger().Info("Scheduling daily range filter update",
-			"last_updated", p.Settings.GetLastRangeFilterUpdate(),
-			"operation", "update_range_filter")
-		fmt.Println("Updating species range filter")
+			logger.Time("last_updated", p.Settings.GetLastRangeFilterUpdate()),
+			logger.String("operation", "update_range_filter"))
 		// Add UpdateRangeFilterAction if it hasn't been executed today
 		actions = append(actions, &UpdateRangeFilterAction{
 			Bn:       p.Bn,
@@ -1491,9 +1445,9 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 	removed := p.logDedup.Cleanup(staleAfter)
 	if removed > 0 {
 		GetLogger().Debug("Cleaned stale log deduplication entries",
-			"removed_count", removed,
-			"stale_after", staleAfter,
-			"operation", "log_dedup_cleanup")
+			logger.Int("removed_count", removed),
+			logger.String("stale_after", staleAfter.String()),
+			logger.String("operation", "log_dedup_cleanup"))
 	}
 	return removed
 }
@@ -1542,13 +1496,13 @@ func (p *Processor) Shutdown() error {
 		case err := <-done:
 			if err != nil {
 				GetLogger().Warn("Failed to flush dynamic thresholds during shutdown",
-					"error", err,
-					"operation", "shutdown_flush_thresholds")
+					logger.Error(err),
+					logger.String("operation", "shutdown_flush_thresholds"))
 			}
 		case <-ctx.Done():
 			GetLogger().Warn("Timeout flushing dynamic thresholds during shutdown",
-				"timeout_seconds", int(DefaultFlushTimeout.Seconds()),
-				"operation", "shutdown_flush_thresholds")
+				logger.Int("timeout_seconds", int(DefaultFlushTimeout.Seconds())),
+				logger.String("operation", "shutdown_flush_thresholds"))
 		}
 	}
 
@@ -1564,12 +1518,10 @@ func (p *Processor) Shutdown() error {
 
 	// Stop the job queue with a timeout
 	if err := p.JobQueue.StopWithTimeout(30 * time.Second); err != nil {
-		// Add structured logging
 		GetLogger().Warn("Job queue shutdown timed out",
-			"error", err,
-			"timeout_seconds", 30,
-			"operation", "job_queue_shutdown")
-		log.Printf("Warning: job queue shutdown timed out: %v", err)
+			logger.Error(err),
+			logger.Int("timeout_seconds", 30),
+			logger.String("operation", "job_queue_shutdown"))
 	}
 
 	// Disconnect BirdWeather client
@@ -1588,18 +1540,14 @@ func (p *Processor) Shutdown() error {
 
 	if tracker != nil {
 		if err := tracker.Close(); err != nil {
-			// Add structured logging
 			GetLogger().Warn("Failed to close species tracker",
-				"error", err,
-				"operation", "species_tracker_cleanup")
-			log.Printf("Warning: failed to close species tracker: %v", err)
+				logger.Error(err),
+				logger.String("operation", "species_tracker_cleanup"))
 		}
 	}
 
-	// Add structured logging
 	GetLogger().Info("Processor shutdown complete",
-		"operation", "processor_shutdown")
-	log.Println("Processor shutdown complete")
+		logger.String("operation", "processor_shutdown"))
 	return nil
 }
 
@@ -1708,20 +1656,20 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 		// This prevents log spam from empty analysis cycles
 		if filteredCount > 0 {
 			GetLogger().Info("Detection processing results",
-				"source", p.getDisplayNameForSource(source),
-				"raw_results_count", rawCount,
-				"filtered_detections_count", filteredCount,
-				"log_reason", reason,
-				"operation", "process_detections_summary")
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.Int("raw_results_count", rawCount),
+				logger.Int("filtered_detections_count", filteredCount),
+				logger.String("log_reason", reason),
+				logger.String("operation", "process_detections_summary"))
 		} else {
 			// Log zero-detection cycles at DEBUG level for troubleshooting
 			// without flooding INFO logs with noise
 			GetLogger().Debug("Detection processing results",
-				"source", p.getDisplayNameForSource(source),
-				"raw_results_count", rawCount,
-				"filtered_detections_count", 0,
-				"log_reason", reason,
-				"operation", "process_detections_summary")
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.Int("raw_results_count", rawCount),
+				logger.Int("filtered_detections_count", 0),
+				logger.String("log_reason", reason),
+				logger.String("operation", "process_detections_summary"))
 		}
 	}
 }
@@ -1777,16 +1725,16 @@ func (p *Processor) initPreRenderer() {
 		// Validate export path
 		if p.Settings.Realtime.Audio.Export.Path == "" {
 			GetLogger().Error("Export path not configured, disabling pre-rendering",
-				"operation", "prerenderer_init")
+				logger.String("operation", "prerenderer_init"))
 			return
 		}
 
 		// Verify export path exists and is writable
 		if err := os.MkdirAll(p.Settings.Realtime.Audio.Export.Path, 0o750); err != nil {
 			GetLogger().Error("Export path not writable, disabling pre-rendering",
-				"path", p.Settings.Realtime.Audio.Export.Path,
-				"error", err,
-				"operation", "prerenderer_init")
+				logger.String("path", p.Settings.Realtime.Audio.Export.Path),
+				logger.Error(err),
+				logger.String("operation", "prerenderer_init"))
 			return
 		}
 
@@ -1795,24 +1743,23 @@ func (p *Processor) initPreRenderer() {
 		validSizesList := spectrogram.GetValidSizes()
 		if !slices.Contains(validSizesList, size) {
 			GetLogger().Error("Invalid spectrogram size, disabling pre-rendering",
-				"size", size,
-				"valid_sizes", validSizesList,
-				"operation", "prerenderer_init")
-			log.Printf("❌ Invalid spectrogram size '%s', pre-rendering disabled. Valid sizes: %v", size, validSizesList)
+				logger.String("size", size),
+				logger.Any("valid_sizes", validSizesList),
+				logger.String("operation", "prerenderer_init"))
 			return
 		}
 
 		// Validate Sox binary is configured and exists
 		if p.Settings.Realtime.Audio.SoxPath == "" {
 			GetLogger().Error("Sox binary not configured, disabling pre-rendering",
-				"operation", "prerenderer_init")
+				logger.String("operation", "prerenderer_init"))
 			return
 		}
 		if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
 			GetLogger().Error("Sox binary not found, disabling pre-rendering",
-				"path", p.Settings.Realtime.Audio.SoxPath,
-				"error", err,
-				"operation", "prerenderer_init")
+				logger.String("path", p.Settings.Realtime.Audio.SoxPath),
+				logger.Error(err),
+				logger.String("operation", "prerenderer_init"))
 			return
 		}
 
@@ -1820,9 +1767,9 @@ func (p *Processor) initPreRenderer() {
 		sfs, err := securefs.New(p.Settings.Realtime.Audio.Export.Path)
 		if err != nil {
 			GetLogger().Error("Failed to create SecureFS for pre-renderer",
-				"error", err,
-				"export_path", p.Settings.Realtime.Audio.Export.Path,
-				"operation", "prerenderer_init")
+				logger.Error(err),
+				logger.String("export_path", p.Settings.Realtime.Audio.Export.Path),
+				logger.String("operation", "prerenderer_init"))
 			return
 		}
 
@@ -1830,14 +1777,15 @@ func (p *Processor) initPreRenderer() {
 		ctx := context.Background()
 
 		// Create and start pre-renderer
-		pr := spectrogram.NewPreRenderer(ctx, p.Settings, sfs, GetLogger())
+		// Pass nil for logger to use slog.Default() - spectrogram package not yet migrated to Logger interface
+		pr := spectrogram.NewPreRenderer(ctx, p.Settings, sfs, nil)
 		pr.Start()
 
 		p.preRenderer = pr
 
 		GetLogger().Info("Spectrogram pre-renderer initialized",
-			"size", p.Settings.Realtime.Dashboard.Spectrogram.Size,
-			"raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw,
-			"operation", "prerenderer_init")
+			logger.String("size", p.Settings.Realtime.Dashboard.Spectrogram.Size),
+			logger.Bool("raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw),
+			logger.String("operation", "prerenderer_init"))
 	})
 }

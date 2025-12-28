@@ -3,7 +3,6 @@ package myaudio
 
 import (
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -13,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -52,7 +51,7 @@ type AudioSourceRegistry struct {
 	mu sync.RWMutex
 
 	// Logger
-	logger *slog.Logger
+	logger logger.Logger
 }
 
 var (
@@ -69,16 +68,12 @@ var (
 // GetRegistry returns the singleton registry instance
 func GetRegistry() *AudioSourceRegistry {
 	registryOnce.Do(func() {
-		logger := logging.ForService("myaudio")
-		if logger == nil {
-			// Fallback for tests or when logging is not initialized
-			logger = slog.Default()
-		}
+		log := GetLogger()
 		registry = &AudioSourceRegistry{
 			sources:       make(map[string]*AudioSource),
 			connectionMap: make(map[string]string),
 			refCounts:     make(map[string]*int32),
-			logger:        logger.With("component", "registry"),
+			logger:        log.With(logger.String("component", "registry")),
 		}
 	})
 	return registry
@@ -140,10 +135,10 @@ func (r *AudioSourceRegistry) RegisterSource(connectionString string, config Sou
 	r.sources[source.ID] = source
 	r.connectionMap[connectionString] = source.ID
 
-	r.logger.With("id", source.ID).
-		With("display_name", source.DisplayName).
-		With("safe", source.SafeString).
-		Info("Registered audio source")
+	r.logger.Info("Registered audio source",
+		logger.String("id", source.ID),
+		logger.String("display_name", source.DisplayName),
+		logger.String("safe", source.SafeString))
 
 	return source, nil
 }
@@ -185,7 +180,7 @@ func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceT
 		Type: actualType,
 	})
 	if err != nil {
-		r.logger.With("error", err).Error("Failed to register source")
+		r.logger.Error("Failed to register source", logger.Error(err))
 		return nil
 	}
 	return source
@@ -298,9 +293,9 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 	if !refCountExists {
 		// No refCount entry means this source was never acquired, treat as 0 and remove
 		newCount = -1 // This will trigger removal below
-		r.logger.With("id", sourceID).
-			With("safe", source.SafeString).
-			Warn("Attempted to release reference for source without refCount entry")
+		r.logger.Warn("Attempted to release reference for source without refCount entry",
+			logger.String("id", sourceID),
+			logger.String("safe", source.SafeString))
 	} else {
 		// Decrement reference count (no need for atomic since we hold the mutex)
 		*refCountPtr--
@@ -313,9 +308,9 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 		delete(r.connectionMap, source.connectionString)
 		delete(r.refCounts, sourceID)
 
-		r.logger.With("id", sourceID).
-			With("safe", source.SafeString).
-			Info("Removed unreferenced audio source")
+		r.logger.Info("Removed unreferenced audio source",
+			logger.String("id", sourceID),
+			logger.String("safe", source.SafeString))
 	}
 
 	return nil
@@ -337,9 +332,9 @@ func (r *AudioSourceRegistry) RemoveSource(sourceID string) error {
 	delete(r.connectionMap, source.connectionString)
 	delete(r.refCounts, sourceID)
 
-	r.logger.With("id", sourceID).
-		With("safe", source.SafeString).
-		Info("Removed audio source")
+	r.logger.Info("Removed audio source",
+		logger.String("id", sourceID),
+		logger.String("safe", source.SafeString))
 
 	return nil
 }
@@ -403,9 +398,9 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 	delete(r.connectionMap, source.connectionString)
 	delete(r.refCounts, sourceID)
 
-	r.logger.With("id", sourceID).
-		With("safe", source.SafeString).
-		Info("Removed unused audio source")
+	r.logger.Info("Removed unused audio source",
+		logger.String("id", sourceID),
+		logger.String("safe", source.SafeString))
 
 	return RemoveSourceSuccess, nil
 }
@@ -436,9 +431,9 @@ func (r *AudioSourceRegistry) RemoveSourceByConnection(connectionString string) 
 	delete(r.connectionMap, connectionString)
 	delete(r.refCounts, sourceID)
 
-	r.logger.With("id", sourceID).
-		With("safe", source.SafeString).
-		Info("Removed audio source by connection")
+	r.logger.Info("Removed audio source by connection",
+		logger.String("id", sourceID),
+		logger.String("safe", source.SafeString))
 
 	return nil
 }
@@ -459,15 +454,15 @@ func (r *AudioSourceRegistry) CleanupInactiveSources(inactiveDuration time.Durat
 		delete(r.connectionMap, source.connectionString)
 		delete(r.refCounts, id)
 		removedCount++
-		r.logger.With("id", id).
-			With("safe", source.SafeString).
-			With("last_seen", source.LastSeen).
-			Info("Cleaned up inactive source")
+		r.logger.Info("Cleaned up inactive source",
+			logger.String("id", id),
+			logger.String("safe", source.SafeString),
+			logger.Time("last_seen", source.LastSeen))
 	}
 
 	if removedCount > 0 {
-		r.logger.With("count", removedCount).
-			Info("Cleaned up inactive audio sources")
+		r.logger.Info("Cleaned up inactive audio sources",
+			logger.Int("count", removedCount))
 	}
 
 	return removedCount
@@ -536,8 +531,8 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 		return r.validateAudioDevice(connectionString)
 	default:
 		// Unknown types are allowed but logged
-		// Unknown types are allowed but logged
-		r.logger.Warn("Unknown source type for validation", "type", sourceType)
+		r.logger.Warn("Unknown source type for validation",
+			logger.String("type", string(sourceType)))
 		return nil
 	}
 }
@@ -722,8 +717,8 @@ func (r *AudioSourceRegistry) generateID(sourceType SourceType) string {
 		// Fallback to timestamp-based ID if UUID generation fails
 		// This is extremely rare but provides a safety net
 		r.logger.Error("Failed to generate UUID, using timestamp fallback",
-			"error", err,
-			"source_type", sourceType)
+			logger.Error(err),
+			logger.String("source_type", string(sourceType)))
 		// Use nanosecond timestamp for uniqueness
 		id := fmt.Sprintf("%d", time.Now().UnixNano())[:8]
 		return fmt.Sprintf("%s_%s", sourceType, id)

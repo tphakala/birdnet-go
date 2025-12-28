@@ -17,11 +17,11 @@ import (
 const (
 	// DefaultJobExecutionTimeout is the default timeout for job execution
 	DefaultJobExecutionTimeout = 30 * time.Second
-	
+
 	// MaxActionStatsEntries is the maximum number of action stats to keep in memory
 	// Older entries will be removed to prevent unbounded memory growth
 	MaxActionStatsEntries = 1000
-	
+
 	// ActionStatsTargetSize is the target size after cleanup (with hysteresis margin)
 	// Set to 80% of max to avoid repeated cleanup triggers
 	ActionStatsTargetSize = int(MaxActionStatsEntries * 0.8)
@@ -695,7 +695,7 @@ func (q *JobQueue) cleanupOldActionStats() {
 		key  string
 		time time.Time
 	}
-	
+
 	entries := make([]statEntry, 0, len(q.stats.ActionStats))
 	for key := range q.stats.ActionStats {
 		stat := q.stats.ActionStats[key]
@@ -704,19 +704,19 @@ func (q *JobQueue) cleanupOldActionStats() {
 			time: stat.LastExecutionTime,
 		})
 	}
-	
+
 	// Sort by time (oldest first) using standard library
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].time.Before(entries[j].time)
 	})
-	
+
 	// Calculate exact number to remove to reach target size with hysteresis margin
 	currentSize := len(entries)
 	toRemove := currentSize - ActionStatsTargetSize
 	if toRemove <= 0 {
 		toRemove = 1 // Always remove at least one entry to prevent repeated triggers
 	}
-	
+
 	for i := 0; i < toRemove && i < len(entries); i++ {
 		delete(q.stats.ActionStats, entries[i].key)
 	}

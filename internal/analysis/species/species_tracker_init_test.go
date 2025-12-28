@@ -19,6 +19,7 @@ import (
 
 // TestInitFromDatabase_CriticalReliability tests complete initialization flow
 // CRITICAL: This is the entry point for all tracking - failures here break everything
+//
 //nolint:gocognit // Table-driven test for database initialization scenarios
 func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 	t.Parallel()
@@ -199,6 +200,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 
 // TestCheckAndUpdateSpecies_CriticalReliability tests the atomic check-and-update operation
 // CRITICAL: This ensures thread-safe updates and prevents race conditions
+//
 //nolint:gocognit // Table-driven test for species check and update operations
 func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 	t.Parallel()
