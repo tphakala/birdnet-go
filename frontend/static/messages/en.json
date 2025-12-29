@@ -32,7 +32,9 @@
     "internalServerError": "Internal Server Error",
     "actions": {
       "download": "Download",
-      "review": "Review"
+      "review": "Review",
+      "play": "Play",
+      "view": "View"
     },
     "buttons": {
       "save": "Save Changes",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Search Filters",
     "results": "Search Results",
-    "resultsCount": "{count, plural, =0 {No results} one {# result} other {# results}}",
+    "resultsCountZero": "No results",
+    "resultsCountOne": "1 result",
+    "resultsCountOther": "{count} results",
     "noSearchPerformed": "No search performed yet",
     "noSearchPerformedHint": "Use the search filters above to find bird detections",
     "loadingResults": "Loading results...",

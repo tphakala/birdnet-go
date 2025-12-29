@@ -1,15 +1,15 @@
 <!--
   DetectionRow.svelte
-  
+
   A comprehensive row component for displaying individual bird detection records with interactive features.
   Includes confidence indicators, status badges, weather information, and action controls.
-  
+
   Usage:
   - Detection listings and tables
   - Search results display
   - Administrative detection management
   - Any context requiring detailed detection information
-  
+
   Features:
   - Confidence circle visualization
   - Status badges (verified, false positive, etc.)
@@ -18,7 +18,7 @@
   - Thumbnail image support
   - Modal dialogs for review and confirmation
   - Responsive design
-  
+
   Props:
   - detection: Detection - The detection data object
   - isExcluded?: boolean - Whether this detection is excluded
@@ -26,18 +26,18 @@
   - onRefresh?: () => void - Handler for data refresh
 -->
 <script lang="ts">
-  import type { Detection } from '$lib/types/detection.types';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
-  import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
-  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
-  import { fetchWithCSRF } from '$lib/utils/api';
+  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
+  import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
-  import { loggers } from '$lib/utils/logger';
+  import type { Detection } from '$lib/types/detection.types';
+  import { fetchWithCSRF } from '$lib/utils/api';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
+  import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.ui;
 
@@ -46,9 +46,20 @@
     isExcluded?: boolean;
     onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
+    onPlayMobileAudio?: (_payload: {
+      audioUrl: string;
+      speciesName: string;
+      detectionId: number;
+    }) => void;
   }
 
-  let { detection, isExcluded = false, onDetailsClick, onRefresh }: Props = $props();
+  let {
+    detection,
+    isExcluded = false,
+    onDetailsClick,
+    onRefresh,
+    onPlayMobileAudio,
+  }: Props = $props();
 
   // Modal states
   let showConfirmModal = $state(false);
@@ -199,6 +210,10 @@
   });
 
   // Cleanup is handled automatically by useImageDelayedLoading
+  function playMobileAudio() {
+    const audioUrl = `/api/v2/audio/${detection.id}`;
+    onPlayMobileAudio?.({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
+  }
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
@@ -298,6 +313,12 @@
           {detection.commonName}
         </button>
         <div class="sp-species-scientific-name">{detection.scientificName}</div>
+      </div>
+      <!-- Mobile-only quick play button -->
+      <div class="mt-2 md:hidden">
+        <button class="btn btn-primary btn-xs" aria-label="Play audio" onclick={playMobileAudio}>
+          🔊 Play
+        </button>
       </div>
     </div>
   </div>

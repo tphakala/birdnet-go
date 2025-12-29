@@ -1,15 +1,15 @@
 <!--
   DetectionsList.svelte
-  
+
   A container component that orchestrates the display of multiple bird detection records.
   Manages pagination, loading states, and provides a consistent layout for detection data.
-  
+
   Usage:
   - Main detection pages
   - Search results presentation
   - Filtered detection views
   - Administrative detection management interfaces
-  
+
   Features:
   - Paginated detection display
   - Loading and error state handling
@@ -17,7 +17,7 @@
   - Responsive card-based layout
   - Integration with DetectionRow components
   - Refresh functionality
-  
+
   Props:
   - data: DetectionsListData | null - Paginated detection data
   - loading?: boolean - Loading state indicator
@@ -28,15 +28,17 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import { cn } from '$lib/utils/cn';
-  import type { DetectionsListData } from '$lib/types/detection.types';
-  import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
-  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
-  import DetectionRow from './DetectionRow.svelte';
-  import { XCircle } from '@lucide/svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
   import { t } from '$lib/i18n';
+  import type { DetectionsListData } from '$lib/types/detection.types';
+  import { cn } from '$lib/utils/cn';
+  import { XCircle } from '@lucide/svelte';
+  import { untrack } from 'svelte';
+  import DetectionCardMobile from './DetectionCardMobile.svelte';
+  import DetectionRow from './DetectionRow.svelte';
 
   interface Props {
     data: DetectionsListData | null;
@@ -111,6 +113,30 @@
   // State for number of results - captures initial value without creating dependency
   // Uses untrack() to explicitly capture initial value only (local state is independent after init)
   let selectedNumResults = $state(untrack(() => String(data?.numResults || 25)));
+
+  // Mobile audio player state
+  let showMobilePlayer = $state(false);
+  let selectedAudioUrl = $state('');
+  let selectedSpeciesName = $state('');
+  let selectedDetectionId = $state<number | undefined>(undefined);
+
+  function handlePlayMobileAudio(payload: {
+    audioUrl: string;
+    speciesName: string;
+    detectionId: number;
+  }) {
+    selectedAudioUrl = payload.audioUrl;
+    selectedSpeciesName = payload.speciesName;
+    selectedDetectionId = payload.detectionId;
+    showMobilePlayer = true;
+  }
+
+  function handleCloseMobilePlayer() {
+    showMobilePlayer = false;
+    selectedAudioUrl = '';
+    selectedSpeciesName = '';
+    selectedDetectionId = undefined;
+  }
 </script>
 
 <div class={cn(className)}>
@@ -176,7 +202,8 @@
         className="py-8"
       />
     {:else}
-      <table class="w-full">
+      <!-- Desktop/tablet: table layout -->
+      <table class="w-full hidden md:table">
         <caption class="sr-only">{t('detections.table.caption')}</caption>
         <thead>
           <tr class="detection-header-list">
@@ -192,11 +219,28 @@
         <tbody class="divide-y divide-base-200">
           {#each data.notes as detection (detection.id)}
             <tr>
-              <DetectionRow {detection} {onDetailsClick} {onRefresh} />
+              <DetectionRow
+                {detection}
+                {onDetailsClick}
+                {onRefresh}
+                onPlayMobileAudio={handlePlayMobileAudio}
+              />
             </tr>
           {/each}
         </tbody>
       </table>
+
+      <!-- Mobile: card layout -->
+      <div class="md:hidden space-y-2">
+        {#each data.notes as detection (detection.id)}
+          <DetectionCardMobile
+            {detection}
+            {onDetailsClick}
+            {onRefresh}
+            onPlayMobileAudio={handlePlayMobileAudio}
+          />
+        {/each}
+      </div>
     {/if}
   </div>
 
@@ -220,6 +264,18 @@
           />
         </div>
       </div>
+    </div>
+  {/if}
+
+  <!-- Mobile Audio Player Overlay -->
+  {#if showMobilePlayer}
+    <div class="md:hidden">
+      <MobileAudioPlayer
+        audioUrl={selectedAudioUrl}
+        speciesName={selectedSpeciesName}
+        detectionId={selectedDetectionId}
+        onClose={handleCloseMobilePlayer}
+      />
     </div>
   {/if}
 </div>

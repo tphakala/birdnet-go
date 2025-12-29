@@ -47,18 +47,18 @@ Responsive Breakpoints:
 -->
 
 <script lang="ts">
-  import { untrack } from 'svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
-  import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { XCircle, ChevronLeft, ChevronRight, Sunrise, Sunset, Star } from '@lucide/svelte';
-  import { t } from '$lib/i18n';
-  import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
-  import AnimatedCounter from './AnimatedCounter.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
+  import { t } from '$lib/i18n';
+  import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
-  import { LRUCache } from '$lib/utils/LRUCache';
   import { loggers } from '$lib/utils/logger';
+  import { LRUCache } from '$lib/utils/LRUCache';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { ChevronLeft, ChevronRight, Star, Sunrise, Sunset, XCircle } from '@lucide/svelte';
+  import { untrack } from 'svelte';
+  import AnimatedCounter from './AnimatedCounter.svelte';
+  import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
 
   const logger = loggers.ui;
 
@@ -584,7 +584,7 @@ Responsive Breakpoints:
 </script>
 
 {#snippet navigationControls()}
-  <div class="flex items-center gap-2">
+  <div class="flex items-center gap-2 w-full justify-between md:w-auto md:justify-end">
     <!-- Previous day button -->
     <button
       onclick={onPreviousDay}
@@ -599,7 +599,7 @@ Responsive Breakpoints:
       value={selectedDate}
       onChange={onDateChange}
       onTodayClick={onGoToToday}
-      className="mx-2 grow"
+      className="mx-auto md:mx-2 w-auto"
     />
 
     <!-- Next day button -->
@@ -661,7 +661,9 @@ Responsive Breakpoints:
     class="daily-summary-card card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
     <div class="px-6 py-4 border-b border-base-200 overflow-visible">
-      <div class="flex items-center justify-between overflow-visible">
+      <div
+        class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
+      >
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
           <p class="text-sm text-base-content/60">{t('dashboard.dailySummary.subtitle')}</p>
@@ -682,7 +684,9 @@ Responsive Breakpoints:
   >
     <!-- Card Header with Date Navigation -->
     <div class="px-6 py-4 border-b border-base-200 overflow-visible">
-      <div class="flex items-center justify-between overflow-visible">
+      <div
+        class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
+      >
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
           <p class="text-sm text-base-content/60">{t('dashboard.dailySummary.subtitle')}</p>
