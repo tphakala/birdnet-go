@@ -839,7 +839,7 @@ func TestLockDetection(t *testing.T) {
 			requestBody: `{"locked": false}`,
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "2").Return(datastore.Note{ID: 2, Locked: false}, nil)
-				m.On("IsNoteLocked", "2").Return(false, nil)
+				// Note: IsNoteLocked is NOT called when unlocking (req.Locked = false)
 				m.On("UnlockNote", "2").Return(nil)
 			},
 			expectedStatus: http.StatusNoContent,
@@ -853,6 +853,19 @@ func TestLockDetection(t *testing.T) {
 				m.On("IsNoteLocked", "3").Return(true, nil)
 			},
 			expectedStatus: http.StatusConflict,
+		},
+		{
+			name:        "Unlock a locked detection should succeed",
+			detectionID: "4",
+			requestBody: `{"locked": false}`,
+			mockSetup: func(m *mock.Mock) {
+				// Detection is currently locked (Locked: true)
+				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: true}, nil)
+				// Note: IsNoteLocked is NOT called when unlocking (req.Locked = false)
+				// Should call UnlockNote to unlock it
+				m.On("UnlockNote", "4").Return(nil)
+			},
+			expectedStatus: http.StatusNoContent,
 		},
 	}
 

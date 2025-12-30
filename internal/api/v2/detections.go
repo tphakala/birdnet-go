@@ -1158,16 +1158,24 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 func (c *Controller) LockDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 
-	// Use the shared lock helper without acquiring a lock
-	note, err := c.checkAndHandleLock(idStr, false)
-	if err != nil {
-		return ctx.JSON(http.StatusConflict, map[string]string{"error": err.Error()})
-	}
-
-	// Parse request
+	// Parse request first to determine if we're locking or unlocking
 	req := &DetectionRequest{}
 	if err := ctx.Bind(req); err != nil {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	// Get the note to verify it exists
+	note, err := c.DS.Get(idStr)
+	if err != nil {
+		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
+	}
+
+	// Only check lock status when trying to LOCK (not unlock)
+	// This allows unlocking a locked detection
+	if req.Locked {
+		if c.checkDetectionNotLocked(ctx, idStr, note.Locked) {
+			return nil // Response already handled by checkDetectionNotLocked
+		}
 	}
 
 	// Lock/unlock the detection
