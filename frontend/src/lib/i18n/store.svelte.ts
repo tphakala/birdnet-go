@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 import { DEFAULT_LOCALE, type Locale, isValidLocale } from './config.js';
 import { detectBrowserLocale } from './utils.js';
+import { parsePlural } from './pluralParser.js';
 import { getLogger } from '$lib/utils/logger';
 
 const logger = getLogger('app');
@@ -243,47 +244,8 @@ export function t(key: string, params?: Record<string, unknown>): string {
     return message;
   }
 
-  // Handle ICU MessageFormat plural syntax
-  let result = message;
-
-  // Pattern: {count, plural, =0 {No results} one {# result} other {# results}}
-  result = result.replace(/\{(\w+),\s*plural,([^}]+)\}/g, (match, paramName, pluralPattern) => {
-    // eslint-disable-next-line security/detect-object-injection
-    const count = params[paramName];
-    if (typeof count !== 'number') return match;
-
-    // Parse plural rules
-    const rules = pluralPattern.match(/(?:=(\d+)|zero|one|two|few|many|other)\s*\{([^}]+)\}/g);
-    if (!rules) return match;
-
-    // Get the correct plural category
-    const pluralRules = new Intl.PluralRules(currentLocale);
-    const category = pluralRules.select(count);
-
-    for (const rule of rules) {
-      const ruleMatch = rule.match(/(?:=(\d+)|(zero|one|two|few|many|other))\s*\{([^}]+)\}/);
-      if (!ruleMatch) continue;
-
-      const [, exactMatch, pluralCategory, text] = ruleMatch;
-
-      // Check exact match first (e.g., =0)
-      if (exactMatch && Number(exactMatch) === count) {
-        return text.replace(/#/g, count.toString());
-      }
-
-      // Check plural category
-      if (pluralCategory === category) {
-        return text.replace(/#/g, count.toString());
-      }
-
-      // Fallback to 'other' category
-      if (pluralCategory === 'other') {
-        return text.replace(/#/g, count.toString());
-      }
-    }
-
-    return match;
-  });
+  // Handle ICU MessageFormat plural syntax using extracted parser
+  let result = parsePlural(message, params, currentLocale);
 
   // Simple interpolation: {name} -> value
   result = result.replace(/\{(\w+)\}/g, (_, param) => {
