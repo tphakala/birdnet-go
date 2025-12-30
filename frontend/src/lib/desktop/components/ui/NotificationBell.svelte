@@ -12,6 +12,8 @@
     isExistingNotification,
     shouldShowNotification,
     sanitizeNotificationMessage,
+    mapApiNotification,
+    mapApiNotifications,
   } from '$lib/utils/notifications';
 
   const logger = loggers.ui;
@@ -115,7 +117,8 @@
       const data = await api.get<{ notifications?: Notification[] }>(
         '/api/v2/notifications?limit=20&status=unread'
       );
-      const apiNotifications = data?.notifications ?? [];
+      // Map API notifications to frontend format (status -> read)
+      const apiNotifications = mapApiNotifications(data?.notifications ?? []);
 
       // Apply deduplication to API-fetched notifications
       // This ensures consistent deduplication behavior between SSE and API
@@ -243,11 +246,14 @@
       return;
     }
 
+    // Map SSE notification from API format (status -> read)
+    const mappedNotification = mapApiNotification(notification);
+
     // Check if notification already exists BEFORE merging
-    const wasNewNotification = !isExistingNotification(notification, notifications);
+    const wasNewNotification = !isExistingNotification(mappedNotification, notifications);
 
     // Always perform merge to update timestamps and priority
-    notifications = mergeAndDeduplicateNotifications(notifications, [notification], {
+    notifications = mergeAndDeduplicateNotifications(notifications, [mappedNotification], {
       debugMode,
     });
 

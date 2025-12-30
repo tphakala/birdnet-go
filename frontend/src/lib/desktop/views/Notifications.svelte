@@ -22,6 +22,7 @@
     deduplicateNotifications,
     sanitizeNotificationMessage,
     groupNotifications,
+    mapApiNotifications,
   } from '$lib/utils/notifications';
   import NotificationGroup from '$lib/desktop/components/ui/NotificationGroup.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -112,9 +113,11 @@
       if (filters.priority) params.append('priority', filters.priority);
 
       const data = await api.get(`/api/v2/notifications?${params}`);
-      // Apply deduplication to remove duplicate notifications
+      // Map API notifications to frontend format (status -> read)
+      // then apply deduplication to remove duplicate notifications
       const rawNotifications = data.notifications || [];
-      notifications = deduplicateNotifications(rawNotifications, {
+      const mappedNotifications = mapApiNotifications(rawNotifications);
+      notifications = deduplicateNotifications(mappedNotifications, {
         excludeToasts: false, // Show all notifications in the full view
       });
       hasUnread = notifications.some(n => !n.read);
