@@ -25,6 +25,86 @@ export interface Notification {
 }
 
 /**
+ * API notification type - matches backend response format
+ * The backend sends 'status' field instead of 'read' boolean
+ */
+export interface ApiNotification {
+  id: string;
+  type: 'error' | 'warning' | 'info' | 'detection' | 'system';
+  title: string;
+  message: string;
+  timestamp: string;
+  priority: Priority;
+  status: 'unread' | 'read' | 'acknowledged';
+  component?: string;
+  metadata?: {
+    note_id?: number;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * Input type for mapping function - accepts both API format and frontend format
+ * This is intentionally permissive to handle various notification sources:
+ * - Real API responses (have status, no read)
+ * - Test mocks (have read, may not have status)
+ * - Pre-mapped notifications (have both)
+ * - SSE notifications (have status, no read)
+ */
+type NotificationInput = {
+  id: string;
+  type: 'error' | 'warning' | 'info' | 'detection' | 'system';
+  title: string;
+  message: string;
+  timestamp: string;
+  priority: Priority;
+  status?: string;
+  read?: boolean;
+  component?: string;
+  metadata?: {
+    note_id?: number;
+    [key: string]: unknown;
+  };
+};
+
+/**
+ * Maps a notification from API format to frontend format
+ * The backend sends 'status' (string) but frontend expects 'read' (boolean)
+ *
+ * This function handles three cases:
+ * 1. Already mapped: has 'read' field already set, keep it
+ * 2. API response: has 'status' field, derive 'read' from it
+ * 3. Neither: default to unread (read: false)
+ *
+ * @param notification - Notification from API response or pre-mapped notification
+ * @returns Notification with 'read' boolean derived from 'status'
+ */
+export function mapApiNotification(notification: NotificationInput): Notification {
+  // If 'read' is already defined (boolean), preserve it
+  // This handles test mocks and already-mapped notifications
+  if (typeof notification.read === 'boolean') {
+    return notification as Notification;
+  }
+
+  // Otherwise, derive 'read' from 'status'
+  // 'unread' -> read: false, 'read'/'acknowledged' -> read: true
+  return {
+    ...notification,
+    read: notification.status !== 'unread',
+  } as Notification;
+}
+
+/**
+ * Maps an array of notifications from API format to frontend format
+ *
+ * @param notifications - Array of notifications from API response or pre-mapped notifications
+ * @returns Array of notifications with 'read' boolean derived from 'status'
+ */
+export function mapApiNotifications(notifications: NotificationInput[]): Notification[] {
+  return notifications.map(mapApiNotification);
+}
+
+/**
  * Type guard to identify toast notifications
  * Toast notifications are ephemeral and should only appear as temporary UI toasts
  */
