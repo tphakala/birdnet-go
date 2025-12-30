@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -77,9 +78,6 @@ func TestAnalysisBuffer_PoolInitializedOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	poolSizes := make(chan int, numGoroutines)
 
-	// Reset to trigger re-initialization race
-	resetAnalysisBufferGlobals()
-
 	// Now race to initialize
 	for i := range numGoroutines {
 		wg.Go(func() {
@@ -123,20 +121,7 @@ func generateTestSourceID(index int) string {
 }
 
 func isAlreadyExistsError(err error) bool {
-	return err != nil && containsString(err.Error(), "already exists")
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && searchSubstring(s, substr)
-}
-
-func searchSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return err != nil && strings.Contains(err.Error(), "already exists")
 }
 
 // resetAnalysisBufferGlobals resets the global variables to simulate fresh start
