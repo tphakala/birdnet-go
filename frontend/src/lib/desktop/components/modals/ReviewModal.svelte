@@ -43,9 +43,11 @@
       lockDetection = false;
       ignoreSpecies = isExcluded;
       const firstComment = safeArrayAccess(detection.comments || [], 0);
-      comment = firstComment?.entry || '';
-      // Show comment section if there's already a comment
-      showCommentSection = !!comment;
+      const firstCommentValue = firstComment?.entry || '';
+      comment = firstCommentValue;
+      // Use firstCommentValue (local variable) instead of comment ($state) to avoid
+      // creating a reactive dependency that would reset the section when typing
+      showCommentSection = !!firstCommentValue;
     }
   });
 
