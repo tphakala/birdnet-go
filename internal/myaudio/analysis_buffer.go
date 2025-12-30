@@ -33,7 +33,9 @@ var (
 	analysisMetrics      *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
 	analysisMetricsMutex sync.RWMutex            // Mutex for thread-safe access to analysisMetrics
 	analysisMetricsOnce  sync.Once               // Ensures metrics are only set once
-	readBufferPool       *BufferPool             // Global buffer pool for read operations
+	readBufferPool     *BufferPool // Global buffer pool for read operations
+	bufferPoolInitOnce sync.Once   // Ensures buffer pool is initialized exactly once
+	errBufferPoolInit  error       // Stores any error from buffer pool initialization
 )
 
 // init initializes the warningCounter map
@@ -102,26 +104,23 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 
 	settings := conf.Setting()
 
-	// Set overlapSize based on user setting in seconds if not already set
-	if overlapSize == 0 {
+	// Initialize buffer pool sizes exactly once, thread-safely
+	bufferPoolInitOnce.Do(func() {
 		overlapSize = SecondsToBytes(settings.BirdNET.Overlap)
 		readSize = conf.BufferSize - overlapSize
+		readBufferPool, errBufferPoolInit = NewBufferPool(readSize)
+	})
 
-		// Initialize the read buffer pool if not already done
-		if readBufferPool == nil {
-			var err error
-			readBufferPool, err = NewBufferPool(readSize)
-			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("myaudio").
-					Category(errors.CategorySystem).
-					Context("operation", "allocate_analysis_buffer").
-					Context("source", sourceID).
-					Context("buffer_pool_size", readSize).
-					Build()
-				return enhancedErr
-			}
-		}
+	// Check if initialization failed
+	if errBufferPoolInit != nil {
+		enhancedErr := errors.New(errBufferPoolInit).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "allocate_analysis_buffer").
+			Context("source", sourceID).
+			Context("buffer_pool_size", readSize).
+			Build()
+		return enhancedErr
 	}
 
 	// Initialize the analysis ring buffer

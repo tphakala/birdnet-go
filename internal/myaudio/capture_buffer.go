@@ -463,14 +463,16 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 		startOffset := requestedStartTime.Sub(cb.startTime)
 		endOffset := requestedEndTime.Sub(cb.startTime)
 
-		startIndex := int(startOffset.Seconds()) * cb.sampleRate * cb.bytesPerSample
-		endIndex := int(endOffset.Seconds()) * cb.sampleRate * cb.bytesPerSample
+		// Calculate byte indices with full floating-point precision before truncating to int.
+		// This preserves sub-second accuracy (e.g., 1.5s * 48000 * 2 = 144000, not 96000).
+		startIndex := int(startOffset.Seconds() * float64(cb.sampleRate) * float64(cb.bytesPerSample))
+		endIndex := int(endOffset.Seconds() * float64(cb.sampleRate) * float64(cb.bytesPerSample))
 
 		startIndex %= cb.bufferSize
 		endIndex %= cb.bufferSize
 
 		if startOffset < 0 {
-			if cb.writeIndex == 0 || cb.writeIndex+int(startOffset.Seconds())*cb.sampleRate*cb.bytesPerSample > cb.bufferSize {
+			if cb.writeIndex == 0 || cb.writeIndex+int(startOffset.Seconds()*float64(cb.sampleRate)*float64(cb.bytesPerSample)) > cb.bufferSize {
 				cb.lock.Unlock()
 
 				enhancedErr := errors.Newf("requested start time is outside the buffer's current timeframe").
