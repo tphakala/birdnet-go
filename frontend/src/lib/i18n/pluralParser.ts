@@ -15,46 +15,55 @@ export function parsePlural(
   params: Record<string, unknown>,
   locale: string
 ): string {
-  // Fixed regex that handles one level of nested braces
-  // Pattern: (?:[^{}]|\{[^{}]*\})* matches either:
+  // Fixed regex that handles two levels of nested braces
+  // Pattern: (?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})* matches:
   //   - [^{}] any character that's not a brace
-  //   - OR \{[^{}]*\} a complete pair of braces with non-brace content
+  //   - OR \{...\} braces containing either non-brace chars or one more level of braces
+  // This handles: {count, plural, one {text with {placeholder}} other {more {nested}}}
   const result = message.replace(
     // eslint-disable-next-line security/detect-unsafe-regex
-    /\{(\w+),\s*plural,((?:[^{}]|\{[^{}]*\})*)\}/g,
+    /\{(\w+),\s*plural,((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g,
     (match, paramName: string, pluralPattern: string) => {
       // eslint-disable-next-line security/detect-object-injection
       const count = params[paramName];
       if (typeof count !== 'number') return match;
 
-      // Parse plural rules
-      const rules = pluralPattern.match(/(?:=(\d+)|zero|one|two|few|many|other)\s*\{([^}]+)\}/g);
-      if (!rules) return match;
+      // Parse plural rules with nested brace support (two levels)
+      // Use matchAll for cleaner parsing
+      const ruleRegex =
+        // eslint-disable-next-line security/detect-unsafe-regex
+        /(?:=(\d+)|(zero|one|two|few|many|other))\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
+      const rules = [...pluralPattern.matchAll(ruleRegex)];
+      if (rules.length === 0) return match;
 
       // Get the correct plural category
       const pluralRules = new Intl.PluralRules(locale);
       const category = pluralRules.select(count);
 
-      for (const rule of rules) {
-        const ruleMatch = rule.match(/(?:=(\d+)|(zero|one|two|few|many|other))\s*\{([^}]+)\}/);
-        if (!ruleMatch) continue;
+      // Collect matches by type for proper precedence
+      let categoryMatchText: string | undefined;
+      let otherMatchText: string | undefined;
 
+      for (const ruleMatch of rules) {
         const [, exactMatch, pluralCategory, text] = ruleMatch;
 
-        // Check exact match first (e.g., =0)
+        // Exact match (=N) has highest precedence - return immediately
         if (exactMatch && Number(exactMatch) === count) {
           return text.replace(/#/g, count.toString());
         }
 
-        // Check plural category
+        // Store category match and 'other' fallback for later
         if (pluralCategory === category) {
-          return text.replace(/#/g, count.toString());
+          categoryMatchText = text;
+        } else if (pluralCategory === 'other') {
+          otherMatchText = text;
         }
+      }
 
-        // Fallback to 'other' category
-        if (pluralCategory === 'other') {
-          return text.replace(/#/g, count.toString());
-        }
+      // Apply precedence: specific category > 'other' fallback
+      const resultText = categoryMatchText ?? otherMatchText;
+      if (resultText) {
+        return resultText.replace(/#/g, count.toString());
       }
 
       return match;
