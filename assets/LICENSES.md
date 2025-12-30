@@ -512,11 +512,6 @@ Source: Apache-2.0
 License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.11/LICENSE
 Source: BSD-3-Clause
 
-### gopkg.in/natefinch/lumberjack.v2
-
-License: https://github.com/natefinch/lumberjack/blob/v2.2.1/LICENSE
-Source: MIT
-
 ### gopkg.in/yaml.v3
 
 License: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
