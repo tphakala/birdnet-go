@@ -46,7 +46,9 @@
           ? detection.comments[0]?.entry || ''
           : '';
       comment = firstComment;
-      showCommentSection = !!comment;
+      // Use firstComment (local variable) instead of comment ($state) to avoid
+      // creating a reactive dependency that would reset the section when typing
+      showCommentSection = !!firstComment;
       reviewErrorMessage = null;
     }
   });
