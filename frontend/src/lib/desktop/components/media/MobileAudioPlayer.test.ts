@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import MobileAudioPlayer from './MobileAudioPlayer.svelte';
@@ -23,7 +24,12 @@ describe('MobileAudioPlayer', () => {
   const mobilePlayerTest = createComponentTestFactory(MobileAudioPlayer);
 
   beforeEach(() => {
+    vi.clearAllMocks();
     user = userEvent.setup();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders the modal dialog', () => {

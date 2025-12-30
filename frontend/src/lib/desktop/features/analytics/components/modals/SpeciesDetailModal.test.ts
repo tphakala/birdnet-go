@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import SpeciesDetailModal from './SpeciesDetailModal.svelte';
@@ -33,7 +34,12 @@ describe('SpeciesDetailModal', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
     user = userEvent.setup();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders when isOpen is true and species is provided', () => {
