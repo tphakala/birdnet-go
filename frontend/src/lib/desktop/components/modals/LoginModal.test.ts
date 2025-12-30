@@ -282,8 +282,8 @@ describe('LoginModal', () => {
           basicEnabled: false,
           enabledProviders: ['google', 'github'],
           endpoints: {
-            google: '/api/v1/auth/custom-google',
-            github: '/api/v1/auth/custom-github',
+            google: '/api/v2/auth/custom-google',
+            github: '/api/v2/auth/custom-github',
           },
         },
       });

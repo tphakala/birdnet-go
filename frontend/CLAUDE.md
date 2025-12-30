@@ -11,7 +11,7 @@
 ## Critical Rules
 
 - **NEVER use `any` type**
-- **NEVER create inline SVGs** - use `$lib/utils/icons`
+- **NEVER create inline SVGs** - use `@lucide/svelte` icons
 - **NEVER use `toISOString()` for dates** - use `getLocalDateString()`
 - **Use D3.js for ALL charting/plotting** - unless specific requirement for custom approach
 - **Run `npm run check:all` before EVERY commit**
@@ -267,15 +267,18 @@ let settings = $derived(
 
 ```svelte
 <script>
-  import { navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { X, Search, Settings } from '@lucide/svelte';
 </script>
 
 <!-- ✅ Correct -->
-{@html navigationIcons.close}
+<X class="h-4 w-4" />
+<Search class="h-5 w-5" />
 
 <!-- ❌ Wrong -->
 <svg>...</svg>
 ```
+
+See `$lib/utils/ICONS.md` for common icons and usage patterns.
 
 ## Logging
 
@@ -344,8 +347,12 @@ function getCsrfToken(): string | null {
 ### Buttons
 
 ```svelte
+<script>
+  import { X } from '@lucide/svelte';
+</script>
+
 <button aria-label="Close dialog">
-  {@html navigationIcons.close}
+  <X class="h-4 w-4" />
 </button>
 ```
 

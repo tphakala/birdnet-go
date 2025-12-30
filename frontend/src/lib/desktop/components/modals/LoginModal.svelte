@@ -230,8 +230,8 @@
     const configuredEndpoints = authConfig.endpoints || {};
     const endpoint = safeGet(configuredEndpoints, providerId) || provider.authEndpoint;
 
-    // SECURITY: Basic endpoint validation - accept both formats
-    if (!endpoint || (!endpoint.startsWith('/auth/') && !endpoint.startsWith('/api/v1/auth/'))) {
+    // SECURITY: Basic endpoint validation - accept OAuth and API v2 auth formats
+    if (!endpoint || (!endpoint.startsWith('/auth/') && !endpoint.startsWith('/api/v2/auth/'))) {
       error = 'Configuration error. Please contact your administrator.';
       return;
     }
