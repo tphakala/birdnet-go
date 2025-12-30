@@ -2443,7 +2443,7 @@
     }
 
     /* Mobile-friendly button sizes */
-    .btn:not(.btn-xs):not(.btn-sm) {
+    .btn:not(.btn-xs, .btn-sm) {
       min-height: 2.5rem;
       padding: 0.5rem 1rem;
     }

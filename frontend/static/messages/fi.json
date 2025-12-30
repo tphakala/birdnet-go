@@ -16,7 +16,9 @@
     "sort": "Lajittele",
     "actions": {
       "download": "Lataa",
-      "review": "Tarkastele"
+      "review": "Tarkastele",
+      "play": "Toista",
+      "view": "Näytä"
     },
     "settings": "Asetukset",
     "close": "Sulje",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Hakusuodattimet",
     "results": "Hakutulokset",
-    "resultsCount": "{count, plural, =0 {Ei tuloksia} one {# tulos} other {# tulosta}}",
+    "resultsCountZero": "Ei tuloksia",
+    "resultsCountOne": "1 tulos",
+    "resultsCountOther": "{count} tulosta",
     "noSearchPerformed": "Hakua ei ole vielä suoritettu",
     "noSearchPerformedHint": "Käytä yllä olevia hakusuodattimia löytääksesi lintuhavaintoja",
     "loadingResults": "Ladataan tuloksia...",

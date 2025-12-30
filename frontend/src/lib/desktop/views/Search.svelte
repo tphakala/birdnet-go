@@ -8,7 +8,16 @@
   import { toastActions } from '$lib/stores/toast';
   import { api } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
-  import { ArrowDownUp, ChevronDown, Eye, FrownIcon, Music, Search, XCircle } from '@lucide/svelte';
+  import {
+    ArrowDownUp,
+    ChevronDown,
+    Eye,
+    FrownIcon,
+    Music,
+    Search,
+    Volume2,
+    XCircle,
+  } from '@lucide/svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -973,7 +982,8 @@
                         species: result.commonName || t('search.detailsPanel.unknownSpecies'),
                       })}
                     >
-                      🔊 {t('common.actions.play')}
+                      <Volume2 class="size-4" />
+                      {t('common.actions.play')}
                     </button>
                     <button
                       class="btn btn-outline btn-sm"

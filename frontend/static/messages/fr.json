@@ -17,7 +17,9 @@
     "done": "Terminé",
     "actions": {
       "download": "Télécharger",
-      "review": "Réviser"
+      "review": "Réviser",
+      "play": "Lire",
+      "view": "Voir"
     },
     "settings": "Paramètres",
     "close": "Fermer",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Filtres de recherche",
     "results": "Résultats de recherche",
-    "resultsCount": "{count, plural, =0 {Aucun résultat} one {# résultat} other {# résultats}}",
+    "resultsCountZero": "Aucun résultat",
+    "resultsCountOne": "1 résultat",
+    "resultsCountOther": "{count} résultats",
     "noSearchPerformed": "Aucune recherche effectuée",
     "noSearchPerformedHint": "Utilisez les filtres de recherche ci-dessus pour trouver des détections d'oiseaux",
     "loadingResults": "Chargement des résultats...",

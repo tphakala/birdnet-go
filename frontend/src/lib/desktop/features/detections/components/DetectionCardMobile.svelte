@@ -3,12 +3,12 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import { Volume2 } from '@lucide/svelte';
+  import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
     detection: Detection;
     onDetailsClick?: (_id: number) => void;
-    onRefresh?: () => void;
     onPlayMobileAudio?: (_payload: {
       audioUrl: string;
       speciesName: string;
@@ -17,16 +17,12 @@
     className?: string;
   }
 
-  import { t } from '$lib/i18n';
   let { detection, onDetailsClick, onPlayMobileAudio, className = '' }: Props = $props();
 
   // Legacy dispatcher removed
 
   let spectrogramError = $state(false);
-  let spectrogramUrl = $state<string>('');
-  $effect(() => {
-    spectrogramUrl = `/api/v2/spectrogram/${detection.id}?size=sm`;
-  });
+  let spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=sm`);
 
   function handlePlay() {
     const audioUrl = `/api/v2/audio/${detection.id}`;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { parseLocalDateString } from '$lib/utils/date';
+  import { X } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -45,6 +46,25 @@
   function stopPropagation(e: MouseEvent) {
     e.stopPropagation();
   }
+
+  function stopKeyPropagation(e: KeyboardEvent) {
+    e.stopPropagation();
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      handleClose();
+    }
+  }
+
+  $effect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeydown);
+      return () => {
+        document.removeEventListener('keydown', handleKeydown);
+      };
+    }
+  });
 </script>
 
 {#if isOpen && species}
@@ -54,13 +74,17 @@
     role="dialog"
     aria-modal="true"
     aria-label={species.common_name}
+    tabindex="-1"
     onclick={handleOverlayClick}
+    onkeydown={handleKeydown}
   >
     <!-- Bottom sheet on mobile, centered dialog on larger screens -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="bg-base-100 w-full sm:max-w-md sm:rounded-xl sm:shadow-xl sm:my-8 rounded-t-2xl"
       style:max-height="80vh"
       onclick={stopPropagation}
+      onkeydown={stopKeyPropagation}
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">
@@ -75,18 +99,7 @@
           aria-label={t('common.aria.closeModal')}
           onclick={handleClose}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-              clip-rule="evenodd"
-            />
-          </svg>
+          <X class="size-5" />
         </button>
       </div>
 

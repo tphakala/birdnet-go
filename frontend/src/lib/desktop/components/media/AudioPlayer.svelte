@@ -244,8 +244,9 @@
   // Audio context setup
   const initializeAudioContext = async () => {
     try {
-      // Check if AudioContext is available
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      // Check if AudioContext is available (webkitAudioContext for Safari)
+      type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
+      const AudioContextClass = window.AudioContext || (window as WebkitWindow).webkitAudioContext;
       if (!AudioContextClass) {
         throw new Error('AudioContext not supported');
       }

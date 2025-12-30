@@ -236,7 +236,6 @@
           <DetectionCardMobile
             {detection}
             {onDetailsClick}
-            {onRefresh}
             onPlayMobileAudio={handlePlayMobileAudio}
           />
         {/each}
