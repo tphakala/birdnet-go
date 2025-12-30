@@ -28,9 +28,7 @@ export function parsePlural(
       if (typeof count !== 'number') return match;
 
       // Parse plural rules
-      const rules = pluralPattern.match(
-        /(?:=(\d+)|zero|one|two|few|many|other)\s*\{([^}]+)\}/g
-      );
+      const rules = pluralPattern.match(/(?:=(\d+)|zero|one|two|few|many|other)\s*\{([^}]+)\}/g);
       if (!rules) return match;
 
       // Get the correct plural category
@@ -38,9 +36,7 @@ export function parsePlural(
       const category = pluralRules.select(count);
 
       for (const rule of rules) {
-        const ruleMatch = rule.match(
-          /(?:=(\d+)|(zero|one|two|few|many|other))\s*\{([^}]+)\}/
-        );
+        const ruleMatch = rule.match(/(?:=(\d+)|(zero|one|two|few|many|other))\s*\{([^}]+)\}/);
         if (!ruleMatch) continue;
 
         const [, exactMatch, pluralCategory, text] = ruleMatch;
