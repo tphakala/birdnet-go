@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import NotificationGroup from './NotificationGroup.svelte';
-import type { NotificationGroup as NotificationGroupType, Notification } from '$lib/utils/notifications';
+import type {
+  NotificationGroup as NotificationGroupType,
+  Notification,
+} from '$lib/utils/notifications';
 
 // Create mock notification for testing
 function createMockNotification(overrides: Partial<Notification> = {}): Notification {
   return {
     id: 'notif-1',
     type: 'info',
+    title: 'Test Notification',
     message: 'Test notification message',
     timestamp: new Date().toISOString(),
     priority: 'medium',
@@ -27,7 +31,8 @@ function createMockGroup(overrides: Partial<NotificationGroupType> = {}): Notifi
     component: 'Test',
     notifications,
     unreadCount: notifications.filter(n => !n.read).length,
-    earliestTimestamp: notifications[notifications.length - 1]?.timestamp || new Date().toISOString(),
+    earliestTimestamp:
+      notifications[notifications.length - 1]?.timestamp || new Date().toISOString(),
     latestTimestamp: notifications[0]?.timestamp || new Date().toISOString(),
     highestPriority: 'medium',
     ...overrides,
@@ -186,10 +191,7 @@ describe('NotificationGroup', () => {
     render(NotificationGroup, {
       props: {
         group: createMockGroup({
-          notifications: [
-            createMockNotification({ id: 'x' }),
-            createMockNotification({ id: 'y' }),
-          ],
+          notifications: [createMockNotification({ id: 'x' }), createMockNotification({ id: 'y' })],
         }),
         onDismissAll,
       },

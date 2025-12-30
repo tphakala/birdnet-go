@@ -274,7 +274,7 @@ describe('ActionMenu', () => {
     render(ActionMenu, {
       props: {
         detection: createMockDetection({
-          review: { verified: 'correct', comment: '' },
+          review: { verified: 'correct' },
         }),
       },
     });
@@ -289,7 +289,7 @@ describe('ActionMenu', () => {
     render(ActionMenu, {
       props: {
         detection: createMockDetection({
-          review: { verified: 'false_positive', comment: '' },
+          review: { verified: 'false_positive' },
         }),
       },
     });
