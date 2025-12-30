@@ -135,6 +135,23 @@ describe('mapApiNotification', () => {
 
     expect(result.read).toBe(true); // Should preserve existing read value
   });
+
+  it('defaults to read: false when neither status nor read is present', () => {
+    // Edge case: notification missing both status and read fields
+    const notificationWithoutStatusOrRead = {
+      id: 'test-7',
+      type: 'info' as const,
+      title: 'Test',
+      message: 'Test message',
+      timestamp: '2025-01-01T12:00:00Z',
+      priority: 'medium' as const,
+      // No status field, no read field
+    };
+
+    const result = mapApiNotification(notificationWithoutStatusOrRead);
+
+    expect(result.read).toBe(false); // Should default to unread
+  });
 });
 
 describe('deduplicateNotifications', () => {

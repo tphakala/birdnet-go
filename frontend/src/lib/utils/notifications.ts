@@ -87,10 +87,10 @@ export function mapApiNotification(notification: NotificationInput): Notificatio
   }
 
   // Otherwise, derive 'read' from 'status'
-  // 'unread' -> read: false, 'read'/'acknowledged' -> read: true
+  // 'unread' or undefined -> read: false, 'read'/'acknowledged' -> read: true
   return {
     ...notification,
-    read: notification.status !== 'unread',
+    read: notification.status === 'read' || notification.status === 'acknowledged',
   } as Notification;
 }
 
