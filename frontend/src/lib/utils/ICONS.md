@@ -24,20 +24,20 @@ Icons are provided by Lucide, a beautiful and consistent icon library. Import ic
 
 ## Common Icons
 
-| Purpose       | Icon Import                              | Example                           |
-| ------------- | ---------------------------------------- | --------------------------------- |
-| Close/Cancel  | `X`                                      | `<X class="h-4 w-4" />`           |
-| Search        | `Search`                                 | `<Search class="h-5 w-5" />`      |
-| Settings      | `Settings`                               | `<Settings class="h-5 w-5" />`    |
-| Play/Pause    | `Play`, `Pause`                          | `<Play class="h-4 w-4" />`        |
-| Navigation    | `ChevronLeft`, `ChevronRight`, `Menu`    | `<Menu class="h-6 w-6" />`        |
-| Actions       | `Edit`, `Trash2`, `Save`, `Copy`, `Plus` | `<Edit class="h-4 w-4" />`        |
-| Status        | `Check`, `AlertCircle`, `Info`, `Ban`    | `<Check class="h-4 w-4" />`       |
-| Media         | `Volume2`, `VolumeX`, `Download`         | `<Volume2 class="h-5 w-5" />`     |
-| Time/Calendar | `Clock`, `Calendar`                      | `<Clock class="h-4 w-4" />`       |
-| User          | `User`, `LogIn`, `LogOut`                | `<User class="h-5 w-5" />`        |
-| Data          | `BarChart2`, `FileText`, `Folder`        | `<BarChart2 class="h-5 w-5" />`   |
-| Arrows        | `ArrowLeft`, `ArrowRight`, `ArrowUp`     | `<ArrowLeft class="h-4 w-4" />`   |
+| Purpose       | Icon Import                              | Example                                    |
+| ------------- | ---------------------------------------- | ------------------------------------------ |
+| Close/Cancel  | `X`                                      | `<X class="h-4 w-4" />`                    |
+| Search        | `Search`                                 | `<Search class="h-5 w-5" />`               |
+| Settings      | `Settings`                               | `<Settings class="h-5 w-5" />`             |
+| Play/Pause    | `Play`, `Pause`                          | `<Play class="h-4 w-4" />`                 |
+| Navigation    | `ChevronLeft`, `ChevronRight`, `Menu`    | `<Menu class="h-6 w-6" />`                 |
+| Actions       | `Edit`, `Trash2`, `Save`, `Copy`, `Plus` | `<Edit class="h-4 w-4" />`                 |
+| Status        | `Check`, `AlertCircle`, `Info`, `Ban`    | `<Check class="h-4 w-4" />`                |
+| Media         | `Volume2`, `VolumeX`, `Download`         | `<Volume2 class="h-5 w-5" />`              |
+| Time/Calendar | `Clock`, `Calendar`                      | `<Clock class="h-4 w-4" />`                |
+| User          | `User`, `LogIn`, `LogOut`                | `<User class="h-5 w-5" />`                 |
+| Data          | `BarChart2`, `FileText`, `Folder`        | `<BarChart2 class="h-5 w-5" />`            |
+| Arrows        | `ArrowLeft`, `ArrowRight`, `ArrowUp`     | `<ArrowLeft class="h-4 w-4" />`            |
 | Loading       | `Loader2` (with animation)               | `<Loader2 class="h-4 w-4 animate-spin" />` |
 
 ## Styling
