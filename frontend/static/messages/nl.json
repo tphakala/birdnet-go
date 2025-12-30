@@ -32,7 +32,9 @@
     "internalServerError": "Interne server fout",
     "actions": {
       "download": "Ophalen",
-      "review": "Beoordeling"
+      "review": "Beoordeling",
+      "play": "Afspelen",
+      "view": "Bekijken"
     },
     "buttons": {
       "save": "Bewaar",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Zoek filters",
     "results": "Zoek resultaten",
-    "resultsCount": "{count, plural, =0 {Niets gevonden} one {# resultaat} other {# resultaten}}",
+    "resultsCountZero": "Geen resultaten",
+    "resultsCountOne": "1 resultaat",
+    "resultsCountOther": "{count} resultaten",
     "noSearchPerformed": "Nog geen zoek opdracht uitgevoerd",
     "noSearchPerformedHint": "Gebruik bocenstaande zoek filters om een vogel herkenning te vinden",
     "loadingResults": "Inladen resultaten...",

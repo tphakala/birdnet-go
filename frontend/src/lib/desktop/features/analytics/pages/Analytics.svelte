@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
-  import Chart from 'chart.js/auto';
-  import 'chartjs-adapter-date-fns';
-  import StatCard from '../components/ui/StatCard.svelte';
-  import ChartCard from '../components/ui/ChartCard.svelte';
-  import FilterForm from '../components/forms/FilterForm.svelte';
-  import { XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { api } from '$lib/utils/api';
+  import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
-  import { api } from '$lib/utils/api';
-  import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
+  import { XCircle } from '@lucide/svelte';
+  import Chart from 'chart.js/auto';
+  import 'chartjs-adapter-date-fns';
+  import { onMount, tick } from 'svelte';
+  import FilterForm from '../components/forms/FilterForm.svelte';
+  import ChartCard from '../components/ui/ChartCard.svelte';
+  import StatCard from '../components/ui/StatCard.svelte';
 
   const logger = getLogger('app');
 
@@ -1332,7 +1332,8 @@
           <span class="loading loading-spinner loading-lg text-primary"></span>
         </div>
       {:else}
-        <div class="overflow-x-auto">
+        <!-- Desktop/tablet table -->
+        <div class="overflow-x-auto hidden md:block">
           <table class="table w-full">
             <thead>
               <tr>
@@ -1357,7 +1358,7 @@
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
                           onerror={e => {
-                            const target = e.currentTarget as any;
+                            const target = e.currentTarget as HTMLImageElement;
                             if (target) {
                               target.src = '/assets/images/bird-placeholder.svg';
                             }
@@ -1401,6 +1402,64 @@
               {/each}
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile list -->
+        <div class="md:hidden space-y-2">
+          {#each recentDetections as detection, index (detection.id ?? index)}
+            <div class="bg-base-100 rounded-lg p-3">
+              <div class="flex items-start gap-3">
+                <!-- Thumbnail -->
+                <div class="w-10 h-10 rounded-full bg-base-200 overflow-hidden shrink-0">
+                  <img
+                    src="/api/v2/media/species-image?name={encodeURIComponent(
+                      detection.scientificName
+                    )}"
+                    alt={detection.commonName || 'Unknown species'}
+                    class="w-full h-full object-cover"
+                    onerror={e => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (target) {
+                        target.src = '/assets/images/bird-placeholder.svg';
+                      }
+                    }}
+                    loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                  />
+                </div>
+                <!-- Content -->
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm text-base-content/70">
+                    {detection.timestamp ? formatDateTime(detection.timestamp) : '-'}
+                  </div>
+                  <div class="font-medium leading-tight truncate">
+                    {detection.commonName || t('analytics.recentDetections.unknownSpecies')}
+                  </div>
+                  <div class="text-xs opacity-60 truncate">{detection.scientificName || ''}</div>
+                  <div class="mt-2 flex items-center justify-between">
+                    <!-- Confidence badge -->
+                    <span
+                      class="badge {detection.confidence >= 0.8
+                        ? 'badge-success'
+                        : detection.confidence >= 0.4
+                          ? 'badge-warning'
+                          : 'badge-error'}"
+                    >
+                      {formatPercentage(detection.confidence)}
+                    </span>
+                    <span class="text-xs opacity-70"
+                      >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          {:else}
+            <div class="text-center py-4 text-base-content opacity-50">
+              {t('analytics.recentDetections.noRecentDetections')}
+            </div>
+          {/each}
         </div>
       {/if}
     </div>

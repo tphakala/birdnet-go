@@ -1,8 +1,8 @@
-<!-- 
+<!--
   DetectionDetail.svelte - Single Detection View Component
-  
+
   Purpose: Display comprehensive details for a single bird detection
-  
+
   Features:
   - Hero section with species information and confidence
   - Audio player with large spectrogram visualization
@@ -10,24 +10,24 @@
   - Species rarity and taxonomy information
   - Detection history and tracking metadata
   - Review and action controls
-  
+
   Props:
   - detectionId: string - The ID of the detection to display
 -->
 <script lang="ts">
-  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
-  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
-  import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
-  import SpeciesThumbnail from '$lib/desktop/components/modals/SpeciesThumbnail.svelte';
+  import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import SpeciesBadges from '$lib/desktop/components/modals/SpeciesBadges.svelte';
+  import SpeciesThumbnail from '$lib/desktop/components/modals/SpeciesThumbnail.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { t } from '$lib/i18n';
-  import { loggers } from '$lib/utils/logger';
-  import { Download } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
+  import { loggers } from '$lib/utils/logger';
+  import { Download } from '@lucide/svelte';
 
   // Interface definitions for API responses
   interface SpeciesRarity {
@@ -340,10 +340,10 @@
     <div class="card-body">
       <!-- Species info container - similar to ReviewModal -->
       <div class="bg-base-200 rounded-lg p-4" role="region" aria-label="Species information">
-        <!-- Single Row Layout: All 4 segments in one row using flex -->
-        <div class="flex gap-4 items-start">
+        <!-- Responsive layout: stack on mobile, row on md+ -->
+        <div class="flex flex-col md:flex-row gap-4 items-start">
           <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
-          <div class="flex gap-4 items-center flex-1 min-w-0">
+          <div class="flex gap-3 md:gap-4 items-center flex-1 min-w-0 w-full">
             <SpeciesThumbnail
               scientificName={detection.scientificName}
               commonName={detection.commonName}
@@ -352,13 +352,13 @@
             <div class="flex-1 min-w-0">
               <h1
                 id="species-heading"
-                class="text-3xl font-semibold text-base-content mb-1 truncate"
+                class="text-2xl md:text-3xl font-semibold text-base-content mb-1 truncate"
               >
                 {detection.commonName}
                 <span class="sr-only">detection details</span>
               </h1>
               <p
-                class="text-lg text-base-content opacity-60 italic truncate"
+                class="text-base md:text-lg text-base-content opacity-60 italic truncate"
                 aria-label="Scientific name"
               >
                 {detection.scientificName}
@@ -369,91 +369,107 @@
             </div>
           </div>
 
-          <!-- Section 2: Date & Time (fixed width) -->
-          <div
-            class="shrink-0 text-center"
-            style:min-width="120px"
-            role="region"
-            aria-labelledby="datetime-heading"
-          >
-            <h2 id="datetime-heading" class="text-sm text-base-content opacity-60 mb-2">
-              {t('detections.headers.dateTime')}
-            </h2>
-            <div class="text-base text-base-content" aria-label="Detection date">
-              {detection.date}
-            </div>
-            <div class="text-base text-base-content" aria-label="Detection time">
-              {detection.time}
-            </div>
-            {#if detection.timeOfDay}
-              <div
-                class="text-sm text-base-content opacity-60 mt-1 capitalize"
-                aria-label="Time of day"
-              >
-                {detection.timeOfDay}
+          <!-- Mobile: place Date/Time and Confidence side-by-side; md+: flow as normal -->
+          <div class="grid grid-cols-2 gap-4 md:contents w-full">
+            <!-- Section 2: Date & Time (fixed width) -->
+            <div
+              class="md:shrink-0 md:text-center md:min-w-[120px] w-full"
+              role="region"
+              aria-labelledby="datetime-heading"
+            >
+              <h2 id="datetime-heading" class="text-sm text-base-content opacity-60 mb-2">
+                {t('detections.headers.dateTime')}
+              </h2>
+              <div class="text-base text-base-content" aria-label="Detection date">
+                {detection.date}
               </div>
-            {/if}
-          </div>
-
-          <!-- Section 3: Weather Conditions (fixed width) -->
-          <div
-            class="shrink-0 text-center"
-            style:min-width="180px"
-            role="region"
-            aria-labelledby="weather-heading"
-          >
-            <h2 id="weather-heading" class="text-sm text-base-content opacity-60 mb-2">
-              {t('detections.headers.weather')}
-            </h2>
-            {#if detection.weather}
-              <div class="flex justify-center" aria-label="Weather conditions at time of detection">
-                <WeatherDetails
-                  weatherIcon={detection.weather.weatherIcon}
-                  weatherDescription={detection.weather.description}
-                  temperature={detection.weather.temperature}
-                  windSpeed={detection.weather.windSpeed}
-                  windGust={detection.weather.windGust}
-                  units={detection.weather.units}
-                  size="md"
-                  className="text-center"
-                />
+              <div class="text-base text-base-content" aria-label="Detection time">
+                {detection.time}
               </div>
-            {:else}
-              <div class="text-sm text-base-content opacity-40 italic" role="status">
-                {t('detections.weather.noData')}
-              </div>
-            {/if}
-          </div>
-
-          <!-- Section 4: Confidence + Actions (fixed width) -->
-          <div
-            class="shrink-0 flex flex-col items-center"
-            style:min-width="120px"
-            role="region"
-            aria-labelledby="confidence-heading"
-          >
-            <h2 id="confidence-heading" class="text-sm text-base-content opacity-60 mb-2">
-              {t('common.labels.confidence')}
-            </h2>
-            <div aria-label="Detection confidence {detection.confidence}%">
-              <ConfidenceCircle confidence={detection.confidence} size="xl" />
-            </div>
-
-            <!-- Actions below confidence -->
-            <div class="flex flex-col gap-2 mt-4" role="group" aria-label="Detection actions">
-              {#if detection.clipName}
-                <a
-                  href={`/api/v2/media/audio/${detection.clipName}`}
-                  download
-                  class="btn btn-ghost btn-sm gap-2"
-                  aria-label="Download audio clip for {detection.commonName} detection"
+              {#if detection.timeOfDay}
+                <div
+                  class="text-sm text-base-content opacity-60 mt-1 capitalize"
+                  aria-label="Time of day"
                 >
-                  <Download class="size-5" />
-                  {t('common.actions.download')}
-                </a>
+                  {detection.timeOfDay}
+                </div>
               {/if}
             </div>
+
+            <!-- Section 3: Weather Conditions (fixed width) -->
+            <div
+              class="hidden md:block md:shrink-0 md:text-center md:min-w-[180px] w-full"
+              role="region"
+              aria-labelledby="weather-heading"
+            >
+              <h2 id="weather-heading" class="text-sm text-base-content opacity-60 mb-2">
+                {t('detections.headers.weather')}
+              </h2>
+              {#if detection.weather}
+                <div
+                  class="flex justify-start md:justify-center"
+                  aria-label="Weather conditions at time of detection"
+                >
+                  <WeatherDetails
+                    weatherIcon={detection.weather.weatherIcon}
+                    weatherDescription={detection.weather.description}
+                    temperature={detection.weather.temperature}
+                    windSpeed={detection.weather.windSpeed}
+                    windGust={detection.weather.windGust}
+                    units={detection.weather.units}
+                    size="md"
+                    className="text-left md:text-center"
+                  />
+                </div>
+              {:else}
+                <div class="text-sm text-base-content opacity-40 italic" role="status">
+                  {t('detections.weather.noData')}
+                </div>
+              {/if}
+            </div>
+
+            <!-- Section 4: Confidence + Actions (fixed width) -->
+            <div
+              class="md:shrink-0 flex flex-col md:items-center w-full md:w-auto md:min-w-[120px]"
+              role="region"
+              aria-labelledby="confidence-heading"
+            >
+              <div class="flex items-center gap-3 md:flex-col md:items-center">
+                <h2
+                  id="confidence-heading"
+                  class="text-sm text-base-content opacity-60 mb-0 md:mb-2"
+                >
+                  {t('common.labels.confidence')}
+                </h2>
+                <div
+                  aria-label="Detection confidence {detection.confidence}%"
+                  class="md:self-auto self-start md:scale-100 scale-90"
+                >
+                  <ConfidenceCircle confidence={detection.confidence} size="xl" />
+                </div>
+              </div>
+
+              <!-- Actions below confidence -->
+              <div
+                class="flex flex-row md:flex-col gap-2 mt-3"
+                role="group"
+                aria-label="Detection actions"
+              >
+                {#if detection.clipName}
+                  <a
+                    href={`/api/v2/media/audio/${detection.clipName}`}
+                    download
+                    class="btn btn-ghost btn-sm gap-2"
+                    aria-label="Download audio clip for {detection.commonName} detection"
+                  >
+                    <Download class="size-5" />
+                    {t('common.actions.download')}
+                  </a>
+                {/if}
+              </div>
+            </div>
           </div>
+          <!-- end mobile grid wrapper -->
         </div>
       </div>
     </div>

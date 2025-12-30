@@ -16,7 +16,9 @@
     "sort": "Sortieren",
     "actions": {
       "download": "Herunterladen",
-      "review": "Überprüfen"
+      "review": "Überprüfen",
+      "play": "Abspielen",
+      "view": "Ansehen"
     },
     "settings": "Einstellungen",
     "close": "Schließen",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Suchfilter",
     "results": "Suchergebnisse",
-    "resultsCount": "{count, plural, =0 {Keine Ergebnisse} one {# Ergebnis} other {# Ergebnisse}}",
+    "resultsCountZero": "Keine Ergebnisse",
+    "resultsCountOne": "1 Ergebnis",
+    "resultsCountOther": "{count} Ergebnisse",
     "noSearchPerformed": "Noch keine Suche durchgeführt",
     "noSearchPerformedHint": "Verwenden Sie die Suchfilter oben, um Vogelerkennungen zu finden",
     "loadingResults": "Ergebnisse werden geladen...",

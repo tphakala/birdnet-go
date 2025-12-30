@@ -2434,4 +2434,70 @@
   .border-border-100 {
     border-color: var(--border-100);
   }
+
+  /* Mobile-optimized scrolling and touch behavior */
+  @media (max-width: 640px) {
+    /* Enable better touch scroll on mobile */
+    * {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Mobile-friendly button sizes */
+    .btn:not(.btn-xs, .btn-sm) {
+      min-height: 2.5rem;
+      padding: 0.5rem 1rem;
+    }
+
+    .btn-sm {
+      min-height: 2rem;
+      padding: 0.375rem 0.75rem;
+    }
+
+    /* Mobile card padding */
+    .card-body {
+      padding: 1rem;
+    }
+
+    /* Better mobile input sizing */
+    .input,
+    .select,
+    .textarea {
+      min-height: 2.75rem;
+      font-size: 16px; /* Prevents zoom on iOS */
+    }
+
+    /* Mobile-friendly table scrolling */
+
+    /* Improved touch targets for mobile */
+
+    /* Mobile dialog/modal improvements */
+    .modal-box {
+      max-height: 90vh;
+      border-radius: 1.5rem 1.5rem 0 0;
+    }
+
+    /* Stack buttons on mobile */
+    .btn-group,
+    .flex.gap-2 > .btn {
+      flex: 1;
+    }
+  }
+
+  /* Tablet and larger improvements */
+  @media (min-width: 768px) {
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    .btn {
+      padding: 0.625rem 1.25rem;
+    }
+  }
+
+  /* Large screen optimizations */
+  @media (min-width: 1024px) {
+    .card-body {
+      padding: 2rem;
+    }
+  }
 }

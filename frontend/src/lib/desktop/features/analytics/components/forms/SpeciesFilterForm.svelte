@@ -1,7 +1,7 @@
 <script lang="ts">
   import FormField from '$lib/desktop/components/forms/FormField.svelte';
-  import Select from '$lib/desktop/components/ui/Select.svelte';
   import Input from '$lib/desktop/components/ui/Input.svelte';
+  import Select from '$lib/desktop/components/ui/Select.svelte';
   import { t } from '$lib/i18n';
 
   interface SpeciesFilters {
@@ -83,7 +83,7 @@
       <div
         class="filters-grid"
         style:display="grid"
-        style:grid-template-columns="repeat(auto-fit, minmax(250px, 1fr))"
+        style:grid-template-columns="repeat(auto-fit, minmax(200px, 1fr))"
         style:gap="1rem"
       >
         <!-- Time Period Filter -->
@@ -107,8 +107,12 @@
           <Select id="sortOrder" bind:value={filters.sortOrder} options={sortOptions} />
         </FormField>
 
-        <!-- Search Filter -->
-        <FormField label={t('analytics.filters.searchSpecies')} id="searchTerm">
+        <!-- Search Filter - Full width on mobile -->
+        <FormField
+          label={t('analytics.filters.searchSpecies')}
+          id="searchTerm"
+          className="col-span-full sm:col-span-auto"
+        >
           <Input
             type="text"
             id="searchTerm"
@@ -119,7 +123,7 @@
         </FormField>
       </div>
 
-      <div class="flex justify-between items-center">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div class="text-sm text-base-content opacity-60">
           <span>{filteredCount}</span>
           {t('analytics.filters.species')}
@@ -127,13 +131,18 @@
             <span>{t('analytics.filters.filtered')}</span>
           {/if}
         </div>
-        <div class="flex gap-2">
-          <button type="button" class="btn btn-ghost" onclick={handleReset} disabled={isLoading}>
+        <div class="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            onclick={handleReset}
+            disabled={isLoading}
+          >
             {t('analytics.filters.reset')}
           </button>
           <button
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-secondary btn-sm hidden sm:flex"
             onclick={handleExport}
             disabled={isLoading}
           >
@@ -151,7 +160,7 @@
             </svg>
             {t('analytics.filters.exportCsv')}
           </button>
-          <button type="submit" class="btn btn-primary" disabled={isLoading}>
+          <button type="submit" class="btn btn-primary btn-sm" disabled={isLoading}>
             {#if isLoading}
               <span class="loading loading-spinner loading-sm"></span>
             {/if}

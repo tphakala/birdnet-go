@@ -26,7 +26,9 @@
     "sort": "Ordenar",
     "actions": {
       "download": "Baixar",
-      "review": "Revisar"
+      "review": "Revisar",
+      "play": "Reproduzir",
+      "view": "Ver"
     },
     "settings": "Configurações",
     "close": "Fechar",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Filtros de pesquisa",
     "results": "Resultados da pesquisa",
-    "resultsCount": "{count, plural, =0 {Nenhum resultado} one {# resultado} other {# resultados}}",
+    "resultsCountZero": "Sem resultados",
+    "resultsCountOne": "1 resultado",
+    "resultsCountOther": "{count} resultados",
     "noSearchPerformed": "Nenhuma pesquisa realizada ainda",
     "noSearchPerformedHint": "Use os filtros de pesquisa acima para encontrar detecções de pássaros",
     "loadingResults": "Carregando resultados...",

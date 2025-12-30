@@ -32,7 +32,9 @@
     "internalServerError": "Wewnętrzny Błąd Serwera",
     "actions": {
       "download": "Pobierz",
-      "review": "Przejrzyj"
+      "review": "Przejrzyj",
+      "play": "Odtwórz",
+      "view": "Zobacz"
     },
     "buttons": {
       "save": "Zapisz Zmiany",
@@ -327,7 +329,9 @@
   "search": {
     "title": "Filtry Wyszukiwania",
     "results": "Wyniki Wyszukiwania",
-    "resultsCount": "{count, plural, =0 {Brak wyników} one {# wynik} few {# wyniki} other {# wyników}}",
+    "resultsCountZero": "Brak wyników",
+    "resultsCountOne": "1 wynik",
+    "resultsCountOther": "{count} wyników",
     "noSearchPerformed": "Nie wykonano jeszcze wyszukiwania",
     "noSearchPerformedHint": "Użyj filtrów wyszukiwania powyżej, aby znaleźć detekcje ptaków",
     "loadingResults": "Ładowanie wyników...",

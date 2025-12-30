@@ -1,13 +1,23 @@
 <script lang="ts">
-  import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
-  import { t, getLocale } from '$lib/i18n';
-  import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
+  import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
+  import { getLocale, t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
-  import { Search, ArrowDownUp, XCircle, Music, Eye, ChevronDown, FrownIcon } from '@lucide/svelte';
   import { api } from '$lib/utils/api';
+  import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
+  import {
+    ArrowDownUp,
+    ChevronDown,
+    Eye,
+    FrownIcon,
+    Music,
+    Search,
+    Volume2,
+    XCircle,
+  } from '@lucide/svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -63,6 +73,34 @@
   let expandedItems = $state(new Set<string>());
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
+
+  // Localized pluralized results count using i18n keys
+  function formatResultsCount(count: number) {
+    if (!count || count === 0) return t('search.resultsCountZero');
+    if (count === 1) return t('search.resultsCountOne');
+    return t('search.resultsCountOther', { count });
+  }
+
+  // Mobile audio overlay state
+  let showMobilePlayer = $state(false);
+  let selectedAudioUrl = $state('');
+  let selectedSpeciesName = $state('');
+  let selectedDetectionId = $state<string | undefined>(undefined);
+
+  function openMobilePlayer(result: SearchResult) {
+    if (!result?.id) return;
+    selectedAudioUrl = `/api/v2/audio/${result.id}`;
+    selectedSpeciesName = result.commonName || '';
+    selectedDetectionId = result.id;
+    showMobilePlayer = true;
+  }
+
+  function closeMobilePlayer() {
+    showMobilePlayer = false;
+    selectedAudioUrl = '';
+    selectedSpeciesName = '';
+    selectedDetectionId = undefined;
+  }
 
   // Form validation
   function validateForm() {
@@ -501,9 +539,7 @@
         {#if formSubmitted}
           <div class="flex items-center gap-4">
             <span class="text-sm text-base-content opacity-70" aria-live="polite"
-              >{t('search.resultsCount', {
-                count: totalResults,
-              })}</span
+              >{formatResultsCount(totalResults)}</span
             >
             <div class="dropdown dropdown-end">
               <div
@@ -597,9 +633,10 @@
         </div>
       {/if}
 
-      <!-- Search results table - only visible when search performed -->
+      <!-- Search results - table for md+, cards for mobile -->
       {#if formSubmitted && !isLoading && results.length > 0}
-        <div class="overflow-x-auto mt-4" aria-labelledby="search-results-heading">
+        <!-- Desktop/tablet table -->
+        <div class="overflow-x-auto mt-4 hidden md:block" aria-labelledby="search-results-heading">
           <table class="table w-full">
             <thead>
               <tr>
@@ -657,7 +694,7 @@
                           alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={e => {
-                            const target = e.target as any;
+                            const target = e.target as HTMLImageElement;
                             if (target) {
                               target.src = '/assets/images/bird-placeholder.svg';
                               target.classList.add('p-2');
@@ -820,7 +857,7 @@
                                 alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
                                 onerror={e => {
-                                  const target = e.target as any;
+                                  const target = e.target as HTMLImageElement;
                                   if (target) {
                                     target.src = '/assets/images/bird-placeholder.svg';
                                     target.classList.add('p-2');
@@ -855,6 +892,124 @@
               {/each}
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile card list -->
+        <div class="md:hidden mt-4 space-y-2" aria-labelledby="search-results-heading">
+          {#each results as result (result.id)}
+            <section class="bg-base-100 rounded-lg p-3">
+              <div class="flex items-start gap-3">
+                <!-- Time of Day + Date/Time -->
+                <div class="w-16 shrink-0 text-sm opacity-80">
+                  <div class="flex items-center gap-1">
+                    <TimeOfDayIcon timeOfDay={result.timeOfDay as any} className="size-4" />
+                    <span class="capitalize">{result.timeOfDay}</span>
+                  </div>
+                  <div class="mt-1 text-xs opacity-70 leading-tight">
+                    {formatDate(result.timestamp)}
+                  </div>
+                </div>
+
+                <!-- Thumbnail and names -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <div class="w-12 h-12 rounded-md overflow-hidden bg-base-200 shrink-0">
+                      <img
+                        src="/api/v2/media/species-image?name={encodeURIComponent(
+                          result.scientificName
+                        )}"
+                        alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
+                        class="w-full h-full object-cover"
+                        onerror={e => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          if (target) {
+                            target.src = '/assets/images/bird-placeholder.svg';
+                          }
+                        }}
+                        loading="lazy"
+                        decoding="async"
+                        fetchpriority="low"
+                      />
+                    </div>
+                    <div class="min-w-0">
+                      <div class="font-semibold leading-tight truncate">
+                        {result.commonName || t('search.detailsPanel.unknownSpecies')}
+                      </div>
+                      <div class="text-xs opacity-60 truncate">{result.scientificName || ''}</div>
+                    </div>
+                  </div>
+
+                  <!-- Confidence + Status -->
+                  <div class="mt-2 flex items-center gap-2">
+                    <span
+                      class="badge {result.confidence >= 0.8
+                        ? 'badge-success'
+                        : result.confidence >= 0.4
+                          ? 'badge-warning'
+                          : 'badge-error'}"
+                    >
+                      {Math.round(result.confidence * 100)}%
+                    </span>
+                    <div class="flex gap-1 flex-wrap">
+                      <div
+                        class="status-badge {result.verified === 'correct'
+                          ? 'correct'
+                          : result.verified === 'false_positive'
+                            ? 'false'
+                            : 'unverified'}"
+                      >
+                        {result.verified === 'correct'
+                          ? t('search.statusBadges.verified')
+                          : result.verified === 'false_positive'
+                            ? t('search.statusBadges.false')
+                            : t('search.statusBadges.unverified')}
+                      </div>
+                      <div class="status-badge {result.locked ? 'locked' : 'unverified'}">
+                        {result.locked
+                          ? t('search.statusBadges.locked')
+                          : t('search.statusBadges.unlocked')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="mt-2 flex items-center gap-2">
+                    <button
+                      class="btn btn-primary btn-sm"
+                      onclick={() => openMobilePlayer(result)}
+                      disabled={!result.hasAudio}
+                      aria-label={t('search.detailsPanel.playAudio', {
+                        species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                      })}
+                    >
+                      <Volume2 class="size-4" />
+                      {t('common.actions.play')}
+                    </button>
+                    <button
+                      class="btn btn-outline btn-sm"
+                      onclick={() => (window.location.href = `/ui/detections/${result.id}`)}
+                      aria-label={t('search.detailsPanel.viewDetails', {
+                        species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                      })}
+                    >
+                      {t('common.actions.view')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          {/each}
+
+          {#if showMobilePlayer}
+            <div class="md:hidden">
+              <MobileAudioPlayer
+                audioUrl={selectedAudioUrl}
+                speciesName={selectedSpeciesName}
+                detectionId={selectedDetectionId}
+                onClose={closeMobilePlayer}
+              />
+            </div>
+          {/if}
         </div>
       {/if}
 

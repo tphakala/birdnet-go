@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import StatCard from '../components/ui/StatCard.svelte';
-  import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
-  import SpeciesCard from '../components/ui/SpeciesCard.svelte';
   import { t } from '$lib/i18n';
+  import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
-  import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
+  import { onMount } from 'svelte';
+  import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
+  import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
+  import SpeciesCard from '../components/ui/SpeciesCard.svelte';
+  import SpeciesCardMobile from '../components/ui/SpeciesCardMobile.svelte';
+  import StatCard from '../components/ui/StatCard.svelte';
 
   const logger = loggers.analytics;
 
@@ -43,6 +45,8 @@
   let speciesData = $state<SpeciesData[]>([]);
   let filteredSpecies = $state<SpeciesData[]>([]);
   let viewMode = $state<ViewMode>('grid');
+  let selectedSpecies = $state<SpeciesData | null>(null);
+  let showDetailModal = $state(false);
 
   let filters = $state<SpeciesFilters>({
     timePeriod: 'all',
@@ -360,6 +364,16 @@
       applyFilters();
     }, 300);
   }
+
+  function handleSpeciesClick(species: SpeciesData) {
+    selectedSpecies = species;
+    showDetailModal = true;
+  }
+
+  function handleCloseDetailModal() {
+    showDetailModal = false;
+    selectedSpecies = null;
+  }
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
@@ -437,7 +451,7 @@
       <!-- View Toggle -->
       <div class="flex justify-between items-center mb-4">
         <h2 class="card-title">{t('analytics.species.speciesList')}</h2>
-        <div class="join">
+        <div class="join hidden sm:flex">
           <button
             class="btn btn-sm join-item"
             class:btn-active={viewMode === 'grid'}
@@ -484,9 +498,18 @@
         </div>
       {/if}
 
-      <!-- Grid View -->
-      {#if !isLoading && viewMode === 'grid'}
-        <div class="species-grid">
+      <!-- Mobile View - Compact List -->
+      {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
+        <div class="sm:hidden space-y-2">
+          {#each filteredSpecies as species (species.scientific_name)}
+            <SpeciesCardMobile {species} variant="compact" onClick={handleSpeciesClick} />
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Desktop Grid View -->
+      {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
+        <div class="species-grid hidden sm:grid">
           {#each filteredSpecies as species (species.scientific_name)}
             <SpeciesCard {species} />
           {/each}
@@ -496,7 +519,7 @@
       <!-- List View -->
       {#if !isLoading && viewMode === 'list'}
         <div class="overflow-x-auto">
-          <table class="table w-full">
+          <table class="table w-full hidden sm:table">
             <thead>
               <tr>
                 <th>{t('analytics.species.headers.species')}</th>
@@ -560,6 +583,12 @@
               {/each}
             </tbody>
           </table>
+          <!-- Mobile list view -->
+          <div class="sm:hidden space-y-2">
+            {#each filteredSpecies as species (species.scientific_name)}
+              <SpeciesCardMobile {species} variant="list" onClick={handleSpeciesClick} />
+            {/each}
+          </div>
         </div>
       {/if}
 
@@ -584,6 +613,15 @@
     </div>
   </div>
 </div>
+
+<!-- Mobile Species Detail Modal -->
+<SpeciesDetailModal
+  species={selectedSpecies}
+  isOpen={showDetailModal}
+  onClose={handleCloseDetailModal}
+/>
+
+<!-- Mobile Audio Player -->
 
 <style>
   .card-padding {
