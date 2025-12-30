@@ -2482,22 +2482,4 @@
       flex: 1;
     }
   }
-
-  /* Tablet and larger improvements */
-  @media (min-width: 768px) {
-    .card-body {
-      padding: 1.5rem;
-    }
-
-    .btn {
-      padding: 0.625rem 1.25rem;
-    }
-  }
-
-  /* Large screen optimizations */
-  @media (min-width: 1024px) {
-    .card-body {
-      padding: 2rem;
-    }
-  }
 }
