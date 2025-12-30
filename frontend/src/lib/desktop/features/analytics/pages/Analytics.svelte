@@ -1358,7 +1358,7 @@
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
                           onerror={e => {
-                            const target = e.currentTarget as any;
+                            const target = e.currentTarget as HTMLImageElement;
                             if (target) {
                               target.src = '/assets/images/bird-placeholder.svg';
                             }
@@ -1418,7 +1418,7 @@
                     alt={detection.commonName || 'Unknown species'}
                     class="w-full h-full object-cover"
                     onerror={e => {
-                      const target = e.currentTarget as any;
+                      const target = e.currentTarget as HTMLImageElement;
                       if (target) {
                         target.src = '/assets/images/bird-placeholder.svg';
                       }

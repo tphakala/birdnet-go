@@ -1,5 +1,4 @@
 <script lang="ts">
-  import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import { t } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
@@ -48,9 +47,6 @@
   let viewMode = $state<ViewMode>('grid');
   let selectedSpecies = $state<SpeciesData | null>(null);
   let showDetailModal = $state(false);
-  let showAudioPlayer = $state(false);
-  let selectedAudioUrl = $state('');
-  let selectedAudioSpecies = $state('');
 
   let filters = $state<SpeciesFilters>({
     timePeriod: 'all',
@@ -378,14 +374,6 @@
     showDetailModal = false;
     selectedSpecies = null;
   }
-
-  // Removed unused audio handler to satisfy linting
-
-  function handleCloseAudioPlayer() {
-    showAudioPlayer = false;
-    selectedAudioUrl = '';
-    selectedAudioSpecies = '';
-  }
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
@@ -634,13 +622,6 @@
 />
 
 <!-- Mobile Audio Player -->
-{#if showAudioPlayer}
-  <MobileAudioPlayer
-    audioUrl={selectedAudioUrl}
-    speciesName={selectedAudioSpecies}
-    onClose={handleCloseAudioPlayer}
-  />
-{/if}
 
 <style>
   .card-padding {

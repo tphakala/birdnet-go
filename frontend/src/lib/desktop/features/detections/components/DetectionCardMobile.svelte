@@ -2,6 +2,7 @@
   // Use prop callback instead of legacy event dispatcher
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
+  import { Volume2 } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
@@ -85,7 +86,8 @@
         onclick={handlePlay}
         aria-label={t('search.detailsPanel.playAudio', { species: detection.commonName })}
       >
-        🔊 {t('common.actions.play')}
+        <Volume2 class="h-4 w-4" />
+        {t('common.actions.play')}
       </button>
       <button
         class="btn btn-outline btn-sm"

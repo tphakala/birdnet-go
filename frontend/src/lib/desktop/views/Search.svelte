@@ -685,7 +685,7 @@
                           alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={e => {
-                            const target = e.target as any;
+                            const target = e.target as HTMLImageElement;
                             if (target) {
                               target.src = '/assets/images/bird-placeholder.svg';
                               target.classList.add('p-2');
@@ -848,7 +848,7 @@
                                 alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
                                 onerror={e => {
-                                  const target = e.target as any;
+                                  const target = e.target as HTMLImageElement;
                                   if (target) {
                                     target.src = '/assets/images/bird-placeholder.svg';
                                     target.classList.add('p-2');
@@ -912,7 +912,7 @@
                         alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                         class="w-full h-full object-cover"
                         onerror={e => {
-                          const target = e.currentTarget as any;
+                          const target = e.currentTarget as HTMLImageElement;
                           if (target) {
                             target.src = '/assets/images/bird-placeholder.svg';
                           }

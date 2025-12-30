@@ -2443,7 +2443,7 @@
     }
 
     /* Mobile-friendly button sizes */
-    .btn {
+    .btn:not(.btn-xs):not(.btn-sm) {
       min-height: 2.5rem;
       padding: 0.5rem 1rem;
     }
@@ -2467,16 +2467,8 @@
     }
 
     /* Mobile-friendly table scrolling */
-    .overflow-x-auto {
-      -webkit-overflow-scrolling: touch;
-    }
 
     /* Improved touch targets for mobile */
-    a,
-    button {
-      min-height: 44px; /* iOS recommended touch target */
-      min-width: 44px;
-    }
 
     /* Mobile dialog/modal improvements */
     .modal-box {

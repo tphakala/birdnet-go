@@ -29,6 +29,7 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
+  import { Volume2 } from '@lucide/svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
@@ -317,7 +318,8 @@
       <!-- Mobile-only quick play button -->
       <div class="mt-2 md:hidden">
         <button class="btn btn-primary btn-xs" aria-label="Play audio" onclick={playMobileAudio}>
-          🔊 Play
+          <Volume2 class="h-4 w-4" />
+          Play
         </button>
       </div>
     </div>
