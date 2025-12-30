@@ -99,5 +99,19 @@ describe('pluralParser', () => {
         expect(result).toBe('You have a message from {sender}');
       });
     });
+
+    describe('invalid locale handling', () => {
+      it('falls back to other category for invalid locale', () => {
+        const message = '{count, plural, one {# item} other {# items}}';
+        // Invalid locale should not throw, should fallback to 'other'
+        const result = parsePlural(message, { count: 1 }, 'invalid-locale-xyz');
+        expect(result).toBe('1 items');
+      });
+
+      it('does not throw for malformed locale', () => {
+        const message = '{count, plural, =0 {none} other {some}}';
+        expect(() => parsePlural(message, { count: 0 }, '!!!')).not.toThrow();
+      });
+    });
   });
 });

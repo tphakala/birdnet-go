@@ -36,9 +36,15 @@ export function parsePlural(
       const rules = [...pluralPattern.matchAll(ruleRegex)];
       if (rules.length === 0) return match;
 
-      // Get the correct plural category
-      const pluralRules = new Intl.PluralRules(locale);
-      const category = pluralRules.select(count);
+      // Get the correct plural category (with fallback for invalid locales)
+      let category: Intl.LDMLPluralRule;
+      try {
+        const pluralRules = new Intl.PluralRules(locale);
+        category = pluralRules.select(count);
+      } catch {
+        // Invalid locale - fall back to 'other' category
+        category = 'other';
+      }
 
       // Collect matches by type for proper precedence
       let categoryMatchText: string | undefined;
