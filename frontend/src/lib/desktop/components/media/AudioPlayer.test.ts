@@ -49,14 +49,6 @@ describe('AudioPlayer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
-    // Mock ResizeObserver - use class syntax for Vitest 4.x compatibility
-    class MockResizeObserver {
-      observe = vi.fn();
-      unobserve = vi.fn();
-      disconnect = vi.fn();
-    }
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-
     // Mock HTMLMediaElement methods
     mockPlay = vi.fn().mockResolvedValue(undefined);
     mockPause = vi.fn();

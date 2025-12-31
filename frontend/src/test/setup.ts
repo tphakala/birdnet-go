@@ -471,7 +471,8 @@ class MockIntersectionObserver {
   disconnect = vi.fn();
   takeRecords = vi.fn().mockReturnValue([]);
 }
-globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+globalThis.IntersectionObserver =
+  MockIntersectionObserver as unknown as typeof IntersectionObserver;
 
 // Mock ResizeObserver - use class syntax for Vitest 4.x compatibility
 class MockResizeObserver {
