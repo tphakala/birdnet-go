@@ -9,8 +9,8 @@
  *   2. Run tests: npm run test:integration -- --run
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
-import { apiCall, API_BASE } from './integration-setup';
+import { describe, expect, it } from 'vitest';
+import { apiCall } from './integration-setup';
 
 // Helper to generate unique IDs for test isolation
 function uniqueTestId(): string {

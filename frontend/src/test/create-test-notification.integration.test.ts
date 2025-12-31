@@ -11,6 +11,6 @@ describe('Test Helpers', () => {
     });
     expect(response.ok).toBe(true);
     const notification = await response.json();
-    console.log('Created notification:', notification.id);
+    expect(notification.id).toBeDefined();
   });
 });

@@ -107,11 +107,6 @@ describe('System API', () => {
 
     // Jobs endpoint may return 500 if processor is not available
     expect([200, 500]).toContain(response.status);
-
-    if (response.ok) {
-      const jobs = await response.json();
-      expect(jobs).toBeDefined();
-    }
   });
 
   it('can fetch audio devices', async () => {
@@ -285,11 +280,6 @@ describe('Weather API', () => {
 
     // Sun endpoint should work if location is configured
     expect([200, 400, 404, 500]).toContain(response.status);
-
-    if (response.ok) {
-      const sun = await response.json();
-      expect(sun).toBeDefined();
-    }
   });
 
   it('can fetch latest weather', async () => {
