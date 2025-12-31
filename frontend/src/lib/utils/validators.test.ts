@@ -69,20 +69,24 @@ describe('Date Validators', () => {
     it('should preserve local-midnight semantics for YYYY-MM-DD strings', () => {
       // Mock timezone handling - this test verifies that parseLocalDateString
       // correctly handles YYYY-MM-DD input regardless of timezone
-      const mockDate = vi.spyOn(global, 'Date').mockImplementation(
+      // Use a class-based mock for Vitest 4.x constructor compatibility
+      class MockDate extends OriginalDate {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dateString?: any) => {
+        constructor(dateString?: any) {
           if (dateString === '2024-01-15T12:00:00') {
-            return new OriginalDate('2024-01-15T12:00:00');
+            super('2024-01-15T12:00:00');
+          } else {
+            super(dateString);
           }
-          return new OriginalDate(dateString);
         }
-      );
+      }
+      const originalDate = global.Date;
+      global.Date = MockDate as DateConstructor;
 
       // The validator should handle the date correctly regardless of timezone
       expect(validator('2024-01-15')).toBeNull();
 
-      mockDate.mockRestore();
+      global.Date = originalDate;
     });
 
     it('should use custom error message', () => {

@@ -97,6 +97,8 @@ export default defineConfig({
       },
     },
   },
+  // Vitest 4.x cache directory (moved from test.cache.dir)
+  cacheDir: 'node_modules/.vite',
   test: {
     environment: 'jsdom',
     globals: true,
@@ -107,15 +109,10 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts}'],
     // Explicitly exclude node_modules and other non-test directories from file search
     exclude: ['node_modules', 'dist', 'build', '.svelte-kit', 'coverage'],
-    // Performance optimizations
+    // Performance optimizations - Vitest 4.x removed poolOptions, use top-level options
     pool: 'threads', // Faster than default 'forks' for many small tests
-    poolOptions: {
-      threads: {
-        singleThread: false, // Allow multiple threads
-        minThreads: 2, // Keep minimum threads warm
-        maxThreads: 8, // Limit max threads to avoid overhead
-      },
-    },
+    minWorkers: 2, // Keep minimum threads warm (renamed from poolOptions.threads.minThreads)
+    maxWorkers: 8, // Limit max threads to avoid overhead (renamed from poolOptions.threads.maxThreads)
     // Increase concurrent test limit
     maxConcurrency: 20,
     // Optimize dependency handling
@@ -126,10 +123,6 @@ export default defineConfig({
           include: ['@testing-library/svelte', '@testing-library/jest-dom', 'jsdom'],
         },
       },
-    },
-    // Cache test results for faster re-runs
-    cache: {
-      dir: 'node_modules/.vitest',
     },
     coverage: {
       reporter: ['text', 'html', 'lcov'],

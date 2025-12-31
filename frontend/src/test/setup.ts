@@ -426,7 +426,7 @@ let animationFrameId = 0;
 
 Object.defineProperty(globalThis, 'requestAnimationFrame', {
   writable: true,
-  value: vi.fn().mockImplementation((callback: FrameRequestCallback): number => {
+  value: vi.fn().mockImplementation(function (callback: FrameRequestCallback): number {
     const id = ++animationFrameId;
     animationFrameCallbacks.set(id, callback);
     // Synchronously invoke the callback with a timestamp for deterministic testing
@@ -439,7 +439,7 @@ Object.defineProperty(globalThis, 'requestAnimationFrame', {
 
 Object.defineProperty(globalThis, 'cancelAnimationFrame', {
   writable: true,
-  value: vi.fn().mockImplementation((id: number): void => {
+  value: vi.fn().mockImplementation(function (id: number): void {
     animationFrameCallbacks.delete(id);
   }),
 });
@@ -447,34 +447,42 @@ Object.defineProperty(globalThis, 'cancelAnimationFrame', {
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
+  value: vi.fn().mockImplementation(function (query: string) {
+    return {
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(), // deprecated
+      removeListener: vi.fn(), // deprecated
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    };
+  }),
 });
 
-// Mock IntersectionObserver
-globalThis.IntersectionObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock IntersectionObserver - use class syntax for Vitest 4.x compatibility
+class MockIntersectionObserver {
+  readonly root: Element | null = null;
+  readonly rootMargin: string = '';
+  readonly thresholds: ReadonlyArray<number> = [];
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = vi.fn().mockReturnValue([]);
+}
+globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
 
-// Mock ResizeObserver
-globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver - use class syntax for Vitest 4.x compatibility
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
 // Mock HTMLCanvasElement.getContext for axe-core accessibility tests
-HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(contextType => {
+HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(function (contextType: string) {
   if (contextType === '2d') {
     return {
       fillRect: vi.fn(),
@@ -523,10 +531,10 @@ const DEFAULT_COMPUTED_STYLES = {
   border: 'none',
 };
 
-window.getComputedStyle = vi.fn().mockImplementation(() => {
+window.getComputedStyle = vi.fn().mockImplementation(function () {
   const style = {
     ...DEFAULT_COMPUTED_STYLES,
-    getPropertyValue: vi.fn().mockImplementation((property: string) => {
+    getPropertyValue: vi.fn().mockImplementation(function (property: string) {
       const computedStyle = { ...DEFAULT_COMPUTED_STYLES } as Record<string, string>;
       return (
         // eslint-disable-next-line security/detect-object-injection -- intentional property access in test mock
@@ -545,7 +553,7 @@ window.getComputedStyle = vi.fn().mockImplementation(() => {
 // Note: CSRF token mocking is handled per-test as needed to avoid interfering with API tests
 
 // Mock fetch for i18n translation loading and API calls
-globalThis.fetch = vi.fn().mockImplementation(url => {
+globalThis.fetch = vi.fn().mockImplementation(function (url: string) {
   // Mock translation files for i18n system
   if (url.includes('/ui/assets/messages/') && url.endsWith('.json')) {
     const mockTranslations = {
