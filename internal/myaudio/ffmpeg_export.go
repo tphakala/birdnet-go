@@ -106,6 +106,10 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		var sumAbsSamples int64
 		numSamples := len(pcmData) / 2
 		if numSamples > 0 {
+			// Initialize min/max with first sample to handle all-positive or all-negative audio
+			firstSample := int16(pcmData[0]) | int16(pcmData[1])<<8
+			maxSample, minSample = firstSample, firstSample
+
 			for i := 0; i < len(pcmData)-1; i += 2 {
 				sample := int16(pcmData[i]) | int16(pcmData[i+1])<<8
 				if sample > maxSample {
