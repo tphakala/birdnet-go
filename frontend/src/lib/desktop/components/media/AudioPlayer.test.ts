@@ -49,19 +49,12 @@ describe('AudioPlayer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
-    // Mock ResizeObserver
-    global.ResizeObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }));
-
     // Mock HTMLMediaElement methods
     mockPlay = vi.fn().mockResolvedValue(undefined);
     mockPause = vi.fn();
 
-    window.HTMLMediaElement.prototype.play = mockPlay;
-    window.HTMLMediaElement.prototype.pause = mockPause;
+    window.HTMLMediaElement.prototype.play = mockPlay as unknown as () => Promise<void>;
+    window.HTMLMediaElement.prototype.pause = mockPause as unknown as () => void;
 
     // Mock addEventListener to store handlers
     window.HTMLMediaElement.prototype.addEventListener = vi.fn(

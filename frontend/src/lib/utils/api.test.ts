@@ -59,7 +59,7 @@ describe('API utilities', () => {
 
     beforeEach(() => {
       mockFetch = vi.fn();
-      global.fetch = mockFetch;
+      global.fetch = mockFetch as unknown as typeof fetch;
     });
 
     it('makes GET request with default headers', async () => {
@@ -197,7 +197,7 @@ describe('API utilities', () => {
           json: () => Promise.resolve({ success: true }),
         })
       );
-      global.fetch = mockFetch;
+      global.fetch = mockFetch as unknown as typeof fetch;
     });
 
     it('makes GET requests', async () => {

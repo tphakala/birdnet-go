@@ -31,7 +31,7 @@ describe('Auth Store', () => {
 
     // Mock fetch
     mockFetch = vi.fn();
-    global.fetch = mockFetch;
+    global.fetch = mockFetch as unknown as typeof fetch;
 
     // Save and mock window.location.href
     originalHref = window.location.href;

@@ -90,9 +90,9 @@ export function validateSpecies(
     const allowedParts = parseSpeciesName(allowed);
 
     return (
-      (speciesParts.scientific &&
+      (speciesParts.scientific !== '' &&
         speciesParts.scientific.toLowerCase() === allowedParts.scientific.toLowerCase()) ||
-      (speciesParts.common &&
+      (speciesParts.common !== '' &&
         speciesParts.common.toLowerCase() === allowedParts.common.toLowerCase())
     );
   });
