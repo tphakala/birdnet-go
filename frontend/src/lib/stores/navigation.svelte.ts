@@ -35,7 +35,15 @@ function normalizePath(url: string): string {
  */
 export function createNavigation(): NavigationStore {
   let currentPath = $state(
-    typeof window !== 'undefined' ? window.location.pathname : '/ui/dashboard'
+    (() => {
+      if (typeof window === 'undefined') return '/ui/dashboard';
+      const path = normalizePath(window.location.pathname);
+      // Update URL if it was normalized (without creating history entry)
+      if (path !== window.location.pathname) {
+        window.history.replaceState({}, '', path);
+      }
+      return path;
+    })()
   );
 
   function navigate(url: string): void {

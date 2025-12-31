@@ -366,15 +366,22 @@
       logger.debug('SSE notifications manager initialized');
     }
 
-    // Determine current route from URL path
-    const path = window.location.pathname;
-    handleRouting(path);
+    // Determine current route from URL path (use store which has normalized path)
+    handleRouting(navigation.currentPath);
+  });
 
-    // Listen for browser back/forward navigation
-    window.addEventListener('popstate', () => {
+  // Use $effect for browser back/forward navigation with automatic cleanup
+  $effect(() => {
+    const handlePopState = () => {
       navigation.handlePopState();
-      handleRouting(window.location.pathname);
-    });
+      handleRouting(navigation.currentPath);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   });
 </script>
 

@@ -4,8 +4,10 @@ import { createNavigation } from './navigation.svelte';
 
 describe('navigation store', () => {
   beforeEach(() => {
-    // Mock history.pushState
+    vi.clearAllMocks();
+    // Mock history methods
     vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
+    vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
   });
 
   describe('navigate', () => {
@@ -36,6 +38,7 @@ describe('navigation store', () => {
 
   describe('handlePopState', () => {
     it('should update currentPath from window.location', () => {
+      const originalLocation = window.location;
       const nav = createNavigation();
       // Simulate browser back by setting window.location.pathname
       Object.defineProperty(window, 'location', {
@@ -45,6 +48,12 @@ describe('navigation store', () => {
       });
       nav.handlePopState();
       expect(nav.currentPath).toBe('/ui/about');
+      // Restore original location to prevent test pollution
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
     });
   });
 });
