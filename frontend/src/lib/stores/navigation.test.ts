@@ -1,6 +1,6 @@
 // frontend/src/lib/stores/navigation.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { navigation, createNavigation } from './navigation.svelte';
+import { createNavigation } from './navigation.svelte';
 
 describe('navigation store', () => {
   beforeEach(() => {

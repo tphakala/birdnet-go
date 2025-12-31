@@ -18,7 +18,7 @@
     children?: Snippet;
     className?: string;
     authConfig?: AuthConfig;
-    onNavigate?: (url: string) => void;
+    onNavigate?: (_url: string) => void;
   }
 
   let {

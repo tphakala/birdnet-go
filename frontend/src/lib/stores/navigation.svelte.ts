@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /**
  * Navigation store for SPA client-side routing.
  * Manages route state and provides navigate() function using History API.
