@@ -465,14 +465,48 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 
 		// Calculate byte indices with full floating-point precision before truncating to int.
 		// This preserves sub-second accuracy (e.g., 1.5s * 48000 * 2 = 144000, not 96000).
-		startIndex := int(startOffset.Seconds() * float64(cb.sampleRate) * float64(cb.bytesPerSample))
-		endIndex := int(endOffset.Seconds() * float64(cb.sampleRate) * float64(cb.bytesPerSample))
+		// IMPORTANT: Calculate sample indices first, then convert to bytes to ensure alignment.
+		// Direct byte calculation can produce odd indices for 16-bit audio, causing corruption.
+		startSampleIndex := int(startOffset.Seconds() * float64(cb.sampleRate))
+		endSampleIndex := int(endOffset.Seconds() * float64(cb.sampleRate))
+		startIndex := startSampleIndex * cb.bytesPerSample
+		endIndex := endSampleIndex * cb.bytesPerSample
 
 		startIndex %= cb.bufferSize
 		endIndex %= cb.bufferSize
 
+		// Debug: Log byte indices and alignment status to diagnose potential audio corruption
+		if conf.Setting().Realtime.Audio.Export.Debug {
+			startAligned := startIndex%cb.bytesPerSample == 0
+			endAligned := endIndex%cb.bytesPerSample == 0
+			log.Debug("capture buffer read segment calculation",
+				logger.String("source", cb.source),
+				logger.Int("start_index", startIndex),
+				logger.Int("end_index", endIndex),
+				logger.Int("bytes_per_sample", cb.bytesPerSample),
+				logger.Bool("start_aligned", startAligned),
+				logger.Bool("end_aligned", endAligned),
+				logger.Float64("start_offset_sec", startOffset.Seconds()),
+				logger.Float64("end_offset_sec", endOffset.Seconds()),
+				logger.Int("write_index", cb.writeIndex),
+				logger.Int("buffer_size", cb.bufferSize))
+
+			// Warn if misaligned - this would cause audio corruption
+			if !startAligned || !endAligned {
+				log.Warn("MISALIGNED byte index detected - audio corruption likely",
+					logger.String("source", cb.source),
+					logger.Int("start_index", startIndex),
+					logger.Int("end_index", endIndex),
+					logger.Int("bytes_per_sample", cb.bytesPerSample),
+					logger.Int("start_remainder", startIndex%cb.bytesPerSample),
+					logger.Int("end_remainder", endIndex%cb.bytesPerSample))
+			}
+		}
+
 		if startOffset < 0 {
-			if cb.writeIndex == 0 || cb.writeIndex+int(startOffset.Seconds()*float64(cb.sampleRate)*float64(cb.bytesPerSample)) > cb.bufferSize {
+			// Use sample-based calculation for consistency with the main index calculation
+			startOffsetBytes := int(startOffset.Seconds()*float64(cb.sampleRate)) * cb.bytesPerSample
+			if cb.writeIndex == 0 || cb.writeIndex+startOffsetBytes > cb.bufferSize {
 				cb.lock.Unlock()
 
 				enhancedErr := errors.Newf("requested start time is outside the buffer's current timeframe").
