@@ -72,6 +72,11 @@ Source: MIT
 License: https://github.com/fsnotify/fsnotify/blob/v1.9.0/LICENSE
 Source: BSD-3-Clause
 
+### github.com/gen2brain/malgo
+
+License: https://github.com/gen2brain/malgo/blob/v0.11.24/LICENSE
+Source: Unlicense
+
 ### github.com/getsentry/sentry-go
 
 License: https://github.com/getsentry/sentry-go/blob/v0.40.0/LICENSE
@@ -391,11 +396,6 @@ Source: MIT
 
 License: https://github.com/tphakala/go-tflite/blob/2dad4328ec9e/LICENSE
 Source: MIT
-
-### github.com/tphakala/malgo
-
-License: https://github.com/tphakala/malgo/blob/v0.11.22/LICENSE
-Source: Unlicense
 
 ### github.com/tphakala/simd
 
