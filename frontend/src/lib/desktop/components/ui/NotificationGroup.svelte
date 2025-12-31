@@ -201,7 +201,7 @@
         {#if group.unreadCount > 0 && onMarkAllRead}
           <button
             onclick={() => onMarkAllRead?.(unreadIds)}
-            class="btn btn-ghost btn-xs"
+            class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
             aria-label={t('notifications.groups.markAllRead')}
           >
             <Eye class="size-3" />
@@ -210,7 +210,7 @@
         {#if onDismissAll}
           <button
             onclick={() => onDismissAll?.(allIds)}
-            class="btn btn-ghost btn-xs text-error"
+            class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
             aria-label={t('notifications.groups.dismissAll')}
           >
             <Trash2 class="size-3" />
@@ -266,7 +266,7 @@
               {#if !notification.read && onMarkAsRead}
                 <button
                   onclick={() => onMarkAsRead?.(notification.id)}
-                  class="btn btn-ghost btn-xs"
+                  class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                   aria-label={t('notifications.actions.markAsRead')}
                 >
                   <Eye class="size-3" />
@@ -275,7 +275,7 @@
               {#if notification.read && notification.status !== 'acknowledged' && onAcknowledge}
                 <button
                   onclick={() => onAcknowledge?.(notification.id)}
-                  class="btn btn-ghost btn-xs"
+                  class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                   aria-label={t('notifications.actions.acknowledge')}
                 >
                   <Check class="size-3" />
@@ -284,7 +284,7 @@
               {#if onDelete}
                 <button
                   onclick={() => onDelete?.(notification.id)}
-                  class="btn btn-ghost btn-xs text-error"
+                  class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                   aria-label={t('notifications.actions.delete')}
                 >
                   <Trash2 class="size-3" />

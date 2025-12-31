@@ -54,8 +54,11 @@
   let hasUnread = $state(false);
   let pendingDeleteId = $state(null);
   let pendingBulkDeleteIds = $state(null);
-  let deleteModal = $state(null);
-  let bulkDeleteModal = $state(null);
+  // Element bindings should NOT use $state - causes showModal() to fail
+  /** @type {HTMLDialogElement | null} */
+  let deleteModal = null;
+  /** @type {HTMLDialogElement | null} */
+  let bulkDeleteModal = null;
 
   let filters = $state({
     status: '',
@@ -651,48 +654,72 @@
   </div>
 
   <!-- Delete Confirmation Modal -->
-  <dialog bind:this={deleteModal} class="modal">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">{t('notifications.actions.confirmDelete')}</h3>
-      <p class="py-4">{t('notifications.actions.deleteConfirmation')}</p>
-      <div class="modal-action">
-        <form method="dialog" class="flex gap-2">
-          <button onclick={() => (pendingDeleteId = null)} class="btn btn-ghost"
-            >{t('common.cancel')}</button
-          >
-          <button type="button" onclick={confirmDelete} class="btn btn-error"
-            >{t('common.delete')}</button
-          >
-        </form>
+  <dialog
+    bind:this={deleteModal}
+    class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl backdrop:bg-black/50"
+  >
+    <div class="p-6">
+      <h3 class="font-bold text-lg text-gray-900 dark:text-gray-100">
+        {t('notifications.actions.confirmDelete')}
+      </h3>
+      <p class="py-4 text-gray-600 dark:text-gray-300">
+        {t('notifications.actions.deleteConfirmation')}
+      </p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button
+          type="button"
+          onclick={() => {
+            pendingDeleteId = null;
+            deleteModal?.close();
+          }}
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          onclick={confirmDelete}
+          class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+        >
+          {t('common.delete')}
+        </button>
       </div>
     </div>
-    <form method="dialog" class="fixed inset-0 bg-black/50 -z-10">
-      <button class="w-full h-full cursor-default">{t('common.close')}</button>
-    </form>
   </dialog>
 
   <!-- Bulk Delete Confirmation Modal -->
-  <dialog bind:this={bulkDeleteModal} class="modal">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">{t('notifications.groups.confirmBulkDelete')}</h3>
-      <p class="py-4">
+  <dialog
+    bind:this={bulkDeleteModal}
+    class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl backdrop:bg-black/50"
+  >
+    <div class="p-6">
+      <h3 class="font-bold text-lg text-gray-900 dark:text-gray-100">
+        {t('notifications.groups.confirmBulkDelete')}
+      </h3>
+      <p class="py-4 text-gray-600 dark:text-gray-300">
         {t('notifications.groups.bulkDeleteConfirmation', {
           count: pendingBulkDeleteIds?.length ?? 0,
         })}
       </p>
-      <div class="modal-action">
-        <form method="dialog" class="flex gap-2">
-          <button onclick={() => (pendingBulkDeleteIds = null)} class="btn btn-ghost"
-            >{t('common.cancel')}</button
-          >
-          <button type="button" onclick={confirmBulkDelete} class="btn btn-error"
-            >{t('common.delete')}</button
-          >
-        </form>
+      <div class="flex justify-end gap-2 mt-4">
+        <button
+          type="button"
+          onclick={() => {
+            pendingBulkDeleteIds = null;
+            bulkDeleteModal?.close();
+          }}
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          onclick={confirmBulkDelete}
+          class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+        >
+          {t('common.delete')}
+        </button>
       </div>
     </div>
-    <form method="dialog" class="fixed inset-0 bg-black/50 -z-10">
-      <button class="w-full h-full cursor-default">{t('common.close')}</button>
-    </form>
   </dialog>
 </div>
