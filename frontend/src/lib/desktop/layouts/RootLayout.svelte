@@ -18,6 +18,7 @@
     children?: Snippet;
     className?: string;
     authConfig?: AuthConfig;
+    onNavigate?: (url: string) => void;
   }
 
   let {
@@ -32,6 +33,7 @@
       basicEnabled: true,
       enabledProviders: [],
     },
+    onNavigate,
   }: Props = $props();
 
   // Drawer state
@@ -80,11 +82,15 @@
     // including navigation to /ui/detections with query parameters
   }
 
-  // Handle navigation
+  // Handle navigation - use passed callback or fall back to full reload
   function handleNavigate(url: string) {
-    // Convert old routes to new /ui/ routes
     const uiUrl = url.startsWith('/ui/') ? url : `/ui${url === '/' ? '/dashboard' : url}`;
-    window.location.href = uiUrl;
+    if (onNavigate) {
+      onNavigate(uiUrl);
+    } else {
+      // Fallback for when used without SPA routing
+      window.location.href = uiUrl;
+    }
   }
 </script>
 
