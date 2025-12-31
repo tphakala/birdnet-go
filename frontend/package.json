@@ -23,6 +23,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:ci": "vitest run --reporter=verbose --coverage.enabled=false",
+    "test:integration": "vitest --config vitest.integration.config.ts",
+    "test:integration:auto": "INTEGRATION_AUTO_BACKEND=true vitest --config vitest.integration.config.ts",
     "depcheck": "npx depcheck --skip-missing",
     "commitlint": "npx commitlint --from HEAD~1 --to HEAD --verbose",
     "analyze:deps": "madge --extensions ts,js,svelte --summary src/",

@@ -36,3 +36,6 @@ vite.config.*.ts
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Vitest browser mode screenshots
+src/test/__screenshots__/

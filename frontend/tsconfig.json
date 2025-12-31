@@ -33,6 +33,7 @@
     "src/vite-env.d.ts",
     "src/vitest-env.d.ts",
     "vite.config.js",
+    "vitest.integration.config.ts",
     "tailwind.config.js",
     "postcss.config.js"
   ],

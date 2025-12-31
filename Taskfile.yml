@@ -737,6 +737,37 @@ tasks:
     cmds:
       - npm run test -- --run
 
+  # Integration Testing Tasks
+  integration-backend:
+    desc: Start backend for integration testing (air with hot reload)
+    cmds:
+      - air realtime
+
+  integration-test:
+    desc: Run frontend integration tests (backend must be running)
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - |
+        if ! curl -s http://localhost:8080/api/v2/health > /dev/null 2>&1; then
+          echo "⚠️  Backend not running at localhost:8080"
+          echo "   Start it with: task integration-backend"
+          echo "   Or use: task integration-test-auto (starts backend automatically)"
+          echo ""
+          echo "Running tests anyway (they will be skipped if backend unavailable)..."
+        fi
+      - npm run test:integration -- --run
+
+  integration-test-auto:
+    desc: Run integration tests with automatic backend management
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - |
+        echo "🧪 Running integration tests with auto-managed backend..."
+        echo "   Backend will be started automatically by Vitest global setup"
+      - npm run test:integration:auto -- --run
+
   frontend-test-coverage:
     desc: Run frontend tests with coverage
     dir: frontend
