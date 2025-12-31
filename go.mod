@@ -6,6 +6,7 @@ require (
 	github.com/antonholmquist/jason v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.18.0
+	github.com/gen2brain/malgo v0.11.24
 	github.com/getsentry/sentry-go v0.40.0
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
@@ -27,7 +28,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
-	github.com/tphakala/malgo v0.11.22
 	github.com/tphakala/simd v1.0.22
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0
