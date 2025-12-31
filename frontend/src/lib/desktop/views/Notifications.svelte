@@ -591,7 +591,7 @@
                     {#if !notification.read}
                       <button
                         onclick={e => markAsRead(notification.id, e)}
-                        class="btn btn-ghost btn-xs"
+                        class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                         aria-label={t('notifications.actions.markAsRead')}
                       >
                         <Eye class="size-3" />
@@ -600,7 +600,7 @@
                     {#if notification.read && notification.status !== 'acknowledged'}
                       <button
                         onclick={e => acknowledge(notification.id, e)}
-                        class="btn btn-ghost btn-xs"
+                        class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                         aria-label={t('notifications.actions.acknowledge')}
                       >
                         <Check class="size-3" />
@@ -608,7 +608,7 @@
                     {/if}
                     <button
                       onclick={e => deleteNotification(notification.id, e)}
-                      class="btn btn-ghost btn-xs text-error"
+                      class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                       aria-label={t('notifications.actions.delete')}
                     >
                       <Trash2 class="size-3" />
@@ -657,6 +657,12 @@
   <dialog
     bind:this={deleteModal}
     class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl backdrop:bg-black/50"
+    onclose={() => (pendingDeleteId = null)}
+    onclick={e => {
+      if (e.currentTarget === e.target) {
+        deleteModal?.close();
+      }
+    }}
   >
     <div class="p-6">
       <h3 class="font-bold text-lg text-gray-900 dark:text-gray-100">
@@ -668,10 +674,7 @@
       <div class="flex justify-end gap-2 mt-4">
         <button
           type="button"
-          onclick={() => {
-            pendingDeleteId = null;
-            deleteModal?.close();
-          }}
+          onclick={() => deleteModal?.close()}
           class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
         >
           {t('common.cancel')}
@@ -691,6 +694,12 @@
   <dialog
     bind:this={bulkDeleteModal}
     class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl backdrop:bg-black/50"
+    onclose={() => (pendingBulkDeleteIds = null)}
+    onclick={e => {
+      if (e.currentTarget === e.target) {
+        bulkDeleteModal?.close();
+      }
+    }}
   >
     <div class="p-6">
       <h3 class="font-bold text-lg text-gray-900 dark:text-gray-100">
