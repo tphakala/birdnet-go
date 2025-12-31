@@ -33,24 +33,40 @@ afterAll(() => {
   // Cleanup
 });
 
+// Cached CSRF token to avoid fetching on every request
+let cachedCsrfToken = '';
+
+/**
+ * Get CSRF token from app config endpoint
+ */
+async function getCsrfToken(): Promise<string> {
+  if (cachedCsrfToken) {
+    return cachedCsrfToken;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/app/config`);
+    if (response.ok) {
+      const config = await response.json();
+      cachedCsrfToken = config.csrfToken ?? '';
+      return cachedCsrfToken;
+    }
+  } catch {
+    // CSRF token not available
+  }
+  return '';
+}
+
 /**
  * Helper to make API calls with proper headers
  */
 export async function apiCall(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const url = endpoint.startsWith('/api') ? endpoint : `${API_BASE}${endpoint}`;
 
-  // Get CSRF token from the backend first if needed for mutations
+  // Get CSRF token for mutations (POST, PUT, DELETE, PATCH)
   let csrfToken = '';
   if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
-    try {
-      const tokenResponse = await fetch(`${API_BASE}/auth/csrf`);
-      if (tokenResponse.ok) {
-        const tokenData = await tokenResponse.json();
-        csrfToken = tokenData.token ?? '';
-      }
-    } catch {
-      // No CSRF token needed or auth not configured
-    }
+    csrfToken = await getCsrfToken();
   }
 
   const headers = new Headers(options.headers);
