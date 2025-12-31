@@ -164,8 +164,13 @@ test.describe('Notification Delete Modal', () => {
     await page.goto('/ui/notifications', { timeout: 15000 });
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
 
-    // Switch to flat view and click delete
+    // Switch to flat view and get the delete button
     const deleteButton = await switchToFlatViewAndGetDeleteButton(page);
+
+    // Get a reference to the parent card before clicking delete
+    const notificationCard = deleteButton.locator('xpath=ancestor::div[contains(@class, "card")]');
+    await expect(notificationCard).toBeVisible();
+
     await deleteButton.click();
 
     // Modal should be visible
@@ -181,13 +186,8 @@ test.describe('Notification Delete Modal', () => {
     // Modal should close
     await expect(modal).not.toBeVisible({ timeout: 5000 });
 
-    // Wait for API call to complete and UI to update
-    await page.waitForTimeout(1000);
-
-    // Notification should be gone (or count decreased)
-    const notificationItems = page.locator('text=New Species');
-    const count = await notificationItems.count();
-    expect(count).toBeLessThanOrEqual(1);
+    // The specific notification card should be removed from the UI
+    await expect(notificationCard).not.toBeVisible({ timeout: 5000 });
   });
 
   test('modal has proper backdrop styling', async ({ page, request }) => {
