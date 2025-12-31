@@ -69,7 +69,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'task dev_server',
+    // Build frontend first to ensure E2E tests use latest code
+    // dev_server only runs 'air realtime' which serves static assets
+    command: 'task frontend-build && task dev_server',
     port: 8080,
     reuseExistingServer: !process.env['CI'],
     timeout: 240000, // 4 minutes for cold machine startup
