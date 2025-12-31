@@ -96,6 +96,67 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return enhancedErr
 	}
 
+	// Debug: Log PCM data statistics before export to diagnose audio corruption
+	if settings.Export.Debug {
+		log := GetLogger()
+		isAligned := len(pcmData)%2 == 0 // 16-bit alignment check
+
+		// Calculate basic PCM statistics
+		var maxSample, minSample int16
+		var sumAbsSamples int64
+		numSamples := len(pcmData) / 2
+		if numSamples > 0 {
+			for i := 0; i < len(pcmData)-1; i += 2 {
+				sample := int16(pcmData[i]) | int16(pcmData[i+1])<<8
+				if sample > maxSample {
+					maxSample = sample
+				}
+				if sample < minSample {
+					minSample = sample
+				}
+				if sample < 0 {
+					sumAbsSamples += int64(-sample)
+				} else {
+					sumAbsSamples += int64(sample)
+				}
+			}
+		}
+		avgAbsSample := int64(0)
+		if numSamples > 0 {
+			avgAbsSample = sumAbsSamples / int64(numSamples)
+		}
+
+		// Get first 10 samples for inspection
+		firstSamples := make([]int16, 0, 10)
+		for i := 0; i < min(20, len(pcmData)-1); i += 2 {
+			sample := int16(pcmData[i]) | int16(pcmData[i+1])<<8
+			firstSamples = append(firstSamples, sample)
+		}
+
+		log.Debug("PCM data before FFmpeg export",
+			logger.Int("pcm_size_bytes", len(pcmData)),
+			logger.Int("num_samples", numSamples),
+			logger.Bool("size_aligned", isAligned),
+			logger.Int("max_sample", int(maxSample)),
+			logger.Int("min_sample", int(minSample)),
+			logger.Int64("avg_abs_sample", avgAbsSample),
+			logger.String("first_10_samples", fmt.Sprintf("%v", firstSamples)),
+			logger.String("output_path", outputPath),
+			logger.String("format", settings.Export.Type))
+
+		// Warn if audio appears to be silence or noise
+		if avgAbsSample < 100 {
+			log.Warn("PCM data appears to be near-silence",
+				logger.Int64("avg_abs_sample", avgAbsSample),
+				logger.String("output_path", outputPath))
+		} else if avgAbsSample > 20000 {
+			log.Warn("PCM data has unusually high amplitude - possible noise/corruption",
+				logger.Int64("avg_abs_sample", avgAbsSample),
+				logger.Int("max_sample", int(maxSample)),
+				logger.String("output_path", outputPath))
+		}
+	}
+
 	// Create a temporary file for FFmpeg output, returns full path with TempExt
 	// temporary file is used to perform export as atomic file operation
 	tempFilePath, err := createTempFile(outputPath)
