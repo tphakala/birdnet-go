@@ -3,6 +3,7 @@
   import { settingsStore, settingsActions } from '$lib/stores/settings';
   import { safeGet } from '$lib/utils/security';
   import { t } from '$lib/i18n';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -18,32 +19,28 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
 
-  // Get current section from URL
-  function getSectionFromPath(): string {
-    const path = window.location.pathname;
+  // Map URL paths to section names
+  const sectionMap: Record<string, string> = {
+    main: 'node',
+    audio: 'audio',
+    detectionfilters: 'filters',
+    integrations: 'integration',
+    security: 'security',
+    species: 'species',
+    notifications: 'notifications',
+    support: 'support',
+  };
 
-    // Extract the last part of the path
+  // Get current section from a path
+  function getSectionFromPath(path: string): string {
     const parts = path.split('/');
     const lastPart = parts[parts.length - 1];
-
-    // Map URL paths to section names
-    // Note: userinterface has been consolidated into main settings
-    const sectionMap: Record<string, string> = {
-      main: 'node',
-      audio: 'audio',
-      detectionfilters: 'filters',
-      integrations: 'integration',
-      security: 'security',
-      species: 'species',
-      notifications: 'notifications',
-      support: 'support',
-    };
-
     return safeGet(sectionMap, lastPart, 'node');
   }
 
-  // Get the current section
-  let currentSection = $state(getSectionFromPath());
+  // Derive current section from navigation store's reactive path
+  // This automatically updates when SPA navigation changes the path
+  let currentSection = $derived(getSectionFromPath(navigation.currentPath));
 
   // Get store values
   let store = $derived($settingsStore);
@@ -51,32 +48,6 @@
   // Load settings data on mount
   onMount(() => {
     settingsActions.loadSettings();
-  });
-
-  // Update section when navigation happens
-  onMount(() => {
-    const updateSection = () => {
-      currentSection = getSectionFromPath();
-    };
-
-    // Listen for browser navigation
-    window.addEventListener('popstate', updateSection);
-
-    // Listen for clicks on navigation links
-    const handleClick = (e: Event) => {
-      const target = e.target as HTMLElement;
-      const link = target.closest('a');
-      if (link && link.href.includes('/settings/')) {
-        setTimeout(updateSection, 0);
-      }
-    };
-
-    document.addEventListener('click', handleClick);
-
-    return () => {
-      window.removeEventListener('popstate', updateSection);
-      document.removeEventListener('click', handleClick);
-    };
   });
 </script>
 

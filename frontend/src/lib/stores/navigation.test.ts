@@ -1,0 +1,59 @@
+// frontend/src/lib/stores/navigation.test.ts
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createNavigation } from './navigation.svelte';
+
+describe('navigation store', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Mock history methods
+    vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
+    vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+  });
+
+  describe('navigate', () => {
+    it('should update currentPath', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/settings');
+      expect(nav.currentPath).toBe('/ui/settings');
+    });
+
+    it('should call history.pushState', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/analytics');
+      expect(window.history.pushState).toHaveBeenCalledWith({}, '', '/ui/analytics');
+    });
+
+    it('should normalize paths without /ui/ prefix', () => {
+      const nav = createNavigation();
+      nav.navigate('/settings');
+      expect(nav.currentPath).toBe('/ui/settings');
+    });
+
+    it('should handle root path', () => {
+      const nav = createNavigation();
+      nav.navigate('/');
+      expect(nav.currentPath).toBe('/ui/dashboard');
+    });
+  });
+
+  describe('handlePopState', () => {
+    it('should update currentPath from window.location', () => {
+      const originalLocation = window.location;
+      const nav = createNavigation();
+      // Simulate browser back by setting window.location.pathname
+      Object.defineProperty(window, 'location', {
+        value: { pathname: '/ui/about' },
+        writable: true,
+        configurable: true,
+      });
+      nav.handlePopState();
+      expect(nav.currentPath).toBe('/ui/about');
+      // Restore original location to prevent test pollution
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
+    });
+  });
+});

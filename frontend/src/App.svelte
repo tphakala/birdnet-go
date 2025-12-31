@@ -8,8 +8,19 @@
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
   import { t } from './lib/i18n';
   import { appState, initApp, MAX_RETRIES } from './lib/stores/appState.svelte';
+  import { navigation } from './lib/stores/navigation.svelte';
 
   const logger = getLogger('app');
+
+  /**
+   * Client-side navigation function.
+   * Updates URL via History API and triggers route handling.
+   * Page title translation is automatic via $derived(t(pageTitleKey)).
+   */
+  function navigate(url: string): void {
+    navigation.navigate(url);
+    handleRouting(navigation.currentPath);
+  }
 
   // Dynamic imports for heavy pages - properly typed component references
   let Analytics = $state<Component | null>(null);
@@ -355,9 +366,22 @@
       logger.debug('SSE notifications manager initialized');
     }
 
-    // Determine current route from URL path
-    const path = window.location.pathname;
-    handleRouting(path);
+    // Determine current route from URL path (use store which has normalized path)
+    handleRouting(navigation.currentPath);
+  });
+
+  // Use $effect for browser back/forward navigation with automatic cleanup
+  $effect(() => {
+    const handlePopState = () => {
+      navigation.handlePopState();
+      handleRouting(navigation.currentPath);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   });
 </script>
 
@@ -408,6 +432,7 @@
     {accessAllowed}
     {version}
     {authConfig}
+    onNavigate={navigate}
   >
     {#if currentRoute === 'dashboard'}
       <DashboardPage />
