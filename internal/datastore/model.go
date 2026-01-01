@@ -3,22 +3,29 @@ package datastore
 
 import "time"
 
-// AudioSource represents a structured audio source with ID, safe string, and display name
-// This allows safe separation of concerns: ID for buffer operations, SafeString for logging, DisplayName for UI
+// AudioSource is the runtime representation (not persisted)
 type AudioSource struct {
-	ID          string `json:"id"`          // Source ID for buffer operations (e.g., "rtsp_87b89761")
-	SafeString  string `json:"safeString"`  // Sanitized connection string for logging (credentials removed)
-	DisplayName string `json:"displayName"` // User-friendly name for UI display
+	ID          string `json:"id"`
+	SafeString  string `json:"safeString"`
+	DisplayName string `json:"displayName"`
+}
+
+// AudioSourceRecord is persisted to DB; notes reference via FK
+type AudioSourceRecord struct {
+	ID        string    `gorm:"primaryKey;size:50"`
+	Label     string    `gorm:"size:200"`
+	Type      string    `gorm:"size:20"`
+	CreatedAt time.Time `gorm:"index"`
+	UpdatedAt time.Time
 }
 
 // Note represents a single observation data point
 type Note struct {
-	ID          uint   `gorm:"primaryKey"`
-	SourceNode  string // Node name from config (Main.Name)
-	SourceID    string `gorm:"index:idx_notes_source_id"` // Audio source registry ID (e.g., "rtsp_87b89761")
-	SourceLabel string `gorm:"index:idx_notes_source_label"` // User-friendly label for the audio source (e.g., "Backyard Feeder")
-	Date        string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
-	Time        string `gorm:"index:idx_notes_time"`
+	ID            uint   `gorm:"primaryKey"`
+	SourceNode    string
+	AudioSourceID string `gorm:"index:idx_notes_audio_source_id;size:50"`
+	Date          string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
+	Time          string `gorm:"index:idx_notes_time"`
 	//InputFile      string
 	Source      AudioSource `gorm:"-"` // Runtime only, not stored in database
 	BeginTime   time.Time

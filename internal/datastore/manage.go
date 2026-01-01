@@ -474,6 +474,7 @@ func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
 		model any
 		name  string
 	}{
+		{&AudioSourceRecord{}, "audio_source_records"}, // must be before notes for FK
 		{&Note{}, "notes"},
 		{&Results{}, "results"},
 		{&NoteReview{}, "note_reviews"},

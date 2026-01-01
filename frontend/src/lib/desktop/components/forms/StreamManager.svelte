@@ -319,9 +319,9 @@
       updatedStreams.splice(index, 1, { url, label });
       onUpdateStreams(updatedStreams);
 
-      // Update per-stream transport
-      if (oldStream) {
+      if (oldStream && oldStream.url !== url) {
         streamTransports.delete(oldStream.url);
+        streamHealth.delete(oldStream.url);
       }
       streamTransports.set(url, streamTransport);
     }
