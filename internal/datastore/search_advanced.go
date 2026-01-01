@@ -58,8 +58,8 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	// 	metrics.IncrementSearches("advanced")
 	// }
 
-	// Start building the query
 	query := ds.DB.Model(&Note{}).
+		Joins("LEFT JOIN audio_source_records ON notes.audio_source_id = audio_source_records.id").
 		Preload("Review").
 		Preload("Lock").
 		Preload("Comments", func(db *gorm.DB) *gorm.DB {
@@ -94,9 +94,8 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 		query = query.Where("source IN ?", filters.Location)
 	}
 
-	// Apply source label filter (RTSP stream labels)
 	if len(filters.Source) > 0 {
-		query = query.Where("source_label IN ?", filters.Source)
+		query = query.Where("audio_source_records.label IN ?", filters.Source)
 	}
 
 	// Apply verified filter

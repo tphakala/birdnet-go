@@ -540,10 +540,13 @@ func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note, in
 
 // noteToDetectionResponse converts a single note to a detection response
 func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
-	// Prefer persisted SourceLabel, fall back to runtime Source.DisplayName
-	sourceLabel := note.SourceLabel
-	if sourceLabel == "" && note.Source != (datastore.AudioSource{}) && note.Source.DisplayName != "" {
+	sourceLabel := ""
+	if note.Source != (datastore.AudioSource{}) && note.Source.DisplayName != "" {
 		sourceLabel = note.Source.DisplayName
+	} else if note.AudioSourceID != "" {
+		if audioSource, err := c.DS.GetAudioSource(note.AudioSourceID); err == nil && audioSource != nil {
+			sourceLabel = audioSource.Label
+		}
 	}
 
 	detection := DetectionResponse{
