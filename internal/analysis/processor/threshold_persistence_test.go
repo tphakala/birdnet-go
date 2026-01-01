@@ -303,6 +303,15 @@ func (m *MockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	}, nil
 }
 
+// Audio source methods
+func (m *MockDatastore) GetOrCreateAudioSource(sourceID, label, sourceType string) (*datastore.AudioSourceRecord, error) {
+	return &datastore.AudioSourceRecord{ID: sourceID, Label: label, Type: sourceType}, nil
+}
+
+func (m *MockDatastore) GetAudioSource(sourceID string) (*datastore.AudioSourceRecord, error) {
+	return &datastore.AudioSourceRecord{ID: sourceID, Label: "", Type: "device"}, nil
+}
+
 // createTestProcessor creates a processor with mock datastore for testing
 func createTestProcessor() *Processor {
 	settings := &conf.Settings{}
