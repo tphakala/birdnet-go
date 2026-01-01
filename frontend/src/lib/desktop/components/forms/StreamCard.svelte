@@ -29,18 +29,20 @@
 
   interface Props {
     url: string;
+    label?: string;
     index: number;
     transport: string;
     streamType?: string;
     status?: StreamStatus;
     statusMessage?: string;
     disabled?: boolean;
-    onUpdate: (_url: string, _transport: string, _streamType: string) => void;
+    onUpdate: (_url: string, _label: string, _transport: string, _streamType: string) => void;
     onDelete: () => void;
   }
 
   let {
     url,
+    label = '',
     index,
     transport = 'tcp',
     streamType = 'rtsp',
@@ -54,6 +56,7 @@
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
   let editUrl = $state('');
+  let editLabel = $state('');
   let editTransport = $state('tcp');
   let editStreamType = $state('rtsp');
   let showDeleteConfirm = $state(false);
@@ -152,6 +155,7 @@
 
   function startEdit() {
     editUrl = url;
+    editLabel = label;
     editTransport = transport;
     editStreamType = streamType;
     isEditing = true;
@@ -164,10 +168,13 @@
 
   function saveEdit() {
     if (editUrl.trim()) {
-      onUpdate(editUrl.trim(), editTransport, editStreamType);
+      onUpdate(editUrl.trim(), editLabel.trim(), editTransport, editStreamType);
       isEditing = false;
     }
   }
+
+  // Display name: use label if set, otherwise "Stream N"
+  let displayName = $derived(label || `${t('settings.audio.streams.streamLabel')} ${index + 1}`);
 
   function confirmDelete() {
     showDeleteConfirm = true;
@@ -224,6 +231,27 @@
     {#if isEditing}
       <!-- Edit Mode -->
       <div class="space-y-4">
+        <!-- Label Input -->
+        <div class="form-control">
+          <label class="label py-1" for="stream-label-{index}">
+            <span class="label-text text-xs font-medium">
+              {t('settings.audio.streams.labelField')}
+            </span>
+          </label>
+          <input
+            id="stream-label-{index}"
+            type="text"
+            bind:value={editLabel}
+            onkeydown={handleKeydown}
+            class="input input-sm w-full text-sm"
+            placeholder={t('settings.audio.streams.labelPlaceholder')}
+            aria-describedby="stream-label-help-{index}"
+          />
+          <span id="stream-label-help-{index}" class="text-xs text-base-content opacity-60 mt-1">
+            {t('settings.audio.streams.labelHelp')}
+          </span>
+        </div>
+
         <!-- URL Input -->
         <div class="form-control">
           <label class="label py-1" for="stream-url-{index}">
@@ -304,8 +332,7 @@
           <!-- Stream Name, Status, and URL on same line where possible -->
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm font-semibold text-base-content">
-              {t('settings.audio.streams.streamLabel')}
-              {index + 1}
+              {displayName}
             </span>
             <StatusPill
               variant={getStatusVariant(status)}

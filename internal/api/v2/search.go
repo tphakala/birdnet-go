@@ -35,6 +35,7 @@ type SearchRequest struct {
 	LockedStatus   string  `json:"lockedStatus"`
 	DeviceFilter   string  `json:"deviceFilter"`
 	TimeOfDay      string  `json:"timeOfDay"`
+	Source         string  `json:"source"`
 	Page           int     `json:"page"`
 	SortBy         string  `json:"sortBy"`
 }
@@ -111,6 +112,7 @@ func (c *Controller) logValidatedRequest(path, ip string, req *SearchRequest) {
 		logger.String("verifiedStatus", req.VerifiedStatus),
 		logger.String("lockedStatus", req.LockedStatus),
 		logger.String("deviceFilter", req.DeviceFilter),
+		logger.String("source", req.Source),
 		logger.String("timeOfDay", req.TimeOfDay),
 		logger.Int("page", req.Page),
 		logger.String("sortBy", req.SortBy),
@@ -133,6 +135,7 @@ func (c *Controller) buildSearchFilters(req *SearchRequest, ctxTimeout context.C
 		UnlockedOnly:   req.LockedStatus == "unlocked",
 		Device:         req.DeviceFilter,
 		TimeOfDay:      req.TimeOfDay,
+		Source:         req.Source,
 		Page:           req.Page,
 		PerPage:        defaultPerPage,
 		SortBy:         req.SortBy,

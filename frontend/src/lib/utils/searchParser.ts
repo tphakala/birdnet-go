@@ -18,7 +18,8 @@ export type FilterType =
   | 'verified'
   | 'species'
   | 'location'
-  | 'locked';
+  | 'locked'
+  | 'source';
 
 export interface SearchFilter {
   type: FilterType;
@@ -140,6 +141,9 @@ function parseFilter(type: FilterType, value: string, raw: string): FilterParseR
 
     case 'locked':
       return parseLockedFilter(operator, actualValue, raw);
+
+    case 'source':
+      return parseSourceFilter(operator, actualValue, raw);
 
     default:
       return { error: `Unknown filter type: ${type}` };
@@ -454,6 +458,30 @@ function parseLockedFilter(
   };
 }
 
+function parseSourceFilter(
+  operator: FilterOperator,
+  value: string,
+  raw: string
+): FilterParseResult {
+  // Only allow equality for source
+  if (operator !== ':' && operator !== '=') {
+    return { error: `Invalid operator "${operator}" for source filter` };
+  }
+
+  if (!value.trim()) {
+    return { error: 'Source value cannot be empty' };
+  }
+
+  return {
+    filter: {
+      type: 'source',
+      operator: ':',
+      value: value.trim(),
+      raw,
+    },
+  };
+}
+
 /**
  * Convert parsed filters to API query parameters
  */
@@ -502,6 +530,10 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
       case 'locked':
         params.locked = filter.value.toString();
         break;
+
+      case 'source':
+        params.source = filter.value.toString();
+        break;
     }
   }
 
@@ -543,6 +575,10 @@ export function getFilterSuggestions(partialInput: string): string[] {
       case 'locked':
         suggestions.push('locked:true', 'locked:false');
         break;
+
+      case 'source':
+        suggestions.push('source:');
+        break;
     }
   } else {
     // Suggest filter types
@@ -555,6 +591,7 @@ export function getFilterSuggestions(partialInput: string): string[] {
       'species:',
       'location:',
       'locked:',
+      'source:',
     ];
     filterTypes.forEach(type => {
       if (type.startsWith(partialInput.toLowerCase())) {
@@ -600,6 +637,9 @@ export function formatFilterForDisplay(filter: SearchFilter): string {
 
     case 'locked':
       return `Locked: ${filter.value}`;
+
+    case 'source':
+      return `Source: ${filter.value}`;
 
     default:
       return filter.raw;

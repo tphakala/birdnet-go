@@ -1618,13 +1618,14 @@ func (p *Processor) NewWithSpeciesInfo(
 
 	// Return a new Note struct populated with the provided parameters and the current date and time
 	return datastore.Note{
-		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
-		Date:           date,                           // Use ISO 8601 date format
-		Time:           timeStr,                        // Use 24-hour time format
-		Source:         sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName
-		BeginTime:      beginTime,                      // Start time of the observation
-		EndTime:        endTime,                        // End time of the observation
-		SpeciesCode:    speciesCode,                    // Species code from taxonomy lookup
+		SourceNode:    p.Settings.Main.Name,           // From the provided configuration settings
+		AudioSourceID: sourceStruct.ID,
+		Date:          date,                           // Use ISO 8601 date format
+		Time:          timeStr,                        // Use 24-hour time format
+		Source:        sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName
+		BeginTime:     beginTime,                      // Start time of the observation
+		EndTime:       endTime,                        // End time of the observation
+		SpeciesCode:   speciesCode,                    // Species code from taxonomy lookup
 		ScientificName: scientificName,                 // Scientific name from taxonomy lookup
 		CommonName:     commonName,                     // Common name from taxonomy lookup
 		Confidence:     roundedConfidence,              // Confidence score of the observation

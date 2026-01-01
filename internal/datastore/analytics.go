@@ -13,6 +13,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// defaultSourceLabel is the display label for detections from the local microphone (no RTSP label)
+const defaultSourceLabel = "Local Microphone"
+
 // isDebugLoggingEnabled returns true if debug logging is enabled and logger is available
 func isDebugLoggingEnabled() bool {
 	settings := conf.GetSettings()
@@ -665,4 +668,51 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	}
 
 	return finalResults, nil
+}
+
+// SourceSummaryData contains detection statistics by audio source
+type SourceSummaryData struct {
+	SourceLabel string `json:"source_label"`
+	Count       int    `json:"count"`
+}
+
+// GetSourceSummaryData retrieves detection counts grouped by audio source label
+func (ds *DataStore) GetSourceSummaryData(ctx context.Context, startDate, endDate string, limit int) ([]SourceSummaryData, error) {
+	summaries := make([]SourceSummaryData, 0, 10)
+
+	caseExpr := fmt.Sprintf(
+		"CASE WHEN audio_source_records.label IS NULL OR audio_source_records.label = '' THEN '%s' ELSE audio_source_records.label END",
+		defaultSourceLabel,
+	)
+
+	query := ds.DB.WithContext(ctx).Table("notes").
+		Joins("LEFT JOIN audio_source_records ON notes.audio_source_id = audio_source_records.id").
+		Select(fmt.Sprintf("%s as source_label, COUNT(*) as count", caseExpr)).
+		Group(caseExpr).
+		Order("count DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	switch {
+	case startDate != "" && endDate != "":
+		query = query.Where("notes.date >= ? AND notes.date <= ?", startDate, endDate)
+	case startDate != "":
+		query = query.Where("notes.date >= ?", startDate)
+	case endDate != "":
+		query = query.Where("notes.date <= ?", endDate)
+	}
+
+	if err := query.Scan(&summaries).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_source_summary_data").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	return summaries, nil
 }

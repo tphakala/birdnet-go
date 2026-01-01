@@ -3,20 +3,29 @@ package datastore
 
 import "time"
 
-// AudioSource represents a structured audio source with ID, safe string, and display name
-// This allows safe separation of concerns: ID for buffer operations, SafeString for logging, DisplayName for UI
+// AudioSource is the runtime representation (not persisted)
 type AudioSource struct {
-	ID          string `json:"id"`          // Source ID for buffer operations (e.g., "rtsp_87b89761")
-	SafeString  string `json:"safeString"`  // Sanitized connection string for logging (credentials removed)
-	DisplayName string `json:"displayName"` // User-friendly name for UI display
+	ID          string `json:"id"`
+	SafeString  string `json:"safeString"`
+	DisplayName string `json:"displayName"`
+}
+
+// AudioSourceRecord is persisted to DB; notes reference via FK
+type AudioSourceRecord struct {
+	ID        string    `gorm:"primaryKey;size:50"`
+	Label     string    `gorm:"size:200"`
+	Type      string    `gorm:"size:20"`
+	CreatedAt time.Time `gorm:"index"`
+	UpdatedAt time.Time
 }
 
 // Note represents a single observation data point
 type Note struct {
-	ID         uint `gorm:"primaryKey"`
-	SourceNode string
-	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
-	Time       string `gorm:"index:idx_notes_time"`
+	ID            uint   `gorm:"primaryKey"`
+	SourceNode    string
+	AudioSourceID string `gorm:"index:idx_notes_audio_source_id;size:50"`
+	Date          string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
+	Time          string `gorm:"index:idx_notes_time"`
 	//InputFile      string
 	Source      AudioSource `gorm:"-"` // Runtime only, not stored in database
 	BeginTime   time.Time
@@ -182,14 +191,14 @@ type DynamicThreshold struct {
 // This enables the frontend to display a timeline of threshold adjustments per species.
 type ThresholdEvent struct {
 	ID            uint      `gorm:"primaryKey"`
-	SpeciesName   string    `gorm:"index;not null;size:200"`  // Common name (lowercase)
-	PreviousLevel int       `gorm:"not null"`                 // Level before change
-	NewLevel      int       `gorm:"not null"`                 // Level after change
-	PreviousValue float64   `gorm:"not null"`                 // Threshold value before change
-	NewValue      float64   `gorm:"not null"`                 // Threshold value after change
-	ChangeReason  string    `gorm:"not null;size:50"`         // "high_confidence", "expiry", "manual_reset"
-	Confidence    float64   `gorm:"default:0"`                // Detection confidence that triggered change (if applicable)
-	CreatedAt     time.Time `gorm:"index;not null"`           // When the event occurred
+	SpeciesName   string    `gorm:"index;not null;size:200"` // Common name (lowercase)
+	PreviousLevel int       `gorm:"not null"`                // Level before change
+	NewLevel      int       `gorm:"not null"`                // Level after change
+	PreviousValue float64   `gorm:"not null"`                // Threshold value before change
+	NewValue      float64   `gorm:"not null"`                // Threshold value after change
+	ChangeReason  string    `gorm:"not null;size:50"`        // "high_confidence", "expiry", "manual_reset"
+	Confidence    float64   `gorm:"default:0"`               // Detection confidence that triggered change (if applicable)
+	CreatedAt     time.Time `gorm:"index;not null"`          // When the event occurred
 }
 
 // NotificationHistory tracks sent notifications to prevent duplicate notifications after restart
@@ -197,10 +206,10 @@ type ThresholdEvent struct {
 // Resolves BG-17: Species tracker loses state on restart - causes false "New Species" notifications
 type NotificationHistory struct {
 	ID               uint      `gorm:"primaryKey"`
-	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"` // Scientific name of the species
+	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"`                    // Scientific name of the species
 	NotificationType string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:50;default:new_species"` // Type: "new_species", "yearly", "seasonal"
-	LastSent         time.Time `gorm:"index;not null"`                                                       // When notification was last sent
-	ExpiresAt        time.Time `gorm:"index;not null"`                                                       // When this record expires (2x suppression window)
-	CreatedAt        time.Time `gorm:"not null"`                                                             // When first created
-	UpdatedAt        time.Time `gorm:"not null"`                                                             // Last update time
+	LastSent         time.Time `gorm:"index;not null"`                                                                          // When notification was last sent
+	ExpiresAt        time.Time `gorm:"index;not null"`                                                                          // When this record expires (2x suppression window)
+	CreatedAt        time.Time `gorm:"not null"`                                                                                // When first created
+	UpdatedAt        time.Time `gorm:"not null"`                                                                                // Last update time
 }

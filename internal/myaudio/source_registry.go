@@ -731,7 +731,7 @@ func (r *AudioSourceRegistry) generateID(sourceType SourceType) string {
 func (r *AudioSourceRegistry) generateDisplayName(source *AudioSource) string {
 	switch source.Type {
 	case SourceTypeRTSP:
-		// Use SafeString (sanitized URL) as display name
+		// For RTSP without a label, fall back to the sanitized URL for identification
 		return source.SafeString
 	case SourceTypeAudioCard:
 		// Parse device string based on OS
