@@ -21,13 +21,13 @@ func TestMaskURL(t *testing.T) {
 			name:          "masks BirdWeatherID in station URL",
 			birdweatherID: "12345abcdef",
 			inputURL:      "https://app.birdweather.com/api/v1/stations/12345abcdef/soundscapes",
-			expectedURL:   "https://app.birdweather.com/api/v1/stations/***/soundscapes",
+			expectedURL:   "https://app.birdweather.com/api/v1/stations/[BIRDWEATHER_ID]/soundscapes",
 		},
 		{
 			name:          "masks BirdWeatherID in detection URL",
 			birdweatherID: "xyz789",
 			inputURL:      "https://app.birdweather.com/api/v1/stations/xyz789/detections",
-			expectedURL:   "https://app.birdweather.com/api/v1/stations/***/detections",
+			expectedURL:   "https://app.birdweather.com/api/v1/stations/[BIRDWEATHER_ID]/detections",
 		},
 		{
 			name:          "handles empty BirdWeatherID",
@@ -39,7 +39,7 @@ func TestMaskURL(t *testing.T) {
 			name:          "masks multiple occurrences",
 			birdweatherID: "test123",
 			inputURL:      "https://app.birdweather.com/api/v1/stations/test123/soundscapes?id=test123",
-			expectedURL:   "https://app.birdweather.com/api/v1/stations/***/soundscapes?id=***",
+			expectedURL:   "https://app.birdweather.com/api/v1/stations/[BIRDWEATHER_ID]/soundscapes?id=[BIRDWEATHER_ID]",
 		},
 		{
 			name:          "handles URL without BirdWeatherID",
