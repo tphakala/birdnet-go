@@ -146,7 +146,7 @@ func defaultSensitiveKeys() []string {
 	return []string{
 		// Authentication credentials
 		"password", "token", "secret", "key", "api_key", "api_token",
-		"client_id", "client_secret", "apikey",
+		"client_id", "client_secret", "apikey", "apitoken",
 		"accesskeyid", "secretaccesskey", "encryptionkey",
 
 		// MQTT credentials
@@ -173,6 +173,39 @@ func defaultSensitiveKeys() []string {
 // isURLValue checks if a string value appears to be a URL
 func isURLValue(s string) bool {
 	return strings.Contains(s, urlSchemeDelimiter)
+}
+
+// isSensitiveKey checks if a key matches a sensitive key pattern using word boundaries.
+// The sensitive pattern must appear as a complete word within the key:
+//   - At start: "password", "password1", "password_hash" match "password"
+//   - After underscore: "mqtt_password", "api_key" match their suffix
+//
+// Prevents false positives where sensitive patterns appear mid-word:
+//   - "monkey" does NOT match "key" (no word boundary before "key")
+//   - "tokenizer" does NOT match "token" (letter follows "token")
+//   - "passwordhash" does NOT match "password" (letter follows)
+func isSensitiveKey(lowerKey, sensitive string) bool {
+	idx := strings.Index(lowerKey, sensitive)
+	if idx == -1 {
+		return false
+	}
+
+	endIdx := idx + len(sensitive)
+
+	// Start boundary: at start of string OR preceded by underscore
+	validStart := idx == 0 || lowerKey[idx-1] == '_'
+	if !validStart {
+		return false
+	}
+
+	// End boundary: at end of string OR followed by underscore/digit
+	// Allows: password, mqtt_password, password_hash, password1
+	// Rejects: passwordhash, tokenizer (letter follows)
+	if endIdx == len(lowerKey) {
+		return true
+	}
+	nextChar := lowerKey[endIdx]
+	return nextChar == '_' || (nextChar >= '0' && nextChar <= '9')
 }
 
 // isDefaultValue checks if a value is a default/empty value that doesn't need redaction
@@ -205,7 +238,8 @@ func isDefaultValue(value any) bool {
 // host, path, and query with placeholders.
 func redactURLStructurally(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
-	if err != nil {
+	if err != nil || parsed.Scheme == "" {
+		// url.Parse is lenient - empty scheme means it wasn't a proper URL
 		return redactedPlaceholder
 	}
 
@@ -216,15 +250,17 @@ func redactURLStructurally(rawURL string) string {
 	result.WriteString(urlSchemeDelimiter)
 
 	// Handle credentials
-	if parsed.User != nil {
-		_, hasPass := parsed.User.Password()
-		if hasPass {
+	if u := parsed.User; u != nil {
+		username := u.Username()
+		_, hasPass := u.Password()
+
+		// Only add user/pass placeholders if there's something to redact
+		if username != "" || hasPass {
 			result.WriteString(redactedUserPlaceholder)
-			result.WriteString(":")
-			result.WriteString(redactedPassPlaceholder)
-			result.WriteString("@")
-		} else if parsed.User.Username() != "" {
-			result.WriteString(redactedUserPlaceholder)
+			if hasPass {
+				result.WriteString(":")
+				result.WriteString(redactedPassPlaceholder)
+			}
 			result.WriteString("@")
 		}
 	}
@@ -646,11 +682,11 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 // For non-sensitive keys, it recursively processes nested structures
 // and sanitizes RTSP URLs in string values.
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
-	// Check if key is sensitive
+	// Check if key is sensitive using word boundary matching
 	lowerKey := strings.ToLower(key)
 	isSensitive := false
 	for _, sensitive := range sensitiveKeys {
-		if strings.Contains(lowerKey, sensitive) {
+		if isSensitiveKey(lowerKey, sensitive) {
 			isSensitive = true
 			break
 		}
@@ -662,6 +698,15 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 
 	// Recursively process nested structures
 	return c.processNonSensitiveValue(key, value, sensitiveKeys)
+}
+
+// scrubMap recursively processes a map, scrubbing each key-value pair.
+func (c *Collector) scrubMap(m map[string]any, sensitiveKeys []string) map[string]any {
+	scrubbed := make(map[string]any, len(m))
+	for k, val := range m {
+		scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
+	}
+	return scrubbed
 }
 
 // redactSensitiveValue handles redaction of values for sensitive keys.
@@ -687,11 +732,7 @@ func (c *Collector) redactSensitiveValue(value any, sensitiveKeys []string) any 
 		return c.redactSliceRecursively(v, sensitiveKeys)
 	case map[string]any:
 		// Recursively process maps to preserve structure
-		scrubbed := make(map[string]any, len(v))
-		for k, val := range v {
-			scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
-		}
-		return scrubbed
+		return c.scrubMap(v, sensitiveKeys)
 	default:
 		return redactedPlaceholder
 	}
@@ -716,14 +757,8 @@ func (c *Collector) redactSliceRecursively(slice []any, sensitiveKeys []string) 
 				redacted[i] = redactedPlaceholder
 			}
 		case map[string]any:
-			// Recursively process nested maps
-			scrubbed := make(map[string]any, len(v))
-			for k, val := range v {
-				scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
-			}
-			redacted[i] = scrubbed
+			redacted[i] = c.scrubMap(v, sensitiveKeys)
 		case []any:
-			// Recursively process nested arrays
 			redacted[i] = c.redactSliceRecursively(v, sensitiveKeys)
 		default:
 			redacted[i] = redactedPlaceholder
@@ -736,11 +771,7 @@ func (c *Collector) redactSliceRecursively(slice []any, sensitiveKeys []string) 
 func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKeys []string) any {
 	switch v := value.(type) {
 	case map[string]any:
-		scrubbed := make(map[string]any, len(v))
-		for k, val := range v {
-			scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
-		}
-		return scrubbed
+		return c.scrubMap(v, sensitiveKeys)
 	case []any:
 		scrubbed := make([]any, len(v))
 		for i, item := range v {
@@ -1682,14 +1713,11 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format(journalTimeFormat)
 
-	// Use same line limit as collectJournalLogs
-	const maxJournalLines = 5000
-
 	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",
-		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
+		"-n", fmt.Sprintf("%d", maxJournalLogLines)) // Limit number of lines
 
 	output, err := cmd.Output()
 	if err != nil {

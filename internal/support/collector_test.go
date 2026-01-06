@@ -687,12 +687,61 @@ func TestRedactURLStructurally(t *testing.T) {
 			url:  "https://hooks.slack.com/services/T123/B456/xyz789",
 			want: "https://[host]/[path]",
 		},
+		{
+			name: "non-URL string returns redacted placeholder",
+			url:  "just a plain string",
+			want: "[redacted]",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := redactURLStructurally(tt.url)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestIsSensitiveKey tests word boundary matching for sensitive keys
+func TestIsSensitiveKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		key       string
+		sensitive string
+		want      bool
+	}{
+		// Exact matches
+		{"exact match password", "password", "password", true},
+		{"exact match token", "token", "token", true},
+		{"exact match key", "key", "key", true},
+
+		// Suffix matches (common config patterns)
+		{"mqtt_password matches password", "mqtt_password", "password", true},
+		{"api_key matches key", "api_key", "key", true},
+		{"auth_token matches token", "auth_token", "token", true},
+		{"webhook_url matches url", "webhook_url", "url", true},
+
+		// Should NOT match (false positives prevented)
+		{"monkey should not match key", "monkey", "key", false},
+		{"turkey should not match key", "turkey", "key", false},
+		{"donkey should not match key", "donkey", "key", false},
+		{"tokenizer should not match token", "tokenizer", "token", false},
+		{"curlopt should not match url", "curlopt", "url", false},
+		{"secrete should not match secret", "secrete", "secret", false},
+
+		// Edge cases
+		{"empty key", "", "password", false},
+		{"key at start with suffix", "passwordhash", "password", false},
+		{"key with number suffix", "password1", "password", true},
+		{"key with underscore suffix", "password_hash", "password", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSensitiveKey(tt.key, tt.sensitive)
+			assert.Equal(t, tt.want, got, "isSensitiveKey(%q, %q)", tt.key, tt.sensitive)
 		})
 	}
 }
