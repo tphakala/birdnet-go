@@ -70,6 +70,28 @@ const (
 	soxResampleRate = "24k"
 )
 
+// getStyleArgs returns Sox spectrogram arguments for the given style preset.
+// These arguments control the visual appearance of the spectrogram.
+func getStyleArgs(style string) []string {
+	switch style {
+	case conf.SpectrogramStyleGrayscale:
+		// Monochrome with light/white background (xeno-canto style)
+		return []string{"-m", "-l"}
+	case conf.SpectrogramStyleGrayscaleDark:
+		// Monochrome with dark background
+		return []string{"-m"}
+	case conf.SpectrogramStyleHighContrast:
+		// High color saturation with light background
+		return []string{"-h", "-l"}
+	case conf.SpectrogramStyleScientific:
+		// Grayscale with Dolph window for sharper frequency resolution
+		return []string{"-m", "-l", "-w", "dolph"}
+	default:
+		// Default style - no extra args (colorful with dark background)
+		return nil
+	}
+}
+
 // durationCacheEntry stores cached audio duration with file validation info
 type durationCacheEntry struct {
 	duration  float64
