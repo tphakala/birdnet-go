@@ -1155,6 +1155,26 @@
                   "helpText": "Generar espectrogramas solo cuando haga clic en el botón generar. Perfecto para sistemas con recursos limitados (Raspberry Pi 3/Zero) - cero sobrecarga automática, usted controla cuándo se usa la CPU."
                 }
               },
+              "style": {
+                "label": "Spectrogram Style",
+                "helpText": "Choose the visual appearance of generated spectrograms.",
+                "preview": "Preview",
+                "previewAlt": "Spectrogram style preview",
+                "options": {
+                  "default": "Default (Colorful)",
+                  "grayscale": "Grayscale (Light)",
+                  "grayscaleDark": "Grayscale (Dark)",
+                  "highContrast": "High Contrast",
+                  "scientific": "Scientific (xeno-canto style)"
+                },
+                "descriptions": {
+                  "default": "Colorful spectrogram with dark background",
+                  "grayscale": "Monochrome with white background, similar to xeno-canto.org",
+                  "grayscaleDark": "Monochrome with dark background",
+                  "highContrast": "High color saturation with light background",
+                  "scientific": "Grayscale with Dolph window for sharper frequency resolution"
+                }
+              },
               "enabled": {
                 "label": "Habilitar Pre-renderizado de Espectrograma",
                 "helpText": "OBSOLETO: Use el Modo de Generación en su lugar. Generar espectrogramas en segundo plano cuando se guardan detecciones para eliminar retrasos de UI."

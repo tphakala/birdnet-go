@@ -1167,6 +1167,26 @@
                   "helpText": "Generuj spektrogramy tylko wtedy, gdy klikniesz przycisk generowania. Idealne dla systemów o ograniczonych zasobach (Raspberry Pi 3/Zero) - zero automatycznego obciążenia, ty kontrolujesz, kiedy używane jest CPU."
                 }
               },
+              "style": {
+                "label": "Spectrogram Style",
+                "helpText": "Choose the visual appearance of generated spectrograms.",
+                "preview": "Preview",
+                "previewAlt": "Spectrogram style preview",
+                "options": {
+                  "default": "Default (Colorful)",
+                  "grayscale": "Grayscale (Light)",
+                  "grayscaleDark": "Grayscale (Dark)",
+                  "highContrast": "High Contrast",
+                  "scientific": "Scientific (xeno-canto style)"
+                },
+                "descriptions": {
+                  "default": "Colorful spectrogram with dark background",
+                  "grayscale": "Monochrome with white background, similar to xeno-canto.org",
+                  "grayscaleDark": "Monochrome with dark background",
+                  "highContrast": "High color saturation with light background",
+                  "scientific": "Grayscale with Dolph window for sharper frequency resolution"
+                }
+              },
               "enabled": {
                 "label": "Włącz Wstępne Renderowanie Spektrogramu",
                 "helpText": "PRZESTARZAŁE: Użyj zamiast tego Trybu Generowania. Generuj spektrogramy w tle podczas zapisywania detekcji, aby wyeliminować opóźnienia interfejsu użytkownika."

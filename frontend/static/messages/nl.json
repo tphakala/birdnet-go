@@ -1155,6 +1155,26 @@
                   "helpText": "Spectrograms worden uitsluitend gegeneerd wanneeer de Genereren knop wordt gebruikt. Ideaal voor systemen met beperkte bronnen (Raspberry Pi 3/Zero) - Geen ongeplande achtergrond aktiviteit, volledige controle over wannneer de processor wordt gebruikt."
                 }
               },
+              "style": {
+                "label": "Spectrogram Style",
+                "helpText": "Choose the visual appearance of generated spectrograms.",
+                "preview": "Preview",
+                "previewAlt": "Spectrogram style preview",
+                "options": {
+                  "default": "Default (Colorful)",
+                  "grayscale": "Grayscale (Light)",
+                  "grayscaleDark": "Grayscale (Dark)",
+                  "highContrast": "High Contrast",
+                  "scientific": "Scientific (xeno-canto style)"
+                },
+                "descriptions": {
+                  "default": "Colorful spectrogram with dark background",
+                  "grayscale": "Monochrome with white background, similar to xeno-canto.org",
+                  "grayscaleDark": "Monochrome with dark background",
+                  "highContrast": "High color saturation with light background",
+                  "scientific": "Grayscale with Dolph window for sharper frequency resolution"
+                }
+              },
               "enabled": {
                 "label": "Aktiveer achtergrond uitvoering",
                 "helpText": "VEROUDERD: Gebruik beter Automatisch. Spectrogrammen in de achtergrond genereren when detections are saved to eliminate UI lag."
