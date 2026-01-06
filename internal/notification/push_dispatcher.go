@@ -467,6 +467,14 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 		retryable = perr.Retryable
 	}
 
+	// Don't retry timeout errors - the message may have been delivered.
+	// This addresses issue #1706 where notifications are sent multiple times.
+	// Timeout errors occur after the HTTP request body is sent, so the message
+	// likely reached the server even if we didn't receive the response.
+	if isTimeoutError(err) {
+		retryable = false
+	}
+
 	if !retryable || attempts > d.maxRetries {
 		if d.log != nil {
 			d.log.Error("push send failed",
@@ -482,6 +490,43 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 		d.metrics.RecordRetryAttempt(providerName)
 	}
 	return true
+}
+
+// isTimeoutError checks if an error is a timeout-related error that should not be retried.
+// Timeout errors indicate the message may have been delivered but the response was not received.
+// Retrying these can cause duplicate notifications (issue #1706).
+//
+// Also returns true for context.Canceled since retrying during shutdown is pointless.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for context errors (timeout or cancellation)
+	// DeadlineExceeded: timeout occurred, message may have been sent
+	// Canceled: shutdown in progress, no point retrying
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+
+	// Check for timeout-related error messages from Shoutrrr and HTTP layer.
+	// Note: "timeout" matches "Gateway Timeout", "gateway time-out" catches hyphenated variant.
+	errStr := strings.ToLower(err.Error())
+	timeoutPatterns := []string{
+		"timed out",         // Shoutrrr router timeout: "failed to send: timed out"
+		"timeout",           // Generic timeout errors, also matches "Gateway Timeout"
+		"status: 504",       // HTTP 504 in jsonclient errors: "got unexpected HTTP status: 504"
+		"gateway time-out",  // HTTP 504 Gateway Time-out (hyphenated variant)
+		"deadline exceeded", // Context deadline as string
+	}
+
+	for _, pattern := range timeoutPatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // waitForRetry waits for the retry delay with exponential backoff and jitter.
