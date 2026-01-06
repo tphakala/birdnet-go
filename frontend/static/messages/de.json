@@ -1155,6 +1155,24 @@
                   "helpText": "Spektrogramme nur generieren, wenn Sie auf die Schaltfläche klicken. Perfekt für ressourcenbeschränkte Systeme (Raspberry Pi 3/Zero) - keine automatische Belastung, Sie kontrollieren, wann CPU verwendet wird."
                 }
               },
+              "style": {
+                "label": "Spektrogramm-Stil",
+                "helpText": "Wählen Sie das visuelle Erscheinungsbild der generierten Spektrogramme.",
+                "preview": "Vorschau",
+                "previewAlt": "Spektrogramm-Stil Vorschau",
+                "options": {
+                  "default": "Standard (Farbenfroh)",
+                  "scientificDark": "Wissenschaftlich (Dunkel)",
+                  "highContrastDark": "Hoher Kontrast (Dunkel)",
+                  "scientific": "Wissenschaftlich (Hell)"
+                },
+                "descriptions": {
+                  "default": "Farbenfrohes Spektrogramm mit dunklem Hintergrund",
+                  "scientificDark": "Graustufen mit Dolph-Fenster, dunkler Hintergrund",
+                  "highContrastDark": "Hohe Farbsättigung mit dunklem Hintergrund",
+                  "scientific": "Graustufen mit Dolph-Fenster, heller Hintergrund (xeno-canto-Stil)"
+                }
+              },
               "enabled": {
                 "label": "Spektrogramm-Vorrendering aktivieren",
                 "helpText": "VERALTET: Verwenden Sie stattdessen den Generierungsmodus. Spektrogramme im Hintergrund generieren, wenn Erkennungen gespeichert werden, um UI-Verzögerungen zu eliminieren."

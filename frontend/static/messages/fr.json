@@ -1155,6 +1155,24 @@
                   "helpText": "Générer les spectrogrammes uniquement lorsque vous cliquez sur le bouton générer. Parfait pour les systèmes aux ressources limitées (Raspberry Pi 3/Zero) - zéro surcharge automatique, vous contrôlez quand le CPU est utilisé."
                 }
               },
+              "style": {
+                "label": "Style du spectrogramme",
+                "helpText": "Choisissez l'apparence visuelle des spectrogrammes générés.",
+                "preview": "Aperçu",
+                "previewAlt": "Aperçu du style de spectrogramme",
+                "options": {
+                  "default": "Par défaut (Coloré)",
+                  "scientificDark": "Scientifique (Sombre)",
+                  "highContrastDark": "Contraste élevé (Sombre)",
+                  "scientific": "Scientifique (Clair)"
+                },
+                "descriptions": {
+                  "default": "Spectrogramme coloré avec fond sombre",
+                  "scientificDark": "Niveaux de gris avec fenêtre de Dolph, fond sombre",
+                  "highContrastDark": "Saturation élevée des couleurs avec fond sombre",
+                  "scientific": "Niveaux de gris avec fenêtre de Dolph, fond clair (style xeno-canto)"
+                }
+              },
               "enabled": {
                 "label": "Activer le Pré-rendu de Spectrogramme",
                 "helpText": "OBSOLÈTE : Utilisez le Mode de Génération à la place. Générer les spectrogrammes en arrière-plan lors de l'enregistrement des détections pour éliminer les retards d'interface."

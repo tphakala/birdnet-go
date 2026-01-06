@@ -70,6 +70,25 @@ const (
 	soxResampleRate = "24k"
 )
 
+// getStyleArgs returns Sox spectrogram arguments for the given style preset.
+// These arguments control the visual appearance of the spectrogram.
+func getStyleArgs(style string) []string {
+	switch style {
+	case conf.SpectrogramStyleScientificDark:
+		// Grayscale with Dolph window, dark background
+		return []string{"-m", "-w", "dolph"}
+	case conf.SpectrogramStyleHighContrastDark:
+		// High color saturation with dark background
+		return []string{"-h"}
+	case conf.SpectrogramStyleScientific:
+		// Grayscale with Dolph window, light background (xeno-canto style)
+		return []string{"-m", "-l", "-w", "dolph"}
+	default:
+		// Default style - no extra args (colorful with dark background)
+		return nil
+	}
+}
+
 // durationCacheEntry stores cached audio duration with file validation info
 type durationCacheEntry struct {
 	duration  float64
@@ -526,6 +545,12 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 		args = append(args, "-r")
 	}
 
+	// Add style-specific arguments
+	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	if styleArgs := getStyleArgs(style); styleArgs != nil {
+		args = append(args, styleArgs...)
+	}
+
 	// Build command with low priority
 	cmd := createCommandWithNice(ctx, soxBinary, args)
 
@@ -651,6 +676,12 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	// Add raw flag if requested (no axes/legends)
 	if raw {
 		args = append(args, "-r")
+	}
+
+	// Add style-specific arguments
+	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	if styleArgs := getStyleArgs(style); styleArgs != nil {
+		args = append(args, styleArgs...)
 	}
 
 	return args

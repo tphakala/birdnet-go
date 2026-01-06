@@ -1155,6 +1155,24 @@
                   "helpText": "Generoi spektrogrammit vain kun napsautat generoi-painiketta. Täydellinen resurssirajoitteisille järjestelmille (Raspberry Pi 3/Zero) - ei automaattista kuormaa, sinä päätät milloin prosessoria käytetään."
                 }
               },
+              "style": {
+                "label": "Spektrogrammin tyyli",
+                "helpText": "Valitse luotujen spektrogrammien visuaalinen ulkoasu.",
+                "preview": "Esikatselu",
+                "previewAlt": "Spektrogrammin tyylin esikatselu",
+                "options": {
+                  "default": "Oletus (Värikäs)",
+                  "scientificDark": "Tieteellinen (Tumma)",
+                  "highContrastDark": "Korkea kontrasti (Tumma)",
+                  "scientific": "Tieteellinen (Vaalea)"
+                },
+                "descriptions": {
+                  "default": "Värikäs spektrogrammi tummalla taustalla",
+                  "scientificDark": "Harmaasävy Dolph-ikkunalla, tumma tausta",
+                  "highContrastDark": "Korkea värikylläisyys tummalla taustalla",
+                  "scientific": "Harmaasävy Dolph-ikkunalla, vaalea tausta (xeno-canto-tyylinen)"
+                }
+              },
               "enabled": {
                 "label": "Ota Spektrogrammin Esirenderöinti Käyttöön",
                 "helpText": "VANHENTUNUT: Käytä sen sijaan Generointitilaa. Generoi spektrogrammeja taustalla kun havaintoja tallennetaan käyttöliittymän viiveiden poistamiseksi."

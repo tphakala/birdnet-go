@@ -48,6 +48,7 @@
     realtimeSettings,
     DEFAULT_SPECTROGRAM_SETTINGS,
     type SpectrogramPreRender,
+    type SpectrogramStyle,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -95,6 +96,30 @@
     label: info.name,
     localeCode: code as FlagLocale,
   }));
+
+  // Spectrogram style definitions with value→translationKey mapping
+  const SPECTROGRAM_STYLES: { value: SpectrogramStyle; labelKey: string }[] = [
+    { value: 'default', labelKey: 'default' },
+    { value: 'scientific_dark', labelKey: 'scientificDark' },
+    { value: 'high_contrast_dark', labelKey: 'highContrastDark' },
+    { value: 'scientific', labelKey: 'scientific' },
+  ];
+
+  // Spectrogram style options - computed reactively to support locale changes
+  let spectrogramStyleOptions = $derived.by(() => {
+    getLocale(); // Trigger re-computation on locale change
+    return SPECTROGRAM_STYLES.map(style => ({
+      value: style.value,
+      label: t(
+        `settings.main.sections.userInterface.dashboard.spectrogram.style.options.${style.labelKey}`
+      ),
+    }));
+  });
+
+  // Get translation key for style description
+  function getStyleDescriptionKey(style: SpectrogramStyle): string {
+    return SPECTROGRAM_STYLES.find(s => s.value === style)?.labelKey ?? 'default';
+  }
 
   // Extended option type for weather provider
   interface WeatherOption extends SelectOption {
@@ -181,6 +206,11 @@
   });
 
   let store = $derived($settingsStore);
+
+  // Current spectrogram style for preview
+  let currentSpectrogramStyle = $derived<SpectrogramStyle>(
+    (settings.dashboard.spectrogram?.style as SpectrogramStyle) ?? 'default'
+  );
 
   // Database type selection
   let selectedDatabaseType = $state('sqlite');
@@ -1659,7 +1689,8 @@
             {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
           </h4>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <!-- Generation Mode with contextual note -->
+          <div class="space-y-3">
             <SelectDropdown
               options={[
                 {
@@ -1689,32 +1720,81 @@
               menuSize="sm"
               onChange={value => updateSpectrogramSetting('mode', value as string)}
             />
+
+            <!-- Mode-specific note directly under dropdown -->
+            {#if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
+              <SettingsNote>
+                <span>
+                  {t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText'
+                  )}
+                </span>
+              </SettingsNote>
+            {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
+              <SettingsNote>
+                <span>
+                  {t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
+                  )}
+                </span>
+              </SettingsNote>
+            {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
+              <SettingsNote>
+                <span>
+                  {t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
+                  )}
+                </span>
+              </SettingsNote>
+            {/if}
           </div>
 
-          <!-- Mode-specific notes -->
-          {#if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
-            <SettingsNote>
-              <span>
-                {t('settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText')}
-              </span>
-            </SettingsNote>
-          {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
-            <SettingsNote>
-              <span>
-                {t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
-                )}
-              </span>
-            </SettingsNote>
-          {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
-            <SettingsNote>
-              <span>
-                {t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
-                )}
-              </span>
-            </SettingsNote>
-          {/if}
+          <!-- Style Selection as visual cards (full width row) -->
+          <div class="mt-6">
+            <span class="text-sm font-medium">
+              {t('settings.main.sections.userInterface.dashboard.spectrogram.style.label')}
+            </span>
+            <p class="text-xs text-base-content/60 mt-1">
+              {t('settings.main.sections.userInterface.dashboard.spectrogram.style.helpText')}
+            </p>
+
+            <!-- Style Cards Grid - 4 cards in a row with good sizing -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+              {#each spectrogramStyleOptions as style (style.value)}
+                {@const isSelected = currentSpectrogramStyle === style.value}
+                <button
+                  type="button"
+                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-primary/50 {isSelected
+                    ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.3)]'
+                    : 'border-base-300 bg-base-100 hover:border-base-content/30'}"
+                  disabled={store.isLoading || store.isSaving}
+                  onclick={() => updateSpectrogramSetting('style', style.value)}
+                >
+                  <!-- Preview thumbnail -->
+                  <img
+                    src={`/ui/assets/images/spectrogram-preview-${style.value}.png`}
+                    alt={style.label}
+                    class="w-full aspect-[4/3] object-cover rounded"
+                  />
+                  <!-- Label -->
+                  <span
+                    class="mt-2 text-xs leading-tight text-center {isSelected
+                      ? 'text-primary font-medium'
+                      : 'text-base-content/70'}"
+                  >
+                    {style.label}
+                  </span>
+                </button>
+              {/each}
+            </div>
+
+            <!-- Selected style description -->
+            <p class="text-sm text-base-content/60 italic mt-4">
+              {t(
+                `settings.main.sections.userInterface.dashboard.spectrogram.style.descriptions.${getStyleDescriptionKey(currentSpectrogramStyle)}`
+              )}
+            </p>
+          </div>
         </div>
       </div>
     </SettingsSection>

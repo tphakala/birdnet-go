@@ -814,6 +814,23 @@ func validateDashboardSettings(settings *Dashboard) error {
 		}
 	}
 
+	// Validate spectrogram style
+	if settings.Spectrogram.Style != "" {
+		validStyles := []string{
+			SpectrogramStyleDefault,
+			SpectrogramStyleScientificDark,
+			SpectrogramStyleHighContrastDark,
+			SpectrogramStyleScientific,
+		}
+		if !slices.Contains(validStyles, settings.Spectrogram.Style) {
+			// Log warning but don't fail - default to "default" style
+			GetLogger().Warn("Invalid spectrogram style, using default",
+				logger.String("invalid_style", settings.Spectrogram.Style),
+				logger.String("valid_styles", strings.Join(validStyles, ", ")))
+			settings.Spectrogram.Style = SpectrogramStyleDefault
+		}
+	}
+
 	// Log the effective spectrogram mode at startup for troubleshooting
 	effectiveMode := settings.Spectrogram.GetMode()
 	GetLogger().Debug("Spectrogram configuration",
@@ -821,7 +838,8 @@ func validateDashboardSettings(settings *Dashboard) error {
 		logger.String("mode", settings.Spectrogram.Mode),
 		logger.String("effective_mode", effectiveMode),
 		logger.String("size", settings.Spectrogram.Size),
-		logger.Bool("raw", settings.Spectrogram.Raw))
+		logger.Bool("raw", settings.Spectrogram.Raw),
+		logger.String("style", settings.Spectrogram.Style))
 
 	return nil
 }

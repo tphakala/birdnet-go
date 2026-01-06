@@ -138,6 +138,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.spectrogram.mode", "auto")   // Default to auto mode (generate on demand)
 	viper.SetDefault("realtime.dashboard.spectrogram.size", "sm")     // 400px, matches frontend RecentDetectionsCard
 	viper.SetDefault("realtime.dashboard.spectrogram.raw", true)      // Raw spectrogram (no axes/legend)
+	viper.SetDefault("realtime.dashboard.spectrogram.style", "default") // Visual style preset
 
 	// Retention policy configuration
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)

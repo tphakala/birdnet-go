@@ -442,6 +442,9 @@ export type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
 // Spectrogram generation mode options
 export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
 
+// Spectrogram style preset options
+export type SpectrogramStyle = 'default' | 'scientific_dark' | 'high_contrast_dark' | 'scientific';
+
 // SpectrogramPreRender contains settings for spectrogram generation modes.
 // Three modes control when and how spectrograms are generated:
 //   - "auto": Generate on-demand when API is called (default, suitable for most systems)
@@ -452,6 +455,7 @@ export interface SpectrogramPreRender {
   enabled?: boolean; // DEPRECATED: Use mode instead (kept for backward compatibility)
   size: SpectrogramSize; // Default size for all modes (sm=400px, md=800px, lg=1000px, xl=1200px)
   raw: boolean; // Generate raw spectrogram without axes/legend (default: true)
+  style?: SpectrogramStyle; // Visual style preset (default: 'default')
 }
 
 // Default spectrogram settings
@@ -460,6 +464,7 @@ export const DEFAULT_SPECTROGRAM_SETTINGS: SpectrogramPreRender = {
   enabled: false,
   size: 'sm',
   raw: true,
+  style: 'default',
 } as const;
 
 // Log config
