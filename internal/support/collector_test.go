@@ -572,6 +572,131 @@ func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() any           { return nil }
 
+// TestIsDefaultValue tests default value detection for redaction skipping
+func TestIsDefaultValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{"nil value", nil, true},
+		{"empty string", "", true},
+		{"non-empty string", "hello", false},
+		{"zero float64", float64(0.0), true},
+		{"non-zero float64", float64(45.5), false},
+		{"negative float64", float64(-122.5), false},
+		{"zero int", int(0), true},
+		{"non-zero int", int(42), false},
+		{"zero int64", int64(0), true},
+		{"non-zero int64", int64(100), false},
+		{"false bool", false, false}, // booleans never default
+		{"true bool", true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isDefaultValue(tt.value)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestIsURLValue tests URL detection
+func TestIsURLValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"http URL", "http://example.com", true},
+		{"https URL", "https://example.com/path", true},
+		{"rtsp URL", "rtsp://192.168.1.1:554/stream", true},
+		{"mqtt URL", "mqtt://broker:1883", true},
+		{"ntfy URL", "ntfy://user:pass@ntfy.sh/topic", true},
+		{"ftp URL", "ftp://ftp.example.com/files", true},
+		{"plain string", "not a url", false},
+		{"empty string", "", false},
+		{"path only", "/some/path", false},
+		{"host only", "example.com", false},
+		{"email address", "user@example.com", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isURLValue(tt.value)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestRedactURLStructurally tests URL structural redaction
+func TestRedactURLStructurally(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{
+			name: "URL with user and password",
+			url:  "ntfy://admin:secret@ntfy.sh/mytopic",
+			want: "ntfy://[user]:[pass]@[host]/[path]",
+		},
+		{
+			name: "URL with user only",
+			url:  "ftp://anonymous@ftp.example.com/files",
+			want: "ftp://[user]@[host]/[path]",
+		},
+		{
+			name: "URL without credentials",
+			url:  "https://api.example.com/webhook",
+			want: "https://[host]/[path]",
+		},
+		{
+			name: "URL with port",
+			url:  "rtsp://user:pass@192.168.1.50:554/stream",
+			want: "rtsp://[user]:[pass]@[host]:554/[path]",
+		},
+		{
+			name: "URL with query parameters",
+			url:  "https://api.example.com/data?token=abc&user=123",
+			want: "https://[host]/[path]?[query]",
+		},
+		{
+			name: "URL host only",
+			url:  "mqtt://broker.example.com",
+			want: "mqtt://[host]",
+		},
+		{
+			name: "URL with port no path",
+			url:  "mqtt://broker.example.com:1883",
+			want: "mqtt://[host]:1883",
+		},
+		{
+			name: "URL with root path only",
+			url:  "http://example.com/",
+			want: "http://[host]",
+		},
+		{
+			name: "complex webhook URL",
+			url:  "https://hooks.slack.com/services/T123/B456/xyz789",
+			want: "https://[host]/[path]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := redactURLStructurally(tt.url)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestAnonymizeIPAddress tests IP address anonymization
 func TestAnonymizeIPAddress(t *testing.T) {
 	t.Parallel()
