@@ -203,10 +203,7 @@ func NotifyShutdown() {
 // scrubContextMap sanitizes a context map for logging by removing sensitive data
 func scrubContextMap(ctx map[string]any) map[string]any {
 	// Metadata keys for context scrubbing
-	const (
-		keyMessage  = "message"
-		valRedacted = "[REDACTED]"
-	)
+	const keyMessage = "message"
 
 	if ctx == nil {
 		return nil
@@ -229,7 +226,7 @@ func scrubContextMap(ctx map[string]any) map[string]any {
 			scrubbed[k] = scrubPath(fmt.Sprint(v))
 		case "token", "api_key", "password", "secret":
 			// Never log sensitive credentials
-			scrubbed[k] = valRedacted
+			scrubbed[k] = privacy.RedactedMarker
 		default:
 			// Keep other values as-is
 			scrubbed[k] = v

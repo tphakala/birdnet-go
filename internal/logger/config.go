@@ -37,14 +37,14 @@ type FileOutput struct {
 
 // ModuleOutput represents per-module output configuration
 type ModuleOutput struct {
-	Enabled         bool   `yaml:"enabled" json:"enabled"`                                   // enable module-specific output
-	FilePath        string `yaml:"file_path" json:"file_path"`                               // dedicated file path for this module
-	Level           string `yaml:"level" json:"level"`                                       // log level override for this module
-	ConsoleAlso     bool   `yaml:"console_also" json:"console_also"`                         // also log to console
-	MaxSize         int    `yaml:"max_size" json:"max_size"`                                 // maximum size in MB before rotation (0 = use FileOutput default)
-	MaxAge          int    `yaml:"max_age" json:"max_age"`                                   // maximum age in days (0 = use FileOutput default)
-	MaxRotatedFiles int    `yaml:"max_rotated_files" json:"max_rotated_files"`               // maximum number of rotated files (0 = use FileOutput default)
-	Compress        *bool  `yaml:"compress,omitempty" json:"compress,omitempty"`             // compress rotated logs (nil = use FileOutput default)
+	Enabled         bool   `yaml:"enabled" json:"enabled"`                       // enable module-specific output
+	FilePath        string `yaml:"file_path" json:"file_path"`                   // dedicated file path for this module
+	Level           string `yaml:"level" json:"level"`                           // log level override for this module
+	ConsoleAlso     bool   `yaml:"console_also" json:"console_also"`             // also log to console
+	MaxSize         int    `yaml:"max_size" json:"max_size"`                     // maximum size in MB before rotation (0 = use FileOutput default)
+	MaxAge          int    `yaml:"max_age" json:"max_age"`                       // maximum age in days (0 = use FileOutput default)
+	MaxRotatedFiles int    `yaml:"max_rotated_files" json:"max_rotated_files"`   // maximum number of rotated files (0 = use FileOutput default)
+	Compress        *bool  `yaml:"compress,omitempty" json:"compress,omitempty"` // compress rotated logs (nil = use FileOutput default)
 }
 
 // Default values for logging configuration.

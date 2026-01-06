@@ -16,7 +16,7 @@ import (
 func getMountInfoPlatform(path string) (*MountInfo, error) {
 	// Get the volume root path
 	rootPath := filepath.VolumeName(path) + "\\"
-	
+
 	rootPathPtr, err := windows.UTF16PtrFromString(rootPath)
 	if err != nil {
 		return nil, err
@@ -24,19 +24,19 @@ func getMountInfoPlatform(path string) (*MountInfo, error) {
 
 	// Buffer for filesystem name
 	var fsName [windows.MAX_PATH + 1]uint16
-	
+
 	// Get volume information
 	err = windows.GetVolumeInformation(
 		rootPathPtr,
-		nil,                        // Volume name buffer
-		0,                          // Volume name size
-		nil,                        // Volume serial number
-		nil,                        // Maximum component length
-		nil,                        // File system flags
-		&fsName[0],                 // File system name buffer
-		uint32(len(fsName)),        // File system name size
+		nil,                 // Volume name buffer
+		0,                   // Volume name size
+		nil,                 // Volume serial number
+		nil,                 // Maximum component length
+		nil,                 // File system flags
+		&fsName[0],          // File system name buffer
+		uint32(len(fsName)), // File system name size
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get volume information: %w", err)
 	}
@@ -59,7 +59,7 @@ func getInodeInfoPlatform(_ string) (*InodeInfo, error) {
 // captureMemoryInfo gathers system memory information for Windows systems
 func captureMemoryInfo() (MemoryInfo, error) {
 	info := MemoryInfo{}
-	
+
 	// Get virtual memory statistics using gopsutil
 	vmStat, err := mem.VirtualMemory()
 	if err != nil {
@@ -89,13 +89,13 @@ func captureMemoryInfo() (MemoryInfo, error) {
 func getProcessMemoryUsage() (*ProcessMemoryUsage, error) {
 	// Get current process PID
 	pid := int32(os.Getpid())
-	
+
 	// Get process instance
 	proc, err := process.NewProcess(pid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get process instance: %w", err)
 	}
-	
+
 	// Get memory info using gopsutil
 	memInfo, err := proc.MemoryInfo()
 	if err != nil {

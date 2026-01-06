@@ -825,16 +825,26 @@ When working with the API code, be mindful of these important considerations:
 #### Sensitive Data Handling
 
 - Never log sensitive information such as passwords, tokens, or PII
-- Mask sensitive data in error messages and logs
-- Use dedicated logging middleware to automatically redact sensitive fields
+- Use the dedicated sensitive field constructors from the logger package
+- These constructors automatically sanitize data using the privacy package
 - Example:
 
   ```go
   // INCORRECT - exposes credentials
   c.log.Info("login attempt", logger.String("username", username), logger.String("password", password))
 
-  // CORRECT - only log non-sensitive data
-  c.log.Info("login attempt", logger.String("username", username))
+  // CORRECT - use semantic sensitive field constructors
+  c.log.Info("login attempt", logger.Username(username))
+
+  // Available sensitive field constructors:
+  // logger.Username(value)           - hashes username for safe log correlation
+  // logger.Password(value)           - always returns [REDACTED]
+  // logger.Token(key, value)         - redacts with length hint: [TOKEN:len=N]
+  // logger.URL(key, value)           - sanitizes URLs
+  // logger.CredentialURL(key, value) - sanitizes URLs with embedded credentials
+  // logger.SanitizedString(key, val) - applies full privacy scrubbing
+  // logger.SanitizedError(err)       - scrubs error messages
+  // logger.Credential(key)           - marks field as [REDACTED]
   ```
 
 ### Error Handling

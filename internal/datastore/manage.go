@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -381,7 +382,7 @@ func redactSensitiveInfo(dsn string) string {
 	if u.User != nil {
 		_, hasPassword := u.User.Password()
 		if hasPassword {
-			u.User = url.UserPassword(u.User.Username(), "[REDACTED]")
+			u.User = url.UserPassword(u.User.Username(), privacy.RedactedMarker)
 		}
 	}
 

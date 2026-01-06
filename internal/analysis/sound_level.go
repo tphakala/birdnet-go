@@ -47,8 +47,8 @@ func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData 
 	// Create a copy to avoid modifying the original
 	sanitized := myaudio.SoundLevelData{
 		Timestamp:   data.Timestamp,
-		Source:      sanitizeString(data.Source, "unknown"),
-		Name:        sanitizeString(data.Name, "unknown"),
+		Source:      stringOrDefault(data.Source, "unknown"),
+		Name:        stringOrDefault(data.Name, "unknown"),
 		Duration:    data.Duration,
 		OctaveBands: make(map[string]myaudio.OctaveBandData),
 	}
@@ -118,8 +118,9 @@ func sanitizeFloat64(value, defaultValue float64) float64 {
 	return value
 }
 
-// sanitizeString ensures a string is not empty
-func sanitizeString(value, defaultValue string) string {
+// stringOrDefault returns the value if non-empty, otherwise returns the default.
+// This is a simple helper for providing fallback values, not for security sanitization.
+func stringOrDefault(value, defaultValue string) string {
 	if value == "" {
 		return defaultValue
 	}

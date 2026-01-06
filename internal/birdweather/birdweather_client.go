@@ -115,12 +115,13 @@ type BwClient struct {
 	HTTPClient    *http.Client
 }
 
-// maskURL masks sensitive BirdWeatherID tokens in URLs for safe logging
+// maskURL masks sensitive BirdWeatherID tokens in URLs for safe logging.
+// Uses a descriptive marker [BIRDWEATHER_ID] for consistency with privacy package patterns.
 func (b *BwClient) maskURL(urlStr string) string {
 	if b.BirdweatherID == "" {
 		return urlStr
 	}
-	return strings.ReplaceAll(urlStr, b.BirdweatherID, "***")
+	return strings.ReplaceAll(urlStr, b.BirdweatherID, "[BIRDWEATHER_ID]")
 }
 
 // closeResponseBody safely closes an HTTP response body and logs any errors
