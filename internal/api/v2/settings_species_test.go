@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -17,9 +18,8 @@ import (
 func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	t.Parallel()
 
-	// Setup
+	// Setup - echo can be shared but controller must be created per subtest to avoid races
 	e := echo.New()
-	controller := createTestController(t)
 
 	tests := []struct {
 		name           string
@@ -94,6 +94,8 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Create fresh controller for each subtest to avoid race conditions
+			controller := createTestController(t)
 			// Execute update
 			rec := patchRealtime(t, e, controller, tt.payload)
 			require.Equal(t, http.StatusOK, rec.Code, "Should return 200 OK")
@@ -115,7 +117,8 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 			}
 
 			// Verify the settings were updated correctly
-			actualConfig := controller.Settings.Realtime.Species.Config[birdName]
+			// Note: Keys are normalized to lowercase after API update
+			actualConfig := controller.Settings.Realtime.Species.Config[strings.ToLower(birdName)]
 			assert.InDelta(t, tt.expectedConfig.Threshold, actualConfig.Threshold, 0.0001,
 				"%s: Threshold should match", tt.description)
 			assert.Equal(t, tt.expectedConfig.Interval, actualConfig.Interval,
@@ -154,7 +157,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 					Include: []string{"Robin"},
 					Exclude: []string{"Crow"},
 					Config: map[string]conf.SpeciesConfig{
-						"Initial Bird": {
+						"initial bird": {
 							Threshold: 0.5,
 							Interval:  30,
 							Actions:   []conf.SpeciesAction{},
@@ -167,6 +170,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	}
 
 	// Update with zero values
+	// Note: Keys can be any case in payload - they will be normalized to lowercase
 	updatePayload := map[string]any{
 		"interval": 15,
 		"species": map[string]any{
@@ -192,17 +196,18 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 
 	// Verify zero values are preserved in the controller's settings
 	// Zero threshold and interval values should persist after update operations
-	initialBird := controller.Settings.Realtime.Species.Config["Initial Bird"]
-	assert.InDelta(t, 0.0, initialBird.Threshold, 0.0001, "Initial Bird threshold should be zero")
-	assert.Equal(t, 0, initialBird.Interval, "Initial Bird interval should be zero")
-	assert.Empty(t, initialBird.Actions, "Initial Bird actions should be empty")
-	assert.NotNil(t, initialBird.Actions, "Initial Bird actions should be empty slice, not nil")
+	// Note: Keys are normalized to lowercase after API update
+	initialBird := controller.Settings.Realtime.Species.Config["initial bird"]
+	assert.InDelta(t, 0.0, initialBird.Threshold, 0.0001, "initial bird threshold should be zero")
+	assert.Equal(t, 0, initialBird.Interval, "initial bird interval should be zero")
+	assert.Empty(t, initialBird.Actions, "initial bird actions should be empty")
+	assert.NotNil(t, initialBird.Actions, "initial bird actions should be empty slice, not nil")
 
-	newBird := controller.Settings.Realtime.Species.Config["New Bird"]
-	assert.InDelta(t, 0.0, newBird.Threshold, 0.0001, "New Bird threshold should be zero")
-	assert.Equal(t, 0, newBird.Interval, "New Bird interval should be zero")
-	assert.Empty(t, newBird.Actions, "New Bird actions should be empty")
-	assert.NotNil(t, newBird.Actions, "New Bird actions should be empty slice, not nil")
+	newBird := controller.Settings.Realtime.Species.Config["new bird"]
+	assert.InDelta(t, 0.0, newBird.Threshold, 0.0001, "new bird threshold should be zero")
+	assert.Equal(t, 0, newBird.Interval, "new bird interval should be zero")
+	assert.Empty(t, newBird.Actions, "new bird actions should be empty")
+	assert.NotNil(t, newBird.Actions, "new bird actions should be empty slice, not nil")
 
 	// Verify the API response indicates success
 	var response map[string]any
@@ -221,14 +226,14 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	t.Parallel()
 
-	// Setup with existing configs
+	// Setup with existing configs (use lowercase keys since they're set directly)
 	e := echo.New()
 	controller := &Controller{
 		Settings: &conf.Settings{
 			Realtime: conf.RealtimeSettings{
 				Species: conf.SpeciesSettings{
 					Config: map[string]conf.SpeciesConfig{
-						"Bird A": {
+						"bird a": {
 							Threshold: 0.7,
 							Interval:  30,
 							Actions: []conf.SpeciesAction{
@@ -239,7 +244,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 								},
 							},
 						},
-						"Bird B": {
+						"bird b": {
 							Threshold: 0.8,
 							Interval:  60,
 							Actions:   []conf.SpeciesAction{},
@@ -252,6 +257,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	}
 
 	// Update only Bird A with zero values, Bird B should remain unchanged
+	// Note: Keys in payload can be any case - they will be normalized to lowercase
 	updatePayload := map[string]any{
 		"species": map[string]any{
 			"config": map[string]any{
@@ -272,18 +278,18 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	rec := patchRealtime(t, e, controller, updatePayload)
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	// Verify Bird A was updated with zero values
-	birdA := controller.Settings.Realtime.Species.Config["Bird A"]
-	assert.InDelta(t, 0.0, birdA.Threshold, 0.0001, "Bird A threshold should be zero")
-	assert.Equal(t, 0, birdA.Interval, "Bird A interval should be zero")
-	assert.Empty(t, birdA.Actions, "Bird A actions should be cleared")
-	assert.NotNil(t, birdA.Actions, "Bird A actions should be empty slice, not nil")
+	// Verify Bird A was updated with zero values (keys normalized to lowercase)
+	birdA := controller.Settings.Realtime.Species.Config["bird a"]
+	assert.InDelta(t, 0.0, birdA.Threshold, 0.0001, "bird a threshold should be zero")
+	assert.Equal(t, 0, birdA.Interval, "bird a interval should be zero")
+	assert.Empty(t, birdA.Actions, "bird a actions should be cleared")
+	assert.NotNil(t, birdA.Actions, "bird a actions should be empty slice, not nil")
 
 	// Verify Bird B remains unchanged
-	birdB := controller.Settings.Realtime.Species.Config["Bird B"]
-	assert.InDelta(t, 0.8, birdB.Threshold, 0.0001, "Bird B threshold should be unchanged")
-	assert.Equal(t, 60, birdB.Interval, "Bird B interval should be unchanged")
-	assert.NotNil(t, birdB.Actions, "Bird B actions should be empty slice, not nil")
+	birdB := controller.Settings.Realtime.Species.Config["bird b"]
+	assert.InDelta(t, 0.8, birdB.Threshold, 0.0001, "bird b threshold should be unchanged")
+	assert.Equal(t, 60, birdB.Interval, "bird b interval should be unchanged")
+	assert.NotNil(t, birdB.Actions, "bird b actions should be empty slice, not nil")
 }
 
 // TestSpeciesSettingsPatchGetSync tests that PATCH -> GET works correctly
@@ -292,6 +298,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	t.Parallel()
 
 	// Setup controller with its own settings (simulating real usage)
+	// Use lowercase keys since they're set directly
 	e := echo.New()
 	controller := &Controller{
 		Settings: &conf.Settings{
@@ -301,7 +308,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 					Include: []string{},
 					Exclude: []string{},
 					Config: map[string]conf.SpeciesConfig{
-						"Test Bird": {
+						"test bird": {
 							Threshold: 0.5,
 							Interval:  30,
 							Actions:   []conf.SpeciesAction{},
@@ -314,6 +321,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	}
 
 	// Step 1: PATCH update with zero values
+	// Note: Keys in payload can be any case - they will be normalized to lowercase
 	updatePayload := map[string]any{
 		"species": map[string]any{
 			"config": map[string]any{
@@ -329,8 +337,8 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	rec := patchRealtime(t, e, controller, updatePayload)
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	// Verify controller settings were updated
-	testBird := controller.Settings.Realtime.Species.Config["Test Bird"]
+	// Verify controller settings were updated (keys normalized to lowercase)
+	testBird := controller.Settings.Realtime.Species.Config["test bird"]
 	assert.InDelta(t, 0.0, testBird.Threshold, 0.0001, "Controller should have zero threshold")
 	assert.Equal(t, 0, testBird.Interval, "Controller should have zero interval")
 
@@ -354,21 +362,22 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	config, ok := configInterface.(map[string]any)
 	require.True(t, ok, "Config field should be a map")
 
-	testBirdInterface, hasTestBird := config["Test Bird"]
-	require.True(t, hasTestBird, "Test Bird should exist in GET response")
+	// Keys are normalized to lowercase in the config
+	testBirdInterface, hasTestBird := config["test bird"]
+	require.True(t, hasTestBird, "test bird should exist in GET response")
 	testBirdResponse, ok := testBirdInterface.(map[string]any)
-	require.True(t, ok, "Test Bird should be a map")
+	require.True(t, ok, "test bird should be a map")
 
 	// Extract and validate threshold (JSON numbers decode as float64)
 	thresholdInterface, hasThreshold := testBirdResponse["threshold"]
-	require.True(t, hasThreshold, "Test Bird should have threshold")
+	require.True(t, hasThreshold, "test bird should have threshold")
 	threshold, ok := thresholdInterface.(float64)
 	require.True(t, ok, "Threshold should be a number")
 	assert.InDelta(t, 0.0, threshold, 0.0001, "GET should return updated zero threshold")
 
 	// Extract and validate interval (JSON numbers decode as float64)
 	intervalInterface, hasInterval := testBirdResponse["interval"]
-	require.True(t, hasInterval, "Test Bird should have interval")
+	require.True(t, hasInterval, "test bird should have interval")
 	intervalFloat, ok := intervalInterface.(float64)
 	require.True(t, ok, "Interval should be a number")
 	assert.InDelta(t, float64(0), intervalFloat, 0.0001, "GET should return updated zero interval")
