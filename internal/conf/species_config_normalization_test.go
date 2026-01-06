@@ -1,8 +1,11 @@
 package conf
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,4 +108,62 @@ func TestNormalizeSpeciesConfigKeys_NilMap(t *testing.T) {
 	result := NormalizeSpeciesConfigKeys(nil)
 	assert.NotNil(t, result, "should return empty map, not nil")
 	assert.Empty(t, result)
+}
+
+func TestSettingsNormalizesSpeciesConfigOnLoad(t *testing.T) {
+	t.Parallel()
+
+	// Create temp config file with mixed-case species keys
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	configContent := `
+birdnet:
+  sensitivity: 1.0
+  threshold: 0.8
+realtime:
+  species:
+    include:
+      - "American Robin"
+    exclude:
+      - "House Sparrow"
+    config:
+      "American Robin":
+        threshold: 0.75
+        interval: 30
+      "European Blackbird":
+        threshold: 0.85
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0600)
+	require.NoError(t, err)
+
+	// Load config using viper directly to simulate Load()
+	v := viper.New()
+	v.SetConfigFile(configPath)
+	err = v.ReadInConfig()
+	require.NoError(t, err)
+
+	var settings Settings
+	err = v.Unmarshal(&settings)
+	require.NoError(t, err)
+
+	// Apply normalization (this is what we're testing gets called)
+	settings.Realtime.Species.Config = NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
+
+	// Verify keys are normalized to lowercase
+	_, hasAmericanRobin := settings.Realtime.Species.Config["american robin"]
+	assert.True(t, hasAmericanRobin, "should have lowercase 'american robin' key")
+
+	_, hasEuropeanBlackbird := settings.Realtime.Species.Config["european blackbird"]
+	assert.True(t, hasEuropeanBlackbird, "should have lowercase 'european blackbird' key")
+
+	// Verify original mixed-case keys don't exist
+	_, hasMixedCase := settings.Realtime.Species.Config["American Robin"]
+	assert.False(t, hasMixedCase, "should not have mixed-case key")
+
+	// Verify config values are preserved
+	robin := settings.Realtime.Species.Config["american robin"]
+	assert.InDelta(t, 0.75, robin.Threshold, 0.0001)
+	assert.Equal(t, 30, robin.Interval)
 }

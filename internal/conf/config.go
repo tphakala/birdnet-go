@@ -1235,6 +1235,13 @@ func Load() (*Settings, error) {
 			Build()
 	}
 
+	// Normalize species config keys to lowercase for case-insensitive matching
+	// This ensures that config keys like "American Robin" are converted to "american robin"
+	// to match the lowercase species names used in detection lookup (fixes #1701)
+	if settings.Realtime.Species.Config != nil {
+		settings.Realtime.Species.Config = NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
+	}
+
 	// Migrate legacy OAuth configuration to new array format
 	// This must happen before validation and saving
 	if settings.MigrateOAuthConfig() {
