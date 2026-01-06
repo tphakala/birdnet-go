@@ -1784,7 +1784,7 @@
                 >
                   <!-- Preview thumbnail -->
                   <img
-                    src={`/assets/images/spectrogram-preview-${style.value}.png`}
+                    src={`/ui/assets/images/spectrogram-preview-${style.value}.png`}
                     alt={style.label}
                     class="w-full aspect-[4/3] object-cover rounded"
                   />
