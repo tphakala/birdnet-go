@@ -637,20 +637,106 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 	return scrubbed
 }
 
-// scrubValue recursively scrubs sensitive values
+// scrubValue recursively scrubs sensitive values.
+// For sensitive keys:
+//   - Default/empty values are left unchanged
+//   - URL values get structural redaction (preserving scheme and port)
+//   - Other values get replaced with [redacted]
+//
+// For non-sensitive keys, it recursively processes nested structures
+// and sanitizes RTSP URLs in string values.
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
-	// Check if key is sensitive - if so, completely redact it
+	// Check if key is sensitive
 	lowerKey := strings.ToLower(key)
+	isSensitive := false
 	for _, sensitive := range sensitiveKeys {
 		if strings.Contains(lowerKey, sensitive) {
-			return redactedPlaceholder
+			isSensitive = true
+			break
 		}
 	}
 
-	// Recursively scrub nested structures
+	if isSensitive {
+		return c.redactSensitiveValue(value, sensitiveKeys)
+	}
+
+	// Recursively process nested structures
+	return c.processNonSensitiveValue(key, value, sensitiveKeys)
+}
+
+// redactSensitiveValue handles redaction of values for sensitive keys.
+// For scalar values (strings, numbers), it applies redaction.
+// For complex types (maps, arrays), it recursively processes them
+// to redact nested sensitive fields while preserving structure.
+func (c *Collector) redactSensitiveValue(value any, sensitiveKeys []string) any {
+	// Skip default/empty values
+	if isDefaultValue(value) {
+		return value
+	}
+
+	switch v := value.(type) {
+	case string:
+		if isURLValue(v) {
+			return redactURLStructurally(v)
+		}
+		return redactedPlaceholder
+	case float64, float32, int, int64, int32:
+		return redactedPlaceholder
+	case []any:
+		// Recursively process arrays to preserve structure
+		return c.redactSliceRecursively(v, sensitiveKeys)
+	case map[string]any:
+		// Recursively process maps to preserve structure
+		scrubbed := make(map[string]any, len(v))
+		for k, val := range v {
+			scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
+		}
+		return scrubbed
+	default:
+		return redactedPlaceholder
+	}
+}
+
+// redactSliceRecursively handles redaction of slice values while preserving structure.
+// For each item in the slice, it recursively processes to redact nested sensitive fields.
+func (c *Collector) redactSliceRecursively(slice []any, sensitiveKeys []string) []any {
+	if len(slice) == 0 {
+		return slice
+	}
+	redacted := make([]any, len(slice))
+	for i, item := range slice {
+		switch v := item.(type) {
+		case string:
+			switch {
+			case isURLValue(v):
+				redacted[i] = redactURLStructurally(v)
+			case v == "":
+				redacted[i] = v
+			default:
+				redacted[i] = redactedPlaceholder
+			}
+		case map[string]any:
+			// Recursively process nested maps
+			scrubbed := make(map[string]any, len(v))
+			for k, val := range v {
+				scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
+			}
+			redacted[i] = scrubbed
+		case []any:
+			// Recursively process nested arrays
+			redacted[i] = c.redactSliceRecursively(v, sensitiveKeys)
+		default:
+			redacted[i] = redactedPlaceholder
+		}
+	}
+	return redacted
+}
+
+// processNonSensitiveValue handles non-sensitive values with recursive processing.
+func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKeys []string) any {
 	switch v := value.(type) {
 	case map[string]any:
-		scrubbed := make(map[string]any)
+		scrubbed := make(map[string]any, len(v))
 		for k, val := range v {
 			scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
 		}
@@ -662,8 +748,7 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 		}
 		return scrubbed
 	case string:
-		// Sanitize any RTSP URLs found in string values to remove credentials
-		// This preserves URL structure while removing sensitive authentication info
+		// Sanitize RTSP URLs in all string values (existing behavior)
 		return privacy.SanitizeRTSPUrls(v)
 	default:
 		return value

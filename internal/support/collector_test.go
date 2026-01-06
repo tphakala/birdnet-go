@@ -537,7 +537,13 @@ func compareConfigs(a, b map[string]any) bool {
 				return false
 			}
 			for i := range t1 {
-				if t1[i] != t2[i] {
+				// Handle nested maps in slices
+				if m1, ok := t1[i].(map[string]any); ok {
+					m2, ok := t2[i].(map[string]any)
+					if !ok || !compareConfigs(m1, m2) {
+						return false
+					}
+				} else if t1[i] != t2[i] {
 					return false
 				}
 			}
