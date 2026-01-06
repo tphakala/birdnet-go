@@ -148,11 +148,10 @@ const (
 
 // Spectrogram style preset constants
 const (
-	SpectrogramStyleDefault       = "default"
-	SpectrogramStyleGrayscale     = "grayscale"
-	SpectrogramStyleGrayscaleDark = "grayscale_dark"
-	SpectrogramStyleHighContrast  = "high_contrast"
-	SpectrogramStyleScientific    = "scientific"
+	SpectrogramStyleDefault         = "default"
+	SpectrogramStyleScientificDark  = "scientific_dark"
+	SpectrogramStyleHighContrastDark = "high_contrast_dark"
+	SpectrogramStyleScientific      = "scientific"
 )
 
 // SpectrogramPreRender contains settings for spectrogram generation modes.
@@ -165,7 +164,7 @@ type SpectrogramPreRender struct {
 	Enabled bool   `json:"enabled" mapstructure:"enabled"` // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
 	Size    string `json:"size"    mapstructure:"size"`    // Default size for all modes (see recommendations below)
 	Raw     bool   `json:"raw"     mapstructure:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
-	Style   string `json:"style"   mapstructure:"style"`   // Visual style preset: "default", "grayscale", "grayscale_dark", "high_contrast", "scientific"
+	Style   string `json:"style"   mapstructure:"style"`   // Visual style preset: "default", "scientific_dark", "high_contrast_dark", "scientific"
 }
 
 // GetMode returns the effective spectrogram generation mode, handling backward compatibility.

@@ -1156,23 +1156,21 @@
                 }
               },
               "style": {
-                "label": "Spectrogram Style",
-                "helpText": "Choose the visual appearance of generated spectrograms.",
-                "preview": "Preview",
-                "previewAlt": "Spectrogram style preview",
+                "label": "Spektrogrammin tyyli",
+                "helpText": "Valitse luotujen spektrogrammien visuaalinen ulkoasu.",
+                "preview": "Esikatselu",
+                "previewAlt": "Spektrogrammin tyylin esikatselu",
                 "options": {
-                  "default": "Default (Colorful)",
-                  "grayscale": "Grayscale (Light)",
-                  "grayscaleDark": "Grayscale (Dark)",
-                  "highContrast": "High Contrast",
-                  "scientific": "Scientific (xeno-canto style)"
+                  "default": "Oletus (Värikäs)",
+                  "scientificDark": "Tieteellinen (Tumma)",
+                  "highContrastDark": "Korkea kontrasti (Tumma)",
+                  "scientific": "Tieteellinen (Vaalea)"
                 },
                 "descriptions": {
-                  "default": "Colorful spectrogram with dark background",
-                  "grayscale": "Monochrome with white background, similar to xeno-canto.org",
-                  "grayscaleDark": "Monochrome with dark background",
-                  "highContrast": "High color saturation with light background",
-                  "scientific": "Grayscale with Dolph window for sharper frequency resolution"
+                  "default": "Värikäs spektrogrammi tummalla taustalla",
+                  "scientificDark": "Harmaasävy Dolph-ikkunalla, tumma tausta",
+                  "highContrastDark": "Korkea värikylläisyys tummalla taustalla",
+                  "scientific": "Harmaasävy Dolph-ikkunalla, vaalea tausta (xeno-canto-tyylinen)"
                 }
               },
               "enabled": {

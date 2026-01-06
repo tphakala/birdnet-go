@@ -818,16 +818,15 @@ func validateDashboardSettings(settings *Dashboard) error {
 	if settings.Spectrogram.Style != "" {
 		validStyles := []string{
 			SpectrogramStyleDefault,
-			SpectrogramStyleGrayscale,
-			SpectrogramStyleGrayscaleDark,
-			SpectrogramStyleHighContrast,
+			SpectrogramStyleScientificDark,
+			SpectrogramStyleHighContrastDark,
 			SpectrogramStyleScientific,
 		}
 		if !slices.Contains(validStyles, settings.Spectrogram.Style) {
 			// Log warning but don't fail - default to "default" style
 			GetLogger().Warn("Invalid spectrogram style, using default",
 				logger.String("invalid_style", settings.Spectrogram.Style),
-				logger.String("valid_styles", "default, grayscale, grayscale_dark, high_contrast, scientific"))
+				logger.String("valid_styles", "default, scientific_dark, high_contrast_dark, scientific"))
 			settings.Spectrogram.Style = SpectrogramStyleDefault
 		}
 	}

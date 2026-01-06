@@ -443,12 +443,7 @@ export type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
 export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
 
 // Spectrogram style preset options
-export type SpectrogramStyle =
-  | 'default'
-  | 'grayscale'
-  | 'grayscale_dark'
-  | 'high_contrast'
-  | 'scientific';
+export type SpectrogramStyle = 'default' | 'scientific_dark' | 'high_contrast_dark' | 'scientific';
 
 // SpectrogramPreRender contains settings for spectrogram generation modes.
 // Three modes control when and how spectrograms are generated:

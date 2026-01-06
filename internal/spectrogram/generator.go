@@ -74,17 +74,14 @@ const (
 // These arguments control the visual appearance of the spectrogram.
 func getStyleArgs(style string) []string {
 	switch style {
-	case conf.SpectrogramStyleGrayscale:
-		// Monochrome with light/white background (xeno-canto style)
-		return []string{"-m", "-l"}
-	case conf.SpectrogramStyleGrayscaleDark:
-		// Monochrome with dark background
-		return []string{"-m"}
-	case conf.SpectrogramStyleHighContrast:
-		// High color saturation with light background
-		return []string{"-h", "-l"}
+	case conf.SpectrogramStyleScientificDark:
+		// Grayscale with Dolph window, dark background
+		return []string{"-m", "-w", "dolph"}
+	case conf.SpectrogramStyleHighContrastDark:
+		// High color saturation with dark background
+		return []string{"-h"}
 	case conf.SpectrogramStyleScientific:
-		// Grayscale with Dolph window for sharper frequency resolution
+		// Grayscale with Dolph window, light background (xeno-canto style)
 		return []string{"-m", "-l", "-w", "dolph"}
 	default:
 		// Default style - no extra args (colorful with dark background)

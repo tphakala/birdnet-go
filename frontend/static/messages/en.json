@@ -1177,17 +1177,15 @@
                 "previewAlt": "Spectrogram style preview",
                 "options": {
                   "default": "Default (Colorful)",
-                  "grayscale": "Grayscale (Light)",
-                  "grayscaleDark": "Grayscale (Dark)",
-                  "highContrast": "High Contrast",
-                  "scientific": "Scientific (xeno-canto style)"
+                  "scientificDark": "Scientific (Dark)",
+                  "highContrastDark": "High Contrast (Dark)",
+                  "scientific": "Scientific (Light)"
                 },
                 "descriptions": {
                   "default": "Colorful spectrogram with dark background",
-                  "grayscale": "Monochrome with white background, similar to xeno-canto.org",
-                  "grayscaleDark": "Monochrome with dark background",
-                  "highContrast": "High color saturation with light background",
-                  "scientific": "Grayscale with Dolph window for sharper frequency resolution"
+                  "scientificDark": "Grayscale with Dolph window, dark background",
+                  "highContrastDark": "High color saturation with dark background",
+                  "scientific": "Grayscale with Dolph window, light background (xeno-canto style)"
                 }
               },
               "enabled": {

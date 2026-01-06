@@ -1168,23 +1168,21 @@
                 }
               },
               "style": {
-                "label": "Spectrogram Style",
-                "helpText": "Choose the visual appearance of generated spectrograms.",
-                "preview": "Preview",
-                "previewAlt": "Spectrogram style preview",
+                "label": "Styl spektrogramu",
+                "helpText": "Wybierz wygląd wizualny generowanych spektrogramów.",
+                "preview": "Podgląd",
+                "previewAlt": "Podgląd stylu spektrogramu",
                 "options": {
-                  "default": "Default (Colorful)",
-                  "grayscale": "Grayscale (Light)",
-                  "grayscaleDark": "Grayscale (Dark)",
-                  "highContrast": "High Contrast",
-                  "scientific": "Scientific (xeno-canto style)"
+                  "default": "Domyślny (Kolorowy)",
+                  "scientificDark": "Naukowy (Ciemny)",
+                  "highContrastDark": "Wysoki kontrast (Ciemny)",
+                  "scientific": "Naukowy (Jasny)"
                 },
                 "descriptions": {
-                  "default": "Colorful spectrogram with dark background",
-                  "grayscale": "Monochrome with white background, similar to xeno-canto.org",
-                  "grayscaleDark": "Monochrome with dark background",
-                  "highContrast": "High color saturation with light background",
-                  "scientific": "Grayscale with Dolph window for sharper frequency resolution"
+                  "default": "Kolorowy spektrogram z ciemnym tłem",
+                  "scientificDark": "Skala szarości z oknem Dolpha, ciemne tło",
+                  "highContrastDark": "Wysoka saturacja kolorów z ciemnym tłem",
+                  "scientific": "Skala szarości z oknem Dolpha, jasne tło (styl xeno-canto)"
                 }
               },
               "enabled": {
