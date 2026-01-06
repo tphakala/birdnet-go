@@ -951,30 +951,33 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	require.NoError(t, err)
 
 	now := time.Now()
+	// Calculate year start (Jan 1 of current year) for proper yearly entry placement
+	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
 
 	// Add old and recent entries for all tracking types
 	tracker.mu.Lock()
 	// Lifetime - only entries older than 10 years are pruned
-	tracker.speciesFirstSeen["VeryOldLifetime"] = now.AddDate(-11, 0, 0)       // 11 years ago - WILL be pruned
-	tracker.speciesFirstSeen["OldLifetime"] = now.Add(-30 * 24 * time.Hour)    // 30 days ago - will NOT be pruned
-	tracker.speciesFirstSeen["RecentLifetime"] = now.Add(-10 * 24 * time.Hour) // 10 days ago - will NOT be pruned
+	tracker.speciesFirstSeen["VeryOldLifetime"] = now.AddDate(-11, 0, 0) // 11 years ago - WILL be pruned
+	tracker.speciesFirstSeen["OldLifetime"] = now.AddDate(0, 0, -30)     // 30 days ago - will NOT be pruned
+	tracker.speciesFirstSeen["RecentLifetime"] = now.AddDate(0, 0, -10)  // 10 days ago - will NOT be pruned
 
 	// Yearly - only entries from before the current tracking year are pruned
-	tracker.speciesThisYear["LastYearEntry"] = now.AddDate(-1, 0, 0)        // 1 year ago - WILL be pruned
-	tracker.speciesThisYear["OldYearly"] = now.Add(-70 * 24 * time.Hour)    // 70 days ago - will NOT be pruned (still this year)
-	tracker.speciesThisYear["RecentYearly"] = now.Add(-20 * 24 * time.Hour) // 20 days ago - will NOT be pruned
+	// Use dates relative to yearStart to ensure entries are correctly within/outside the year
+	tracker.speciesThisYear["LastYearEntry"] = yearStart.AddDate(0, 0, -1) // Day before year start - WILL be pruned
+	tracker.speciesThisYear["OldYearly"] = yearStart.AddDate(0, 0, 1)      // Day after year start - will NOT be pruned
+	tracker.speciesThisYear["RecentYearly"] = now.AddDate(0, 0, -1)        // Yesterday - will NOT be pruned (guaranteed in current year)
 
 	// Seasonal - entire seasons older than 1 year are pruned
 	tracker.speciesBySeason["old_spring"] = make(map[string]time.Time)
 	tracker.speciesBySeason["old_spring"]["VeryOldSeasonal"] = now.AddDate(-2, 0, 0) // 2 years ago - WILL be pruned (entire season)
 	tracker.speciesBySeason["current_spring"] = make(map[string]time.Time)
-	tracker.speciesBySeason["current_spring"]["OldSeasonal"] = now.Add(-50 * 24 * time.Hour)    // 50 days ago - will NOT be pruned
-	tracker.speciesBySeason["current_spring"]["RecentSeasonal"] = now.Add(-15 * 24 * time.Hour) // 15 days ago - will NOT be pruned
+	tracker.speciesBySeason["current_spring"]["OldSeasonal"] = now.AddDate(0, 0, -50)    // 50 days ago - will NOT be pruned
+	tracker.speciesBySeason["current_spring"]["RecentSeasonal"] = now.AddDate(0, 0, -15) // 15 days ago - will NOT be pruned
 
-	// Notifications
+	// Notifications - use hours for sub-day precision
 	tracker.notificationLastSent = make(map[string]time.Time)
-	tracker.notificationLastSent["OldNotification"] = now.Add(-72 * time.Hour)
-	tracker.notificationLastSent["RecentNotification"] = now.Add(-12 * time.Hour)
+	tracker.notificationLastSent["OldNotification"] = now.Add(-72 * time.Hour)    // 3 days ago
+	tracker.notificationLastSent["RecentNotification"] = now.Add(-12 * time.Hour) // 12 hours ago
 	tracker.mu.Unlock()
 
 	// Prune
@@ -1006,7 +1009,7 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	// These should remain (not old enough to prune)
 	assert.True(t, hasOldLifetime, "30-day-old lifetime entry should remain")
 	assert.True(t, hasRecentLifetime, "Recent lifetime should remain")
-	assert.True(t, hasOldYearly, "70-day-old yearly entry (still this year) should remain")
+	assert.True(t, hasOldYearly, "Yearly entry after year start should remain")
 	assert.True(t, hasRecentYearly, "Recent yearly should remain")
 	assert.True(t, hasCurrentSpring, "Current spring season should remain")
 	assert.True(t, hasOldSeasonal, "50-day-old seasonal entry should remain")
