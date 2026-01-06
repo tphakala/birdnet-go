@@ -143,10 +143,29 @@ type Collector struct {
 // defaultSensitiveKeys returns the default list of sensitive configuration keys to redact
 func defaultSensitiveKeys() []string {
 	return []string{
+		// Authentication credentials
 		"password", "token", "secret", "key", "api_key", "api_token",
-		"client_id", "client_secret", "webhook_url", "mqtt_password",
-		"apikey", "username", "broker", "topic",
-		"mqtt_username", "mqtt_topic", "birdweather_id",
+		"client_id", "client_secret", "apikey",
+		"accesskeyid", "secretaccesskey", "encryptionkey",
+
+		// MQTT credentials
+		"mqtt_password", "mqtt_username", "mqtt_topic", "broker",
+
+		// Service identifiers
+		"birdweather_id", "username", "userid",
+
+		// Location data (privacy sensitive)
+		"latitude", "longitude", "stationid",
+
+		// URLs (handled specially for structural redaction)
+		"url", "urls", "endpoint", "webhook_url",
+
+		// Network topology
+		"subnet",
+
+		// Secret file paths
+		"privatekeypath", "sshkeypath", "credentialspath",
+		"tokenfile", "passfile", "userfile", "valuefile",
 	}
 }
 
