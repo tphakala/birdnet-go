@@ -413,6 +413,98 @@ func TestCollector_scrubConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "redact ntfy URL with credentials structurally",
+			config: map[string]any{
+				"notification": map[string]any{
+					"push": map[string]any{
+						"providers": []any{
+							map[string]any{
+								"type": "shoutrrr",
+								"urls": []any{"ntfy://admin:secret@ntfy.sh/mytopic"},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]any{
+				"notification": map[string]any{
+					"push": map[string]any{
+						"providers": []any{
+							map[string]any{
+								"type": "shoutrrr",
+								"urls": []any{"ntfy://[user]:[pass]@[host]/[path]"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "redact webhook URL without credentials",
+			config: map[string]any{
+				"endpoints": []any{
+					map[string]any{
+						"url":    "https://hooks.slack.com/services/T123/B456/xyz",
+						"method": "POST",
+					},
+				},
+			},
+			want: map[string]any{
+				"endpoints": []any{
+					map[string]any{
+						"url":    "https://[host]/[path]",
+						"method": "POST",
+					},
+				},
+			},
+		},
+		{
+			name: "redact URL preserving port",
+			config: map[string]any{
+				"url": "rtsp://camera:pass@192.168.1.50:554/stream1",
+			},
+			want: map[string]any{
+				"url": "rtsp://[user]:[pass]@[host]:554/[path]",
+			},
+		},
+		{
+			name: "redact endpoint URL",
+			config: map[string]any{
+				"weather": map[string]any{
+					"openWeather": map[string]any{
+						"endpoint": "https://api.openweathermap.org/data/2.5/weather",
+						"units":    "metric",
+					},
+				},
+			},
+			want: map[string]any{
+				"weather": map[string]any{
+					"openWeather": map[string]any{
+						"endpoint": "https://[host]/[path]",
+						"units":    "metric",
+					},
+				},
+			},
+		},
+		{
+			name: "skip empty URL",
+			config: map[string]any{
+				"url": "",
+			},
+			want: map[string]any{
+				"url": "",
+			},
+		},
+		{
+			name: "redact URL with query parameters",
+			config: map[string]any{
+				"url": "https://api.example.com/webhook?token=secret123&channel=alerts",
+			},
+			want: map[string]any{
+				"url": "https://[host]/[path]?[query]",
+			},
+		},
 	}
 
 	for _, tt := range tests {
