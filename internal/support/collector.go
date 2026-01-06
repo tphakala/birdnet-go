@@ -740,20 +740,25 @@ func (c *Collector) redactSensitiveValue(value any, sensitiveKeys []string) any 
 
 // redactSliceRecursively handles redaction of slice values while preserving structure.
 // For each item in the slice, it recursively processes to redact nested sensitive fields.
+// Default values (empty strings, zero numbers) are preserved to maintain consistency
+// with scalar sensitive value handling.
 func (c *Collector) redactSliceRecursively(slice []any, sensitiveKeys []string) []any {
 	if len(slice) == 0 {
 		return slice
 	}
 	redacted := make([]any, len(slice))
 	for i, item := range slice {
+		// Preserve default values consistently with scalar handling
+		if isDefaultValue(item) {
+			redacted[i] = item
+			continue
+		}
+
 		switch v := item.(type) {
 		case string:
-			switch {
-			case isURLValue(v):
+			if isURLValue(v) {
 				redacted[i] = redactURLStructurally(v)
-			case v == "":
-				redacted[i] = v
-			default:
+			} else {
 				redacted[i] = redactedPlaceholder
 			}
 		case map[string]any:
