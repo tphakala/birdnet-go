@@ -135,7 +135,7 @@ realtime:
         threshold: 0.85
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0600)
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
 	// Load config using viper directly to simulate Load()
