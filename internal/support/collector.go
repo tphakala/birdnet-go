@@ -67,8 +67,14 @@ const (
 	logReadmeFileName   = "logs/README.txt"
 
 	// Redaction and privacy
-	redactionPlaceholder = "[REDACTED]"
-	logReadmeContent     = "No log files were found or all logs were older than the specified duration."
+	redactedPlaceholder      = "[redacted]"
+	redactedUserPlaceholder  = "[user]"
+	redactedPassPlaceholder  = "[pass]"
+	redactedHostPlaceholder  = "[host]"
+	redactedPathPlaceholder  = "[path]"
+	redactedQueryPlaceholder = "[query]"
+	urlSchemeDelimiter       = "://"
+	logReadmeContent         = "No log files were found or all logs were older than the specified duration."
 
 	// Journal command flags
 	journalFlagUnit       = "-u"
@@ -534,7 +540,7 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 	lowerKey := strings.ToLower(key)
 	for _, sensitive := range sensitiveKeys {
 		if strings.Contains(lowerKey, sensitive) {
-			return redactionPlaceholder
+			return redactedPlaceholder
 		}
 	}
 
