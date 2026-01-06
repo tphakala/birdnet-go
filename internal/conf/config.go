@@ -165,6 +165,7 @@ type SpectrogramPreRender struct {
 	Enabled bool   `json:"enabled" mapstructure:"enabled"` // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
 	Size    string `json:"size"    mapstructure:"size"`    // Default size for all modes (see recommendations below)
 	Raw     bool   `json:"raw"     mapstructure:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
+	Style   string `json:"style"   mapstructure:"style"`   // Visual style preset: "default", "grayscale", "grayscale_dark", "high_contrast", "scientific"
 }
 
 // GetMode returns the effective spectrogram generation mode, handling backward compatibility.
