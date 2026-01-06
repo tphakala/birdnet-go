@@ -1752,27 +1752,25 @@ func getNestedValue(config map[string]any, path ...string) (any, bool) {
 	return current, true
 }
 
+// assertRedacted checks that a nested field at a given path is present and redacted.
+func assertRedacted(t *testing.T, config map[string]any, path ...string) {
+	t.Helper()
+	val, ok := getNestedValue(config, path...)
+	pathStr := strings.Join(path, ".")
+	require.True(t, ok, "%s not found in scrubbed config", pathStr)
+	assert.Equal(t, "[redacted]", val, "%s should be redacted", pathStr)
+}
+
 // assertCriticalFieldsRedacted verifies the most critical sensitive fields
 // are properly redacted with expected placeholder values.
 func assertCriticalFieldsRedacted(t *testing.T, config map[string]any) {
 	t.Helper()
 
 	// 1. Security passwords and secrets
-	val, ok := getNestedValue(config, "security", "basicAuth", "password")
-	require.True(t, ok, "security.basicAuth.password not found")
-	assert.Equal(t, "[redacted]", val, "security.basicAuth.password should be redacted")
-
-	val, ok = getNestedValue(config, "security", "basicAuth", "clientSecret")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "security.basicAuth.clientSecret should be redacted")
-
-	val, ok = getNestedValue(config, "security", "sessionSecret")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "security.sessionSecret should be redacted")
-
-	val, ok = getNestedValue(config, "security", "allowSubnetBypass", "subnet")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "security.allowSubnetBypass.subnet should be redacted")
+	assertRedacted(t, config, "security", "basicAuth", "password")
+	assertRedacted(t, config, "security", "basicAuth", "clientSecret")
+	assertRedacted(t, config, "security", "sessionSecret")
+	assertRedacted(t, config, "security", "allowSubnetBypass", "subnet")
 
 	// 2. OAuth providers (array)
 	providers, ok := getNestedValue(config, "security", "oauthProviders")
@@ -1783,7 +1781,8 @@ func assertCriticalFieldsRedacted(t *testing.T, config map[string]any) {
 	require.Len(t, providerList, 2, "should have 2 OAuth providers")
 
 	for i, p := range providerList {
-		provider := p.(map[string]any)
+		provider, ok := p.(map[string]any)
+		require.True(t, ok, "provider[%d] should be a map", i)
 		assert.Equal(t, "[redacted]", provider["clientId"],
 			"provider[%d].clientId should be redacted", i)
 		assert.Equal(t, "[redacted]", provider["clientSecret"],
@@ -1795,73 +1794,45 @@ func assertCriticalFieldsRedacted(t *testing.T, config map[string]any) {
 	}
 
 	// 3. Location coordinates
-	val, ok = getNestedValue(config, "birdnet", "latitude")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "birdnet.latitude should be redacted")
-
-	val, ok = getNestedValue(config, "birdnet", "longitude")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "birdnet.longitude should be redacted")
+	assertRedacted(t, config, "birdnet", "latitude")
+	assertRedacted(t, config, "birdnet", "longitude")
 
 	// 4. MQTT credentials
-	val, ok = getNestedValue(config, "realtime", "mqtt", "username")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "mqtt.username should be redacted")
-
-	val, ok = getNestedValue(config, "realtime", "mqtt", "password")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "mqtt.password should be redacted")
-
-	val, ok = getNestedValue(config, "realtime", "mqtt", "topic")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "mqtt.topic should be redacted")
+	assertRedacted(t, config, "realtime", "mqtt", "username")
+	assertRedacted(t, config, "realtime", "mqtt", "password")
+	assertRedacted(t, config, "realtime", "mqtt", "topic")
 
 	// 5. Birdweather ID
-	val, ok = getNestedValue(config, "realtime", "birdweather", "id")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "birdweather.id should be redacted")
+	assertRedacted(t, config, "realtime", "birdweather", "id")
 
 	// 6. Weather API keys
-	val, ok = getNestedValue(config, "realtime", "weather", "openWeather", "apiKey")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "openWeather.apiKey should be redacted")
-
-	val, ok = getNestedValue(config, "realtime", "weather", "wunderground", "apiKey")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "wunderground.apiKey should be redacted")
-
-	val, ok = getNestedValue(config, "realtime", "weather", "wunderground", "stationId")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "wunderground.stationId should be redacted")
+	assertRedacted(t, config, "realtime", "weather", "openWeather", "apiKey")
+	assertRedacted(t, config, "realtime", "weather", "wunderground", "apiKey")
+	assertRedacted(t, config, "realtime", "weather", "wunderground", "stationId")
 
 	// 7. eBird API key
-	val, ok = getNestedValue(config, "realtime", "ebird", "apiKey")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "ebird.apiKey should be redacted")
+	assertRedacted(t, config, "realtime", "ebird", "apiKey")
 
 	// 8. Output MySQL credentials
-	val, ok = getNestedValue(config, "output", "mysql", "username")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "mysql.username should be redacted")
-
-	val, ok = getNestedValue(config, "output", "mysql", "password")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "mysql.password should be redacted")
+	assertRedacted(t, config, "output", "mysql", "username")
+	assertRedacted(t, config, "output", "mysql", "password")
 
 	// 9. Backup encryption key
-	val, ok = getNestedValue(config, "backup", "encryptionKey")
-	require.True(t, ok)
-	assert.Equal(t, "[redacted]", val, "backup.encryptionKey should be redacted")
+	assertRedacted(t, config, "backup", "encryptionKey")
 
 	// 10. Check backup targets for credentials
 	targets, ok := getNestedValue(config, "backup", "targets")
-	require.True(t, ok)
-	targetList := targets.([]any)
+	require.True(t, ok, "backup.targets not found")
+	targetList, ok := targets.([]any)
+	require.True(t, ok, "backup.targets should be a slice")
 
-	for _, target := range targetList {
-		tgt := target.(map[string]any)
-		settings := tgt["settings"].(map[string]any)
-		targetType := tgt["type"].(string)
+	for i, target := range targetList {
+		tgt, ok := target.(map[string]any)
+		require.True(t, ok, "target[%d] should be a map", i)
+		settings, ok := tgt["settings"].(map[string]any)
+		require.True(t, ok, "target[%d].settings should be a map", i)
+		targetType, ok := tgt["type"].(string)
+		require.True(t, ok, "target[%d].type should be a string", i)
 
 		switch targetType {
 		case "s3":
