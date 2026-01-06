@@ -256,24 +256,24 @@ func TestCollector_scrubConfig(t *testing.T) {
 				},
 			},
 			want: map[string]any{
-				"password":   "[REDACTED]",
-				"api_key":    "[REDACTED]",
+				"password":   "[redacted]",
+				"api_key":    "[redacted]",
 				"safe_field": "visible",
 				"nested": map[string]any{
-					"token":        "[REDACTED]",
+					"token":        "[redacted]",
 					"normal_field": "also_visible",
 				},
 			},
 		},
 		{
-			name: "sanitize RTSP URLs with credentials",
+			name: "sanitize RTSP URLs with credentials in non-sensitive field",
 			config: map[string]any{
-				"urls": []any{"rtsp://user:pass@192.168.1.100:554/stream", "http://example.com"},
-				"data": []any{"safe1", "safe2"},
+				"streams": []any{"rtsp://user:pass@192.168.1.100:554/stream", "http://example.com"},
+				"data":    []any{"safe1", "safe2"},
 			},
 			want: map[string]any{
-				"urls": []any{"rtsp://192.168.1.100:554/stream", "http://example.com"},
-				"data": []any{"safe1", "safe2"},
+				"streams": []any{"rtsp://192.168.1.100:554/stream", "http://example.com"},
+				"data":    []any{"safe1", "safe2"},
 			},
 		},
 		{
@@ -285,9 +285,9 @@ func TestCollector_scrubConfig(t *testing.T) {
 				"normal":   "visible",
 			},
 			want: map[string]any{
-				"Password": "[REDACTED]",
-				"API_KEY":  "[REDACTED]",
-				"ApiToken": "[REDACTED]",
+				"Password": "[redacted]",
+				"API_KEY":  "[redacted]",
+				"ApiToken": "[redacted]",
 				"normal":   "visible",
 			},
 		},
