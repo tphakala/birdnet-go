@@ -965,7 +965,7 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	// Use dates relative to yearStart to ensure entries are correctly within/outside the year
 	tracker.speciesThisYear["LastYearEntry"] = yearStart.AddDate(0, 0, -1) // Day before year start - WILL be pruned
 	tracker.speciesThisYear["OldYearly"] = yearStart.AddDate(0, 0, 1)      // Day after year start - will NOT be pruned
-	tracker.speciesThisYear["RecentYearly"] = now.AddDate(0, 0, -1)        // Yesterday - will NOT be pruned (guaranteed in current year)
+	tracker.speciesThisYear["RecentYearly"] = now // Today - will NOT be pruned (guaranteed in current year)
 
 	// Seasonal - entire seasons older than 1 year are pruned
 	tracker.speciesBySeason["old_spring"] = make(map[string]time.Time)
