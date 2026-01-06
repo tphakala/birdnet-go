@@ -97,40 +97,28 @@
     localeCode: code as FlagLocale,
   }));
 
+  // Spectrogram style definitions with value→translationKey mapping
+  const SPECTROGRAM_STYLES: { value: SpectrogramStyle; labelKey: string }[] = [
+    { value: 'default', labelKey: 'default' },
+    { value: 'scientific_dark', labelKey: 'scientificDark' },
+    { value: 'high_contrast_dark', labelKey: 'highContrastDark' },
+    { value: 'scientific', labelKey: 'scientific' },
+  ];
+
   // Spectrogram style options - computed reactively to support locale changes
   let spectrogramStyleOptions = $derived.by(() => {
     getLocale(); // Trigger re-computation on locale change
-    return [
-      {
-        value: 'default',
-        label: t(
-          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.default'
-        ),
-      },
-      {
-        value: 'scientific_dark',
-        label: t(
-          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.scientificDark'
-        ),
-      },
-      {
-        value: 'high_contrast_dark',
-        label: t(
-          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.highContrastDark'
-        ),
-      },
-      {
-        value: 'scientific',
-        label: t(
-          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.scientific'
-        ),
-      },
-    ];
+    return SPECTROGRAM_STYLES.map(style => ({
+      value: style.value,
+      label: t(
+        `settings.main.sections.userInterface.dashboard.spectrogram.style.options.${style.labelKey}`
+      ),
+    }));
   });
 
-  // Map style value (snake_case) to translation key (camelCase)
+  // Get translation key for style description
   function getStyleDescriptionKey(style: SpectrogramStyle): string {
-    return style.replace(/(_\w)/g, k => k[1].toUpperCase());
+    return SPECTROGRAM_STYLES.find(s => s.value === style)?.labelKey ?? 'default';
   }
 
   // Extended option type for weather provider
