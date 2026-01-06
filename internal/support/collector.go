@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,6 +168,89 @@ func defaultSensitiveKeys() []string {
 		"privatekeypath", "sshkeypath", "credentialspath",
 		"tokenfile", "passfile", "userfile", "valuefile",
 	}
+}
+
+// isURLValue checks if a string value appears to be a URL
+func isURLValue(s string) bool {
+	return strings.Contains(s, urlSchemeDelimiter)
+}
+
+// isDefaultValue checks if a value is a default/empty value that doesn't need redaction
+func isDefaultValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case string:
+		return v == ""
+	case float64:
+		return v == 0.0
+	case float32:
+		return v == 0.0
+	case int:
+		return v == 0
+	case int64:
+		return v == 0
+	case int32:
+		return v == 0
+	case bool:
+		return false // booleans are never "default" for redaction purposes
+	default:
+		return false
+	}
+}
+
+// redactURLStructurally preserves URL structure while replacing sensitive components.
+// It keeps the scheme and port (useful for debugging) while replacing credentials,
+// host, path, and query with placeholders.
+func redactURLStructurally(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return redactedPlaceholder
+	}
+
+	var result strings.Builder
+
+	// Preserve scheme
+	result.WriteString(parsed.Scheme)
+	result.WriteString(urlSchemeDelimiter)
+
+	// Handle credentials
+	if parsed.User != nil {
+		_, hasPass := parsed.User.Password()
+		if hasPass {
+			result.WriteString(redactedUserPlaceholder)
+			result.WriteString(":")
+			result.WriteString(redactedPassPlaceholder)
+			result.WriteString("@")
+		} else if parsed.User.Username() != "" {
+			result.WriteString(redactedUserPlaceholder)
+			result.WriteString("@")
+		}
+	}
+
+	// Replace host
+	result.WriteString(redactedHostPlaceholder)
+
+	// Preserve port if present
+	if parsed.Port() != "" {
+		result.WriteString(":")
+		result.WriteString(parsed.Port())
+	}
+
+	// Replace path
+	if parsed.Path != "" && parsed.Path != "/" {
+		result.WriteString("/")
+		result.WriteString(redactedPathPlaceholder)
+	}
+
+	// Replace query
+	if parsed.RawQuery != "" {
+		result.WriteString("?")
+		result.WriteString(redactedQueryPlaceholder)
+	}
+
+	return result.String()
 }
 
 // NewCollector creates a new support data collector
