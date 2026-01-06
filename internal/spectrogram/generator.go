@@ -675,6 +675,12 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 		args = append(args, "-r")
 	}
 
+	// Add style-specific arguments
+	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	if styleArgs := getStyleArgs(style); styleArgs != nil {
+		args = append(args, styleArgs...)
+	}
+
 	return args
 }
 
