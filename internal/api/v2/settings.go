@@ -519,6 +519,12 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 	}
 
+	// Normalize species config keys to lowercase after realtime section updates
+	// This ensures case-insensitive matching regardless of how users enter species names
+	if section == "realtime" && settings.Realtime.Species.Config != nil {
+		settings.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
+	}
+
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
 		*settings = oldSettings
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)

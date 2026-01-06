@@ -498,6 +498,74 @@ func getRealtime(t *testing.T, e *echo.Echo, c *Controller) *httptest.ResponseRe
 	return rec
 }
 
+// TestSpeciesConfigNormalizationOnAPIUpdate tests that species config keys
+// are normalized to lowercase when updated via API
+func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	controller := &Controller{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Include: []string{},
+					Exclude: []string{},
+					Config:  make(map[string]conf.SpeciesConfig),
+				},
+			},
+		},
+		DisableSaveSettings: true,
+	}
+
+	// Update with mixed-case species names (as UI would send)
+	updatePayload := map[string]any{
+		"species": map[string]any{
+			"config": map[string]any{
+				"American Robin": map[string]any{
+					"threshold": 0.75,
+					"interval":  30,
+					"actions":   []any{},
+				},
+				"House Sparrow": map[string]any{
+					"threshold": 0.85,
+					"interval":  0,
+					"actions":   []any{},
+				},
+			},
+		},
+	}
+
+	body, err := json.Marshal(updatePayload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("realtime")
+
+	err = controller.UpdateSectionSettings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify keys are normalized to lowercase in controller settings
+	_, hasLowercaseRobin := controller.Settings.Realtime.Species.Config["american robin"]
+	assert.True(t, hasLowercaseRobin, "should have lowercase 'american robin' key after API update")
+
+	_, hasLowercaseSparrow := controller.Settings.Realtime.Species.Config["house sparrow"]
+	assert.True(t, hasLowercaseSparrow, "should have lowercase 'house sparrow' key after API update")
+
+	// Verify mixed-case keys don't exist
+	_, hasMixedCaseRobin := controller.Settings.Realtime.Species.Config["American Robin"]
+	assert.False(t, hasMixedCaseRobin, "should not have mixed-case 'American Robin' key")
+
+	// Verify config values are preserved
+	robin := controller.Settings.Realtime.Species.Config["american robin"]
+	assert.InDelta(t, 0.75, robin.Threshold, 0.0001)
+	assert.Equal(t, 30, robin.Interval)
+}
+
 // createTestController creates a test controller with initialized settings for species tests
 func createTestController(t *testing.T) *Controller {
 	t.Helper()
