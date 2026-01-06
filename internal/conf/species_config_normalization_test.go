@@ -151,7 +151,10 @@ realtime:
 	err = v.Unmarshal(&settings)
 	require.NoError(t, err)
 
-	// Apply normalization (this is what we're testing gets called)
+	// Apply normalization as called in Load()
+	// Note: Viper may already normalize map keys to lowercase during unmarshal,
+	// making this idempotent. We still call it to ensure consistent behavior
+	// regardless of viper's internal implementation.
 	settings.Realtime.Species.Config = NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
 
 	// Verify keys are normalized to lowercase
