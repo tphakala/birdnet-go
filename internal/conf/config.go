@@ -538,11 +538,15 @@ type SpeciesConfig struct {
 	Actions   []SpeciesAction `yaml:"actions" json:"actions"`     // List of actions to execute
 }
 
-// RealtimeSpeciesSettings contains all species-specific settings
+// SpeciesSettings contains all species-specific settings.
+// Note: Config map keys are normalized to lowercase during config load
+// and API updates to ensure case-insensitive matching. Users can enter
+// species names in any case (e.g., "American Robin", "american robin")
+// and they will all resolve to the same lowercase key.
 type SpeciesSettings struct {
 	Include []string                 `yaml:"include" json:"include"` // Always include these species
 	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
-	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration
+	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration (keys normalized to lowercase)
 }
 
 // LogDeduplicationSettings contains settings for log deduplication
