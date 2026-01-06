@@ -48,6 +48,7 @@
     realtimeSettings,
     DEFAULT_SPECTROGRAM_SETTINGS,
     type SpectrogramPreRender,
+    type SpectrogramStyle,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -95,6 +96,43 @@
     label: info.name,
     localeCode: code as FlagLocale,
   }));
+
+  // Spectrogram style options - computed reactively to support locale changes
+  let spectrogramStyleOptions = $derived.by(() => {
+    getLocale(); // Trigger re-computation on locale change
+    return [
+      {
+        value: 'default',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.default'
+        ),
+      },
+      {
+        value: 'grayscale',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.grayscale'
+        ),
+      },
+      {
+        value: 'grayscale_dark',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.grayscaleDark'
+        ),
+      },
+      {
+        value: 'high_contrast',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.highContrast'
+        ),
+      },
+      {
+        value: 'scientific',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.scientific'
+        ),
+      },
+    ];
+  });
 
   // Extended option type for weather provider
   interface WeatherOption extends SelectOption {
@@ -181,6 +219,11 @@
   });
 
   let store = $derived($settingsStore);
+
+  // Current spectrogram style for preview
+  let currentSpectrogramStyle = $derived<SpectrogramStyle>(
+    (settings.dashboard.spectrogram?.style as SpectrogramStyle) ?? 'default'
+  );
 
   // Database type selection
   let selectedDatabaseType = $state('sqlite');
@@ -1689,6 +1732,37 @@
               menuSize="sm"
               onChange={value => updateSpectrogramSetting('mode', value as string)}
             />
+
+            <SelectDropdown
+              options={spectrogramStyleOptions}
+              value={settings.dashboard.spectrogram?.style ?? 'default'}
+              label={t('settings.main.sections.userInterface.dashboard.spectrogram.style.label')}
+              helpText={t(
+                'settings.main.sections.userInterface.dashboard.spectrogram.style.helpText'
+              )}
+              disabled={store.isLoading || store.isSaving}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateSpectrogramSetting('style', value as string)}
+            />
+          </div>
+
+          <!-- Style Preview Panel -->
+          <div class="mt-4 p-4 bg-base-200 rounded-lg">
+            <p class="text-sm font-medium mb-2">
+              {t('settings.main.sections.userInterface.dashboard.spectrogram.style.preview')}
+            </p>
+            <img
+              src={`/images/spectrogram-preview-${currentSpectrogramStyle}.png`}
+              alt={t('settings.main.sections.userInterface.dashboard.spectrogram.style.previewAlt')}
+              class="w-full max-w-md rounded border border-base-300"
+            />
+            <p class="text-sm text-base-content/70 mt-2">
+              {t(
+                `settings.main.sections.userInterface.dashboard.spectrogram.style.descriptions.${currentSpectrogramStyle === 'grayscale_dark' ? 'grayscaleDark' : currentSpectrogramStyle === 'high_contrast' ? 'highContrast' : currentSpectrogramStyle}`
+              )}
+            </p>
           </div>
 
           <!-- Mode-specific notes -->
