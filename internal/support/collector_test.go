@@ -291,6 +291,128 @@ func TestCollector_scrubConfig(t *testing.T) {
 				"normal":   "visible",
 			},
 		},
+		{
+			name: "redact coordinates when non-default",
+			config: map[string]any{
+				"birdnet": map[string]any{
+					"latitude":    45.5231,
+					"longitude":   -122.6765,
+					"sensitivity": 1.0,
+					"threshold":   0.8,
+				},
+			},
+			want: map[string]any{
+				"birdnet": map[string]any{
+					"latitude":    "[redacted]",
+					"longitude":   "[redacted]",
+					"sensitivity": 1.0,
+					"threshold":   0.8,
+				},
+			},
+		},
+		{
+			name: "skip default coordinates (zero values)",
+			config: map[string]any{
+				"latitude":  0.0,
+				"longitude": 0.0,
+			},
+			want: map[string]any{
+				"latitude":  0.0,
+				"longitude": 0.0,
+			},
+		},
+		{
+			name: "redact station ID",
+			config: map[string]any{
+				"weather": map[string]any{
+					"wunderground": map[string]any{
+						"stationid": "KWASEATT123",
+						"units":     "m",
+					},
+				},
+			},
+			want: map[string]any{
+				"weather": map[string]any{
+					"wunderground": map[string]any{
+						"stationid": "[redacted]",
+						"units":     "m",
+					},
+				},
+			},
+		},
+		{
+			name: "redact user ID (email)",
+			config: map[string]any{
+				"security": map[string]any{
+					"oauthProviders": []any{
+						map[string]any{
+							"provider": "google",
+							"userid":   "user@example.com",
+							"enabled":  true,
+						},
+					},
+				},
+			},
+			want: map[string]any{
+				"security": map[string]any{
+					"oauthProviders": []any{
+						map[string]any{
+							"provider": "google",
+							"userid":   "[redacted]",
+							"enabled":  true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "redact subnet",
+			config: map[string]any{
+				"security": map[string]any{
+					"allowSubnetBypass": map[string]any{
+						"enabled": true,
+						"subnet":  "192.168.1.0/24",
+					},
+				},
+			},
+			want: map[string]any{
+				"security": map[string]any{
+					"allowSubnetBypass": map[string]any{
+						"enabled": true,
+						"subnet":  "[redacted]",
+					},
+				},
+			},
+		},
+		{
+			name: "redact secret file paths",
+			config: map[string]any{
+				"backup": map[string]any{
+					"targets": []any{
+						map[string]any{
+							"type": "sftp",
+							"settings": map[string]any{
+								"privatekeypath": "/home/user/.ssh/id_rsa",
+								"host":           "backup.example.com",
+							},
+						},
+					},
+				},
+			},
+			want: map[string]any{
+				"backup": map[string]any{
+					"targets": []any{
+						map[string]any{
+							"type": "sftp",
+							"settings": map[string]any{
+								"privatekeypath": "[redacted]",
+								"host":           "backup.example.com",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
