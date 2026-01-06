@@ -694,9 +694,9 @@ func normalizeSpeciesConfigKeysInJSON(data json.RawMessage, sectionName string) 
 
 	var dataMap map[string]any
 	if err := json.Unmarshal(data, &dataMap); err != nil {
-		// Can't parse as JSON map, return original data unchanged
-		// This is not an error - the data might be valid for unmarshaling directly
-		return data, nil //nolint:nilerr // intentionally ignoring unmarshal error
+		// For species/realtime sections, we expect a JSON object
+		// Return error for clearer feedback on malformed requests
+		return nil, fmt.Errorf("failed to unmarshal section data as JSON object: %w", err)
 	}
 
 	modified := false
@@ -725,12 +725,28 @@ func normalizeSpeciesConfigKeysInJSON(data json.RawMessage, sectionName string) 
 	return json.Marshal(dataMap)
 }
 
-// normalizeMapKeysToLowercase converts all keys in a map to lowercase
+// normalizeMapKeysToLowercase converts all keys in a map to lowercase.
+// Uses a two-pass algorithm to ensure deterministic behavior when the input
+// contains conflicting keys (e.g., "Bird" and "bird"): mixed-case keys
+// take precedence over their lowercase counterparts.
 func normalizeMapKeysToLowercase(m map[string]any) map[string]any {
 	result := make(map[string]any, len(m))
+
+	// First pass: add all already-lowercase keys
 	for k, v := range m {
-		result[strings.ToLower(k)] = v
+		if k == strings.ToLower(k) {
+			result[k] = v
+		}
 	}
+
+	// Second pass: add non-lowercase keys (normalized), overwriting any
+	// existing lowercase versions
+	for k, v := range m {
+		if k != strings.ToLower(k) {
+			result[strings.ToLower(k)] = v
+		}
+	}
+
 	return result
 }
 
