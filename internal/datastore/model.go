@@ -182,14 +182,14 @@ type DynamicThreshold struct {
 // This enables the frontend to display a timeline of threshold adjustments per species.
 type ThresholdEvent struct {
 	ID            uint      `gorm:"primaryKey"`
-	SpeciesName   string    `gorm:"index;not null;size:200"`  // Common name (lowercase)
-	PreviousLevel int       `gorm:"not null"`                 // Level before change
-	NewLevel      int       `gorm:"not null"`                 // Level after change
-	PreviousValue float64   `gorm:"not null"`                 // Threshold value before change
-	NewValue      float64   `gorm:"not null"`                 // Threshold value after change
-	ChangeReason  string    `gorm:"not null;size:50"`         // "high_confidence", "expiry", "manual_reset"
-	Confidence    float64   `gorm:"default:0"`                // Detection confidence that triggered change (if applicable)
-	CreatedAt     time.Time `gorm:"index;not null"`           // When the event occurred
+	SpeciesName   string    `gorm:"index;not null;size:200"` // Common name (lowercase)
+	PreviousLevel int       `gorm:"not null"`                // Level before change
+	NewLevel      int       `gorm:"not null"`                // Level after change
+	PreviousValue float64   `gorm:"not null"`                // Threshold value before change
+	NewValue      float64   `gorm:"not null"`                // Threshold value after change
+	ChangeReason  string    `gorm:"not null;size:50"`        // "high_confidence", "expiry", "manual_reset"
+	Confidence    float64   `gorm:"default:0"`               // Detection confidence that triggered change (if applicable)
+	CreatedAt     time.Time `gorm:"index;not null"`          // When the event occurred
 }
 
 // NotificationHistory tracks sent notifications to prevent duplicate notifications after restart
@@ -197,10 +197,10 @@ type ThresholdEvent struct {
 // Resolves BG-17: Species tracker loses state on restart - causes false "New Species" notifications
 type NotificationHistory struct {
 	ID               uint      `gorm:"primaryKey"`
-	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"` // Scientific name of the species
+	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"`                    // Scientific name of the species
 	NotificationType string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:50;default:new_species"` // Type: "new_species", "yearly", "seasonal"
-	LastSent         time.Time `gorm:"index;not null"`                                                       // When notification was last sent
-	ExpiresAt        time.Time `gorm:"index;not null"`                                                       // When this record expires (2x suppression window)
-	CreatedAt        time.Time `gorm:"not null"`                                                             // When first created
-	UpdatedAt        time.Time `gorm:"not null"`                                                             // Last update time
+	LastSent         time.Time `gorm:"index;not null"`                                                                          // When notification was last sent
+	ExpiresAt        time.Time `gorm:"index;not null"`                                                                          // When this record expires (2x suppression window)
+	CreatedAt        time.Time `gorm:"not null"`                                                                                // When first created
+	UpdatedAt        time.Time `gorm:"not null"`                                                                                // Last update time
 }

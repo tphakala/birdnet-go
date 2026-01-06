@@ -27,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Timeout and interval constants
@@ -953,7 +954,7 @@ func (a *BirdWeatherAction) Execute(data any) error {
 	if err := a.BwClient.Publish(&note, pcmData); err != nil {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
-		sanitizedErr := sanitizeError(err)
+		sanitizedErr := privacy.WrapError(err)
 		// Add structured logging
 		GetLogger().Error("Failed to upload to BirdWeather",
 			logger.String("component", "analysis.processor.actions"),
@@ -1084,7 +1085,7 @@ func (a *MqttAction) Execute(data any) error {
 	if err != nil {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
-		sanitizedErr := sanitizeError(err)
+		sanitizedErr := privacy.WrapError(err)
 
 		// Check if this is an EOF error which indicates connection was closed unexpectedly
 		// This is a common issue with MQTT brokers and should be treated as retryable
@@ -1244,7 +1245,7 @@ func (a *SSEAction) Execute(data any) error {
 	if err := a.SSEBroadcaster(&noteCopy, &birdImage); err != nil {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
-		sanitizedErr := sanitizeError(err)
+		sanitizedErr := privacy.WrapError(err)
 		GetLogger().Error("Failed to broadcast via SSE",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),

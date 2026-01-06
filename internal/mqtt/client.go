@@ -73,7 +73,7 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	log.Info("MQTT configuration loaded",
 		logger.String("broker", config.Broker),
 		logger.String("client_id", config.ClientID),
-		logger.String("username", config.Username),
+		logger.Username(config.Username),
 		logger.String("topic", config.Topic),
 		logger.Bool("retain", config.Retain),
 		logger.Bool("debug", config.Debug),

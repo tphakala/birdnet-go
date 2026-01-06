@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Configuration constants
@@ -457,15 +458,18 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 // sanitizeErrorMessage returns a sanitized version of the error message
 // for safe storage in statistics. This function:
 // 1. Handles nil errors
-// 2. Bounds the message length to prevent memory bloat
-// 3. Removes control characters and potentially unsafe characters
-// 4. Handles non-ASCII characters and escape sequences
+// 2. Scrubs sensitive data (credentials, tokens, emails, IPs) using privacy package
+// 3. Bounds the message length to prevent memory bloat
+// 4. Removes control characters and potentially unsafe characters
+// 5. Handles non-ASCII characters and escape sequences
 func sanitizeErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
 
-	errMsg := err.Error()
+	// First, apply privacy scrubbing to remove sensitive data
+	// This handles URLs with credentials, API tokens, emails, IPs, etc.
+	errMsg := privacy.ScrubMessage(err.Error())
 
 	// Bound message length to prevent memory bloat
 	if len(errMsg) > MaxMessageLength {
@@ -479,11 +483,6 @@ func sanitizeErrorMessage(err error) string {
 		if r < 32 || r == 127 {
 			return -1
 		}
-
-		// Option: For stricter sanitization, uncomment to keep only ASCII printable characters
-		// if r > 127 {
-		//    return -1
-		// }
 
 		// Remove potentially problematic Unicode characters
 		if r >= 0xFFF0 && r <= 0xFFFF { // Unicode specials

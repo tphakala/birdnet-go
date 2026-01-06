@@ -1317,54 +1317,54 @@ func TestAnonymizePath_PathTypes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		input        string
-		expectPrefix string
+		name           string
+		input          string
+		expectPrefix   string
 		expectContains []string
 	}{
 		{
-			name:         "Unix absolute path",
-			input:        "/home/user/documents/file.txt",
-			expectPrefix: "/",
+			name:           "Unix absolute path",
+			input:          "/home/user/documents/file.txt",
+			expectPrefix:   "/",
 			expectContains: []string{"path-", ".txt"},
 		},
 		{
-			name:         "Unix relative path",
-			input:        "documents/file.txt",
+			name:           "Unix relative path",
+			input:          "documents/file.txt",
 			expectContains: []string{"path-", ".txt"},
 		},
 		{
-			name:         "Windows absolute path",
-			input:        "C:\\Users\\John\\Documents\\file.txt",
+			name:           "Windows absolute path",
+			input:          "C:\\Users\\John\\Documents\\file.txt",
 			expectContains: []string{"path-", ".txt", "\\"},
 		},
 		{
-			name:         "Path with multiple extensions",
-			input:        "/var/log/app.log.gz",
-			expectPrefix: "/",
+			name:           "Path with multiple extensions",
+			input:          "/var/log/app.log.gz",
+			expectPrefix:   "/",
 			expectContains: []string{"path-", ".gz"},
 		},
 		{
-			name:         "Path without extension",
-			input:        "/usr/bin/executable",
-			expectPrefix: "/",
+			name:           "Path without extension",
+			input:          "/usr/bin/executable",
+			expectPrefix:   "/",
 			expectContains: []string{"path-"},
 		},
 		{
-			name:         "Single segment path",
-			input:        "filename.txt",
+			name:           "Single segment path",
+			input:          "filename.txt",
 			expectContains: []string{"path-", ".txt"},
 		},
 		{
-			name:         "Deep nested path",
-			input:        "/alpha/beta/gamma/delta/file.go",
-			expectPrefix: "/",
+			name:           "Deep nested path",
+			input:          "/alpha/beta/gamma/delta/file.go",
+			expectPrefix:   "/",
 			expectContains: []string{"path-", ".go"},
 		},
 		{
-			name:         "Path with spaces in name",
-			input:        "/home/user/my documents/my file.pdf",
-			expectPrefix: "/",
+			name:           "Path with spaces in name",
+			input:          "/home/user/my documents/my file.pdf",
+			expectPrefix:   "/",
 			expectContains: []string{"path-", ".pdf"},
 		},
 	}
@@ -1744,5 +1744,130 @@ func TestExtractUserAgentComponents(t *testing.T) {
 		require.Len(t, result, 2)
 		assert.Contains(t, result, "Chrome")
 		assert.Contains(t, result, "Android")
+	})
+}
+
+// TestScrubUsername tests the username anonymization function
+func TestScrubUsername(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty username returns marker", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubUsername("")
+		assert.Equal(t, EmptyUserMarker, result)
+	})
+
+	t.Run("normal username returns hash prefix", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubUsername("admin")
+		assert.True(t, strings.HasPrefix(result, "user-"), "expected prefix 'user-', got: %s", result)
+		assert.Len(t, result, 13) // "user-" (5) + 8 hex chars
+	})
+
+	t.Run("same username produces same hash", func(t *testing.T) {
+		t.Parallel()
+		result1 := ScrubUsername("testuser")
+		result2 := ScrubUsername("testuser")
+		assert.Equal(t, result1, result2, "same username should produce same hash")
+	})
+
+	t.Run("different usernames produce different hashes", func(t *testing.T) {
+		t.Parallel()
+		result1 := ScrubUsername("user1")
+		result2 := ScrubUsername("user2")
+		assert.NotEqual(t, result1, result2, "different usernames should produce different hashes")
+	})
+
+	t.Run("special characters in username", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubUsername("user@domain.com")
+		assert.True(t, strings.HasPrefix(result, "user-"), "expected prefix 'user-', got: %s", result)
+	})
+}
+
+// TestScrubPassword tests the password redaction function
+func TestScrubPassword(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty password returns empty marker", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubPassword("")
+		assert.Equal(t, EmptyPasswordMarker, result)
+	})
+
+	t.Run("non-empty password returns redacted marker", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubPassword("supersecret123")
+		assert.Equal(t, RedactedMarker, result)
+	})
+
+	t.Run("short password returns redacted marker", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubPassword("x")
+		assert.Equal(t, RedactedMarker, result)
+	})
+}
+
+// TestScrubToken tests the token redaction function
+func TestScrubToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty token returns empty marker", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubToken("")
+		assert.Equal(t, EmptyTokenMarker, result)
+	})
+
+	t.Run("short token shows length", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubToken("abc123")
+		assert.Equal(t, "[TOKEN:len=6]", result)
+	})
+
+	t.Run("long token shows length", func(t *testing.T) {
+		t.Parallel()
+		longToken := "test_token_abcdefghij1234567890abcdefghij123456"
+		result := ScrubToken(longToken)
+		assert.Equal(t, "[TOKEN:len=47]", result)
+	})
+}
+
+// TestScrubCredentialURL tests URL credential scrubbing
+func TestScrubCredentialURL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty URL returns empty string", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubCredentialURL("")
+		assert.Empty(t, result)
+	})
+
+	t.Run("URL with userinfo is scrubbed", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubCredentialURL("https://user:password@example.com/path")
+		// URL encoding converts [REDACTED] to %5BREDACTED%5D
+		assert.True(t, strings.Contains(result, "[REDACTED]") || strings.Contains(result, "%5BREDACTED%5D"),
+			"expected [REDACTED] or URL-encoded version, got: %s", result)
+		assert.NotContains(t, result, "password")
+	})
+
+	t.Run("telegram bot token is scrubbed", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubCredentialURL("telegram://api.telegram.org/bot123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ/sendMessage")
+		assert.Contains(t, result, "/bot[TOKEN]/")
+		assert.NotContains(t, result, "123456789:ABCdefGHI")
+	})
+
+	t.Run("discord webhook is scrubbed", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubCredentialURL("https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
+		assert.Contains(t, result, "[WEBHOOK_ID]")
+		assert.Contains(t, result, "[TOKEN]")
+	})
+
+	t.Run("simple URL without credentials unchanged", func(t *testing.T) {
+		t.Parallel()
+		result := ScrubCredentialURL("https://example.com/api/v1")
+		assert.Equal(t, "https://example.com/api/v1", result)
 	})
 }

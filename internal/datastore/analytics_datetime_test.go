@@ -33,7 +33,7 @@ func TestGetSpeciesSummaryDataDateTimeHandling(t *testing.T) {
 		},
 		{
 			ScientificName: "Corvus corax",
-			CommonName:     "Common Raven", 
+			CommonName:     "Common Raven",
 			SpeciesCode:    "comrav",
 			Date:           "2024-01-15",
 			Time:           "15:30:45", // Later time same day
@@ -140,7 +140,7 @@ func TestGetSpeciesSummaryDataDateTimeHandling(t *testing.T) {
 	require.NotNil(t, ravenSummaryAfter, "Raven summary should still exist")
 
 	// Verify raven's timestamps haven't changed
-	assert.Equal(t, expectedRavenLastSeen, ravenSummaryAfter.LastSeen, 
+	assert.Equal(t, expectedRavenLastSeen, ravenSummaryAfter.LastSeen,
 		"Raven last_seen should remain unchanged after new species added")
 	assert.Equal(t, expectedRavenFirstSeen, ravenSummaryAfter.FirstSeen,
 		"Raven first_seen should remain unchanged after new species added")

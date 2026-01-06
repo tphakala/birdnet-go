@@ -147,7 +147,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 	// If authentication is not required, act as if the login was successful
 	if !authService.IsAuthRequired(ctx) {
 		c.logInfoIfEnabled("Authentication not required",
-			logger.String("username", req.Username),
+			logger.Username(req.Username),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
@@ -186,7 +186,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 		randomDelay(ctx.Request().Context(), authDelayMinMs, authDelayMaxMs)
 
 		c.logWarnIfEnabled("Failed login attempt",
-			logger.String("username", req.Username),
+			logger.Username(req.Username),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.Error(authErr),
@@ -207,10 +207,10 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 	// Successful login - auth code has been generated directly (V1 pattern)
 	c.logInfoIfEnabled("Successful login with auth code",
-		logger.String("username", req.Username),
+		logger.Username(req.Username),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
-		logger.Int("auth_code_length", len(authCode)),
+		logger.Bool("auth_code_generated", authCode != ""),
 	)
 
 	// Extract the base path dynamically
@@ -247,10 +247,10 @@ func (c *Controller) Login(ctx echo.Context) error {
 	redirectURL := fmt.Sprintf("/api/v2/auth/callback?code=%s&redirect=%s", url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	c.logInfoIfEnabled("Returning successful login response with redirect",
-		logger.String("username", req.Username),
+		logger.Username(req.Username),
 		logger.String("redirect_url", redirectURL),
 		logger.String("final_redirect", finalRedirect),
-		logger.Int("auth_code_length", len(authCode)),
+		logger.Bool("auth_code_generated", authCode != ""),
 	)
 
 	return ctx.JSON(http.StatusOK, AuthResponse{
@@ -322,7 +322,7 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 
 	c.logInfoIfEnabled("Auth status check",
 		logger.Bool("authenticated", status.Authenticated),
-		logger.String("username", status.Username),
+		logger.Username(status.Username),
 		logger.String("method", status.Method),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),

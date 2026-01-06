@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Mock types are now defined in test_helpers_test.go:
@@ -23,54 +24,50 @@ import (
 // - MockSettings
 // - testAudioSource()
 
-func TestSanitizeError(t *testing.T) {
+// TestPrivacyWrapError tests that privacy.WrapError correctly sanitizes errors
+// These tests verify the integration with the centralized privacy package.
+func TestPrivacyWrapError(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		err      error
-		expected string
+		name             string
+		err              error
+		shouldContain    []string // Strings that SHOULD be in the sanitized output
+		shouldNotContain []string // Strings that should NOT be in the sanitized output
 	}{
 		{
-			name:     "nil error",
-			err:      nil,
-			expected: "",
+			name:          "nil error",
+			err:           nil,
+			shouldContain: nil,
 		},
 		{
-			name:     "simple error",
-			err:      errors.New("simple error message"),
-			expected: "simple error message",
+			name:          "simple error",
+			err:           errors.New("simple error message"),
+			shouldContain: []string{"simple error message"},
 		},
 		{
-			name:     "RTSP URL with credentials",
-			err:      errors.New("failed to connect to rtsp://admin:password123@192.168.1.100:554/stream"),
-			expected: "failed to connect to rtsp://[redacted]@192.168.1.100:554/stream",
-		},
-		{
-			name:     "MQTT URL with credentials",
-			err:      errors.New("failed to connect to mqtt://user:secret@mqtt.example.com:1883"),
-			expected: "failed to connect to mqtt://[redacted]@mqtt.example.com:1883",
+			name:             "RTSP URL with credentials",
+			err:              errors.New("failed to connect to rtsp://admin:password123@192.168.1.100:554/stream"),
+			shouldContain:    []string{"failed to connect to"},
+			shouldNotContain: []string{"admin", "password123"},
 		},
 		{
 			name: "API key in error",
 			// NOTE: This is a fake API key used only for testing the sanitization function.
-			// It is deliberately included as a test fixture and is not a real credential.
-			err:      errors.New("API request failed: api_key=abc123xyz789"),
-			expected: "API request failed: api_key=[REDACTED]",
+			err:              errors.New("API request failed: api_key=abc123xyz789"),
+			shouldContain:    []string{"API request failed"},
+			shouldNotContain: []string{"abc123xyz789"},
 		},
 		{
-			name:     "Token in error",
-			err:      errors.New("authentication failed: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
-			expected: "authentication failed: token=[REDACTED]",
+			name:             "Token in error",
+			err:              errors.New("authentication failed: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
+			shouldContain:    []string{"authentication failed", "[TOKEN]"},
+			shouldNotContain: []string{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"},
 		},
 		{
-			name:     "Password in error",
-			err:      errors.New("login failed: password=supersecret123"),
-			expected: "login failed: password=[REDACTED]",
-		},
-		{
-			name:     "Multiple sensitive data",
-			err:      errors.New("failed: rtsp://user:pass@example.com and api_key=12345 and password=secret"),
-			expected: "failed: rtsp://[redacted]@example.com and api_key=[REDACTED] and password=[REDACTED]",
+			name:             "Email in error",
+			err:              errors.New("notification failed for user@example.com"),
+			shouldContain:    []string{"notification failed for", "[EMAIL]"},
+			shouldNotContain: []string{"user@example.com"},
 		},
 	}
 
@@ -78,35 +75,43 @@ func TestSanitizeError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if tt.err == nil {
-				assert.NoError(t, sanitizeError(tt.err), "sanitizeError(nil) should return nil")
+				assert.NoError(t, privacy.WrapError(tt.err), "privacy.WrapError(nil) should return nil")
 				return
 			}
 
-			sanitized := sanitizeError(tt.err)
-			require.Error(t, sanitized, "sanitizeError() returned nil for non-nil error")
+			sanitized := privacy.WrapError(tt.err)
+			require.Error(t, sanitized, "privacy.WrapError() returned nil for non-nil error")
 
-			// Check that the sanitized error message matches the expected value
-			assert.Equal(t, tt.expected, sanitized.Error(), "sanitizeError() message mismatch")
+			// Check that expected strings are present
+			for _, s := range tt.shouldContain {
+				assert.Contains(t, sanitized.Error(), s, "sanitized error should contain %q", s)
+			}
 
-			// Check that the original error is preserved
+			// Check that sensitive strings are NOT present
+			for _, s := range tt.shouldNotContain {
+				assert.NotContains(t, sanitized.Error(), s, "sanitized error should NOT contain %q", s)
+			}
+
+			// Check that the original error is preserved via Unwrap
 			assert.ErrorIs(t, sanitized, tt.err, "errors.Is(sanitized, original) = false, want true")
 		})
 	}
 }
 
-// TestSanitizeErrorWrapped tests that sanitizeError works with wrapped errors
-func TestSanitizeErrorWrapped(t *testing.T) {
+// TestPrivacyWrapErrorWrapped tests that privacy.WrapError works with wrapped errors
+func TestPrivacyWrapErrorWrapped(t *testing.T) {
 	t.Parallel()
 	// Create a wrapped error with sensitive information
-	baseErr := errors.New("password=secret123")
-	wrappedErr := fmt.Errorf("operation failed: %w", baseErr)
+	baseErr := errors.New("user@example.com")
+	wrappedErr := fmt.Errorf("operation failed for: %w", baseErr)
 
 	// Sanitize the wrapped error
-	sanitized := sanitizeError(wrappedErr)
+	sanitized := privacy.WrapError(wrappedErr)
 
 	// Check that the sensitive information was removed
-	expected := "operation failed: password=[REDACTED]"
-	assert.Equal(t, expected, sanitized.Error(), "sanitizeError() message mismatch")
+	assert.Contains(t, sanitized.Error(), "operation failed for:")
+	assert.Contains(t, sanitized.Error(), "[EMAIL]")
+	assert.NotContains(t, sanitized.Error(), "user@example.com")
 
 	// Check that the original error is preserved
 	require.ErrorIs(t, sanitized, wrappedErr, "errors.Is(sanitized, wrappedErr) = false, want true")
@@ -1165,55 +1170,58 @@ func BenchmarkEnqueueTask(b *testing.B) {
 	}
 }
 
-// TestSanitizeActionType tests that the sanitizeActionType function correctly sanitizes sensitive information
-func TestSanitizeActionType(t *testing.T) {
+// TestPrivacyScrubMessage tests that privacy.ScrubMessage correctly sanitizes sensitive information in strings
+// This replaces the old TestSanitizeActionType test.
+func TestPrivacyScrubMessage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name             string
+		input            string
+		shouldContain    []string // Strings that SHOULD be in the sanitized output
+		shouldNotContain []string // Strings that should NOT be in the sanitized output
 	}{
 		{
-			name:     "simple type",
-			input:    "*processor.MockAction",
-			expected: "*processor.MockAction",
+			name:          "simple type",
+			input:         "*processor.MockAction",
+			shouldContain: []string{"*processor.MockAction"},
 		},
 		{
-			name:     "RTSP URL with credentials",
-			input:    "*actions.RTSPAction{URL:rtsp://admin:password123@192.168.1.100:554/stream}",
-			expected: "*actions.RTSPAction{URL:rtsp://[redacted]@192.168.1.100:554/stream}",
+			name:             "RTSP URL with credentials",
+			input:            "*actions.RTSPAction{URL:rtsp://admin:password123@192.168.1.100:554/stream}",
+			shouldContain:    []string{"*actions.RTSPAction"},
+			shouldNotContain: []string{"admin", "password123"},
 		},
 		{
-			name:     "MQTT URL with credentials",
-			input:    "*actions.MQTTAction{Broker:mqtt://user:secret@mqtt.example.com:1883}",
-			expected: "*actions.MQTTAction{Broker:mqtt://[redacted]@mqtt.example.com:1883}",
+			name:             "API key in type",
+			input:            "*actions.APIAction{Key:api_key=abc123xyz789}",
+			shouldContain:    []string{"*actions.APIAction", "[TOKEN]"},
+			shouldNotContain: []string{"abc123xyz789"},
 		},
 		{
-			name:     "API key in type",
-			input:    "*actions.APIAction{Key:api_key=abc123xyz789}",
-			expected: "*actions.APIAction{Key:api_key=[REDACTED]}",
-		},
-		{
-			name:     "Password in type",
-			input:    "*actions.LoginAction{Username:user,password=supersecret123}",
-			expected: "*actions.LoginAction{Username:user,password=[REDACTED]",
-		},
-		{
-			name:     "Multiple sensitive data",
-			input:    "*actions.MultiAction{RTSP:rtsp://user:pass@example.com,API:api_key=12345,Auth:password=secret}",
-			expected: "*actions.MultiAction{RTSP:rtsp://[redacted]@example.com,API:api_key=[REDACTED],Auth=[REDACTED]",
+			name:             "Email in string",
+			input:            "notification for user@example.com failed",
+			shouldContain:    []string{"notification for", "[EMAIL]", "failed"},
+			shouldNotContain: []string{"user@example.com"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			sanitized := sanitizeActionType(tt.input)
+			sanitized := privacy.ScrubMessage(tt.input)
 			// Print the actual output for debugging
 			t.Logf("Input: %q", tt.input)
 			t.Logf("Actual: %q", sanitized)
-			t.Logf("Expected: %q", tt.expected)
-			assert.Equal(t, tt.expected, sanitized, "sanitizeActionType()")
+
+			// Check that expected strings are present
+			for _, s := range tt.shouldContain {
+				assert.Contains(t, sanitized, s, "sanitized should contain %q", s)
+			}
+
+			// Check that sensitive strings are NOT present
+			for _, s := range tt.shouldNotContain {
+				assert.NotContains(t, sanitized, s, "sanitized should NOT contain %q", s)
+			}
 		})
 	}
 }

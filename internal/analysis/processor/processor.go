@@ -897,7 +897,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 					logger.String("operation", "enqueue_task"),
 					logger.String("error", "queue_full"))
 			} else {
-				sanitizedErr := sanitizeError(err)
+				sanitizedErr := privacy.WrapError(err)
 				GetLogger().Error("failed to enqueue task",
 					logger.Any("error", sanitizedErr),
 					logger.String("species", speciesName),

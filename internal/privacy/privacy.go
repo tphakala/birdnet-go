@@ -39,6 +39,21 @@ const (
 	minTokenParts = 2
 )
 
+// Redaction markers for consistent output across all sanitization functions
+const (
+	// RedactedMarker is the standard marker for completely redacted sensitive data
+	RedactedMarker = "[REDACTED]"
+
+	// EmptyUserMarker is used when an empty username is provided
+	EmptyUserMarker = "[EMPTY_USER]"
+
+	// EmptyPasswordMarker is used when an empty password is provided
+	EmptyPasswordMarker = "[EMPTY_PASSWORD]"
+
+	// EmptyTokenMarker is used when an empty token is provided
+	EmptyTokenMarker = "[EMPTY_TOKEN]"
+)
+
 // Constants for hash slice lengths used in anonymization
 const (
 	// hashLenShort is 4 bytes (8 hex chars) used for path segment hashes
@@ -128,6 +143,14 @@ var (
 
 	// FFmpeg error prefix pattern - matches memory addresses like [rtsp @ 0x55d4a4808980]
 	ffmpegPrefixPattern = regexp.MustCompile(`\[\w+\s*@\s*0x[0-9a-fA-F]+\]\s*`)
+
+	// URL credential scrubbing patterns (for fallback when URL parsing fails)
+	urlCredPattern  = regexp.MustCompile(`(://)[^:@/]+:[^@/]+@`)
+	urlTokenPattern = regexp.MustCompile(`(://)[^:@/]+@`)
+
+	// Notification URL token patterns (Telegram bot tokens, Discord webhooks, etc.)
+	botTokenPattern = regexp.MustCompile(`/bot[A-Za-z0-9:_-]{20,}/`)
+	webhookPattern  = regexp.MustCompile(`/\d{15,}/[A-Za-z0-9_-]{50,}`)
 )
 
 // Common two-part TLDs that need special handling
@@ -383,6 +406,88 @@ func ScrubAPITokens(message string) string {
 		result = separatorRegex.ReplaceAllString(result, ": ")
 		return result
 	})
+}
+
+// ScrubUsername anonymizes usernames for safe logging.
+// Returns a consistent hash prefix to enable log correlation without exposing the actual username.
+// The same username will always produce the same hash, allowing correlation across log entries.
+func ScrubUsername(username string) string {
+	if username == "" {
+		return EmptyUserMarker
+	}
+	hash := sha256.Sum256([]byte(username))
+	return fmt.Sprintf("user-%x", hash[:hashLenShort])
+}
+
+// ScrubPassword completely redacts passwords for safe logging.
+// Always returns RedactedMarker regardless of input to prevent any information leakage.
+func ScrubPassword(password string) string {
+	if password == "" {
+		return EmptyPasswordMarker
+	}
+	return RedactedMarker
+}
+
+// ScrubToken redacts tokens with a length hint for debugging.
+// The length hint helps with debugging without exposing the actual token value.
+func ScrubToken(token string) string {
+	if token == "" {
+		return EmptyTokenMarker
+	}
+	return fmt.Sprintf("[TOKEN:len=%d]", len(token))
+}
+
+// ScrubCredentialURL sanitizes URLs that may contain embedded credentials.
+// Handles common notification service URL formats (telegram://, discord://, slack://, etc.)
+// and generic URLs with userinfo (user:pass@host).
+func ScrubCredentialURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, do a simple credential pattern replacement
+		return scrubURLCredentialsSimple(rawURL)
+	}
+
+	// Remove userinfo (credentials) from URL
+	if parsedURL.User != nil {
+		parsedURL.User = url.User(RedactedMarker)
+	}
+
+	// Also check for common notification URL patterns with tokens in path/query
+	result := parsedURL.String()
+
+	// Scrub any remaining token-like patterns in the path
+	result = scrubURLTokenPatterns(result)
+
+	return result
+}
+
+// scrubURLCredentialsSimple performs simple regex-based credential scrubbing
+// for cases where URL parsing fails.
+// Uses pre-compiled patterns for performance (see issue #825).
+func scrubURLCredentialsSimple(rawURL string) string {
+	// Pattern: scheme://user:pass@host or scheme://token@host
+	result := urlCredPattern.ReplaceAllString(rawURL, "$1[REDACTED]@")
+
+	// Pattern: scheme://token@host (single value before @)
+	result = urlTokenPattern.ReplaceAllString(result, "$1[REDACTED]@")
+
+	return result
+}
+
+// scrubURLTokenPatterns removes token-like patterns from URL paths and queries.
+// Uses pre-compiled patterns for performance (see issue #825).
+func scrubURLTokenPatterns(urlStr string) string {
+	// Common bot token patterns (Telegram: bot<token>, Discord webhooks, etc.)
+	result := botTokenPattern.ReplaceAllString(urlStr, "/bot[TOKEN]/")
+
+	// Webhook ID:token patterns
+	result = webhookPattern.ReplaceAllString(result, "/[WEBHOOK_ID]/[TOKEN]")
+
+	return result
 }
 
 // categorizeHost anonymizes hostnames while preserving useful categorization

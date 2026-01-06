@@ -11,6 +11,7 @@ import (
 	shoutrrr "github.com/nicholas-fedor/shoutrrr"
 	router "github.com/nicholas-fedor/shoutrrr/pkg/router"
 	stypes "github.com/nicholas-fedor/shoutrrr/pkg/types"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // ShoutrrrProvider sends via nicholas-fedor/shoutrrr
@@ -63,7 +64,8 @@ func (s *ShoutrrrProvider) ValidateConfig() error {
 	// Build sender to validate URLs
 	sender, err := shoutrrr.CreateSender(s.urls...)
 	if err != nil {
-		return err
+		// Wrap error to sanitize any URLs that may contain tokens/credentials
+		return privacy.WrapError(err)
 	}
 	s.sender = sender
 	// Apply configured timeout and quiet logger
@@ -95,7 +97,8 @@ func (s *ShoutrrrProvider) Send(ctx context.Context, n *Notification) error {
 			}
 		}
 		if firstErr != nil {
-			return firstErr
+			// Wrap error to sanitize any URLs that may contain tokens/credentials
+			return privacy.WrapError(firstErr)
 		}
 	}
 	return nil

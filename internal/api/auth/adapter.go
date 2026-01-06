@@ -163,7 +163,7 @@ func (a *SecurityAdapter) ValidateToken(token string) error {
 //
 // Returns auth code on success, error on failure.
 func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) (string, error) {
-	a.log().Info("Basic authentication login attempt", logger.String("username", username))
+	a.log().Info("Basic authentication login attempt", logger.Username(username))
 
 	if err := a.validateBasicAuthEnabled(username); err != nil {
 		return "", err
@@ -188,7 +188,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 func (a *SecurityAdapter) validateBasicAuthEnabled(username string) error {
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
 		a.log().Warn("Basic authentication failed: Basic auth not enabled",
-			logger.String("username", username))
+			logger.Username(username))
 		return ErrBasicAuthDisabled
 	}
 	return nil
@@ -226,10 +226,10 @@ func (a *SecurityAdapter) validatePassword(password, storedPassword string) bool
 func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) error {
 	if !userMatch {
 		a.log().Warn("Basic authentication failed: Invalid username",
-			logger.String("username", username))
+			logger.Username(username))
 	} else {
 		a.log().Warn("Basic authentication failed: Invalid password",
-			logger.String("username", username))
+			logger.Username(username))
 	}
 	return ErrInvalidCredentials
 }
@@ -237,19 +237,19 @@ func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) err
 // generateAuthCodeOnSuccess generates an auth code after successful authentication.
 func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, error) {
 	log := a.log()
-	log.Info("Credentials validated successfully", logger.String("username", username))
+	log.Info("Credentials validated successfully", logger.Username(username))
 
 	authCode, err := a.OAuth2Server.GenerateAuthCode()
 	if err != nil {
 		log.Error("Failed to generate auth code during basic auth",
-			logger.String("username", username),
+			logger.Username(username),
 			logger.Error(err))
 		return "", ErrAuthCodeGeneration
 	}
 
 	log.Info("Basic authentication successful",
-		logger.String("username", username),
-		logger.Int("auth_code_length", len(authCode)))
+		logger.Username(username),
+		logger.Bool("auth_code_generated", authCode != ""))
 	return authCode, nil
 }
 

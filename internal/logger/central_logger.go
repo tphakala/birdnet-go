@@ -121,11 +121,11 @@ func putAttrs(attrs *[]slog.Attr) {
 type CentralLogger struct {
 	config        *LoggingConfig
 	timezone      *time.Location
-	baseHandler   slog.Handler                    // Default handler for modules without specific config
-	mainWriter    *BufferedFileWriter             // Main log file writer (if file output enabled)
-	moduleWriters map[string]*BufferedFileWriter  // Per-module buffered writers
-	moduleLevels  map[string]slog.Level           // Per-module log levels
-	mu            sync.RWMutex                    // Protects concurrent access
+	baseHandler   slog.Handler                   // Default handler for modules without specific config
+	mainWriter    *BufferedFileWriter            // Main log file writer (if file output enabled)
+	moduleWriters map[string]*BufferedFileWriter // Per-module buffered writers
+	moduleLevels  map[string]slog.Level          // Per-module log levels
+	mu            sync.RWMutex                   // Protects concurrent access
 }
 
 // NewCentralLogger creates a centralized logger with module routing
