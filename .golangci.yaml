@@ -74,16 +74,17 @@ linters:
       # Use logger.Username(), logger.Password(), logger.Token(), etc. instead
       forbid:
         # Password/credential field names - always use logger.Password() or logger.Credential()
-        - pattern: 'logger\.String\(\s*"(?i:password|passwd|pwd|secret|credential)"'
+        # Uses .* to catch variations like "user_password", "mqtt_secret", etc.
+        - pattern: 'logger\.String\(\s*"(?i)[^"]*(password|passwd|pwd|secret|credential)[^"]*"'
           msg: "Use logger.Password() or logger.Credential() for sensitive credential fields instead of logger.String()"
         # Token field names - always use logger.Token()
-        - pattern: 'logger\.String\(\s*"(?i:token|bearer|api_key|apikey|auth_token|access_token)"'
+        - pattern: 'logger\.String\(\s*"(?i)[^"]*(token|bearer|api_key|apikey|auth_token|access_token)[^"]*"'
           msg: "Use logger.Token() for token fields instead of logger.String()"
         # Username field names - always use logger.Username()
-        - pattern: 'logger\.String\(\s*"(?i:username|user_name|userid|user_id|login)"'
+        - pattern: 'logger\.String\(\s*"(?i)[^"]*(username|user_name|userid|user_id|login)[^"]*"'
           msg: "Use logger.Username() for username fields instead of logger.String()"
         # Email addresses - should be sanitized
-        - pattern: 'logger\.String\(\s*"(?i:email|e-mail|mail)"'
+        - pattern: 'logger\.String\(\s*"(?i)[^"]*(email|e-mail|mail)[^"]*"'
           msg: "Use logger.SanitizedString() for email fields to redact sensitive data"
       analyze-types: false
 issues:
