@@ -509,13 +509,14 @@ func isTimeoutError(err error) bool {
 		return true
 	}
 
-	// Check for timeout-related error messages from Shoutrrr and HTTP layer
+	// Check for timeout-related error messages from Shoutrrr and HTTP layer.
+	// Note: "timeout" matches "Gateway Timeout", "gateway time-out" catches hyphenated variant.
 	errStr := strings.ToLower(err.Error())
 	timeoutPatterns := []string{
 		"timed out",         // Shoutrrr router timeout: "failed to send: timed out"
-		"timeout",           // Generic timeout errors
+		"timeout",           // Generic timeout errors, also matches "Gateway Timeout"
 		"status: 504",       // HTTP 504 in jsonclient errors: "got unexpected HTTP status: 504"
-		"gateway time",      // HTTP 504 Gateway Time-out
+		"gateway time-out",  // HTTP 504 Gateway Time-out (hyphenated variant)
 		"deadline exceeded", // Context deadline as string
 	}
 

@@ -22,7 +22,6 @@ const (
 	testMaxRetries     = 3
 	testRetryDelay     = 10 * time.Millisecond
 	testDefaultTimeout = 200 * time.Millisecond
-	testSettleTime     = 100 * time.Millisecond // Time to wait for async operations
 )
 
 // MockTelegramServer simulates Telegram API for testing notification delivery.
@@ -171,9 +170,6 @@ func runRetryTest(t *testing.T, tc retryTestCase) {
 	ep := &d.providers[0]
 	d.retryLoop(ctx, notif, ep)
 
-	// Wait for async operations to settle
-	time.Sleep(testSettleTime)
-
 	assert.Equal(t, tc.expectedCount, int(sendAttempts.Load()), tc.description)
 }
 
@@ -288,6 +284,7 @@ func TestIsTimeoutError(t *testing.T) {
 		// False positive prevention - should NOT match as timeout
 		{"port_number_5040", fmt.Errorf("dial tcp 127.0.0.1:5040: connect: connection refused"), false},
 		{"error_code_504x", fmt.Errorf("error code 5041: invalid request"), false},
+		{"gateway_timestamp", fmt.Errorf("gateway timestamp mismatch: expected 2024-01-01"), false},
 	}
 
 	for _, tt := range tests {
