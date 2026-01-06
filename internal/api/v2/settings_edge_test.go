@@ -384,9 +384,10 @@ func TestComplexNestedPreservation(t *testing.T) {
 	controller := getTestController(t, e)
 
 	// Update controller settings with complex initial state
+	// Use lowercase keys since that's what a real config would have after normalization
 	controller.Settings.Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
 	controller.Settings.Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
-	controller.Settings.Realtime.Species.Config["Robin"] = conf.SpeciesConfig{
+	controller.Settings.Realtime.Species.Config["robin"] = conf.SpeciesConfig{
 		Threshold: 0.8,
 		Interval:  30,
 		Actions: []conf.SpeciesAction{{
@@ -394,7 +395,7 @@ func TestComplexNestedPreservation(t *testing.T) {
 			Command: "/usr/bin/notify",
 		}},
 	}
-	controller.Settings.Realtime.Species.Config["Eagle"] = conf.SpeciesConfig{
+	controller.Settings.Realtime.Species.Config["eagle"] = conf.SpeciesConfig{
 		Threshold: 0.9,
 		Interval:  60,
 	}
@@ -435,14 +436,14 @@ func TestComplexNestedPreservation(t *testing.T) {
 	assert.Equal(t, initialInclude, settings.Realtime.Species.Include)
 	assert.Equal(t, initialExclude, settings.Realtime.Species.Exclude)
 
-	// Robin config
-	robinConfig := settings.Realtime.Species.Config["Robin"]
+	// Robin config (keys normalized to lowercase after API update)
+	robinConfig := settings.Realtime.Species.Config["robin"]
 	assert.InDelta(t, 0.85, robinConfig.Threshold, 0.0001) // Changed
 	assert.Equal(t, 30, robinConfig.Interval)              // Preserved
 	assert.Len(t, robinConfig.Actions, 1)                  // Preserved
 
-	// Eagle config completely preserved
-	eagleConfig := settings.Realtime.Species.Config["Eagle"]
+	// Eagle config completely preserved (keys normalized to lowercase)
+	eagleConfig := settings.Realtime.Species.Config["eagle"]
 	assert.InDelta(t, 0.9, eagleConfig.Threshold, 0.0001)
 	assert.Equal(t, 60, eagleConfig.Interval)
 }
