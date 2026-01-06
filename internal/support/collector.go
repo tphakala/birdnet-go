@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,8 +68,14 @@ const (
 	logReadmeFileName   = "logs/README.txt"
 
 	// Redaction and privacy
-	redactionPlaceholder = "[REDACTED]"
-	logReadmeContent     = "No log files were found or all logs were older than the specified duration."
+	redactedPlaceholder      = "[redacted]"
+	redactedUserPlaceholder  = "[user]"
+	redactedPassPlaceholder  = "[pass]"
+	redactedHostPlaceholder  = "[host]"
+	redactedPathPlaceholder  = "[path]"
+	redactedQueryPlaceholder = "[query]"
+	urlSchemeDelimiter       = "://"
+	logReadmeContent         = "No log files were found or all logs were older than the specified duration."
 
 	// Journal command flags
 	journalFlagUnit       = "-u"
@@ -137,11 +144,149 @@ type Collector struct {
 // defaultSensitiveKeys returns the default list of sensitive configuration keys to redact
 func defaultSensitiveKeys() []string {
 	return []string{
+		// Authentication credentials
 		"password", "token", "secret", "key", "api_key", "api_token",
-		"client_id", "client_secret", "webhook_url", "mqtt_password",
-		"apikey", "username", "broker", "topic",
-		"mqtt_username", "mqtt_topic", "birdweather_id",
+		"client_id", "client_secret", "apikey", "apitoken",
+		"accesskeyid", "secretaccesskey", "encryptionkey",
+
+		// MQTT credentials
+		"mqtt_password", "mqtt_username", "mqtt_topic", "broker",
+
+		// Service identifiers
+		"birdweather_id", "username", "userid",
+
+		// Location data (privacy sensitive)
+		"latitude", "longitude", "stationid",
+
+		// URLs (handled specially for structural redaction)
+		"url", "urls", "endpoint", "webhook_url",
+
+		// Network topology
+		"subnet",
+
+		// Secret file paths
+		"privatekeypath", "sshkeypath", "credentialspath",
+		"tokenfile", "passfile", "userfile", "valuefile",
 	}
+}
+
+// isURLValue checks if a string value appears to be a URL
+func isURLValue(s string) bool {
+	return strings.Contains(s, urlSchemeDelimiter)
+}
+
+// isSensitiveKey checks if a key matches a sensitive key pattern using word boundaries.
+// The sensitive pattern must appear as a complete word within the key:
+//   - At start: "password", "password1", "password_hash" match "password"
+//   - After underscore: "mqtt_password", "api_key" match their suffix
+//
+// Prevents false positives where sensitive patterns appear mid-word:
+//   - "monkey" does NOT match "key" (no word boundary before "key")
+//   - "tokenizer" does NOT match "token" (letter follows "token")
+//   - "passwordhash" does NOT match "password" (letter follows)
+func isSensitiveKey(lowerKey, sensitive string) bool {
+	idx := strings.Index(lowerKey, sensitive)
+	if idx == -1 {
+		return false
+	}
+
+	endIdx := idx + len(sensitive)
+
+	// Start boundary: at start of string OR preceded by underscore
+	validStart := idx == 0 || lowerKey[idx-1] == '_'
+	if !validStart {
+		return false
+	}
+
+	// End boundary: at end of string OR followed by underscore/digit
+	// Allows: password, mqtt_password, password_hash, password1
+	// Rejects: passwordhash, tokenizer (letter follows)
+	if endIdx == len(lowerKey) {
+		return true
+	}
+	nextChar := lowerKey[endIdx]
+	return nextChar == '_' || (nextChar >= '0' && nextChar <= '9')
+}
+
+// isDefaultValue checks if a value is a default/empty value that doesn't need redaction
+func isDefaultValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case string:
+		return v == ""
+	case float64:
+		return v == 0.0
+	case float32:
+		return v == 0.0
+	case int:
+		return v == 0
+	case int64:
+		return v == 0
+	case int32:
+		return v == 0
+	case bool:
+		return false // booleans are never "default" for redaction purposes
+	default:
+		return false
+	}
+}
+
+// redactURLStructurally preserves URL structure while replacing sensitive components.
+// It keeps the scheme and port (useful for debugging) while replacing credentials,
+// host, path, and query with placeholders.
+func redactURLStructurally(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" {
+		// url.Parse is lenient - empty scheme means it wasn't a proper URL
+		return redactedPlaceholder
+	}
+
+	var result strings.Builder
+
+	// Preserve scheme
+	result.WriteString(parsed.Scheme)
+	result.WriteString(urlSchemeDelimiter)
+
+	// Handle credentials
+	if u := parsed.User; u != nil {
+		username := u.Username()
+		_, hasPass := u.Password()
+
+		// Only add user/pass placeholders if there's something to redact
+		if username != "" || hasPass {
+			result.WriteString(redactedUserPlaceholder)
+			if hasPass {
+				result.WriteString(":")
+				result.WriteString(redactedPassPlaceholder)
+			}
+			result.WriteString("@")
+		}
+	}
+
+	// Replace host
+	result.WriteString(redactedHostPlaceholder)
+
+	// Preserve port if present
+	if parsed.Port() != "" {
+		result.WriteString(":")
+		result.WriteString(parsed.Port())
+	}
+
+	// Replace path
+	if parsed.Path != "" && parsed.Path != "/" {
+		result.WriteString("/")
+		result.WriteString(redactedPathPlaceholder)
+	}
+
+	// Replace query
+	if parsed.RawQuery != "" {
+		result.WriteString("?")
+		result.WriteString(redactedQueryPlaceholder)
+	}
+
+	return result.String()
 }
 
 // NewCollector creates a new support data collector
@@ -528,24 +673,110 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 	return scrubbed
 }
 
-// scrubValue recursively scrubs sensitive values
+// scrubValue recursively scrubs sensitive values.
+// For sensitive keys:
+//   - Default/empty values are left unchanged
+//   - URL values get structural redaction (preserving scheme and port)
+//   - Other values get replaced with [redacted]
+//
+// For non-sensitive keys, it recursively processes nested structures
+// and sanitizes RTSP URLs in string values.
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
-	// Check if key is sensitive - if so, completely redact it
+	// Check if key is sensitive using word boundary matching
 	lowerKey := strings.ToLower(key)
+	isSensitive := false
 	for _, sensitive := range sensitiveKeys {
-		if strings.Contains(lowerKey, sensitive) {
-			return redactionPlaceholder
+		if isSensitiveKey(lowerKey, sensitive) {
+			isSensitive = true
+			break
 		}
 	}
 
-	// Recursively scrub nested structures
+	if isSensitive {
+		return c.redactSensitiveValue(value, sensitiveKeys)
+	}
+
+	// Recursively process nested structures
+	return c.processNonSensitiveValue(key, value, sensitiveKeys)
+}
+
+// scrubMap recursively processes a map, scrubbing each key-value pair.
+func (c *Collector) scrubMap(m map[string]any, sensitiveKeys []string) map[string]any {
+	scrubbed := make(map[string]any, len(m))
+	for k, val := range m {
+		scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
+	}
+	return scrubbed
+}
+
+// redactSensitiveValue handles redaction of values for sensitive keys.
+// For scalar values (strings, numbers), it applies redaction.
+// For complex types (maps, arrays), it recursively processes them
+// to redact nested sensitive fields while preserving structure.
+func (c *Collector) redactSensitiveValue(value any, sensitiveKeys []string) any {
+	// Skip default/empty values
+	if isDefaultValue(value) {
+		return value
+	}
+
+	switch v := value.(type) {
+	case string:
+		if isURLValue(v) {
+			return redactURLStructurally(v)
+		}
+		return redactedPlaceholder
+	case float64, float32, int, int64, int32:
+		return redactedPlaceholder
+	case []any:
+		// Recursively process arrays to preserve structure
+		return c.redactSliceRecursively(v, sensitiveKeys)
+	case map[string]any:
+		// Recursively process maps to preserve structure
+		return c.scrubMap(v, sensitiveKeys)
+	default:
+		return redactedPlaceholder
+	}
+}
+
+// redactSliceRecursively handles redaction of slice values while preserving structure.
+// For each item in the slice, it recursively processes to redact nested sensitive fields.
+// Default values (empty strings, zero numbers) are preserved to maintain consistency
+// with scalar sensitive value handling.
+func (c *Collector) redactSliceRecursively(slice []any, sensitiveKeys []string) []any {
+	if len(slice) == 0 {
+		return slice
+	}
+	redacted := make([]any, len(slice))
+	for i, item := range slice {
+		// Preserve default values consistently with scalar handling
+		if isDefaultValue(item) {
+			redacted[i] = item
+			continue
+		}
+
+		switch v := item.(type) {
+		case string:
+			if isURLValue(v) {
+				redacted[i] = redactURLStructurally(v)
+			} else {
+				redacted[i] = redactedPlaceholder
+			}
+		case map[string]any:
+			redacted[i] = c.scrubMap(v, sensitiveKeys)
+		case []any:
+			redacted[i] = c.redactSliceRecursively(v, sensitiveKeys)
+		default:
+			redacted[i] = redactedPlaceholder
+		}
+	}
+	return redacted
+}
+
+// processNonSensitiveValue handles non-sensitive values with recursive processing.
+func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKeys []string) any {
 	switch v := value.(type) {
 	case map[string]any:
-		scrubbed := make(map[string]any)
-		for k, val := range v {
-			scrubbed[k] = c.scrubValue(k, val, sensitiveKeys)
-		}
-		return scrubbed
+		return c.scrubMap(v, sensitiveKeys)
 	case []any:
 		scrubbed := make([]any, len(v))
 		for i, item := range v {
@@ -553,8 +784,7 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 		}
 		return scrubbed
 	case string:
-		// Sanitize any RTSP URLs found in string values to remove credentials
-		// This preserves URL structure while removing sensitive authentication info
+		// Sanitize RTSP URLs in all string values (existing behavior)
 		return privacy.SanitizeRTSPUrls(v)
 	default:
 		return value
@@ -1488,14 +1718,11 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format(journalTimeFormat)
 
-	// Use same line limit as collectJournalLogs
-	const maxJournalLines = 5000
-
 	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",
-		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
+		"-n", fmt.Sprintf("%d", maxJournalLogLines)) // Limit number of lines
 
 	output, err := cmd.Output()
 	if err != nil {
