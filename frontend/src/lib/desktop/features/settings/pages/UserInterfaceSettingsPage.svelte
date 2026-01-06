@@ -29,7 +29,7 @@
     dashboardSettings,
     DEFAULT_SPECTROGRAM_SETTINGS,
   } from '$lib/stores/settings';
-  import type { SpectrogramPreRender } from '$lib/stores/settings';
+  import type { SpectrogramPreRender, SpectrogramStyle } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
@@ -78,6 +78,48 @@
     label: info.name,
     localeCode: code as FlagLocale,
   }));
+
+  // Spectrogram style options - computed reactively to support locale changes
+  let spectrogramStyleOptions = $derived.by(() => {
+    getLocale(); // Trigger re-computation on locale change
+    return [
+      {
+        value: 'default',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.default'
+        ),
+      },
+      {
+        value: 'grayscale',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.grayscale'
+        ),
+      },
+      {
+        value: 'grayscale_dark',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.grayscaleDark'
+        ),
+      },
+      {
+        value: 'high_contrast',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.highContrast'
+        ),
+      },
+      {
+        value: 'scientific',
+        label: t(
+          'settings.main.sections.userInterface.dashboard.spectrogram.style.options.scientific'
+        ),
+      },
+    ];
+  });
+
+  // Current spectrogram style for preview
+  let currentSpectrogramStyle = $derived<SpectrogramStyle>(
+    (settings.dashboard.spectrogram?.style as SpectrogramStyle) ?? 'default'
+  );
 
   // Image provider options
   let providerOptions = $state<ApiState<Array<{ value: string; label: string }>>>({
@@ -405,6 +447,35 @@
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateSpectrogramSetting('mode', value)}
           />
+
+          <SelectField
+            id="spectrogram-style"
+            value={settings.dashboard.spectrogram?.style ?? 'default'}
+            label={t('settings.main.sections.userInterface.dashboard.spectrogram.style.label')}
+            options={spectrogramStyleOptions}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.spectrogram.style.helpText'
+            )}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateSpectrogramSetting('style', value)}
+          />
+        </div>
+
+        <!-- Style Preview Panel -->
+        <div class="mt-4 p-4 bg-base-200 rounded-lg">
+          <p class="text-sm font-medium mb-2">
+            {t('settings.main.sections.userInterface.dashboard.spectrogram.style.preview')}
+          </p>
+          <img
+            src={`/images/spectrogram-preview-${currentSpectrogramStyle}.png`}
+            alt={t('settings.main.sections.userInterface.dashboard.spectrogram.style.previewAlt')}
+            class="w-full max-w-md rounded border border-base-300"
+          />
+          <p class="text-sm text-base-content/70 mt-2">
+            {t(
+              `settings.main.sections.userInterface.dashboard.spectrogram.style.descriptions.${currentSpectrogramStyle === 'grayscale_dark' ? 'grayscaleDark' : currentSpectrogramStyle === 'high_contrast' ? 'highContrast' : currentSpectrogramStyle}`
+            )}
+          </p>
         </div>
 
         <!-- Mode-specific notes -->
