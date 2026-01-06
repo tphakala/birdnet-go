@@ -180,6 +180,11 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		c.logAPIRequest(ctx, logger.LogLevelDebug, "Skipped protected fields during settings update", logger.Any("skipped_fields", skippedFields))
 	}
 
+	// Normalize species config keys to lowercase for case-insensitive matching
+	if settings.Realtime.Species.Config != nil {
+		settings.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
+	}
+
 	// Check if any important settings have changed and trigger actions as needed
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
 		// Attempt to rollback changes if applying them failed
@@ -671,6 +676,74 @@ func deepMergeMaps(dst, src map[string]any) map[string]any {
 	return result
 }
 
+// normalizeSpeciesConfigKeysInJSON normalizes species config map keys to lowercase in the JSON data.
+// This ensures case-insensitive key matching during deep merge operations.
+// For "species" section: normalizes keys in the "config" field
+// For "realtime" section: normalizes keys in the "species.config" field
+func normalizeSpeciesConfigKeysInJSON(data json.RawMessage, sectionName string) (json.RawMessage, error) {
+	// Only process species-related sections
+	if sectionName != SettingsSectionSpecies && sectionName != SettingsSectionRealtime {
+		return data, nil
+	}
+
+	var dataMap map[string]any
+	if err := json.Unmarshal(data, &dataMap); err != nil {
+		// For species/realtime sections, we expect a JSON object
+		// Return error for clearer feedback on malformed requests
+		return nil, fmt.Errorf("failed to unmarshal section data as JSON object: %w", err)
+	}
+
+	modified := false
+
+	switch sectionName {
+	case SettingsSectionSpecies:
+		// Direct species section: normalize "config" keys
+		if configMap, ok := dataMap["config"].(map[string]any); ok {
+			dataMap["config"] = normalizeMapKeysToLowercase(configMap)
+			modified = true
+		}
+	case SettingsSectionRealtime:
+		// Realtime section: normalize "species.config" keys
+		if speciesMap, ok := dataMap["species"].(map[string]any); ok {
+			if configMap, ok := speciesMap["config"].(map[string]any); ok {
+				speciesMap["config"] = normalizeMapKeysToLowercase(configMap)
+				modified = true
+			}
+		}
+	}
+
+	if !modified {
+		return data, nil
+	}
+
+	return json.Marshal(dataMap)
+}
+
+// normalizeMapKeysToLowercase converts all keys in a map to lowercase.
+// Uses a two-pass algorithm to ensure deterministic behavior when the input
+// contains conflicting keys (e.g., "Bird" and "bird"): mixed-case keys
+// take precedence over their lowercase counterparts.
+func normalizeMapKeysToLowercase(m map[string]any) map[string]any {
+	result := make(map[string]any, len(m))
+
+	// First pass: add all already-lowercase keys
+	for k, v := range m {
+		if k == strings.ToLower(k) {
+			result[k] = v
+		}
+	}
+
+	// Second pass: add non-lowercase keys (normalized), overwriting any
+	// existing lowercase versions
+	for k, v := range m {
+		if k != strings.ToLower(k) {
+			result[strings.ToLower(k)] = v
+		}
+	}
+
+	return result
+}
+
 // Helper functions
 
 // getSettingsSectionValue returns a pointer to the requested section of settings for in-place updates
@@ -720,8 +793,15 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 
 // handleGenericSection handles updates to any settings section using merging
 func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string, skippedFields *[]string) error {
+	// Normalize species config keys in the incoming data BEFORE merging
+	// This ensures case-insensitive key matching during the deep merge
+	normalizedData, err := normalizeSpeciesConfigKeysInJSON(data, sectionName)
+	if err != nil {
+		return fmt.Errorf("failed to normalize species config keys: %w", err)
+	}
+
 	// Use mergeJSONIntoStruct to preserve fields not included in the update
-	if err := mergeJSONIntoStruct(data, sectionPtr); err != nil {
+	if err := mergeJSONIntoStruct(normalizedData, sectionPtr); err != nil {
 		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
 	}
 

@@ -538,11 +538,15 @@ type SpeciesConfig struct {
 	Actions   []SpeciesAction `yaml:"actions" json:"actions"`     // List of actions to execute
 }
 
-// RealtimeSpeciesSettings contains all species-specific settings
+// SpeciesSettings contains all species-specific settings.
+// Note: Config map keys are normalized to lowercase during config load
+// and API updates to ensure case-insensitive matching. Users can enter
+// species names in any case (e.g., "American Robin", "american robin")
+// and they will all resolve to the same lowercase key.
 type SpeciesSettings struct {
 	Include []string                 `yaml:"include" json:"include"` // Always include these species
 	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
-	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration
+	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration (keys normalized to lowercase)
 }
 
 // LogDeduplicationSettings contains settings for log deduplication
@@ -1233,6 +1237,13 @@ func Load() (*Settings, error) {
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").
 			Build()
+	}
+
+	// Normalize species config keys to lowercase for case-insensitive matching
+	// This ensures that config keys like "American Robin" are converted to "american robin"
+	// to match the lowercase species names used in detection lookup (fixes #1701)
+	if settings.Realtime.Species.Config != nil {
+		settings.Realtime.Species.Config = NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
 	}
 
 	// Migrate legacy OAuth configuration to new array format
