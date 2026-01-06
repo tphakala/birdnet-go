@@ -146,6 +146,15 @@ const (
 	SpectrogramModeUserRequested = "user-requested"
 )
 
+// Spectrogram style preset constants
+const (
+	SpectrogramStyleDefault       = "default"
+	SpectrogramStyleGrayscale     = "grayscale"
+	SpectrogramStyleGrayscaleDark = "grayscale_dark"
+	SpectrogramStyleHighContrast  = "high_contrast"
+	SpectrogramStyleScientific    = "scientific"
+)
+
 // SpectrogramPreRender contains settings for spectrogram generation modes.
 // Three modes control when and how spectrograms are generated:
 //   - "auto": Generate on-demand when API is called (default, suitable for most systems)
