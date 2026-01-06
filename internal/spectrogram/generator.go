@@ -548,6 +548,12 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 		args = append(args, "-r")
 	}
 
+	// Add style-specific arguments
+	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	if styleArgs := getStyleArgs(style); styleArgs != nil {
+		args = append(args, styleArgs...)
+	}
+
 	// Build command with low priority
 	cmd := createCommandWithNice(ctx, soxBinary, args)
 
