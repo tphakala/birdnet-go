@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,7 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"gopkg.in/yaml.v3"
 )
+
+// updateGoldenFiles is a flag to regenerate golden files during development.
+// Run with: go test -v -run TestComprehensivePrivacyScrubbing -update ./internal/support/...
+var updateGoldenFiles = flag.Bool("update", false, "update golden files")
 
 // Test constants
 const (
@@ -1077,4 +1083,944 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 	assert.NotNil(t, bundle.Diagnostics)
 	assert.True(t, bundle.Diagnostics.LogCollection.FileLogs.Attempted)
 	// Journal logs might or might not be attempted depending on the environment
+}
+
+// =============================================================================
+// Comprehensive Privacy Scrubbing Integration Test
+// =============================================================================
+
+// createComprehensiveMockConfig creates a complete mock configuration
+// covering ALL settings the application supports for integration testing.
+// This mirrors the structure in internal/conf/config.go.
+func createComprehensiveMockConfig() map[string]any {
+	return map[string]any{
+		// =====================================================================
+		// Main Settings
+		// =====================================================================
+		"main": map[string]any{
+			"name":      "birdnet-home-station",
+			"timeAs24h": true,
+		},
+
+		// =====================================================================
+		// Logging Configuration
+		// =====================================================================
+		"logging": map[string]any{
+			"level":  "info",
+			"format": "json",
+		},
+
+		// =====================================================================
+		// Input Configuration
+		// =====================================================================
+		"input": map[string]any{
+			"path":      "/home/user/recordings",
+			"recursive": true,
+			"watch":     false,
+		},
+
+		// =====================================================================
+		// BirdNET Configuration (includes location data)
+		// =====================================================================
+		"birdnet": map[string]any{
+			"debug":       false,
+			"sensitivity": 1.0,
+			"threshold":   0.8,
+			"overlap":     0.0,
+			"latitude":    45.5231,
+			"longitude":   -122.6765,
+			"threads":     4,
+			"locale":      "en",
+			"modelPath":   "/opt/birdnet/models/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite",
+			"labelPath":   "/opt/birdnet/models/BirdNET_GLOBAL_6K_V2.4_Labels.txt",
+			"useXNNPACK":  true,
+			"rangeFilter": map[string]any{
+				"debug":     false,
+				"model":     "latest",
+				"modelPath": "/opt/birdnet/models/BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite",
+				"threshold": 0.03,
+			},
+		},
+
+		// =====================================================================
+		// Security Configuration (highly sensitive)
+		// =====================================================================
+		"security": map[string]any{
+			"debug":           false,
+			"baseUrl":         "https://birdnet.example.com:5500",
+			"host":            "birdnet.example.com",
+			"autoTls":         true,
+			"redirectToHTTPS": true,
+			"basicAuth": map[string]any{
+				"enabled":        true,
+				"password":       "admin_secret_password",
+				"clientId":       "oauth_client_id_12345",
+				"clientSecret":   "oauth_client_secret_xyz",
+				"redirectUri":    "https://birdnet.example.com/callback",
+				"authCodeExp":    "5m",
+				"accessTokenExp": "24h",
+			},
+			"sessionSecret":   "session_secret_key_abc123",
+			"sessionDuration": "168h",
+			"allowSubnetBypass": map[string]any{
+				"enabled": true,
+				"subnet":  "192.168.1.0/24",
+			},
+			"oauthProviders": []any{
+				map[string]any{
+					"provider":     "google",
+					"enabled":      true,
+					"clientId":     "google_client_id_123",
+					"clientSecret": "google_client_secret_456",
+					"redirectUri":  "https://birdnet.example.com/auth/google/callback",
+					"userId":       "user@gmail.com",
+				},
+				map[string]any{
+					"provider":     "github",
+					"enabled":      true,
+					"clientId":     "github_client_id_789",
+					"clientSecret": "github_client_secret_abc",
+					"userId":       "github_username",
+				},
+			},
+		},
+
+		// =====================================================================
+		// Realtime Processing Settings
+		// =====================================================================
+		"realtime": map[string]any{
+			"interval":       1,
+			"processingTime": false,
+
+			// Audio Configuration (nested under realtime)
+			"audio": map[string]any{
+				"source":          "plughw:1,0",
+				"ffmpegPath":      "/usr/bin/ffmpeg",
+				"soxPath":         "/usr/bin/sox",
+				"streamTransport": "auto",
+				"soundLevel": map[string]any{
+					"enabled":              true,
+					"interval":             5,
+					"debug":                false,
+					"debugRealtimeLogging": false,
+				},
+				"equalizer": map[string]any{
+					"enabled": true,
+					"filters": []any{
+						map[string]any{
+							"type":      "HighPass",
+							"frequency": 150.0,
+							"q":         0.707,
+						},
+						map[string]any{
+							"type":      "LowPass",
+							"frequency": 12000.0,
+							"q":         0.707,
+						},
+					},
+				},
+				"export": map[string]any{
+					"debug":      false,
+					"enabled":    true,
+					"path":       "/data/clips",
+					"type":       "wav",
+					"bitrate":    "192k",
+					"length":     12,
+					"preCapture": 3,
+					"gain":       0.0,
+					"retention": map[string]any{
+						"debug":            false,
+						"policy":           "age",
+						"maxAge":           "30d",
+						"maxUsage":         "80%",
+						"minClips":         10,
+						"checkInterval":    60,
+						"keepSpectrograms": true,
+					},
+					"normalization": map[string]any{
+						"enabled":       true,
+						"targetLUFS":    -16.0,
+						"loudnessRange": 7.0,
+						"truePeak":      -1.0,
+					},
+				},
+			},
+
+			// Dashboard Configuration (nested under realtime)
+			"dashboard": map[string]any{
+				"summaryLimit":    10,
+				"locale":          "en",
+				"temperatureUnit": "celsius",
+				"thumbnails": map[string]any{
+					"debug":          false,
+					"summary":        true,
+					"recent":         true,
+					"imageProvider":  "auto",
+					"fallbackPolicy": "all",
+				},
+				"spectrogram": map[string]any{
+					"mode":    "auto",
+					"enabled": true,
+					"size":    "400x200",
+					"raw":     false,
+				},
+			},
+
+			// Dynamic Threshold
+			"dynamicThreshold": map[string]any{
+				"enabled":    true,
+				"debug":      false,
+				"trigger":    0.9,
+				"min":        0.5,
+				"validHours": 24,
+			},
+
+			// False Positive Filter
+			"falsePositiveFilter": map[string]any{
+				"level": 2,
+			},
+
+			// Log settings
+			"log": map[string]any{
+				"enabled": true,
+				"path":    "/var/log/birdnet/obs.log",
+			},
+
+			// Log Deduplication
+			"logDeduplication": map[string]any{
+				"enabled":                   true,
+				"healthCheckIntervalSeconds": 300,
+			},
+
+			// Privacy Filter
+			"privacyFilter": map[string]any{
+				"debug":      false,
+				"enabled":    true,
+				"confidence": 0.8,
+			},
+
+			// Dog Bark Filter
+			"dogBarkFilter": map[string]any{
+				"debug":      false,
+				"enabled":    true,
+				"confidence": 0.7,
+				"remember":   15,
+				"species":    []any{"Canis lupus familiaris"},
+			},
+
+			// MQTT (broker, username, password, TLS paths)
+			"mqtt": map[string]any{
+				"enabled":  true,
+				"debug":    false,
+				"broker":   "mqtt://mqtt.example.com:1883",
+				"topic":    "birdnet/detections",
+				"username": "mqtt_admin",
+				"password": "mqtt_secret_pass",
+				"retain":   true,
+				"retrySettings": map[string]any{
+					"enabled":           true,
+					"maxRetries":        3,
+					"initialDelay":      1,
+					"maxDelay":          30,
+					"backoffMultiplier": 2.0,
+				},
+				"tls": map[string]any{
+					"enabled":            true,
+					"insecureSkipVerify": false,
+					"caCert":             "/etc/ssl/mqtt/ca-cert.pem",
+					"clientCert":         "/etc/ssl/mqtt/client-cert.pem",
+					"clientKey":          "/etc/ssl/mqtt/client-key.pem",
+				},
+			},
+
+			// Birdweather (ID)
+			"birdweather": map[string]any{
+				"enabled":          true,
+				"debug":            false,
+				"id":               "birdweather_station_id_xyz",
+				"threshold":        0.7,
+				"locationAccuracy": 500.0,
+				"retrySettings": map[string]any{
+					"enabled":           true,
+					"maxRetries":        3,
+					"initialDelay":      1,
+					"maxDelay":          30,
+					"backoffMultiplier": 2.0,
+				},
+			},
+
+			// Weather (OpenWeather/Wunderground API keys, stationId)
+			"weather": map[string]any{
+				"provider":     "openweather",
+				"pollInterval": 30,
+				"debug":        false,
+				"openWeather": map[string]any{
+					"enabled":  true,
+					"apiKey":   "openweather_api_key_123abc",
+					"endpoint": "https://api.openweathermap.org/data/2.5/weather",
+					"units":    "metric",
+					"language": "en",
+				},
+				"wunderground": map[string]any{
+					"apiKey":    "wunderground_api_key_456def",
+					"stationId": "KWASEATT123",
+					"endpoint":  "https://api.weather.com/v2/pws/observations/current",
+					"units":     "m",
+				},
+			},
+
+			// RTSP (URLs with credentials)
+			"rtsp": map[string]any{
+				"transport": "tcp",
+				"urls": []any{
+					"rtsp://camera_user:camera_pass@192.168.1.100:554/stream1",
+					"rtsp://admin:secret123@10.0.0.50:554/cam/realmonitor",
+				},
+				"ffmpegParameters": []any{"-rtsp_transport", "tcp"},
+				"health": map[string]any{
+					"healthyDataThreshold": 60,
+					"monitoringInterval":   30,
+				},
+			},
+
+			// eBird (API key)
+			"ebird": map[string]any{
+				"enabled":  true,
+				"apiKey":   "ebird_api_key_xyz789",
+				"cacheTTL": 24,
+				"locale":   "en",
+			},
+
+			// Telemetry
+			"telemetry": map[string]any{
+				"enabled": true,
+				"listen":  "0.0.0.0:8090",
+			},
+
+			// System Monitoring
+			"monitoring": map[string]any{
+				"enabled":                true,
+				"checkInterval":          60,
+				"criticalResendInterval": 30,
+				"hysteresisPercent":      5.0,
+				"cpu": map[string]any{
+					"enabled":  true,
+					"warning":  80.0,
+					"critical": 95.0,
+				},
+				"memory": map[string]any{
+					"enabled":  true,
+					"warning":  85.0,
+					"critical": 95.0,
+				},
+				"disk": map[string]any{
+					"enabled":  true,
+					"warning":  80.0,
+					"critical": 90.0,
+					"paths":    []any{"/", "/data", "/home/user/birdnet"},
+				},
+			},
+
+			// Species Configuration
+			"species": map[string]any{
+				"include": []any{"Turdus migratorius", "Cardinalis cardinalis"}, //nolint:misspell // Correct scientific name for Northern Cardinal
+				"exclude": []any{"Columba livia"},
+				"config": map[string]any{
+					"Turdus migratorius": map[string]any{
+						"threshold": 0.7,
+						"interval":  30,
+						"actions": []any{
+							map[string]any{
+								"type":            "script",
+								"command":         "/usr/local/bin/robin-alert.sh",
+								"parameters":      []any{"--notify"},
+								"executeDefaults": true,
+							},
+						},
+					},
+				},
+			},
+
+			// Species Tracking
+			"speciesTracking": map[string]any{
+				"enabled":                      true,
+				"newSpeciesWindowDays":         7,
+				"syncIntervalMinutes":          15,
+				"notificationSuppressionHours": 24,
+				"yearlyTracking": map[string]any{
+					"enabled":    true,
+					"resetMonth": 1,
+					"resetDay":   1,
+					"windowDays": 30,
+				},
+				"seasonalTracking": map[string]any{
+					"enabled":    true,
+					"windowDays": 14,
+					"seasons": map[string]any{
+						"spring": map[string]any{"startMonth": 3, "startDay": 1},
+						"summer": map[string]any{"startMonth": 6, "startDay": 1},
+						"fall":   map[string]any{"startMonth": 9, "startDay": 1},
+						"winter": map[string]any{"startMonth": 12, "startDay": 1},
+					},
+				},
+			},
+		},
+
+		// Section 4: Output (MySQL credentials)
+		"output": map[string]any{
+			"sqlite": map[string]any{
+				"enabled": true,
+				"path":    "/data/birdnet.db",
+			},
+			"mysql": map[string]any{
+				"enabled":  true,
+				"username": "mysql_user",
+				"password": "mysql_secret_password",
+				"database": "birdnet_db",
+				"host":     "mysql.internal.example.com",
+				"port":     "3306",
+			},
+		},
+
+		// Section 5: Backup (encryption key, FTP/SFTP/S3/Rsync credentials)
+		"backup": map[string]any{
+			"enabled":        true,
+			"debug":          false,
+			"encryption":     true,
+			"encryptionKey":  "base64_encryption_key_very_secret",
+			"sanitizeConfig": true,
+			"retention": map[string]any{
+				"maxAge":     "30d",
+				"maxBackups": 10,
+				"minBackups": 3,
+			},
+			"schedules": []any{
+				map[string]any{
+					"enabled":  true,
+					"hour":     2,
+					"minute":   0,
+					"weekday":  "",
+					"isWeekly": false,
+				},
+				map[string]any{
+					"enabled":  true,
+					"hour":     3,
+					"minute":   30,
+					"weekday":  "Sunday",
+					"isWeekly": true,
+				},
+			},
+			"operationTimeouts": map[string]any{
+				"backup":  "2h",
+				"store":   "15m",
+				"cleanup": "10m",
+				"delete":  "2m",
+			},
+			"targets": []any{
+				map[string]any{
+					"type":    "local",
+					"enabled": true,
+					"settings": map[string]any{
+						"path": "/backups/local",
+					},
+				},
+				map[string]any{
+					"type":    "ftp",
+					"enabled": true,
+					"settings": map[string]any{
+						"host":     "ftp.backup.example.com",
+						"port":     21,
+						"username": "ftp_backup_user",
+						"password": "ftp_backup_secret",
+						"path":     "/remote/backups",
+						"useTls":   true,
+					},
+				},
+				map[string]any{
+					"type":    "sftp",
+					"enabled": true,
+					"settings": map[string]any{
+						"host":           "sftp.backup.example.com",
+						"port":           22,
+						"username":       "sftp_user",
+						"password":       "sftp_password",
+						"privateKeyPath": "/home/user/.ssh/id_rsa_backup",
+						"path":           "/remote/sftp/backups",
+					},
+				},
+				map[string]any{
+					"type":    "s3",
+					"enabled": true,
+					"settings": map[string]any{
+						"endpoint":        "https://s3.amazonaws.com",
+						"region":          "us-west-2",
+						"bucket":          "birdnet-backups",
+						"accessKeyId":     "AKIAIOSFODNN7EXAMPLE",
+						"secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+						"prefix":          "backups/",
+						"useSSL":          true,
+					},
+				},
+				map[string]any{
+					"type":    "rsync",
+					"enabled": true,
+					"settings": map[string]any{
+						"host":       "rsync.backup.example.com",
+						"port":       22,
+						"username":   "rsync_user",
+						"path":       "/backups/rsync",
+						"sshKeyPath": "/home/user/.ssh/id_rsa_rsync",
+					},
+				},
+				map[string]any{
+					"type":    "gdrive",
+					"enabled": true,
+					"settings": map[string]any{
+						"credentialsPath": "/secrets/google-drive-creds.json",
+						"folderId":        "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+					},
+				},
+			},
+		},
+
+		// Section 6: Notification (Shoutrrr URLs with tokens, webhook URLs with auth)
+		"notification": map[string]any{
+			"templates": map[string]any{
+				"newSpecies": map[string]any{
+					"title":   "New Species Detected!",
+					"message": "{{.CommonName}} ({{.ScientificName}}) at {{.Time}}",
+				},
+			},
+			"push": map[string]any{
+				"enabled":                  true,
+				"defaultTimeout":           "30s",
+				"maxRetries":               3,
+				"retryDelay":               "5s",
+				"minConfidenceThreshold":   0.8,
+				"speciesCooldownMinutes":   30,
+				"circuitBreaker": map[string]any{
+					"enabled":              true,
+					"maxFailures":          5,
+					"timeout":              "30s",
+					"halfOpenMaxRequests":  2,
+				},
+				"healthCheck": map[string]any{
+					"enabled":  true,
+					"interval": "60s",
+					"timeout":  "10s",
+				},
+				"rateLimiting": map[string]any{
+					"enabled":           true,
+					"requestsPerMinute": 60,
+					"burstSize":         10,
+				},
+				"providers": []any{
+					map[string]any{
+						"type":    "shoutrrr",
+						"enabled": true,
+						"name":    "ntfy",
+						"urls": []any{
+							"ntfy://admin:secret_token@ntfy.sh/birdnet-alerts",
+							"discord://webhook_id:webhook_token@discord.com/webhooks",
+							"telegram://bot_token@telegram?channels=channel_id",
+						},
+						"timeout": "30s",
+					},
+					map[string]any{
+						"type":    "webhook",
+						"enabled": true,
+						"name":    "custom_webhook",
+						"endpoints": []any{
+							map[string]any{
+								"url":     "https://hooks.slack.com/services/T123/B456/xyz789abc",
+								"method":  "POST",
+								"timeout": "10s",
+								"headers": map[string]any{
+									"X-Custom-Header": "value",
+								},
+								"auth": map[string]any{
+									"type":      "bearer",
+									"token":     "bearer_token_secret_123",
+									"tokenFile": "/secrets/bearer_token.txt",
+								},
+							},
+							map[string]any{
+								"url":    "https://api.custom.com/webhook?token=secret_query_param",
+								"method": "POST",
+								"auth": map[string]any{
+									"type":     "basic",
+									"user":     "webhook_user",
+									"pass":     "webhook_password",
+									"userFile": "/secrets/webhook_user.txt",
+									"passFile": "/secrets/webhook_pass.txt",
+								},
+							},
+						},
+					},
+					map[string]any{
+						"type":    "script",
+						"enabled": true,
+						"name":    "custom_script",
+						"command": "/usr/local/bin/notify.sh",
+						"args":    []any{"--verbose"},
+						"environment": map[string]any{
+							"API_KEY":    "script_api_key_secret",
+							"API_SECRET": "script_api_secret_value",
+						},
+					},
+				},
+			},
+		},
+
+		// Section 7: Sentry (DSN not typically in config, but testing the pattern)
+		"sentry": map[string]any{
+			"enabled":    true,
+			"debug":      false,
+			"sampleRate": 1.0,
+		},
+
+		// Section 8: WebServer
+		"webserver": map[string]any{
+			"enabled": true,
+			"port":    "8080",
+			"liveStream": map[string]any{
+				"bitrate":    128,
+				"sampleRate": 48000,
+			},
+		},
+
+		// Section 9: Default value preservation tests
+		// These should NOT be redacted because they are empty/zero/nil
+		"defaultValueTests": map[string]any{
+			"password":        "",    // empty string - preserve
+			"apiKey":          "",    // empty string - preserve
+			"latitude":        0.0,   // zero float - preserve
+			"longitude":       0.0,   // zero float - preserve
+			"token":           nil,   // nil - preserve
+			"port":            0,     // zero int - preserve
+			"nonSensitiveKey": "visible_value",
+		},
+	}
+}
+
+// verifyAgainstGoldenFile compares the scrubbed config against a golden file.
+// When -update flag is set, it regenerates the golden file instead of comparing.
+func verifyAgainstGoldenFile(t *testing.T, got map[string]any, goldenFilename string) {
+	t.Helper()
+
+	// Marshal the result to YAML for comparison
+	gotYAML, err := yaml.Marshal(got)
+	require.NoError(t, err, "failed to marshal scrubbed config to YAML")
+
+	goldenPath := filepath.Join("testdata", goldenFilename)
+
+	if *updateGoldenFiles {
+		// Create testdata directory if it doesn't exist
+		err := os.MkdirAll("testdata", defaultDirPermissions)
+		require.NoError(t, err, "failed to create testdata directory")
+
+		// Write the new golden file
+		err = os.WriteFile(goldenPath, gotYAML, defaultFilePermissions)
+		require.NoError(t, err, "failed to update golden file")
+		t.Logf("Updated golden file: %s", goldenPath)
+		return
+	}
+
+	// Read expected golden file
+	// #nosec G304 -- goldenPath is constructed from constant "testdata" + controlled test filename
+	expectedYAML, err := os.ReadFile(goldenPath)
+	require.NoError(t, err, "failed to read golden file (run with -update to generate)")
+
+	// Compare using YAML-aware comparison
+	assert.YAMLEq(t, string(expectedYAML), string(gotYAML),
+		"scrubbed config does not match golden file")
+}
+
+// getNestedValue navigates nested maps safely to retrieve a value by path.
+func getNestedValue(config map[string]any, path ...string) (any, bool) {
+	var current any = config
+	for _, key := range path {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current, ok = m[key]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+// assertCriticalFieldsRedacted verifies the most critical sensitive fields
+// are properly redacted with expected placeholder values.
+func assertCriticalFieldsRedacted(t *testing.T, config map[string]any) {
+	t.Helper()
+
+	// 1. Security passwords and secrets
+	val, ok := getNestedValue(config, "security", "basicAuth", "password")
+	require.True(t, ok, "security.basicAuth.password not found")
+	assert.Equal(t, "[redacted]", val, "security.basicAuth.password should be redacted")
+
+	val, ok = getNestedValue(config, "security", "basicAuth", "clientSecret")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "security.basicAuth.clientSecret should be redacted")
+
+	val, ok = getNestedValue(config, "security", "sessionSecret")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "security.sessionSecret should be redacted")
+
+	val, ok = getNestedValue(config, "security", "allowSubnetBypass", "subnet")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "security.allowSubnetBypass.subnet should be redacted")
+
+	// 2. OAuth providers (array)
+	providers, ok := getNestedValue(config, "security", "oauthProviders")
+	require.True(t, ok, "security.oauthProviders not found")
+
+	providerList, ok := providers.([]any)
+	require.True(t, ok, "oauthProviders should be a slice")
+	require.Len(t, providerList, 2, "should have 2 OAuth providers")
+
+	for i, p := range providerList {
+		provider := p.(map[string]any)
+		assert.Equal(t, "[redacted]", provider["clientId"],
+			"provider[%d].clientId should be redacted", i)
+		assert.Equal(t, "[redacted]", provider["clientSecret"],
+			"provider[%d].clientSecret should be redacted", i)
+		assert.Equal(t, "[redacted]", provider["userId"],
+			"provider[%d].userId should be redacted", i)
+		// provider name should NOT be redacted
+		assert.NotEqual(t, "[redacted]", provider["provider"])
+	}
+
+	// 3. Location coordinates
+	val, ok = getNestedValue(config, "birdnet", "latitude")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "birdnet.latitude should be redacted")
+
+	val, ok = getNestedValue(config, "birdnet", "longitude")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "birdnet.longitude should be redacted")
+
+	// 4. MQTT credentials
+	val, ok = getNestedValue(config, "realtime", "mqtt", "username")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "mqtt.username should be redacted")
+
+	val, ok = getNestedValue(config, "realtime", "mqtt", "password")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "mqtt.password should be redacted")
+
+	val, ok = getNestedValue(config, "realtime", "mqtt", "topic")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "mqtt.topic should be redacted")
+
+	// 5. Birdweather ID
+	val, ok = getNestedValue(config, "realtime", "birdweather", "id")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "birdweather.id should be redacted")
+
+	// 6. Weather API keys
+	val, ok = getNestedValue(config, "realtime", "weather", "openWeather", "apiKey")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "openWeather.apiKey should be redacted")
+
+	val, ok = getNestedValue(config, "realtime", "weather", "wunderground", "apiKey")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "wunderground.apiKey should be redacted")
+
+	val, ok = getNestedValue(config, "realtime", "weather", "wunderground", "stationId")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "wunderground.stationId should be redacted")
+
+	// 7. eBird API key
+	val, ok = getNestedValue(config, "realtime", "ebird", "apiKey")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "ebird.apiKey should be redacted")
+
+	// 8. Output MySQL credentials
+	val, ok = getNestedValue(config, "output", "mysql", "username")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "mysql.username should be redacted")
+
+	val, ok = getNestedValue(config, "output", "mysql", "password")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "mysql.password should be redacted")
+
+	// 9. Backup encryption key
+	val, ok = getNestedValue(config, "backup", "encryptionKey")
+	require.True(t, ok)
+	assert.Equal(t, "[redacted]", val, "backup.encryptionKey should be redacted")
+
+	// 10. Check backup targets for credentials
+	targets, ok := getNestedValue(config, "backup", "targets")
+	require.True(t, ok)
+	targetList := targets.([]any)
+
+	for _, target := range targetList {
+		tgt := target.(map[string]any)
+		settings := tgt["settings"].(map[string]any)
+		targetType := tgt["type"].(string)
+
+		switch targetType {
+		case "s3":
+			assert.Equal(t, "[redacted]", settings["accessKeyId"],
+				"s3.accessKeyId should be redacted")
+			assert.Equal(t, "[redacted]", settings["secretAccessKey"],
+				"s3.secretAccessKey should be redacted")
+		case "sftp":
+			assert.Equal(t, "[redacted]", settings["password"],
+				"sftp.password should be redacted")
+			assert.Equal(t, "[redacted]", settings["privateKeyPath"],
+				"sftp.privateKeyPath should be redacted")
+			assert.Equal(t, "[redacted]", settings["username"],
+				"sftp.username should be redacted")
+		case "ftp":
+			assert.Equal(t, "[redacted]", settings["password"],
+				"ftp.password should be redacted")
+			assert.Equal(t, "[redacted]", settings["username"],
+				"ftp.username should be redacted")
+		case "rsync":
+			assert.Equal(t, "[redacted]", settings["username"],
+				"rsync.username should be redacted")
+			assert.Equal(t, "[redacted]", settings["sshKeyPath"],
+				"rsync.sshKeyPath should be redacted")
+		case "gdrive":
+			assert.Equal(t, "[redacted]", settings["credentialsPath"],
+				"gdrive.credentialsPath should be redacted")
+		}
+	}
+}
+
+// assertDefaultValuesPreserved verifies that default/empty values are NOT redacted.
+func assertDefaultValuesPreserved(t *testing.T, config map[string]any) {
+	t.Helper()
+
+	defaults, ok := config["defaultValueTests"].(map[string]any)
+	require.True(t, ok, "defaultValueTests section not found")
+
+	// Empty strings should be preserved
+	assert.Empty(t, defaults["password"], "empty password should be preserved")
+	assert.Empty(t, defaults["apiKey"], "empty apiKey should be preserved")
+
+	// Zero floats should be preserved
+	assert.InDelta(t, 0.0, defaults["latitude"], 0, "zero latitude should be preserved")
+	assert.InDelta(t, 0.0, defaults["longitude"], 0, "zero longitude should be preserved")
+
+	// Zero ints should be preserved
+	assert.Equal(t, 0, defaults["port"], "zero port should be preserved")
+
+	// Nil should be preserved
+	assert.Nil(t, defaults["token"], "nil token should be preserved")
+
+	// Non-sensitive keys should be unchanged
+	assert.Equal(t, "visible_value", defaults["nonSensitiveKey"],
+		"non-sensitive key should be unchanged")
+}
+
+// assertURLStructuralRedaction verifies URLs are redacted with proper structure preserved.
+func assertURLStructuralRedaction(t *testing.T, config map[string]any) {
+	t.Helper()
+
+	// RTSP URLs should preserve scheme and port
+	rtsp, ok := getNestedValue(config, "realtime", "rtsp", "urls")
+	require.True(t, ok, "realtime.rtsp.urls not found")
+
+	urls := rtsp.([]any)
+	require.Len(t, urls, 2, "should have 2 RTSP URLs")
+
+	for i, u := range urls {
+		urlStr := u.(string)
+		assert.Contains(t, urlStr, "rtsp://", "URL[%d] should preserve rtsp:// scheme", i)
+		assert.Contains(t, urlStr, "[host]", "URL[%d] should redact host", i)
+		assert.Contains(t, urlStr, ":554", "URL[%d] should preserve port", i)
+		assert.Contains(t, urlStr, "[user]", "URL[%d] should show [user] placeholder", i)
+		assert.Contains(t, urlStr, "[pass]", "URL[%d] should show [pass] placeholder", i)
+		assert.NotContains(t, urlStr, "camera_user", "URL[%d] should not contain credentials", i)
+		assert.NotContains(t, urlStr, "admin", "URL[%d] should not contain credentials", i)
+	}
+
+	// Weather endpoints should be structurally redacted
+	endpoint, ok := getNestedValue(config, "realtime", "weather", "openWeather", "endpoint")
+	require.True(t, ok)
+	endpointStr := endpoint.(string)
+	assert.Contains(t, endpointStr, "https://", "endpoint should preserve https:// scheme")
+	assert.Contains(t, endpointStr, "[host]", "endpoint should redact host")
+
+	// Notification webhook URLs
+	providers, ok := getNestedValue(config, "notification", "push", "providers")
+	require.True(t, ok)
+
+	providerList := providers.([]any)
+	for _, p := range providerList {
+		provider := p.(map[string]any)
+
+		if provider["type"] == "shoutrrr" {
+			shoutrrrURLs := provider["urls"].([]any)
+			for _, u := range shoutrrrURLs {
+				urlStr := u.(string)
+				// URLs should be structurally redacted
+				assert.NotContains(t, urlStr, "admin:secret", "shoutrrr URL should not contain credentials")
+				assert.NotContains(t, urlStr, "webhook_token", "shoutrrr URL should not contain token")
+				assert.Contains(t, urlStr, "[host]", "shoutrrr URL host should be redacted")
+			}
+		}
+
+		if provider["type"] == "webhook" {
+			endpoints := provider["endpoints"].([]any)
+			for _, e := range endpoints {
+				ep := e.(map[string]any)
+				url := ep["url"].(string)
+				assert.Contains(t, url, "[host]", "webhook URL should have redacted host")
+				assert.Contains(t, url, "https://", "webhook URL should preserve https:// scheme")
+			}
+		}
+	}
+
+	// MQTT broker URL should be structurally redacted
+	broker, ok := getNestedValue(config, "realtime", "mqtt", "broker")
+	require.True(t, ok)
+	brokerStr := broker.(string)
+	assert.Contains(t, brokerStr, "mqtt://", "broker should preserve mqtt:// scheme")
+	assert.Contains(t, brokerStr, "[host]", "broker should redact host")
+	assert.Contains(t, brokerStr, ":1883", "broker should preserve port")
+}
+
+// TestComprehensivePrivacyScrubbing_Integration is a comprehensive integration test
+// that verifies all sensitive fields in the config are properly scrubbed.
+// Run with -update flag to regenerate golden file: go test -v -run TestComprehensivePrivacyScrubbing -update
+func TestComprehensivePrivacyScrubbing_Integration(t *testing.T) {
+	t.Parallel()
+
+	// Create collector with default sensitive keys
+	c := &Collector{
+		sensitiveKeys: defaultSensitiveKeys(),
+	}
+
+	// Build comprehensive mock config
+	input := createComprehensiveMockConfig()
+
+	// Execute scrubbing
+	got := c.scrubConfig(input)
+
+	// Part 1: Golden file comparison
+	t.Run("golden_file_comparison", func(t *testing.T) {
+		verifyAgainstGoldenFile(t, got, "scrubbed_config_golden.yaml")
+	})
+
+	// Part 2: Targeted assertions for critical fields
+	t.Run("critical_field_assertions", func(t *testing.T) {
+		assertCriticalFieldsRedacted(t, got)
+	})
+
+	// Part 3: Default value preservation
+	t.Run("default_values_preserved", func(t *testing.T) {
+		assertDefaultValuesPreserved(t, got)
+	})
+
+	// Part 4: URL structural redaction
+	t.Run("url_structural_redaction", func(t *testing.T) {
+		assertURLStructuralRedaction(t, got)
+	})
 }

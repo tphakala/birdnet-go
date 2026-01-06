@@ -144,16 +144,18 @@ type Collector struct {
 // defaultSensitiveKeys returns the default list of sensitive configuration keys to redact
 func defaultSensitiveKeys() []string {
 	return []string{
-		// Authentication credentials
-		"password", "token", "secret", "key", "api_key", "api_token",
+		// Authentication credentials (snake_case and camelCase variants)
+		"password", "pass", "token", "secret", "key", "api_key", "api_token",
 		"client_id", "client_secret", "apikey", "apitoken",
+		"clientid", "clientsecret", // camelCase variants
 		"accesskeyid", "secretaccesskey", "encryptionkey",
+		"sessionsecret", // session secret (camelCase)
 
 		// MQTT credentials
-		"mqtt_password", "mqtt_username", "mqtt_topic", "broker",
+		"mqtt_password", "mqtt_username", "mqtt_topic", "broker", "topic",
 
-		// Service identifiers
-		"birdweather_id", "username", "userid",
+		// Service identifiers (including generic "id" for nested identifiers like birdweather.id)
+		"birdweather_id", "birdweatherid", "username", "user", "userid", "id",
 
 		// Location data (privacy sensitive)
 		"latitude", "longitude", "stationid",

@@ -1,0 +1,436 @@
+backup:
+    debug: false
+    enabled: true
+    encryption: true
+    encryptionKey: '[redacted]'
+    operationTimeouts:
+        backup: 2h
+        cleanup: 10m
+        delete: 2m
+        store: 15m
+    retention:
+        maxAge: 30d
+        maxBackups: 10
+        minBackups: 3
+    sanitizeConfig: true
+    schedules:
+        - enabled: true
+          hour: 2
+          isWeekly: false
+          minute: 0
+          weekday: ""
+        - enabled: true
+          hour: 3
+          isWeekly: true
+          minute: 30
+          weekday: Sunday
+    targets:
+        - enabled: true
+          settings:
+            path: /backups/local
+          type: local
+        - enabled: true
+          settings:
+            host: ftp.backup.example.com
+            password: '[redacted]'
+            path: /remote/backups
+            port: 21
+            useTls: true
+            username: '[redacted]'
+          type: ftp
+        - enabled: true
+          settings:
+            host: sftp.backup.example.com
+            password: '[redacted]'
+            path: /remote/sftp/backups
+            port: 22
+            privateKeyPath: '[redacted]'
+            username: '[redacted]'
+          type: sftp
+        - enabled: true
+          settings:
+            accessKeyId: '[redacted]'
+            bucket: birdnet-backups
+            endpoint: https://[host]
+            prefix: backups/
+            region: us-west-2
+            secretAccessKey: '[redacted]'
+            useSSL: true
+          type: s3
+        - enabled: true
+          settings:
+            host: rsync.backup.example.com
+            path: /backups/rsync
+            port: 22
+            sshKeyPath: '[redacted]'
+            username: '[redacted]'
+          type: rsync
+        - enabled: true
+          settings:
+            credentialsPath: '[redacted]'
+            folderId: 1AbCdEfGhIjKlMnOpQrStUvWxYz
+          type: gdrive
+birdnet:
+    debug: false
+    labelPath: /opt/birdnet/models/BirdNET_GLOBAL_6K_V2.4_Labels.txt
+    latitude: '[redacted]'
+    locale: en
+    longitude: '[redacted]'
+    modelPath: /opt/birdnet/models/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
+    overlap: 0
+    rangeFilter:
+        debug: false
+        model: latest
+        modelPath: /opt/birdnet/models/BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite
+        threshold: 0.03
+    sensitivity: 1
+    threads: 4
+    threshold: 0.8
+    useXNNPACK: true
+defaultValueTests:
+    apiKey: ""
+    latitude: 0
+    longitude: 0
+    nonSensitiveKey: visible_value
+    password: ""
+    port: 0
+    token: null
+input:
+    path: /home/user/recordings
+    recursive: true
+    watch: false
+logging:
+    format: json
+    level: info
+main:
+    name: birdnet-home-station
+    timeAs24h: true
+notification:
+    push:
+        circuitBreaker:
+            enabled: true
+            halfOpenMaxRequests: 2
+            maxFailures: 5
+            timeout: 30s
+        defaultTimeout: 30s
+        enabled: true
+        healthCheck:
+            enabled: true
+            interval: 60s
+            timeout: 10s
+        maxRetries: 3
+        minConfidenceThreshold: 0.8
+        providers:
+            - enabled: true
+              name: ntfy
+              timeout: 30s
+              type: shoutrrr
+              urls:
+                - ntfy://[user]:[pass]@[host]/[path]
+                - discord://[user]:[pass]@[host]/[path]
+                - telegram://[user]@[host]?[query]
+            - enabled: true
+              endpoints:
+                - auth:
+                    token: '[redacted]'
+                    tokenFile: '[redacted]'
+                    type: bearer
+                  headers:
+                    X-Custom-Header: value
+                  method: POST
+                  timeout: 10s
+                  url: https://[host]/[path]
+                - auth:
+                    pass: '[redacted]'
+                    passFile: '[redacted]'
+                    type: basic
+                    user: '[redacted]'
+                    userFile: '[redacted]'
+                  method: POST
+                  url: https://[host]/[path]?[query]
+              name: custom_webhook
+              type: webhook
+            - args:
+                - --verbose
+              command: /usr/local/bin/notify.sh
+              enabled: true
+              environment:
+                API_KEY: '[redacted]'
+                API_SECRET: '[redacted]'
+              name: custom_script
+              type: script
+        rateLimiting:
+            burstSize: 10
+            enabled: true
+            requestsPerMinute: 60
+        retryDelay: 5s
+        speciesCooldownMinutes: 30
+    templates:
+        newSpecies:
+            message: '{{.CommonName}} ({{.ScientificName}}) at {{.Time}}'
+            title: New Species Detected!
+output:
+    mysql:
+        database: birdnet_db
+        enabled: true
+        host: mysql.internal.example.com
+        password: '[redacted]'
+        port: "3306"
+        username: '[redacted]'
+    sqlite:
+        enabled: true
+        path: /data/birdnet.db
+realtime:
+    audio:
+        equalizer:
+            enabled: true
+            filters:
+                - frequency: 150
+                  q: 0.707
+                  type: HighPass
+                - frequency: 12000
+                  q: 0.707
+                  type: LowPass
+        export:
+            bitrate: 192k
+            debug: false
+            enabled: true
+            gain: 0
+            length: 12
+            normalization:
+                enabled: true
+                loudnessRange: 7
+                targetLUFS: -16
+                truePeak: -1
+            path: /data/clips
+            preCapture: 3
+            retention:
+                checkInterval: 60
+                debug: false
+                keepSpectrograms: true
+                maxAge: 30d
+                maxUsage: 80%
+                minClips: 10
+                policy: age
+            type: wav
+        ffmpegPath: /usr/bin/ffmpeg
+        soundLevel:
+            debug: false
+            debugRealtimeLogging: false
+            enabled: true
+            interval: 5
+        source: plughw:1,0
+        soxPath: /usr/bin/sox
+        streamTransport: auto
+    birdweather:
+        debug: false
+        enabled: true
+        id: '[redacted]'
+        locationAccuracy: 500
+        retrySettings:
+            backoffMultiplier: 2
+            enabled: true
+            initialDelay: 1
+            maxDelay: 30
+            maxRetries: 3
+        threshold: 0.7
+    dashboard:
+        locale: en
+        spectrogram:
+            enabled: true
+            mode: auto
+            raw: false
+            size: 400x200
+        summaryLimit: 10
+        temperatureUnit: celsius
+        thumbnails:
+            debug: false
+            fallbackPolicy: all
+            imageProvider: auto
+            recent: true
+            summary: true
+    dogBarkFilter:
+        confidence: 0.7
+        debug: false
+        enabled: true
+        remember: 15
+        species:
+            - Canis lupus familiaris
+    dynamicThreshold:
+        debug: false
+        enabled: true
+        min: 0.5
+        trigger: 0.9
+        validHours: 24
+    ebird:
+        apiKey: '[redacted]'
+        cacheTTL: 24
+        enabled: true
+        locale: en
+    falsePositiveFilter:
+        level: 2
+    interval: 1
+    log:
+        enabled: true
+        path: /var/log/birdnet/obs.log
+    logDeduplication:
+        enabled: true
+        healthCheckIntervalSeconds: 300
+    monitoring:
+        checkInterval: 60
+        cpu:
+            critical: 95
+            enabled: true
+            warning: 80
+        criticalResendInterval: 30
+        disk:
+            critical: 90
+            enabled: true
+            paths:
+                - /
+                - /data
+                - /home/user/birdnet
+            warning: 80
+        enabled: true
+        hysteresisPercent: 5
+        memory:
+            critical: 95
+            enabled: true
+            warning: 85
+    mqtt:
+        broker: mqtt://[host]:1883
+        debug: false
+        enabled: true
+        password: '[redacted]'
+        retain: true
+        retrySettings:
+            backoffMultiplier: 2
+            enabled: true
+            initialDelay: 1
+            maxDelay: 30
+            maxRetries: 3
+        tls:
+            caCert: /etc/ssl/mqtt/ca-cert.pem
+            clientCert: /etc/ssl/mqtt/client-cert.pem
+            clientKey: /etc/ssl/mqtt/client-key.pem
+            enabled: true
+            insecureSkipVerify: false
+        topic: '[redacted]'
+        username: '[redacted]'
+    privacyFilter:
+        confidence: 0.8
+        debug: false
+        enabled: true
+    processingTime: false
+    rtsp:
+        ffmpegParameters:
+            - -rtsp_transport
+            - tcp
+        health:
+            healthyDataThreshold: 60
+            monitoringInterval: 30
+        transport: tcp
+        urls:
+            - rtsp://[user]:[pass]@[host]:554/[path]
+            - rtsp://[user]:[pass]@[host]:554/[path]
+    species:
+        config:
+            Turdus migratorius:
+                actions:
+                    - command: /usr/local/bin/robin-alert.sh
+                      executeDefaults: true
+                      parameters:
+                        - --notify
+                      type: script
+                interval: 30
+                threshold: 0.7
+        exclude:
+            - Columba livia
+        include:
+            - Turdus migratorius
+            - Cardinalis cardinalis
+    speciesTracking:
+        enabled: true
+        newSpeciesWindowDays: 7
+        notificationSuppressionHours: 24
+        seasonalTracking:
+            enabled: true
+            seasons:
+                fall:
+                    startDay: 1
+                    startMonth: 9
+                spring:
+                    startDay: 1
+                    startMonth: 3
+                summer:
+                    startDay: 1
+                    startMonth: 6
+                winter:
+                    startDay: 1
+                    startMonth: 12
+            windowDays: 14
+        syncIntervalMinutes: 15
+        yearlyTracking:
+            enabled: true
+            resetDay: 1
+            resetMonth: 1
+            windowDays: 30
+    telemetry:
+        enabled: true
+        listen: 0.0.0.0:8090
+    weather:
+        debug: false
+        openWeather:
+            apiKey: '[redacted]'
+            enabled: true
+            endpoint: https://[host]/[path]
+            language: en
+            units: metric
+        pollInterval: 30
+        provider: openweather
+        wunderground:
+            apiKey: '[redacted]'
+            endpoint: https://[host]/[path]
+            stationId: '[redacted]'
+            units: m
+security:
+    allowSubnetBypass:
+        enabled: true
+        subnet: '[redacted]'
+    autoTls: true
+    baseUrl: https://birdnet.example.com:5500
+    basicAuth:
+        accessTokenExp: 24h
+        authCodeExp: 5m
+        clientId: '[redacted]'
+        clientSecret: '[redacted]'
+        enabled: true
+        password: '[redacted]'
+        redirectUri: https://birdnet.example.com/callback
+    debug: false
+    host: birdnet.example.com
+    oauthProviders:
+        - clientId: '[redacted]'
+          clientSecret: '[redacted]'
+          enabled: true
+          provider: google
+          redirectUri: https://birdnet.example.com/auth/google/callback
+          userId: '[redacted]'
+        - clientId: '[redacted]'
+          clientSecret: '[redacted]'
+          enabled: true
+          provider: github
+          userId: '[redacted]'
+    redirectToHTTPS: true
+    sessionDuration: 168h
+    sessionSecret: '[redacted]'
+sentry:
+    debug: false
+    enabled: true
+    sampleRate: 1
+webserver:
+    enabled: true
+    liveStream:
+        bitrate: 128
+        sampleRate: 48000
+    port: "8080"
