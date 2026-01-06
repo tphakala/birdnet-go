@@ -87,19 +87,22 @@ func TestNormalizeSpeciesConfigKeys(t *testing.T) {
 func TestNormalizeSpeciesConfigKeys_DuplicateAfterNormalization(t *testing.T) {
 	t.Parallel()
 
-	// When two keys normalize to the same value, last one wins (Go map iteration order)
-	// This test documents the behavior - in practice users shouldn't have duplicates
+	// When two keys normalize to the same value, mixed-case key takes precedence.
+	// This is deterministic (not random map iteration) due to the two-pass algorithm.
+	// In practice users shouldn't have duplicates, but this documents the behavior.
 	input := map[string]SpeciesConfig{
-		"American Robin": {Threshold: 0.8},
-		"american robin": {Threshold: 0.9},
+		"American Robin": {Threshold: 0.8},  // mixed-case: should win
+		"american robin": {Threshold: 0.9},  // lowercase: should be overwritten
 	}
 
 	result := NormalizeSpeciesConfigKeys(input)
 
 	// Should have only one key
 	require.Len(t, result, 1)
-	_, exists := result["american robin"]
-	assert.True(t, exists, "normalized key should exist")
+	config, exists := result["american robin"]
+	require.True(t, exists, "normalized key should exist")
+	// Verify mixed-case key value (0.8) overwrote lowercase key value (0.9)
+	assert.InDelta(t, 0.8, config.Threshold, 0.0001, "mixed-case key should take precedence")
 }
 
 func TestNormalizeSpeciesConfigKeys_NilMap(t *testing.T) {
