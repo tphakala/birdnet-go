@@ -130,16 +130,7 @@
 
   // Map style value (snake_case) to translation key (camelCase)
   function getStyleDescriptionKey(style: SpectrogramStyle): string {
-    switch (style) {
-      case 'scientific_dark':
-        return 'scientificDark';
-      case 'high_contrast_dark':
-        return 'highContrastDark';
-      case 'scientific':
-      case 'default':
-      default:
-        return style;
-    }
+    return style.replace(/(_\w)/g, k => k[1].toUpperCase());
   }
 
   // Extended option type for weather provider
@@ -1781,7 +1772,7 @@
 
             <!-- Style Cards Grid - 4 cards in a row with good sizing -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-              {#each spectrogramStyleOptions as style}
+              {#each spectrogramStyleOptions as style (style.value)}
                 {@const isSelected = currentSpectrogramStyle === style.value}
                 <button
                   type="button"
@@ -1793,7 +1784,7 @@
                 >
                   <!-- Preview thumbnail -->
                   <img
-                    src={`/ui/assets/images/spectrogram-preview-${style.value}.png`}
+                    src={`/assets/images/spectrogram-preview-${style.value}.png`}
                     alt={style.label}
                     class="w-full aspect-[4/3] object-cover rounded"
                   />

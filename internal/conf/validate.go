@@ -826,7 +826,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 			// Log warning but don't fail - default to "default" style
 			GetLogger().Warn("Invalid spectrogram style, using default",
 				logger.String("invalid_style", settings.Spectrogram.Style),
-				logger.String("valid_styles", "default, scientific_dark, high_contrast_dark, scientific"))
+				logger.String("valid_styles", strings.Join(validStyles, ", ")))
 			settings.Spectrogram.Style = SpectrogramStyleDefault
 		}
 	}
