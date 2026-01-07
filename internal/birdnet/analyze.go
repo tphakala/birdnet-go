@@ -67,7 +67,22 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	}
 
 	// Preparing input tensor with the sample data
-	copy(inputTensor.Float32s(), sample[0])
+	// If a PNG named "foo.png" exists, load its RGB NHWC data and use that
+	// as the model input. Otherwise fall back to the provided sample.
+	pngTensor, _, _, pngErr := LoadPNGToTensor("/home/mikeyk730/src/merlin-bird-id/samples/spectrograms/lesgol.png")
+	if pngErr == nil {
+		input := inputTensor.Float32s()
+		if len(input) == len(pngTensor) {
+			copy(input, pngTensor)
+		} else {
+			bn.Debug("PNG tensor length mismatch: input=%d png=%d", len(input), len(pngTensor))
+			copy(input, sample[0])
+		}
+	} else {
+		fmt.Printf("Error: %v\n", pngErr)
+
+		copy(inputTensor.Float32s(), sample[0])
+	}
 
 	// DEBUG: Log the length of the sample data
 	//log.Printf("Invoking tensor with sample length: %d", len(sample[0]))
@@ -106,6 +121,34 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	// Read the results from the output tensor
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	predictions := extractPredictions(outputTensor)
+
+	// Print predictions sorted descending by value: one per line with label and 3 decimals
+	type predItem struct {
+		idx   int
+		val   float32
+		label string
+	}
+
+	items := make([]predItem, 0, len(predictions))
+	for i, p := range predictions {
+		label := fmt.Sprintf("idx_%d", i)
+		if i < len(bn.Settings.BirdNET.Labels) {
+			label = bn.Settings.BirdNET.Labels[i]
+		}
+		items = append(items, predItem{idx: i, val: p, label: label})
+	}
+
+	sort.Slice(items, func(i, j int) bool { return items[i].val > items[j].val })
+	limit := 5
+	if len(items) < limit {
+		limit = len(items)
+	}
+	for i := 0; i < limit; i++ {
+		it := items[i]
+		fmt.Printf("%s: %.3f\n", it.label, it.val)
+	}
+
+
 
 	// Use optimized sigmoid function with buffer reuse
 	confidence := applySigmoidToPredictionsReuse(predictions, bn.Settings.BirdNET.Sensitivity, bn.confidenceBuffer)
@@ -217,10 +260,10 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 	for _, result := range results {
 		// Look up occurrence score for this species (nil map reads are safe)
 		occurrence := speciesOccurrences[result.Species]
-		
+
 		// Compute actual processing time
 		processingTime := time.Since(start)
-		
+
 		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, processingTime, occurrence)
 		notes = append(notes, note)
 	}
@@ -321,14 +364,15 @@ func applySigmoidToPredictions(predictions []float32, sensitivity float64) []flo
 // applySigmoidToPredictionsReuse applies the sigmoid function to predictions using a pre-allocated buffer.
 // Falls back to allocation if buffer size doesn't match predictions length to ensure correctness.
 func applySigmoidToPredictionsReuse(predictions []float32, sensitivity float64, buffer []float32) []float32 {
-	if len(buffer) != len(predictions) {
+	//if len(buffer) != len(predictions) {
 		// Fallback to allocation when buffer size doesn't match predictions length.
 		// This ensures correctness when model output size differs from expected buffer size.
-		return applySigmoidToPredictions(predictions, sensitivity)
-	}
-	
+	//	return applySigmoidToPredictions(predictions, sensitivity)
+	//}
+
 	for i, pred := range predictions {
-		buffer[i] = float32(customSigmoid(float64(pred), sensitivity))
+		//buffer[i] = float32(customSigmoid(float64(pred), sensitivity))
+		buffer[i] = float32(pred)
 	}
 	return buffer
 }
@@ -347,19 +391,19 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	if len(results) == 0 || k <= 0 {
 		return []datastore.Results{}
 	}
-	
+
 	if k >= len(results) {
 		// If k is greater than or equal to the number of results, sort everything
 		sortResults(results)
 		return results
 	}
-	
+
 	// Use partial sort to find top k elements
 	partialSort(results, k)
-	
+
 	// Sort the top k elements in descending order
 	sortResults(results[:k])
-	
+
 	return results[:k]
 }
 
@@ -370,14 +414,14 @@ func partialSort(results []datastore.Results, k int) {
 	if k >= n {
 		return
 	}
-	
+
 	// Use quickselect-like algorithm to partition the top k elements
 	left, right := 0, n-1
-	
+
 partitionLoop:
 	for left < right {
 		pivotIndex := partition(results, left, right)
-		
+
 		switch {
 		case pivotIndex == k-1:
 			// Perfect partition - we have exactly k elements
@@ -398,7 +442,7 @@ func partition(results []datastore.Results, left, right int) int {
 	// Use the rightmost element as pivot
 	pivot := results[right]
 	i := left - 1
-	
+
 	for j := left; j < right; j++ {
 		// Sort in descending order (higher confidence first)
 		if results[j].Confidence > pivot.Confidence {
@@ -406,7 +450,7 @@ func partition(results []datastore.Results, left, right int) int {
 			results[i], results[j] = results[j], results[i]
 		}
 	}
-	
+
 	results[i+1], results[right] = results[right], results[i+1]
 	return i + 1
 }
