@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -553,21 +554,18 @@ func TestEventTracker_ConcurrentTrackAndReset(t *testing.T) {
 
 	// Half goroutines track events, half reset events
 	for i := range goroutines {
-		wg.Add(1)
 		if i%2 == 0 {
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for range iterations {
 					tracker.TrackEvent(species, DatabaseSave)
 				}
-			}()
+			})
 		} else {
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for range iterations {
 					tracker.ResetEvent(species, DatabaseSave)
 				}
-			}()
+			})
 		}
 	}
 
@@ -645,10 +643,7 @@ func TestEventTracker_VeryLongSpeciesName(t *testing.T) {
 	tracker := NewEventTracker(60 * time.Second)
 
 	// Very long species name
-	longName := ""
-	for range 1000 {
-		longName += "A"
-	}
+	longName := strings.Repeat("A", 1000)
 
 	require.True(t, tracker.TrackEvent(longName, DatabaseSave))
 	assert.False(t, tracker.TrackEvent(longName, DatabaseSave))
