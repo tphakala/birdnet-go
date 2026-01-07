@@ -303,7 +303,7 @@ func setDefaultConfig() {
 	// Live stream configuration
 	viper.SetDefault("webserver.livestream.debug", false)
 	viper.SetDefault("webserver.livestream.bitrate", 128)
-	viper.SetDefault("webserver.livestream.sampleRate", 48000)
+	viper.SetDefault("webserver.livestream.sampleRate", 22050)
 	viper.SetDefault("webserver.livestream.segmentLength", 2)
 	viper.SetDefault("webserver.livestream.ffmpegLogLevel", "warning")
 
