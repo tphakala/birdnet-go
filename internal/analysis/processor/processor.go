@@ -549,10 +549,10 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 		p.handleHumanDetection(item, speciesLowercase, result)
 
 		// Determine confidence threshold and check filters
-		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
+		baseThreshold := p.getBaseConfidenceThreshold(commonName, scientificName)
 
 		// Check if detection should be filtered
-		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source.ID)
+		shouldSkip, _ := p.shouldFilterDetection(result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID)
 		if shouldSkip {
 			continue
 		}
@@ -609,7 +609,7 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdn
 }
 
 // shouldFilterDetection checks if a detection should be filtered out
-func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, speciesLowercase string, baseThreshold float32, source string) (shouldFilter bool, confidenceThreshold float32) {
+func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source string) (shouldFilter bool, confidenceThreshold float32) {
 	// Check human detection privacy filter
 	if strings.Contains(strings.ToLower(commonName), speciesHuman) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
@@ -619,7 +619,8 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	if p.Settings.Realtime.DynamicThreshold.Enabled {
 		// Check if this species has a custom user-configured threshold (> 0)
 		// Species may be in Config only for custom actions/interval without threshold set
-		config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]
+		// Use lookupSpeciesConfig to support both common name and scientific name lookups
+		config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
 		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold, isCustomThreshold)
 	} else {
@@ -765,12 +766,14 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 }
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
-func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 {
-	// Check if species has a custom threshold in the new structure
-	if config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]; exists {
+// It supports lookup by both common name and scientific name for consistency with include/exclude matching.
+func (p *Processor) getBaseConfidenceThreshold(commonName, scientificName string) float32 {
+	// Check if species has a custom threshold using both common and scientific name lookup
+	if config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName); exists {
 		if p.Settings.Debug {
 			GetLogger().Debug("using custom confidence threshold",
-				logger.String("species", speciesLowercase),
+				logger.String("commonName", commonName),
+				logger.String("scientificName", scientificName),
 				logger.Float64("threshold", config.Threshold),
 				logger.String("operation", "custom_threshold_lookup"))
 		}
@@ -1094,13 +1097,12 @@ func (p *Processor) pendingDetectionsFlusher() {
 
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(detection *Detections) []Action {
-	speciesName := strings.ToLower(detection.Note.CommonName)
-
-	// Check if species has custom configuration
-	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
+	// Check if species has custom configuration using both common and scientific name lookup
+	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, detection.Note.CommonName, detection.Note.ScientificName); exists {
 		if p.Settings.Debug {
 			GetLogger().Debug("species config exists for custom actions",
-				logger.String("species", speciesName),
+				logger.String("commonName", detection.Note.CommonName),
+				logger.String("scientificName", detection.Note.ScientificName),
 				logger.String("operation", "custom_action_check"))
 		}
 

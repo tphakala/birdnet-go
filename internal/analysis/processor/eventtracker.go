@@ -183,6 +183,45 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	return allowEvent
 }
 
+// TrackEventWithNames checks if an event for a given species (by common or scientific name) should be processed.
+// This method supports lookup by both common name and scientific name, consistent with include/exclude matching.
+func (et *EventTracker) TrackEventWithNames(commonName, scientificName string, eventType EventType) bool {
+	// Normalize common name for map key lookups
+	normalizedCommonName := strings.ToLower(commonName)
+
+	et.Mutex.RLock()
+
+	handler, exists := et.Handlers[eventType]
+	if !exists {
+		et.Mutex.RUnlock()
+		return false
+	}
+
+	// Determine the effective timeout for this species using both common and scientific name lookup
+	effectiveTimeout := et.DefaultInterval
+
+	// Use lookupSpeciesConfig to support both common name and scientific name
+	if speciesConfig, found := lookupSpeciesConfig(et.SpeciesConfigs, commonName, scientificName); found {
+		if speciesConfig.Interval > 0 {
+			effectiveTimeout = time.Duration(speciesConfig.Interval) * time.Second
+		} else if speciesConfig.Interval < 0 {
+			log := GetLogger()
+			log.Warn("Negative interval configured for species, using default interval instead",
+				logger.Int("interval", speciesConfig.Interval),
+				logger.String("commonName", commonName),
+				logger.String("scientificName", scientificName))
+		}
+	}
+
+	et.Mutex.RUnlock()
+
+	handler.Mutex.Lock()
+	allowEvent := handler.shouldHandleEventLocked(normalizedCommonName, effectiveTimeout)
+	handler.Mutex.Unlock()
+
+	return allowEvent
+}
+
 // ResetEvent resets the state for a specific species and event type, clearing any tracked event timing.
 func (et *EventTracker) ResetEvent(species string, eventType EventType) {
 	// Normalize species key consistently
