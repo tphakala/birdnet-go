@@ -48,7 +48,7 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
 
-	// Get the input tensor from the interpreter
+// Get the input tensor from the interpreter
 	spectrogramInputTensor := bn.SpectrogramInterpreter.GetInputTensor(0)
 	if spectrogramInputTensor == nil {
 		err := errors.New(fmt.Errorf("cannot get spectrogram input tensor")).
@@ -95,6 +95,24 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		}
 	} else {
 		fmt.Printf("spectrogram output tensor is nil\n")
+	}
+
+	hop_size := 128
+	window_size := 512
+	hops := 512 //(len(sample[0]) - window_size) / hop_size + 1
+	for i := 0; i < hops; i++ {
+		startIdx := i * hop_size
+		endIdx := startIdx + window_size
+
+		fmt.Printf("hop %d: startIdx=%d endIdx=%d\n", i, startIdx, endIdx)
+
+		//todo: code to run the specrogram model is above this loop.
+		// we need to modify the code to run the model for each hop.
+		// the input tensor needs to be set for each hop.
+		//the input is the 512 samples from startIdx to endIdx.
+		//then invoke the interpreter and get the output.
+		//finally, aggregate the outputs for all hops. the final shape
+		// should be (size of output from spectrogram model, number of iterations)
 	}
 
 
