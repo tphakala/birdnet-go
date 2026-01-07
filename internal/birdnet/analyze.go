@@ -40,10 +40,63 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		span.SetData("sample_size", len(sample[0]))
 	}
 
+	fmt.Printf("sample count: %d\n", len(sample))
+	fmt.Printf("sample size: %d\n", len(sample[0]))
+
 	// implement locking to prevent concurrent access to the interpreter, not
 	// necessarily best way to manage multiple audio sources but works for now
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
+
+	// Get the input tensor from the interpreter
+	spectrogramInputTensor := bn.SpectrogramInterpreter.GetInputTensor(0)
+	if spectrogramInputTensor == nil {
+		err := errors.New(fmt.Errorf("cannot get spectrogram input tensor")).
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("interpreter_state", "initialized").
+			Build()
+
+		// Record error in metrics via span finish
+		span.SetTag("error", "true")
+		span.SetData("error_type", "input_tensor_nil")
+
+		return nil, err
+	}
+
+	if status := bn.SpectrogramInterpreter.Invoke(); status != tflite.OK {
+		err := errors.Newf("spectrogram tensor invoke failed: %v", status).
+			Category(errors.CategoryAudio).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("sample_length", len(sample[0])).
+			Context("status_code", status).
+			Timing("prediction-invoke", time.Since(start)).
+			Build()
+
+		span.SetTag("error", "true")
+		span.SetData("error_type", "invoke_failed")
+		span.SetData("status_code", status)
+
+		return nil, err
+	}
+
+	spectrogramOutputTensor := bn.SpectrogramInterpreter.GetOutputTensor(0)
+
+	// Print spectrogram output tensor to terminal for debugging
+	if spectrogramOutputTensor != nil {
+		specData := spectrogramOutputTensor.Float32s()
+		dims := make([]int, spectrogramOutputTensor.NumDims())
+		for i := 0; i < spectrogramOutputTensor.NumDims(); i++ {
+			dims[i] = spectrogramOutputTensor.Dim(i)
+		}
+		fmt.Printf("Spectrogram output tensor dims: %v len=%d\n", dims, len(specData))
+		for i, v := range specData {
+			fmt.Printf("spectrogram[%d]: %.3f\n", i, v)
+		}
+	} else {
+		fmt.Printf("spectrogram output tensor is nil\n")
+	}
+
 
 	// Get the input tensor from the interpreter
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
@@ -74,15 +127,10 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		input := inputTensor.Float32s()
 		if len(input) == len(pngTensor) {
 			copy(input, pngTensor)
-		} else {
-			bn.Debug("PNG tensor length mismatch: input=%d png=%d", len(input), len(pngTensor))
-			copy(input, sample[0])
 		}
-	} else {
-		fmt.Printf("Error: %v\n", pngErr)
-
-		copy(inputTensor.Float32s(), sample[0])
 	}
+
+	// copy(inputTensor.Float32s(), sample[0])
 
 	// DEBUG: Log the length of the sample data
 	//log.Printf("Invoking tensor with sample length: %d", len(sample[0]))
@@ -123,30 +171,30 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	predictions := extractPredictions(outputTensor)
 
 	// Print predictions sorted descending by value: one per line with label and 3 decimals
-	type predItem struct {
-		idx   int
-		val   float32
-		label string
-	}
+	// type predItem struct {
+	// 	idx   int
+	// 	val   float32
+	// 	label string
+	// }
 
-	items := make([]predItem, 0, len(predictions))
-	for i, p := range predictions {
-		label := fmt.Sprintf("idx_%d", i)
-		if i < len(bn.Settings.BirdNET.Labels) {
-			label = bn.Settings.BirdNET.Labels[i]
-		}
-		items = append(items, predItem{idx: i, val: p, label: label})
-	}
+	// items := make([]predItem, 0, len(predictions))
+	// for i, p := range predictions {
+	// 	label := fmt.Sprintf("idx_%d", i)
+	// 	if i < len(bn.Settings.BirdNET.Labels) {
+	// 		label = bn.Settings.BirdNET.Labels[i]
+	// 	}
+	// 	items = append(items, predItem{idx: i, val: p, label: label})
+	// }
 
-	sort.Slice(items, func(i, j int) bool { return items[i].val > items[j].val })
-	limit := 5
-	if len(items) < limit {
-		limit = len(items)
-	}
-	for i := 0; i < limit; i++ {
-		it := items[i]
-		fmt.Printf("%s: %.3f\n", it.label, it.val)
-	}
+	// sort.Slice(items, func(i, j int) bool { return items[i].val > items[j].val })
+	// limit := 5
+	// if len(items) < limit {
+	// 	limit = len(items)
+	// }
+	// for i := 0; i < limit; i++ {
+	// 	it := items[i]
+	// 	fmt.Printf("%s: %.3f\n", it.label, it.val)
+	// }
 
 
 
