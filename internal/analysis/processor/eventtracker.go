@@ -131,56 +131,12 @@ func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map
 
 // TrackEvent checks if an event for a given species and event type should be processed.
 // It utilizes the respective event handler to make this determination, considering species-specific intervals.
+// This is a convenience wrapper around TrackEventWithNames for callers that only have the species name.
 func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
-	// Normalize species key consistently for all map lookups
-	normalizedSpecies := strings.ToLower(species)
-
-	// LOCKING STRATEGY:
-	// 1. First, we acquire a read lock on the EventTracker mutex to safely access shared maps (Handlers and SpeciesConfigs)
-	//    This protects against concurrent access to these maps by multiple goroutines
-	et.Mutex.RLock()
-
-	handler, exists := et.Handlers[eventType]
-	if !exists {
-		et.Mutex.RUnlock()
-		return false // Should not happen if EventTracker is initialized correctly
-	}
-
-	// Determine the effective timeout for this species and event type
-	effectiveTimeout := et.DefaultInterval // Start with the global default
-
-	if speciesConfig, ok := et.SpeciesConfigs[normalizedSpecies]; ok {
-		if speciesConfig.Interval > 0 {
-			// Custom interval is set and valid (positive value)
-			effectiveTimeout = time.Duration(speciesConfig.Interval) * time.Second
-		} else if speciesConfig.Interval < 0 {
-			// Log a warning for negative interval values
-			log := GetLogger()
-			log.Warn("Negative interval configured for species, using default interval instead",
-				logger.Int("interval", speciesConfig.Interval),
-				logger.String("species", species))
-			// Continue using the default interval
-		}
-		// For zero interval, silently use the default interval (existing behavior)
-	}
-
-	// 2. We unlock the EventTracker mutex BEFORE acquiring the handler's mutex
-	//    This is critical to prevent deadlocks that could occur if:
-	//    - Thread A: Holds EventTracker lock, waiting for Handler lock
-	//    - Thread B: Holds Handler lock, waiting for EventTracker lock
-	//    By releasing the outer lock first, we establish a consistent lock ordering
-	et.Mutex.RUnlock()
-
-	// 3. Now we lock the handler's mutex to safely access and update its LastEventTime map
-	//    This ensures thread-safety for the specific handler while allowing other event types
-	//    to be processed concurrently
-	handler.Mutex.Lock()
-	// Use the shared helper method to evaluate whether the event should be handled
-	// Pass the effective timeout as a parameter rather than modifying handler.Timeout
-	allowEvent := handler.shouldHandleEventLocked(normalizedSpecies, effectiveTimeout)
-	handler.Mutex.Unlock()
-
-	return allowEvent
+	// Delegate to TrackEventWithNames with empty scientific name.
+	// The fast path lookup by lowercase common name will produce identical behavior
+	// to the previous direct map lookup.
+	return et.TrackEventWithNames(species, "", eventType)
 }
 
 // TrackEventWithNames checks if an event for a given species (by common or scientific name) should be processed.
