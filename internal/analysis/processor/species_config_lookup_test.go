@@ -2,6 +2,7 @@ package processor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -186,4 +187,56 @@ func TestLookupSpeciesConfig_MultipleSpecies(t *testing.T) {
 	config, found = lookupSpeciesConfig(configMap, "Blue Jay", "Cyanocitta cristata")
 	assert.False(t, found)
 	assert.Equal(t, conf.SpeciesConfig{}, config)
+}
+
+func TestTrackEventWithNames_TrackingKeyFallback(t *testing.T) {
+	t.Parallel()
+
+	// Create tracker with species config keyed by scientific name
+	speciesConfigs := map[string]conf.SpeciesConfig{
+		"turdus migratorius": {Interval: 120}, // Scientific name
+	}
+	tracker := NewEventTrackerWithConfig(60*time.Second, speciesConfigs)
+
+	// Test 1: Empty common name falls back to scientific name for tracking key
+	// First call should allow the event
+	allowed := tracker.TrackEventWithNames("", "Turdus migratorius", LogToFile)
+	assert.True(t, allowed, "first event should be allowed")
+
+	// Second immediate call should be blocked (same tracking key)
+	allowed = tracker.TrackEventWithNames("", "Turdus migratorius", LogToFile)
+	assert.False(t, allowed, "second event should be blocked due to rate limiting")
+
+	// Test 2: Both names empty should allow the event (can't rate-limit)
+	allowed = tracker.TrackEventWithNames("", "", LogToFile)
+	assert.True(t, allowed, "event with both names empty should be allowed")
+
+	// Call again - should still allow since there's no tracking key
+	allowed = tracker.TrackEventWithNames("", "", LogToFile)
+	assert.True(t, allowed, "event with both names empty should always be allowed")
+}
+
+func TestTrackEventWithNames_ScientificNameConfig(t *testing.T) {
+	t.Parallel()
+
+	// Create tracker with species config keyed by scientific name
+	speciesConfigs := map[string]conf.SpeciesConfig{
+		"turdus migratorius": {Interval: 1}, // 1 second interval
+	}
+	tracker := NewEventTrackerWithConfig(60*time.Second, speciesConfigs)
+
+	// Event with common name not in config but scientific name is
+	allowed := tracker.TrackEventWithNames("American Robin", "Turdus migratorius", DatabaseSave)
+	assert.True(t, allowed, "first event should be allowed")
+
+	// Immediate second call should be blocked
+	allowed = tracker.TrackEventWithNames("American Robin", "Turdus migratorius", DatabaseSave)
+	assert.False(t, allowed, "second event should be blocked")
+
+	// Wait for interval to expire
+	time.Sleep(1100 * time.Millisecond)
+
+	// Should be allowed again
+	allowed = tracker.TrackEventWithNames("American Robin", "Turdus migratorius", DatabaseSave)
+	assert.True(t, allowed, "event after interval should be allowed")
 }

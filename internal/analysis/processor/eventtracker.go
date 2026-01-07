@@ -142,8 +142,19 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 // TrackEventWithNames checks if an event for a given species (by common or scientific name) should be processed.
 // This method supports lookup by both common name and scientific name, consistent with include/exclude matching.
 func (et *EventTracker) TrackEventWithNames(commonName, scientificName string, eventType EventType) bool {
-	// Normalize common name for map key lookups
-	normalizedCommonName := strings.ToLower(commonName)
+	// Determine tracking key: prefer common name, fall back to scientific name.
+	// This ensures events are rate-limited per-species even if common name is missing.
+	trackingKey := commonName
+	if trackingKey == "" {
+		trackingKey = scientificName
+	}
+
+	// If both names are empty, allow the event (can't rate-limit without a key)
+	if trackingKey == "" {
+		return true
+	}
+
+	normalizedTrackingKey := strings.ToLower(trackingKey)
 
 	et.Mutex.RLock()
 
@@ -172,7 +183,7 @@ func (et *EventTracker) TrackEventWithNames(commonName, scientificName string, e
 	et.Mutex.RUnlock()
 
 	handler.Mutex.Lock()
-	allowEvent := handler.shouldHandleEventLocked(normalizedCommonName, effectiveTimeout)
+	allowEvent := handler.shouldHandleEventLocked(normalizedTrackingKey, effectiveTimeout)
 	handler.Mutex.Unlock()
 
 	return allowEvent
