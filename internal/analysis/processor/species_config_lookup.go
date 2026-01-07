@@ -35,12 +35,11 @@ func lookupSpeciesConfig(configMap map[string]conf.SpeciesConfig, commonName, sc
 		}
 	}
 
-	// Fallback: O(n) iteration checking scientific name
+	// Fallback: O(n) iteration checking scientific name (case-insensitive)
 	// This allows users to configure species by scientific name in config files
 	if scientificName != "" {
-		scientificNameLower := strings.ToLower(scientificName)
 		for key, config := range configMap {
-			if strings.EqualFold(key, scientificNameLower) {
+			if strings.EqualFold(key, scientificName) {
 				return config, true
 			}
 		}
