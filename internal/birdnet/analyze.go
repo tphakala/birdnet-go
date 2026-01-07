@@ -3,7 +3,11 @@ package birdnet
 import (
 	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"math"
+	"os"
 	"sort"
 	"time"
 
@@ -64,55 +68,138 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		return nil, err
 	}
 
-	if status := bn.SpectrogramInterpreter.Invoke(); status != tflite.OK {
-		err := errors.Newf("spectrogram tensor invoke failed: %v", status).
-			Category(errors.CategoryAudio).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-			Context("sample_length", len(sample[0])).
-			Context("status_code", status).
-			Timing("prediction-invoke", time.Since(start)).
-			Build()
+	// Run the spectrogram model for each hop and aggregate outputs.
+	hopSize := 128
+	windowSize := 512
+	sampleLen := len(sample[0])
+	hops := 512
+	//hops = (sampleLen-windowSize)/hopSize + 1
 
-		span.SetTag("error", "true")
-		span.SetData("error_type", "invoke_failed")
-		span.SetData("status_code", status)
+	// Prepare buffers for aggregated spectrogram formatted for the classifier.
+	// Classifier expects NHWC (1,128,512,3) -> we'll create a float32 buffer
+	// with shape (128, hops, 3) flattened as NHWC.
+	height := 128
+	channels := 3
+	width := hops
+	classBuf := make([]float32, height*width*channels)
+	var colBuf []byte
 
-		return nil, err
-	}
-
-	spectrogramOutputTensor := bn.SpectrogramInterpreter.GetOutputTensor(0)
-
-	// Print spectrogram output tensor to terminal for debugging
-	if spectrogramOutputTensor != nil {
-		specData := spectrogramOutputTensor.Float32s()
-		dims := make([]int, spectrogramOutputTensor.NumDims())
-		for i := 0; i < spectrogramOutputTensor.NumDims(); i++ {
-			dims[i] = spectrogramOutputTensor.Dim(i)
+	for hi := 0; hi < hops; hi++ {
+		startIdx := hi * hopSize
+		// prepare input window (zero-pad past end)
+		input := spectrogramInputTensor.Float32s()
+		for j := 0; j < len(input) && j < windowSize; j++ {
+			srcIdx := startIdx + j
+			if srcIdx < sampleLen {
+				input[j] = sample[0][srcIdx]
+			} else {
+				input[j] = 0.0
+			}
 		}
+
+		fmt.Printf("hop %d: startIdx=%d\n", hi, startIdx)
+
+		if status := bn.SpectrogramInterpreter.Invoke(); status != tflite.OK {
+			err := errors.Newf("spectrogram tensor invoke failed (hop=%d): %v", hi, status).
+				Category(errors.CategoryAudio).
+				ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+				Context("hop_index", hi).
+				Context("status_code", status).
+				Timing("spectrogram-invoke", time.Since(start)).
+				Build()
+
+			span.SetTag("error", "true")
+			span.SetData("error_type", "spectrogram_invoke_failed")
+			span.SetData("status_code", status)
+
+			return nil, err
+		}
+
+		outTensor := bn.SpectrogramInterpreter.GetOutputTensor(0)
+		if outTensor == nil {
+			return nil, errors.New(fmt.Errorf("spectrogram output tensor nil")).
+				Category(errors.CategoryModelInit).
+				ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+				Context("hop_index", hi).
+				Build()
+		}
+
+		specData := outTensor.Float32s()
+		dims := make([]int, outTensor.NumDims())
+		for i := 0; i < outTensor.NumDims(); i++ {
+			dims[i] = outTensor.Dim(i)
+		}
+
 		fmt.Printf("Spectrogram output tensor dims: %v len=%d\n", dims, len(specData))
-		for i, v := range specData {
-			fmt.Printf("spectrogram[%d]: %.3f\n", i, v)
+
+		output_size := outTensor.Dim(0)
+		if len(colBuf) != output_size {
+			colBuf = make([]byte, output_size)
 		}
-	} else {
-		fmt.Printf("spectrogram output tensor is nil\n")
+		outTensor.CopyToBuffer(&colBuf[0])
+
+		// Fill classifier buffer: duplicate byte values into RGB channels.
+		for y := 0; y < height; y++ {
+			var v float32
+			if y < output_size {
+				v = float32(colBuf[y])
+			} else {
+				v = 0.0
+			}
+			base := ((y*width)+hi)*channels
+			classBuf[base+0] = v
+			classBuf[base+1] = v
+			classBuf[base+2] = v
+		}
 	}
 
-	hop_size := 128
-	window_size := 512
-	hops := 512 //(len(sample[0]) - window_size) / hop_size + 1
-	for i := 0; i < hops; i++ {
-		startIdx := i * hop_size
-		endIdx := startIdx + window_size
-
-		fmt.Printf("hop %d: startIdx=%d endIdx=%d\n", i, startIdx, endIdx)
-
-		//todo: code to run the specrogram model is above this loop.
-		// we need to modify the code to run the model for each hop.
-		// the input tensor needs to be set for each hop.
-		//the input is the 512 samples from startIdx to endIdx.
-		//then invoke the interpreter and get the output.
-		//finally, aggregate the outputs for all hops. the final shape
-		// should be (size of output from spectrogram model, number of iterations)
+	// Write `classBuf` to PNG for debugging (dimensions: width=hops, height=128)
+	if len(classBuf) > 0 {
+		pngW := width
+		pngH := height
+		// file path can be changed as needed
+		outPath := "/tmp/classbuf_debug.png"
+		img := image.NewRGBA(image.Rect(0, 0, pngW, pngH))
+		for y := 0; y < pngH; y++ {
+			for x := 0; x < pngW; x++ {
+				base := ((y*pngW)+x)*channels
+				var r, g, b uint8
+				if base+2 < len(classBuf) {
+					rr := classBuf[base+0]
+					gg := classBuf[base+1]
+					bb := classBuf[base+2]
+					if rr < 0 {
+						rr = 0
+					}
+					if gg < 0 {
+						gg = 0
+					}
+					if bb < 0 {
+						bb = 0
+					}
+					if rr > 255 {
+						rr = 255
+					}
+					if gg > 255 {
+						gg = 255
+					}
+					if bb > 255 {
+						bb = 255
+					}
+					r = uint8(rr)
+					g = uint8(gg)
+					b = uint8(bb)
+				}
+				img.SetRGBA(x, y, color.RGBA{r, g, b, 255})
+			}
+		}
+		if f, err := os.Create(outPath); err == nil {
+			_ = png.Encode(f, img)
+			_ = f.Close()
+			fmt.Printf("Wrote debug PNG: %s\n", outPath)
+		} else {
+			fmt.Printf("Failed to create debug PNG: %v\n", err)
+		}
 	}
 
 
@@ -138,17 +225,23 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	}
 
 	// Preparing input tensor with the sample data
-	// If a PNG named "foo.png" exists, load its RGB NHWC data and use that
-	// as the model input. Otherwise fall back to the provided sample.
+	// Prefer the aggregated spectrogram (`classBuf`) formatted to NHWC if sizes match.
 	pngTensor, _, _, pngErr := LoadPNGToTensor("/home/mikeyk730/src/merlin-bird-id/samples/spectrograms/lesgol.png")
-	if pngErr == nil {
-		input := inputTensor.Float32s()
-		if len(input) == len(pngTensor) {
-			copy(input, pngTensor)
+	input := inputTensor.Float32s()
+	if len(input) == len(classBuf) {
+		copy(input, classBuf)
+	} else if pngErr == nil && len(input) == len(pngTensor) {
+		copy(input, pngTensor)
+	} else {
+		// Fallback to provided sample (if it matches length), otherwise zero-fill
+		if len(input) == len(sample[0]) {
+			copy(input, sample[0])
+		} else {
+			for i := range input {
+				input[i] = 0.0
+			}
 		}
 	}
-
-	// copy(inputTensor.Float32s(), sample[0])
 
 	// DEBUG: Log the length of the sample data
 	//log.Printf("Invoking tensor with sample length: %d", len(sample[0]))
