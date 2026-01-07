@@ -220,23 +220,26 @@ func TestTrackEventWithNames_ScientificNameConfig(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker with species config keyed by scientific name
+	// Note: SpeciesConfig.Interval is in seconds, so 1s is the minimum configurable.
+	// This test verifies that lookupSpeciesConfig finds the config by scientific name
+	// and applies the custom interval for rate-limiting.
 	speciesConfigs := map[string]conf.SpeciesConfig{
-		"turdus migratorius": {Interval: 1}, // 1 second interval
+		"turdus migratorius": {Interval: 1}, // 1 second (minimum configurable)
 	}
 	tracker := NewEventTrackerWithConfig(60*time.Second, speciesConfigs)
 
-	// Event with common name not in config but scientific name is
+	// Event with common name not in config but scientific name is - verifies lookup works
 	allowed := tracker.TrackEventWithNames("American Robin", "Turdus migratorius", DatabaseSave)
 	assert.True(t, allowed, "first event should be allowed")
 
-	// Immediate second call should be blocked
+	// Immediate second call should be blocked - verifies custom interval was found
 	allowed = tracker.TrackEventWithNames("American Robin", "Turdus migratorius", DatabaseSave)
-	assert.False(t, allowed, "second event should be blocked")
+	assert.False(t, allowed, "second event should be blocked (custom 1s interval found via scientific name)")
 
-	// Wait for interval to expire
+	// Wait for interval to expire (1s + 100ms buffer for CI reliability)
 	time.Sleep(1100 * time.Millisecond)
 
-	// Should be allowed again
+	// Should be allowed again after interval expiry
 	allowed = tracker.TrackEventWithNames("American Robin", "Turdus migratorius", DatabaseSave)
 	assert.True(t, allowed, "event after interval should be allowed")
 }
