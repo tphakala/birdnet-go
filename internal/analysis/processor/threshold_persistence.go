@@ -133,7 +133,8 @@ func (p *Processor) persistDynamicThresholds() error {
 		}
 
 		// Reconstruct base threshold for reference
-		baseThreshold := p.getBaseConfidenceThreshold(speciesName)
+		// Note: scientific name not available here, but common name lookup is sufficient
+		baseThreshold := p.getBaseConfidenceThreshold(speciesName, "")
 
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
 			SpeciesName:   speciesName,

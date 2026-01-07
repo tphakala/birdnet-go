@@ -539,10 +539,8 @@ func (a *LogAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	speciesName := strings.ToLower(a.Note.CommonName)
-
-	// Check if the event should be handled for this species
-	if !a.EventTracker.TrackEvent(speciesName, LogToFile) {
+	// Check if the event should be handled for this species (supports scientific name lookup)
+	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, LogToFile) {
 		return nil
 	}
 
@@ -577,10 +575,8 @@ func (a *DatabaseAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	speciesName := strings.ToLower(a.Note.CommonName)
-
-	// Check event frequency
-	if !a.EventTracker.TrackEvent(speciesName, DatabaseSave) {
+	// Check event frequency (supports scientific name lookup)
+	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, DatabaseSave) {
 		return nil
 	}
 
@@ -904,10 +900,8 @@ func (a *BirdWeatherAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	speciesName := strings.ToLower(a.Note.CommonName)
-
-	// Check event frequency
-	if !a.EventTracker.TrackEvent(speciesName, BirdWeatherSubmit) {
+	// Check event frequency (supports scientific name lookup)
+	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, BirdWeatherSubmit) {
 		return nil
 	}
 
@@ -923,7 +917,7 @@ func (a *BirdWeatherAction) Execute(data any) error {
 			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", speciesName),
+				logger.String("species", a.Note.CommonName),
 				logger.Float64("confidence", a.Note.Confidence),
 				logger.Float64("threshold", float64(a.Settings.Realtime.Birdweather.Threshold)),
 				logger.String("operation", "birdweather_threshold_check"))
@@ -1035,10 +1029,8 @@ func (a *MqttAction) Execute(data any) error {
 			Build()
 	}
 
-	speciesName := strings.ToLower(a.Note.CommonName)
-
-	// Check event frequency
-	if !a.EventTracker.TrackEvent(speciesName, MQTTPublish) {
+	// Check event frequency (supports scientific name lookup)
+	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, MQTTPublish) {
 		return nil
 	}
 
@@ -1192,10 +1184,8 @@ func (a *SSEAction) Execute(data any) error {
 		return nil // Silently skip if no broadcaster is configured
 	}
 
-	speciesName := strings.ToLower(a.Note.CommonName)
-
-	// Check event frequency
-	if !a.EventTracker.TrackEvent(speciesName, SSEBroadcast) {
+	// Check event frequency (supports scientific name lookup)
+	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, SSEBroadcast) {
 		return nil
 	}
 
