@@ -244,7 +244,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.32/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.33/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
