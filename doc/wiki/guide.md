@@ -541,7 +541,7 @@ sudo journalctl -fu birdnet-go
 
 4. **Low detection rate or poor performance**:
    - Verify your latitude/longitude settings are correct in config.yaml
-   - Check if audio device is working properly: `arecord -d 5 -f S16_LE -r 48000 test.wav`
+   - Check if audio device is working properly: `arecord -d 5 -f S16_LE -r 22050 test.wav`
    - Adjust sensitivity and threshold settings in the configuration file
 
 5. **Constant 'WARNING: BirdNET processing time exceeded buffer length' messages:**
@@ -2887,8 +2887,8 @@ The endpoints include built-in rate limiting (10 requests per minute per IP) to 
 
 #### Detection Stream Endpoint
 
-**URL:** `GET /api/v2/detections/stream`  
-**Authentication:** None required (public endpoint)  
+**URL:** `GET /api/v2/detections/stream`
+**Authentication:** None required (public endpoint)
 **Rate Limiting:** 10 connections per minute per IP address
 
 The SSE stream sends different types of events:
@@ -2949,8 +2949,8 @@ Sent every 30 seconds to keep the connection alive and provide connection status
 
 #### Connection Status Endpoint
 
-**URL:** `GET /api/v2/sse/status`  
-**Authentication:** None required (public endpoint)  
+**URL:** `GET /api/v2/sse/status`
+**Authentication:** None required (public endpoint)
 **Rate Limiting:** Standard API rate limits apply
 
 Returns information about the current SSE connection status:

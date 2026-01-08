@@ -116,7 +116,7 @@ func readWAVBuffered(file *os.File, settings *conf.Settings, callback AudioChunk
 	// Using 8 chunks worth of data = 1,152,000 samples
 	// This provides 24 seconds of buffered audio
 	// Memory usage: 1,152,000 samples * 2 bytes = 2.3MB
-	bufferSize := 1_152_000
+	bufferSize := 22050 * 3 * 8
 	buf := &audio.IntBuffer{
 		Data:   make([]int, bufferSize),
 		Format: &audio.Format{SampleRate: int(conf.SampleRate), NumChannels: conf.NumChannels},

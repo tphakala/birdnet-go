@@ -150,7 +150,7 @@ realtime:
 **Example:**
 
 ```bash
-ffmpeg -rtsp_transport tcp -timeout 5000000 -i rtsp://usser:password@192.168.1.100/stream -vn -f s16le -ar 48000 -ac 1 -f null -
+ffmpeg -rtsp_transport tcp -timeout 5000000 -i rtsp://usser:password@192.168.1.100/stream -vn -f s16le -ar 22050 -ac 1 -f null -
 ```
 
 ### FFmpeg Parameter Defaults Reference

@@ -47,7 +47,7 @@ const (
 	hlsAudioBitDepth     = 16    // Audio bit depth for encoding
 	hlsMinBitrate        = 16    // Minimum audio bitrate in kbps
 	hlsMaxBitrate        = 320   // Maximum audio bitrate in kbps
-	hlsDefaultSampleRate = 48000 // Default audio sample rate in Hz
+	hlsDefaultSampleRate = 22050 // Default audio sample rate in Hz
 	hlsCleanupDelay      = 5     // Delay in seconds before cleanup
 )
 

@@ -59,7 +59,7 @@ Output written to output/soundscape.wav.txt
 Real-Time Analysis
 
 Real-time analysis requires an audio capture device from which audio is
-ingested for analysis. The input audio format should be 16-bit, 48000
+ingested for analysis. The input audio format should be 16-bit, 22050
 Hz. Stereo input is acceptable, as it is downmixed to one channel within
 BirdNET-Go. Mismatched capture settings may reduce accuracy.
 
@@ -98,10 +98,10 @@ On Linux use of PulseAudio backend is recommended.
 Configuring Pulse Audio on Linux
 
 Make sure Pulse Audio is installed on your system and set Pulse Audio to output
-16bit 48000 hz audio by editing /etc/pulse/daemon.conf to contain following
+16bit 22050 hz audio by editing /etc/pulse/daemon.conf to contain following
 
 default-sample-format = s16le
-default-sample-rate = 48000
+default-sample-rate = 22050
 
 Node and BirdNET settings
 

@@ -244,7 +244,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
   // Sample rate: specific valid values
   if ('sampleRate' in settings) {
     const validRates = [16000, 22050, 24000, 44100, 48000];
-    const rate = coerceNumber(settings.sampleRate, 16000, 48000, 48000);
+    const rate = coerceNumber(settings.sampleRate, 16000, 48000, 22050);
     // Find closest valid rate
     coerced.sampleRate = validRates.reduce((prev, curr) =>
       Math.abs(curr - rate) < Math.abs(prev - rate) ? curr : prev

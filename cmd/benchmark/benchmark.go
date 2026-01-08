@@ -92,7 +92,7 @@ func runInferenceBenchmark(settings *conf.Settings, results *benchmarkResults) e
 	defer bn.Delete()
 
 	// Generate 3 seconds of silent audio (48000 * 3 samples)
-	sampleSize := 48000 * 3
+	sampleSize := 22050 * 3
 	silentChunk := make([]float32, sampleSize)
 
 	// Run for 30 seconds

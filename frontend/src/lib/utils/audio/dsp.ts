@@ -80,7 +80,7 @@ export interface NormalizedCoefficients {
 // ============================================================================
 
 /** Default sample rate (matches backend) */
-export const DEFAULT_SAMPLE_RATE = 48000;
+export const DEFAULT_SAMPLE_RATE = 22050;
 
 /** Butterworth Q factor for maximally flat response */
 export const BUTTERWORTH_Q = 0.7071067811865476; // 1/sqrt(2)
