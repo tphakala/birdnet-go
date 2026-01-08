@@ -3,11 +3,7 @@ package birdnet
 import (
 	"context"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"math"
-	"os"
 	"sort"
 	"time"
 
@@ -44,164 +40,10 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		span.SetData("sample_size", len(sample[0]))
 	}
 
-	fmt.Printf("sample count: %d\n", len(sample))
-	fmt.Printf("sample size: %d\n", len(sample[0]))
-
 	// implement locking to prevent concurrent access to the interpreter, not
 	// necessarily best way to manage multiple audio sources but works for now
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-
-// Get the input tensor from the interpreter
-	spectrogramInputTensor := bn.SpectrogramInterpreter.GetInputTensor(0)
-	if spectrogramInputTensor == nil {
-		err := errors.New(fmt.Errorf("cannot get spectrogram input tensor")).
-			Category(errors.CategoryModelInit).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-			Context("interpreter_state", "initialized").
-			Build()
-
-		// Record error in metrics via span finish
-		span.SetTag("error", "true")
-		span.SetData("error_type", "input_tensor_nil")
-
-		return nil, err
-	}
-
-	// Run the spectrogram model for each hop and aggregate outputs.
-	hopSize := 128
-	windowSize := 512
-	sampleLen := len(sample[0])
-	hops := 512
-	//hops = (sampleLen-windowSize)/hopSize + 1
-
-	// Prepare buffers for aggregated spectrogram formatted for the classifier.
-	// Classifier expects NHWC (1,128,512,3) -> we'll create a float32 buffer
-	// with shape (128, hops, 3) flattened as NHWC.
-	height := 128
-	channels := 3
-	width := hops
-	classBuf := make([]float32, height*width*channels)
-	var colBuf []byte
-
-	for hi := 0; hi < hops; hi++ {
-		startIdx := hi * hopSize
-		// prepare input window (zero-pad past end)
-		input := spectrogramInputTensor.Float32s()
-		for j := 0; j < len(input) && j < windowSize; j++ {
-			srcIdx := startIdx + j
-			if srcIdx < sampleLen {
-				input[j] = sample[0][srcIdx]
-			} else {
-				input[j] = 0.0
-			}
-		}
-
-		fmt.Printf("hop %d: startIdx=%d\n", hi, startIdx)
-
-		if status := bn.SpectrogramInterpreter.Invoke(); status != tflite.OK {
-			err := errors.Newf("spectrogram tensor invoke failed (hop=%d): %v", hi, status).
-				Category(errors.CategoryAudio).
-				ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-				Context("hop_index", hi).
-				Context("status_code", status).
-				Timing("spectrogram-invoke", time.Since(start)).
-				Build()
-
-			span.SetTag("error", "true")
-			span.SetData("error_type", "spectrogram_invoke_failed")
-			span.SetData("status_code", status)
-
-			return nil, err
-		}
-
-		outTensor := bn.SpectrogramInterpreter.GetOutputTensor(0)
-		if outTensor == nil {
-			return nil, errors.New(fmt.Errorf("spectrogram output tensor nil")).
-				Category(errors.CategoryModelInit).
-				ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-				Context("hop_index", hi).
-				Build()
-		}
-
-		specData := outTensor.Float32s()
-		dims := make([]int, outTensor.NumDims())
-		for i := 0; i < outTensor.NumDims(); i++ {
-			dims[i] = outTensor.Dim(i)
-		}
-
-		fmt.Printf("Spectrogram output tensor dims: %v len=%d\n", dims, len(specData))
-
-		output_size := outTensor.Dim(0)
-		if len(colBuf) != output_size {
-			colBuf = make([]byte, output_size)
-		}
-		outTensor.CopyToBuffer(&colBuf[0])
-
-		// Fill classifier buffer: duplicate byte values into RGB channels.
-		for y := 0; y < height; y++ {
-			var v float32
-			if y < output_size {
-				v = float32(colBuf[y])
-			} else {
-				v = 0.0
-			}
-			base := ((y*width)+hi)*channels
-			classBuf[base+0] = v
-			classBuf[base+1] = v
-			classBuf[base+2] = v
-		}
-	}
-
-	// Write `classBuf` to PNG for debugging (dimensions: width=hops, height=128)
-	if len(classBuf) > 0 {
-		pngW := width
-		pngH := height
-		// file path can be changed as needed
-		outPath := "/tmp/classbuf_debug.png"
-		img := image.NewRGBA(image.Rect(0, 0, pngW, pngH))
-		for y := 0; y < pngH; y++ {
-			for x := 0; x < pngW; x++ {
-				base := ((y*pngW)+x)*channels
-				var r, g, b uint8
-				if base+2 < len(classBuf) {
-					rr := classBuf[base+0]
-					gg := classBuf[base+1]
-					bb := classBuf[base+2]
-					if rr < 0 {
-						rr = 0
-					}
-					if gg < 0 {
-						gg = 0
-					}
-					if bb < 0 {
-						bb = 0
-					}
-					if rr > 255 {
-						rr = 255
-					}
-					if gg > 255 {
-						gg = 255
-					}
-					if bb > 255 {
-						bb = 255
-					}
-					r = uint8(rr)
-					g = uint8(gg)
-					b = uint8(bb)
-				}
-				img.SetRGBA(x, y, color.RGBA{r, g, b, 255})
-			}
-		}
-		if f, err := os.Create(outPath); err == nil {
-			_ = png.Encode(f, img)
-			_ = f.Close()
-			fmt.Printf("Wrote debug PNG: %s\n", outPath)
-		} else {
-			fmt.Printf("Failed to create debug PNG: %v\n", err)
-		}
-	}
-
 
 	// Get the input tensor from the interpreter
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
@@ -225,22 +67,21 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	}
 
 	// Preparing input tensor with the sample data
-	// Prefer the aggregated spectrogram (`classBuf`) formatted to NHWC if sizes match.
-	pngTensor, _, _, pngErr := LoadPNGToTensor("/home/mikeyk730/src/merlin-bird-id/samples/spectrograms/lesgol.png")
-	input := inputTensor.Float32s()
-	if len(input) == len(classBuf) {
-		copy(input, classBuf)
-	} else if pngErr == nil && len(input) == len(pngTensor) {
-		copy(input, pngTensor)
-	} else {
-		// Fallback to provided sample (if it matches length), otherwise zero-fill
-		if len(input) == len(sample[0]) {
-			copy(input, sample[0])
-		} else {
-			for i := range input {
-				input[i] = 0.0
-			}
+	if RequiresSpectrogramGeneration(&bn.ModelInfo) {
+		spectrogram, _, _, err := bn.GenerateSoundIdSpectrogram(ctx, sample[0])
+		if err != nil {
+			return nil, err
 		}
+
+		input := inputTensor.Float32s()
+		if len(input) != len(spectrogram) {
+			err := errors.Newf("input tensor size mismatch: expected %d, got %d", len(input), len(spectrogram)).
+				Build()
+			return nil, err
+		}
+		copy(input, spectrogram)
+	} else {
+		copy(inputTensor.Float32s(), sample[0])
 	}
 
 	// DEBUG: Log the length of the sample data
@@ -281,36 +122,13 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	predictions := extractPredictions(outputTensor)
 
-	// Print predictions sorted descending by value: one per line with label and 3 decimals
-	// type predItem struct {
-	// 	idx   int
-	// 	val   float32
-	// 	label string
-	// }
-
-	// items := make([]predItem, 0, len(predictions))
-	// for i, p := range predictions {
-	// 	label := fmt.Sprintf("idx_%d", i)
-	// 	if i < len(bn.Settings.BirdNET.Labels) {
-	// 		label = bn.Settings.BirdNET.Labels[i]
-	// 	}
-	// 	items = append(items, predItem{idx: i, val: p, label: label})
-	// }
-
-	// sort.Slice(items, func(i, j int) bool { return items[i].val > items[j].val })
-	// limit := 5
-	// if len(items) < limit {
-	// 	limit = len(items)
-	// }
-	// for i := 0; i < limit; i++ {
-	// 	it := items[i]
-	// 	fmt.Printf("%s: %.3f\n", it.label, it.val)
-	// }
-
-
-
-	// Use optimized sigmoid function with buffer reuse
-	confidence := applySigmoidToPredictionsReuse(predictions, bn.Settings.BirdNET.Sensitivity, bn.confidenceBuffer)
+	var confidence []float32
+	if ShouldApplySigmoid(&bn.ModelInfo) {
+		// Use optimized sigmoid function with buffer reuse
+		confidence = applySigmoidToPredictionsReuse(predictions, bn.Settings.BirdNET.Sensitivity, bn.confidenceBuffer)
+	} else {
+		confidence = predictions
+	}
 
 	// Use the pre-allocated buffer to reduce memory allocations
 	results, err := pairLabelsAndConfidenceReuse(bn.Settings.BirdNET.Labels, confidence, bn.resultsBuffer)
@@ -523,15 +341,14 @@ func applySigmoidToPredictions(predictions []float32, sensitivity float64) []flo
 // applySigmoidToPredictionsReuse applies the sigmoid function to predictions using a pre-allocated buffer.
 // Falls back to allocation if buffer size doesn't match predictions length to ensure correctness.
 func applySigmoidToPredictionsReuse(predictions []float32, sensitivity float64, buffer []float32) []float32 {
-	//if len(buffer) != len(predictions) {
+	if len(buffer) != len(predictions) {
 		// Fallback to allocation when buffer size doesn't match predictions length.
 		// This ensures correctness when model output size differs from expected buffer size.
-	//	return applySigmoidToPredictions(predictions, sensitivity)
-	//}
+		return applySigmoidToPredictions(predictions, sensitivity)
+	}
 
 	for i, pred := range predictions {
-		//buffer[i] = float32(customSigmoid(float64(pred), sensitivity))
-		buffer[i] = float32(pred)
+		buffer[i] = float32(customSigmoid(float64(pred), sensitivity))
 	}
 	return buffer
 }

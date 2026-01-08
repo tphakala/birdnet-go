@@ -40,17 +40,17 @@ type speciesCacheEntry struct {
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
-	AnalysisInterpreter *tflite.Interpreter
-	RangeInterpreter    *tflite.Interpreter
+	AnalysisInterpreter    *tflite.Interpreter
+	RangeInterpreter       *tflite.Interpreter
 	SpectrogramInterpreter *tflite.Interpreter
-	Settings            *conf.Settings
-	ModelInfo           ModelInfo           // Information about the current model
-	TaxonomyMap         TaxonomyMap         // Mapping of species codes to names and vice versa
-	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
-	TaxonomyPath        string              // Path to custom taxonomy file, if used
-	mu                  sync.Mutex
-	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
-	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
+	Settings               *conf.Settings
+	ModelInfo              ModelInfo           // Information about the current model
+	TaxonomyMap            TaxonomyMap         // Mapping of species codes to names and vice versa
+	ScientificIndex        ScientificNameIndex // Index for fast scientific name lookups
+	TaxonomyPath           string              // Path to custom taxonomy file, if used
+	mu                     sync.Mutex
+	resultsBuffer          []datastore.Results // Pre-allocated buffer for results to reduce allocations
+	confidenceBuffer       []float32           // Pre-allocated buffer for confidence values to reduce allocations
 
 	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
 	speciesCacheMu sync.RWMutex
@@ -113,12 +113,14 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Build()
 	}
 
-	if err := bn.initializeSpectrogramModel(); err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize spectrogram model: %w", err)).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
-			Build()
+	if RequiresSpectrogramGeneration(&bn.ModelInfo) {
+		if err := bn.initializeSpectrogramModel(); err != nil {
+			return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize spectrogram model: %w", err)).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+				Build()
+		}
 	}
 
 	if err := bn.loadLabels(); err != nil {
