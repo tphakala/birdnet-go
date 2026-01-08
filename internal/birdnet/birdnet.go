@@ -510,6 +510,13 @@ func (bn *BirdNET) loadLabels() error {
 		return bn.loadEmbeddedLabels()
 	}
 
+	if bn.Settings.BirdNET.RangeFilter.LabelPath != "" {
+		err := bn.loadExternalRangeFilterLabels()
+		if err != nil {
+			return err
+		}
+	}
+
 	// Otherwise use external labels
 	return bn.loadExternalLabels()
 }
@@ -629,6 +636,40 @@ func (bn *BirdNET) loadExternalLabels() error {
 	return nil
 }
 
+func (bn *BirdNET) loadExternalRangeFilterLabels() error {
+	start := time.Now()
+
+	file, err := os.Open(bn.Settings.BirdNET.RangeFilter.LabelPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("range_filter_label_path", bn.Settings.BirdNET.RangeFilter.LabelPath).
+			Context("operation", "open").
+			Timing("range-filter-label-file-open", time.Since(start)).
+			Build()
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			GetLogger().Warn("Failed to close label file",
+				logger.Error(err),
+				logger.String("path", bn.Settings.BirdNET.RangeFilter.LabelPath))
+		}
+	}()
+
+	// Read the file directly as a text file
+	err = bn.loadRangeFilterLabelsFromText(file)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryLabelLoad).
+			Context("range_filter_label_path", bn.Settings.BirdNET.RangeFilter.LabelPath).
+			Context("operation", "parse").
+			Timing("range-filter-label-file-load", time.Since(start)).
+			Build()
+	}
+
+	return nil
+}
+
 // logMissingTaxonomyCodes checks labels against the taxonomy map and logs information about missing species
 func (bn *BirdNET) logMissingTaxonomyCodes() {
 	// Validate labels against taxonomy
@@ -662,6 +703,14 @@ func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		bn.Settings.BirdNET.Labels = append(bn.Settings.BirdNET.Labels, strings.TrimSpace(scanner.Text()))
+	}
+	return scanner.Err()
+}
+
+func (bn *BirdNET) loadRangeFilterLabelsFromText(file *os.File) error {
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		bn.Settings.BirdNET.RangeFilter.Labels = append(bn.Settings.BirdNET.RangeFilter.Labels, strings.TrimSpace(scanner.Text()))
 	}
 	return scanner.Err()
 }

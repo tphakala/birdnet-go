@@ -203,37 +203,49 @@ func matchesSpecies(label, speciesName string) bool {
 func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error) {
 	start := time.Now()
 
-	input := bn.RangeInterpreter.GetInputTensor(0)
-	if input == nil {
-		return nil, errors.New(fmt.Errorf("cannot get input tensor")).
-			Category(errors.CategoryModelInit).
-			Context("model_type", "range_filter").
-			Context("interpreter_state", "initialized").
-			Build()
-	}
-
 	// If week is not set, use current date to get week
 	if week == 0 {
 		week = getWeekForFilter(date)
 	}
 
-	// Prepare the input data
-	data := []float32{float32(bn.Settings.BirdNET.Latitude), float32(bn.Settings.BirdNET.Longitude), week}
+	if bn.Settings.BirdNET.RangeFilter.Model == "merlin" {
+		copy(bn.RangeInterpreter.GetInputTensor(0).Float32s(), []float32{
+			float32(bn.Settings.BirdNET.Longitude),
+		})
+		copy(bn.RangeInterpreter.GetInputTensor(1).Float32s(), []float32{
+			week,
+		})
+		copy(bn.RangeInterpreter.GetInputTensor(2).Float32s(), []float32{
+			float32(bn.Settings.BirdNET.Latitude),
+		})
+	} else {
+		input := bn.RangeInterpreter.GetInputTensor(0)
+		if input == nil {
+			return nil, errors.New(fmt.Errorf("cannot get input tensor")).
+				Category(errors.CategoryModelInit).
+				Context("model_type", "range_filter").
+				Context("interpreter_state", "initialized").
+				Build()
+		}
 
-	// Retrieve the input tensor's underlying data slice
-	float32s := input.Float32s()
+		// Prepare the input data
+		data := []float32{float32(bn.Settings.BirdNET.Latitude), float32(bn.Settings.BirdNET.Longitude), week}
 
-	// Ensure the input tensor has enough capacity
-	if len(float32s) < len(data) {
-		return nil, errors.Newf("input tensor does not have enough capacity: need %d, have %d", len(data), len(float32s)).
-			Category(errors.CategoryValidation).
-			Context("required_size", len(data)).
-			Context("actual_size", len(float32s)).
-			Build()
+		// Retrieve the input tensor's underlying data slice
+		float32s := input.Float32s()
+
+		// Ensure the input tensor has enough capacity
+		if len(float32s) < len(data) {
+			return nil, errors.Newf("input tensor does not have enough capacity: need %d, have %d", len(data), len(float32s)).
+				Category(errors.CategoryValidation).
+				Context("required_size", len(data)).
+				Context("actual_size", len(float32s)).
+				Build()
+		}
+
+		//Copy the data into the input tensor
+		copy(float32s, data)
 	}
-
-	// Copy the data into the input tensor
-	copy(float32s, data)
 
 	// Execute the model inference
 	status := bn.RangeInterpreter.Invoke()
@@ -260,8 +272,8 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 	// Filter and label the results, but only for indices that exist in bn.Labels
 	var results []Filter
 	for i, score := range filter {
-		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Settings.BirdNET.Labels) {
-			results = append(results, Filter{Score: score, Label: bn.Settings.BirdNET.Labels[i]})
+		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Settings.BirdNET.RangeFilter.Labels) {
+			results = append(results, Filter{Score: score, Label: bn.Settings.BirdNET.RangeFilter.Labels[i]})
 		}
 	}
 
