@@ -51,14 +51,14 @@ func ParseSpeciesString(species string) (scientificName, commonName, speciesCode
 
 // NoteParams holds the parameters for creating a new Note.
 type NoteParams struct {
-	Begin       time.Time
-	End         time.Time
-	Species     string
-	Confidence  float64
-	Source      string
-	ClipName    string
-	Elapsed     time.Duration
-	Occurrence  float64
+	Begin      time.Time
+	End        time.Time
+	Species    string
+	Confidence float64
+	Source     string
+	ClipName   string
+	Elapsed    time.Duration
+	Occurrence float64
 }
 
 // NewWith creates and returns a new Note with the provided NoteParams and current date and time.
@@ -85,16 +85,16 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 	var audioSourceStruct datastore.AudioSource
 	if settings.Input.Path != "" {
 		audioSourceStruct = datastore.AudioSource{
-			ID:          source,                     // Use source as ID
-			SafeString:  settings.Input.Path,       // File path is safe to display
+			ID:          source,                             // Use source as ID
+			SafeString:  settings.Input.Path,                // File path is safe to display
 			DisplayName: filepath.Base(settings.Input.Path), // Just the filename for display
 		}
 	} else {
 		// For other sources, use basic structure
 		audioSourceStruct = datastore.AudioSource{
 			ID:          source,
-			SafeString:  source,      // For analysis mode, source is typically safe
-			DisplayName: source,      // Use as-is for display
+			SafeString:  source, // For analysis mode, source is typically safe
+			DisplayName: source, // Use as-is for display
 		}
 	}
 
@@ -103,22 +103,22 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return datastore.Note{
-		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
-		Date:           date,                         // Use ISO 8601 date format.
-		Time:           timeStr,                      // Use 24-hour time format.
-		Source:         audioSourceStruct,            // Proper AudioSource struct
-		BeginTime:      beginTime,                    // Start time of the observation.
-		EndTime:        endTime,                      // End time of the observation.
-		SpeciesCode:    speciesCode,                  // Parsed species code or placeholder.
-		ScientificName: scientificName,               // Parsed scientific name of the species.
-		CommonName:     commonName,                   // Parsed common name of the species.
-		Confidence:     roundedConfidence,            // Confidence score of the observation.
-		Latitude:       settings.BirdNET.Latitude,    // Geographic latitude where the observation was made.
-		Longitude:      settings.BirdNET.Longitude,   // Geographic longitude where the observation was made.
-		Threshold:      settings.BirdNET.Threshold,   // Threshold setting from configuration.
-		Sensitivity:    settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
-		ClipName:       clipName,                     // Name of the audio clip.
-		ProcessingTime: elapsedTime,                  // Time taken to process the observation.
+		SourceNode:     settings.Main.Name,                       // From the provided configuration settings.
+		Date:           date,                                     // Use ISO 8601 date format.
+		Time:           timeStr,                                  // Use 24-hour time format.
+		Source:         audioSourceStruct,                        // Proper AudioSource struct
+		BeginTime:      beginTime,                                // Start time of the observation.
+		EndTime:        endTime,                                  // End time of the observation.
+		SpeciesCode:    speciesCode,                              // Parsed species code or placeholder.
+		ScientificName: scientificName,                           // Parsed scientific name of the species.
+		CommonName:     commonName,                               // Parsed common name of the species.
+		Confidence:     roundedConfidence,                        // Confidence score of the observation.
+		Latitude:       settings.BirdNET.Latitude,                // Geographic latitude where the observation was made.
+		Longitude:      settings.BirdNET.Longitude,               // Geographic longitude where the observation was made.
+		Threshold:      settings.BirdNET.Threshold,               // Threshold setting from configuration.
+		Sensitivity:    settings.BirdNET.Sensitivity,             // Sensitivity setting from configuration.
+		ClipName:       clipName,                                 // Name of the audio clip.
+		ProcessingTime: elapsedTime,                              // Time taken to process the observation.
 		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)), // Occurrence probability based on location/time, clamped to [0,1].
 	}
 }
@@ -153,7 +153,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	yellow := color.New(color.FgYellow)
 
 	// Write the header to the output destination.
-	header := "Selection\tView\tChannel\tBegin File\tBegin Time (s)\tEnd Time (s)\tLow Freq (Hz)\tHigh Freq (Hz)\tSpecies Code\tCommon Name\tConfidence\n"
+	header := "Selection\tFile\tBegin Time (s)\tEnd Time (s)\tSpecies Code\tCommon Name\tConfidence\n"
 	if _, err := w.Write([]byte(header)); err != nil {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
@@ -167,8 +167,8 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 		}
 
 		// Prepare the line for notes above the threshold, assuming note.BeginTime and note.EndTime are of type time.Time
-		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%s\t%s\t0\t15000\t%s\t%s\t%.4f\n",
-			i+1, notes[i].Source.SafeString, notes[i].BeginTime.Format("15:04:05"), notes[i].EndTime.Format("15:04:05"),
+		line := fmt.Sprintf("%d\t%s\t%s\t%s\t%s\t%s\t%.4f\n",
+			i+1, notes[i].Source.SafeString, notes[i].BeginTime.Format("15:04:05.000"), notes[i].EndTime.Format("15:04:05.000"),
 			notes[i].SpeciesCode, notes[i].CommonName, notes[i].Confidence)
 
 		// Attempt to write the note
@@ -255,4 +255,3 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 	// Return nil if the writing operation completes successfully.
 	return nil
 }
-
