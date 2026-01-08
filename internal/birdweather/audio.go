@@ -109,7 +109,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	metaInfo += fmt.Sprintf("File Size: %d bytes\n", actualFileSize)
 	metaInfo += fmt.Sprintf("Buffer Size: %d bytes\n", bufferSize)
 
-	metaInfo += "Sample Rate: 22050 Hz\n"
+	metaInfo += "Sample Rate: 48000 Hz\n"
 	metaInfo += "Bits Per Sample: 16\n"
 	metaInfo += "Channels: 1\n"
 

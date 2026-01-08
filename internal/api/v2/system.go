@@ -36,7 +36,7 @@ const (
 	cpuCacheUpdateInterval = 2 * time.Second // Interval for CPU cache updates
 	bytesPerKB             = 1024            // Bytes per kilobyte
 	maxPercentage          = 100             // Maximum percentage value
-	defaultAudioSampleRate = 22050           // Standard BirdNET audio sample rate
+	defaultAudioSampleRate = 48000           // Standard BirdNET audio sample rate
 	defaultAudioBitDepth   = 16              // Standard audio bit depth
 	minRequiredElements    = 2               // Minimum required elements for various checks
 )
