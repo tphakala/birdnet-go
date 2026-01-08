@@ -2,7 +2,8 @@
 package conf
 
 const (
-	SampleRate    = 48000 // Sample rate of the audio fed to BirdNET Analyzer
+	// todo:mdk: make this a config, since birdnet requires 48000
+	SampleRate    = 22050 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth      = 16    // Bit depth of the audio fed to BirdNET Analyzer
 	NumChannels   = 1     // Number of channels of the audio fed to BirdNET Analyzer
 	CaptureLength = 3     // Length of audio data fed to BirdNET Analyzer in seconds
