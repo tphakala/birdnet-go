@@ -17,6 +17,7 @@ export const WEATHER_ICON_MAP: Record<string, { day: string; night: string; desc
     '09': { day: '🌧️', night: '🌧️', description: 'Shower rain' },
     '10': { day: '🌦️', night: '🌧️', description: 'Rain' },
     '11': { day: '⛈️', night: '⛈️', description: 'Thunderstorm' },
+    '12': { day: '🌨️', night: '🌨️', description: 'Sleet' },
     '13': { day: '❄️', night: '❄️', description: 'Snow' },
     '50': { day: '🌫️', night: '🌫️', description: 'Mist' },
   };
