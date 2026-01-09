@@ -91,24 +91,6 @@ func getStyleArgs(style string) []string {
 	}
 }
 
-// getDynamicRange returns the configured dynamic range value for Sox -z parameter.
-// Returns the default value ("100") if not configured or if an invalid value is set.
-func (g *Generator) getDynamicRange() string {
-	dr := g.settings.Realtime.Dashboard.Spectrogram.DynamicRange
-	if dr == "" {
-		return defaultDynamicRange
-	}
-	// Validate it's one of the known presets
-	switch dr {
-	case conf.SpectrogramDynamicRangeHighContrast,
-		conf.SpectrogramDynamicRangeStandard,
-		conf.SpectrogramDynamicRangeExtended:
-		return dr
-	default:
-		return defaultDynamicRange
-	}
-}
-
 // durationCacheEntry stores cached audio duration with file validation info
 type durationCacheEntry struct {
 	duration  float64
@@ -153,6 +135,24 @@ func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, log logger.Lo
 		settings: settings,
 		sfs:      sfs,
 		logger:   log,
+	}
+}
+
+// getDynamicRange returns the configured dynamic range value for Sox -z parameter.
+// Returns the default value ("100") if not configured or if an invalid value is set.
+func (g *Generator) getDynamicRange() string {
+	dr := g.settings.Realtime.Dashboard.Spectrogram.DynamicRange
+	if dr == "" {
+		return defaultDynamicRange
+	}
+	// Validate it's one of the known presets
+	switch dr {
+	case conf.SpectrogramDynamicRangeHighContrast,
+		conf.SpectrogramDynamicRangeStandard,
+		conf.SpectrogramDynamicRangeExtended:
+		return dr
+	default:
+		return defaultDynamicRange
 	}
 }
 
