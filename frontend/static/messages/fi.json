@@ -1173,6 +1173,20 @@
                   "scientific": "Harmaasävy Dolph-ikkunalla, vaalea tausta (xeno-canto-tyylinen)"
                 }
               },
+              "dynamicRange": {
+                "label": "Dynamiikka-alue",
+                "helpText": "Säätää kontrastia - pienemmät arvot tuovat heikot signaalit paremmin esiin, suuremmat arvot näyttävät enemmän yksityiskohtia.",
+                "options": {
+                  "highContrast": "Korkea kontrasti (80 dB)",
+                  "standard": "Standardi (100 dB)",
+                  "extended": "Laajennettu (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
+                  "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. Sox-oletusarvo."
+                }
+              },
               "enabled": {
                 "label": "Ota Spektrogrammin Esirenderöinti Käyttöön",
                 "helpText": "VANHENTUNUT: Käytä sen sijaan Generointitilaa. Generoi spektrogrammeja taustalla kun havaintoja tallennetaan käyttöliittymän viiveiden poistamiseksi."

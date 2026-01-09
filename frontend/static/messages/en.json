@@ -1188,6 +1188,20 @@
                   "scientific": "Grayscale with Dolph window, light background (xeno-canto style)"
                 }
               },
+              "dynamicRange": {
+                "label": "Dynamic Range",
+                "helpText": "Controls contrast - lower values make weak signals stand out better, higher values show more detail.",
+                "options": {
+                  "highContrast": "High Contrast (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Extended (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Best for weak signals. Bird calls stand out clearly from background noise. Recommended for scientific/grayscale styles.",
+                  "standard": "Default balanced setting. Good for most use cases.",
+                  "extended": "More detail visible but lower contrast. Sox default value."
+                }
+              },
               "enabled": {
                 "label": "Enable Spectrogram Pre-Rendering",
                 "helpText": "DEPRECATED: Use Generation Mode instead. Generate spectrograms in the background when detections are saved to eliminate UI lag."
