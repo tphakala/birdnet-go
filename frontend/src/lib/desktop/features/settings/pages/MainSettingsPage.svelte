@@ -99,10 +99,11 @@
   }));
 
   // Spectrogram style definitions with value→translationKey mapping
+  // Order: colorful styles first, then scientific styles side by side
   const SPECTROGRAM_STYLES: { value: SpectrogramStyle; labelKey: string }[] = [
     { value: 'default', labelKey: 'default' },
-    { value: 'scientific_dark', labelKey: 'scientificDark' },
     { value: 'high_contrast_dark', labelKey: 'highContrastDark' },
+    { value: 'scientific_dark', labelKey: 'scientificDark' },
     { value: 'scientific', labelKey: 'scientific' },
   ];
 
