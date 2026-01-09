@@ -25,7 +25,8 @@ import (
 
 const (
 	// defaultGenerationTimeout is the default timeout for spectrogram generation
-	defaultGenerationTimeout = 60 * time.Second
+	// Increased to 90s to accommodate slow storage (e.g., SD cards) under I/O pressure
+	defaultGenerationTimeout = 90 * time.Second
 
 	// ffmpegFallbackTimeout is the timeout for FFmpeg fallback when Sox fails.
 	// This is independent of the Sox timeout to ensure FFmpeg has adequate time
@@ -194,9 +195,10 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 
 	// Try Sox first (faster, direct processing)
 	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw); err != nil {
-		g.logger.Debug("Sox generation failed, trying FFmpeg fallback",
+		g.logger.Warn("Sox spectrogram generation failed, falling back to FFmpeg (style settings may not be applied)",
 			logger.String("audio_path", audioPath),
-			logger.Error(err))
+			logger.Error(err),
+			logger.Int64("sox_duration_ms", time.Since(start).Milliseconds()))
 
 		// Create FRESH context for FFmpeg fallback with full timeout.
 		// This ensures FFmpeg has adequate time even if Sox consumed most of the
