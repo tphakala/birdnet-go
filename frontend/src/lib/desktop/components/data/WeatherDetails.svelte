@@ -35,7 +35,9 @@
   import { safeGet } from '$lib/utils/security';
   import {
     convertTemperature,
+    convertWindSpeed,
     getTemperatureSymbol,
+    getWindSpeedUnit,
     type TemperatureUnit,
   } from '$lib/utils/formatters';
 
@@ -76,9 +78,19 @@
     return convertTemperature(temperature, units);
   });
 
-  const windSpeedUnit = $derived.by(() => {
-    return units === 'imperial' ? 'mph' : 'm/s';
+  // Convert wind speed from m/s (internal storage) to display unit
+  const displayWindSpeed = $derived.by(() => {
+    if (windSpeed === undefined) return undefined;
+    return convertWindSpeed(windSpeed, units);
   });
+
+  // Convert wind gust from m/s (internal storage) to display unit
+  const displayWindGust = $derived.by(() => {
+    if (windGust === undefined) return undefined;
+    return convertWindSpeed(windGust, units);
+  });
+
+  const windSpeedUnit = $derived(getWindSpeedUnit(units));
 
   // Weather icon mapping
   const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
@@ -229,15 +241,16 @@
   {/if}
 
   <!-- Wind Speed with Wind Icon -->
-  {#if windSpeed !== undefined}
+  {#if displayWindSpeed !== undefined}
     <div class="wd-wind-row flex items-center gap-2">
       <Wind
         class={cn(safeGet(iconSizeClasses, size, ''), getWindOpacity, 'shrink-0')}
-        aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit}`}
+        aria-label={`Wind speed: ${displayWindSpeed.toFixed(0)} ${windSpeedUnit}`}
       />
       <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
-        {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
-          ? `(${windGust.toFixed(0)})`
+        {displayWindSpeed.toFixed(0)}{displayWindGust !== undefined &&
+        displayWindGust > displayWindSpeed
+          ? `(${displayWindGust.toFixed(0)})`
           : ''}
         {windSpeedUnit}
       </span>

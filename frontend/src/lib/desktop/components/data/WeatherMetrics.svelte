@@ -30,6 +30,7 @@
   import { t } from '$lib/i18n';
   import { Thermometer, Wind } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
+  import { convertTemperature, convertWindSpeed, getWindSpeedUnit } from '$lib/utils/formatters';
 
   interface Props {
     weatherIcon?: string;
@@ -99,7 +100,25 @@
     }
   });
 
-  const windSpeedUnit = $derived(units === 'imperial' ? 'mph' : 'm/s');
+  // Convert temperature from Celsius (internal storage) to display unit
+  const displayTemperature = $derived.by(() => {
+    if (temperature === undefined) return undefined;
+    return convertTemperature(temperature, units);
+  });
+
+  // Convert wind speed from m/s (internal storage) to display unit
+  const displayWindSpeed = $derived.by(() => {
+    if (windSpeed === undefined) return undefined;
+    return convertWindSpeed(windSpeed, units);
+  });
+
+  // Convert wind gust from m/s (internal storage) to display unit
+  const displayWindGust = $derived.by(() => {
+    if (windGust === undefined) return undefined;
+    return convertWindSpeed(windGust, units);
+  });
+
+  const windSpeedUnit = $derived(getWindSpeedUnit(units));
 
   // Weather icon mapping
   const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
@@ -223,38 +242,39 @@
   <!-- Line 2: Temperature + Wind Speed -->
   <div class="flex items-center gap-2 overflow-hidden">
     <!-- Temperature Group -->
-    {#if temperature !== undefined && showTemperatureGroup}
+    {#if displayTemperature !== undefined && showTemperatureGroup}
       <div class="wm-temperature-group flex items-center gap-1 shrink-0">
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
           <Thermometer
             class={cn(safeGet(sizeClasses, size, ''), 'shrink-0')}
-            aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
+            aria-label={`Temperature: ${displayTemperature.toFixed(1)}${temperatureUnit}`}
           />
         {/if}
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
         >
-          {temperature.toFixed(1)}{temperatureUnit}
+          {displayTemperature.toFixed(1)}{temperatureUnit}
         </span>
       </div>
     {/if}
 
     <!-- Wind Speed Group -->
-    {#if windSpeed !== undefined && showWindSpeedGroup}
+    {#if displayWindSpeed !== undefined && showWindSpeedGroup}
       <div class="wm-wind-group flex items-center gap-1 shrink-0">
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
           <Wind
             class={cn(safeGet(sizeClasses, size, ''), getWindOpacity, 'shrink-0')}
-            aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
+            aria-label={`Wind speed: ${displayWindSpeed.toFixed(0)} ${windSpeedUnit}`}
           />
         {/if}
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
         >
-          {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
-            ? `(${windGust.toFixed(0)})`
+          {displayWindSpeed.toFixed(0)}{displayWindGust !== undefined &&
+          displayWindGust > displayWindSpeed
+            ? `(${displayWindGust.toFixed(0)})`
             : ''}
           {windSpeedUnit}
         </span>
