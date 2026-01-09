@@ -437,7 +437,10 @@ func TestGetDetection(t *testing.T) {
 				assert.Equal(t, "correct", response.Verified)
 				assert.False(t, response.Locked)
 				assert.Len(t, response.Comments, 1)
-				assert.Equal(t, "Test comment", response.Comments[0])
+				assert.Equal(t, "Test comment", response.Comments[0].Entry)
+				assert.Equal(t, uint(1), response.Comments[0].ID)
+				assert.NotEmpty(t, response.Comments[0].CreatedAt)
+				assert.NotEmpty(t, response.Comments[0].UpdatedAt)
 			},
 		},
 		{
@@ -484,6 +487,145 @@ func TestGetDetection(t *testing.T) {
 			mockDS.AssertExpectations(t)
 		})
 	}
+}
+
+// TestGetDetectionCommentFormat verifies that detection comments are returned
+// with full object format (id, entry, createdAt, updatedAt) as expected by the frontend.
+// This test was added to fix issue #1728 where comments displayed as "NaN-NaN-NaN NaN:NaN:NaN"
+// due to a mismatch between backend (returning []string) and frontend (expecting Comment objects).
+func TestGetDetectionCommentFormat(t *testing.T) {
+	// Setup
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	// Create specific timestamps for verification
+	createdTime := time.Date(2025, 1, 9, 10, 30, 0, 0, time.UTC)
+	updatedTime := time.Date(2025, 1, 9, 11, 45, 0, 0, time.UTC)
+
+	// Create mock data with multiple comments to verify ordering
+	mockNote := datastore.Note{
+		ID:             42,
+		Date:           "2025-01-09",
+		Time:           "10:30:00",
+		Source:         testRealtimeSource(),
+		SpeciesCode:    "NOCA",
+		ScientificName: "Cardinalis cardinalis", //nolint:misspell // Valid scientific name for Northern Cardinal
+		CommonName:     "Northern Cardinal",
+		Confidence:     0.92,
+		BeginTime:      createdTime,
+		EndTime:        createdTime.Add(3 * time.Second),
+		Verified:       "correct",
+		Locked:         false,
+		Comments: []datastore.NoteComment{
+			{
+				ID:        101,
+				NoteID:    42,
+				Entry:     "First comment with text",
+				CreatedAt: createdTime,
+				UpdatedAt: updatedTime,
+			},
+			{
+				ID:        102,
+				NoteID:    42,
+				Entry:     "Second comment added later",
+				CreatedAt: createdTime.Add(time.Hour),
+				UpdatedAt: createdTime.Add(time.Hour),
+			},
+		},
+	}
+
+	// Setup mock expectations
+	mockDS.On("Get", "42").Return(mockNote, nil)
+	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
+
+	// Create request
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/42", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("42")
+
+	// Call handler
+	err := controller.GetDetection(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse response
+	var response DetectionResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Verify comment structure - this is the key fix for issue #1728
+	// Frontend expects Comment objects with {id, entry, createdAt, updatedAt}
+	// NOT string arrays which would cause "NaN-NaN-NaN NaN:NaN:NaN" display
+	require.Len(t, response.Comments, 2, "Expected 2 comments")
+
+	// Verify first comment has all required fields
+	comment1 := response.Comments[0]
+	assert.Equal(t, uint(101), comment1.ID, "Comment ID should be preserved")
+	assert.Equal(t, "First comment with text", comment1.Entry, "Comment entry text should be preserved")
+	assert.Equal(t, createdTime.Format(time.RFC3339), comment1.CreatedAt, "CreatedAt should be RFC3339 formatted")
+	assert.Equal(t, updatedTime.Format(time.RFC3339), comment1.UpdatedAt, "UpdatedAt should be RFC3339 formatted")
+
+	// Verify second comment with exact timestamp assertions
+	comment2 := response.Comments[1]
+	expectedTime2 := createdTime.Add(time.Hour)
+	assert.Equal(t, uint(102), comment2.ID)
+	assert.Equal(t, "Second comment added later", comment2.Entry)
+	assert.Equal(t, expectedTime2.Format(time.RFC3339), comment2.CreatedAt, "Second comment CreatedAt should be RFC3339 formatted")
+	assert.Equal(t, expectedTime2.Format(time.RFC3339), comment2.UpdatedAt, "Second comment UpdatedAt should be RFC3339 formatted")
+
+	// Verify timestamps are valid RFC3339 format (frontend will parse these)
+	_, err = time.Parse(time.RFC3339, comment1.CreatedAt)
+	require.NoError(t, err, "CreatedAt must be valid RFC3339 timestamp")
+	_, err = time.Parse(time.RFC3339, comment1.UpdatedAt)
+	require.NoError(t, err, "UpdatedAt must be valid RFC3339 timestamp")
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetDetectionEmptyComments verifies detection with no comments returns empty array
+func TestGetDetectionEmptyComments(t *testing.T) {
+	// Setup
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	mockNote := datastore.Note{
+		ID:             99,
+		Date:           "2025-01-09",
+		Time:           "12:00:00",
+		Source:         testRealtimeSource(),
+		SpeciesCode:    "AMRO",
+		ScientificName: "Turdus migratorius",
+		CommonName:     "American Robin",
+		Confidence:     0.88,
+		BeginTime:      time.Now(),
+		EndTime:        time.Now().Add(3 * time.Second),
+		Verified:       "unverified",
+		Locked:         false,
+		Comments:       nil, // No comments
+	}
+
+	mockDS.On("Get", "99").Return(mockNote, nil)
+	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/99", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("99")
+
+	err := controller.GetDetection(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response DetectionResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Comments should be nil/empty, not cause any NaN issues
+	assert.Empty(t, response.Comments, "Detection with no comments should have empty comments array")
+
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetRecentDetections tests the GetRecentDetections endpoint

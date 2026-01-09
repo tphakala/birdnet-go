@@ -49,6 +49,7 @@
     DEFAULT_SPECTROGRAM_SETTINGS,
     type SpectrogramPreRender,
     type SpectrogramStyle,
+    type SpectrogramDynamicRange,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -98,10 +99,11 @@
   }));
 
   // Spectrogram style definitions with value→translationKey mapping
+  // Order: colorful styles first, then scientific styles side by side
   const SPECTROGRAM_STYLES: { value: SpectrogramStyle; labelKey: string }[] = [
     { value: 'default', labelKey: 'default' },
-    { value: 'scientific_dark', labelKey: 'scientificDark' },
     { value: 'high_contrast_dark', labelKey: 'highContrastDark' },
+    { value: 'scientific_dark', labelKey: 'scientificDark' },
     { value: 'scientific', labelKey: 'scientific' },
   ];
 
@@ -119,6 +121,29 @@
   // Get translation key for style description
   function getStyleDescriptionKey(style: SpectrogramStyle): string {
     return SPECTROGRAM_STYLES.find(s => s.value === style)?.labelKey ?? 'default';
+  }
+
+  // Dynamic range preset definitions with value→translationKey mapping
+  const DYNAMIC_RANGE_PRESETS: { value: SpectrogramDynamicRange; labelKey: string }[] = [
+    { value: '80', labelKey: 'highContrast' },
+    { value: '100', labelKey: 'standard' },
+    { value: '120', labelKey: 'extended' },
+  ];
+
+  // Dynamic range options - computed reactively to support locale changes
+  let dynamicRangeOptions = $derived.by(() => {
+    getLocale(); // Trigger re-computation on locale change
+    return DYNAMIC_RANGE_PRESETS.map(preset => ({
+      value: preset.value,
+      label: t(
+        `settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.options.${preset.labelKey}`
+      ),
+    }));
+  });
+
+  // Get translation key for dynamic range description
+  function getDynamicRangeDescriptionKey(value: SpectrogramDynamicRange): string {
+    return DYNAMIC_RANGE_PRESETS.find(p => p.value === value)?.labelKey ?? 'standard';
   }
 
   // Extended option type for weather provider
@@ -210,6 +235,11 @@
   // Current spectrogram style for preview
   let currentSpectrogramStyle = $derived<SpectrogramStyle>(
     (settings.dashboard.spectrogram?.style as SpectrogramStyle) ?? 'default'
+  );
+
+  // Current dynamic range for description
+  let currentDynamicRange = $derived<SpectrogramDynamicRange>(
+    (settings.dashboard.spectrogram?.dynamicRange as SpectrogramDynamicRange) ?? '100'
   );
 
   // Database type selection
@@ -1794,6 +1824,31 @@
                 `settings.main.sections.userInterface.dashboard.spectrogram.style.descriptions.${getStyleDescriptionKey(currentSpectrogramStyle)}`
               )}
             </p>
+          </div>
+
+          <!-- Dynamic Range Selection -->
+          <div class="mt-6 space-y-3">
+            <SelectDropdown
+              options={dynamicRangeOptions}
+              value={currentDynamicRange}
+              label={t(
+                'settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.label'
+              )}
+              disabled={store.isLoading || store.isSaving}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateSpectrogramSetting('dynamicRange', value as string)}
+            />
+
+            <!-- Dynamic range contextual note -->
+            <SettingsNote>
+              <span>
+                {t(
+                  `settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.descriptions.${getDynamicRangeDescriptionKey(currentDynamicRange)}`
+                )}
+              </span>
+            </SettingsNote>
           </div>
         </div>
       </div>

@@ -27,9 +27,23 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { t } from '$lib/i18n';
   import { Thermometer, Wind } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
+  import {
+    convertTemperature,
+    convertWindSpeed,
+    getTemperatureSymbol,
+    getWindSpeedUnit,
+    type TemperatureUnit,
+  } from '$lib/utils/formatters';
+  import {
+    WEATHER_ICON_MAP,
+    UNKNOWN_WEATHER_INFO,
+    getEffectiveWeatherCode,
+    isNightTime,
+    translateWeatherCondition,
+    getWindOpacityClass,
+  } from '$lib/utils/weather';
 
   interface Props {
     weatherIcon?: string;
@@ -38,7 +52,7 @@
     temperature?: number;
     windSpeed?: number;
     windGust?: number;
-    units?: 'metric' | 'imperial' | 'standard';
+    units?: TemperatureUnit;
     size?: 'sm' | 'md' | 'lg';
     className?: string;
   }
@@ -87,91 +101,52 @@
   const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 30); // Always show temperature
   const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 100); // Hide wind speed on narrow
 
-  // Get the appropriate unit labels based on the units setting
-  const temperatureUnit = $derived.by(() => {
-    switch (units) {
-      case 'imperial':
-        return '°F';
-      case 'standard':
-        return 'K';
-      default:
-        return '°C';
-    }
+  // Get the appropriate unit label based on the units setting
+  const temperatureUnit = $derived(getTemperatureSymbol(units));
+
+  // Convert temperature from Celsius (internal storage) to display unit
+  const displayTemperature = $derived.by(() => {
+    if (temperature === undefined) return undefined;
+    return convertTemperature(temperature, units);
   });
 
-  const windSpeedUnit = $derived(units === 'imperial' ? 'mph' : 'm/s');
-
-  // Weather icon mapping
-  const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
-    '01': { day: '☀️', night: '🌙', description: 'Clear sky' },
-    '02': { day: '⛅', night: '☁️', description: 'Few clouds' },
-    '03': { day: '⛅', night: '☁️', description: 'Scattered clouds' },
-    '04': { day: '⛅', night: '☁️', description: 'Broken clouds' },
-    '09': { day: '🌧️', night: '🌧️', description: 'Shower rain' },
-    '10': { day: '🌦️', night: '🌧️', description: 'Rain' },
-    '11': { day: '⛈️', night: '⛈️', description: 'Thunderstorm' },
-    '13': { day: '❄️', night: '❄️', description: 'Snow' },
-    '50': { day: '🌫️', night: '🌫️', description: 'Mist' },
-  };
-
-  // Extract base weather code
-  const weatherCode = $derived.by(() => {
-    if (!weatherIcon || typeof weatherIcon !== 'string') return '';
-    const match = weatherIcon.match(/^(\d{2})[dn]?$/);
-    return match ? match[1] : '';
+  // Convert wind speed from m/s (internal storage) to display unit
+  const displayWindSpeed = $derived.by(() => {
+    if (windSpeed === undefined) return undefined;
+    return convertWindSpeed(windSpeed, units);
   });
 
-  // Determine if it's night time
-  const isNight = $derived(timeOfDay === 'night' || weatherIcon?.endsWith('n'));
+  // Convert wind gust from m/s (internal storage) to display unit
+  const displayWindGust = $derived.by(() => {
+    if (windGust === undefined) return undefined;
+    return convertWindSpeed(windGust, units);
+  });
 
-  // Get weather emoji and description
+  const windSpeedUnit = $derived(getWindSpeedUnit(units));
+
+  // Extract base weather code using shared utility, with fallback to description-based derivation
+  const weatherCode = $derived(getEffectiveWeatherCode(weatherIcon, weatherDescription));
+
+  // Determine if it's night time using shared utility
+  const isNight = $derived(isNightTime(weatherIcon, timeOfDay));
+
+  // Get weather info from shared mapping
   const weatherInfo = $derived(
-    safeGet(weatherIconMap, weatherCode, {
-      day: '❓',
-      night: '❓',
-      description: weatherDescription || 'Unknown',
+    safeGet(WEATHER_ICON_MAP, weatherCode, {
+      ...UNKNOWN_WEATHER_INFO,
+      description: weatherDescription || UNKNOWN_WEATHER_INFO.description,
     })
   );
 
   const weatherEmoji = $derived(isNight ? weatherInfo.night : weatherInfo.day);
 
-  // Helper function to translate weather conditions with fallbacks
-  function translateWeatherCondition(condition: string | undefined): string {
-    if (!condition) return '';
-
-    // Normalize the condition string
-    const normalized = condition.toLowerCase().replace(/ /g, '_');
-
-    // Try different key variations
-    const keys = [
-      `detections.weather.conditions.${normalized}`,
-      `detections.weather.conditions.${condition.toLowerCase()}`,
-      'detections.weather.conditions.unknown',
-    ];
-
-    // Return first successful translation or original
-    for (const key of keys) {
-      const translation = t(key);
-      if (translation !== key) {
-        return translation;
-      }
-    }
-
-    return condition;
-  }
-
-  // Get localized weather description
+  // Get localized weather description using shared utility
   const weatherDesc = $derived(
     translateWeatherCondition(weatherDescription || weatherInfo.description)
   );
 
-  // Get appropriate wind icon opacity based on wind speed
-  const getWindOpacity = $derived.by(() => {
-    if (windSpeed === undefined) return '';
-    if (windSpeed < 3) return 'opacity-50'; // Light wind: 0-3 m/s
-    if (windSpeed < 8) return 'opacity-75'; // Moderate wind: 3-8 m/s
-    return ''; // Strong wind: 8+ m/s - full opacity
-  });
+  // Get appropriate wind icon opacity based on wind speed using shared utility
+  const windOpacity = $derived(getWindOpacityClass(windSpeed));
 
   // Size classes
   const sizeClasses = {
@@ -223,38 +198,39 @@
   <!-- Line 2: Temperature + Wind Speed -->
   <div class="flex items-center gap-2 overflow-hidden">
     <!-- Temperature Group -->
-    {#if temperature !== undefined && showTemperatureGroup}
+    {#if displayTemperature !== undefined && showTemperatureGroup}
       <div class="wm-temperature-group flex items-center gap-1 shrink-0">
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
           <Thermometer
             class={cn(safeGet(sizeClasses, size, ''), 'shrink-0')}
-            aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
+            aria-label={`Temperature: ${displayTemperature.toFixed(1)}${temperatureUnit}`}
           />
         {/if}
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
         >
-          {temperature.toFixed(1)}{temperatureUnit}
+          {displayTemperature.toFixed(1)}{temperatureUnit}
         </span>
       </div>
     {/if}
 
     <!-- Wind Speed Group -->
-    {#if windSpeed !== undefined && showWindSpeedGroup}
+    {#if displayWindSpeed !== undefined && showWindSpeedGroup}
       <div class="wm-wind-group flex items-center gap-1 shrink-0">
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
           <Wind
-            class={cn(safeGet(sizeClasses, size, ''), getWindOpacity, 'shrink-0')}
-            aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
+            class={cn(safeGet(sizeClasses, size, ''), windOpacity, 'shrink-0')}
+            aria-label={`Wind speed: ${displayWindSpeed.toFixed(0)} ${windSpeedUnit}`}
           />
         {/if}
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
         >
-          {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
-            ? `(${windGust.toFixed(0)})`
+          {displayWindSpeed.toFixed(0)}{displayWindGust !== undefined &&
+          displayWindGust > displayWindSpeed
+            ? `(${displayWindGust.toFixed(0)})`
             : ''}
           {windSpeedUnit}
         </span>

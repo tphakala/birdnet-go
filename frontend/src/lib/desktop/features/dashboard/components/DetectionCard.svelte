@@ -236,6 +236,7 @@
       {#if detection.weather?.weatherIcon}
         <WeatherBadge
           weatherIcon={detection.weather.weatherIcon}
+          description={detection.weather.description}
           temperature={detection.weather.temperature}
           units={detection.weather.units}
           timeOfDay={detection.timeOfDay}

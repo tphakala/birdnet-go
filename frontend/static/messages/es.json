@@ -451,6 +451,9 @@
         "sunrise": "Amanecer a las {time}",
         "sunset": "Atardecer a las {time}"
       },
+      "weather": {
+        "label": "Clima"
+      },
       "legend": {
         "less": "Menos",
         "more": "Más"
@@ -1171,6 +1174,20 @@
                   "scientificDark": "Escala de grises con ventana Dolph, fondo oscuro",
                   "highContrastDark": "Alta saturación de color con fondo oscuro",
                   "scientific": "Escala de grises con ventana Dolph, fondo claro (estilo xeno-canto)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Rango Dinámico",
+                "helpText": "Controla el contraste - valores más bajos hacen que las señales débiles destaquen mejor, valores más altos muestran más detalle.",
+                "options": {
+                  "highContrast": "Alto Contraste (80 dB)",
+                  "standard": "Estándar (100 dB)",
+                  "extended": "Extendido (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideal para señales débiles. Los cantos de aves destacan claramente del ruido de fondo. Recomendado para estilos científicos/escala de grises.",
+                  "standard": "Configuración balanceada por defecto. Bueno para la mayoría de los casos.",
+                  "extended": "Más detalles visibles pero menor contraste. Valor predeterminado de SoX."
                 }
               },
               "enabled": {

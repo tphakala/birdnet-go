@@ -451,6 +451,9 @@
         "sunrise": "Zonsopgang om {time}",
         "sunset": "Zonsondergang om {time}"
       },
+      "weather": {
+        "label": "Weer"
+      },
       "legend": {
         "less": "Minder",
         "more": "Meer"
@@ -1171,6 +1174,20 @@
                   "scientificDark": "Grijstinten met Dolph-venster, donkere achtergrond",
                   "highContrastDark": "Hoge kleurverzadiging met donkere achtergrond",
                   "scientific": "Grijstinten met Dolph-venster, lichte achtergrond (xeno-canto stijl)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamisch Bereik",
+                "helpText": "Bepaalt het contrast - lagere waarden laten zwakke signalen beter uitkomen, hogere waarden tonen meer detail.",
+                "options": {
+                  "highContrast": "Hoog Contrast (80 dB)",
+                  "standard": "Standaard (100 dB)",
+                  "extended": "Uitgebreid (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideaal voor zwakke signalen. Vogelgeluiden komen duidelijk uit boven de achtergrondruis. Aanbevolen voor wetenschappelijke/grijstinten stijlen.",
+                  "standard": "Standaard gebalanceerde instelling. Goed voor de meeste toepassingen.",
+                  "extended": "Meer detail zichtbaar maar lager contrast. SoX standaardwaarde."
                 }
               },
               "enabled": {

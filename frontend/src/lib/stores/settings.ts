@@ -445,6 +445,10 @@ export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
 // Spectrogram style preset options
 export type SpectrogramStyle = 'default' | 'scientific_dark' | 'high_contrast_dark' | 'scientific';
 
+// Spectrogram dynamic range preset options (dB values for Sox -z parameter)
+// Lower values = higher contrast (weak signals visible), higher values = more detail
+export type SpectrogramDynamicRange = '80' | '100' | '120';
+
 // SpectrogramPreRender contains settings for spectrogram generation modes.
 // Three modes control when and how spectrograms are generated:
 //   - "auto": Generate on-demand when API is called (default, suitable for most systems)
@@ -456,6 +460,7 @@ export interface SpectrogramPreRender {
   size: SpectrogramSize; // Default size for all modes (sm=400px, md=800px, lg=1000px, xl=1200px)
   raw: boolean; // Generate raw spectrogram without axes/legend (default: true)
   style?: SpectrogramStyle; // Visual style preset (default: 'default')
+  dynamicRange?: SpectrogramDynamicRange; // Dynamic range in dB: 80 (high contrast), 100 (standard), 120 (extended)
 }
 
 // Default spectrogram settings
@@ -465,6 +470,7 @@ export const DEFAULT_SPECTROGRAM_SETTINGS: SpectrogramPreRender = {
   size: 'sm',
   raw: true,
   style: 'default',
+  dynamicRange: '100',
 } as const;
 
 // Log config

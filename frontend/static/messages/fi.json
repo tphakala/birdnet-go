@@ -451,6 +451,9 @@
         "sunrise": "Auringonnousu klo {time}",
         "sunset": "Auringonlasku klo {time}"
       },
+      "weather": {
+        "label": "Sää"
+      },
       "legend": {
         "less": "Vähemmän",
         "more": "Enemmän"
@@ -1171,6 +1174,20 @@
                   "scientificDark": "Harmaasävy Dolph-ikkunalla, tumma tausta",
                   "highContrastDark": "Korkea värikylläisyys tummalla taustalla",
                   "scientific": "Harmaasävy Dolph-ikkunalla, vaalea tausta (xeno-canto-tyylinen)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamiikka-alue",
+                "helpText": "Säätää kontrastia - pienemmät arvot tuovat heikot signaalit paremmin esiin, suuremmat arvot näyttävät enemmän yksityiskohtia.",
+                "options": {
+                  "highContrast": "Korkea kontrasti (80 dB)",
+                  "standard": "Standardi (100 dB)",
+                  "extended": "Laajennettu (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
+                  "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. SoX-oletusarvo."
                 }
               },
               "enabled": {

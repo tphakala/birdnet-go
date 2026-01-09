@@ -451,6 +451,9 @@
         "sunrise": "Nascer do sol às {time}",
         "sunset": "Pôr do sol às {time}"
       },
+      "weather": {
+        "label": "Clima"
+      },
       "legend": {
         "less": "Menos",
         "more": "Mais"
@@ -1174,6 +1177,20 @@
                   "scientificDark": "Escala de cinza com janela Dolph, fundo escuro",
                   "highContrastDark": "Alta saturação de cores com fundo escuro",
                   "scientific": "Escala de cinza com janela Dolph, fundo claro (estilo xeno-canto)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Faixa Dinâmica",
+                "helpText": "Controla o contraste - valores mais baixos fazem sinais fracos se destacarem melhor, valores mais altos mostram mais detalhes.",
+                "options": {
+                  "highContrast": "Alto Contraste (80 dB)",
+                  "standard": "Padrão (100 dB)",
+                  "extended": "Estendido (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideal para sinais fracos. Cantos de pássaros se destacam claramente do ruído de fundo. Recomendado para estilos científicos/escala de cinza.",
+                  "standard": "Configuração balanceada padrão. Bom para a maioria dos casos de uso.",
+                  "extended": "Mais detalhes visíveis mas menor contraste. Valor padrão do SoX."
                 }
               },
               "enabled": {

@@ -20,60 +20,72 @@ import (
 func TestStandardEventBehavior(t *testing.T) {
 	t.Parallel()
 
+	// Use timeOffset instead of absolute time.Time to avoid race conditions
+	// when running parallel subtests. The offset is applied to time.Now()
+	// inside each subtest to ensure accurate timing regardless of scheduling delays.
 	tests := []struct {
-		name          string
-		lastEventTime time.Time
-		timeout       time.Duration
-		wantAllow     bool
+		name       string
+		timeOffset time.Duration // Offset from time.Now() computed inside subtest
+		useEpoch   bool          // If true, use time.Time{} instead of offset
+		timeout    time.Duration
+		wantAllow  bool
 	}{
 		{
-			name:          "allows event when timeout exceeded",
-			lastEventTime: time.Now().Add(-2 * time.Second),
-			timeout:       1 * time.Second,
-			wantAllow:     true,
+			name:       "allows event when timeout exceeded",
+			timeOffset: -2 * time.Second,
+			timeout:    1 * time.Second,
+			wantAllow:  true,
 		},
 		{
-			name:          "blocks event within timeout",
-			lastEventTime: time.Now(),
-			timeout:       1 * time.Second,
-			wantAllow:     false,
+			name:       "blocks event within timeout",
+			timeOffset: 0, // "just now"
+			timeout:    1 * time.Second,
+			wantAllow:  false,
 		},
 		{
-			name:          "allows event at exactly timeout boundary",
-			lastEventTime: time.Now().Add(-1 * time.Second),
-			timeout:       1 * time.Second,
-			wantAllow:     true, // >= means exactly at boundary is allowed
+			name:       "allows event at exactly timeout boundary",
+			timeOffset: -1 * time.Second,
+			timeout:    1 * time.Second,
+			wantAllow:  true, // >= means exactly at boundary is allowed
 		},
 		{
-			name:          "zero timeout always allows",
-			lastEventTime: time.Now(),
-			timeout:       0,
-			wantAllow:     true,
+			name:       "zero timeout always allows",
+			timeOffset: 0,
+			timeout:    0,
+			wantAllow:  true,
 		},
 		{
-			name:          "negative timeout allows (time.Since always >= negative)",
-			lastEventTime: time.Now(),
-			timeout:       -1 * time.Second,
-			wantAllow:     true,
+			name:       "negative timeout allows (time.Since always >= negative)",
+			timeOffset: 0,
+			timeout:    -1 * time.Second,
+			wantAllow:  true,
 		},
 		{
-			name:          "very old event allows",
-			lastEventTime: time.Now().Add(-24 * time.Hour),
-			timeout:       1 * time.Minute,
-			wantAllow:     true,
+			name:       "very old event allows",
+			timeOffset: -24 * time.Hour,
+			timeout:    1 * time.Minute,
+			wantAllow:  true,
 		},
 		{
-			name:          "zero time (epoch) allows",
-			lastEventTime: time.Time{},
-			timeout:       1 * time.Second,
-			wantAllow:     true, // time.Since(zero) is huge
+			name:      "zero time (epoch) allows",
+			useEpoch:  true,
+			timeout:   1 * time.Second,
+			wantAllow: true, // time.Since(zero) is huge
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := StandardEventBehavior(tt.lastEventTime, tt.timeout)
+			// Compute lastEventTime inside the subtest to avoid race conditions
+			// with parallel test scheduling
+			var lastEventTime time.Time
+			if tt.useEpoch {
+				lastEventTime = time.Time{}
+			} else {
+				lastEventTime = time.Now().Add(tt.timeOffset)
+			}
+			got := StandardEventBehavior(lastEventTime, tt.timeout)
 			assert.Equal(t, tt.wantAllow, got)
 		})
 	}

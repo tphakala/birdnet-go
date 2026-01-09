@@ -729,8 +729,14 @@ Performance Optimizations:
   // Handle detection limit change from DetectionCardGrid
   function handleDetectionLimitChange(newLimit: number) {
     detectionLimit = newLimit;
-    // Trim existing detections to new limit
-    recentDetections = recentDetections.slice(0, newLimit);
+
+    if (newLimit > recentDetections.length) {
+      // Need more data than currently loaded - fetch from API
+      fetchRecentDetections();
+    } else {
+      // Just trim existing data to new limit
+      recentDetections = recentDetections.slice(0, newLimit);
+    }
   }
 
   // Derived state to check if we're viewing today's data

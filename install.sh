@@ -4588,40 +4588,7 @@ disable_wifi_power_save() {
     fi
 }
 
-# Function to detect Raspberry Pi model
-detect_rpi_model() {
-    if [ -f /proc/device-tree/model ]; then
-        local model
-        model=$(tr -d '\0' < /proc/device-tree/model)
-        case "$model" in
-            *"Raspberry Pi 5"*)
-                print_message "✅ Detected Raspberry Pi 5" "$GREEN"
-                return 5
-                ;;
-            *"Raspberry Pi 4"*)
-                print_message "✅ Detected Raspberry Pi 4" "$GREEN"
-                return 4
-                ;;
-            *"Raspberry Pi 3"*)
-                print_message "✅ Detected Raspberry Pi 3" "$GREEN"
-                return 3
-                ;;
-            *"Raspberry Pi Zero 2"*)
-                print_message "✅ Detected Raspberry Pi Zero 2" "$GREEN"
-                return 2
-                ;;
-            *)
-                print_message "ℹ️ Unknown Raspberry Pi model: $model" "$YELLOW"
-                return 0
-                ;;
-        esac
-    fi
-
-    # Return 0 if no Raspberry Pi model is detected
-    return 0
-}
-
-# Function to configure performance settings based on RPi model
+# Function to configure performance settings
 optimize_settings() {
     print_message "\n⏱️ Optimizing settings based on system performance" "$GREEN"
     # enable XNNPACK delegate for inference acceleration
@@ -4632,33 +4599,6 @@ optimize_settings() {
     if is_raspberry_pi; then
         print_message "🔧 WiFi power saving will be disabled on startup to prevent connection drops" "$YELLOW"
     fi
-
-    # Detect RPi model
-    detect_rpi_model
-    local rpi_model=$?
-
-    case $rpi_model in
-        5)
-            # RPi 5 settings
-            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
-            print_message "✅ Applied optimized settings for Raspberry Pi 5" "$GREEN"
-            ;;
-        4)
-            # RPi 4 settings
-            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
-            print_message "✅ Applied optimized settings for Raspberry Pi 4" "$GREEN"
-            ;;
-        3)
-            # RPi 3 settings
-            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
-            print_message "✅ Applied optimized settings for Raspberry Pi 3" "$GREEN"
-            ;;
-        2)
-            # RPi Zero 2 settings
-            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
-            print_message "✅ Applied optimized settings for Raspberry Pi Zero 2" "$GREEN"
-            ;;
-    esac
 }
 
 # Function to validate installation

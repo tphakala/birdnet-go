@@ -154,17 +154,27 @@ const (
 	SpectrogramStyleScientific       = "scientific"
 )
 
+// Spectrogram dynamic range preset constants (dB values for Sox -z parameter).
+// Lower values increase contrast, making weak signals stand out better.
+// Higher values show more detail but with lower contrast.
+const (
+	SpectrogramDynamicRangeHighContrast = "80"  // High contrast - weak signals visible
+	SpectrogramDynamicRangeStandard     = "100" // Standard - balanced (default)
+	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail, Sox default
+)
+
 // SpectrogramPreRender contains settings for spectrogram generation modes.
 // Three modes control when and how spectrograms are generated:
 //   - "auto": Generate on-demand when API is called (default, suitable for most systems)
 //   - "prerender": Background worker generates during audio clip save (continuous CPU usage)
 //   - "user-requested": Only generate when user clicks button in UI (zero automatic overhead)
 type SpectrogramPreRender struct {
-	Mode    string `json:"mode"    mapstructure:"mode"`    // Generation mode: "auto" (default), "prerender", "user-requested"
-	Enabled bool   `json:"enabled" mapstructure:"enabled"` // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
-	Size    string `json:"size"    mapstructure:"size"`    // Default size for all modes (see recommendations below)
-	Raw     bool   `json:"raw"     mapstructure:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
-	Style   string `json:"style"   mapstructure:"style"`   // Visual style preset: "default", "scientific_dark", "high_contrast_dark", "scientific"
+	Mode         string `json:"mode"         mapstructure:"mode"`         // Generation mode: "auto" (default), "prerender", "user-requested"
+	Enabled      bool   `json:"enabled"      mapstructure:"enabled"`      // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
+	Size         string `json:"size"         mapstructure:"size"`         // Default size for all modes (see recommendations below)
+	Raw          bool   `json:"raw"          mapstructure:"raw"`          // Generate raw spectrogram without axes/legend (default: true)
+	Style        string `json:"style"        mapstructure:"style"`        // Visual style preset: "default", "scientific_dark", "high_contrast_dark", "scientific"
+	DynamicRange string `json:"dynamicRange" mapstructure:"dynamicRange"` // Dynamic range in dB: "80" (high contrast), "100" (standard), "120" (extended)
 }
 
 // GetMode returns the effective spectrogram generation mode, handling backward compatibility.
