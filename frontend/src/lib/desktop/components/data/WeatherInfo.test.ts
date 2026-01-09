@@ -41,7 +41,7 @@ describe('WeatherInfo', () => {
     expect(screen.getByText('detections.weather.title')).toBeInTheDocument();
     expect(screen.getByText('22.5°C')).toBeInTheDocument();
     expect(screen.getByText('Clear')).toBeInTheDocument();
-    expect(screen.getByText('15 km/h')).toBeInTheDocument();
+    expect(screen.getByText('15 m/s')).toBeInTheDocument();
     expect(screen.getByText('65%')).toBeInTheDocument();
   });
 
