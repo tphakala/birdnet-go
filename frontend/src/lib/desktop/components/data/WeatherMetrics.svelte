@@ -39,7 +39,7 @@
   import {
     WEATHER_ICON_MAP,
     UNKNOWN_WEATHER_INFO,
-    extractWeatherCode,
+    getEffectiveWeatherCode,
     isNightTime,
     translateWeatherCondition,
     getWindOpacityClass,
@@ -124,8 +124,8 @@
 
   const windSpeedUnit = $derived(getWindSpeedUnit(units));
 
-  // Extract base weather code using shared utility
-  const weatherCode = $derived(extractWeatherCode(weatherIcon));
+  // Extract base weather code using shared utility, with fallback to description-based derivation
+  const weatherCode = $derived(getEffectiveWeatherCode(weatherIcon, weatherDescription));
 
   // Determine if it's night time using shared utility
   const isNight = $derived(isNightTime(weatherIcon, timeOfDay));
