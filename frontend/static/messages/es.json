@@ -1173,6 +1173,20 @@
                   "scientific": "Escala de grises con ventana Dolph, fondo claro (estilo xeno-canto)"
                 }
               },
+              "dynamicRange": {
+                "label": "Rango Dinámico",
+                "helpText": "Controla el contraste - valores más bajos hacen que las señales débiles destaquen mejor, valores más altos muestran más detalle.",
+                "options": {
+                  "highContrast": "Alto Contraste (80 dB)",
+                  "standard": "Estándar (100 dB)",
+                  "extended": "Extendido (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideal para señales débiles. Los cantos de aves destacan claramente del ruido de fondo. Recomendado para estilos científicos/escala de grises.",
+                  "standard": "Configuración balanceada por defecto. Bueno para la mayoría de los casos.",
+                  "extended": "Más detalles visibles pero menor contraste. Valor predeterminado de Sox."
+                }
+              },
               "enabled": {
                 "label": "Habilitar Pre-renderizado de Espectrograma",
                 "helpText": "OBSOLETO: Use el Modo de Generación en su lugar. Generar espectrogramas en segundo plano cuando se guardan detecciones para eliminar retrasos de UI."

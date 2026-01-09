@@ -1173,6 +1173,20 @@
                   "scientific": "Niveaux de gris avec fenêtre de Dolph, fond clair (style xeno-canto)"
                 }
               },
+              "dynamicRange": {
+                "label": "Plage Dynamique",
+                "helpText": "Contrôle le contraste - des valeurs plus faibles font mieux ressortir les signaux faibles, des valeurs plus élevées montrent plus de détails.",
+                "options": {
+                  "highContrast": "Contraste Élevé (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Étendu (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Idéal pour les signaux faibles. Les chants d'oiseaux ressortent clairement du bruit de fond. Recommandé pour les styles scientifiques/niveaux de gris.",
+                  "standard": "Réglage équilibré par défaut. Bon pour la plupart des cas d'utilisation.",
+                  "extended": "Plus de détails visibles mais contraste plus faible. Valeur par défaut de Sox."
+                }
+              },
               "enabled": {
                 "label": "Activer le Pré-rendu de Spectrogramme",
                 "helpText": "OBSOLÈTE : Utilisez le Mode de Génération à la place. Générer les spectrogrammes en arrière-plan lors de l'enregistrement des détections pour éliminer les retards d'interface."

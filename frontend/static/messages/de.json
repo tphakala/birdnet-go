@@ -1173,6 +1173,20 @@
                   "scientific": "Graustufen mit Dolph-Fenster, heller Hintergrund (xeno-canto-Stil)"
                 }
               },
+              "dynamicRange": {
+                "label": "Dynamikbereich",
+                "helpText": "Steuert den Kontrast - niedrigere Werte lassen schwache Signale besser hervorstechen, höhere Werte zeigen mehr Details.",
+                "options": {
+                  "highContrast": "Hoher Kontrast (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Erweitert (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideal für schwache Signale. Vogelrufe heben sich deutlich vom Hintergrundrauschen ab. Empfohlen für wissenschaftliche/Graustufen-Stile.",
+                  "standard": "Ausgewogene Standardeinstellung. Gut für die meisten Anwendungsfälle.",
+                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. Sox-Standardwert."
+                }
+              },
               "enabled": {
                 "label": "Spektrogramm-Vorrendering aktivieren",
                 "helpText": "VERALTET: Verwenden Sie stattdessen den Generierungsmodus. Spektrogramme im Hintergrund generieren, wenn Erkennungen gespeichert werden, um UI-Verzögerungen zu eliminieren."

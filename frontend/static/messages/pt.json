@@ -1176,6 +1176,20 @@
                   "scientific": "Escala de cinza com janela Dolph, fundo claro (estilo xeno-canto)"
                 }
               },
+              "dynamicRange": {
+                "label": "Faixa Dinâmica",
+                "helpText": "Controla o contraste - valores mais baixos fazem sinais fracos se destacarem melhor, valores mais altos mostram mais detalhes.",
+                "options": {
+                  "highContrast": "Alto Contraste (80 dB)",
+                  "standard": "Padrão (100 dB)",
+                  "extended": "Estendido (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideal para sinais fracos. Cantos de pássaros se destacam claramente do ruído de fundo. Recomendado para estilos científicos/escala de cinza.",
+                  "standard": "Configuração balanceada padrão. Bom para a maioria dos casos de uso.",
+                  "extended": "Mais detalhes visíveis mas menor contraste. Valor padrão do Sox."
+                }
+              },
               "enabled": {
                 "label": "Habilitar Pré-renderização de Espectrograma",
                 "helpText": "OBSOLETO: Use o Modo de Geração em vez disso. Gerar espectrogramas em segundo plano quando detecções são salvas para eliminar atrasos de UI."

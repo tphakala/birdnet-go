@@ -1185,6 +1185,20 @@
                   "scientific": "Skala szarości z oknem Dolpha, jasne tło (styl xeno-canto)"
                 }
               },
+              "dynamicRange": {
+                "label": "Zakres Dynamiczny",
+                "helpText": "Kontroluje kontrast - niższe wartości lepiej wyróżniają słabe sygnały, wyższe wartości pokazują więcej szczegółów.",
+                "options": {
+                  "highContrast": "Wysoki Kontrast (80 dB)",
+                  "standard": "Standardowy (100 dB)",
+                  "extended": "Rozszerzony (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Najlepszy dla słabych sygnałów. Śpiew ptaków wyraźnie wyróżnia się z szumu tła. Zalecany dla stylów naukowych/skali szarości.",
+                  "standard": "Domyślne zrównoważone ustawienie. Dobre dla większości zastosowań.",
+                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość Sox."
+                }
+              },
               "enabled": {
                 "label": "Włącz Wstępne Renderowanie Spektrogramu",
                 "helpText": "PRZESTARZAŁE: Użyj zamiast tego Trybu Generowania. Generuj spektrogramy w tle podczas zapisywania detekcji, aby wyeliminować opóźnienia interfejsu użytkownika."
