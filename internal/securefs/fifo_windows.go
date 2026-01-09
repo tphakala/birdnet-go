@@ -46,7 +46,7 @@ func createFIFOPlatform(path string) (string, error) {
 	// Remove any existing file at the path location
 	if _, err := os.Stat(path); err == nil {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Warn("Error removing existing file at FIFO path",
+			GetLogger().Warn("Error removing existing file at FIFO path",
 				logger.String("path", path),
 				logger.Error(err))
 		}
@@ -87,7 +87,7 @@ func createFIFOPlatform(path string) (string, error) {
 		)
 
 		if createErr == nil && pipeHandle != windows.InvalidHandle {
-			log.Debug("Successfully created Windows named pipe", logger.String("pipe", fullPipeName))
+			GetLogger().Debug("Successfully created Windows named pipe", logger.String("pipe", fullPipeName))
 
 			// Create a placeholder file at the original path location with metadata
 			// This helps us track the named pipe location
@@ -95,13 +95,13 @@ func createFIFOPlatform(path string) (string, error) {
 
 			// Ensure the parent directory exists
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				log.Warn("Failed to create parent directory for named pipe placeholder",
+				GetLogger().Warn("Failed to create parent directory for named pipe placeholder",
 					logger.String("path", filepath.Dir(path)),
 					logger.Error(err))
 			}
 
 			if err := os.WriteFile(path, []byte(placeholderInfo), 0o666); err != nil {
-				log.Warn("Failed to create named pipe placeholder file",
+				GetLogger().Warn("Failed to create named pipe placeholder file",
 					logger.String("path", path),
 					logger.Error(err))
 			}
@@ -114,7 +114,7 @@ func createFIFOPlatform(path string) (string, error) {
 			return fullPipeName, nil
 		}
 
-		log.Debug("Failed to create Windows named pipe, retrying",
+		GetLogger().Debug("Failed to create Windows named pipe, retrying",
 			logger.Int("retry", retry+1),
 			logger.Error(createErr))
 		if pipeHandle != windows.InvalidHandle {
