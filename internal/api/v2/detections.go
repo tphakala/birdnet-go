@@ -128,25 +128,33 @@ func (c *Controller) initDetectionRoutes() {
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
 }
 
+// CommentResponse represents a comment on a detection in the API response
+type CommentResponse struct {
+	ID        uint   `json:"id"`
+	Entry     string `json:"entry"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID                 uint         `json:"id"`
-	Date               string       `json:"date"`
-	Time               string       `json:"time"`
-	Source             string       `json:"source"`
-	BeginTime          string       `json:"beginTime"`
-	EndTime            string       `json:"endTime"`
-	SpeciesCode        string       `json:"speciesCode"`
-	ScientificName     string       `json:"scientificName"`
-	CommonName         string       `json:"commonName"`
-	Confidence         float64      `json:"confidence"`
-	Verified           string       `json:"verified"`
-	Locked             bool         `json:"locked"`
-	Comments           []string     `json:"comments,omitempty"`
-	Weather            *WeatherInfo `json:"weather,omitempty"`
-	TimeOfDay          string       `json:"timeOfDay,omitempty"`
-	IsNewSpecies       bool         `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen int          `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	ID                 uint              `json:"id"`
+	Date               string            `json:"date"`
+	Time               string            `json:"time"`
+	Source             string            `json:"source"`
+	BeginTime          string            `json:"beginTime"`
+	EndTime            string            `json:"endTime"`
+	SpeciesCode        string            `json:"speciesCode"`
+	ScientificName     string            `json:"scientificName"`
+	CommonName         string            `json:"commonName"`
+	Confidence         float64           `json:"confidence"`
+	Verified           string            `json:"verified"`
+	Locked             bool              `json:"locked"`
+	Comments           []CommentResponse `json:"comments,omitempty"`
+	Weather            *WeatherInfo      `json:"weather,omitempty"`
+	TimeOfDay          string            `json:"timeOfDay,omitempty"`
+	IsNewSpecies       bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
@@ -570,14 +578,19 @@ func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, 
 	detection.CurrentSeason = status.CurrentSeason
 }
 
-// extractNoteComments extracts comment strings from note comments
-func extractNoteComments(noteComments []datastore.NoteComment) []string {
+// extractNoteComments converts datastore comments to API response format
+func extractNoteComments(noteComments []datastore.NoteComment) []CommentResponse {
 	if len(noteComments) == 0 {
 		return nil
 	}
-	comments := make([]string, 0, len(noteComments))
+	comments := make([]CommentResponse, 0, len(noteComments))
 	for _, comment := range noteComments {
-		comments = append(comments, comment.Entry)
+		comments = append(comments, CommentResponse{
+			ID:        comment.ID,
+			Entry:     comment.Entry,
+			CreatedAt: comment.CreatedAt.Format(time.RFC3339),
+			UpdatedAt: comment.UpdatedAt.Format(time.RFC3339),
+		})
 	}
 	return comments
 }
