@@ -566,12 +566,13 @@ func TestGetDetectionCommentFormat(t *testing.T) {
 	assert.Equal(t, createdTime.Format(time.RFC3339), comment1.CreatedAt, "CreatedAt should be RFC3339 formatted")
 	assert.Equal(t, updatedTime.Format(time.RFC3339), comment1.UpdatedAt, "UpdatedAt should be RFC3339 formatted")
 
-	// Verify second comment
+	// Verify second comment with exact timestamp assertions
 	comment2 := response.Comments[1]
+	expectedTime2 := createdTime.Add(time.Hour)
 	assert.Equal(t, uint(102), comment2.ID)
 	assert.Equal(t, "Second comment added later", comment2.Entry)
-	assert.NotEmpty(t, comment2.CreatedAt, "CreatedAt must not be empty")
-	assert.NotEmpty(t, comment2.UpdatedAt, "UpdatedAt must not be empty")
+	assert.Equal(t, expectedTime2.Format(time.RFC3339), comment2.CreatedAt, "Second comment CreatedAt should be RFC3339 formatted")
+	assert.Equal(t, expectedTime2.Format(time.RFC3339), comment2.UpdatedAt, "Second comment UpdatedAt should be RFC3339 formatted")
 
 	// Verify timestamps are valid RFC3339 format (frontend will parse these)
 	_, err = time.Parse(time.RFC3339, comment1.CreatedAt)
