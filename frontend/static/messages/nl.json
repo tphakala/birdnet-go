@@ -451,6 +451,9 @@
         "sunrise": "Zonsopgang om {time}",
         "sunset": "Zonsondergang om {time}"
       },
+      "weather": {
+        "label": "Weer"
+      },
       "legend": {
         "less": "Minder",
         "more": "Meer"

@@ -451,6 +451,9 @@
         "sunrise": "Amanecer a las {time}",
         "sunset": "Atardecer a las {time}"
       },
+      "weather": {
+        "label": "Clima"
+      },
       "legend": {
         "less": "Menos",
         "more": "Más"

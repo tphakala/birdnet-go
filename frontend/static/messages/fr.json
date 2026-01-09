@@ -451,6 +451,9 @@
         "sunrise": "Lever du soleil à {time}",
         "sunset": "Coucher du soleil à {time}"
       },
+      "weather": {
+        "label": "Météo"
+      },
       "legend": {
         "less": "Moins",
         "more": "Plus"

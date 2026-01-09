@@ -451,6 +451,9 @@
         "sunrise": "Sunrise at {time}",
         "sunset": "Sunset at {time}"
       },
+      "weather": {
+        "label": "Weather"
+      },
       "legend": {
         "less": "Less",
         "more": "More"

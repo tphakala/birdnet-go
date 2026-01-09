@@ -54,7 +54,18 @@ Responsive Breakpoints:
   import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
   import { LRUCache } from '$lib/utils/LRUCache';
-  import { safeArrayAccess } from '$lib/utils/security';
+  import { safeArrayAccess, safeGet } from '$lib/utils/security';
+  import {
+    WEATHER_ICON_MAP,
+    UNKNOWN_WEATHER_INFO,
+    getEffectiveWeatherCode,
+    translateWeatherCondition,
+  } from '$lib/utils/weather';
+  import {
+    convertTemperature,
+    getTemperatureSymbol,
+    type TemperatureUnit,
+  } from '$lib/utils/formatters';
   import { ChevronLeft, ChevronRight, Star, Sunrise, Sunset, XCircle } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import AnimatedCounter from './AnimatedCounter.svelte';
@@ -108,6 +119,15 @@ Responsive Breakpoints:
   interface SunTimes {
     sunrise: string; // ISO date string
     sunset: string; // ISO date string
+  }
+
+  // Hourly weather data from API
+  interface HourlyWeatherResponse {
+    time: string; // "HH:mm:ss"
+    temperature: number;
+    weather_main?: string;
+    weather_desc?: string; // yr.no symbol like "partlycloudy_night"
+    weather_icon?: string; // icon code or "unknown"
   }
 
   // Column type definitions
@@ -183,10 +203,45 @@ Responsive Breakpoints:
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
 
+  // Hourly weather state
+  let hourlyWeather = $state<HourlyWeatherResponse[]>([]);
+  // Map for O(1) hour lookup (populated when hourlyWeather changes)
+  let hourlyWeatherMap = $state(new Map<number, HourlyWeatherResponse>());
+
+  // Temperature unit preference (fetched from dashboard config)
+  let temperatureUnit = $state<TemperatureUnit>('metric');
+
   // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
   const sunTimesCache = $state.raw(
     new LRUCache<string, SunTimes>(CONFIG.CACHE.SUN_TIMES_MAX_ENTRIES)
   );
+
+  // Cache for hourly weather to avoid repeated API calls
+  const hourlyWeatherCache = $state.raw(
+    new LRUCache<string, HourlyWeatherResponse[]>(CONFIG.CACHE.SUN_TIMES_MAX_ENTRIES)
+  );
+
+  // Fetch dashboard config for temperature unit preference
+  async function fetchDashboardConfig(): Promise<void> {
+    try {
+      const response = await fetch('/api/v2/settings/dashboard');
+      if (!response.ok) return;
+      const config = await response.json();
+      // Map config temperatureUnit to TemperatureUnit type
+      if (config.temperatureUnit === 'fahrenheit') {
+        temperatureUnit = 'imperial';
+      } else {
+        temperatureUnit = 'metric';
+      }
+    } catch {
+      // Keep default 'metric' on error
+    }
+  }
+
+  // Fetch dashboard config on mount
+  $effect(() => {
+    fetchDashboardConfig();
+  });
 
   // Optimize loading state management with proper dependency tracking
   $effect(() => {
@@ -245,10 +300,67 @@ Responsive Breakpoints:
   }
 
   // Update sun times when selected date changes
+  // Uses captured date to prevent stale data from overwriting fresh data on rapid date changes
   $effect(() => {
-    if (selectedDate) {
-      fetchSunTimes(selectedDate).then(times => {
-        sunTimes = times; // times will be null if there was an error
+    const currentDate = selectedDate;
+    if (currentDate) {
+      fetchSunTimes(currentDate).then(times => {
+        // Only update if this is still the current date (prevents race condition)
+        if (selectedDate === currentDate) {
+          sunTimes = times;
+        }
+      });
+    }
+  });
+
+  // Fetch hourly weather data from API with caching
+  async function fetchHourlyWeather(date: string): Promise<HourlyWeatherResponse[]> {
+    // Validate date format (YYYY-MM-DD) before making API request
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      logger.warn(`Invalid date format provided to fetchHourlyWeather: ${date}`);
+      return [];
+    }
+
+    // Check cache first
+    const cached = hourlyWeatherCache.get(date);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const response = await fetch(`/api/v2/weather/hourly/${date}`);
+      if (!response.ok) {
+        logger.warn(`Failed to fetch hourly weather: ${response.status} ${response.statusText}`);
+        return [];
+      }
+      const responseData = await response.json();
+      const weatherData: HourlyWeatherResponse[] = responseData.data || [];
+
+      // Cache the result
+      hourlyWeatherCache.set(date, weatherData);
+
+      return weatherData;
+    } catch (fetchError) {
+      const errorMsg =
+        fetchError instanceof Error ? fetchError.message : 'Unknown error fetching hourly weather';
+      logger.warn('Error fetching hourly weather:', errorMsg);
+      return [];
+    }
+  }
+
+  // Update hourly weather when selected date changes
+  // Uses captured date to prevent stale data from overwriting fresh data on rapid date changes
+  $effect(() => {
+    const currentDate = selectedDate;
+    if (currentDate) {
+      fetchHourlyWeather(currentDate).then(data => {
+        // Only update if this is still the current date (prevents race condition)
+        if (selectedDate === currentDate) {
+          hourlyWeather = data;
+          // Build hour-keyed map for O(1) lookup
+          hourlyWeatherMap = new Map(data.map(w => [parseInt(w.time.split(':')[0], 10), w]));
+        }
       });
     }
   });
@@ -268,6 +380,51 @@ Responsive Breakpoints:
   // Pre-computed sunrise/sunset hours to avoid recalculating in template loops
   const sunriseHour = $derived(sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null);
   const sunsetHour = $derived(sunTimes ? getSunHourFromTime(sunTimes.sunset) : null);
+
+  // Find weather data for a specific hour (O(1) map lookup)
+  const getHourlyWeatherData = (hour: number): HourlyWeatherResponse | undefined => {
+    return hourlyWeatherMap.get(hour);
+  };
+
+  // Get weather emoji for a specific hour
+  const getHourlyWeatherEmoji = (hour: number): string => {
+    const hourData = getHourlyWeatherData(hour);
+    if (!hourData) return '';
+
+    const iconCode = getEffectiveWeatherCode(hourData.weather_icon, hourData.weather_desc);
+    if (!iconCode) return '';
+
+    // Determine if it's night based on hour relative to sunrise/sunset
+    // Fallback checks both OpenWeatherMap 'n' suffix and yr.no '_night' suffix in description
+    const isNight =
+      sunriseHour !== null && sunsetHour !== null
+        ? hour < sunriseHour || hour >= sunsetHour
+        : (hourData.weather_icon?.endsWith('n') ?? false) ||
+          (hourData.weather_desc?.includes('_night') ?? false);
+
+    const weatherInfo = safeGet(WEATHER_ICON_MAP, iconCode, UNKNOWN_WEATHER_INFO);
+    return isNight ? weatherInfo.night : weatherInfo.day;
+  };
+
+  // Get tooltip text for hourly weather
+  const getHourlyWeatherTooltip = (hour: number): string => {
+    const hourData = getHourlyWeatherData(hour);
+    if (!hourData) return '';
+
+    // Translate raw weather description to human-readable text
+    const rawDesc = hourData.weather_main || hourData.weather_desc || '';
+    const desc = translateWeatherCondition(rawDesc);
+
+    // Convert temperature from Celsius (API storage) to user's preferred unit
+    let temp = '';
+    if (hourData.temperature !== undefined) {
+      const convertedTemp = convertTemperature(hourData.temperature, temperatureUnit);
+      const symbol = getTemperatureSymbol(temperatureUnit);
+      temp = `${convertedTemp.toFixed(1)}${symbol}`;
+    }
+
+    return [desc, temp].filter(Boolean).join(', ');
+  };
 
   // Get daylight class for an hour based on its position relative to sunrise/sunset
   // Returns: 'deep-night', 'night', 'pre-dawn', 'sunrise', 'early-day', 'day', 'mid-day', 'late-day', 'sunset', 'dusk', 'evening'
@@ -702,6 +859,55 @@ Responsive Breakpoints:
           class="daily-summary-grid min-w-[900px]"
           style:--species-col-width={speciesColumnWidth}
         >
+          <!-- Hourly weather visualization row (only shown if weather data exists) -->
+          {#if hourlyWeather.length > 0}
+            <div class="flex mb-1">
+              <!-- Empty label column to align with other rows -->
+              <div class="species-label-col shrink-0"></div>
+
+              <!-- Hourly weather (desktop) -->
+              <div class="hourly-grid flex-1 grid">
+                {#each Array(24) as _, hour (hour)}
+                  {@const emoji = getHourlyWeatherEmoji(hour)}
+                  <div
+                    class="h-5 flex items-center justify-center text-sm weather-cell"
+                    title={getHourlyWeatherTooltip(hour)}
+                  >
+                    {emoji || ''}
+                  </div>
+                {/each}
+              </div>
+
+              <!-- Bi-hourly weather (tablet/mobile) -->
+              <div class="bi-hourly-grid flex-1 grid">
+                {#each Array(12) as _, i (i)}
+                  {@const hour = i * 2}
+                  {@const emoji = getHourlyWeatherEmoji(hour)}
+                  <div
+                    class="h-5 flex items-center justify-center text-sm weather-cell"
+                    title={getHourlyWeatherTooltip(hour)}
+                  >
+                    {emoji || ''}
+                  </div>
+                {/each}
+              </div>
+
+              <!-- Six-hourly weather (small mobile) -->
+              <div class="six-hourly-grid flex-1 grid">
+                {#each Array(4) as _, i (i)}
+                  {@const hour = i * 6}
+                  {@const emoji = getHourlyWeatherEmoji(hour)}
+                  <div
+                    class="h-5 flex items-center justify-center text-base weather-cell"
+                    title={getHourlyWeatherTooltip(hour)}
+                  >
+                    {emoji || ''}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
           <!-- Daylight visualization row -->
           <div class="flex mb-1">
             <div class="species-label-col shrink-0 flex items-center">
