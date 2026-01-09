@@ -1827,31 +1827,28 @@
           </div>
 
           <!-- Dynamic Range Selection -->
-          <div class="mt-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-              <SelectDropdown
-                options={dynamicRangeOptions}
-                value={currentDynamicRange}
-                label={t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.label'
-                )}
-                helpText={t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.helpText'
-                )}
-                disabled={store.isLoading || store.isSaving}
-                variant="select"
-                groupBy={false}
-                menuSize="sm"
-                onChange={value => updateSpectrogramSetting('dynamicRange', value as string)}
-              />
-            </div>
-
-            <!-- Selected dynamic range description -->
-            <p class="text-sm text-base-content/60 italic mt-3">
-              {t(
-                `settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.descriptions.${getDynamicRangeDescriptionKey(currentDynamicRange)}`
+          <div class="mt-6 space-y-3">
+            <SelectDropdown
+              options={dynamicRangeOptions}
+              value={currentDynamicRange}
+              label={t(
+                'settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.label'
               )}
-            </p>
+              disabled={store.isLoading || store.isSaving}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateSpectrogramSetting('dynamicRange', value as string)}
+            />
+
+            <!-- Dynamic range contextual note -->
+            <SettingsNote>
+              <span>
+                {t(
+                  `settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.descriptions.${getDynamicRangeDescriptionKey(currentDynamicRange)}`
+                )}
+              </span>
+            </SettingsNote>
           </div>
         </div>
       </div>
