@@ -119,3 +119,144 @@ export function getWindOpacityClass(windSpeed: number | undefined): string {
   if (windSpeed < WIND_SPEED_THRESHOLDS.MODERATE) return 'opacity-75';
   return ''; // Strong wind: full opacity
 }
+
+/**
+ * Yr.no weather symbol to standardized icon code mapping
+ * Used as fallback when weatherIcon is "unknown" but description contains the raw symbol
+ * Based on https://nrkno.github.io/yr-weather-symbols/
+ */
+const YR_NO_SYMBOL_TO_ICON: Record<string, string> = {
+  // Clear sky
+  clearsky_day: '01',
+  clearsky_night: '01',
+  clearsky_polartwilight: '01',
+  // Fair (few clouds)
+  fair_day: '02',
+  fair_night: '02',
+  fair_polartwilight: '02',
+  // Partly cloudy
+  partlycloudy_day: '03',
+  partlycloudy_night: '03',
+  partlycloudy_polartwilight: '03',
+  // Cloudy
+  cloudy: '04',
+  // Fog
+  fog: '50',
+  // Rain showers (light/normal/heavy)
+  lightrainshowers_day: '09',
+  lightrainshowers_night: '09',
+  lightrainshowers_polartwilight: '09',
+  rainshowers_day: '09',
+  rainshowers_night: '09',
+  rainshowers_polartwilight: '09',
+  heavyrainshowers_day: '09',
+  heavyrainshowers_night: '09',
+  heavyrainshowers_polartwilight: '09',
+  // Rain (light/normal/heavy)
+  lightrain: '10',
+  rain: '10',
+  heavyrain: '10',
+  // Thunderstorm variants
+  lightrainshowersandthunder_day: '11',
+  lightrainshowersandthunder_night: '11',
+  lightrainshowersandthunder_polartwilight: '11',
+  rainshowersandthunder_day: '11',
+  rainshowersandthunder_night: '11',
+  rainshowersandthunder_polartwilight: '11',
+  heavyrainshowersandthunder_day: '11',
+  heavyrainshowersandthunder_night: '11',
+  heavyrainshowersandthunder_polartwilight: '11',
+  lightrainandthunder: '11',
+  rainandthunder: '11',
+  heavyrainandthunder: '11',
+  // Sleet showers
+  lightsleetshowers_day: '12',
+  lightsleetshowers_night: '12',
+  lightsleetshowers_polartwilight: '12',
+  sleetshowers_day: '12',
+  sleetshowers_night: '12',
+  sleetshowers_polartwilight: '12',
+  heavysleetshowers_day: '12',
+  heavysleetshowers_night: '12',
+  heavysleetshowers_polartwilight: '12',
+  // Sleet
+  lightsleet: '12',
+  sleet: '12',
+  heavysleet: '12',
+  // Sleet and thunder (including yr.no typo "lightssleet")
+  lightssleetshowersandthunder_day: '11',
+  lightssleetshowersandthunder_night: '11',
+  lightssleetshowersandthunder_polartwilight: '11',
+  sleetshowersandthunder_day: '11',
+  sleetshowersandthunder_night: '11',
+  sleetshowersandthunder_polartwilight: '11',
+  heavysleetshowersandthunder_day: '11',
+  heavysleetshowersandthunder_night: '11',
+  heavysleetshowersandthunder_polartwilight: '11',
+  lightsleetandthunder: '11',
+  sleetandthunder: '11',
+  heavysleetandthunder: '11',
+  // Snow showers
+  lightsnowshowers_day: '13',
+  lightsnowshowers_night: '13',
+  lightsnowshowers_polartwilight: '13',
+  snowshowers_day: '13',
+  snowshowers_night: '13',
+  snowshowers_polartwilight: '13',
+  heavysnowshowers_day: '13',
+  heavysnowshowers_night: '13',
+  heavysnowshowers_polartwilight: '13',
+  // Snow
+  lightsnow: '13',
+  snow: '13',
+  heavysnow: '13',
+  // Snow and thunder (including yr.no typo "lightssnow")
+  lightssnowshowersandthunder_day: '11',
+  lightssnowshowersandthunder_night: '11',
+  lightssnowshowersandthunder_polartwilight: '11',
+  snowshowersandthunder_day: '11',
+  snowshowersandthunder_night: '11',
+  snowshowersandthunder_polartwilight: '11',
+  heavysnowshowersandthunder_day: '11',
+  heavysnowshowersandthunder_night: '11',
+  heavysnowshowersandthunder_polartwilight: '11',
+  lightsnowandthunder: '11',
+  snowandthunder: '11',
+  heavysnowandthunder: '11',
+};
+
+/**
+ * Derive icon code from yr.no weather description
+ * Used when weatherIcon is "unknown" but description contains the raw yr.no symbol
+ *
+ * @param description - Raw yr.no symbol code (e.g., 'partlycloudy_night')
+ * @returns Standardized icon code (e.g., '03') or empty string if not found
+ */
+export function deriveIconFromDescription(description: string | undefined | null): string {
+  if (!description || typeof description !== 'string') return '';
+  return safeGet(YR_NO_SYMBOL_TO_ICON, description, '');
+}
+
+/**
+ * Get effective weather icon code, with fallback to description-based derivation
+ * Handles legacy "unknown" icon values by attempting to derive from description
+ *
+ * @param weatherIcon - The stored weather icon code
+ * @param description - Raw weather description (yr.no symbol)
+ * @returns Valid icon code or empty string
+ */
+export function getEffectiveWeatherCode(
+  weatherIcon: string | undefined | null,
+  description?: string | null
+): string {
+  // First try to extract from weatherIcon
+  const extracted = extractWeatherCode(weatherIcon);
+  if (extracted) return extracted;
+
+  // If weatherIcon is "unknown" or invalid, try to derive from description
+  if (description) {
+    return deriveIconFromDescription(description);
+  }
+
+  return '';
+}
