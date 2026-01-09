@@ -451,6 +451,9 @@
         "sunrise": "Nascer do sol às {time}",
         "sunset": "Pôr do sol às {time}"
       },
+      "weather": {
+        "label": "Tempo"
+      },
       "legend": {
         "less": "Menos",
         "more": "Mais"

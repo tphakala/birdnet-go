@@ -451,6 +451,9 @@
         "sunrise": "Auringonnousu klo {time}",
         "sunset": "Auringonlasku klo {time}"
       },
+      "weather": {
+        "label": "Sää"
+      },
       "legend": {
         "less": "Vähemmän",
         "more": "Enemmän"

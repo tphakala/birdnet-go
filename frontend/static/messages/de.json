@@ -451,6 +451,9 @@
         "sunrise": "Sonnenaufgang um {time}",
         "sunset": "Sonnenuntergang um {time}"
       },
+      "weather": {
+        "label": "Wetter"
+      },
       "legend": {
         "less": "Weniger",
         "more": "Mehr"
