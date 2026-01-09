@@ -1184,7 +1184,7 @@
                 "descriptions": {
                   "highContrast": "Ideaal voor zwakke signalen. Vogelgeluiden komen duidelijk uit boven de achtergrondruis. Aanbevolen voor wetenschappelijke/grijstinten stijlen.",
                   "standard": "Standaard gebalanceerde instelling. Goed voor de meeste toepassingen.",
-                  "extended": "Meer detail zichtbaar maar lager contrast. Sox standaardwaarde."
+                  "extended": "Meer detail zichtbaar maar lager contrast. SoX standaardwaarde."
                 }
               },
               "enabled": {

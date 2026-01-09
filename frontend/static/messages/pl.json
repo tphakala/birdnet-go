@@ -1196,7 +1196,7 @@
                 "descriptions": {
                   "highContrast": "Najlepszy dla słabych sygnałów. Śpiew ptaków wyraźnie wyróżnia się z szumu tła. Zalecany dla stylów naukowych/skali szarości.",
                   "standard": "Domyślne zrównoważone ustawienie. Dobre dla większości zastosowań.",
-                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość Sox."
+                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość SoX."
                 }
               },
               "enabled": {

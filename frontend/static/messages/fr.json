@@ -1184,7 +1184,7 @@
                 "descriptions": {
                   "highContrast": "Idéal pour les signaux faibles. Les chants d'oiseaux ressortent clairement du bruit de fond. Recommandé pour les styles scientifiques/niveaux de gris.",
                   "standard": "Réglage équilibré par défaut. Bon pour la plupart des cas d'utilisation.",
-                  "extended": "Plus de détails visibles mais contraste plus faible. Valeur par défaut de Sox."
+                  "extended": "Plus de détails visibles mais contraste plus faible. Valeur par défaut de SoX."
                 }
               },
               "enabled": {

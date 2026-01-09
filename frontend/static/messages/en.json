@@ -1199,7 +1199,7 @@
                 "descriptions": {
                   "highContrast": "Best for weak signals. Bird calls stand out clearly from background noise. Recommended for scientific/grayscale styles.",
                   "standard": "Default balanced setting. Good for most use cases.",
-                  "extended": "More detail visible but lower contrast. Sox default value."
+                  "extended": "More detail visible but lower contrast. SoX default value."
                 }
               },
               "enabled": {

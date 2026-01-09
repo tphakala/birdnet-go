@@ -1184,7 +1184,7 @@
                 "descriptions": {
                   "highContrast": "Ideal para señales débiles. Los cantos de aves destacan claramente del ruido de fondo. Recomendado para estilos científicos/escala de grises.",
                   "standard": "Configuración balanceada por defecto. Bueno para la mayoría de los casos.",
-                  "extended": "Más detalles visibles pero menor contraste. Valor predeterminado de Sox."
+                  "extended": "Más detalles visibles pero menor contraste. Valor predeterminado de SoX."
                 }
               },
               "enabled": {

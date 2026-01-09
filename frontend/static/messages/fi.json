@@ -1184,7 +1184,7 @@
                 "descriptions": {
                   "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
                   "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
-                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. Sox-oletusarvo."
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. SoX-oletusarvo."
                 }
               },
               "enabled": {

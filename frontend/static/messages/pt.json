@@ -1187,7 +1187,7 @@
                 "descriptions": {
                   "highContrast": "Ideal para sinais fracos. Cantos de pássaros se destacam claramente do ruído de fundo. Recomendado para estilos científicos/escala de cinza.",
                   "standard": "Configuração balanceada padrão. Bom para a maioria dos casos de uso.",
-                  "extended": "Mais detalhes visíveis mas menor contraste. Valor padrão do Sox."
+                  "extended": "Mais detalhes visíveis mas menor contraste. Valor padrão do SoX."
                 }
               },
               "enabled": {

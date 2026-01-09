@@ -1184,7 +1184,7 @@
                 "descriptions": {
                   "highContrast": "Ideal für schwache Signale. Vogelrufe heben sich deutlich vom Hintergrundrauschen ab. Empfohlen für wissenschaftliche/Graustufen-Stile.",
                   "standard": "Ausgewogene Standardeinstellung. Gut für die meisten Anwendungsfälle.",
-                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. Sox-Standardwert."
+                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. SoX-Standardwert."
                 }
               },
               "enabled": {
