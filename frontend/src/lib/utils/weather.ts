@@ -3,6 +3,7 @@
  */
 
 import { t } from '$lib/i18n';
+import { safeGet } from '$lib/utils/security';
 
 /**
  * Weather icon code to emoji mapping
@@ -35,9 +36,9 @@ export const UNKNOWN_WEATHER_INFO = {
  * Wind speed thresholds for visual opacity indicators (in m/s)
  */
 export const WIND_SPEED_THRESHOLDS = {
-  /** Light wind: 0-3 m/s - shown with reduced opacity */
+  /** Light wind: <3 m/s - shown with reduced opacity */
   LIGHT: 3,
-  /** Moderate wind: 3-8 m/s - shown with medium opacity */
+  /** Moderate wind: 3-7 m/s - shown with medium opacity (8+ is strong) */
   MODERATE: 8,
 } as const;
 
@@ -70,7 +71,7 @@ export function isNightTime(
  * @param isNight - Whether it's night time
  */
 export function getWeatherEmoji(weatherCode: string, isNight: boolean): string {
-  const info = WEATHER_ICON_MAP[weatherCode] ?? UNKNOWN_WEATHER_INFO;
+  const info = safeGet(WEATHER_ICON_MAP, weatherCode, UNKNOWN_WEATHER_INFO);
   return isNight ? info.night : info.day;
 }
 
