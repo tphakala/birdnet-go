@@ -59,7 +59,6 @@ Responsive Breakpoints:
     WEATHER_ICON_MAP,
     UNKNOWN_WEATHER_INFO,
     getEffectiveWeatherCode,
-    isNightTime,
     translateWeatherCondition,
   } from '$lib/utils/weather';
   import {
@@ -206,6 +205,8 @@ Responsive Breakpoints:
 
   // Hourly weather state
   let hourlyWeather = $state<HourlyWeatherResponse[]>([]);
+  // Map for O(1) hour lookup (populated when hourlyWeather changes)
+  let hourlyWeatherMap = $state(new Map<number, HourlyWeatherResponse>());
 
   // Temperature unit preference (fetched from dashboard config)
   let temperatureUnit = $state<TemperatureUnit>('metric');
@@ -314,6 +315,13 @@ Responsive Breakpoints:
 
   // Fetch hourly weather data from API with caching
   async function fetchHourlyWeather(date: string): Promise<HourlyWeatherResponse[]> {
+    // Validate date format (YYYY-MM-DD) before making API request
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      logger.warn(`Invalid date format provided to fetchHourlyWeather: ${date}`);
+      return [];
+    }
+
     // Check cache first
     const cached = hourlyWeatherCache.get(date);
     if (cached) {
@@ -350,6 +358,8 @@ Responsive Breakpoints:
         // Only update if this is still the current date (prevents race condition)
         if (selectedDate === currentDate) {
           hourlyWeather = data;
+          // Build hour-keyed map for O(1) lookup
+          hourlyWeatherMap = new Map(data.map(w => [parseInt(w.time.split(':')[0], 10), w]));
         }
       });
     }
@@ -371,12 +381,9 @@ Responsive Breakpoints:
   const sunriseHour = $derived(sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null);
   const sunsetHour = $derived(sunTimes ? getSunHourFromTime(sunTimes.sunset) : null);
 
-  // Find weather data for a specific hour (shared helper)
+  // Find weather data for a specific hour (O(1) map lookup)
   const getHourlyWeatherData = (hour: number): HourlyWeatherResponse | undefined => {
-    return hourlyWeather.find(w => {
-      const weatherHour = parseInt(w.time.split(':')[0], 10);
-      return weatherHour === hour;
-    });
+    return hourlyWeatherMap.get(hour);
   };
 
   // Get weather emoji for a specific hour
@@ -388,10 +395,12 @@ Responsive Breakpoints:
     if (!iconCode) return '';
 
     // Determine if it's night based on hour relative to sunrise/sunset
+    // Fallback checks both OpenWeatherMap 'n' suffix and yr.no '_night' suffix in description
     const isNight =
       sunriseHour !== null && sunsetHour !== null
         ? hour < sunriseHour || hour >= sunsetHour
-        : isNightTime(hourData.weather_icon, 'day');
+        : (hourData.weather_icon?.endsWith('n') ?? false) ||
+          (hourData.weather_desc?.includes('_night') ?? false);
 
     const weatherInfo = safeGet(WEATHER_ICON_MAP, iconCode, UNKNOWN_WEATHER_INFO);
     return isNight ? weatherInfo.night : weatherInfo.day;

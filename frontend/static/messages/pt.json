@@ -452,7 +452,7 @@
         "sunset": "Pôr do sol às {time}"
       },
       "weather": {
-        "label": "Tempo"
+        "label": "Clima"
       },
       "legend": {
         "less": "Menos",
