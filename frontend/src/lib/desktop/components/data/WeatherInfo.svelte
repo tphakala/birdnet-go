@@ -34,7 +34,7 @@
   import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte';
   import { Thermometer, Sun, Wind, Droplets, Gauge, Cloud, XCircle } from '@lucide/svelte';
-  import { formatTemperature, type TemperatureUnit } from '$lib/utils/formatters';
+  import { formatTemperature, formatWindSpeed, type TemperatureUnit } from '$lib/utils/formatters';
 
   interface WeatherData {
     hourly?: {
@@ -117,12 +117,6 @@
     return `${value}%`;
   }
 
-  // Helper function to format wind speed
-  function formatWindSpeed(speed: number | undefined): string {
-    if (speed === undefined) return 'N/A';
-    return `${speed} km/h`;
-  }
-
   // Fetch when detectionId changes
   $effect(() => {
     if (detectionId && autoFetch) {
@@ -201,7 +195,7 @@
           <Wind class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">{t('detections.weather.labels.wind')}</div>
-            <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed)}</div>
+            <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed, units)}</div>
           </div>
         </div>
 

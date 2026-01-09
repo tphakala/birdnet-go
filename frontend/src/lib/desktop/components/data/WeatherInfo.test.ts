@@ -41,7 +41,7 @@ describe('WeatherInfo', () => {
     expect(screen.getByText('detections.weather.title')).toBeInTheDocument();
     expect(screen.getByText('22.5°C')).toBeInTheDocument();
     expect(screen.getByText('Clear')).toBeInTheDocument();
-    expect(screen.getByText('15 km/h')).toBeInTheDocument();
+    expect(screen.getByText('15 m/s')).toBeInTheDocument();
     expect(screen.getByText('65%')).toBeInTheDocument();
   });
 
@@ -353,6 +353,69 @@ describe('WeatherInfo', () => {
     // Wait for updated data to display
     await waitFor(() => {
       expect(screen.getByText('25.0°C')).toBeInTheDocument();
+    });
+  });
+
+  describe('temperature unit conversion', () => {
+    it('displays temperature in Celsius when units is metric', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render(WeatherInfo as any, {
+        props: {
+          weatherData: mockWeatherData,
+          units: 'metric',
+        },
+      });
+
+      // 22.5°C should display as 22.5°C (no conversion)
+      expect(screen.getByText('22.5°C')).toBeInTheDocument();
+    });
+
+    it('converts temperature to Fahrenheit when units is imperial', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render(WeatherInfo as any, {
+        props: {
+          weatherData: mockWeatherData,
+          units: 'imperial',
+        },
+      });
+
+      // 22.5°C = 72.5°F (22.5 * 9/5 + 32 = 72.5)
+      expect(screen.getByText('72.5°F')).toBeInTheDocument();
+    });
+
+    it('converts temperature to Kelvin when units is standard', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render(WeatherInfo as any, {
+        props: {
+          weatherData: mockWeatherData,
+          units: 'standard',
+        },
+      });
+
+      // 22.5°C = 295.65K (22.5 + 273.15 = 295.65), displayed with 1 decimal
+      expect(screen.getByText('295.6K')).toBeInTheDocument();
+    });
+
+    it('reproduces bug fix: 17.2°C displays as ~63°F when units is imperial', () => {
+      // This test validates the bug fix from issue #1730
+      // Previously, WeatherMetrics showed 17.2 F (Celsius value with F symbol)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render(WeatherInfo as any, {
+        props: {
+          weatherData: {
+            hourly: {
+              temperature: 17.2, // Bug report value
+              weatherMain: 'Clear',
+              windSpeed: 5,
+              humidity: 50,
+            },
+          },
+          units: 'imperial',
+        },
+      });
+
+      // 17.2°C = 62.96°F ≈ 63.0°F
+      expect(screen.getByText('63.0°F')).toBeInTheDocument();
     });
   });
 });

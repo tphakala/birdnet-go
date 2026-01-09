@@ -5,9 +5,11 @@
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { getLocale, t } from '$lib/i18n';
+  import { dashboardSettings } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
   import { api } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
+  import type { TemperatureUnit } from '$lib/utils/formatters';
   import {
     ArrowDownUp,
     ChevronDown,
@@ -22,6 +24,14 @@
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
   const ENABLE_LOADING_SPINNERS = false;
+
+  // Map user's temperature preference to TemperatureUnit format
+  // Settings store uses 'celsius'/'fahrenheit', but formatters use 'metric'/'imperial'/'standard'
+  const temperatureUnits = $derived.by((): TemperatureUnit => {
+    const setting = $dashboardSettings?.temperatureUnit;
+    if (setting === 'fahrenheit') return 'imperial';
+    return 'metric'; // Default to metric (Celsius)
+  });
 
   // Type definitions
   interface DateRange {
@@ -824,7 +834,7 @@
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                           <!-- Weather Information Container -->
                           <div class="bg-base-200 rounded-box p-4">
-                            <WeatherInfo detectionId={result.id} />
+                            <WeatherInfo detectionId={result.id} units={temperatureUnits} />
                           </div>
 
                           <!-- Bird Image Container (Middle Column) -->
