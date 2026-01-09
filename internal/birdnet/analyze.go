@@ -218,7 +218,7 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 	}
 
 	// calculate predEnd time based on settings.BirdNET.Overlap
-	predEnd := predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
+	predEnd := predStart.Add(time.Duration(3.0 * float64(time.Second)))
 
 	var source = ""
 	var clipName = ""
