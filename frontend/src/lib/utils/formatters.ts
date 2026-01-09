@@ -319,6 +319,12 @@ export function convertWindSpeed(metersPerSecond: number, unit: TemperatureUnit)
     case 'standard':
       // m/s, no conversion needed
       return metersPerSecond;
+    default: {
+      // Exhaustive check - ensures all TemperatureUnit cases are handled
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _exhaustiveCheck: never = unit;
+      return metersPerSecond;
+    }
   }
 }
 
@@ -335,6 +341,12 @@ export function getWindSpeedUnit(unit: TemperatureUnit): string {
     case 'metric':
     case 'standard':
       return 'm/s';
+    default: {
+      // Exhaustive check - ensures all TemperatureUnit cases are handled
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _exhaustiveCheck: never = unit;
+      return 'm/s';
+    }
   }
 }
 
