@@ -24,6 +24,19 @@
  * ```
  */
 
+import { loggers } from '$lib/utils/logger';
+
+const logger = loggers.ui;
+
+/** Set to true to enable queue debug logging */
+const DEBUG_QUEUE = false;
+
+function debugLog(message: string, data?: Record<string, unknown>) {
+  if (DEBUG_QUEUE) {
+    logger.debug(`[ImageQueue] ${message}`, data);
+  }
+}
+
 /** Maximum concurrent image loads - adjust this value to tune performance */
 export const MAX_CONCURRENT_IMAGE_LOADS = 2;
 
@@ -65,6 +78,7 @@ export function acquireSlot(): SlotHandle {
   const promise = new Promise<boolean>(resolve => {
     if (activeCount < MAX_CONCURRENT_IMAGE_LOADS) {
       activeCount++;
+      debugLog('Slot acquired immediately', { active: activeCount });
       resolve(true);
       return;
     }
@@ -72,6 +86,7 @@ export function acquireSlot(): SlotHandle {
     // Queue the request
     request = { resolve, cancelled: false };
     waitQueue.push(request);
+    debugLog('Request queued', { queued: waitQueue.length });
   });
 
   const cancel = () => {
@@ -94,11 +109,14 @@ export function acquireSlot(): SlotHandle {
  * Safe to call even if no slot was acquired.
  */
 export function releaseSlot(): void {
+  debugLog('Slot released', { active: activeCount, queued: waitQueue.length });
+
   // Process next queued request if any
   while (waitQueue.length > 0) {
     const next = waitQueue.shift();
     if (next && !next.cancelled) {
       // Transfer slot to next request (activeCount stays same)
+      debugLog('Slot transferred to queued request', { active: activeCount, queued: waitQueue.length });
       next.resolve(true);
       return;
     }
@@ -107,6 +125,7 @@ export function releaseSlot(): void {
   // No queued requests, just decrement
   if (activeCount > 0) {
     activeCount--;
+    debugLog('Active count decremented', { active: activeCount });
   }
 }
 
