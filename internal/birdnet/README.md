@@ -182,6 +182,69 @@ The package includes several optimizations for performance:
 - Optional XNNPACK delegate support for accelerated inference
 - Performance core optimization on supported hardware
 - Efficient queue system to handle analysis results asynchronously
+- Batch inference support for improved throughput
+
+## Batch Inference
+
+The package supports batch inference for improved throughput when processing multiple audio sources or using high overlap values.
+
+### Configuration
+
+Enable batch inference by setting `BatchSize` in the configuration:
+
+```yaml
+birdnet:
+  batchSize: 4  # 1=disabled, 4-8 recommended for multiple sources
+```
+
+### How It Works
+
+1. Audio chunks are collected by the `BatchScheduler`
+2. When `batchSize` chunks are collected, batch inference runs
+3. Results are returned to each source asynchronously via channels
+
+### API
+
+```go
+// Submit a chunk for batch inference
+err := bn.SubmitBatch(birdnet.BatchRequest{
+    Sample:     audioSample,        // []float32 of length 144000 (3s at 48kHz)
+    SourceID:   "rtsp-camera-1",    // Identifier for tracking
+    ResultChan: make(chan birdnet.BatchResponse, 1),
+})
+
+// Receive results asynchronously
+resp := <-resultChan
+if resp.HasError() {
+    // Handle error
+}
+for _, result := range resp.Results {
+    fmt.Printf("%s: %.2f\n", result.Species, result.Confidence)
+}
+```
+
+### When to Use
+
+| Scenario                           | Recommended BatchSize |
+|------------------------------------|---------------------- |
+| Single source, low overlap         | 1 (disabled)          |
+| Single source, high overlap (2.5+) | 4                     |
+| Multiple RTSP streams (4+)         | 4-8                   |
+| Many sources (8+)                  | 8                     |
+
+### Performance
+
+Batch inference can provide 1.5-2x throughput improvement compared to sequential processing by:
+
+- Reducing TensorFlow Lite interpreter context switching
+- Better CPU cache utilization
+- Amortizing model invocation overhead across multiple samples
+
+Run benchmarks to measure performance on your hardware:
+
+```bash
+go test ./internal/birdnet/... -bench=. -benchtime=10s
+```
 
 ## Cross-Platform Support
 
