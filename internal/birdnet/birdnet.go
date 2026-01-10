@@ -1075,3 +1075,30 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 
 	return scientific, common, code
 }
+
+// SubmitBatch submits an audio chunk for batch inference.
+// If batching is disabled (BatchSize <= 1), falls back to immediate single prediction.
+func (bn *BirdNET) SubmitBatch(req BatchRequest) error {
+	if err := req.Validate(); err != nil {
+		return err
+	}
+
+	// If no scheduler, fall back to immediate single prediction
+	if bn.batchScheduler == nil {
+		go func() {
+			results, err := bn.Predict([][]float32{req.Sample})
+			req.ResultChan <- BatchResponse{
+				Results: results,
+				Err:     err,
+			}
+		}()
+		return nil
+	}
+
+	return bn.batchScheduler.Submit(req)
+}
+
+// IsBatchingEnabled returns true if batch inference is enabled
+func (bn *BirdNET) IsBatchingEnabled() bool {
+	return bn.batchScheduler != nil
+}
