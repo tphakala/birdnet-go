@@ -145,8 +145,12 @@
           releaseSlot();
         }
       } else {
-        // Cancelled (component unmounted while waiting)
-        spectrogramLoader.setLoading(false);
+        // Cancelled (component unmounted or detection changed while waiting)
+        // Only clear loading if this request is still for the current detection
+        // to avoid race condition with new detection's loading state
+        if (detection.id === forDetectionId) {
+          spectrogramLoader.setLoading(false);
+        }
       }
     });
   }
