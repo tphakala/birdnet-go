@@ -117,7 +117,10 @@ export function releaseSlot(): void {
     const next = waitQueue.shift();
     if (next && !next.cancelled) {
       // Transfer slot to next request (activeCount stays same)
-      debugLog('Slot transferred to queued request', { active: activeCount, queued: waitQueue.length });
+      debugLog('Slot transferred to queued request', {
+        active: activeCount,
+        queued: waitQueue.length,
+      });
       next.resolve(true);
       return;
     }
