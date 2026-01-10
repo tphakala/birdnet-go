@@ -1149,10 +1149,8 @@ func (bn *BirdNET) GetBatchSize() int {
 func (bn *BirdNET) UpdateBatchSize(overlap float64) {
 	newBatchSize := CalculateBatchSize(overlap)
 
+	// First pass: check if change needed and capture old scheduler
 	bn.mu.Lock()
-	defer bn.mu.Unlock()
-
-	// Compute current batch size inside lock to avoid TOCTOU race
 	currentBatchSize := 1
 	if bn.batchScheduler != nil {
 		currentBatchSize = bn.batchScheduler.batchSize
@@ -1160,17 +1158,28 @@ func (bn *BirdNET) UpdateBatchSize(overlap float64) {
 
 	// No change needed
 	if newBatchSize == currentBatchSize {
+		bn.mu.Unlock()
 		return
 	}
 
-	// Stop existing scheduler if any
-	if bn.batchScheduler != nil {
-		bn.batchScheduler.Stop()
-		bn.batchScheduler = nil
+	// Capture old scheduler and clear reference atomically to avoid TOCTOU race
+	oldScheduler := bn.batchScheduler
+	bn.batchScheduler = nil
+	bn.mu.Unlock()
+
+	// Stop old scheduler outside lock to avoid deadlock:
+	// Stop() waits for processLoop, which may be in PredictBatch holding bn.mu
+	if oldScheduler != nil {
+		oldScheduler.Stop()
 	}
 
-	// Create new scheduler if batch size > 1
+	// Second pass: create new scheduler if needed
 	if newBatchSize > 1 {
-		bn.batchScheduler = NewBatchScheduler(bn, newBatchSize)
+		bn.mu.Lock()
+		// Re-check in case another goroutine already created a scheduler
+		if bn.batchScheduler == nil {
+			bn.batchScheduler = NewBatchScheduler(bn, newBatchSize)
+		}
+		bn.mu.Unlock()
 	}
 }
