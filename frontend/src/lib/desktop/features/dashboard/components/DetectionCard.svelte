@@ -26,6 +26,7 @@
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
+  import { acquireSlot, releaseSlot } from '$lib/utils/imageLoadQueue';
 
   const logger = loggers.ui;
 
@@ -78,6 +79,10 @@
   let audioFilterFreq = $state(20);
   let audioContextAvailable = $state(true);
 
+  // Queue slot management
+  let slotHandle: ReturnType<typeof acquireSlot> | undefined;
+  let hasSlot = $state(false);
+
   function handleGainChange(value: number) {
     audioGainValue = value;
   }
@@ -90,8 +95,10 @@
     audioContextAvailable = available;
   }
 
-  // Spectrogram URL
-  const spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=md&raw=true`);
+  // Spectrogram URL - only set when we have a queue slot
+  const spectrogramUrl = $derived(
+    hasSlot ? `/api/v2/spectrogram/${detection.id}?size=md&raw=true` : ''
+  );
 
   // Track previous detection ID for cleanup
   let previousDetectionId: number | undefined;
@@ -108,6 +115,24 @@
       retryCount = 0;
       spectrogramLoader.reset();
 
+      // Release old slot and request new one
+      if (hasSlot) {
+        releaseSlot();
+        hasSlot = false;
+      }
+      if (slotHandle) {
+        slotHandle.cancel();
+      }
+
+      // Request new slot for new detection
+      spectrogramLoader.setLoading(true);
+      slotHandle = acquireSlot();
+      slotHandle.promise.then(acquired => {
+        if (acquired) {
+          hasSlot = true;
+        }
+      });
+
       // Reset audio settings to defaults for new detection
       audioGainValue = 0;
       audioFilterFreq = 20;
@@ -122,6 +147,11 @@
     if (retryTimer) {
       clearTimeout(retryTimer);
       retryTimer = undefined;
+    }
+    // Release queue slot on successful load
+    if (hasSlot) {
+      releaseSlot();
+      hasSlot = false;
     }
   }
 
@@ -152,6 +182,11 @@
       }, retryDelay);
     } else {
       spectrogramLoader.setError();
+      // Release queue slot on final failure
+      if (hasSlot) {
+        releaseSlot();
+        hasSlot = false;
+      }
     }
   }
 
@@ -182,6 +217,17 @@
 
   onMount(() => {
     spectrogramLoader.setLoading(true);
+
+    // Request a slot from the image load queue
+    slotHandle = acquireSlot();
+    slotHandle.promise.then(acquired => {
+      if (acquired) {
+        hasSlot = true;
+      } else {
+        // Cancelled (component unmounted while waiting)
+        spectrogramLoader.setLoading(false);
+      }
+    });
   });
 
   onDestroy(() => {
@@ -189,6 +235,15 @@
       clearTimeout(retryTimer);
     }
     spectrogramLoader.cleanup();
+
+    // Cancel pending slot request or release acquired slot
+    if (slotHandle) {
+      slotHandle.cancel();
+    }
+    if (hasSlot) {
+      releaseSlot();
+      hasSlot = false;
+    }
   });
 </script>
 
@@ -213,7 +268,7 @@
         <div class="spectrogram-error">
           <span class="text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
-      {:else}
+      {:else if spectrogramUrl}
         <img
           bind:this={spectrogramImage}
           src={spectrogramUrl}
