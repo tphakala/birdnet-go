@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Simple bird silhouette -->
-  <path d="M6,18 C6,18 8,16 10,16 C12,16 14,18 16,18 C18,18 20,16 22,16 C24,16 26,18 26,18" />
-  <path d="M16,8 C16,8 10,10 8,16 C6,22 10,24 16,24 C22,24 26,22 24,16 C22,10 16,8 16,8Z" />
-  <circle cx="18" cy="14" r="1.5" />
-</svg> 

@@ -40,7 +40,7 @@ See `internal/api/README.md` for complete API documentation.
 
 ### Asset Routes
 
-- `/assets/*` - Static assets (images, icons)
+- `/ui/assets/*` - Static assets (images, icons, sounds) served from `frontend/static/`
 - Frontend JS/CSS embedded in Go binary at build time
 
 ## Architecture

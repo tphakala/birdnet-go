@@ -25,8 +25,8 @@
   // UI constants
   const ANIMATION_DURATION_MS = 1000;
   const NOTIFICATION_VOLUME = 0.5;
-  const NOTIFICATION_SOUND_PATH = '/assets/sounds/notification.mp3';
-  const NOTIFICATION_ICON_PATH = '/assets/images/favicon-32x32.png';
+  const NOTIFICATION_SOUND_PATH = '/ui/assets/sounds/notification.mp3';
+  const NOTIFICATION_ICON_PATH = '/ui/assets/favicon-32x32.png';
   const NOTIFICATIONS_PAGE_URL = '/notifications';
   const SOUND_ENABLED_KEY = 'notificationSound';
   const NOTIFICATIONS_LIMIT = 20;

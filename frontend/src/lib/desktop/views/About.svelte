@@ -50,7 +50,7 @@
         class="w-36 h-36 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center p-1 border border-[var(--border-100)]"
       >
         <img
-          src="/assets/images/BirdNET-Go-logo.webp"
+          src="/ui/assets/BirdNET-Go-logo.webp"
           alt={t('about.logoAlt')}
           class="w-full h-full object-contain rounded-full"
         />
@@ -386,7 +386,7 @@
         <div class="flex items-center gap-2">
           <FileText class="size-5" />
           <a
-            href="/assets/LICENSES.md"
+            href="/ui/assets/LICENSES.md"
             class="link link-primary"
             target="_blank"
             rel="noopener noreferrer">{t('about.dependencyLicenses')}</a
