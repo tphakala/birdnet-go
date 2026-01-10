@@ -79,7 +79,7 @@ func BenchmarkPredictBatch_8(b *testing.B) {
 // BenchmarkScheduler_Throughput measures end-to-end throughput using the batch scheduler API.
 func BenchmarkScheduler_Throughput(b *testing.B) {
 	settings := conf.NewTestSettings().Build()
-	settings.BirdNET.BatchSize = 4
+	settings.BirdNET.Overlap = 2.0 // Enable batching (batch size = 4)
 
 	bn, err := NewBirdNET(settings)
 	if err != nil {

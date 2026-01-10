@@ -188,20 +188,22 @@ The package includes several optimizations for performance:
 
 The package supports batch inference for improved throughput when processing multiple audio sources or using high overlap values.
 
-### Configuration
+### Automatic Batch Sizing
 
-Enable batch inference by setting `BatchSize` in the configuration:
+Batch inference is automatically enabled based on the overlap setting. No manual configuration is required.
 
-```yaml
-birdnet:
-  batchSize: 4  # 1=disabled, 4-8 recommended for multiple sources
-```
+| Overlap | Batch Size   | Rationale                                             |
+|---------|--------------|-------------------------------------------------------|
+| < 2.0   | 1 (disabled) | Chunks arrive slowly (>1s apart), no batching benefit |
+| 2.0-2.5 | 4            | Moderate chunk rate (~0.5-1s apart)                   |
+| >= 2.5  | 8            | High chunk rate (~0.5s apart), maximize throughput    |
 
 ### How It Works
 
 1. Audio chunks are collected by the `BatchScheduler`
-2. When `batchSize` chunks are collected, batch inference runs
+2. When the calculated batch size is reached, batch inference runs
 3. Results are returned to each source asynchronously via channels
+4. On shutdown, pending partial batches are discarded (stale realtime data)
 
 ### API
 
@@ -222,15 +224,6 @@ for _, result := range resp.Results {
     fmt.Printf("%s: %.2f\n", result.Species, result.Confidence)
 }
 ```
-
-### When to Use
-
-| Scenario                           | Recommended BatchSize |
-|------------------------------------|---------------------- |
-| Single source, low overlap         | 1 (disabled)          |
-| Single source, high overlap (2.5+) | 4                     |
-| Multiple RTSP streams (4+)         | 4-8                   |
-| Many sources (8+)                  | 8                     |
 
 ### Performance
 

@@ -9,6 +9,9 @@ import (
 // SampleSize is the expected number of float32 samples per audio chunk (3 seconds at 48kHz)
 const SampleSize = 144000
 
+// DefaultTopKResults is the number of top prediction results to return from inference
+const DefaultTopKResults = 10
+
 // BatchRequest represents a single audio chunk submitted for batch inference
 type BatchRequest struct {
 	Sample     []float32            // Audio samples (must be SampleSize length)

@@ -18,7 +18,7 @@ func TestBatchRequest_Validate(t *testing.T) {
 		{
 			name: "valid request",
 			request: BatchRequest{
-				Sample:     make([]float32, 144000),
+				Sample:     make([]float32, SampleSize),
 				SourceID:   "test-source",
 				ResultChan: make(chan BatchResponse, 1),
 			},
@@ -45,7 +45,7 @@ func TestBatchRequest_Validate(t *testing.T) {
 		{
 			name: "nil result channel",
 			request: BatchRequest{
-				Sample:     make([]float32, 144000),
+				Sample:     make([]float32, SampleSize),
 				SourceID:   "test-source",
 				ResultChan: nil,
 			},

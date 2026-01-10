@@ -1495,6 +1495,7 @@ type settingsChangeCheck struct {
 // Each check has a detection function, action to trigger, and toast notification.
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", "info", toastDurationLong},
+	{"Batch inference", "reconfigure_batch_inference", overlapSettingsChanged, "Reconfiguring batch inference...", "info", toastDurationShort},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", "info", toastDurationMedium},
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", "info", toastDurationShort},
 	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", "info", toastDurationMedium},
@@ -1574,6 +1575,11 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	}
 
 	return false
+}
+
+// overlapSettingsChanged checks if the overlap setting has changed, which affects batch inference.
+func overlapSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.BirdNET.Overlap != currentSettings.BirdNET.Overlap
 }
 
 // rangeFilterSettingsChanged checks if range filter settings have changed

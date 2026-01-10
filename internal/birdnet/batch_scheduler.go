@@ -23,8 +23,12 @@ type BatchScheduler struct {
 	wg        sync.WaitGroup
 }
 
-// NewBatchScheduler creates a new BatchScheduler with the given batch size
+// NewBatchScheduler creates a new BatchScheduler with the given batch size.
+// Panics if predictor is nil.
 func NewBatchScheduler(predictor BatchPredictor, batchSize int) *BatchScheduler {
+	if predictor == nil {
+		panic("birdnet: NewBatchScheduler called with nil predictor")
+	}
 	if batchSize < 1 {
 		batchSize = 1
 	}
@@ -65,10 +69,16 @@ func (s *BatchScheduler) Submit(req BatchRequest) error {
 	return nil
 }
 
-// Stop gracefully shuts down the scheduler, processing any pending requests
+// Stop gracefully shuts down the scheduler, notifying pending requesters.
+// In realtime audio processing, incomplete batches on shutdown are stale data.
 func (s *BatchScheduler) Stop() {
 	s.mu.Lock()
 	s.stopped = true
+	// Notify pending requesters that scheduler is stopping
+	for _, req := range s.pending {
+		req.ResultChan <- BatchResponse{Err: fmt.Errorf("scheduler stopped")}
+	}
+	s.pending = nil
 	s.cond.Signal()
 	s.mu.Unlock()
 
@@ -103,15 +113,9 @@ func (s *BatchScheduler) waitForBatch() []BatchRequest {
 			return batch
 		}
 
-		// Check if stopped
+		// Check if stopped - exit without processing remaining
 		if s.stopped {
-			if len(s.pending) == 0 {
-				return nil // Exit signal
-			}
-			// Process remaining items as final batch
-			batch := s.pending
-			s.pending = nil
-			return batch
+			return nil
 		}
 
 		// Wait for more items or stop signal
@@ -125,6 +129,16 @@ func (s *BatchScheduler) processBatch(batch []BatchRequest) {
 		return
 	}
 
+	// Recover from panics to prevent callers from hanging forever on ResultChan
+	defer func() {
+		if r := recover(); r != nil {
+			err := fmt.Errorf("panic during batch inference: %v", r)
+			for _, req := range batch {
+				req.ResultChan <- BatchResponse{Err: err}
+			}
+		}
+	}()
+
 	// Collect samples
 	samples := make([][]float32, len(batch))
 	for i, req := range batch {
@@ -133,6 +147,11 @@ func (s *BatchScheduler) processBatch(batch []BatchRequest) {
 
 	// Run batch inference
 	results, err := s.predictor.PredictBatch(samples)
+
+	// Validate result count matches batch size to prevent index out of bounds
+	if err == nil && len(results) != len(batch) {
+		err = fmt.Errorf("batch inference returned %d results for %d samples", len(results), len(batch))
+	}
 
 	// Send results back to each requester
 	for i, req := range batch {
