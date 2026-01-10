@@ -2,7 +2,11 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
 import { loggers } from '$lib/utils/logger';
-import { sanitizeNotificationMessage, type Notification } from '$lib/utils/notifications';
+import {
+  sanitizeNotificationMessage,
+  isValidNotification,
+  type Notification,
+} from '$lib/utils/notifications';
 
 const logger = loggers.sse;
 
@@ -12,7 +16,7 @@ const SSE_MAX_RETRY_MS = 30000;
 const SSE_RETRY_DELAY_MS = 5000;
 const SSE_INIT_DELAY_MS = 100;
 const TOAST_DEFAULT_DURATION_MS = 5000;
-const TOAST_DEFAULT_POSITION = 'top-right' as ToastPosition;
+const TOAST_DEFAULT_POSITION: ToastPosition = 'top-right';
 
 interface SSENotification {
   message: string;
@@ -96,7 +100,12 @@ class SSENotificationManager {
           this.handleNotification(notification);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for backwards compatibility
-          logger.warn('SSE general message parsing error (ignored):', error, 'Data:', event.data);
+          // Avoid logging raw payload to prevent leaking sensitive content
+          logger.warn('SSE general message parsing error (ignored)', error, {
+            component: 'sseNotifications',
+            action: 'onmessage',
+            dataLength: typeof event.data === 'string' ? event.data.length : undefined,
+          });
         }
       };
 
@@ -133,8 +142,15 @@ class SSENotificationManager {
       this.eventSource.addEventListener('notification', (event: Event) => {
         try {
           const messageEvent = event as MessageEvent;
-          const notification: Notification = JSON.parse(messageEvent.data);
-          this.notifyCallbacks(notification);
+          const parsed: unknown = JSON.parse(messageEvent.data);
+          if (!isValidNotification(parsed)) {
+            logger.warn('Invalid notification event payload (ignored)', null, {
+              component: 'sseNotifications',
+              action: 'handleNotification',
+            });
+            return;
+          }
+          this.notifyCallbacks(parsed);
         } catch (error) {
           logger.error('Error processing notification event', error, {
             component: 'sseNotifications',
@@ -147,7 +163,7 @@ class SSENotificationManager {
         component: 'sseNotifications',
         action: 'connect',
       });
-      // Try again in 5 seconds
+      // Retry after SSE_RETRY_DELAY_MS
       setTimeout(() => this.connect(), SSE_RETRY_DELAY_MS);
     }
   }

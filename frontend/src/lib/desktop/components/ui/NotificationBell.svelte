@@ -78,7 +78,7 @@
     const now = new Date();
     const time = new Date(timestamp);
     const diffMs = now.getTime() - time.getTime();
-    const diffMins = Math.floor(diffMs / MS_PER_MINUTE);
+    const diffMins = Math.max(0, Math.floor(diffMs / MS_PER_MINUTE));
 
     if (diffMins < 1) return 'just now';
     if (diffMins < MINUTES_PER_HOUR) return `${diffMins}m ago`;
@@ -313,14 +313,22 @@
       // Use preloaded audio for faster playback
       preloadedAudio.currentTime = 0;
       preloadedAudio.play().catch(error => {
-        logger.debug('Could not play preloaded notification sound', { error });
+        logger.debug('Could not play preloaded notification sound', error, {
+          component: 'NotificationBell',
+          action: 'playNotificationSound',
+          mode: 'preloaded',
+        });
       });
     } else {
       // Fallback to creating new Audio instance
       const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
       audio.volume = NOTIFICATION_VOLUME;
       audio.play().catch(error => {
-        logger.debug('Could not play notification sound', { error });
+        logger.debug('Could not play notification sound', error, {
+          component: 'NotificationBell',
+          action: 'playNotificationSound',
+          mode: 'new-audio',
+        });
       });
     }
   }
@@ -328,7 +336,7 @@
   // Show browser notification
   function showBrowserNotification(notification: Notification) {
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
-      new globalThis.Notification(notification.title, {
+      new globalThis.Notification(sanitizeNotificationMessage(notification.title), {
         body: sanitizeNotificationMessage(notification.message),
         icon: NOTIFICATION_ICON_PATH,
         tag: notification.id,
@@ -359,6 +367,7 @@
     }
     if (animationTimeout) {
       globalThis.clearTimeout(animationTimeout);
+      animationTimeout = null;
     }
     // Clean up audio resources
     if (preloadedAudio) {
