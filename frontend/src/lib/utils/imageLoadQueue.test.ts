@@ -49,7 +49,7 @@ describe('imageLoadQueue', () => {
       // This one should be queued
       const queuedHandle = acquireSlot();
       let resolved = false;
-      queuedHandle.promise.then(() => {
+      void queuedHandle.promise.then(() => {
         resolved = true;
       });
 
@@ -69,7 +69,7 @@ describe('imageLoadQueue', () => {
       // Queue one more
       const queuedHandle = acquireSlot();
       let resolved = false;
-      queuedHandle.promise.then(() => {
+      void queuedHandle.promise.then(() => {
         resolved = true;
       });
 
