@@ -284,14 +284,13 @@ func (s *Service) fetchAndSave() error {
 			Build()
 	}
 
-	// Convert to local time once for logging and storage.
-	// Mutating data.Time is safe since data is only used within this function.
-	// SaveWeatherData's In(time.Local) call becomes a no-op.
-	data.Time = data.Time.In(time.Local)
+	// Convert to local time for logging. SaveWeatherData handles its own
+	// timezone conversion for storage.
+	localTimeForLog := data.Time.In(time.Local)
 
 	getLogger().Info("Successfully fetched weather data",
 		logger.String("provider", s.settings.Realtime.Weather.Provider),
-		logger.String("time", data.Time.Format("2006-01-02 15:04:05-07:00")),
+		logger.String("time", localTimeForLog.Format("2006-01-02 15:04:05-07:00")),
 		logger.Float64("temp_c", data.Temperature.Current),
 		logger.Float64("wind_mps", data.Wind.Speed),
 		logger.Int("humidity_pct", data.Humidity),
