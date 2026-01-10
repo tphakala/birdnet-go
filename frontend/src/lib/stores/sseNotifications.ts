@@ -25,9 +25,54 @@ interface SSEToastData {
   };
 }
 
+// Callback type for notification events
+type NotificationCallback = (notification: Notification) => void;
+
+// Notification type matching NotificationBell's expected format
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error' | 'detection' | 'system';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  timestamp: string;
+  read: boolean;
+  component?: string;
+  status?: string;
+}
+
 class SSENotificationManager {
   private eventSource: ReconnectingEventSource | null = null;
   private isConnected = false;
+  private readonly notificationCallbacks: Set<NotificationCallback> = new Set();
+
+  /**
+   * Register a callback to receive raw notification events
+   * Used by components like NotificationBell that need the full notification data
+   */
+  registerNotificationCallback(callback: NotificationCallback): () => void {
+    this.notificationCallbacks.add(callback);
+    // Return unsubscribe function
+    return () => {
+      this.notificationCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Notify all registered callbacks of a new notification
+   */
+  private notifyCallbacks(notification: Notification): void {
+    this.notificationCallbacks.forEach(callback => {
+      try {
+        callback(notification);
+      } catch (error) {
+        logger.error('Error in notification callback', error, {
+          component: 'sseNotifications',
+          action: 'notifyCallbacks',
+        });
+      }
+    });
+  }
 
   /**
    * Start listening for SSE notifications
@@ -104,6 +149,20 @@ class SSENotificationManager {
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for heartbeat
           logger.warn('SSE heartbeat parsing error (ignored):', error);
+        }
+      });
+
+      // Handle notification events for registered callbacks
+      this.eventSource.addEventListener('notification', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          const notification: Notification = JSON.parse(messageEvent.data);
+          this.notifyCallbacks(notification);
+        } catch (error) {
+          logger.error('Error processing notification event', error, {
+            component: 'sseNotifications',
+            action: 'handleNotification',
+          });
         }
       });
     } catch (error) {
