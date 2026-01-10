@@ -257,7 +257,10 @@
     link.href = `/api/v2/audio/${detection.id}`;
     // Use species name and date/time for filename
     // Sanitize commonName to prevent path traversal (remove characters that aren't alphanumeric, space, dot, underscore, or hyphen)
-    const safeCommonName = (detection.commonName || DEFAULT_DOWNLOAD_NAME).replace(/[^a-zA-Z0-9 ._-]/g, '_');
+    const safeCommonName = (detection.commonName || DEFAULT_DOWNLOAD_NAME).replace(
+      /[^a-zA-Z0-9 ._-]/g,
+      '_'
+    );
     const dateTime =
       detection.date && detection.time
         ? `${detection.date}_${detection.time.replace(/:/g, '-')}`
