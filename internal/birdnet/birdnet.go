@@ -54,6 +54,9 @@ type BirdNET struct {
 	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
 	speciesCacheMu sync.RWMutex
 	speciesCache   map[string]*speciesCacheEntry
+
+	// Batch inference scheduler (nil if batch size <= 1)
+	batchScheduler *BatchScheduler
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -143,6 +146,11 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
+	}
+
+	// Initialize batch scheduler if batch size > 1
+	if settings.BirdNET.BatchSize > 1 {
+		bn.batchScheduler = NewBatchScheduler(bn, settings.BirdNET.BatchSize)
 	}
 
 	return bn, nil
@@ -627,6 +635,11 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 
 // Delete releases resources used by the TensorFlow Lite interpreters.
 func (bn *BirdNET) Delete() {
+	// Stop batch scheduler first
+	if bn.batchScheduler != nil {
+		bn.batchScheduler.Stop()
+	}
+
 	if bn.AnalysisInterpreter != nil {
 		bn.AnalysisInterpreter.Delete()
 	}
