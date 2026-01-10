@@ -113,6 +113,16 @@ describe('imageLoadQueue', () => {
       const result = await queuedHandle.promise;
       expect(result).toBe(false);
     });
+
+    it('cancel is safe to call on immediately acquired slots', async () => {
+      const handle = acquireSlot();
+      const result = await handle.promise;
+      expect(result).toBe(true);
+
+      // Should not throw or have side effects
+      handle.cancel();
+      expect(getQueueStats().active).toBe(1); // Still active
+    });
   });
 
   describe('releaseSlot', () => {
@@ -177,6 +187,32 @@ describe('imageLoadQueue', () => {
       expect(stats).toHaveProperty('queued');
       expect(stats).toHaveProperty('maxConcurrent');
       expect(stats.maxConcurrent).toBe(MAX_CONCURRENT_IMAGE_LOADS);
+    });
+
+    it('maintains accurate queue stats through complex operation sequences', async () => {
+      // Fill slots
+      for (let i = 0; i < MAX_CONCURRENT_IMAGE_LOADS; i++) {
+        await acquireSlot().promise;
+      }
+      expect(getQueueStats()).toEqual({
+        active: MAX_CONCURRENT_IMAGE_LOADS,
+        queued: 0,
+        maxConcurrent: MAX_CONCURRENT_IMAGE_LOADS,
+      });
+
+      // Queue some requests
+      const handles = [acquireSlot(), acquireSlot(), acquireSlot()];
+      expect(getQueueStats().queued).toBe(3);
+
+      // Cancel middle one
+      handles[1].cancel();
+      expect(getQueueStats().queued).toBe(2);
+
+      // Release a slot - should transfer to first non-cancelled
+      releaseSlot();
+      await handles[0].promise;
+      expect(getQueueStats().queued).toBe(1);
+      expect(getQueueStats().active).toBe(MAX_CONCURRENT_IMAGE_LOADS);
     });
   });
 });
