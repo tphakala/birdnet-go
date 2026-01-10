@@ -149,6 +149,79 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	return topResults, nil
 }
 
+// PredictBatch performs batch inference on multiple audio samples simultaneously.
+// This is more efficient than calling Predict multiple times when processing
+// multiple audio sources or high-overlap chunks.
+func (bn *BirdNET) PredictBatch(samples [][]float32) ([][]datastore.Results, error) {
+	if len(samples) == 0 {
+		return nil, fmt.Errorf("samples cannot be nil or empty")
+	}
+
+	batchSize := len(samples)
+	sampleSize := SampleSize
+
+	// Validate all samples have correct size
+	for i, sample := range samples {
+		if len(sample) != sampleSize {
+			return nil, fmt.Errorf("sample %d has wrong size: expected %d, got %d", i, sampleSize, len(sample))
+		}
+	}
+
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+
+	// Resize input tensor for batch
+	// nolint:gosec // G115: batchSize is bounded by available memory (realistic max ~hundreds of samples),
+	// sampleSize is constant 144000, both safely within int32 range
+	newShape := []int32{int32(batchSize), int32(sampleSize)}
+	if status := bn.AnalysisInterpreter.ResizeInputTensor(0, newShape); status != tflite.OK {
+		return nil, fmt.Errorf("failed to resize input tensor: %v", status)
+	}
+
+	if status := bn.AnalysisInterpreter.AllocateTensors(); status != tflite.OK {
+		return nil, fmt.Errorf("failed to allocate tensors after resize: %v", status)
+	}
+
+	// Copy all samples to input tensor
+	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
+	if inputTensor == nil {
+		return nil, fmt.Errorf("cannot get input tensor")
+	}
+
+	inputData := inputTensor.Float32s()
+	for i, sample := range samples {
+		offset := i * sampleSize
+		copy(inputData[offset:offset+sampleSize], sample)
+	}
+
+	// Invoke inference
+	if status := bn.AnalysisInterpreter.Invoke(); status != tflite.OK {
+		return nil, fmt.Errorf("batch inference failed: %v", status)
+	}
+
+	// Extract results for each sample in batch
+	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
+	numSpecies := outputTensor.Dim(1)
+	outputData := outputTensor.Float32s()
+
+	allResults := make([][]datastore.Results, batchSize)
+	for i := range batchSize {
+		offset := i * numSpecies
+		predictions := make([]float32, numSpecies)
+		copy(predictions, outputData[offset:offset+numSpecies])
+
+		confidence := applySigmoidToPredictions(predictions, bn.Settings.BirdNET.Sensitivity)
+		results, err := pairLabelsAndConfidence(bn.Settings.BirdNET.Labels, confidence)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pair labels for sample %d: %w", i, err)
+		}
+
+		allResults[i] = getTopKResults(results, 10)
+	}
+
+	return allResults, nil
+}
+
 // AnalyzeAudio processes audio data in chunks and predicts species using the BirdNET model.
 // It returns a slice of observations with the identified species and their confidence levels.
 /*func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
