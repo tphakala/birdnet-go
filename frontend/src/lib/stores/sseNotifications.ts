@@ -7,10 +7,12 @@ import { sanitizeNotificationMessage, type Notification } from '$lib/utils/notif
 const logger = loggers.sse;
 
 // SSE connection configuration
+const SSE_ENDPOINT = '/api/v2/notifications/stream';
 const SSE_MAX_RETRY_MS = 30000;
 const SSE_RETRY_DELAY_MS = 5000;
 const SSE_INIT_DELAY_MS = 100;
 const TOAST_DEFAULT_DURATION_MS = 5000;
+const TOAST_DEFAULT_POSITION = 'top-right' as ToastPosition;
 
 interface SSENotification {
   message: string;
@@ -77,7 +79,7 @@ class SSENotificationManager {
 
     try {
       // Create connection to SSE endpoint
-      this.eventSource = new ReconnectingEventSource('/api/v2/notifications/stream', {
+      this.eventSource = new ReconnectingEventSource(SSE_ENDPOINT, {
         max_retry_time: SSE_MAX_RETRY_MS,
         withCredentials: true, // Authentication required for notification stream
       });
@@ -109,14 +111,8 @@ class SSENotificationManager {
 
       // Handle connected event
       this.eventSource.addEventListener('connected', (event: Event) => {
-        try {
-          const messageEvent = event as MessageEvent;
-          const data = JSON.parse(messageEvent.data);
-          logger.info('SSE connected:', data);
-        } catch (error) {
-          // Log parsing errors for debugging while ignoring them for connection events
-          logger.warn('SSE connected event parsing error (ignored):', error);
-        }
+        const messageEvent = event as MessageEvent;
+        logger.info('SSE connected:', messageEvent.data);
       });
 
       // Handle toast messages
@@ -133,16 +129,9 @@ class SSENotificationManager {
         }
       });
 
-      // Handle heartbeat
-      this.eventSource.addEventListener('heartbeat', (event: Event) => {
-        try {
-          const messageEvent = event as MessageEvent;
-          JSON.parse(messageEvent.data);
-          // Heartbeat received successfully - could add connection health tracking here
-        } catch (error) {
-          // Log parsing errors for debugging while ignoring them for heartbeat
-          logger.warn('SSE heartbeat parsing error (ignored):', error);
-        }
+      // Handle heartbeat - just acknowledge reception, no parsing needed
+      this.eventSource.addEventListener('heartbeat', () => {
+        // Heartbeat received - connection is alive
       });
 
       // Handle notification events for registered callbacks
@@ -207,7 +196,7 @@ class SSENotificationManager {
 
     toastActions.show(sanitizeNotificationMessage(toastData.message), toastData.type, {
       duration: toastData.duration ?? TOAST_DEFAULT_DURATION_MS,
-      position: 'top-right' as ToastPosition,
+      position: TOAST_DEFAULT_POSITION,
       actions,
     });
   }

@@ -26,6 +26,13 @@
   // UI constants
   const ANIMATION_DURATION_MS = 1000;
   const NOTIFICATION_VOLUME = 0.5;
+  const NOTIFICATION_SOUND_PATH = '/assets/sounds/notification.mp3';
+  const NOTIFICATION_ICON_PATH = '/assets/images/favicon-32x32.png';
+  const NOTIFICATIONS_PAGE_URL = '/notifications';
+  const SOUND_ENABLED_KEY = 'notificationSound';
+  const NOTIFICATIONS_LIMIT = 20;
+  const BADGE_MAX_COUNT = 99;
+  const DROPDOWN_Z_INDEX = 1010;
 
   interface Props {
     className?: string;
@@ -52,15 +59,12 @@
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
-  // PERFORMANCE OPTIMIZATION: Cache formatted notifications with $derived
-  // Avoids repeated formatting computations and filtering in templates
+  // Filtered notifications for display
   const visibleNotifications = $derived(
     notifications.filter(n => shouldShowNotification(n, debugMode))
   );
 
-  // PERFORMANCE OPTIMIZATION: Cache formatted notification data for display
-  // Prevents repeated date formatting and icon class computation
-  // Template uses these pre-computed values instead of calling functions repeatedly
+  // Pre-computed display data for notifications
   const formattedNotifications = $derived(
     visibleNotifications.map(notification => ({
       ...notification,
@@ -70,7 +74,6 @@
     }))
   );
 
-  // PERFORMANCE OPTIMIZATION: Cache helper functions for display formatting
   function formatTimeAgo(timestamp: string): string {
     const now = new Date();
     const time = new Date(timestamp);
@@ -118,7 +121,7 @@
     loading = true;
     try {
       const data = await api.get<{ notifications?: Notification[] }>(
-        '/api/v2/notifications?limit=20&status=unread'
+        `/api/v2/notifications?limit=${NOTIFICATIONS_LIMIT}&status=unread`
       );
       // Map API notifications to frontend format (status -> read)
       const apiNotifications = mapApiNotifications(data?.notifications ?? []);
@@ -184,18 +187,8 @@
   }
 
   // Add single notification (used for SSE)
+  // Note: Callers must validate with isValidNotification before calling
   function addNotification(notification: Notification) {
-    // Runtime validation to ensure notification has expected shape
-    if (!isValidNotification(notification)) {
-      logger.warn('Invalid notification received, skipping', null, {
-        component: 'NotificationBell',
-        action: 'addNotification',
-        notification:
-          typeof notification === 'object' ? JSON.stringify(notification) : String(notification),
-      });
-      return;
-    }
-
     // Map SSE notification from API format (status -> read)
     const mappedNotification = mapApiNotification(notification);
 
@@ -270,7 +263,7 @@
     if (onNavigateToNotifications) {
       onNavigateToNotifications();
     } else {
-      globalThis.window.location.href = '/notifications';
+      globalThis.window.location.href = NOTIFICATIONS_PAGE_URL;
     }
   }
 
@@ -280,7 +273,7 @@
   // Preload notification sound
   function preloadNotificationSound() {
     try {
-      const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
+      const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
       audio.volume = NOTIFICATION_VOLUME;
       audio.preload = 'auto';
 
@@ -321,7 +314,7 @@
       });
     } else {
       // Fallback to creating new Audio instance
-      const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
+      const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
       audio.volume = NOTIFICATION_VOLUME;
       audio.play().catch(() => {
         // Could not play notification sound
@@ -334,7 +327,7 @@
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
       new globalThis.Notification(notification.title, {
         body: sanitizeNotificationMessage(notification.message),
-        icon: '/assets/images/favicon-32x32.png',
+        icon: NOTIFICATION_ICON_PATH,
         tag: notification.id,
       });
     }
@@ -371,12 +364,10 @@
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect instead of legacy onMount/onDestroy
-  // Provides better reactivity and automatic cleanup management
   $effect(() => {
     if (typeof globalThis.window !== 'undefined') {
       // Load sound preference
-      soundEnabled = globalThis.localStorage.getItem('notificationSound') === 'true';
+      soundEnabled = globalThis.localStorage.getItem(SOUND_ENABLED_KEY) === 'true';
 
       // Preload notification sound
       preloadNotificationSound();
@@ -406,7 +397,6 @@
       }
 
       return () => {
-        // PERFORMANCE OPTIMIZATION: Comprehensive cleanup with Svelte 5 pattern
         globalThis.document.removeEventListener('click', handleClickOutside);
         globalThis.window.removeEventListener(
           'notification-deleted',
@@ -440,7 +430,7 @@
         aria-live="polite"
         aria-atomic="true"
       >
-        {unreadCount > 99 ? '99+' : unreadCount}
+        {unreadCount > BADGE_MAX_COUNT ? `${BADGE_MAX_COUNT}+` : unreadCount}
       </span>
     {/if}
   </button>
@@ -452,7 +442,7 @@
       id="notification-dropdown"
       role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
       class="notification-dropdown absolute top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-128 bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
-      style:z-index={1010}
+      style:z-index={DROPDOWN_Z_INDEX}
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">
@@ -561,7 +551,7 @@
             if (onNavigateToNotifications) {
               onNavigateToNotifications();
             } else {
-              globalThis.window.location.href = '/notifications';
+              globalThis.window.location.href = NOTIFICATIONS_PAGE_URL;
             }
           }}
           class="btn btn-sm btn-block btn-ghost"
