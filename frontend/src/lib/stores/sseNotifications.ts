@@ -129,11 +129,6 @@ class SSENotificationManager {
         }
       });
 
-      // Handle heartbeat - just acknowledge reception, no parsing needed
-      this.eventSource.addEventListener('heartbeat', () => {
-        // Heartbeat received - connection is alive
-      });
-
       // Handle notification events for registered callbacks
       this.eventSource.addEventListener('notification', (event: Event) => {
         try {

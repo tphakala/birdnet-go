@@ -252,19 +252,22 @@
     await Promise.all(unreadIds.map(id => markAsRead(id)));
   }
 
-  // Handle notification click
-  async function handleNotificationClick(notification: Notification) {
-    if (!notification.read) {
-      await markAsRead(notification.id);
-    }
-
+  // Navigate to notifications page
+  function navigateToNotifications() {
     dropdownOpen = false;
-
     if (onNavigateToNotifications) {
       onNavigateToNotifications();
     } else {
       globalThis.window.location.href = NOTIFICATIONS_PAGE_URL;
     }
+  }
+
+  // Handle notification click
+  async function handleNotificationClick(notification: Notification) {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    navigateToNotifications();
   }
 
   let audioReady = false;
@@ -309,15 +312,15 @@
     if (preloadedAudio && audioReady) {
       // Use preloaded audio for faster playback
       preloadedAudio.currentTime = 0;
-      preloadedAudio.play().catch(() => {
-        // Could not play preloaded notification sound
+      preloadedAudio.play().catch(error => {
+        logger.debug('Could not play preloaded notification sound', { error });
       });
     } else {
       // Fallback to creating new Audio instance
       const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
       audio.volume = NOTIFICATION_VOLUME;
-      audio.play().catch(() => {
-        // Could not play notification sound
+      audio.play().catch(error => {
+        logger.debug('Could not play notification sound', { error });
       });
     }
   }
@@ -545,17 +548,7 @@
 
       <!-- Footer -->
       <div class="p-4 border-t border-base-300">
-        <button
-          onclick={() => {
-            dropdownOpen = false;
-            if (onNavigateToNotifications) {
-              onNavigateToNotifications();
-            } else {
-              globalThis.window.location.href = NOTIFICATIONS_PAGE_URL;
-            }
-          }}
-          class="btn btn-sm btn-block btn-ghost"
-        >
+        <button onclick={navigateToNotifications} class="btn btn-sm btn-block btn-ghost">
           View all notifications
         </button>
       </div>
