@@ -8,7 +8,6 @@
   import {
     type Notification,
     mergeAndDeduplicateNotifications,
-    isValidNotification,
     isExistingNotification,
     shouldShowNotification,
     sanitizeNotificationMessage,
@@ -167,27 +166,14 @@
       unsubscribeSSE = null;
     }
 
-    // Register callback with singleton
-    unsubscribeSSE = sseNotifications.registerNotificationCallback(notification => {
-      handleSSENotification(notification);
-    });
+    // Register callback with singleton - validation is handled by sseNotifications
+    unsubscribeSSE = sseNotifications.registerNotificationCallback(addNotification);
 
     logger.debug('Subscribed to notification stream via singleton');
   }
 
-  // Handle notification from SSE singleton
-  function handleSSENotification(data: unknown) {
-    // Use type guard for full validation before casting
-    if (!isValidNotification(data)) {
-      logger.debug('Received invalid notification, ignoring');
-      return;
-    }
-
-    addNotification(data);
-  }
-
   // Add single notification (used for SSE)
-  // Note: Callers must validate with isValidNotification before calling
+  // Note: sseNotifications singleton validates notifications before invoking callbacks
   function addNotification(notification: Notification) {
     // Map SSE notification from API format (status -> read)
     const mappedNotification = mapApiNotification(notification);
@@ -369,8 +355,10 @@
       globalThis.clearTimeout(animationTimeout);
       animationTimeout = null;
     }
-    // Clean up audio resources
+    // Clean up audio resources - abort any ongoing download
     if (preloadedAudio) {
+      preloadedAudio.src = '';
+      preloadedAudio.load();
       preloadedAudio = null;
       audioReady = false;
     }
