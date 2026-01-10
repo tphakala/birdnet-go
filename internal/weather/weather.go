@@ -108,9 +108,13 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		}
 	}()
 
+	// Convert UTC time from weather providers to local time for storage.
+	// This ensures date-based queries using local dates work correctly.
+	localTime := data.Time.In(time.Local)
+
 	// Create daily events data
 	dailyEvents := &datastore.DailyEvents{
-		Date:     data.Time.Format("2006-01-02"),
+		Date:     localTime.Format("2006-01-02"),
 		Country:  data.Location.Country,
 		CityName: data.Location.City,
 	}
@@ -139,7 +143,7 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	// Create hourly weather data
 	hourlyWeather := &datastore.HourlyWeather{
 		DailyEventsID: dailyEvents.ID,
-		Time:          data.Time,
+		Time:          localTime,
 		Temperature:   data.Temperature.Current,
 		FeelsLike:     data.Temperature.FeelsLike,
 		TempMin:       data.Temperature.Min,
@@ -185,14 +189,17 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	}
 
 	getLogger().Debug("Successfully saved weather data to database",
-		logger.Time("time", data.Time),
+		logger.Time("time", localTime),
 		logger.String("city", data.Location.City))
 	return nil
 }
 
+// absoluteZeroCelsius is the lowest possible temperature in Celsius
+const absoluteZeroCelsius = -273.15
+
 // validateWeatherData performs basic validation on weather data
 func validateWeatherData(data *datastore.HourlyWeather) error {
-	if data.Temperature < -273.15 {
+	if data.Temperature < absoluteZeroCelsius {
 		return errors.New(fmt.Errorf("temperature cannot be below absolute zero: %f", data.Temperature)).
 			Component("weather").
 			Category(errors.CategoryValidation).
@@ -221,20 +228,15 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	// Initial fetch
-	if err := s.fetchAndSave(); err != nil {
-		// Error is already logged within fetchAndSave
-		getLogger().Warn("Initial weather fetch failed", logger.Error(err))
-	}
+	// Initial fetch (errors logged within fetchAndSave)
+	_ = s.fetchAndSave()
 
 	for {
 		select {
 		case <-ticker.C:
-			getLogger().Info("Polling weather data...")
-			if err := s.fetchAndSave(); err != nil {
-				// Error is logged within fetchAndSave, maybe just warn here?
-				getLogger().Warn("Weather fetch poll failed", logger.Error(err))
-			}
+			getLogger().Debug("Polling weather data...")
+			// Errors logged within fetchAndSave
+			_ = s.fetchAndSave()
 		case <-stopChan:
 			getLogger().Info("Stopping weather polling service")
 			return
@@ -282,10 +284,13 @@ func (s *Service) fetchAndSave() error {
 			Build()
 	}
 
-	// Log successful fetch details using the weatherLogger
+	// Convert to local time for logging. SaveWeatherData handles its own
+	// timezone conversion for storage.
+	localTimeForLog := data.Time.In(time.Local)
+
 	getLogger().Info("Successfully fetched weather data",
 		logger.String("provider", s.settings.Realtime.Weather.Provider),
-		logger.String("time", data.Time.Format("2006-01-02 15:04:05")),
+		logger.String("time", localTimeForLog.Format("2006-01-02 15:04:05-07:00")),
 		logger.Float64("temp_c", data.Temperature.Current),
 		logger.Float64("wind_mps", data.Wind.Speed),
 		logger.Int("humidity_pct", data.Humidity),
@@ -293,12 +298,6 @@ func (s *Service) fetchAndSave() error {
 		logger.String("description", data.Description),
 		logger.String("city", data.Location.City))
 
-	if err := s.SaveWeatherData(data); err != nil {
-		// Error is logged within SaveWeatherData
-		getLogger().Error("Failed to save fetched weather data", logger.Error(err))
-		// Return the original error from SaveWeatherData
-		return err // No need to wrap again, SaveWeatherData already logs context
-	}
-
-	return nil
+	// Errors logged within SaveWeatherData
+	return s.SaveWeatherData(data)
 }
