@@ -43,7 +43,6 @@
 
   // Handle both decimal (0-1) and percentage (0-100) formats with validation
   const confidencePercent = $derived.by(() => normalizeConfidence(confidence));
-  const isMaxConfidence = $derived(confidencePercent === 100);
 
   function getConfidenceClass(confidence: number): string {
     const clampedPercent = normalizeConfidence(confidence);
@@ -82,11 +81,7 @@
   ></div>
   <div class="confidence-circle-progress"></div>
   <div class="confidence-circle-text" style:font-size={config.fontSize}>
-    {#if isMaxConfidence}
-      <Check size={config.iconSize} strokeWidth={3} />
-    {:else}
-      {confidencePercent}%
-    {/if}
+    {confidencePercent}%
   </div>
 </div>
 
