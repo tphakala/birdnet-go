@@ -126,10 +126,10 @@ type Generator struct {
 }
 
 // NewGenerator creates a new generator instance.
-// If logger is nil, logger.Global() is used to prevent nil pointer panics.
+// If logger is nil, GetLogger() is used to prevent nil pointer panics.
 func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, log logger.Logger) *Generator {
 	if log == nil {
-		log = logger.Global().Module("spectrogram")
+		log = GetLogger()
 	}
 	return &Generator{
 		settings: settings,
@@ -547,19 +547,19 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	// Build Sox arguments for PCM stdin
 	// PCM format parameters use constants from conf package for consistency
 	args := []string{
-		"-t", "raw",                             // Input type: raw/headerless PCM
-		"-r", strconv.Itoa(conf.SampleRate),     // Sample rate: 48kHz
-		"-e", "signed",                          // Encoding: signed integer
-		"-b", strconv.Itoa(conf.BitDepth),       // Bit depth: 16-bit
-		"-c", strconv.Itoa(conf.NumChannels),    // Channels: mono
-		"-",                                     // Read from stdin
-		"-n",                                    // No audio output (null output)
-		"rate", soxResampleRate,                 // Resample to 24kHz for spectrogram
-		"spectrogram",                           // Effect: spectrogram
-		"-x", strconv.Itoa(width),               // Width in pixels
+		"-t", "raw", // Input type: raw/headerless PCM
+		"-r", strconv.Itoa(conf.SampleRate), // Sample rate: 48kHz
+		"-e", "signed", // Encoding: signed integer
+		"-b", strconv.Itoa(conf.BitDepth), // Bit depth: 16-bit
+		"-c", strconv.Itoa(conf.NumChannels), // Channels: mono
+		"-",                     // Read from stdin
+		"-n",                    // No audio output (null output)
+		"rate", soxResampleRate, // Resample to 24kHz for spectrogram
+		"spectrogram",             // Effect: spectrogram
+		"-x", strconv.Itoa(width), // Width in pixels
 		"-y", strconv.Itoa(width / heightRatio), // Height in pixels (half of width)
-		"-z", g.getDynamicRange(),               // Dynamic range in dB
-		"-o", outputPath,                        // Output PNG file
+		"-z", g.getDynamicRange(), // Dynamic range in dB
+		"-o", outputPath, // Output PNG file
 	}
 
 	// Add raw flag if requested (no axes/legend)
