@@ -26,8 +26,17 @@
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
+  import { acquireSlot, releaseSlot } from '$lib/utils/imageLoadQueue';
 
   const logger = loggers.ui;
+
+  // Configuration constants
+  const SPECTROGRAM_SPINNER_DELAY_MS = 150;
+  const SPECTROGRAM_TIMEOUT_MS = 60000;
+  const DEFAULT_AUDIO_GAIN = 0;
+  const DEFAULT_AUDIO_FILTER_FREQ = 20;
+  const DEFAULT_DOWNLOAD_NAME = 'detection';
+  const AUDIO_FILE_EXTENSION = '.wav';
 
   interface Props {
     detection: Detection;
@@ -55,8 +64,8 @@
 
   // Spectrogram loading state
   const spectrogramLoader = useDelayedLoading({
-    delayMs: 150,
-    timeoutMs: 60000,
+    delayMs: SPECTROGRAM_SPINNER_DELAY_MS,
+    timeoutMs: SPECTROGRAM_TIMEOUT_MS,
     onTimeout: () => {
       logger.warn('Spectrogram loading timeout', { detectionId: detection.id });
     },
@@ -67,16 +76,21 @@
   const RETRY_DELAYS = [500, 1000, 2000, 4000];
   let retryCount = $state(0);
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  // svelte-ignore non_reactive_update
-  let spectrogramImage: HTMLImageElement;
+  let spectrogramImage = $state<HTMLImageElement | undefined>(undefined);
 
   // Menu state for z-index management
   let isMenuOpen = $state(false);
 
   // Audio settings state (per-card, not shared)
-  let audioGainValue = $state(0);
-  let audioFilterFreq = $state(20);
+  let audioGainValue = $state(DEFAULT_AUDIO_GAIN);
+  let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioContextAvailable = $state(true);
+
+  // Queue slot management
+  let slotHandle: ReturnType<typeof acquireSlot> | undefined;
+  let hasSlot = $state(false);
+  // Separate URL state - persists after slot is released (so image stays visible)
+  let spectrogramUrl = $state('');
 
   function handleGainChange(value: number) {
     audioGainValue = value;
@@ -90,28 +104,106 @@
     audioContextAvailable = available;
   }
 
-  // Spectrogram URL
-  const spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=md&raw=true`);
+  // Helper: Build spectrogram URL for a detection ID
+  function getSpectrogramUrl(id: number): string {
+    return `/api/v2/spectrogram/${id}?size=md&raw=true`;
+  }
+
+  // Helper: Release the current slot if held
+  function releaseCurrentSlot(): void {
+    if (hasSlot) {
+      releaseSlot();
+      hasSlot = false;
+    }
+  }
+
+  // Helper: Clear the retry timer if active
+  function clearRetryTimer(): void {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
+    }
+  }
+
+  /**
+   * Helper: Request a slot and set up the spectrogram URL when acquired.
+   * Handles stale closure by verifying the detection ID hasn't changed.
+   * @param forDetectionId - The detection ID this request is for
+   */
+  function requestSlotForDetection(forDetectionId: number): void {
+    slotHandle = acquireSlot();
+    slotHandle.promise.then(acquired => {
+      if (acquired) {
+        // Verify detection hasn't changed while waiting for slot
+        if (detection.id === forDetectionId) {
+          hasSlot = true;
+          spectrogramUrl = getSpectrogramUrl(forDetectionId);
+        } else {
+          // Detection changed while waiting - release the slot immediately
+          // Note: We use releaseSlot() directly, not releaseCurrentSlot(),
+          // because hasSlot was never set to true for this request
+          releaseSlot();
+        }
+      } else {
+        // Cancelled (component unmounted or detection changed while waiting)
+        // Only clear loading if this request is still for the current detection
+        // to avoid race condition with new detection's loading state
+        if (detection.id === forDetectionId) {
+          spectrogramLoader.setLoading(false);
+        }
+      }
+    });
+  }
 
   // Track previous detection ID for cleanup
   let previousDetectionId: number | undefined;
+
+  /**
+   * Helper: Reset all state when switching to a new detection.
+   * Cleans up pending operations and initializes fresh state.
+   * @param newDetectionId - The ID of the new detection to load
+   */
+  function resetForNewDetection(newDetectionId: number): void {
+    // Cleanup pending retry
+    clearRetryTimer();
+    retryCount = 0;
+    spectrogramLoader.reset();
+
+    // Release old slot and cancel pending request
+    releaseCurrentSlot();
+    if (slotHandle) {
+      slotHandle.cancel();
+    }
+
+    // Request new slot for new detection
+    spectrogramLoader.setLoading(true);
+    spectrogramUrl = '';
+    requestSlotForDetection(newDetectionId);
+
+    // Reset audio settings to defaults
+    audioGainValue = DEFAULT_AUDIO_GAIN;
+    audioFilterFreq = DEFAULT_AUDIO_FILTER_FREQ;
+    audioContextAvailable = true;
+  }
+
+  // Check if image is already loaded (handles cached images that complete before onload attaches)
+  $effect(() => {
+    if (
+      spectrogramImage &&
+      spectrogramUrl &&
+      spectrogramImage.complete &&
+      spectrogramImage.naturalWidth > 0 &&
+      spectrogramLoader.loading
+    ) {
+      handleSpectrogramLoad();
+    }
+  });
 
   // Reset state when detection changes (component reuse)
   $effect(() => {
     const currentId = detection.id;
     if (previousDetectionId !== undefined && previousDetectionId !== currentId) {
-      // Detection changed - cleanup any pending retry
-      if (retryTimer) {
-        clearTimeout(retryTimer);
-        retryTimer = undefined;
-      }
-      retryCount = 0;
-      spectrogramLoader.reset();
-
-      // Reset audio settings to defaults for new detection
-      audioGainValue = 0;
-      audioFilterFreq = 20;
-      audioContextAvailable = true;
+      resetForNewDetection(currentId);
     }
     previousDetectionId = currentId;
   });
@@ -119,16 +211,15 @@
   function handleSpectrogramLoad() {
     spectrogramLoader.setLoading(false);
     retryCount = 0;
-    if (retryTimer) {
-      clearTimeout(retryTimer);
-      retryTimer = undefined;
-    }
+    clearRetryTimer();
+    // Release queue slot on successful load
+    releaseCurrentSlot();
   }
 
   function handleSpectrogramError() {
     if (retryCount < MAX_RETRIES) {
-      const delayIndex = Math.min(retryCount, RETRY_DELAYS.length - 1);
-      const retryDelay = RETRY_DELAYS.at(delayIndex) ?? 4000;
+      // Index is clamped to valid range, so direct access is safe
+      const retryDelay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
 
       logger.debug('Spectrogram load failed, retrying', {
         detectionId: detection.id,
@@ -137,10 +228,7 @@
       });
 
       retryCount++;
-
-      if (retryTimer) {
-        clearTimeout(retryTimer);
-      }
+      clearRetryTimer();
 
       retryTimer = setTimeout(() => {
         if (spectrogramImage) {
@@ -152,6 +240,8 @@
       }, retryDelay);
     } else {
       spectrogramLoader.setError();
+      // Release queue slot on final failure
+      releaseCurrentSlot();
     }
   }
 
@@ -170,11 +260,16 @@
     const link = document.createElement('a');
     link.href = `/api/v2/audio/${detection.id}`;
     // Use species name and date/time for filename
+    // Sanitize commonName to prevent path traversal (remove characters that aren't alphanumeric, space, dot, underscore, or hyphen)
+    const safeCommonName = (detection.commonName || DEFAULT_DOWNLOAD_NAME).replace(
+      /[^a-zA-Z0-9 ._-]/g,
+      '_'
+    );
     const dateTime =
       detection.date && detection.time
         ? `${detection.date}_${detection.time.replace(/:/g, '-')}`
         : String(detection.id);
-    link.download = `${detection.commonName || 'detection'}_${dateTime}.wav`;
+    link.download = `${safeCommonName}_${dateTime}${AUDIO_FILE_EXTENSION}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -182,13 +277,18 @@
 
   onMount(() => {
     spectrogramLoader.setLoading(true);
+    requestSlotForDetection(detection.id);
   });
 
   onDestroy(() => {
-    if (retryTimer) {
-      clearTimeout(retryTimer);
-    }
+    clearRetryTimer();
     spectrogramLoader.cleanup();
+
+    // Cancel pending slot request or release acquired slot
+    if (slotHandle) {
+      slotHandle.cancel();
+    }
+    releaseCurrentSlot();
   });
 </script>
 
@@ -213,7 +313,7 @@
         <div class="spectrogram-error">
           <span class="text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
-      {:else}
+      {:else if spectrogramUrl}
         <img
           bind:this={spectrogramImage}
           src={spectrogramUrl}
@@ -225,9 +325,6 @@
           onerror={handleSpectrogramError}
         />
       {/if}
-
-      <!-- Gradient Overlay -->
-      <div class="gradient-overlay"></div>
     </div>
 
     <!-- Top-Left Badges: Confidence + Weather -->
@@ -330,11 +427,6 @@
   :global([data-theme='dark']) .spectrogram-loading,
   :global([data-theme='dark']) .spectrogram-error {
     background: linear-gradient(135deg, rgb(30 41 59 / 0.9) 0%, rgb(15 23 42 / 0.95) 100%);
-  }
-
-  /* Gradient overlay - disabled, using backdrop on SpeciesInfoBar instead */
-  .gradient-overlay {
-    display: none;
   }
 
   /* New detection animation */
