@@ -217,7 +217,6 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 			Build()
 	}
 
-	// calculate predEnd time based on settings.BirdNET.Overlap
 	predEnd := predStart.Add(time.Duration(3.0 * float64(time.Second)))
 
 	var source = ""

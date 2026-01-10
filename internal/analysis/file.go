@@ -524,8 +524,10 @@ func processAudioData(
 
 	// Read and send audio chunks with timing information
 	return myaudio.ReadAudioFileBuffered(settings, func(chunkData []float32, isEOF bool) error {
+		chunkDurationSeconds := 3.0
+		delta := chunkDurationSeconds - settings.BirdNET.Overlap
+
 		currentPosition := filePosition
-		delta := 3.0 - settings.BirdNET.Overlap
 		filePosition = filePosition.Add(time.Duration(delta * float64(time.Second)))
 
 		return handleAudioChunk(
