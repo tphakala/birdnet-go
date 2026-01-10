@@ -1,4 +1,4 @@
-/* 
- * Styles are loaded from /assets/tailwind.css via the main HTML template
+/*
+ * Tailwind styles are loaded via the Svelte/Vite build pipeline
  * This file is kept for any Svelte-specific styles if needed
  */

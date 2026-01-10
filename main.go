@@ -28,9 +28,6 @@ var buildDate string
 // version holds the Git version tag
 var version string
 
-//go:embed assets/*
-var assetsFs embed.FS
-
 //go:embed internal/imageprovider/data/latest.json
 var imageDataFs embed.FS // Embed image provider data
 
@@ -80,8 +77,7 @@ func mainWithExitCode() int {
 		defer pprof.StopCPUProfile()
 	}
 
-	// Publish the embedded assets directory to the API server
-	api.AssetsFs = assetsFs
+	// Publish the embedded image data to the API server
 	api.ImageDataFs = imageDataFs
 
 	// Initialize the image provider registry

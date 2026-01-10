@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,10 +28,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
-
-// AssetsFs holds the embedded assets filesystem (sounds, images, etc.).
-// This is set by main.go before starting the server.
-var AssetsFs embed.FS
 
 // ImageDataFs holds the embedded image provider data filesystem.
 // This is set by main.go before starting the server.
@@ -73,7 +68,6 @@ type Server struct {
 	// Static file serving
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
-	assetsFS     fs.FS // Embedded assets filesystem (sounds, images, etc.)
 
 	// Lifecycle management
 	startTime time.Time
@@ -135,25 +129,6 @@ func WithControlChannel(ch chan string) ServerOption {
 func WithAudioLevelChannel(ch chan myaudio.AudioLevelData) ServerOption {
 	return func(s *Server) {
 		s.audioLevelChan = ch
-	}
-}
-
-// WithAssetsFS sets the embedded assets filesystem for serving static assets.
-// This is used to serve files from /assets/* (sounds, images, etc.).
-func WithAssetsFS(assets embed.FS) ServerOption {
-	return func(s *Server) {
-		// Extract the "assets" subdirectory from the embedded FS
-		subFS, err := fs.Sub(assets, "assets")
-		if err != nil {
-			// If extraction fails, use the root FS and log a warning
-			// This can happen if the assets directory structure changes
-			// Note: slogger not yet initialized at option apply time, use package logger
-			GetLogger().Warn("Could not extract assets subdirectory, using root FS",
-				logger.Error(err))
-			s.assetsFS = assets
-		} else {
-			s.assetsFS = subFS
-		}
 	}
 }
 
@@ -271,7 +246,7 @@ func (s *Server) setupRoutes() error {
 	s.registerOAuthRoutes()
 
 	// Initialize static file server for frontend assets (uses centralized logger)
-	s.staticServer = NewStaticFileServer(s.assetsFS)
+	s.staticServer = NewStaticFileServer()
 	s.staticServer.RegisterRoutes(s.echo)
 
 	// Initialize SPA handler - serves Vite's index.html directly

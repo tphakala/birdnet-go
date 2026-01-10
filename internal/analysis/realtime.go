@@ -236,7 +236,6 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		api.WithAudioLevelChannel(audioLevelChan),
 		api.WithOAuth2Server(oauth2Server),
 		api.WithSunCalc(sunCalc),
-		api.WithAssetsFS(api.AssetsFs),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP server: %w", err)

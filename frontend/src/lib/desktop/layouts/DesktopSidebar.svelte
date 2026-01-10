@@ -61,9 +61,6 @@ Performance Optimizations:
   import LoginModal from '../components/modals/LoginModal.svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
 
-  // Logo display option: 'badge' for stylized badge, 'image' for bird image
-  const LOGO_STYLE: 'badge' | 'image' = 'badge';
-
   interface Props {
     securityEnabled?: boolean;
     accessAllowed?: boolean;
@@ -298,16 +295,7 @@ Performance Optimizations:
           class={cn('flex items-center gap-3 group', isCollapsed && 'justify-center')}
           aria-label="BirdNET-Go Home"
         >
-          {#if LOGO_STYLE === 'badge'}
-            <LogoBadge size="md" variant="ocean" />
-          {:else}
-            <!-- Original bird image logo - change LOGO_STYLE to 'image' to use -->
-            <img
-              src="/assets/images/logo.png"
-              alt="BirdNET-Go Logo"
-              class="h-9 w-9 rounded-lg shadow-sm shrink-0"
-            />
-          {/if}
+          <LogoBadge size="md" variant="ocean" />
           {#if !isCollapsed}
             <span class="text-xl font-bold tracking-tight text-base-content">BirdNET-Go</span>
           {/if}
