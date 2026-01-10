@@ -58,6 +58,7 @@ const (
 	DefaultBirdweatherLogPath   = "logs/birdweather.log"
 	DefaultWeatherLogPath       = "logs/weather.log"
 	DefaultImageproviderLogPath = "logs/imageprovider.log"
+	DefaultSpectrogramLogPath   = "logs/spectrogram.log"
 	DefaultMaxSize              = 100   // MB before rotation
 	DefaultMaxAge               = 30    // days to keep rotated files
 	DefaultMaxRotatedFiles      = 10    // max number of rotated files
@@ -143,4 +144,8 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	ensureModuleOutput(cfg, "birdweather", DefaultBirdweatherLogPath)
 	ensureModuleOutput(cfg, "weather", DefaultWeatherLogPath)
 	ensureModuleOutput(cfg, "imageprovider", DefaultImageproviderLogPath)
+
+	// Spectrogram generation logs
+	ensureModuleOutput(cfg, "spectrogram", DefaultSpectrogramLogPath)
+	ensureModuleOutput(cfg, "spectrogram.prerenderer", DefaultSpectrogramLogPath) // Same file
 }
