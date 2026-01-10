@@ -2,9 +2,15 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
 import { loggers } from '$lib/utils/logger';
-import { sanitizeNotificationMessage } from '$lib/utils/notifications';
+import { sanitizeNotificationMessage, type Notification } from '$lib/utils/notifications';
 
 const logger = loggers.sse;
+
+// SSE connection configuration
+const SSE_MAX_RETRY_MS = 30000;
+const SSE_RETRY_DELAY_MS = 5000;
+const SSE_INIT_DELAY_MS = 100;
+const TOAST_DEFAULT_DURATION_MS = 5000;
 
 interface SSENotification {
   message: string;
@@ -27,19 +33,6 @@ interface SSEToastData {
 
 // Callback type for notification events
 type NotificationCallback = (notification: Notification) => void;
-
-// Notification type matching NotificationBell's expected format
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error' | 'detection' | 'system';
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  timestamp: string;
-  read: boolean;
-  component?: string;
-  status?: string;
-}
 
 class SSENotificationManager {
   private eventSource: ReconnectingEventSource | null = null;
@@ -85,7 +78,7 @@ class SSENotificationManager {
     try {
       // Create connection to SSE endpoint
       this.eventSource = new ReconnectingEventSource('/api/v2/notifications/stream', {
-        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
+        max_retry_time: SSE_MAX_RETRY_MS,
         withCredentials: true, // Authentication required for notification stream
       });
 
@@ -171,7 +164,7 @@ class SSENotificationManager {
         action: 'connect',
       });
       // Try again in 5 seconds
-      setTimeout(() => this.connect(), 5000);
+      setTimeout(() => this.connect(), SSE_RETRY_DELAY_MS);
     }
   }
 
@@ -183,7 +176,7 @@ class SSENotificationManager {
     const toastType = this.mapNotificationType(notification.type);
 
     // Show toast with appropriate duration
-    const duration = notification.type === 'error' ? null : 5000; // Errors don't auto-dismiss
+    const duration = notification.type === 'error' ? null : TOAST_DEFAULT_DURATION_MS;
 
     toastActions.show(sanitizeNotificationMessage(notification.message), toastType, {
       duration,
@@ -213,7 +206,7 @@ class SSENotificationManager {
       : undefined;
 
     toastActions.show(sanitizeNotificationMessage(toastData.message), toastData.type, {
-      duration: toastData.duration ?? 5000,
+      duration: toastData.duration ?? TOAST_DEFAULT_DURATION_MS,
       position: 'top-right' as ToastPosition,
       actions,
     });
@@ -261,7 +254,7 @@ export const sseNotifications = new SSENotificationManager();
 // Auto-connect when module is imported
 if (typeof window !== 'undefined') {
   // Initialize after a short delay to ensure the app is ready
-  setTimeout(() => sseNotifications.connect(), 100);
+  setTimeout(() => sseNotifications.connect(), SSE_INIT_DELAY_MS);
 
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => sseNotifications.disconnect());

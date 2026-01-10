@@ -18,6 +18,15 @@
 
   const logger = loggers.ui;
 
+  // Time calculation constants
+  const MS_PER_MINUTE = 60000;
+  const MINUTES_PER_HOUR = 60;
+  const MINUTES_PER_DAY = 1440;
+
+  // UI constants
+  const ANIMATION_DURATION_MS = 1000;
+  const NOTIFICATION_VOLUME = 0.5;
+
   interface Props {
     className?: string;
     debugMode?: boolean;
@@ -66,12 +75,12 @@
     const now = new Date();
     const time = new Date(timestamp);
     const diffMs = now.getTime() - time.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const diffMins = Math.floor(diffMs / MS_PER_MINUTE);
 
     if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    return `${Math.floor(diffMins / 1440)}d ago`;
+    if (diffMins < MINUTES_PER_HOUR) return `${diffMins}m ago`;
+    if (diffMins < MINUTES_PER_DAY) return `${Math.floor(diffMins / MINUTES_PER_HOUR)}h ago`;
+    return `${Math.floor(diffMins / MINUTES_PER_DAY)}d ago`;
   }
 
   function getNotificationIconClass(notification: Notification): string {
@@ -165,20 +174,13 @@
 
   // Handle notification from SSE singleton
   function handleSSENotification(data: unknown) {
-    // Type guard for notification data
-    if (!data || typeof data !== 'object') {
+    // Use type guard for full validation before casting
+    if (!isValidNotification(data)) {
+      logger.debug('Received invalid notification, ignoring');
       return;
     }
 
-    const notification = data as Notification;
-
-    // Validate essential fields
-    if (!notification.id || !notification.message) {
-      logger.debug('Received incomplete notification, ignoring');
-      return;
-    }
-
-    addNotification(notification);
+    addNotification(data);
   }
 
   // Add single notification (used for SSE)
@@ -216,7 +218,7 @@
       animationTimeout = globalThis.setTimeout(() => {
         hasUnread = false;
         animationTimeout = null;
-      }, 1000);
+      }, ANIMATION_DURATION_MS);
 
       // Play sound if enabled and notification is high priority
       if (
@@ -260,7 +262,7 @@
   // Handle notification click
   async function handleNotificationClick(notification: Notification) {
     if (!notification.read) {
-      markAsRead(notification.id);
+      await markAsRead(notification.id);
     }
 
     dropdownOpen = false;
@@ -279,7 +281,7 @@
   function preloadNotificationSound() {
     try {
       const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
-      audio.volume = 0.5;
+      audio.volume = NOTIFICATION_VOLUME;
       audio.preload = 'auto';
 
       audio.addEventListener('canplaythrough', () => {
@@ -320,7 +322,7 @@
     } else {
       // Fallback to creating new Audio instance
       const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
-      audio.volume = 0.5;
+      audio.volume = NOTIFICATION_VOLUME;
       audio.play().catch(() => {
         // Could not play notification sound
       });
@@ -340,10 +342,7 @@
 
   // Handle notification deleted event
   function handleNotificationDeleted(event: CustomEvent<{ id: string; wasUnread: boolean }>) {
-    const index = notifications.findIndex(n => n.id === event.detail.id);
-    if (index !== -1) {
-      notifications = notifications.filter(n => n.id !== event.detail.id);
-    }
+    notifications = notifications.filter(n => n.id !== event.detail.id);
   }
 
   // Handle click outside
@@ -364,6 +363,11 @@
     }
     if (animationTimeout) {
       globalThis.clearTimeout(animationTimeout);
+    }
+    // Clean up audio resources
+    if (preloadedAudio) {
+      preloadedAudio = null;
+      audioReady = false;
     }
   }
 
