@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { sseNotifications } from '$lib/stores/sseNotifications';
   import { cn } from '$lib/utils/cn';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
@@ -18,11 +18,21 @@
 
   const logger = loggers.ui;
 
-  interface SSEMessage {
-    eventType: 'connected' | 'notification' | 'heartbeat' | 'toast';
-    clientId?: string;
-    [key: string]: any;
-  }
+  // Time calculation constants
+  const MS_PER_MINUTE = 60000;
+  const MINUTES_PER_HOUR = 60;
+  const MINUTES_PER_DAY = 1440;
+
+  // UI constants
+  const ANIMATION_DURATION_MS = 1000;
+  const NOTIFICATION_VOLUME = 0.5;
+  const NOTIFICATION_SOUND_PATH = '/assets/sounds/notification.mp3';
+  const NOTIFICATION_ICON_PATH = '/assets/images/favicon-32x32.png';
+  const NOTIFICATIONS_PAGE_URL = '/notifications';
+  const SOUND_ENABLED_KEY = 'notificationSound';
+  const NOTIFICATIONS_LIMIT = 20;
+  const BADGE_MAX_COUNT = 99;
+  const DROPDOWN_Z_INDEX = 1010;
 
   interface Props {
     className?: string;
@@ -44,20 +54,17 @@
   let unreadCount = $derived(notifications.filter(n => !n.read).length);
 
   // Internal state
-  let sseConnection: ReconnectingEventSource | null = null;
+  let unsubscribeSSE: (() => void) | null = null;
   let animationTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
-  // PERFORMANCE OPTIMIZATION: Cache formatted notifications with $derived
-  // Avoids repeated formatting computations and filtering in templates
+  // Filtered notifications for display
   const visibleNotifications = $derived(
     notifications.filter(n => shouldShowNotification(n, debugMode))
   );
 
-  // PERFORMANCE OPTIMIZATION: Cache formatted notification data for display
-  // Prevents repeated date formatting and icon class computation
-  // Template uses these pre-computed values instead of calling functions repeatedly
+  // Pre-computed display data for notifications
   const formattedNotifications = $derived(
     visibleNotifications.map(notification => ({
       ...notification,
@@ -67,17 +74,16 @@
     }))
   );
 
-  // PERFORMANCE OPTIMIZATION: Cache helper functions for display formatting
   function formatTimeAgo(timestamp: string): string {
     const now = new Date();
     const time = new Date(timestamp);
     const diffMs = now.getTime() - time.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const diffMins = Math.max(0, Math.floor(diffMs / MS_PER_MINUTE));
 
     if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    return `${Math.floor(diffMins / 1440)}d ago`;
+    if (diffMins < MINUTES_PER_HOUR) return `${diffMins}m ago`;
+    if (diffMins < MINUTES_PER_DAY) return `${Math.floor(diffMins / MINUTES_PER_HOUR)}h ago`;
+    return `${Math.floor(diffMins / MINUTES_PER_DAY)}d ago`;
   }
 
   function getNotificationIconClass(notification: Notification): string {
@@ -115,7 +121,7 @@
     loading = true;
     try {
       const data = await api.get<{ notifications?: Notification[] }>(
-        '/api/v2/notifications?limit=20&status=unread'
+        `/api/v2/notifications?limit=${NOTIFICATIONS_LIMIT}&status=unread`
       );
       // Map API notifications to frontend format (status -> read)
       const apiNotifications = mapApiNotifications(data?.notifications ?? []);
@@ -148,104 +154,41 @@
     }
   }
 
-  // Connect to SSE for real-time notifications using ReconnectingEventSource
-  function connectSSE() {
-    // Don't attempt SSE connection for non-authenticated users
+  // Subscribe to SSE notifications via singleton
+  function subscribeToNotifications() {
+    // Don't subscribe for non-authenticated users
     if (!isAuthenticated) {
       return;
     }
 
-    if (sseConnection) {
-      sseConnection.close();
-      sseConnection = null;
+    // Clean up existing subscription
+    if (unsubscribeSSE) {
+      unsubscribeSSE();
+      unsubscribeSSE = null;
     }
 
-    try {
-      // ReconnectingEventSource with configuration
-      sseConnection = new ReconnectingEventSource('/api/v2/notifications/stream', {
-        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-        withCredentials: false,
-      });
+    // Register callback with singleton
+    unsubscribeSSE = sseNotifications.registerNotificationCallback(notification => {
+      handleSSENotification(notification);
+    });
 
-      sseConnection.onopen = () => {
-        logger.debug('Notification SSE connection opened');
-      };
-
-      sseConnection.onmessage = event => {
-        try {
-          const data: SSEMessage = JSON.parse(event.data);
-          handleSSEMessage(data);
-        } catch (error) {
-          logger.error('Failed to parse notification SSE message:', error);
-        }
-      };
-
-      sseConnection.onerror = (error: Event) => {
-        // For non-authenticated users, SSE connection errors are expected
-        // Suppress error logging and close the connection gracefully
-        if (!isAuthenticated) {
-          sseConnection?.close();
-          return;
-        }
-
-        logger.error('Notification SSE error:', error);
-        // ReconnectingEventSource handles reconnection automatically
-        // Don't reconnect if page is being unloaded or offline
-        if (!globalThis.window.navigator.onLine || globalThis.document.hidden) {
-          sseConnection?.close();
-        }
-      };
-    } catch (error) {
-      // Don't log errors for non-authenticated users
-      if (isAuthenticated) {
-        logger.error('Failed to create ReconnectingEventSource:', error);
-        // Try again in 5 seconds if initial setup fails
-        setTimeout(() => connectSSE(), 5000);
-      }
-    }
+    logger.debug('Subscribed to notification stream via singleton');
   }
 
-  // Handle SSE messages
-  function handleSSEMessage(data: SSEMessage) {
-    switch (data.eventType) {
-      case 'connected':
-        // Connected to notification stream
-        break;
-
-      case 'notification':
-        addNotification(data as unknown as Notification);
-        break;
-
-      case 'toast':
-        // Toast messages should not be added to the notification bell
-        // They are handled separately by the toast system
-        logger.debug('Received toast message, ignoring in notification bell', data);
-        break;
-
-      case 'heartbeat':
-        // Heartbeat received, connection is alive
-        break;
-
-      default:
-        // Unknown SSE event type
-        logger.debug('Unknown SSE event type:', data.eventType);
-        break;
-    }
-  }
-
-  // Add single notification (used for SSE)
-  function addNotification(notification: Notification) {
-    // Runtime validation to ensure notification has expected shape
-    if (!isValidNotification(notification)) {
-      logger.warn('Invalid notification received, skipping', null, {
-        component: 'NotificationBell',
-        action: 'addNotification',
-        notification:
-          typeof notification === 'object' ? JSON.stringify(notification) : String(notification),
-      });
+  // Handle notification from SSE singleton
+  function handleSSENotification(data: unknown) {
+    // Use type guard for full validation before casting
+    if (!isValidNotification(data)) {
+      logger.debug('Received invalid notification, ignoring');
       return;
     }
 
+    addNotification(data);
+  }
+
+  // Add single notification (used for SSE)
+  // Note: Callers must validate with isValidNotification before calling
+  function addNotification(notification: Notification) {
     // Map SSE notification from API format (status -> read)
     const mappedNotification = mapApiNotification(notification);
 
@@ -268,7 +211,7 @@
       animationTimeout = globalThis.setTimeout(() => {
         hasUnread = false;
         animationTimeout = null;
-      }, 1000);
+      }, ANIMATION_DURATION_MS);
 
       // Play sound if enabled and notification is high priority
       if (
@@ -309,19 +252,22 @@
     await Promise.all(unreadIds.map(id => markAsRead(id)));
   }
 
-  // Handle notification click
-  async function handleNotificationClick(notification: Notification) {
-    if (!notification.read) {
-      markAsRead(notification.id);
-    }
-
+  // Navigate to notifications page
+  function navigateToNotifications() {
     dropdownOpen = false;
-
     if (onNavigateToNotifications) {
       onNavigateToNotifications();
     } else {
-      globalThis.window.location.href = '/notifications';
+      globalThis.window.location.href = NOTIFICATIONS_PAGE_URL;
     }
+  }
+
+  // Handle notification click
+  async function handleNotificationClick(notification: Notification) {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    navigateToNotifications();
   }
 
   let audioReady = false;
@@ -330,8 +276,8 @@
   // Preload notification sound
   function preloadNotificationSound() {
     try {
-      const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
-      audio.volume = 0.5;
+      const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
+      audio.volume = NOTIFICATION_VOLUME;
       audio.preload = 'auto';
 
       audio.addEventListener('canplaythrough', () => {
@@ -366,15 +312,23 @@
     if (preloadedAudio && audioReady) {
       // Use preloaded audio for faster playback
       preloadedAudio.currentTime = 0;
-      preloadedAudio.play().catch(() => {
-        // Could not play preloaded notification sound
+      preloadedAudio.play().catch(error => {
+        logger.debug('Could not play preloaded notification sound', error, {
+          component: 'NotificationBell',
+          action: 'playNotificationSound',
+          mode: 'preloaded',
+        });
       });
     } else {
       // Fallback to creating new Audio instance
-      const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
-      audio.volume = 0.5;
-      audio.play().catch(() => {
-        // Could not play notification sound
+      const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
+      audio.volume = NOTIFICATION_VOLUME;
+      audio.play().catch(error => {
+        logger.debug('Could not play notification sound', error, {
+          component: 'NotificationBell',
+          action: 'playNotificationSound',
+          mode: 'new-audio',
+        });
       });
     }
   }
@@ -382,9 +336,9 @@
   // Show browser notification
   function showBrowserNotification(notification: Notification) {
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
-      new globalThis.Notification(notification.title, {
+      new globalThis.Notification(sanitizeNotificationMessage(notification.title), {
         body: sanitizeNotificationMessage(notification.message),
-        icon: '/assets/images/favicon-32x32.png',
+        icon: NOTIFICATION_ICON_PATH,
         tag: notification.id,
       });
     }
@@ -392,10 +346,7 @@
 
   // Handle notification deleted event
   function handleNotificationDeleted(event: CustomEvent<{ id: string; wasUnread: boolean }>) {
-    const index = notifications.findIndex(n => n.id === event.detail.id);
-    if (index !== -1) {
-      notifications = notifications.filter(n => n.id !== event.detail.id);
-    }
+    notifications = notifications.filter(n => n.id !== event.detail.id);
   }
 
   // Handle click outside
@@ -410,30 +361,34 @@
 
   // Cleanup
   function cleanup() {
-    if (sseConnection) {
-      sseConnection.close();
-      sseConnection = null;
+    if (unsubscribeSSE) {
+      unsubscribeSSE();
+      unsubscribeSSE = null;
     }
     if (animationTimeout) {
       globalThis.clearTimeout(animationTimeout);
+      animationTimeout = null;
+    }
+    // Clean up audio resources
+    if (preloadedAudio) {
+      preloadedAudio = null;
+      audioReady = false;
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect instead of legacy onMount/onDestroy
-  // Provides better reactivity and automatic cleanup management
   $effect(() => {
     if (typeof globalThis.window !== 'undefined') {
       // Load sound preference
-      soundEnabled = globalThis.localStorage.getItem('notificationSound') === 'true';
+      soundEnabled = globalThis.localStorage.getItem(SOUND_ENABLED_KEY) === 'true';
 
       // Preload notification sound
       preloadNotificationSound();
 
       // Load notifications first
       loadNotifications().then(() => {
-        // Only connect to SSE if authenticated
+        // Subscribe to SSE notifications if authenticated
         if (isAuthenticated) {
-          connectSSE();
+          subscribeToNotifications();
         }
       });
 
@@ -454,7 +409,6 @@
       }
 
       return () => {
-        // PERFORMANCE OPTIMIZATION: Comprehensive cleanup with Svelte 5 pattern
         globalThis.document.removeEventListener('click', handleClickOutside);
         globalThis.window.removeEventListener(
           'notification-deleted',
@@ -488,7 +442,7 @@
         aria-live="polite"
         aria-atomic="true"
       >
-        {unreadCount > 99 ? '99+' : unreadCount}
+        {unreadCount > BADGE_MAX_COUNT ? `${BADGE_MAX_COUNT}+` : unreadCount}
       </span>
     {/if}
   </button>
@@ -500,7 +454,7 @@
       id="notification-dropdown"
       role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
       class="notification-dropdown absolute top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-128 bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
-      style:z-index={1010}
+      style:z-index={DROPDOWN_Z_INDEX}
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">
@@ -603,17 +557,7 @@
 
       <!-- Footer -->
       <div class="p-4 border-t border-base-300">
-        <button
-          onclick={() => {
-            dropdownOpen = false;
-            if (onNavigateToNotifications) {
-              onNavigateToNotifications();
-            } else {
-              globalThis.window.location.href = '/notifications';
-            }
-          }}
-          class="btn btn-sm btn-block btn-ghost"
-        >
+        <button onclick={navigateToNotifications} class="btn btn-sm btn-block btn-ghost">
           View all notifications
         </button>
       </div>
