@@ -126,10 +126,14 @@
 
       // Request new slot for new detection
       spectrogramLoader.setLoading(true);
+      const capturedId = currentId;
       slotHandle = acquireSlot();
       slotHandle.promise.then(acquired => {
-        if (acquired) {
+        if (acquired && detection.id === capturedId) {
           hasSlot = true;
+        } else if (acquired) {
+          // Detection changed while waiting, release the stale slot
+          releaseSlot();
         }
       });
 
@@ -219,10 +223,14 @@
     spectrogramLoader.setLoading(true);
 
     // Request a slot from the image load queue
+    const mountDetectionId = detection.id;
     slotHandle = acquireSlot();
     slotHandle.promise.then(acquired => {
-      if (acquired) {
+      if (acquired && detection.id === mountDetectionId) {
         hasSlot = true;
+      } else if (acquired) {
+        // Detection changed while waiting, release the stale slot
+        releaseSlot();
       } else {
         // Cancelled (component unmounted while waiting)
         spectrogramLoader.setLoading(false);

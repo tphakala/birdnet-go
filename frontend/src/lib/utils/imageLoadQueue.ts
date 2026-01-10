@@ -32,6 +32,7 @@ const logger = loggers.ui;
 const DEBUG_QUEUE = false;
 
 function debugLog(message: string, data?: Record<string, unknown>) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Debug flag is intentionally constant
   if (DEBUG_QUEUE) {
     logger.debug(`[ImageQueue] ${message}`, data);
   }

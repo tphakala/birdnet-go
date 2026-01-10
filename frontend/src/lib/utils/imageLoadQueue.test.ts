@@ -5,6 +5,7 @@ import {
   getQueueStats,
   resetQueue,
   MAX_CONCURRENT_IMAGE_LOADS,
+  type SlotHandle,
 } from './imageLoadQueue';
 
 describe('imageLoadQueue', () => {
@@ -26,7 +27,7 @@ describe('imageLoadQueue', () => {
     });
 
     it('allows up to MAX_CONCURRENT_IMAGE_LOADS concurrent acquisitions', async () => {
-      const handles = [];
+      const handles: SlotHandle[] = [];
       for (let i = 0; i < MAX_CONCURRENT_IMAGE_LOADS; i++) {
         const handle = acquireSlot();
         handles.push(handle);
@@ -38,7 +39,7 @@ describe('imageLoadQueue', () => {
 
     it('queues requests beyond the limit', async () => {
       // Fill all slots
-      const handles = [];
+      const handles: SlotHandle[] = [];
       for (let i = 0; i < MAX_CONCURRENT_IMAGE_LOADS; i++) {
         const handle = acquireSlot();
         handles.push(handle);
@@ -128,6 +129,44 @@ describe('imageLoadQueue', () => {
       releaseSlot();
       releaseSlot();
       expect(getQueueStats().active).toBe(0);
+    });
+
+    it('skips cancelled requests when releasing and decrements active count', async () => {
+      // Fill all slots
+      for (let i = 0; i < MAX_CONCURRENT_IMAGE_LOADS; i++) {
+        await acquireSlot().promise;
+      }
+      expect(getQueueStats().active).toBe(MAX_CONCURRENT_IMAGE_LOADS);
+
+      // Queue a request and cancel it
+      const handle = acquireSlot();
+      handle.cancel();
+      await handle.promise;
+      expect(getQueueStats().queued).toBe(0);
+
+      // Release should skip the cancelled request and decrement active count
+      releaseSlot();
+      expect(getQueueStats().active).toBe(MAX_CONCURRENT_IMAGE_LOADS - 1);
+    });
+
+    it('transfers slot to next non-cancelled queued request', async () => {
+      // Fill all slots
+      for (let i = 0; i < MAX_CONCURRENT_IMAGE_LOADS; i++) {
+        await acquireSlot().promise;
+      }
+
+      // Queue two requests, cancel the first
+      const handle1 = acquireSlot();
+      const handle2 = acquireSlot();
+      handle1.cancel();
+
+      expect(getQueueStats().queued).toBe(1); // Only handle2 remains
+
+      // Release should skip cancelled handle1 and give slot to handle2
+      releaseSlot();
+      const result = await handle2.promise;
+      expect(result).toBe(true);
+      expect(getQueueStats().active).toBe(MAX_CONCURRENT_IMAGE_LOADS);
     });
   });
 
