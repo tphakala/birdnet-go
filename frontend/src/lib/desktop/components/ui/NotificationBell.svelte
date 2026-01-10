@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { sseNotifications } from '$lib/stores/sseNotifications';
   import { cn } from '$lib/utils/cn';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
@@ -17,12 +17,6 @@
   } from '$lib/utils/notifications';
 
   const logger = loggers.ui;
-
-  interface SSEMessage {
-    eventType: 'connected' | 'notification' | 'heartbeat' | 'toast';
-    clientId?: string;
-    [key: string]: any;
-  }
 
   interface Props {
     className?: string;
@@ -44,7 +38,7 @@
   let unreadCount = $derived(notifications.filter(n => !n.read).length);
 
   // Internal state
-  let sseConnection: ReconnectingEventSource | null = null;
+  let unsubscribeSSE: (() => void) | null = null;
   let animationTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
@@ -148,89 +142,43 @@
     }
   }
 
-  // Connect to SSE for real-time notifications using ReconnectingEventSource
-  function connectSSE() {
-    // Don't attempt SSE connection for non-authenticated users
+  // Subscribe to SSE notifications via singleton
+  function subscribeToNotifications() {
+    // Don't subscribe for non-authenticated users
     if (!isAuthenticated) {
       return;
     }
 
-    if (sseConnection) {
-      sseConnection.close();
-      sseConnection = null;
+    // Clean up existing subscription
+    if (unsubscribeSSE) {
+      unsubscribeSSE();
+      unsubscribeSSE = null;
     }
 
-    try {
-      // ReconnectingEventSource with configuration
-      sseConnection = new ReconnectingEventSource('/api/v2/notifications/stream', {
-        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-        withCredentials: false,
-      });
+    // Register callback with singleton
+    unsubscribeSSE = sseNotifications.registerNotificationCallback(notification => {
+      handleSSENotification(notification);
+    });
 
-      sseConnection.onopen = () => {
-        logger.debug('Notification SSE connection opened');
-      };
-
-      sseConnection.onmessage = event => {
-        try {
-          const data: SSEMessage = JSON.parse(event.data);
-          handleSSEMessage(data);
-        } catch (error) {
-          logger.error('Failed to parse notification SSE message:', error);
-        }
-      };
-
-      sseConnection.onerror = (error: Event) => {
-        // For non-authenticated users, SSE connection errors are expected
-        // Suppress error logging and close the connection gracefully
-        if (!isAuthenticated) {
-          sseConnection?.close();
-          return;
-        }
-
-        logger.error('Notification SSE error:', error);
-        // ReconnectingEventSource handles reconnection automatically
-        // Don't reconnect if page is being unloaded or offline
-        if (!globalThis.window.navigator.onLine || globalThis.document.hidden) {
-          sseConnection?.close();
-        }
-      };
-    } catch (error) {
-      // Don't log errors for non-authenticated users
-      if (isAuthenticated) {
-        logger.error('Failed to create ReconnectingEventSource:', error);
-        // Try again in 5 seconds if initial setup fails
-        setTimeout(() => connectSSE(), 5000);
-      }
-    }
+    logger.debug('Subscribed to notification stream via singleton');
   }
 
-  // Handle SSE messages
-  function handleSSEMessage(data: SSEMessage) {
-    switch (data.eventType) {
-      case 'connected':
-        // Connected to notification stream
-        break;
-
-      case 'notification':
-        addNotification(data as unknown as Notification);
-        break;
-
-      case 'toast':
-        // Toast messages should not be added to the notification bell
-        // They are handled separately by the toast system
-        logger.debug('Received toast message, ignoring in notification bell', data);
-        break;
-
-      case 'heartbeat':
-        // Heartbeat received, connection is alive
-        break;
-
-      default:
-        // Unknown SSE event type
-        logger.debug('Unknown SSE event type:', data.eventType);
-        break;
+  // Handle notification from SSE singleton
+  function handleSSENotification(data: unknown) {
+    // Type guard for notification data
+    if (!data || typeof data !== 'object') {
+      return;
     }
+
+    const notification = data as Notification;
+
+    // Validate essential fields
+    if (!notification.id || !notification.message) {
+      logger.debug('Received incomplete notification, ignoring');
+      return;
+    }
+
+    addNotification(notification);
   }
 
   // Add single notification (used for SSE)
@@ -410,9 +358,9 @@
 
   // Cleanup
   function cleanup() {
-    if (sseConnection) {
-      sseConnection.close();
-      sseConnection = null;
+    if (unsubscribeSSE) {
+      unsubscribeSSE();
+      unsubscribeSSE = null;
     }
     if (animationTimeout) {
       globalThis.clearTimeout(animationTimeout);
@@ -431,9 +379,9 @@
 
       // Load notifications first
       loadNotifications().then(() => {
-        // Only connect to SSE if authenticated
+        // Subscribe to SSE notifications if authenticated
         if (isAuthenticated) {
-          connectSSE();
+          subscribeToNotifications();
         }
       });
 
