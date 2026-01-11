@@ -11,6 +11,7 @@ import (
 
 // batchSize holds the batch size flag value
 var batchSize int
+var compareMode bool
 
 func Command(settings *conf.Settings) *cobra.Command {
 	cmd := &cobra.Command{
@@ -21,11 +22,15 @@ func Command(settings *conf.Settings) *cobra.Command {
 			if batchSize < 1 || batchSize > 512 {
 				return fmt.Errorf("batch size must be between 1 and 512, got %d", batchSize)
 			}
+			if compareMode {
+				return runBatchComparison(settings, batchSize)
+			}
 			return runBenchmark(settings, batchSize)
 		},
 	}
 
 	cmd.Flags().IntVarP(&batchSize, "batch", "b", 1, "batch size for inference (1-512)")
+	cmd.Flags().BoolVar(&compareMode, "compare", false, "compare N sequential singles vs 1 batch of N to measure batch efficiency")
 
 	return cmd
 }
@@ -226,4 +231,138 @@ func getPerformanceRating(inferenceTime float64) (rating, description string) {
 	default:
 		return "🚀 Superb", "System will perform exceptionally well"
 	}
+}
+
+// runBatchComparison compares N sequential single inferences vs 1 batch of N
+// to measure the actual efficiency gain from batching.
+// This helps determine if TFLite is actually processing batches more efficiently
+// or just running N inferences sequentially internally.
+func runBatchComparison(settings *conf.Settings, n int) error {
+	fmt.Printf("🔬 Batch Efficiency Comparison (N=%d)\n", n)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("Comparing N sequential single inferences vs 1 batch of N")
+	fmt.Println("If batching is efficient, batch should be significantly faster.")
+
+	// Use XNNPACK for comparison
+	settings.BirdNET.UseXNNPACK = true
+
+	// Initialize BirdNET
+	bn, err := birdnet.NewBirdNET(settings)
+	if err != nil {
+		return fmt.Errorf("failed to initialize BirdNET: %w", err)
+	}
+	defer bn.Delete()
+
+	// Generate test data
+	sampleSize := 48000 * 3
+	silentChunk := make([]float32, sampleSize)
+	batchSamples := make([][]float32, n)
+	for i := range n {
+		batchSamples[i] = silentChunk
+	}
+
+	const iterations = 10
+
+	// Warmup
+	fmt.Println("⏳ Warming up...")
+	for range 3 {
+		_, _ = bn.Predict([][]float32{silentChunk})
+	}
+
+	// Test 1: N sequential single inferences
+	fmt.Printf("\n📊 Test 1: %d sequential single inferences (%d iterations)\n", n, iterations)
+	sequentialTimes := make([]time.Duration, 0, iterations)
+	for iter := range iterations {
+		start := time.Now()
+		for range n {
+			_, err := bn.Predict([][]float32{silentChunk})
+			if err != nil {
+				return fmt.Errorf("prediction failed: %w", err)
+			}
+		}
+		elapsed := time.Since(start)
+		sequentialTimes = append(sequentialTimes, elapsed)
+		fmt.Printf("   Iteration %d: %v (%.2f ms/sample)\n", iter+1, elapsed, float64(elapsed.Milliseconds())/float64(n))
+	}
+
+	// Test 2: 1 batch of N
+	fmt.Printf("\n📊 Test 2: 1 batch of %d samples (%d iterations)\n", n, iterations)
+	batchTimes := make([]time.Duration, 0, iterations)
+	for iter := range iterations {
+		start := time.Now()
+		_, err := bn.PredictBatch(batchSamples)
+		if err != nil {
+			return fmt.Errorf("batch prediction failed: %w", err)
+		}
+		elapsed := time.Since(start)
+		batchTimes = append(batchTimes, elapsed)
+		fmt.Printf("   Iteration %d: %v (%.2f ms/sample)\n", iter+1, elapsed, float64(elapsed.Milliseconds())/float64(n))
+	}
+
+	// Calculate averages (excluding first iteration as warmup)
+	avgSequential := average(sequentialTimes[1:])
+	avgBatch := average(batchTimes[1:])
+
+	// Results
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("Results (average of %d iterations, excluding warmup):\n\n", iterations-1)
+	fmt.Printf("Method              Total Time    Per-Sample\n")
+	fmt.Printf("──────────────────  ────────────  ──────────\n")
+	fmt.Printf("Sequential (N×1)    %6.1f ms     %6.2f ms\n",
+		float64(avgSequential.Milliseconds()),
+		float64(avgSequential.Milliseconds())/float64(n))
+	fmt.Printf("Batch (1×N)         %6.1f ms     %6.2f ms\n",
+		float64(avgBatch.Milliseconds()),
+		float64(avgBatch.Milliseconds())/float64(n))
+	fmt.Printf("──────────────────  ────────────  ──────────\n")
+
+	// Calculate speedup/slowdown
+	switch {
+	case avgSequential > avgBatch:
+		speedup := float64(avgSequential-avgBatch) / float64(avgSequential) * 100
+		fmt.Printf("\n✅ Batch is %.1f%% faster than sequential\n", speedup)
+		fmt.Printf("   Overhead saved per sample: %.2f ms\n",
+			(float64(avgSequential.Microseconds())-float64(avgBatch.Microseconds()))/float64(n)/1000)
+	case avgBatch > avgSequential:
+		slowdown := float64(avgBatch-avgSequential) / float64(avgSequential) * 100
+		fmt.Printf("\n❌ Batch is %.1f%% SLOWER than sequential\n", slowdown)
+		fmt.Println("   This suggests TFLite batch processing has overhead on this hardware.")
+	default:
+		fmt.Println("\n⚖️  No significant difference between batch and sequential")
+	}
+
+	// Analysis
+	fmt.Println("\n📝 Analysis:")
+	singleInferenceTime := float64(avgSequential.Microseconds()) / float64(n)
+	theoreticalCGOSavings := float64(n-1) * 0.1 // ~100ns per CGO call, (n-1) extra calls avoided
+	fmt.Printf("   Single inference time: %.2f ms\n", singleInferenceTime/1000)
+	fmt.Printf("   Theoretical CGO overhead saved: ~%.3f µs (negligible)\n", theoreticalCGOSavings)
+	fmt.Printf("   Actual time difference: %.2f ms\n",
+		float64(avgSequential.Microseconds()-avgBatch.Microseconds())/1000)
+
+	batchMicros := float64(avgBatch.Microseconds())
+	seqMicros := float64(avgSequential.Microseconds())
+	switch {
+	case batchMicros < seqMicros*0.9:
+		fmt.Println("   → TFLite is efficiently batching computations (vectorization/parallelism)")
+	case batchMicros > seqMicros*1.1:
+		fmt.Println("   → Batch mode has overhead (tensor resize/allocate costs)")
+		fmt.Println("   → Consider disabling batching on this hardware")
+	default:
+		fmt.Println("   → No significant batching benefit (TFLite processes samples sequentially)")
+		fmt.Println("   → CGO call overhead is negligible compared to inference time")
+	}
+
+	return nil
+}
+
+func average(durations []time.Duration) time.Duration {
+	if len(durations) == 0 {
+		return 0
+	}
+	var total time.Duration
+	for _, d := range durations {
+		total += d
+	}
+	return total / time.Duration(len(durations))
 }
