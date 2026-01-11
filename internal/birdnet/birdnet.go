@@ -47,13 +47,16 @@ type BirdNET struct {
 	TaxonomyMap         TaxonomyMap         // Mapping of species codes to names and vice versa
 	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
-	mu                  sync.Mutex
+	mu                  sync.RWMutex
 	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
 
 	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
 	speciesCacheMu sync.RWMutex
 	speciesCache   map[string]*speciesCacheEntry
+
+	// Batch inference scheduler (nil if batch size <= 1)
+	batchScheduler *BatchScheduler
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -143,6 +146,20 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
+	}
+
+	// Initialize batch scheduler based on overlap setting
+	// Higher overlap = more chunks per second = more benefit from batching
+	batchSize := CalculateBatchSize(settings.BirdNET.Overlap)
+	if batchSize > 1 {
+		bn.batchScheduler = NewBatchScheduler(bn, batchSize)
+		GetLogger().Info("Batch inference enabled",
+			logger.Float64("overlap", settings.BirdNET.Overlap),
+			logger.Int("batch_size", batchSize))
+	} else {
+		GetLogger().Info("Batch inference disabled",
+			logger.Float64("overlap", settings.BirdNET.Overlap),
+			logger.Float64("threshold", OverlapThresholdLow))
 	}
 
 	return bn, nil
@@ -627,6 +644,15 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 
 // Delete releases resources used by the TensorFlow Lite interpreters.
 func (bn *BirdNET) Delete() {
+	// Stop batch scheduler first (capture reference atomically to avoid race)
+	bn.mu.Lock()
+	scheduler := bn.batchScheduler
+	bn.batchScheduler = nil
+	bn.mu.Unlock()
+	if scheduler != nil {
+		scheduler.Stop()
+	}
+
 	if bn.AnalysisInterpreter != nil {
 		bn.AnalysisInterpreter.Delete()
 	}
@@ -1061,4 +1087,99 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	}
 
 	return scientific, common, code
+}
+
+// SubmitBatch submits an audio chunk for batch inference.
+// If batching is disabled (BatchSize <= 1), falls back to immediate single prediction.
+// Safe to call from any goroutine.
+func (bn *BirdNET) SubmitBatch(req BatchRequest) error {
+	if err := req.Validate(); err != nil {
+		return err
+	}
+
+	// Capture scheduler reference atomically to avoid TOCTOU race
+	bn.mu.RLock()
+	scheduler := bn.batchScheduler
+	bn.mu.RUnlock()
+
+	// If no scheduler, fall back to immediate single prediction
+	if scheduler == nil {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					req.ResultChan <- BatchResponse{
+						Err: fmt.Errorf("panic during prediction: %v", r),
+					}
+				}
+			}()
+			results, err := bn.Predict([][]float32{req.Sample})
+			req.ResultChan <- BatchResponse{
+				Results: results,
+				Err:     err,
+			}
+		}()
+		return nil
+	}
+
+	return scheduler.Submit(req)
+}
+
+// IsBatchingEnabled returns true if batch inference is enabled.
+// Safe to call from any goroutine.
+func (bn *BirdNET) IsBatchingEnabled() bool {
+	bn.mu.RLock()
+	defer bn.mu.RUnlock()
+	return bn.batchScheduler != nil
+}
+
+// GetBatchSize returns the current batch size (1 if batching is disabled).
+// Safe to call from any goroutine.
+func (bn *BirdNET) GetBatchSize() int {
+	bn.mu.RLock()
+	defer bn.mu.RUnlock()
+	if bn.batchScheduler == nil {
+		return 1
+	}
+	return bn.batchScheduler.batchSize
+}
+
+// UpdateBatchSize reconfigures batch inference based on the new overlap setting.
+// This stops any existing batch scheduler and creates a new one if needed.
+// Safe to call from any goroutine.
+func (bn *BirdNET) UpdateBatchSize(overlap float64) {
+	newBatchSize := CalculateBatchSize(overlap)
+
+	// First pass: check if change needed and capture old scheduler
+	bn.mu.Lock()
+	currentBatchSize := 1
+	if bn.batchScheduler != nil {
+		currentBatchSize = bn.batchScheduler.batchSize
+	}
+
+	// No change needed
+	if newBatchSize == currentBatchSize {
+		bn.mu.Unlock()
+		return
+	}
+
+	// Capture old scheduler and clear reference atomically to avoid TOCTOU race
+	oldScheduler := bn.batchScheduler
+	bn.batchScheduler = nil
+	bn.mu.Unlock()
+
+	// Stop old scheduler outside lock to avoid deadlock:
+	// Stop() waits for processLoop, which may be in PredictBatch holding bn.mu
+	if oldScheduler != nil {
+		oldScheduler.Stop()
+	}
+
+	// Second pass: create new scheduler if needed
+	if newBatchSize > 1 {
+		bn.mu.Lock()
+		// Re-check in case another goroutine already created a scheduler
+		if bn.batchScheduler == nil {
+			bn.batchScheduler = NewBatchScheduler(bn, newBatchSize)
+		}
+		bn.mu.Unlock()
+	}
 }

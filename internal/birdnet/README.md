@@ -182,6 +182,62 @@ The package includes several optimizations for performance:
 - Optional XNNPACK delegate support for accelerated inference
 - Performance core optimization on supported hardware
 - Efficient queue system to handle analysis results asynchronously
+- Batch inference support for improved throughput
+
+## Batch Inference
+
+The package supports batch inference for improved throughput when processing multiple audio sources or using high overlap values.
+
+### Automatic Batch Sizing
+
+Batch inference is automatically enabled based on the overlap setting. No manual configuration is required.
+
+| Overlap | Batch Size   | Rationale                                             |
+|---------|--------------|-------------------------------------------------------|
+| < 2.0   | 1 (disabled) | Chunks arrive slowly (>1s apart), no batching benefit |
+| 2.0-2.5 | 4            | Moderate chunk rate (~0.5-1s apart)                   |
+| >= 2.5  | 8            | High chunk rate (~0.5s apart), maximize throughput    |
+
+### How It Works
+
+1. Audio chunks are collected by the `BatchScheduler`
+2. When the calculated batch size is reached, batch inference runs
+3. Results are returned to each source asynchronously via channels
+4. On shutdown, pending partial batches are discarded (stale realtime data)
+
+### API
+
+```go
+// Submit a chunk for batch inference
+err := bn.SubmitBatch(birdnet.BatchRequest{
+    Sample:     audioSample,        // []float32 of length 144000 (3s at 48kHz)
+    SourceID:   "rtsp-camera-1",    // Identifier for tracking
+    ResultChan: make(chan birdnet.BatchResponse, 1),
+})
+
+// Receive results asynchronously
+resp := <-resultChan
+if resp.HasError() {
+    // Handle error
+}
+for _, result := range resp.Results {
+    fmt.Printf("%s: %.2f\n", result.Species, result.Confidence)
+}
+```
+
+### Performance
+
+Batch inference can provide 1.5-2x throughput improvement compared to sequential processing by:
+
+- Reducing TensorFlow Lite interpreter context switching
+- Better CPU cache utilization
+- Amortizing model invocation overhead across multiple samples
+
+Run benchmarks to measure performance on your hardware:
+
+```bash
+go test ./internal/birdnet/... -bench=. -benchtime=10s
+```
 
 ## Cross-Platform Support
 

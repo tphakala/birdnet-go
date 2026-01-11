@@ -72,6 +72,7 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.modelpath", "")
 	viper.SetDefault("birdnet.labelpath", "")
 	viper.SetDefault("birdnet.usexnnpack", true)
+	viper.SetDefault("birdnet.batchsize", 1) // Default to 1 (no batching) for backward compatibility
 
 	// Range filter configuration
 	viper.SetDefault("birdnet.rangefilter.debug", false)
