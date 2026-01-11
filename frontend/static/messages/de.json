@@ -1720,13 +1720,6 @@
             "helpText": "Das MQTT-Passwort."
           }
         },
-        "messageSettings": {
-          "title": "Nachrichteneinstellungen",
-          "retain": {
-            "label": "Nachrichten beibehalten",
-            "note": "<strong>Empfohlen:</strong> Aktivieren Sie das Retain-Flag, um sicherzustellen, dass MQTT-Sensoren nach einem Neustart von Home Assistant Werte anzeigen."
-          }
-        },
         "tls": {
           "title": "TLS/SSL-Sicherheit",
           "enable": "TLS/SSL aktivieren",
@@ -1751,6 +1744,10 @@
             "success": "Discovery-Nachrichten an Home Assistant gesendet",
             "error": "Senden der Discovery-Nachrichten fehlgeschlagen",
             "saveFirst": "Einstellungen speichern, bevor Discovery gesendet wird"
+          },
+          "retain": {
+            "label": "Nachrichten beibehalten",
+            "note": "<strong>Empfohlen:</strong> Aktivieren Sie das Retain-Flag, um sicherzustellen, dass MQTT-Sensoren nach einem Neustart von Home Assistant Werte anzeigen."
           }
         },
         "test": {
@@ -2581,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Daten werden geladen...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2590,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Daten werden geladen...",
       "error": "Fehler beim Laden der Daten",
       "sortBy": "Sortieren nach {column}",
       "rowsPerPage": "Zeilen pro Seite",

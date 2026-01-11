@@ -1729,13 +1729,6 @@
             "helpText": "The MQTT password."
           }
         },
-        "messageSettings": {
-          "title": "Message Settings",
-          "retain": {
-            "label": "Retain Messages",
-            "note": "<strong>Recommended:</strong> Enable the retain flag to ensure MQTT sensors show values after Home Assistant restarts."
-          }
-        },
         "tls": {
           "title": "TLS/SSL Security",
           "enable": "Enable TLS/SSL",
@@ -1760,6 +1753,10 @@
             "success": "Discovery messages sent to Home Assistant",
             "error": "Failed to send discovery messages",
             "saveFirst": "Save settings before sending discovery"
+          },
+          "retain": {
+            "label": "Retain Messages",
+            "note": "<strong>Recommended:</strong> Enable the retain flag to ensure MQTT sensors show values after Home Assistant restarts."
           }
         },
         "test": {

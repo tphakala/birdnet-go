@@ -109,33 +109,18 @@ func (p *Processor) RegisterHomeAssistantDiscovery(client mqtt.Client, settings 
 // registerHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
 func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
 	log := GetLogger()
-
-	// Create discovery configuration
 	haSettings := settings.Realtime.MQTT.HomeAssistant
-	discoveryConfig := mqtt.DiscoveryConfig{
-		DiscoveryPrefix: haSettings.DiscoveryPrefix,
-		BaseTopic:       settings.Realtime.MQTT.Topic,
-		DeviceName:      haSettings.DeviceName,
-		NodeID:          settings.Main.Name,
-		Version:         settings.Version,
-	}
-
-	// Create the discovery publisher
-	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
 
 	// Register the OnConnect handler
 	client.RegisterOnConnectHandler(func() {
 		log.Info("MQTT connected, publishing Home Assistant discovery messages")
 
-		// Get audio sources from the registry
-		sources := p.getAudioSourcesForDiscovery()
-
 		// Create a context for publishing
 		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
 		defer cancel()
 
-		// Publish discovery messages
-		if err := publisher.PublishDiscovery(ctx, sources, settings); err != nil {
+		// Publish discovery messages using the helper
+		if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
 			log.Error("Failed to publish Home Assistant discovery",
 				logger.Error(err))
 		}
@@ -146,10 +131,33 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 		logger.String("device_name", haSettings.DeviceName))
 }
 
+// publishHomeAssistantDiscovery publishes Home Assistant discovery messages.
+// This is the shared implementation used by both the OnConnect handler and manual trigger.
+func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, settings *conf.Settings) error {
+	haSettings := settings.Realtime.MQTT.HomeAssistant
+	discoveryConfig := mqtt.DiscoveryConfig{
+		DiscoveryPrefix: haSettings.DiscoveryPrefix,
+		BaseTopic:       settings.Realtime.MQTT.Topic,
+		DeviceName:      haSettings.DeviceName,
+		NodeID:          settings.Main.Name,
+		Version:         settings.Version,
+	}
+
+	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
+	sources := p.getAudioSourcesForDiscovery()
+
+	return publisher.PublishDiscovery(ctx, sources, settings)
+}
+
 // TriggerHomeAssistantDiscovery manually triggers Home Assistant discovery messages.
 // This can be called from the API to force republishing of discovery messages.
 func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 	log := GetLogger()
+
+	// Guard against nil settings during startup/teardown
+	if p.Settings == nil {
+		return fmt.Errorf("settings not initialized")
+	}
 
 	// Check if MQTT is enabled and Home Assistant discovery is enabled
 	if !p.Settings.Realtime.MQTT.Enabled {
@@ -165,30 +173,13 @@ func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 		return fmt.Errorf("MQTT client not connected")
 	}
 
-	// Create discovery configuration
-	haSettings := p.Settings.Realtime.MQTT.HomeAssistant
-	discoveryConfig := mqtt.DiscoveryConfig{
-		DiscoveryPrefix: haSettings.DiscoveryPrefix,
-		BaseTopic:       p.Settings.Realtime.MQTT.Topic,
-		DeviceName:      haSettings.DeviceName,
-		NodeID:          p.Settings.Main.Name,
-		Version:         p.Settings.Version,
-	}
-
-	// Create the discovery publisher
-	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
-
-	// Get audio sources
-	sources := p.getAudioSourcesForDiscovery()
-
-	log.Info("Manually triggering Home Assistant discovery",
-		logger.Int("source_count", len(sources)))
+	log.Info("Manually triggering Home Assistant discovery")
 
 	// Publish discovery messages with timeout
 	publishCtx, cancel := context.WithTimeout(ctx, discoveryPublishTimeout)
 	defer cancel()
 
-	if err := publisher.PublishDiscovery(publishCtx, sources, p.Settings); err != nil {
+	if err := p.publishHomeAssistantDiscovery(publishCtx, client, p.Settings); err != nil {
 		log.Error("Failed to publish Home Assistant discovery", logger.Error(err))
 		return fmt.Errorf("failed to publish discovery: %w", err)
 	}

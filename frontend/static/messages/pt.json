@@ -934,8 +934,7 @@
             "label": "Caminho dos rótulos (Requer reinicialização para aplicar)",
             "placeholder": "Caminho para o arquivo de rótulos",
             "helpText": "Caminho para o arquivo de rótulos do modelo externo, arquivo .zip ou .txt. Insira o caminho absoluto ou relativo ao binário birdnet-go. Deixe vazio para usar os rótulos incorporados padrão."
-          },
-          "description": "Configure arquivos personalizados de modelo e rótulos do BirdNET para detecção especializada"
+          }
         },
         "dynamicThreshold": {
           "title": "Limiar dinâmico",
@@ -955,8 +954,7 @@
           "expireTime": {
             "label": "Tempo de expiração do limiar dinâmico (horas)",
             "helpText": "O número de horas durante as quais os ajustes de limiar dinâmico permanecem válidos. Após esse período, o limiar dinâmico é redefinido."
-          },
-          "description": "Ajusta automaticamente a sensibilidade de detecção com base em observações anteriores"
+          }
         },
         "falsePositiveFilter": {
           "title": "Filtro de Falsos Positivos",
@@ -1008,8 +1006,7 @@
             "loadingSpecies": "Carregando espécies...",
             "noSpeciesFound": "Nenhuma espécie encontrada com as configurações atuais",
             "close": "Fechar"
-          },
-          "description": "Limita a detecção a espécies prováveis em sua região geográfica"
+          }
         },
         "database": {
           "title": "Configurações do banco de dados",
@@ -1996,13 +1993,6 @@
             "helpText": "A senha MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Configurações de mensagem",
-          "retain": {
-            "label": "Reter mensagens",
-            "note": "<strong>Recomendado:</strong> Ative a flag de retenção para garantir que os sensores MQTT mostrem valores após reiniciar o Home Assistant."
-          }
-        },
         "tls": {
           "title": "Segurança TLS/SSL",
           "enable": "Ativar TLS/SSL",
@@ -2027,6 +2017,10 @@
             "success": "Mensagens de descoberta enviadas ao Home Assistant",
             "error": "Falha ao enviar mensagens de descoberta",
             "saveFirst": "Salve as configurações antes de enviar a descoberta"
+          },
+          "retain": {
+            "label": "Reter mensagens",
+            "note": "<strong>Recomendado:</strong> Ative a flag de retenção para garantir que os sensores MQTT mostrem valores após reiniciar o Home Assistant."
           }
         },
         "test": {
@@ -2584,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Carregando dados...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2593,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Carregando dados...",
       "error": "Falha ao carregar dados",
       "sortBy": "Ordenar por {column}",
       "rowsPerPage": "Linhas por página",

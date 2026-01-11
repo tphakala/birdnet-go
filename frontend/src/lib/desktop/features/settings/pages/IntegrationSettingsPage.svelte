@@ -283,11 +283,10 @@
         },
       });
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (response.ok) {
         toastActions.success(t('settings.integration.mqtt.homeAssistant.discovery.success'));
       } else {
+        const result = await response.json();
         toastActions.error(
           result.message || t('settings.integration.mqtt.homeAssistant.discovery.error')
         );
@@ -978,12 +977,12 @@
                   <Checkbox
                     checked={(settings.mqtt as MQTTSettings).retain ?? false}
                     onchange={(checked) => updateMQTTRetain(checked)}
-                    label={t('settings.integration.mqtt.messageSettings.retain.label')}
+                    label={t('settings.integration.mqtt.homeAssistant.retain.label')}
                     disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
                   />
 
                   <SettingsNote>
-                    <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
+                    <span>{@html t('settings.integration.mqtt.homeAssistant.retain.note')}</span>
                   </SettingsNote>
                 </div>
 

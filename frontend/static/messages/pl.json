@@ -1726,13 +1726,6 @@
             "helpText": "Hasło MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Ustawienia Wiadomości",
-          "retain": {
-            "label": "Zachowaj Wiadomości",
-            "note": "<strong>Zalecane:</strong> Włącz flagę zachowania, aby upewnić się, że czujniki MQTT pokazują wartości po restarcie Home Assistant."
-          }
-        },
         "tls": {
           "title": "Bezpieczeństwo TLS/SSL",
           "enable": "Włącz TLS/SSL",
@@ -1757,6 +1750,10 @@
             "success": "Wiadomości wykrywania wysłane do Home Assistant",
             "error": "Nie udało się wysłać wiadomości wykrywania",
             "saveFirst": "Zapisz ustawienia przed wysłaniem wykrywania"
+          },
+          "retain": {
+            "label": "Zachowaj Wiadomości",
+            "note": "<strong>Zalecane:</strong> Włącz flagę zachowania, aby upewnić się, że czujniki MQTT pokazują wartości po restarcie Home Assistant."
           }
         },
         "test": {
@@ -2542,12 +2539,6 @@
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
       "mysqlHostPlaceholder": "Wprowadź host MySQL",
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
-    },
-    "tabs": {
-      "navigation": "Karty nawigacji ustawień",
-      "hasChanges": "Ta karta ma niezapisane zmiany",
-      "setAsDefault": "Ustaw jako domyślne",
-      "defaultIndicator": "Domyślne źródło wejściowe"
     }
   },
   "auth": {
@@ -2587,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ładowanie danych...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2596,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ładowanie danych...",
       "error": "Nie udało się załadować danych",
       "sortBy": "Sortuj według {column}",
       "rowsPerPage": "Wierszy na stronę",

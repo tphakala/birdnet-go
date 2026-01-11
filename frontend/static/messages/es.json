@@ -1993,13 +1993,6 @@
             "helpText": "La contraseña MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Configuración de mensajes",
-          "retain": {
-            "label": "Retener mensajes",
-            "note": "<strong>Recomendado:</strong> Habilite la bandera de retención para asegurar que los sensores MQTT muestren valores después de reiniciar Home Assistant."
-          }
-        },
         "tls": {
           "title": "Seguridad TLS/SSL",
           "enable": "Habilitar TLS/SSL",
@@ -2024,6 +2017,10 @@
             "success": "Mensajes de descubrimiento enviados a Home Assistant",
             "error": "Error al enviar mensajes de descubrimiento",
             "saveFirst": "Guarde la configuración antes de enviar el descubrimiento"
+          },
+          "retain": {
+            "label": "Retener mensajes",
+            "note": "<strong>Recomendado:</strong> Habilite la bandera de retención para asegurar que los sensores MQTT muestren valores después de reiniciar Home Assistant."
           }
         },
         "test": {
@@ -2581,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Cargando datos...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2590,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Cargando datos...",
       "error": "Error al cargar datos",
       "sortBy": "Ordenar por {column}",
       "rowsPerPage": "Filas por página",

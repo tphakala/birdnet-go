@@ -1720,13 +1720,6 @@
             "helpText": "Le mot de passe MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Paramètres des messages",
-          "retain": {
-            "label": "Conserver les messages",
-            "note": "<strong>Recommandé :</strong> Activez le drapeau de conservation pour garantir que les capteurs MQTT affichent des valeurs après le redémarrage de Home Assistant."
-          }
-        },
         "tls": {
           "title": "Sécurité TLS/SSL",
           "enable": "Activer TLS/SSL",
@@ -1736,7 +1729,7 @@
         "homeAssistant": {
           "title": "Home Assistant Auto-Discovery",
           "enable": "Activer Home Assistant MQTT Discovery",
-          "description": "Lorsque activé, BirdNET-Go enregistre automatiquement les appareils et capteurs auprès de Home Assistant via le protocole de découverte MQTT. Les appareils apparaîtront dans le registre des appareils de Home Assistant sans configuration YAML manuelle.",
+          "description": "Lorsqu'elle est activée, BirdNET-Go enregistre automatiquement les appareils et capteurs auprès de Home Assistant via le protocole de découverte MQTT. Les appareils apparaîtront dans le registre des appareils de Home Assistant sans configuration YAML manuelle.",
           "discoveryPrefix": {
             "label": "Préfixe de découverte",
             "helpText": "Le préfixe de sujet MQTT pour les messages de découverte Home Assistant. La valeur par défaut est 'homeassistant'. Ne modifiez ceci que si vous avez configuré un préfixe de découverte personnalisé dans Home Assistant."
@@ -1747,10 +1740,14 @@
           },
           "sensorsNote": "<strong>Capteurs créés :</strong> Pour chaque source audio, Home Assistant recevra : Dernière espèce, Confiance, Nom scientifique et Niveau sonore (si activé). L'appareil pont inclut l'état de disponibilité en ligne/hors ligne.",
           "discovery": {
-            "button": "Envoyer Discovery",
+            "button": "Envoyer la découverte",
             "success": "Messages de découverte envoyés à Home Assistant",
             "error": "Échec de l'envoi des messages de découverte",
             "saveFirst": "Enregistrez les paramètres avant d'envoyer la découverte"
+          },
+          "retain": {
+            "label": "Conserver les messages",
+            "note": "<strong>Recommandé :</strong> Activez le drapeau de conservation pour garantir que les capteurs MQTT affichent des valeurs après le redémarrage de Home Assistant."
           }
         },
         "test": {
@@ -2581,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Chargement des données...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2590,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Chargement des données...",
       "error": "Échec du chargement des données",
       "sortBy": "Trier par {column}",
       "rowsPerPage": "Lignes par page",

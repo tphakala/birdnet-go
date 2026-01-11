@@ -747,35 +747,23 @@ func getProviderDisplayName(provider string) string {
 // TriggerHomeAssistantDiscovery handles POST /api/v2/integrations/mqtt/homeassistant/discovery
 // It manually triggers Home Assistant MQTT discovery message publishing.
 func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
-	ip := ctx.RealIP()
-	path := ctx.Request().URL.Path
 	c.logInfoIfEnabled("Triggering Home Assistant discovery",
-		logger.String("path", path),
-		logger.String("ip", ip))
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()))
 
 	// Check if processor is available
 	if c.Processor == nil {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]any{
-			"success": false,
-			"message": "Processor not available",
-		})
+		return c.HandleError(ctx, nil, "Processor not available", http.StatusServiceUnavailable)
 	}
 
 	// Trigger discovery
 	if err := c.Processor.TriggerHomeAssistantDiscovery(ctx.Request().Context()); err != nil {
-		c.logErrorIfEnabled("Failed to trigger Home Assistant discovery",
-			logger.Error(err),
-			logger.String("path", path),
-			logger.String("ip", ip))
-		return ctx.JSON(http.StatusBadRequest, map[string]any{
-			"success": false,
-			"message": err.Error(),
-		})
+		return c.HandleError(ctx, err, "Failed to trigger Home Assistant discovery", http.StatusBadRequest)
 	}
 
 	c.logInfoIfEnabled("Home Assistant discovery triggered successfully",
-		logger.String("path", path),
-		logger.String("ip", ip))
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()))
 
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"success": true,
