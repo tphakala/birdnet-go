@@ -28,14 +28,15 @@ const (
 
 // client implements the Client interface.
 type client struct {
-	config          Config
-	internalClient  mqtt.Client
-	lastConnAttempt time.Time
-	mu              sync.RWMutex
-	reconnectTimer  *time.Timer
-	reconnectStop   chan struct{}
-	metrics         *metrics.MQTTMetrics
-	controlChan     chan string // Channel for control signals
+	config            Config
+	internalClient    mqtt.Client
+	lastConnAttempt   time.Time
+	mu                sync.RWMutex
+	reconnectTimer    *time.Timer
+	reconnectStop     chan struct{}
+	metrics           *metrics.MQTTMetrics
+	controlChan       chan string           // Channel for control signals
+	onConnectHandlers []OnConnectHandler    // Handlers called on successful connection
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
@@ -62,6 +63,17 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	if strings.HasPrefix(config.Broker, "ssl://") || strings.HasPrefix(config.Broker, "tls://") || strings.HasPrefix(config.Broker, "mqtts://") {
 		config.TLS.Enabled = true
 		log.Info("TLS enabled based on broker URL scheme")
+	}
+
+	// Configure LWT (Last Will and Testament) for Home Assistant availability tracking
+	if settings.Realtime.MQTT.HomeAssistant.Enabled {
+		config.LWT.Enabled = true
+		config.LWT.Topic = config.Topic + "/status"
+		config.LWT.Payload = "offline"
+		config.LWT.QoS = 1
+		config.LWT.Retain = true
+		log.Info("Home Assistant auto-discovery enabled, LWT configured",
+			logger.String("lwt_topic", config.LWT.Topic))
 	}
 
 	// Note: Debug mode logging is now controlled by the central logger configuration
@@ -95,6 +107,15 @@ func (c *client) SetControlChannel(ch chan string) {
 	defer c.mu.Unlock()
 	GetLogger().Debug("Setting control channel for MQTT client")
 	c.controlChan = ch
+}
+
+// RegisterOnConnectHandler registers a callback that will be invoked each time
+// the client successfully connects or reconnects to the broker.
+func (c *client) RegisterOnConnectHandler(handler OnConnectHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onConnectHandlers = append(c.onConnectHandlers, handler)
+	GetLogger().Debug("Registered OnConnect handler", logger.Int("total_handlers", len(c.onConnectHandlers)))
 }
 
 // IsDebug returns the current debug setting in a thread-safe manner.
@@ -390,6 +411,90 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	return nil
 }
 
+// PublishWithRetain sends a message with explicit retain flag control.
+// This is useful for discovery messages that must be retained regardless of client config.
+func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, retain bool) error {
+	// Check context before acquiring lock
+	if err := ctx.Err(); err != nil {
+		GetLogger().Warn("PublishWithRetain context already cancelled",
+			logger.String("topic", topic),
+			logger.Error(err))
+		return err
+	}
+
+	c.mu.Lock()
+	if c.internalClient == nil || !c.internalClient.IsConnected() {
+		c.mu.Unlock()
+		GetLogger().Warn("PublishWithRetain failed: client is not connected")
+		enhancedErr := errors.Newf("not connected to MQTT broker").
+			Component("mqtt").
+			Category(errors.CategoryMQTTConnection).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("topic", topic).
+			Context("operation", "publish_with_retain_not_connected").
+			Build()
+		return enhancedErr
+	}
+	clientToPublish := c.internalClient
+	c.mu.Unlock()
+
+	log := GetLogger().With(
+		logger.String("topic", topic),
+		logger.Int("qos", defaultQoS),
+		logger.Bool("retain", retain))
+	timer := c.metrics.StartPublishTimer()
+	defer timer.ObserveDuration()
+
+	log.Debug("Attempting to publish message with explicit retain",
+		logger.Int("payload_size", len(payload)))
+
+	token := clientToPublish.Publish(topic, defaultQoS, retain, payload)
+
+	if !token.WaitTimeout(c.config.PublishTimeout) {
+		log.Error("MQTT publish with retain timed out",
+			logger.Duration("timeout", c.config.PublishTimeout))
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			log.Error("Context was cancelled during publish wait", logger.Error(ctxErr))
+			return ctxErr
+		}
+		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_timeout")
+		enhancedErr := errors.Newf("publish timeout after %v", c.config.PublishTimeout).
+			Component("mqtt").
+			Category(errors.CategoryMQTTPublish).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("topic", topic).
+			Context("publish_timeout", c.config.PublishTimeout).
+			Context("payload_size", len(payload)).
+			Context("operation", "publish_with_retain_timeout").
+			Build()
+		return enhancedErr
+	}
+
+	if publishErr := token.Error(); publishErr != nil {
+		log.Error("MQTT publish with retain failed", logger.Error(publishErr))
+		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_error")
+		enhancedErr := errors.New(publishErr).
+			Component("mqtt").
+			Category(errors.CategoryMQTTPublish).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("topic", topic).
+			Context("payload_size", len(payload)).
+			Context("qos", defaultQoS).
+			Context("retain", retain).
+			Context("operation", "publish_with_retain_error").
+			Build()
+		return enhancedErr
+	}
+
+	log.Debug("PublishWithRetain completed successfully")
+	c.metrics.IncrementMessagesDelivered()
+	c.metrics.ObserveMessageSize(float64(len(payload)))
+	return nil
+}
+
 // IsConnected returns true if the client is currently connected to the MQTT broker.
 func (c *client) IsConnected() bool {
 	// RLock is sufficient for read-only check
@@ -498,6 +603,17 @@ func (c *client) configureClientOptions(log logger.Logger) (*mqtt.ClientOptions,
 			logger.Bool("skip_verify", c.config.TLS.InsecureSkipVerify),
 			logger.Bool("has_ca_cert", c.config.TLS.CACert != ""),
 			logger.Bool("has_client_cert", c.config.TLS.ClientCert != ""),
+		)
+	}
+
+	// Configure Last Will and Testament (LWT) for availability tracking
+	if c.config.LWT.Enabled && c.config.LWT.Topic != "" {
+		opts.SetWill(c.config.LWT.Topic, c.config.LWT.Payload, c.config.LWT.QoS, c.config.LWT.Retain)
+		log.Debug("LWT configuration applied",
+			logger.String("topic", c.config.LWT.Topic),
+			logger.String("payload", c.config.LWT.Payload),
+			logger.Int("qos", int(c.config.LWT.QoS)),
+			logger.Bool("retain", c.config.LWT.Retain),
 		)
 	}
 
@@ -742,11 +858,45 @@ func (c *client) disconnectWithTimeout(timeout time.Duration) {
 }
 
 func (c *client) onConnect(client mqtt.Client) {
-	GetLogger().Info("Connected to MQTT broker",
+	log := GetLogger()
+	log.Info("Connected to MQTT broker",
 		logger.String("broker", c.config.Broker),
 		logger.String("client_id", c.config.ClientID))
 	c.metrics.UpdateConnectionStatus(true)
-	// Reset reconnect attempts on successful connection - might be handled by Connect logic resetting lastConnAttempt implicitly
+
+	// Publish online status if LWT is enabled
+	if c.config.LWT.Enabled && c.config.LWT.Topic != "" {
+		token := client.Publish(c.config.LWT.Topic, c.config.LWT.QoS, true, "online")
+		if token.WaitTimeout(c.config.PublishTimeout) && token.Error() == nil {
+			log.Debug("Published online status to LWT topic",
+				logger.String("topic", c.config.LWT.Topic))
+		} else {
+			log.Warn("Failed to publish online status to LWT topic",
+				logger.String("topic", c.config.LWT.Topic),
+				logger.Error(token.Error()))
+		}
+	}
+
+	// Call registered OnConnect handlers
+	c.mu.RLock()
+	handlers := make([]OnConnectHandler, len(c.onConnectHandlers))
+	copy(handlers, c.onConnectHandlers)
+	c.mu.RUnlock()
+
+	for i, handler := range handlers {
+		log.Debug("Executing OnConnect handler", logger.Int("handler_index", i))
+		// Run handlers in goroutines to avoid blocking the paho callback
+		go func(h OnConnectHandler, idx int) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error("OnConnect handler panicked",
+						logger.Int("handler_index", idx),
+						logger.Any("panic", r))
+				}
+			}()
+			h()
+		}(handler, i)
+	}
 }
 
 func (c *client) onConnectionLost(client mqtt.Client, err error) {
