@@ -318,6 +318,20 @@ func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.
 
 // Publish sends a message to the specified topic on the MQTT broker.
 func (c *client) Publish(ctx context.Context, topic, payload string) error {
+	c.mu.RLock()
+	currentRetain := c.config.Retain
+	c.mu.RUnlock()
+	return c.publishInternal(ctx, topic, payload, currentRetain)
+}
+
+// PublishWithRetain sends a message with explicit retain flag control.
+// This is useful for discovery messages that must be retained regardless of client config.
+func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, retain bool) error {
+	return c.publishInternal(ctx, topic, payload, retain)
+}
+
+// publishInternal is the common implementation for Publish and PublishWithRetain.
+func (c *client) publishInternal(ctx context.Context, topic, payload string, retain bool) error {
 	// Check context before acquiring lock
 	if err := ctx.Err(); err != nil {
 		GetLogger().Warn("Publish context already cancelled",
@@ -326,11 +340,9 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 		return err
 	}
 
-	c.mu.Lock() // Lock to safely read internalClient and check connection status
-	// Directly check the internal client state while holding the lock
-	// Avoids calling IsConnected() which would re-lock.
+	c.mu.Lock()
 	if c.internalClient == nil || !c.internalClient.IsConnected() {
-		c.mu.Unlock() // Unlock before returning error
+		c.mu.Unlock()
 		GetLogger().Warn("Publish failed: client is not connected")
 		enhancedErr := errors.Newf("not connected to MQTT broker").
 			Component("mqtt").
@@ -339,100 +351,6 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 			Context("client_id", c.config.ClientID).
 			Context("topic", topic).
 			Context("operation", "publish_not_connected").
-			Build()
-		return enhancedErr
-	}
-	GetLogger().Debug("Client is connected, continuing")
-	clientToPublish := c.internalClient // Get client instance under lock
-	currentRetain := c.config.Retain    // Get config value under lock
-	c.mu.Unlock()                       // Unlock before blocking publish call
-
-	log := GetLogger().With(
-		logger.String("topic", topic),
-		logger.Int("qos", defaultQoS),
-		logger.Bool("retain", currentRetain))
-	timer := c.metrics.StartPublishTimer()
-	defer timer.ObserveDuration()
-
-	log.Debug("Attempting to publish message",
-		logger.Int("payload_size", len(payload)))
-
-	// Perform the publish operation directly
-	token := clientToPublish.Publish(topic, defaultQoS, currentRetain, payload)
-
-	// Wait directly on the token with timeout
-	if !token.WaitTimeout(c.config.PublishTimeout) {
-		log.Error("MQTT publish timed out",
-			logger.Duration("timeout", c.config.PublishTimeout))
-		// Check if the *original* context was cancelled
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			log.Error("Context was cancelled during publish wait",
-				logger.Error(ctxErr))
-			return ctxErr
-		}
-		// If context is okay, return a specific timeout error
-		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_timeout") // Count timeout as an error
-		enhancedErr := errors.Newf("publish timeout after %v", c.config.PublishTimeout).
-			Component("mqtt").
-			Category(errors.CategoryMQTTPublish).
-			Context("broker", c.config.Broker).
-			Context("client_id", c.config.ClientID).
-			Context("topic", topic).
-			Context("publish_timeout", c.config.PublishTimeout).
-			Context("payload_size", len(payload)).
-			Context("operation", "publish_timeout").
-			Build()
-		return enhancedErr
-	}
-
-	// Check token for errors after waiting
-	if publishErr := token.Error(); publishErr != nil {
-		log.Error("MQTT publish failed",
-			logger.Error(publishErr))
-		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_error")
-		enhancedErr := errors.New(publishErr).
-			Component("mqtt").
-			Category(errors.CategoryMQTTPublish).
-			Context("broker", c.config.Broker).
-			Context("client_id", c.config.ClientID).
-			Context("topic", topic).
-			Context("payload_size", len(payload)).
-			Context("qos", defaultQoS).
-			Context("retain", currentRetain).
-			Context("operation", "publish_error").
-			Build()
-		return enhancedErr
-	}
-
-	// Only increment success metrics if the publish call did not return an error
-	log.Debug("Publish completed successfully")
-	c.metrics.IncrementMessagesDelivered()
-	c.metrics.ObserveMessageSize(float64(len(payload)))
-	return nil
-}
-
-// PublishWithRetain sends a message with explicit retain flag control.
-// This is useful for discovery messages that must be retained regardless of client config.
-func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, retain bool) error {
-	// Check context before acquiring lock
-	if err := ctx.Err(); err != nil {
-		GetLogger().Warn("PublishWithRetain context already cancelled",
-			logger.String("topic", topic),
-			logger.Error(err))
-		return err
-	}
-
-	c.mu.Lock()
-	if c.internalClient == nil || !c.internalClient.IsConnected() {
-		c.mu.Unlock()
-		GetLogger().Warn("PublishWithRetain failed: client is not connected")
-		enhancedErr := errors.Newf("not connected to MQTT broker").
-			Component("mqtt").
-			Category(errors.CategoryMQTTConnection).
-			Context("broker", c.config.Broker).
-			Context("client_id", c.config.ClientID).
-			Context("topic", topic).
-			Context("operation", "publish_with_retain_not_connected").
 			Build()
 		return enhancedErr
 	}
@@ -446,16 +364,17 @@ func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, r
 	timer := c.metrics.StartPublishTimer()
 	defer timer.ObserveDuration()
 
-	log.Debug("Attempting to publish message with explicit retain",
+	log.Debug("Attempting to publish message",
 		logger.Int("payload_size", len(payload)))
 
 	token := clientToPublish.Publish(topic, defaultQoS, retain, payload)
 
 	if !token.WaitTimeout(c.config.PublishTimeout) {
-		log.Error("MQTT publish with retain timed out",
+		log.Error("MQTT publish timed out",
 			logger.Duration("timeout", c.config.PublishTimeout))
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			log.Error("Context was cancelled during publish wait", logger.Error(ctxErr))
+			log.Error("Context was cancelled during publish wait",
+				logger.Error(ctxErr))
 			return ctxErr
 		}
 		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_timeout")
@@ -467,13 +386,14 @@ func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, r
 			Context("topic", topic).
 			Context("publish_timeout", c.config.PublishTimeout).
 			Context("payload_size", len(payload)).
-			Context("operation", "publish_with_retain_timeout").
+			Context("operation", "publish_timeout").
 			Build()
 		return enhancedErr
 	}
 
 	if publishErr := token.Error(); publishErr != nil {
-		log.Error("MQTT publish with retain failed", logger.Error(publishErr))
+		log.Error("MQTT publish failed",
+			logger.Error(publishErr))
 		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_error")
 		enhancedErr := errors.New(publishErr).
 			Component("mqtt").
@@ -484,12 +404,12 @@ func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, r
 			Context("payload_size", len(payload)).
 			Context("qos", defaultQoS).
 			Context("retain", retain).
-			Context("operation", "publish_with_retain_error").
+			Context("operation", "publish_error").
 			Build()
 		return enhancedErr
 	}
 
-	log.Debug("PublishWithRetain completed successfully")
+	log.Debug("Publish completed successfully")
 	c.metrics.IncrementMessagesDelivered()
 	c.metrics.ObserveMessageSize(float64(len(payload)))
 	return nil

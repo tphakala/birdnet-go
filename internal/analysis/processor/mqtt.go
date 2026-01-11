@@ -94,6 +94,18 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 	p.SetMQTTClient(mqttClient)
 }
 
+// RegisterHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
+// This is called during MQTT initialization and after MQTT reconfiguration.
+func (p *Processor) RegisterHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
+	if client == nil || settings == nil {
+		return
+	}
+	if !settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return
+	}
+	p.registerHomeAssistantDiscovery(client, settings)
+}
+
 // registerHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
 func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
 	log := GetLogger()

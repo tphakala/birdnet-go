@@ -260,6 +260,10 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 			return
 		}
 
+		// Register Home Assistant discovery handler before connecting
+		// so the OnConnect handler fires on the initial connection
+		cm.proc.RegisterHomeAssistantDiscovery(newClient, settings)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := newClient.Connect(ctx); err != nil {
 			cancel()
