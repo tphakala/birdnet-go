@@ -2000,7 +2000,7 @@
           "title": "Configurações de mensagem",
           "retain": {
             "label": "Reter mensagens",
-            "note": "<strong>Usuários do Home Assistant:</strong> É recomendado ativar a flag de retenção para integração com Home Assistant. Sem retenção, os sensores MQTT aparecerão como 'desconhecido' quando o Home Assistant reiniciar."
+            "note": "<strong>Recomendado:</strong> Ative a flag de retenção para garantir que os sensores MQTT mostrem valores após reiniciar o Home Assistant."
           }
         },
         "tls": {
@@ -2008,6 +2008,26 @@
           "enable": "Ativar TLS/SSL",
           "skipVerify": "Ignorar verificação de certificado",
           "configNote": "<strong>Configuração TLS:</strong><br />• TLS padrão: Deixe os certificados vazios para brokers públicos<br />• Certificados autoassinados: Forneça o certificado CA<br />• TLS mútuo (mTLS): Forneça todos os três certificados"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Ativar Home Assistant MQTT Discovery",
+          "description": "Quando ativado, o BirdNET-Go registra automaticamente dispositivos e sensores no Home Assistant através do protocolo de descoberta MQTT. Os dispositivos aparecerão no registro de dispositivos do Home Assistant sem configuração YAML manual.",
+          "discoveryPrefix": {
+            "label": "Prefixo de descoberta",
+            "helpText": "O prefixo de tópico MQTT para mensagens de descoberta do Home Assistant. O padrão é 'homeassistant'. Altere isso apenas se você configurou um prefixo de descoberta personalizado no Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nome do dispositivo",
+            "helpText": "O nome base para dispositivos conforme aparecem no Home Assistant. Cada fonte de áudio terá seu próprio dispositivo vinculado a este dispositivo principal do BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Sensores criados:</strong> Para cada fonte de áudio, o Home Assistant receberá: Última espécie, Confiança, Nome científico e Nível de som (se ativado). O dispositivo ponte inclui status de disponibilidade online/offline.",
+          "discovery": {
+            "button": "Enviar Discovery",
+            "success": "Mensagens de descoberta enviadas ao Home Assistant",
+            "error": "Falha ao enviar mensagens de descoberta",
+            "saveFirst": "Salve as configurações antes de enviar a descoberta"
+          }
         },
         "test": {
           "button": "Testar conexão MQTT",

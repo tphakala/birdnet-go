@@ -146,6 +146,56 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 		logger.String("device_name", haSettings.DeviceName))
 }
 
+// TriggerHomeAssistantDiscovery manually triggers Home Assistant discovery messages.
+// This can be called from the API to force republishing of discovery messages.
+func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
+	log := GetLogger()
+
+	// Check if MQTT is enabled and Home Assistant discovery is enabled
+	if !p.Settings.Realtime.MQTT.Enabled {
+		return fmt.Errorf("MQTT is not enabled")
+	}
+	if !p.Settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return fmt.Errorf("home assistant discovery is not enabled")
+	}
+
+	// Get the MQTT client
+	client := p.GetMQTTClient()
+	if client == nil || !client.IsConnected() {
+		return fmt.Errorf("MQTT client not connected")
+	}
+
+	// Create discovery configuration
+	haSettings := p.Settings.Realtime.MQTT.HomeAssistant
+	discoveryConfig := mqtt.DiscoveryConfig{
+		DiscoveryPrefix: haSettings.DiscoveryPrefix,
+		BaseTopic:       p.Settings.Realtime.MQTT.Topic,
+		DeviceName:      haSettings.DeviceName,
+		NodeID:          p.Settings.Main.Name,
+		Version:         p.Settings.Version,
+	}
+
+	// Create the discovery publisher
+	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
+
+	// Get audio sources
+	sources := p.getAudioSourcesForDiscovery()
+
+	log.Info("Manually triggering Home Assistant discovery",
+		logger.Int("source_count", len(sources)))
+
+	// Publish discovery messages with timeout
+	publishCtx, cancel := context.WithTimeout(ctx, discoveryPublishTimeout)
+	defer cancel()
+
+	if err := publisher.PublishDiscovery(publishCtx, sources, p.Settings); err != nil {
+		log.Error("Failed to publish Home Assistant discovery", logger.Error(err))
+		return fmt.Errorf("failed to publish discovery: %w", err)
+	}
+
+	return nil
+}
+
 // getAudioSourcesForDiscovery retrieves audio sources from the registry for HA discovery.
 func (p *Processor) getAudioSourcesForDiscovery() []datastore.AudioSource {
 	registry := myaudio.GetRegistry()

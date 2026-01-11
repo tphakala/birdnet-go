@@ -1997,7 +1997,7 @@
           "title": "Configuración de mensajes",
           "retain": {
             "label": "Retener mensajes",
-            "note": "<strong>Usuarios de Home Assistant:</strong> Se recomienda habilitar la bandera de retención para la integración con Home Assistant. Sin retención, los sensores MQTT aparecerán como 'desconocidos' cuando Home Assistant se reinicie."
+            "note": "<strong>Recomendado:</strong> Habilite la bandera de retención para asegurar que los sensores MQTT muestren valores después de reiniciar Home Assistant."
           }
         },
         "tls": {
@@ -2005,6 +2005,26 @@
           "enable": "Habilitar TLS/SSL",
           "skipVerify": "Omitir verificación de certificado",
           "configNote": "<strong>Configuración TLS:</strong><br />• TLS estándar: Deje los certificados vacíos para brokers públicos<br />• Certificados autofirmados: Proporcione el certificado CA<br />• TLS mutuo (mTLS): Proporcione los tres certificados"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Habilitar Home Assistant MQTT Discovery",
+          "description": "Cuando está habilitado, BirdNET-Go registra automáticamente dispositivos y sensores con Home Assistant a través del protocolo de descubrimiento MQTT. Los dispositivos aparecerán en el registro de dispositivos de Home Assistant sin configuración YAML manual.",
+          "discoveryPrefix": {
+            "label": "Prefijo de descubrimiento",
+            "helpText": "El prefijo de tema MQTT para mensajes de descubrimiento de Home Assistant. El valor predeterminado es 'homeassistant'. Solo cambie esto si ha configurado un prefijo de descubrimiento personalizado en Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nombre del dispositivo",
+            "helpText": "El nombre base para los dispositivos tal como aparecen en Home Assistant. Cada fuente de audio tendrá su propio dispositivo vinculado a este dispositivo principal de BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Sensores creados:</strong> Para cada fuente de audio, Home Assistant recibirá: Última especie, Confianza, Nombre científico y Nivel de sonido (si está habilitado). El dispositivo puente incluye estado de disponibilidad en línea/fuera de línea.",
+          "discovery": {
+            "button": "Enviar Discovery",
+            "success": "Mensajes de descubrimiento enviados a Home Assistant",
+            "error": "Error al enviar mensajes de descubrimiento",
+            "saveFirst": "Guarde la configuración antes de enviar el descubrimiento"
+          }
         },
         "test": {
           "button": "Probar conexión MQTT",

@@ -1724,7 +1724,7 @@
           "title": "Nachrichteneinstellungen",
           "retain": {
             "label": "Nachrichten beibehalten",
-            "note": "<strong>Home Assistant-Benutzer:</strong> Es wird empfohlen, das Retain-Flag für die Home Assistant-Integration zu aktivieren. Ohne Retain erscheinen MQTT-Sensoren als 'unbekannt', wenn Home Assistant neu startet."
+            "note": "<strong>Empfohlen:</strong> Aktivieren Sie das Retain-Flag, um sicherzustellen, dass MQTT-Sensoren nach einem Neustart von Home Assistant Werte anzeigen."
           }
         },
         "tls": {
@@ -1732,6 +1732,26 @@
           "enable": "TLS/SSL aktivieren",
           "skipVerify": "Zertifikatsüberprüfung überspringen",
           "configNote": "<strong>TLS-Konfiguration:</strong><br />• Standard-TLS: Zertifikate für öffentliche Broker leer lassen<br />• Selbstsignierte Zertifikate: CA-Zertifikat bereitstellen<br />• Mutual TLS (mTLS): Alle drei Zertifikate bereitstellen"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Home Assistant MQTT Discovery aktivieren",
+          "description": "Wenn aktiviert, registriert BirdNET-Go automatisch Geräte und Sensoren bei Home Assistant über das MQTT-Discovery-Protokoll. Geräte erscheinen ohne manuelle YAML-Konfiguration in der Home Assistant-Geräteregistrierung.",
+          "discoveryPrefix": {
+            "label": "Discovery-Präfix",
+            "helpText": "Das MQTT-Topic-Präfix für Home Assistant Discovery-Nachrichten. Standard ist 'homeassistant'. Ändern Sie dies nur, wenn Sie ein benutzerdefiniertes Discovery-Präfix in Home Assistant konfiguriert haben."
+          },
+          "deviceName": {
+            "label": "Gerätename",
+            "helpText": "Der Basisname für Geräte, wie sie in Home Assistant erscheinen. Jede Audioquelle hat ihr eigenes Gerät, das mit diesem BirdNET-Go-Hauptgerät verknüpft ist."
+          },
+          "sensorsNote": "<strong>Erstellte Sensoren:</strong> Für jede Audioquelle erhält Home Assistant: Letzte Art, Konfidenz, wissenschaftlicher Name und Schallpegel (wenn aktiviert). Das Bridge-Gerät enthält Online/Offline-Verfügbarkeitsstatus.",
+          "discovery": {
+            "button": "Discovery senden",
+            "success": "Discovery-Nachrichten an Home Assistant gesendet",
+            "error": "Senden der Discovery-Nachrichten fehlgeschlagen",
+            "saveFirst": "Einstellungen speichern, bevor Discovery gesendet wird"
+          }
         },
         "test": {
           "button": "MQTT-Verbindung testen",

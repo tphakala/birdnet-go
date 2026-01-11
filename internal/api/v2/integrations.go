@@ -207,6 +207,7 @@ func (c *Controller) initIntegrationsRoutes() {
 	mqttGroup := integrationsGroup.Group("/mqtt")
 	mqttGroup.GET("/status", c.GetMQTTStatus)
 	mqttGroup.POST("/test", c.TestMQTTConnection)
+	mqttGroup.POST("/homeassistant/discovery", c.TriggerHomeAssistantDiscovery)
 
 	// BirdWeather routes
 	bwGroup := integrationsGroup.Group("/birdweather")
@@ -741,6 +742,45 @@ func getProviderDisplayName(provider string) string {
 		}
 		return provider
 	}
+}
+
+// TriggerHomeAssistantDiscovery handles POST /api/v2/integrations/mqtt/homeassistant/discovery
+// It manually triggers Home Assistant MQTT discovery message publishing.
+func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	c.logInfoIfEnabled("Triggering Home Assistant discovery",
+		logger.String("path", path),
+		logger.String("ip", ip))
+
+	// Check if processor is available
+	if c.Processor == nil {
+		return ctx.JSON(http.StatusServiceUnavailable, map[string]any{
+			"success": false,
+			"message": "Processor not available",
+		})
+	}
+
+	// Trigger discovery
+	if err := c.Processor.TriggerHomeAssistantDiscovery(ctx.Request().Context()); err != nil {
+		c.logErrorIfEnabled("Failed to trigger Home Assistant discovery",
+			logger.Error(err),
+			logger.String("path", path),
+			logger.String("ip", ip))
+		return ctx.JSON(http.StatusBadRequest, map[string]any{
+			"success": false,
+			"message": err.Error(),
+		})
+	}
+
+	c.logInfoIfEnabled("Home Assistant discovery triggered successfully",
+		logger.String("path", path),
+		logger.String("ip", ip))
+
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Discovery messages sent successfully",
+	})
 }
 
 // writeJSONResponse writes a JSON response to the client

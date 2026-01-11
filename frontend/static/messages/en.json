@@ -1733,7 +1733,7 @@
           "title": "Message Settings",
           "retain": {
             "label": "Retain Messages",
-            "note": "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts."
+            "note": "<strong>Recommended:</strong> Enable the retain flag to ensure MQTT sensors show values after Home Assistant restarts."
           }
         },
         "tls": {
@@ -1741,6 +1741,26 @@
           "enable": "Enable TLS/SSL",
           "skipVerify": "Skip Certificate Verification",
           "configNote": "<strong>TLS Configuration:</strong><br />• Standard TLS: Leave certificates empty for public brokers<br />• Self-signed certificates: Provide CA Certificate<br />• Mutual TLS (mTLS): Provide all three certificates"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Enable Home Assistant MQTT Discovery",
+          "description": "When enabled, BirdNET-Go automatically registers devices and sensors with Home Assistant through MQTT discovery protocol. Devices will appear in Home Assistant's device registry without manual YAML configuration.",
+          "discoveryPrefix": {
+            "label": "Discovery Prefix",
+            "helpText": "The MQTT topic prefix for Home Assistant discovery messages. Default is 'homeassistant'. Only change this if you've configured a custom discovery prefix in Home Assistant."
+          },
+          "deviceName": {
+            "label": "Device Name",
+            "helpText": "The base name for devices as they appear in Home Assistant. Each audio source will have its own device linked to this main BirdNET-Go device."
+          },
+          "sensorsNote": "<strong>Sensors Created:</strong> For each audio source, Home Assistant will receive: Last Species, Confidence, Scientific Name, and Sound Level (if enabled). The bridge device includes online/offline availability status.",
+          "discovery": {
+            "button": "Send Discovery",
+            "success": "Discovery messages sent to Home Assistant",
+            "error": "Failed to send discovery messages",
+            "saveFirst": "Save settings before sending discovery"
+          }
         },
         "test": {
           "button": "Test MQTT Connection",
