@@ -112,13 +112,14 @@ routeInitializers := []struct {
 
 ### Integrations (`integrations.go`)
 
-| Method | Route                              | Handler                     | Auth | Description                      |
-| ------ | ---------------------------------- | --------------------------- | ---- | -------------------------------- |
-| GET    | `/integrations/mqtt/status`        | `GetMQTTStatus`             | ✅   | MQTT connection status           |
-| POST   | `/integrations/mqtt/test`          | `TestMQTTConnection`        | ✅   | Test MQTT connection             |
-| GET    | `/integrations/birdweather/status` | `GetBirdWeatherStatus`      | ✅   | BirdWeather integration status   |
-| POST   | `/integrations/birdweather/test`   | `TestBirdWeatherConnection` | ✅   | Test BirdWeather connection      |
-| POST   | `/integrations/weather/test`       | `TestWeatherConnection`     | ✅   | Test weather provider connection |
+| Method | Route                                        | Handler                         | Auth | Description                           |
+| ------ | -------------------------------------------- | ------------------------------- | ---- | ------------------------------------- |
+| GET    | `/integrations/mqtt/status`                  | `GetMQTTStatus`                 | ✅   | MQTT connection status                |
+| POST   | `/integrations/mqtt/test`                    | `TestMQTTConnection`            | ✅   | Test MQTT connection                  |
+| POST   | `/integrations/mqtt/homeassistant/discovery` | `TriggerHomeAssistantDiscovery` | ✅   | Trigger Home Assistant MQTT discovery |
+| GET    | `/integrations/birdweather/status`           | `GetBirdWeatherStatus`          | ✅   | BirdWeather integration status        |
+| POST   | `/integrations/birdweather/test`             | `TestBirdWeatherConnection`     | ✅   | Test BirdWeather connection           |
+| POST   | `/integrations/weather/test`                 | `TestWeatherConnection`         | ✅   | Test weather provider connection      |
 
 ### Media (`media.go`)
 

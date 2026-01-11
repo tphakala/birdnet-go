@@ -1993,18 +1993,35 @@
             "helpText": "MQTT-salasana."
           }
         },
-        "messageSettings": {
-          "title": "Viestiasetukset",
-          "retain": {
-            "label": "Säilytä viestit",
-            "note": "<strong>Home Assistant -käyttäjät:</strong> On suositeltavaa ottaa käyttöön säilytyslippu Home Assistant -integraatiota varten. Ilman säilytystä MQTT-anturit näkyvät 'tuntemattomina' kun Home Assistant käynnistyy uudelleen."
-          }
-        },
         "tls": {
           "title": "TLS/SSL-suojaus",
           "enable": "Ota käyttöön TLS/SSL",
           "skipVerify": "Ohita varmenteen tarkistus",
           "configNote": "<strong>TLS-asetukset:</strong><br />• Vakio TLS: Jätä varmenteet tyhjäksi julkisille välittäjille<br />• Itse allekirjoitetut varmenteet: Anna CA-varmenne<br />• Molemminpuolinen TLS (mTLS): Anna kaikki kolme varmennetta"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Ota käyttöön Home Assistant MQTT Discovery",
+          "description": "Kun käytössä, BirdNET-Go rekisteröi automaattisesti laitteet ja anturit Home Assistantiin MQTT-discovery-protokollan kautta. Laitteet ilmestyvät Home Assistantin laiterekisteriin ilman manuaalista YAML-konfiguraatiota.",
+          "discoveryPrefix": {
+            "label": "Discovery-etuliite",
+            "helpText": "MQTT-aiheen etuliite Home Assistant discovery -viesteille. Oletusarvo on 'homeassistant'. Muuta tätä vain, jos olet määrittänyt mukautetun discovery-etuliitteen Home Assistantissa."
+          },
+          "deviceName": {
+            "label": "Laitteen nimi",
+            "helpText": "Laitteiden perusnimi sellaisena kuin ne näkyvät Home Assistantissa. Jokaisella äänilähteellä on oma laite, joka on linkitetty tähän BirdNET-Go-päälaitteeseen."
+          },
+          "sensorsNote": "<strong>Luodut anturit:</strong> Jokaista äänilähdettä kohden Home Assistant saa: Viimeisin laji, Luottamus, Tieteellinen nimi ja Äänitaso (jos käytössä). Siltalaitteessa on online/offline-saatavuustila.",
+          "discovery": {
+            "button": "Lähetä Discovery",
+            "success": "Discovery-viestit lähetetty Home Assistantiin",
+            "error": "Discovery-viestien lähetys epäonnistui",
+            "saveFirst": "Tallenna asetukset ennen discoveryn lähettämistä"
+          },
+          "retain": {
+            "label": "Säilytä viestit",
+            "note": "<strong>Suositus:</strong> Ota käyttöön säilytyslippu varmistaaksesi, että MQTT-anturit näyttävät arvoja Home Assistantin uudelleenkäynnistyksen jälkeen."
+          }
         },
         "test": {
           "button": "Testaa MQTT-yhteys",
@@ -2561,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ladataan tietoja...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2570,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ladataan tietoja...",
       "error": "Tietojen lataus epäonnistui",
       "sortBy": "Lajittele {column}",
       "rowsPerPage": "Rivejä sivulla",

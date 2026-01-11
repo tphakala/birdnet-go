@@ -109,8 +109,31 @@ func (p *Processor) RegisterHomeAssistantDiscovery(client mqtt.Client, settings 
 // registerHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
 func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
 	log := GetLogger()
+	haSettings := settings.Realtime.MQTT.HomeAssistant
 
-	// Create discovery configuration
+	// Register the OnConnect handler
+	client.RegisterOnConnectHandler(func() {
+		log.Info("MQTT connected, publishing Home Assistant discovery messages")
+
+		// Create a context for publishing
+		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
+		defer cancel()
+
+		// Publish discovery messages using the helper
+		if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
+			log.Error("Failed to publish Home Assistant discovery",
+				logger.Error(err))
+		}
+	})
+
+	log.Info("Home Assistant discovery handler registered",
+		logger.String("discovery_prefix", haSettings.DiscoveryPrefix),
+		logger.String("device_name", haSettings.DeviceName))
+}
+
+// publishHomeAssistantDiscovery publishes Home Assistant discovery messages.
+// This is the shared implementation used by both the OnConnect handler and manual trigger.
+func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, settings *conf.Settings) error {
 	haSettings := settings.Realtime.MQTT.HomeAssistant
 	discoveryConfig := mqtt.DiscoveryConfig{
 		DiscoveryPrefix: haSettings.DiscoveryPrefix,
@@ -120,30 +143,48 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 		Version:         settings.Version,
 	}
 
-	// Create the discovery publisher
 	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
+	sources := p.getAudioSourcesForDiscovery()
 
-	// Register the OnConnect handler
-	client.RegisterOnConnectHandler(func() {
-		log.Info("MQTT connected, publishing Home Assistant discovery messages")
+	return publisher.PublishDiscovery(ctx, sources, settings)
+}
 
-		// Get audio sources from the registry
-		sources := p.getAudioSourcesForDiscovery()
+// TriggerHomeAssistantDiscovery manually triggers Home Assistant discovery messages.
+// This can be called from the API to force republishing of discovery messages.
+func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
+	log := GetLogger()
 
-		// Create a context for publishing
-		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
-		defer cancel()
+	// Guard against nil settings during startup/teardown
+	if p.Settings == nil {
+		return fmt.Errorf("settings not initialized")
+	}
 
-		// Publish discovery messages
-		if err := publisher.PublishDiscovery(ctx, sources, settings); err != nil {
-			log.Error("Failed to publish Home Assistant discovery",
-				logger.Error(err))
-		}
-	})
+	// Check if MQTT is enabled and Home Assistant discovery is enabled
+	if !p.Settings.Realtime.MQTT.Enabled {
+		return fmt.Errorf("MQTT is not enabled")
+	}
+	if !p.Settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return fmt.Errorf("home assistant discovery is not enabled")
+	}
 
-	log.Info("Home Assistant discovery handler registered",
-		logger.String("discovery_prefix", haSettings.DiscoveryPrefix),
-		logger.String("device_name", haSettings.DeviceName))
+	// Get the MQTT client
+	client := p.GetMQTTClient()
+	if client == nil || !client.IsConnected() {
+		return fmt.Errorf("MQTT client not connected")
+	}
+
+	log.Info("Manually triggering Home Assistant discovery")
+
+	// Publish discovery messages with timeout
+	publishCtx, cancel := context.WithTimeout(ctx, discoveryPublishTimeout)
+	defer cancel()
+
+	if err := p.publishHomeAssistantDiscovery(publishCtx, client, p.Settings); err != nil {
+		log.Error("Failed to publish Home Assistant discovery", logger.Error(err))
+		return fmt.Errorf("failed to publish discovery: %w", err)
+	}
+
+	return nil
 }
 
 // getAudioSourcesForDiscovery retrieves audio sources from the registry for HA discovery.

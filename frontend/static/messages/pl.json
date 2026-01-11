@@ -1726,18 +1726,35 @@
             "helpText": "Hasło MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Ustawienia Wiadomości",
-          "retain": {
-            "label": "Zachowaj Wiadomości",
-            "note": "<strong>Użytkownicy Home Assistant:</strong> Zaleca się włączenie flagi zachowania dla integracji Home Assistant. Bez zachowania, czujniki MQTT będą wyświetlane jako 'nieznane' po restarcie Home Assistant."
-          }
-        },
         "tls": {
           "title": "Bezpieczeństwo TLS/SSL",
           "enable": "Włącz TLS/SSL",
           "skipVerify": "Pomiń Weryfikację Certyfikatu",
           "configNote": "<strong>Konfiguracja TLS:</strong><br />• Standardowe TLS: Zostaw certyfikaty puste dla publicznych brokerów<br />• Certyfikaty self-signed: Podaj Certyfikat CA<br />• Mutual TLS (mTLS): Podaj wszystkie trzy certyfikaty"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Włącz Home Assistant MQTT Discovery",
+          "description": "Po włączeniu BirdNET-Go automatycznie rejestruje urządzenia i czujniki w Home Assistant poprzez protokół wykrywania MQTT. Urządzenia pojawią się w rejestrze urządzeń Home Assistant bez ręcznej konfiguracji YAML.",
+          "discoveryPrefix": {
+            "label": "Prefiks wykrywania",
+            "helpText": "Prefiks tematu MQTT dla wiadomości wykrywania Home Assistant. Domyślnie 'homeassistant'. Zmień to tylko jeśli skonfigurowałeś niestandardowy prefiks wykrywania w Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nazwa urządzenia",
+            "helpText": "Podstawowa nazwa urządzeń wyświetlana w Home Assistant. Każde źródło audio będzie miało własne urządzenie połączone z tym głównym urządzeniem BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Utworzone czujniki:</strong> Dla każdego źródła audio Home Assistant otrzyma: Ostatni gatunek, Pewność, Nazwa naukowa i Poziom dźwięku (jeśli włączony). Urządzenie mostka zawiera status dostępności online/offline.",
+          "discovery": {
+            "button": "Wyślij Discovery",
+            "success": "Wiadomości wykrywania wysłane do Home Assistant",
+            "error": "Nie udało się wysłać wiadomości wykrywania",
+            "saveFirst": "Zapisz ustawienia przed wysłaniem wykrywania"
+          },
+          "retain": {
+            "label": "Zachowaj Wiadomości",
+            "note": "<strong>Zalecane:</strong> Włącz flagę zachowania, aby upewnić się, że czujniki MQTT pokazują wartości po restarcie Home Assistant."
+          }
         },
         "test": {
           "button": "Testuj Połączenie MQTT",
@@ -2522,12 +2539,6 @@
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
       "mysqlHostPlaceholder": "Wprowadź host MySQL",
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
-    },
-    "tabs": {
-      "navigation": "Karty nawigacji ustawień",
-      "hasChanges": "Ta karta ma niezapisane zmiany",
-      "setAsDefault": "Ustaw jako domyślne",
-      "defaultIndicator": "Domyślne źródło wejściowe"
     }
   },
   "auth": {
@@ -2567,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ładowanie danych...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2576,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ładowanie danych...",
       "error": "Nie udało się załadować danych",
       "sortBy": "Sortuj według {column}",
       "rowsPerPage": "Wierszy na stronę",

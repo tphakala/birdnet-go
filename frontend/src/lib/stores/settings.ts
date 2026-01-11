@@ -244,6 +244,12 @@ export interface BirdWeatherSettings {
   debug: boolean;
 }
 
+export interface HomeAssistantSettings {
+  enabled: boolean;
+  discoveryPrefix: string; // Topic prefix (default: "homeassistant")
+  deviceName: string; // Base device name (default: "BirdNET-Go")
+}
+
 export interface MQTTSettings {
   enabled: boolean;
   broker: string;
@@ -256,6 +262,7 @@ export interface MQTTSettings {
     enabled: boolean;
     skipVerify: boolean;
   };
+  homeAssistant?: HomeAssistantSettings;
 }
 
 export interface ObservabilitySettings {
@@ -733,6 +740,11 @@ function createEmptySettings(): SettingsFormData {
           enabled: false,
           skipVerify: false,
         },
+        homeAssistant: {
+          enabled: false,
+          discoveryPrefix: 'homeassistant',
+          deviceName: 'BirdNET-Go',
+        },
       },
       species: {
         include: [],
@@ -853,6 +865,11 @@ export const birdweatherSettings = derived(
 );
 
 export const mqttSettings = derived(settingsStore, $store => $store.formData.realtime?.mqtt);
+
+export const homeAssistantSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.mqtt?.homeAssistant
+);
 
 export const speciesSettings = derived(settingsStore, $store => $store.formData.realtime?.species);
 

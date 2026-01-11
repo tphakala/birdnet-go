@@ -1720,18 +1720,35 @@
             "helpText": "Het MQTT wachtwoord."
           }
         },
-        "messageSettings": {
-          "title": "Bericht Instellingen",
-          "retain": {
-            "label": "Behoud Berichten",
-            "note": "<strong>Home Assistant Gebruikers:</strong> Het wordt aanbevolen om de retain vlag in te schakelen voor Home Assistant integratie. Zonder retain zullen MQTT sensors als 'onbekend' verschijnen wanneer Home Assistant herstart."
-          }
-        },
         "tls": {
           "title": "TLS/SSL Beveiliging",
           "enable": "Schakel TLS/SSL in",
           "skipVerify": "Sla Certificaat Verificatie over",
           "configNote": "<strong>TLS Configuratie:</strong><br />• Standaard TLS: Laat certificaten leeg voor publieke brokers<br />• Self-signed certificaten: Geef CA Certificaat<br />• Wederzijdse TLS (mTLS): Geef alle drie certificaten"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Schakel Home Assistant MQTT Discovery in",
+          "description": "Wanneer ingeschakeld, registreert BirdNET-Go automatisch apparaten en sensoren bij Home Assistant via het MQTT discovery protocol. Apparaten verschijnen in het Home Assistant apparatenregister zonder handmatige YAML-configuratie.",
+          "discoveryPrefix": {
+            "label": "Discovery Prefix",
+            "helpText": "Het MQTT topic prefix voor Home Assistant discovery berichten. Standaard is 'homeassistant'. Wijzig dit alleen als je een aangepast discovery prefix hebt geconfigureerd in Home Assistant."
+          },
+          "deviceName": {
+            "label": "Apparaatnaam",
+            "helpText": "De basisnaam voor apparaten zoals ze verschijnen in Home Assistant. Elke audiobron heeft zijn eigen apparaat gekoppeld aan dit hoofd BirdNET-Go apparaat."
+          },
+          "sensorsNote": "<strong>Aangemaakte Sensoren:</strong> Voor elke audiobron ontvangt Home Assistant: Laatste Soort, Betrouwbaarheid, Wetenschappelijke Naam en Geluidsniveau (indien ingeschakeld). Het bridge apparaat bevat online/offline beschikbaarheidsstatus.",
+          "discovery": {
+            "button": "Verstuur Discovery",
+            "success": "Discovery berichten verzonden naar Home Assistant",
+            "error": "Verzenden van discovery berichten mislukt",
+            "saveFirst": "Sla instellingen op voordat je discovery verstuurt"
+          },
+          "retain": {
+            "label": "Behoud Berichten",
+            "note": "<strong>Aanbevolen:</strong> Schakel de retain vlag in om te zorgen dat MQTT sensoren waarden tonen na herstart van Home Assistant."
+          }
         },
         "test": {
           "button": "Test MQTT Verbinding",
@@ -2561,7 +2578,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Gegevens inlezen ...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2570,7 +2587,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Gegevens inlezen ...",
       "error": "Gegevens inlezen is mislukt",
       "sortBy": "Sorteer op {column}",
       "rowsPerPage": "Rijen per pagina",
