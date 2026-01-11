@@ -432,15 +432,16 @@ type RTSPSettings struct {
 
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
-	Enabled       bool            `json:"enabled"`       // true to enable MQTT
-	Debug         bool            `json:"debug"`         // true to enable MQTT debug
-	Broker        string          `json:"broker"`        // MQTT broker URL
-	Topic         string          `json:"topic"`         // MQTT topic
-	Username      string          `json:"username"`      // MQTT username
-	Password      string          `json:"password"`      // MQTT password
-	Retain        bool            `json:"retain"`        // true to retain messages
-	RetrySettings RetrySettings   `json:"retrySettings"` // settings for retry mechanism
-	TLS           MQTTTLSSettings `json:"tls"`           // TLS/SSL configuration
+	Enabled       bool                  `json:"enabled"`       // true to enable MQTT
+	Debug         bool                  `json:"debug"`         // true to enable MQTT debug
+	Broker        string                `json:"broker"`        // MQTT broker URL
+	Topic         string                `json:"topic"`         // MQTT topic
+	Username      string                `json:"username"`      // MQTT username
+	Password      string                `json:"password"`      // MQTT password
+	Retain        bool                  `json:"retain"`        // true to retain messages
+	RetrySettings RetrySettings         `json:"retrySettings"` // settings for retry mechanism
+	TLS           MQTTTLSSettings       `json:"tls"`           // TLS/SSL configuration
+	HomeAssistant HomeAssistantSettings `json:"homeAssistant"` // Home Assistant auto-discovery settings
 }
 
 // MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections
@@ -450,6 +451,13 @@ type MQTTTLSSettings struct {
 	CACert             string `yaml:"cacert,omitempty" json:"caCert,omitempty"`         // path to CA certificate file (managed internally)
 	ClientCert         string `yaml:"clientcert,omitempty" json:"clientCert,omitempty"` // path to client certificate file (managed internally)
 	ClientKey          string `yaml:"clientkey,omitempty" json:"clientKey,omitempty"`   // path to client key file (managed internally)
+}
+
+// HomeAssistantSettings contains settings for Home Assistant MQTT auto-discovery.
+type HomeAssistantSettings struct {
+	Enabled         bool   `yaml:"enabled" json:"enabled"`                   // true to enable HA auto-discovery
+	DiscoveryPrefix string `yaml:"discovery_prefix" json:"discoveryPrefix"`  // HA discovery topic prefix (default: homeassistant)
+	DeviceName      string `yaml:"device_name" json:"deviceName"`            // base name for devices (default: BirdNET-Go)
 }
 
 // TelemetrySettings contains settings for telemetry.

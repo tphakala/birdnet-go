@@ -44,6 +44,11 @@ func durationToMillisUint(d time.Duration) uint {
 	return uint(ms) // #nosec G115 -- checked for negative values
 }
 
+// OnConnectHandler is a callback function that is called when the MQTT client
+// successfully connects or reconnects to the broker. This allows external code
+// to perform actions like publishing Home Assistant discovery messages.
+type OnConnectHandler func()
+
 // Client defines the interface for MQTT client operations.
 type Client interface {
 	// Connect attempts to connect to the MQTT broker.
@@ -53,6 +58,10 @@ type Client interface {
 	// Publish sends a message to the specified topic on the MQTT broker.
 	// It returns an error if the publish operation fails.
 	Publish(ctx context.Context, topic string, payload string) error
+
+	// PublishWithRetain sends a message with explicit retain flag control.
+	// This is useful for discovery messages that must be retained regardless of client config.
+	PublishWithRetain(ctx context.Context, topic string, payload string, retain bool) error
 
 	// IsConnected returns true if the client is currently connected to the MQTT broker.
 	IsConnected() bool
@@ -67,6 +76,11 @@ type Client interface {
 	// SetControlChannel sets the control channel for the client.
 	// This channel is used to send control signals to the MQTT service.
 	SetControlChannel(ch chan string)
+
+	// RegisterOnConnectHandler registers a callback that will be invoked each time
+	// the client successfully connects or reconnects to the broker. Multiple handlers
+	// can be registered and will be called in order of registration.
+	RegisterOnConnectHandler(handler OnConnectHandler)
 }
 
 // Config holds the configuration for the MQTT client.
@@ -87,6 +101,19 @@ type Config struct {
 	ShutdownDisconnectTimeout time.Duration // Timeout for disconnect during shutdown (shorter than normal)
 	// TLS configuration
 	TLS TLSConfig
+	// Last Will and Testament (LWT) configuration for availability tracking
+	LWT LWTConfig
+}
+
+// LWTConfig holds Last Will and Testament configuration for MQTT availability tracking.
+// When enabled, the broker will publish the WillPayload to WillTopic if the client
+// disconnects unexpectedly, allowing Home Assistant to detect offline status.
+type LWTConfig struct {
+	Enabled     bool   // true to enable LWT
+	Topic       string // topic for LWT messages (e.g., "birdnet/status")
+	Payload     string // payload to send on unexpected disconnect (e.g., "offline")
+	QoS         byte   // QoS level for LWT message (0, 1, or 2)
+	Retain      bool   // true to retain LWT message
 }
 
 // TLSConfig holds TLS/SSL configuration for secure MQTT connections
