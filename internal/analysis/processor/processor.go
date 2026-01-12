@@ -1113,12 +1113,10 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 		for _, actionConfig := range speciesConfig.Actions {
 			switch actionConfig.Type {
 			case "ExecuteCommand":
-				if len(actionConfig.Parameters) > 0 {
-					actions = append(actions, &ExecuteCommandAction{
-						Command: actionConfig.Command,
-						Params:  parseCommandParams(actionConfig.Parameters, detection),
-					})
-				}
+				actions = append(actions, &ExecuteCommandAction{
+					Command: actionConfig.Command,
+					Params:  parseCommandParams(actionConfig.Parameters, detection),
+				})
 			case "SendNotification":
 				// Add notification action handling
 				// ... implementation ...
@@ -1156,8 +1154,8 @@ func parseCommandParams(params []string, detection *Detections) map[string]any {
 	commandParams := make(map[string]any)
 	for _, param := range params {
 		value := getNoteValueByName(&detection.Note, param)
-		// Check if the parameter is confidence and normalize it
-		if param == "confidence" {
+		// Check if the parameter is Confidence and normalize it (0-1 to 0-100)
+		if param == "Confidence" {
 			if confidence, ok := value.(float64); ok {
 				value = confidence * 100
 			}
@@ -1650,6 +1648,11 @@ func (p *Processor) NewWithSpeciesInfo(
 // This prevents ~40,000+ identical "filtered_detections_count:0" logs per day
 // while still allowing debug-mode visibility into the detection pipeline.
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
+	// Guard against nil logDedup (can occur in tests or partial initialization)
+	if p.logDedup == nil {
+		return
+	}
+
 	// Use the LogDeduplicator to determine if we should log
 	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
 

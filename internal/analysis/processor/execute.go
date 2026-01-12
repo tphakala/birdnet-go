@@ -266,6 +266,9 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 
 // isValidParamName checks if a parameter name contains only safe characters
 func isValidParamName(name string) bool {
+	if name == "" {
+		return false
+	}
 	for _, r := range name {
 		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') &&
 			(r < '0' || r > '9') && r != '_' && r != '-' {
