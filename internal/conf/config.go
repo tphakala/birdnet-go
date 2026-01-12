@@ -422,13 +422,36 @@ type RTSPHealthSettings struct {
 	MonitoringInterval   int `json:"monitoringInterval"`   // health check interval in seconds (default: 30)
 }
 
-// RTSPSettings contains settings for RTSP streaming.
-type RTSPSettings struct {
-	Transport        string             `json:"transport"`        // RTSP Transport Protocol
-	URLs             []string           `json:"urls"`             // RTSP stream URL
-	Health           RTSPHealthSettings `json:"health"`           // health monitoring settings
-	FFmpegParameters []string           `json:"ffmpegParameters"` // optional custom FFmpeg parameters
+// StreamType constants for supported streaming protocols
+const (
+	StreamTypeRTSP = "rtsp" // RTSP/RTSPS - IP cameras
+	StreamTypeHTTP = "http" // HTTP/HTTPS - Direct streams, Icecast
+	StreamTypeHLS  = "hls"  // HLS - .m3u8 playlists
+	StreamTypeRTMP = "rtmp" // RTMP/RTMPS - OBS, push streams
+	StreamTypeUDP  = "udp"  // UDP/RTP - Low-latency LAN
+)
+
+// StreamConfig represents a single audio stream source
+type StreamConfig struct {
+	Name      string `yaml:"name" json:"name" mapstructure:"name"`                // Required: descriptive name like "Front Yard"
+	URL       string `yaml:"url" json:"url" mapstructure:"url"`                   // Required: stream URL
+	Type      string `yaml:"type" json:"type" mapstructure:"type"`                // Stream type: rtsp, http, hls, rtmp, udp
+	Transport string `yaml:"transport" json:"transport" mapstructure:"transport"` // Transport: tcp or udp (for RTSP/RTMP)
 }
+
+// RTSPSettings contains settings for audio streaming (supports multiple protocols).
+// Note: Struct name kept for backward compatibility with existing code.
+type RTSPSettings struct {
+	Streams          []StreamConfig     `yaml:"streams" json:"streams" mapstructure:"streams"`                                   // Stream configurations
+	URLs             []string           `yaml:"urls,omitempty" json:"urls,omitempty" mapstructure:"urls"`                        // Legacy: accepts old format, migrated on load
+	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`         // Legacy: global default, migrated on load
+	Health           RTSPHealthSettings `yaml:"health" json:"health" mapstructure:"health"`                                      // Health monitoring settings
+	FFmpegParameters []string           `yaml:"ffmpegParameters" json:"ffmpegParameters" mapstructure:"ffmpegParameters"`        // Custom FFmpeg parameters
+}
+
+// CRITICAL: Legacy fields (URLs, Transport) MUST include json tags to accept
+// payloads from older frontends. Without this, saving from a cached old frontend
+// would wipe the user's stream configuration. The migration runs on Load().
 
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
