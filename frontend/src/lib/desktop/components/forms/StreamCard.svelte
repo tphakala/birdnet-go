@@ -81,8 +81,18 @@
     { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/30' },
   ];
 
-  // Get color for this stream based on index
-  let iconColor = $derived(iconColors[index % iconColors.length]);
+  // Hash function for stable color assignment based on stream name
+  function hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  // Get color for this stream based on name hash (stable across deletions)
+  let iconColor = $derived(iconColors[hashString(stream.name) % iconColors.length]);
 
   // Mask credentials in URL for display
   function maskCredentials(urlStr: string): string {
