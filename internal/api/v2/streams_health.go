@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -147,12 +148,15 @@ type streamInfo struct {
 
 // getStreamInfo looks up stream name and type from config by URL.
 // Returns empty values if stream is not found in config.
+// Uses conf.GetSettings() to always get current config, avoiding stale data
+// after config reloads.
 func (c *Controller) getStreamInfo(rawURL string) streamInfo {
-	if c.Settings == nil {
+	settings := conf.GetSettings()
+	if settings == nil {
 		return streamInfo{}
 	}
 
-	for _, stream := range c.Settings.Realtime.RTSP.Streams {
+	for _, stream := range settings.Realtime.RTSP.Streams {
 		if stream.URL == rawURL {
 			return streamInfo{Name: stream.Name, Type: stream.Type}
 		}
