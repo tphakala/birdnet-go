@@ -37,6 +37,10 @@ var AllSensorTypes = []string{
 // Home Assistant requires IDs to contain only [a-zA-Z0-9_-].
 var idSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
+// maxDisplayNameLength is the maximum length for display names in Home Assistant.
+// This keeps entity names manageable in the HA UI.
+const maxDisplayNameLength = 32
+
 // SanitizeID ensures the ID contains only valid characters for MQTT topics and HA entity IDs.
 func SanitizeID(id string) string {
 	// Replace invalid characters with underscores
@@ -52,6 +56,41 @@ func SanitizeID(id string) string {
 		sanitized = "unknown"
 	}
 	return sanitized
+}
+
+// shortenDisplayName ensures display names stay within maxDisplayNameLength.
+// This prevents excessively long entity names in Home Assistant when
+// source IDs (like RTSP URLs) are used as fallback display names.
+func shortenDisplayName(name string) string {
+	if len(name) <= maxDisplayNameLength {
+		return name
+	}
+
+	// For RTSP-style IDs (rtsp_xxxxx...), keep the prefix and truncate
+	if strings.HasPrefix(name, "rtsp_") && len(name) > 13 {
+		// Keep "rtsp_" + first 8 chars of UUID = 13 chars
+		// Example: "rtsp_a1b2c3d4-e5f6..." -> "rtsp_a1b2c3d4"
+		return name[:13]
+	}
+
+	// For URLs or other long strings, truncate intelligently
+	// Try to cut at a natural boundary (underscore, hyphen, slash)
+	truncated := name[:maxDisplayNameLength]
+
+	// Find the last natural break point
+	lastBreak := -1
+	for i := len(truncated) - 1; i >= maxDisplayNameLength/2; i-- {
+		if truncated[i] == '_' || truncated[i] == '-' || truncated[i] == '/' {
+			lastBreak = i
+			break
+		}
+	}
+
+	if lastBreak > 0 {
+		return truncated[:lastBreak]
+	}
+
+	return truncated
 }
 
 // DiscoveryPayload represents a Home Assistant MQTT discovery message.
@@ -182,9 +221,11 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	bridgeID := p.bridgeID(nodeID)
 
 	// Determine display name
+	// Use shortenDisplayName when falling back to source.ID to prevent
+	// excessively long device names (e.g., from RTSP URLs or UUIDs)
 	displayName := source.DisplayName
 	if displayName == "" {
-		displayName = source.ID
+		displayName = shortenDisplayName(source.ID)
 	}
 	deviceName := fmt.Sprintf("%s %s", p.config.DeviceName, displayName)
 
@@ -246,12 +287,13 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 
 	// Publish Sound Level sensor if sound level monitoring is enabled
 	// Note: ValueTemplate uses source.ID (not sanitized) to match incoming JSON
+	// Band key format: formatBandKey() in soundlevel.go produces "1.0_kHz" for 1000 Hz
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		if err := p.publishSensor(ctx, nodeID, sourceID, SensorSoundLevel, &DiscoveryPayload{
 			Name:              "Sound Level",
 			UniqueID:          deviceID + "_sound_level",
 			StateTopic:        p.config.BaseTopic + "/soundlevel",
-			ValueTemplate:     fmt.Sprintf("{{ value_json.b['1000'].m if value_json.src == '%s' else this.state }}", source.ID),
+			ValueTemplate:     fmt.Sprintf("{{ value_json.b['1.0_kHz'].m if value_json.src == '%s' else this.state }}", source.ID),
 			UnitOfMeasurement: "dB",
 			DeviceClass:       "sound_pressure",
 			StateClass:        "measurement",

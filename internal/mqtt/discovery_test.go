@@ -450,3 +450,295 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 		assert.Contains(t, mock.publishedMessages, speciesTopic, "Species topic not found for source %s", source.ID)
 	}
 }
+
+// =============================================================================
+// SOUND LEVEL VALUE TEMPLATE TESTS
+// =============================================================================
+//
+// These tests verify that the sound level value template uses the correct
+// octave band key format. The keys must match what formatBandKey() produces
+// in internal/myaudio/soundlevel.go:
+//   - Frequencies < 1000 Hz: "%.1f_Hz" (e.g., "500.0_Hz")
+//   - Frequencies >= 1000 Hz: "%.1f_kHz" (e.g., "1.0_kHz" for 1000 Hz)
+//
+// The 1000 Hz band is commonly used for sound level monitoring, and its key
+// is "1.0_kHz", NOT "1000".
+// =============================================================================
+
+// TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat verifies that the sound
+// level discovery message uses the correct octave band key format in its value
+// template. The 1000 Hz band key is "1.0_kHz" (as produced by formatBandKey).
+//
+// This test catches the bug where the template used '1000' instead of '1.0_kHz',
+// causing Home Assistant to never find the sound level data.
+func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "test-node",
+		Version:         "1.0.0",
+	}
+
+	publisher := NewDiscoveryPublisher(mock, &config)
+	ctx := context.Background()
+
+	source := datastore.AudioSource{
+		ID:          "test-mic",
+		DisplayName: "Test Microphone",
+	}
+
+	settings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				SoundLevel: conf.SoundLevelSettings{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	require.NoError(t, err, "Failed to publish source discovery")
+
+	// Get the sound level discovery payload
+	nodeID := SanitizeID(config.NodeID)
+	sourceID := SanitizeID(source.ID)
+	soundLevelTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_sound_level/config"
+
+	require.Contains(t, mock.publishedMessages, soundLevelTopic, "Sound level topic not found")
+
+	var payload DiscoveryPayload
+	err = json.Unmarshal([]byte(mock.publishedMessages[soundLevelTopic]), &payload)
+	require.NoError(t, err, "Failed to parse sound level discovery payload")
+
+	// ==========================================================================
+	// CRITICAL ASSERTION: The value template MUST use '1.0_kHz' NOT '1000'
+	// ==========================================================================
+	// The octave band keys are formatted by formatBandKey() in soundlevel.go:
+	// - 1000 Hz becomes "1.0_kHz" (since 1000 >= 1000, it uses kHz format)
+	// - The template must match this format to extract data correctly
+	//
+	// WRONG: {{ value_json.b['1000'].m ... }}
+	// RIGHT: {{ value_json.b['1.0_kHz'].m ... }}
+	// ==========================================================================
+
+	assert.Contains(t, payload.ValueTemplate, "1.0_kHz",
+		"SOUND LEVEL BUG: Value template must use '1.0_kHz' band key, not '1000'. "+
+			"The formatBandKey() function formats 1000 Hz as '1.0_kHz'. "+
+			"Got template: %s", payload.ValueTemplate)
+
+	assert.NotContains(t, payload.ValueTemplate, "['1000']",
+		"SOUND LEVEL BUG: Value template uses incorrect band key '1000'. "+
+			"Should be '1.0_kHz' to match formatBandKey() output. "+
+			"Got template: %s", payload.ValueTemplate)
+
+	// Also verify the template structure is correct overall
+	assert.Contains(t, payload.ValueTemplate, "value_json.b",
+		"Value template should access bands via value_json.b")
+	assert.Contains(t, payload.ValueTemplate, ".m",
+		"Value template should access mean dB via .m")
+	assert.Contains(t, payload.ValueTemplate, "value_json.src",
+		"Value template should filter by source ID via value_json.src")
+}
+
+// =============================================================================
+// DEVICE NAMING TESTS
+// =============================================================================
+//
+// These tests verify that device names remain reasonably short even when
+// source IDs are long (e.g., RTSP streams with UUID-based IDs or full URLs).
+//
+// Issue: Users reported that RTSP stream names become "unimaginably long"
+// when the full source ID is used as the display name.
+//
+// Solution: When DisplayName is empty, use a truncated/friendly version
+// of the source ID to keep sensor names manageable in Home Assistant.
+// =============================================================================
+
+// maxDeviceDisplayNameLength is the maximum length for the display name portion
+// of a device name. This keeps Home Assistant entity names manageable.
+const maxDeviceDisplayNameLength = 32
+
+// TestDeviceNaming_ShortDisplayNameWhenIDIsLong verifies that device names
+// remain short even when source IDs are long (e.g., RTSP streams).
+//
+// When DisplayName is empty and source.ID is long, the discovery should:
+// 1. Use a truncated/friendly version of the ID
+// 2. Keep the total display name portion under maxDeviceDisplayNameLength
+func TestDeviceNaming_ShortDisplayNameWhenIDIsLong(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "test-node",
+		Version:         "1.0.0",
+	}
+
+	publisher := NewDiscoveryPublisher(mock, &config)
+	ctx := context.Background()
+
+	// Simulate an RTSP source with a long ID and NO DisplayName
+	// This is the problematic case - without DisplayName, the full ID gets used
+	longSourceID := "rtsp_a1b2c3d4-e5f6-7890-abcd-ef1234567890_stream_high_quality"
+	source := datastore.AudioSource{
+		ID:          longSourceID,
+		DisplayName: "", // Empty - this is the problem case
+	}
+
+	settings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				SoundLevel: conf.SoundLevelSettings{
+					Enabled: false,
+				},
+			},
+		},
+	}
+
+	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	require.NoError(t, err, "Failed to publish source discovery")
+
+	// Get the species sensor discovery payload to check device name
+	nodeID := SanitizeID(config.NodeID)
+	sourceID := SanitizeID(source.ID)
+	speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
+
+	require.Contains(t, mock.publishedMessages, speciesTopic, "Species topic not found")
+
+	var payload DiscoveryPayload
+	err = json.Unmarshal([]byte(mock.publishedMessages[speciesTopic]), &payload)
+	require.NoError(t, err, "Failed to parse species discovery payload")
+
+	// ==========================================================================
+	// CRITICAL: Device name should be reasonably short
+	// ==========================================================================
+	// The device name format is: "{DeviceName} {DisplayName}"
+	// When DisplayName is empty, we fall back to source.ID
+	// But if source.ID is very long, we should truncate/shorten it
+	//
+	// Bad: "BirdNET-Go rtsp_a1b2c3d4-e5f6-7890-abcd-ef1234567890_stream_high_quality"
+	// Good: "BirdNET-Go RTSP Stream 1" or "BirdNET-Go rtsp_a1b2c3d4"
+	// ==========================================================================
+
+	// Extract the display name portion (everything after "BirdNET-Go ")
+	deviceName := payload.Device.Name
+	prefix := config.DeviceName + " "
+	require.Greater(t, len(deviceName), len(prefix), "Device name should have a display name portion")
+
+	displayNamePortion := deviceName[len(prefix):]
+
+	assert.LessOrEqual(t, len(displayNamePortion), maxDeviceDisplayNameLength,
+		"DEVICE NAMING BUG: Display name portion is too long (%d chars). "+
+			"When DisplayName is empty, should use a shortened version of source.ID. "+
+			"Got device name: %q, display portion: %q",
+		len(displayNamePortion), deviceName, displayNamePortion)
+
+	// Also verify the full device name doesn't exceed a reasonable total length
+	maxTotalDeviceNameLength := len(config.DeviceName) + 1 + maxDeviceDisplayNameLength
+	assert.LessOrEqual(t, len(deviceName), maxTotalDeviceNameLength,
+		"DEVICE NAMING BUG: Total device name is too long (%d chars). "+
+			"Maximum should be %d. Got: %q",
+		len(deviceName), maxTotalDeviceNameLength, deviceName)
+}
+
+// TestDeviceNaming_PreservesShortDisplayName verifies that short DisplayNames
+// are preserved as-is without modification.
+func TestDeviceNaming_PreservesShortDisplayName(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "test-node",
+		Version:         "1.0.0",
+	}
+
+	publisher := NewDiscoveryPublisher(mock, &config)
+	ctx := context.Background()
+
+	// Source with a nice short DisplayName - should be used as-is
+	source := datastore.AudioSource{
+		ID:          "rtsp_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		DisplayName: "Backyard Camera", // Nice short name
+	}
+
+	settings := &conf.Settings{}
+
+	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	require.NoError(t, err, "Failed to publish source discovery")
+
+	nodeID := SanitizeID(config.NodeID)
+	sourceID := SanitizeID(source.ID)
+	speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
+
+	var payload DiscoveryPayload
+	err = json.Unmarshal([]byte(mock.publishedMessages[speciesTopic]), &payload)
+	require.NoError(t, err, "Failed to parse discovery payload")
+
+	// DisplayName should be preserved exactly
+	assert.Equal(t, "BirdNET-Go Backyard Camera", payload.Device.Name,
+		"Device name should use the provided DisplayName exactly")
+}
+
+// TestShortenDisplayName tests the shortenDisplayName helper function directly
+func TestShortenDisplayName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Short name passes through unchanged",
+			input:    "Backyard Camera",
+			expected: "Backyard Camera",
+		},
+		{
+			name:     "Exactly 32 chars passes through",
+			input:    "12345678901234567890123456789012", // 32 chars
+			expected: "12345678901234567890123456789012",
+		},
+		{
+			name:     "RTSP UUID truncated to 13 chars",
+			input:    "rtsp_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+			expected: "rtsp_a1b2c3d4",
+		},
+		{
+			name:     "Long string with underscores truncates at boundary",
+			input:    "camera_stream_front_yard_high_quality_feed",
+			expected: "camera_stream_front_yard_high",
+		},
+		{
+			name:     "Long string with hyphens truncates at boundary",
+			input:    "front-yard-camera-stream-high-quality-feed",
+			expected: "front-yard-camera-stream-high",
+		},
+		{
+			name:     "Long string without boundaries just truncates",
+			input:    "abcdefghijklmnopqrstuvwxyz1234567890abcd",
+			expected: "abcdefghijklmnopqrstuvwxyz123456",
+		},
+		{
+			name:     "Empty string returns empty",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := shortenDisplayName(tt.input)
+			assert.Equal(t, tt.expected, result)
+			assert.LessOrEqual(t, len(result), maxDisplayNameLength,
+				"Result should never exceed maxDisplayNameLength")
+		})
+	}
+}
