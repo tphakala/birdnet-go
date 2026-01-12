@@ -211,6 +211,7 @@
 
       eventSource.addEventListener('stream_health', (event: Event) => {
         try {
+          // eslint-disable-next-line no-undef -- MessageEvent is a browser global
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data) as StreamHealthResponse & {
             event_type: string;
@@ -270,7 +271,8 @@
       hls: ['http', 'https'],
       udp: ['udp', 'rtp'],
     };
-    return validateProtocolURL(url, protocols[streamType], 2048);
+    const allowedProtocols = protocols[streamType as keyof typeof protocols] ?? protocols.rtsp;
+    return validateProtocolURL(url, allowedProtocols, 2048);
   }
 
   // Clear form errors
@@ -380,7 +382,7 @@
 
   // Delete stream
   function deleteStream(index: number) {
-    const streamToDelete = streams[index];
+    const streamToDelete = streams.at(index);
     const updatedStreams = streams.filter((_, i) => i !== index);
     onUpdateStreams(updatedStreams);
 
