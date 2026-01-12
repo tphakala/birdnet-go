@@ -1301,6 +1301,18 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Migrate legacy RTSP URLs to new streams format
+	if settings.MigrateRTSPConfig() {
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				GetLogger().Warn("Failed to save migrated RTSP config", logger.Error(err))
+			} else {
+				GetLogger().Info("Saved migrated RTSP configuration", logger.String("path", configFile))
+			}
+		}
+	}
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
@@ -1546,11 +1558,35 @@ func (s *Settings) MigrateOAuthConfig() bool {
 	return migrated
 }
 
+// inferStreamType detects the stream type from URL scheme.
+// Returns StreamTypeRTSP as default for unknown schemes.
+func inferStreamType(url string) string {
+	urlLower := strings.ToLower(url)
+
+	switch {
+	case strings.HasPrefix(urlLower, "rtsp://"), strings.HasPrefix(urlLower, "rtsps://"):
+		return StreamTypeRTSP
+	case strings.HasPrefix(urlLower, "rtmp://"), strings.HasPrefix(urlLower, "rtmps://"):
+		return StreamTypeRTMP
+	case strings.HasPrefix(urlLower, "udp://"), strings.HasPrefix(urlLower, "rtp://"):
+		return StreamTypeUDP
+	case strings.HasPrefix(urlLower, "http://"), strings.HasPrefix(urlLower, "https://"):
+		// Check for HLS (.m3u8) vs generic HTTP
+		if strings.Contains(urlLower, ".m3u8") {
+			return StreamTypeHLS
+		}
+		return StreamTypeHTTP
+	default:
+		return StreamTypeRTSP // Default to RTSP for unknown schemes
+	}
+}
+
 // MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
 // This migration:
 // - Skips if Streams already has entries (already migrated)
 // - Only migrates if URLs has data
-// - Preserves the global Transport setting per-stream
+// - Infers stream type from URL scheme
+// - Preserves the global Transport setting for RTSP/RTMP streams
 // - Returns true if migration occurred, false if skipped
 func (s *Settings) MigrateRTSPConfig() bool {
 	rtsp := &s.Realtime.RTSP
@@ -1573,11 +1609,20 @@ func (s *Settings) MigrateRTSPConfig() bool {
 
 	// Migrate each URL to StreamConfig
 	for i, url := range rtsp.URLs {
+		// Infer stream type from URL scheme
+		streamType := inferStreamType(url)
+
+		// Only apply transport setting to RTSP/RTMP types where it makes sense
+		transport := ""
+		if streamType == StreamTypeRTSP || streamType == StreamTypeRTMP {
+			transport = globalTransport
+		}
+
 		stream := StreamConfig{
 			Name:      fmt.Sprintf("Stream %d", i+1),
 			URL:       url,
-			Type:      StreamTypeRTSP, // Legacy URLs were always RTSP
-			Transport: globalTransport,
+			Type:      streamType,
+			Transport: transport,
 		}
 		rtsp.Streams = append(rtsp.Streams, stream)
 	}

@@ -649,7 +649,14 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
-	// Add more realtime settings validation as needed
+	// Validate stream configurations
+	if err := settings.RTSP.ValidateStreams(); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "stream-config").
+			Build()
+	}
+
 	return nil
 }
 

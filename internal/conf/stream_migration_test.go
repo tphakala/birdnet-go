@@ -127,3 +127,77 @@ func TestSettings_MigrateRTSPConfig_StreamProperties(t *testing.T) {
 	assert.Equal(t, StreamTypeRTSP, stream.Type)
 	assert.Equal(t, "udp", stream.Transport)
 }
+
+func TestSettings_MigrateRTSPConfig_MixedTypes(t *testing.T) {
+	settings := Settings{
+		Realtime: RealtimeSettings{
+			RTSP: RTSPSettings{
+				URLs: []string{
+					"rtsp://192.168.1.10/stream",
+					"http://192.168.1.50:8000/audio",
+					"https://camera.local/live/playlist.m3u8",
+					"rtmp://192.168.1.60/live/birdcam",
+					"udp://192.168.1.5:1234",
+				},
+				Transport: "tcp",
+			},
+		},
+	}
+
+	migrated := settings.MigrateRTSPConfig()
+	require.True(t, migrated)
+	require.Len(t, settings.Realtime.RTSP.Streams, 5)
+
+	// RTSP stream - should have transport
+	assert.Equal(t, "Stream 1", settings.Realtime.RTSP.Streams[0].Name)
+	assert.Equal(t, StreamTypeRTSP, settings.Realtime.RTSP.Streams[0].Type)
+	assert.Equal(t, "tcp", settings.Realtime.RTSP.Streams[0].Transport)
+
+	// HTTP stream - should NOT have transport
+	assert.Equal(t, "Stream 2", settings.Realtime.RTSP.Streams[1].Name)
+	assert.Equal(t, StreamTypeHTTP, settings.Realtime.RTSP.Streams[1].Type)
+	assert.Empty(t, settings.Realtime.RTSP.Streams[1].Transport)
+
+	// HLS stream (detected by .m3u8) - should NOT have transport
+	assert.Equal(t, "Stream 3", settings.Realtime.RTSP.Streams[2].Name)
+	assert.Equal(t, StreamTypeHLS, settings.Realtime.RTSP.Streams[2].Type)
+	assert.Empty(t, settings.Realtime.RTSP.Streams[2].Transport)
+
+	// RTMP stream - should have transport
+	assert.Equal(t, "Stream 4", settings.Realtime.RTSP.Streams[3].Name)
+	assert.Equal(t, StreamTypeRTMP, settings.Realtime.RTSP.Streams[3].Type)
+	assert.Equal(t, "tcp", settings.Realtime.RTSP.Streams[3].Transport)
+
+	// UDP stream - should NOT have transport
+	assert.Equal(t, "Stream 5", settings.Realtime.RTSP.Streams[4].Name)
+	assert.Equal(t, StreamTypeUDP, settings.Realtime.RTSP.Streams[4].Type)
+	assert.Empty(t, settings.Realtime.RTSP.Streams[4].Transport)
+}
+
+func TestInferStreamType(t *testing.T) {
+	tests := []struct {
+		url      string
+		expected string
+	}{
+		{"rtsp://192.168.1.10/stream", StreamTypeRTSP},
+		{"RTSP://192.168.1.10/stream", StreamTypeRTSP},
+		{"rtsps://secure.cam/stream", StreamTypeRTSP},
+		{"http://192.168.1.50/audio", StreamTypeHTTP},
+		{"https://secure.server/stream", StreamTypeHTTP},
+		{"http://server/live/playlist.m3u8", StreamTypeHLS},
+		{"https://cdn.example.com/stream.m3u8", StreamTypeHLS},
+		{"rtmp://192.168.1.60/live", StreamTypeRTMP},
+		{"rtmps://secure.rtmp/live", StreamTypeRTMP},
+		{"udp://192.168.1.5:1234", StreamTypeUDP},
+		{"rtp://192.168.1.5:5004", StreamTypeUDP},
+		{"unknown://something", StreamTypeRTSP}, // Default
+		{"no-scheme-url", StreamTypeRTSP},       // Default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			result := inferStreamType(tt.url)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
