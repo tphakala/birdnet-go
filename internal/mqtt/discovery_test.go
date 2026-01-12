@@ -559,16 +559,12 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 // of the source ID to keep sensor names manageable in Home Assistant.
 // =============================================================================
 
-// maxDeviceDisplayNameLength is the maximum length for the display name portion
-// of a device name. This keeps Home Assistant entity names manageable.
-const maxDeviceDisplayNameLength = 32
-
 // TestDeviceNaming_ShortDisplayNameWhenIDIsLong verifies that device names
 // remain short even when source IDs are long (e.g., RTSP streams).
 //
 // When DisplayName is empty and source.ID is long, the discovery should:
 // 1. Use a truncated/friendly version of the ID
-// 2. Keep the total display name portion under maxDeviceDisplayNameLength
+// 2. Keep the total display name portion under maxDisplayNameLength
 func TestDeviceNaming_ShortDisplayNameWhenIDIsLong(t *testing.T) {
 	t.Parallel()
 
@@ -634,14 +630,14 @@ func TestDeviceNaming_ShortDisplayNameWhenIDIsLong(t *testing.T) {
 
 	displayNamePortion := deviceName[len(prefix):]
 
-	assert.LessOrEqual(t, len(displayNamePortion), maxDeviceDisplayNameLength,
+	assert.LessOrEqual(t, len(displayNamePortion), maxDisplayNameLength,
 		"DEVICE NAMING BUG: Display name portion is too long (%d chars). "+
 			"When DisplayName is empty, should use a shortened version of source.ID. "+
 			"Got device name: %q, display portion: %q",
 		len(displayNamePortion), deviceName, displayNamePortion)
 
 	// Also verify the full device name doesn't exceed a reasonable total length
-	maxTotalDeviceNameLength := len(config.DeviceName) + 1 + maxDeviceDisplayNameLength
+	maxTotalDeviceNameLength := len(config.DeviceName) + 1 + maxDisplayNameLength
 	assert.LessOrEqual(t, len(deviceName), maxTotalDeviceNameLength,
 		"DEVICE NAMING BUG: Total device name is too long (%d chars). "+
 			"Maximum should be %d. Got: %q",

@@ -67,10 +67,11 @@ func shortenDisplayName(name string) string {
 	}
 
 	// For RTSP-style IDs (rtsp_xxxxx...), keep the prefix and truncate
-	if strings.HasPrefix(name, "rtsp_") && len(name) > 13 {
-		// Keep "rtsp_" + first 8 chars of UUID = 13 chars
+	const rtspPrefix = "rtsp_"
+	const rtspShortenedLength = len(rtspPrefix) + 8 // "rtsp_" + 8 chars of UUID
+	if strings.HasPrefix(name, rtspPrefix) && len(name) > rtspShortenedLength {
 		// Example: "rtsp_a1b2c3d4-e5f6..." -> "rtsp_a1b2c3d4"
-		return name[:13]
+		return name[:rtspShortenedLength]
 	}
 
 	// For URLs or other long strings, truncate intelligently
