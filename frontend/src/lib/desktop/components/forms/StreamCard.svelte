@@ -181,7 +181,8 @@
         name: editName.trim(),
         url: editUrl.trim(),
         type: editStreamType,
-        transport: editTransport,
+        // Use selected transport for RTSP/RTMP, default 'tcp' for others (ignored by backend)
+        transport: showTransportInEdit ? editTransport : 'tcp',
       });
       isEditing = false;
     }
