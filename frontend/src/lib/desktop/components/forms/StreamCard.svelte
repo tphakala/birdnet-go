@@ -8,9 +8,9 @@
   - Card background styling based on connection state
   - Colored stream icon (auto-assigned based on index)
   - Status pill with semantic coloring
-  - Editable stream URL with credential masking
-  - Stream type selector (RTSP only for now, prepared for HTTP, HLS, RTMP)
-  - Protocol selector (TCP/UDP) per stream
+  - Editable stream name and URL with credential masking
+  - Stream type selector (RTSP, HTTP, HLS, RTMP, UDP)
+  - Protocol selector (TCP/UDP) for RTSP and RTMP streams
   - Inline editing mode
   - Delete confirmation
   - Always-visible action buttons for accessibility
@@ -23,27 +23,24 @@
   import { cn } from '$lib/utils/cn';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import type { StreamConfig, StreamType } from '$lib/stores/settings';
 
   // Stream health status type
   export type StreamStatus = 'connected' | 'connecting' | 'error' | 'idle' | 'unknown';
 
   interface Props {
-    url: string;
+    stream: StreamConfig;
     index: number;
-    transport: string;
-    streamType?: string;
     status?: StreamStatus;
     statusMessage?: string;
     disabled?: boolean;
-    onUpdate: (_url: string, _transport: string, _streamType: string) => void;
+    onUpdate: (_stream: StreamConfig) => void;
     onDelete: () => void;
   }
 
   let {
-    url,
+    stream,
     index,
-    transport = 'tcp',
-    streamType = 'rtsp',
     status = 'unknown',
     statusMessage = '',
     disabled = false,
@@ -53,18 +50,19 @@
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
+  let editName = $state('');
   let editUrl = $state('');
-  let editTransport = $state('tcp');
-  let editStreamType = $state('rtsp');
+  let editTransport = $state<'tcp' | 'udp'>('tcp');
+  let editStreamType = $state<StreamType>('rtsp');
   let showDeleteConfirm = $state(false);
 
-  // Stream type options (RTSP only for now)
+  // Stream type options (all supported types)
   const streamTypeOptions = [
     { value: 'rtsp', label: 'RTSP' },
-    // Future options - disabled for now
-    // { value: 'http', label: 'HTTP', disabled: true },
-    // { value: 'hls', label: 'HLS', disabled: true },
-    // { value: 'rtmp', label: 'RTMP', disabled: true },
+    { value: 'http', label: 'HTTP' },
+    { value: 'hls', label: 'HLS' },
+    { value: 'rtmp', label: 'RTMP' },
+    { value: 'udp', label: 'UDP/RTP' },
   ];
 
   // Transport protocol options
@@ -147,13 +145,18 @@
     }
   }
 
-  let displayUrl = $derived(maskCredentials(url));
+  let displayUrl = $derived(maskCredentials(stream.url));
   let cardStyles = $derived(getCardStyles(status));
 
+  // Show transport only for RTSP and RTMP
+  let showTransport = $derived(stream.type === 'rtsp' || stream.type === 'rtmp');
+  let showTransportInEdit = $derived(editStreamType === 'rtsp' || editStreamType === 'rtmp');
+
   function startEdit() {
-    editUrl = url;
-    editTransport = transport;
-    editStreamType = streamType;
+    editName = stream.name;
+    editUrl = stream.url;
+    editTransport = stream.transport ?? 'tcp';
+    editStreamType = stream.type;
     isEditing = true;
   }
 
@@ -163,8 +166,13 @@
   }
 
   function saveEdit() {
-    if (editUrl.trim()) {
-      onUpdate(editUrl.trim(), editTransport, editStreamType);
+    if (editName.trim() && editUrl.trim()) {
+      onUpdate({
+        name: editName.trim(),
+        url: editUrl.trim(),
+        type: editStreamType,
+        transport: editTransport,
+      });
       isEditing = false;
     }
   }
@@ -224,6 +232,23 @@
     {#if isEditing}
       <!-- Edit Mode -->
       <div class="space-y-4">
+        <!-- Name Input -->
+        <div class="form-control">
+          <label class="label py-1" for="stream-name-{index}">
+            <span class="label-text text-xs font-medium">
+              {t('settings.audio.streams.nameLabel')}
+            </span>
+          </label>
+          <input
+            id="stream-name-{index}"
+            type="text"
+            bind:value={editName}
+            onkeydown={handleKeydown}
+            class="input input-sm w-full text-sm"
+            placeholder={t('settings.audio.streams.namePlaceholder')}
+          />
+        </div>
+
         <!-- URL Input -->
         <div class="form-control">
           <label class="label py-1" for="stream-url-{index}">
@@ -247,24 +272,25 @@
             <SelectDropdown
               value={editStreamType}
               label={t('settings.audio.streams.typeLabel')}
-              helpText={t('settings.audio.streams.typeLockedNote')}
               options={streamTypeOptions}
-              disabled={true}
+              onChange={value => (editStreamType = value as StreamType)}
               groupBy={false}
               menuSize="sm"
             />
           </div>
 
-          <div>
-            <SelectDropdown
-              value={editTransport}
-              label={t('settings.audio.streams.transportLabel')}
-              options={transportOptions}
-              onChange={value => (editTransport = value as string)}
-              groupBy={false}
-              menuSize="sm"
-            />
-          </div>
+          {#if showTransportInEdit}
+            <div>
+              <SelectDropdown
+                value={editTransport}
+                label={t('settings.audio.streams.transportLabel')}
+                options={transportOptions}
+                onChange={value => (editTransport = value as 'tcp' | 'udp')}
+                groupBy={false}
+                menuSize="sm"
+              />
+            </div>
+          {/if}
         </div>
 
         <!-- Action Buttons -->
@@ -277,7 +303,7 @@
             type="button"
             class="btn btn-sm btn-primary gap-1.5"
             onclick={saveEdit}
-            disabled={!editUrl.trim()}
+            disabled={!editName.trim() || !editUrl.trim()}
           >
             <Check class="size-4" />
             {t('common.save')}
@@ -304,8 +330,7 @@
           <!-- Stream Name, Status, and URL on same line where possible -->
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm font-semibold text-base-content">
-              {t('settings.audio.streams.streamLabel')}
-              {index + 1}
+              {stream.name}
             </span>
             <StatusPill
               variant={getStatusVariant(status)}
@@ -329,11 +354,15 @@
           <!-- Colored Protocol Tags -->
           <div class="hidden sm:flex items-center gap-1.5">
             <span class="px-2 py-0.5 rounded text-xs font-semibold bg-info/15 text-info">
-              {streamType.toUpperCase()}
+              {stream.type.toUpperCase()}
             </span>
-            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary/15 text-secondary">
-              {transport.toUpperCase()}
-            </span>
+            {#if showTransport}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary/15 text-secondary"
+              >
+                {stream.transport.toUpperCase()}
+              </span>
+            {/if}
           </div>
 
           <!-- Action Buttons -->
