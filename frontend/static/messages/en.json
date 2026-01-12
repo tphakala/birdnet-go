@@ -1928,10 +1928,13 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "nameLabel": "Stream Name",
+        "namePlaceholder": "e.g., Front Yard Feeder",
+        "nameHelp": "A descriptive name to identify this audio stream",
         "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
+        "urlHelp": "Enter stream URL with optional credentials (e.g., rtsp://user:password@host:port/path)",
         "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
+        "typeHelp": "Stream protocol - auto-detected from URL",
         "transportLabel": "Protocol",
         "summary": "{count} stream(s) configured",
         "healthy": "healthy",
@@ -1951,17 +1954,19 @@
         },
         "emptyState": {
           "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
+          "description": "Add audio streams from IP cameras, Icecast servers, or other network sources.",
           "hintsTitle": "Getting Started",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
+            "rtsp": "Supports RTSP, HTTP, HLS, RTMP, and UDP streams",
             "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "protocol": "TCP is more reliable for RTSP, UDP has lower latency"
           }
         },
         "errors": {
+          "nameRequired": "Stream name is required",
+          "duplicateName": "A stream with this name already exists",
           "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
+          "invalidUrl": "Invalid stream URL format",
           "duplicate": "This stream URL already exists"
         }
       },
