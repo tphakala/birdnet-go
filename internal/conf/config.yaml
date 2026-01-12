@@ -211,12 +211,30 @@ realtime:
     min: 0.20             # dynamic threshold will not go lower than this
     validhours: 24        # number of hours to consider for dynamic confidence
 
-  rtsp:    
-    transport: tcp        # RTSP Transport Protocol
-    urls:                 # RTSP stream URLs
-      # - rtsp://user:password@example.com/stream1
-      # - rtsp://user:password@example.com/stream2
-      # - rtsp://user:password@example.com/stream3
+  rtsp:
+    streams: []           # Audio streams for analysis
+    # Example stream configurations:
+    # streams:
+    #   - name: Front Yard Camera       # Required: unique name for this stream
+    #     url: rtsp://user:pass@192.168.1.10:554/stream
+    #     type: rtsp                    # Stream type: rtsp, http, hls, rtmp, udp
+    #     transport: tcp                # Transport protocol: tcp or udp (rtsp/rtmp only)
+    #   - name: Backyard Microphone
+    #     url: http://192.168.1.20:8000/audio
+    #     type: http
+    #   - name: HLS Stream
+    #     url: https://camera.local/live/playlist.m3u8
+    #     type: hls
+    #   - name: RTMP Feed
+    #     url: rtmp://192.168.1.30/live/birdcam
+    #     type: rtmp
+    #     transport: tcp
+    #   - name: UDP Audio
+    #     url: udp://192.168.1.5:1234
+    #     type: udp
+    health:
+      healthyDataThreshold: 60  # Seconds of data to consider stream healthy
+      monitoringInterval: 30    # Seconds between health checks
   
   log:
     enabled: false        # true to enable OBS chat log
