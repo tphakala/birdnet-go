@@ -1906,42 +1906,47 @@
         "noStreamsConfigured": "Virtoja ei ole määritetty"
       },
       "streams": {
-        "streamLabel": "Virta",
-        "urlLabel": "Virran URL",
-        "urlHelp": "Syötä RTSP-URL valinnaisten tunnistetietojen kanssa (rtsp://käyttäjä:salasana@isäntä:portti/polku)",
-        "typeLabel": "Virran tyyppi",
-        "typeLockedNote": "Vain RTSP on tällä hetkellä tuettu",
+        "streamLabel": "Striimi",
+        "nameLabel": "Striimin nimi",
+        "namePlaceholder": "esim. Etupihan ruokinta",
+        "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
+        "urlLabel": "Striimin URL",
+        "urlHelp": "Syötä strimin URL-osoite valinnaisilla tunnistetiedoilla (esim. rtsp://käyttäjä:salasana@palvelin:portti/polku)",
+        "typeLabel": "Striimin tyyppi",
+        "typeHelp": "Striimin protokolla - tunnistetaan automaattisesti URL:sta",
         "transportLabel": "Protokolla",
-        "summary": "{count} virta(a) määritetty",
-        "healthy": "terve",
-        "unhealthy": "epäterve",
+        "summary": "{count} striimi(ä) määritetty",
+        "healthy": "kunnossa",
+        "unhealthy": "viallinen",
         "unknown": "tuntematon",
         "refresh": "Päivitä",
-        "addStream": "Lisää virta",
-        "deleteConfirm": "Poista tämä virta?",
+        "addStream": "Lisää striimi",
+        "deleteConfirm": "Poista tämä striimi?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
-        "healthLoadError": "Virran terveystilan lataus epäonnistui",
+        "healthLoadError": "Striimin tilan lataus epäonnistui",
         "status": {
           "connected": "Yhdistetty",
           "connecting": "Yhdistetään",
           "error": "Virhe",
-          "idle": "Jouten",
+          "idle": "Odottaa",
           "unknown": "Tuntematon"
         },
         "emptyState": {
-          "title": "Virtoja ei ole määritetty",
-          "description": "Lisää RTSP-virtoja tallentaaksesi ääntä verkkokameroista tai muista RTSP-lähteistä.",
-          "hintsTitle": "Aloittaminen",
+          "title": "Ei määritettyjä striimejä",
+          "description": "Lisää äänistriimejä IP-kameroista, Icecast-palvelimista tai muista verkkolähteistä.",
+          "hintsTitle": "Aloitus",
           "hints": {
-            "rtsp": "Käytä RTSP-URL-osoitteita IP-kameroista (esim. rtsp://192.168.1.100:554/virta)",
-            "credentials": "Sisällytä tunnistetiedot URL-osoitteeseen tarvittaessa (rtsp://käyttäjä:salasana@isäntä/virta)",
-            "protocol": "TCP on luotettavampi, UDP:llä on pienempi viive"
+            "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-striimejä",
+            "credentials": "Sisällytä tunnistetiedot URL:iin tarvittaessa (rtsp://käyttäjä:salasana@palvelin/striimi)",
+            "protocol": "TCP on luotettavampi RTSP:lle, UDP:llä on pienempi latenssi"
           }
         },
         "errors": {
-          "urlRequired": "Virran URL vaaditaan",
-          "invalidUrl": "Virheellinen RTSP-URL-muoto",
-          "duplicate": "Tämä virran URL on jo olemassa"
+          "nameRequired": "Striimin nimi on pakollinen",
+          "duplicateName": "Tämän niminen striimi on jo olemassa",
+          "urlRequired": "Striimin URL on pakollinen",
+          "invalidUrl": "Virheellinen strimin URL-muoto",
+          "duplicate": "Tämä strimin URL on jo olemassa"
         }
       }
     },

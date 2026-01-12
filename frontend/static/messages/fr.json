@@ -2073,42 +2073,47 @@
         "noStreamsConfigured": "No streams configured"
       },
       "streams": {
-        "streamLabel": "Stream",
-        "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
-        "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
-        "transportLabel": "Protocol",
-        "summary": "{count} stream(s) configured",
-        "healthy": "healthy",
-        "unhealthy": "unhealthy",
-        "unknown": "unknown",
-        "refresh": "Refresh",
-        "addStream": "Add Stream",
-        "deleteConfirm": "Remove this stream?",
-        "restartCount": "Restarted {count} time(s)",
-        "healthLoadError": "Failed to load stream health status",
+        "streamLabel": "Flux",
+        "nameLabel": "Nom du Flux",
+        "namePlaceholder": "ex. Mangeoire Jardin",
+        "nameHelp": "Un nom descriptif pour identifier ce flux audio",
+        "urlLabel": "URL du Flux",
+        "urlHelp": "Entrez l'URL du flux avec les identifiants optionnels (ex. rtsp://utilisateur:motdepasse@hôte:port/chemin)",
+        "typeLabel": "Type de Flux",
+        "typeHelp": "Protocole du flux - détecté automatiquement depuis l'URL",
+        "transportLabel": "Protocole",
+        "summary": "{count} flux configuré(s)",
+        "healthy": "sain",
+        "unhealthy": "défaillant",
+        "unknown": "inconnu",
+        "refresh": "Actualiser",
+        "addStream": "Ajouter un Flux",
+        "deleteConfirm": "Supprimer ce flux ?",
+        "restartCount": "Redémarré {count} fois",
+        "healthLoadError": "Échec du chargement de l'état du flux",
         "status": {
-          "connected": "Connected",
-          "connecting": "Connecting",
-          "error": "Error",
-          "idle": "Idle",
-          "unknown": "Unknown"
+          "connected": "Connecté",
+          "connecting": "Connexion",
+          "error": "Erreur",
+          "idle": "Inactif",
+          "unknown": "Inconnu"
         },
         "emptyState": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
-          "hintsTitle": "Getting Started",
+          "title": "Aucun Flux Configuré",
+          "description": "Ajoutez des flux audio depuis des caméras IP, serveurs Icecast ou autres sources réseau.",
+          "hintsTitle": "Pour Commencer",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "rtsp": "Supporte les flux RTSP, HTTP, HLS, RTMP et UDP",
+            "credentials": "Incluez les identifiants dans l'URL si nécessaire (rtsp://utilisateur:motdepasse@hôte/flux)",
+            "protocol": "TCP est plus fiable pour RTSP, UDP a une latence plus faible"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
-          "duplicate": "This stream URL already exists"
+          "nameRequired": "Le nom du flux est requis",
+          "duplicateName": "Un flux avec ce nom existe déjà",
+          "urlRequired": "L'URL du flux est requise",
+          "invalidUrl": "Format d'URL de flux invalide",
+          "duplicate": "Cette URL de flux existe déjà"
         }
       }
     },

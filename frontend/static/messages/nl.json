@@ -2074,20 +2074,23 @@
       },
       "streams": {
         "streamLabel": "Stream",
-        "urlLabel": "Stream URL",
-        "urlHelp": "Voer RTSP URL in met optionele credentials (rtsp://gebruiker:wachtwoord@host:poort/pad)",
-        "typeLabel": "Stream Type",
-        "typeLockedNote": "Alleen RTSP wordt momenteel ondersteund",
+        "nameLabel": "Streamnaam",
+        "namePlaceholder": "bijv. Voederhuisje voortuin",
+        "nameHelp": "Een beschrijvende naam om deze audiostream te identificeren",
+        "urlLabel": "Stream-URL",
+        "urlHelp": "Voer stream-URL in met optionele inloggegevens (bijv. rtsp://gebruiker:wachtwoord@host:poort/pad)",
+        "typeLabel": "Streamtype",
+        "typeHelp": "Streamprotocol - automatisch gedetecteerd uit URL",
         "transportLabel": "Protocol",
         "summary": "{count} stream(s) geconfigureerd",
         "healthy": "gezond",
         "unhealthy": "ongezond",
         "unknown": "onbekend",
         "refresh": "Vernieuwen",
-        "addStream": "Stream Toevoegen",
+        "addStream": "Stream toevoegen",
         "deleteConfirm": "Deze stream verwijderen?",
-        "restartCount": "{count} keer opnieuw gestart",
-        "healthLoadError": "Laden van stream gezondheid status mislukt",
+        "restartCount": "{count} keer herstart",
+        "healthLoadError": "Laden van streamstatus mislukt",
         "status": {
           "connected": "Verbonden",
           "connecting": "Verbinden",
@@ -2096,19 +2099,21 @@
           "unknown": "Onbekend"
         },
         "emptyState": {
-          "title": "Geen Streams Geconfigureerd",
-          "description": "Voeg RTSP streams toe om audio vast te leggen van netwerk camera's of andere RTSP bronnen.",
-          "hintsTitle": "Aan de Slag",
+          "title": "Geen streams geconfigureerd",
+          "description": "Voeg audiostreams toe van IP-camera's, Icecast-servers of andere netwerkbronnen.",
+          "hintsTitle": "Aan de slag",
           "hints": {
-            "rtsp": "Gebruik RTSP URLs van IP camera's (bijv., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Voeg credentials toe in URL indien vereist (rtsp://gebruiker:wachtwoord@host/stream)",
-            "protocol": "TCP is betrouwbaarder, UDP heeft lagere latentie"
+            "rtsp": "Ondersteunt RTSP, HTTP, HLS, RTMP en UDP streams",
+            "credentials": "Voeg inloggegevens toe in URL indien vereist (rtsp://gebruiker:wachtwoord@host/stream)",
+            "protocol": "TCP is betrouwbaarder voor RTSP, UDP heeft lagere latentie"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is vereist",
-          "invalidUrl": "Ongeldig RTSP URL formaat",
-          "duplicate": "Deze stream URL bestaat al"
+          "nameRequired": "Streamnaam is verplicht",
+          "duplicateName": "Er bestaat al een stream met deze naam",
+          "urlRequired": "Stream-URL is verplicht",
+          "invalidUrl": "Ongeldig stream-URL-formaat",
+          "duplicate": "Deze stream-URL bestaat al"
         }
       }
     },

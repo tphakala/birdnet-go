@@ -2080,20 +2080,23 @@
       },
       "streams": {
         "streamLabel": "Strumień",
-        "urlLabel": "Adres URL Strumienia",
-        "urlHelp": "Wprowadź adres URL RTSP z opcjonalnymi danymi uwierzytelniającymi (rtsp://użytkownik:hasło@host:port/ścieżka)",
+        "nameLabel": "Nazwa Strumienia",
+        "namePlaceholder": "np. Karmnik w Ogrodzie",
+        "nameHelp": "Opisowa nazwa do identyfikacji tego strumienia audio",
+        "urlLabel": "URL Strumienia",
+        "urlHelp": "Wprowadź URL strumienia z opcjonalnymi danymi logowania (np. rtsp://użytkownik:hasło@host:port/ścieżka)",
         "typeLabel": "Typ Strumienia",
-        "typeLockedNote": "Obecnie obsługiwany jest tylko RTSP",
+        "typeHelp": "Protokół strumienia - wykrywany automatycznie z URL",
         "transportLabel": "Protokół",
-        "summary": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}",
+        "summary": "{count} strumień(i) skonfigurowany(ch)",
         "healthy": "sprawny",
         "unhealthy": "niesprawny",
         "unknown": "nieznany",
         "refresh": "Odśwież",
         "addStream": "Dodaj Strumień",
         "deleteConfirm": "Usunąć ten strumień?",
-        "restartCount": "{count, plural, one {Zrestartowano # raz} few {Zrestartowano # razy} other {Zrestartowano # razy}}",
-        "healthLoadError": "Nie udało się załadować statusu sprawności strumienia",
+        "restartCount": "Zrestartowano {count} raz(y)",
+        "healthLoadError": "Nie udało się załadować statusu strumienia",
         "status": {
           "connected": "Połączony",
           "connecting": "Łączenie",
@@ -2103,18 +2106,20 @@
         },
         "emptyState": {
           "title": "Brak Skonfigurowanych Strumieni",
-          "description": "Dodaj strumienie RTSP, aby przechwytywać dźwięk z kamer sieciowych lub innych źródeł RTSP.",
+          "description": "Dodaj strumienie audio z kamer IP, serwerów Icecast lub innych źródeł sieciowych.",
           "hintsTitle": "Pierwsze Kroki",
           "hints": {
-            "rtsp": "Użyj adresów URL RTSP z kamer IP (np. rtsp://192.168.1.100:554/strumień)",
-            "credentials": "Dołącz dane uwierzytelniające w URL, jeśli wymagane (rtsp://użytkownik:hasło@host/strumień)",
-            "protocol": "TCP jest bardziej niezawodny, UDP ma mniejsze opóźnienie"
+            "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP",
+            "credentials": "Dołącz dane logowania w URL jeśli wymagane (rtsp://użytkownik:hasło@host/strumień)",
+            "protocol": "TCP jest bardziej niezawodny dla RTSP, UDP ma niższe opóźnienie"
           }
         },
         "errors": {
-          "urlRequired": "Adres URL strumienia jest wymagany",
-          "invalidUrl": "Nieprawidłowy format adresu URL RTSP",
-          "duplicate": "Ten adres URL strumienia już istnieje"
+          "nameRequired": "Nazwa strumienia jest wymagana",
+          "duplicateName": "Strumień o tej nazwie już istnieje",
+          "urlRequired": "URL strumienia jest wymagany",
+          "invalidUrl": "Nieprawidłowy format URL strumienia",
+          "duplicate": "Ten URL strumienia już istnieje"
         }
       }
     },
