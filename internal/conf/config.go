@@ -1546,6 +1546,52 @@ func (s *Settings) MigrateOAuthConfig() bool {
 	return migrated
 }
 
+// MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
+// This migration:
+// - Skips if Streams already has entries (already migrated)
+// - Only migrates if URLs has data
+// - Preserves the global Transport setting per-stream
+// - Returns true if migration occurred, false if skipped
+func (s *Settings) MigrateRTSPConfig() bool {
+	rtsp := &s.Realtime.RTSP
+
+	// Skip if already migrated (new format has streams)
+	if len(rtsp.Streams) > 0 {
+		return false
+	}
+
+	// Skip if no legacy URLs to migrate
+	if len(rtsp.URLs) == 0 {
+		return false
+	}
+
+	// Get global transport, default to tcp
+	globalTransport := rtsp.Transport
+	if globalTransport == "" {
+		globalTransport = "tcp"
+	}
+
+	// Migrate each URL to StreamConfig
+	for i, url := range rtsp.URLs {
+		stream := StreamConfig{
+			Name:      fmt.Sprintf("Stream %d", i+1),
+			URL:       url,
+			Type:      StreamTypeRTSP, // Legacy URLs were always RTSP
+			Transport: globalTransport,
+		}
+		rtsp.Streams = append(rtsp.Streams, stream)
+	}
+
+	// Clear legacy fields
+	rtsp.URLs = nil
+	rtsp.Transport = ""
+
+	GetLogger().Info("Migrated RTSP configuration to new streams format",
+		logger.Int("stream_count", len(rtsp.Streams)))
+
+	return true
+}
+
 // GetOAuthProvider returns the OAuth provider configuration for the given provider ID.
 // Returns nil if the provider is not configured.
 func (s *Settings) GetOAuthProvider(providerID string) *OAuthProviderConfig {
