@@ -6,10 +6,11 @@
 
   Features:
   - Display stream cards with health indicators
-  - Add new streams with type and protocol settings
+  - Add new streams with name, type, and protocol settings
   - Real-time health status via SSE
   - Summary bar showing healthy/unhealthy counts
   - Empty state with guidance
+  - Auto-detect stream type from URL
 
   @component
 -->
@@ -27,6 +28,7 @@
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import type { StreamConfig, StreamType } from '$lib/stores/settings';
 
   const logger = loggers.audio;
 
@@ -45,21 +47,12 @@
   }
 
   interface Props {
-    urls: string[];
-    transport: string;
+    streams: StreamConfig[];
     disabled?: boolean;
-    onUpdateUrls: (_urls: string[]) => void;
-    onUpdateTransport: (_transport: string) => void;
+    onUpdateStreams: (_streams: StreamConfig[]) => void;
   }
 
-  let {
-    urls = [],
-    transport = 'tcp',
-    disabled = false,
-    onUpdateUrls,
-    // eslint-disable-next-line no-unused-vars -- Reserved for future per-stream transport support
-    onUpdateTransport: _onUpdateTransport,
-  }: Props = $props();
+  let { streams = [], disabled = false, onUpdateStreams }: Props = $props();
 
   // Stream health state - using SvelteMap for automatic reactivity
   let streamHealth = $state(new SvelteMap<string, StreamHealthResponse>());
@@ -67,21 +60,24 @@
 
   // Add new stream state
   let showAddForm = $state(false);
+  let newName = $state('');
   let newUrl = $state('');
-  let newTransport = $state('tcp');
-  let newStreamType = $state('rtsp');
+  let newTransport = $state<'tcp' | 'udp'>('tcp');
+  let newStreamType = $state<StreamType>('rtsp');
+  let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
 
   // SSE connection for real-time health updates
   let eventSource: ReconnectingEventSource | null = null;
 
-  // Per-stream transport settings (local state until backend supports it)
-  // For now, we use the global transport but store per-stream for future
-  // Using SvelteMap for automatic reactivity
-  let streamTransports = $state(new SvelteMap<string, string>());
-
-  // Stream type options (RTSP only for now)
-  const streamTypeOptions = [{ value: 'rtsp', label: 'RTSP' }];
+  // Stream type options (all 5 types)
+  const streamTypeOptions = [
+    { value: 'rtsp', label: 'RTSP' },
+    { value: 'http', label: 'HTTP' },
+    { value: 'hls', label: 'HLS' },
+    { value: 'rtmp', label: 'RTMP' },
+    { value: 'udp', label: 'UDP/RTP' },
+  ];
 
   // Transport protocol options
   const transportOptions = [
@@ -89,14 +85,17 @@
     { value: 'udp', label: 'UDP' },
   ];
 
+  // Show transport dropdown only for RTSP and RTMP
+  let showTransportInAdd = $derived(newStreamType === 'rtsp' || newStreamType === 'rtmp');
+
   // Summary stats
   let healthySummary = $derived.by(() => {
     let healthy = 0;
     let unhealthy = 0;
     let unknown = 0;
 
-    urls.forEach(url => {
-      const health = streamHealth.get(url);
+    streams.forEach(stream => {
+      const health = streamHealth.get(stream.url);
       if (!health) {
         unknown++;
       } else if (health.is_healthy && health.is_receiving_data) {
@@ -106,7 +105,7 @@
       }
     });
 
-    return { healthy, unhealthy, unknown, total: urls.length };
+    return { healthy, unhealthy, unknown, total: streams.length };
   });
 
   // Convert backend process state to UI status
@@ -162,9 +161,11 @@
       if (Array.isArray(response)) {
         response.forEach(health => {
           // Match sanitized URL back to original URL
-          const matchingUrl = urls.find(u => sanitizeUrl(u) === health.url || u === health.url);
-          if (matchingUrl) {
-            newHealthMap.set(matchingUrl, health);
+          const matchingStream = streams.find(
+            s => sanitizeUrl(s.url) === health.url || s.url === health.url
+          );
+          if (matchingStream) {
+            newHealthMap.set(matchingStream.url, health);
           }
         });
       }
@@ -210,16 +211,17 @@
 
       eventSource.addEventListener('stream_health', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef -- MessageEvent is a browser global
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data) as StreamHealthResponse & {
             event_type: string;
           };
-          const matchingUrl = urls.find(u => sanitizeUrl(u) === data.url || u === data.url);
+          const matchingStream = streams.find(
+            s => sanitizeUrl(s.url) === data.url || s.url === data.url
+          );
 
-          if (matchingUrl) {
+          if (matchingStream) {
             // SvelteMap automatically triggers reactivity on set()
-            streamHealth.set(matchingUrl, data);
+            streamHealth.set(matchingStream.url, data);
           }
         } catch (e) {
           logger.warn('Failed to parse stream health event', e, {
@@ -239,56 +241,126 @@
     }
   }
 
-  // Validate RTSP URL
-  function validateUrl(url: string): boolean {
-    return validateProtocolURL(url, ['rtsp', 'rtsps'], 2048);
+  // Auto-detect stream type from URL
+  function detectStreamType(url: string): StreamType {
+    const urlLower = url.toLowerCase();
+    if (urlLower.startsWith('rtsp://') || urlLower.startsWith('rtsps://')) return 'rtsp';
+    if (urlLower.startsWith('rtmp://') || urlLower.startsWith('rtmps://')) return 'rtmp';
+    if (urlLower.startsWith('udp://') || urlLower.startsWith('rtp://')) return 'udp';
+    if (urlLower.includes('.m3u8')) return 'hls';
+    if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) return 'http';
+    return 'rtsp'; // Default
+  }
+
+  // Handle URL input with auto-detection
+  function handleUrlInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    newUrl = target.value;
+    if (newUrl.includes('://')) {
+      newStreamType = detectStreamType(newUrl);
+    }
+  }
+
+  // Validate URL based on stream type
+  function validateUrl(url: string, streamType: StreamType): boolean {
+    const protocols: Record<StreamType, string[]> = {
+      rtsp: ['rtsp', 'rtsps'],
+      rtmp: ['rtmp', 'rtmps'],
+      http: ['http', 'https'],
+      hls: ['http', 'https'],
+      udp: ['udp', 'rtp'],
+    };
+    return validateProtocolURL(url, protocols[streamType], 2048);
+  }
+
+  // Clear form errors
+  function clearErrors() {
+    nameError = null;
+    urlError = null;
   }
 
   // Add new stream
   function addStream() {
+    clearErrors();
+
+    const trimmedName = newName.trim();
     const trimmedUrl = newUrl.trim();
 
+    // Validate name
+    if (!trimmedName) {
+      nameError = t('settings.audio.streams.errors.nameRequired');
+      return;
+    }
+
+    // Check for duplicate name (case-insensitive)
+    const nameLower = trimmedName.toLowerCase();
+    if (streams.some(s => s.name.toLowerCase() === nameLower)) {
+      nameError = t('settings.audio.streams.errors.duplicateName');
+      return;
+    }
+
+    // Validate URL
     if (!trimmedUrl) {
       urlError = t('settings.audio.streams.errors.urlRequired');
       return;
     }
 
-    if (!validateUrl(trimmedUrl)) {
+    if (!validateUrl(trimmedUrl, newStreamType)) {
       urlError = t('settings.audio.streams.errors.invalidUrl');
       return;
     }
 
-    if (urls.includes(trimmedUrl)) {
+    // Check for duplicate URL
+    if (streams.some(s => s.url === trimmedUrl)) {
       urlError = t('settings.audio.streams.errors.duplicate');
       return;
     }
 
-    // Add the new URL
-    const updatedUrls = [...urls, trimmedUrl];
-    onUpdateUrls(updatedUrls);
+    // Create new stream config
+    const newStream: StreamConfig = {
+      name: trimmedName,
+      url: trimmedUrl,
+      type: newStreamType,
+      transport: newTransport,
+    };
 
-    // Store per-stream transport (for future use)
-    streamTransports.set(trimmedUrl, newTransport);
+    // Add the new stream
+    const updatedStreams = [...streams, newStream];
+    onUpdateStreams(updatedStreams);
 
     // Reset form
+    newName = '';
     newUrl = '';
-    newTransport = transport; // Reset to global transport
+    newTransport = 'tcp';
     newStreamType = 'rtsp';
-    urlError = null;
+    clearErrors();
     showAddForm = false;
 
     // Refresh health status
     setTimeout(() => loadHealthStatus(), 1000);
   }
 
-  // Update stream - streamType reserved for future use when multiple stream types are supported
-  function updateStream(index: number, url: string, streamTransport: string, _streamType: string) {
-    const updatedUrls = [...urls];
-    if (index >= 0 && index < updatedUrls.length) {
-      const oldUrl = updatedUrls.at(index);
+  // Update stream
+  function updateStream(index: number, updatedStream: StreamConfig) {
+    const updatedStreams = [...streams];
+    if (index >= 0 && index < updatedStreams.length) {
+      const oldStream = updatedStreams.at(index);
 
-      // Prevent duplicate URLs (skip check if URL unchanged)
-      if (url !== oldUrl && updatedUrls.some((existing, i) => i !== index && existing === url)) {
+      // Check for duplicate name (excluding current stream, case-insensitive)
+      const nameLower = updatedStream.name.toLowerCase();
+      if (updatedStreams.some((s, i) => i !== index && s.name.toLowerCase() === nameLower)) {
+        logger.warn('Attempted to update stream to a duplicate name', null, {
+          component: 'StreamManager',
+          action: 'updateStream',
+        });
+        return;
+      }
+
+      // Check for duplicate URL (excluding current stream)
+      if (
+        updatedStream.url !== oldStream?.url &&
+        updatedStreams.some((s, i) => i !== index && s.url === updatedStream.url)
+      ) {
         logger.warn('Attempted to update stream to a duplicate URL', null, {
           component: 'StreamManager',
           action: 'updateStream',
@@ -296,27 +368,25 @@
         return;
       }
 
-      updatedUrls.splice(index, 1, url);
-      onUpdateUrls(updatedUrls);
-
-      // Update per-stream transport
-      if (oldUrl) {
-        streamTransports.delete(oldUrl);
+      // Update health map if URL changed
+      if (oldStream && oldStream.url !== updatedStream.url) {
+        streamHealth.delete(oldStream.url);
       }
-      streamTransports.set(url, streamTransport);
+
+      updatedStreams.splice(index, 1, updatedStream);
+      onUpdateStreams(updatedStreams);
     }
   }
 
   // Delete stream
   function deleteStream(index: number) {
-    const urlToDelete = urls.at(index);
-    const updatedUrls = urls.filter((_, i) => i !== index);
-    onUpdateUrls(updatedUrls);
+    const streamToDelete = streams[index];
+    const updatedStreams = streams.filter((_, i) => i !== index);
+    onUpdateStreams(updatedStreams);
 
-    // Clean up per-stream data - SvelteMap handles reactivity automatically
-    if (urlToDelete) {
-      streamTransports.delete(urlToDelete);
-      streamHealth.delete(urlToDelete);
+    // Clean up health data
+    if (streamToDelete) {
+      streamHealth.delete(streamToDelete.url);
     }
   }
 
@@ -328,19 +398,15 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showAddForm = false;
+      newName = '';
       newUrl = '';
-      urlError = null;
+      clearErrors();
     }
-  }
-
-  // Get transport for a specific stream (falls back to global)
-  function getStreamTransport(url: string): string {
-    return streamTransports.get(url) || transport;
   }
 
   onMount(() => {
     loadHealthStatus();
-    if (urls.length > 0) {
+    if (streams.length > 0) {
       connectSSE();
     }
   });
@@ -352,11 +418,11 @@
     }
   });
 
-  // Reconnect SSE when URLs change
+  // Reconnect SSE when streams change
   $effect(() => {
-    if (urls.length > 0 && !eventSource) {
+    if (streams.length > 0 && !eventSource) {
       connectSSE();
-    } else if (urls.length === 0 && eventSource) {
+    } else if (streams.length === 0 && eventSource) {
       eventSource.close();
       eventSource = null;
     }
@@ -365,13 +431,13 @@
 
 <div class="space-y-4">
   <!-- Status Summary Bar -->
-  {#if urls.length > 0}
+  {#if streams.length > 0}
     <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
           <Radio class="size-4 text-base-content opacity-70" />
           <span class="text-sm font-medium">
-            {t('settings.audio.streams.summary', { count: urls.length })}
+            {t('settings.audio.streams.summary', { count: streams.length })}
           </span>
         </div>
 
@@ -415,7 +481,7 @@
   {/if}
 
   <!-- Stream Cards -->
-  {#if urls.length === 0 && !showAddForm}
+  {#if streams.length === 0 && !showAddForm}
     <EmptyState
       icon={Radio}
       title={t('settings.audio.streams.emptyState.title')}
@@ -434,17 +500,14 @@
     />
   {:else}
     <div class="space-y-3">
-      {#each urls as url, index (url)}
+      {#each streams as stream, index (stream.url)}
         <StreamCard
-          {url}
+          {stream}
           {index}
-          transport={getStreamTransport(url)}
-          streamType="rtsp"
-          status={getStreamStatus(url)}
-          statusMessage={getStatusMessage(url)}
+          status={getStreamStatus(stream.url)}
+          statusMessage={getStatusMessage(stream.url)}
           {disabled}
-          onUpdate={(newUrl, newTransport, newType) =>
-            updateStream(index, newUrl, newTransport, newType)}
+          onUpdate={updatedStream => updateStream(index, updatedStream)}
           onDelete={() => deleteStream(index)}
         />
       {/each}
@@ -454,6 +517,31 @@
     {#if showAddForm}
       <div class="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4">
         <div class="space-y-4">
+          <!-- Name Input -->
+          <div class="form-control">
+            <label class="label py-1" for="new-stream-name">
+              <span class="label-text text-sm font-medium">
+                {t('settings.audio.streams.nameLabel')}
+              </span>
+            </label>
+            <input
+              id="new-stream-name"
+              type="text"
+              bind:value={newName}
+              onkeydown={handleAddKeydown}
+              class={cn('input input-sm w-full', nameError && 'input-error')}
+              placeholder={t('settings.audio.streams.namePlaceholder')}
+              {disabled}
+            />
+            {#if nameError}
+              <span class="text-xs text-error mt-1">{nameError}</span>
+            {:else}
+              <span class="text-xs text-base-content opacity-60 mt-1">
+                {t('settings.audio.streams.nameHelp')}
+              </span>
+            {/if}
+          </div>
+
           <!-- URL Input -->
           <div class="form-control">
             <label class="label py-1" for="new-stream-url">
@@ -464,7 +552,8 @@
             <input
               id="new-stream-url"
               type="text"
-              bind:value={newUrl}
+              value={newUrl}
+              oninput={handleUrlInput}
               onkeydown={handleAddKeydown}
               class={cn('input input-sm w-full font-mono', urlError && 'input-error')}
               placeholder="rtsp://user:password@192.168.1.100:554/stream"
@@ -485,25 +574,27 @@
               <SelectDropdown
                 value={newStreamType}
                 label={t('settings.audio.streams.typeLabel')}
-                helpText={t('settings.audio.streams.typeLockedNote')}
                 options={streamTypeOptions}
-                disabled={true}
+                {disabled}
+                onChange={value => (newStreamType = value as StreamType)}
                 groupBy={false}
                 menuSize="sm"
               />
             </div>
 
-            <div>
-              <SelectDropdown
-                value={newTransport}
-                label={t('settings.audio.streams.transportLabel')}
-                options={transportOptions}
-                {disabled}
-                onChange={value => (newTransport = value as string)}
-                groupBy={false}
-                menuSize="sm"
-              />
-            </div>
+            {#if showTransportInAdd}
+              <div>
+                <SelectDropdown
+                  value={newTransport}
+                  label={t('settings.audio.streams.transportLabel')}
+                  options={transportOptions}
+                  {disabled}
+                  onChange={value => (newTransport = value as 'tcp' | 'udp')}
+                  groupBy={false}
+                  menuSize="sm"
+                />
+              </div>
+            {/if}
           </div>
 
           <!-- Action Buttons -->
@@ -513,8 +604,9 @@
               class="btn btn-sm btn-ghost"
               onclick={() => {
                 showAddForm = false;
+                newName = '';
                 newUrl = '';
-                urlError = null;
+                clearErrors();
               }}
             >
               {t('common.cancel')}
@@ -523,7 +615,7 @@
               type="button"
               class="btn btn-sm btn-primary gap-1.5"
               onclick={addStream}
-              disabled={!newUrl.trim() || disabled}
+              disabled={!newName.trim() || !newUrl.trim() || disabled}
             >
               <Plus class="size-4" />
               {t('settings.audio.streams.addStream')}
