@@ -350,7 +350,9 @@
       "confidenceMax": "Pourcentage de confiance maximum",
       "verifiedStatus": "Statut vérifié",
       "lockedStatus": "Statut verrouillé",
-      "timeOfDay": "Moment de la journée"
+      "timeOfDay": "Moment de la journée",
+      "source": "Source",
+      "sourcePlaceholder": "ex. Mangeoire du jardin"
     },
     "advancedFilters": "Filtres avancés",
     "showAdvancedFilters": "Afficher les filtres avancés",
@@ -547,6 +549,7 @@
     },
     "headers": {
       "dateTime": "Date et heure",
+      "source": "Source",
       "weather": "Météo",
       "species": "Espèce",
       "confidence": "Confiance",
@@ -797,7 +800,9 @@
       "date": "Date",
       "firstHeardOn": "Entendu pour la première fois le",
       "firstHeardDate": "Date de première écoute",
-      "firstHeard": "Première écoute"
+      "firstHeard": "Première écoute",
+      "detectionsBySource": "Détections par source",
+      "noSourceData": "Aucune donnée de source disponible"
     },
     "recentDetections": {
       "title": "Détections récentes",
@@ -805,7 +810,8 @@
         "dateTime": "Date et heure",
         "species": "Espèce",
         "confidence": "Confiance",
-        "timeOfDay": "Moment de la journée"
+        "timeOfDay": "Moment de la journée",
+        "source": "Source"
       },
       "noRecentDetections": "Aucune détection récente trouvée",
       "unknownSpecies": "Espèce inconnue",
@@ -2074,6 +2080,9 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "labelField": "Libellé",
+        "labelPlaceholder": "ex., Mangeoire jardin, Porche avant",
+        "labelHelp": "Nom optionnel pour identifier ce flux dans les rapports de détection",
         "urlLabel": "Stream URL",
         "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
         "typeLabel": "Stream Type",

@@ -211,12 +211,15 @@ realtime:
     min: 0.20             # dynamic threshold will not go lower than this
     validhours: 24        # number of hours to consider for dynamic confidence
 
-  rtsp:    
+  rtsp:
     transport: tcp        # RTSP Transport Protocol
-    urls:                 # RTSP stream URLs
+    streams: []           # RTSP streams with labels (recommended format)
+      # - url: rtsp://user:password@example.com/stream1
+      #   label: "Backyard Feeder"
+      # - url: rtsp://user:password@example.com/stream2
+      #   label: "Front Porch"
+    urls: []              # Legacy format (still supported, labels auto-generated)
       # - rtsp://user:password@example.com/stream1
-      # - rtsp://user:password@example.com/stream2
-      # - rtsp://user:password@example.com/stream3
   
   log:
     enabled: false        # true to enable OBS chat log

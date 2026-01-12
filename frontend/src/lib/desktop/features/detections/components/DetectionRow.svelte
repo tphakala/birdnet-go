@@ -223,6 +223,15 @@
   <span>{detection.date} {detection.time}</span>
 </td>
 
+<!-- Source Column (stream label) -->
+<td class="text-sm hidden lg:table-cell">
+  {#if detection.source}
+    <span class="badge badge-ghost badge-sm">{detection.source}</span>
+  {:else}
+    <span class="text-base-content opacity-50">—</span>
+  {/if}
+</td>
+
 <!-- Weather Column -->
 <td class="text-sm hidden md:table-cell">
   {#if detection.weather}

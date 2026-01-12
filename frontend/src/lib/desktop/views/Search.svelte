@@ -69,6 +69,7 @@
   let verifiedStatus = $state<VerifiedStatus>('any');
   let lockedStatus = $state<LockedStatus>('any');
   let timeOfDayFilter = $state<TimeOfDayFilter>('any');
+  let sourceFilter = $state('');
   let formSubmitted = $state(false);
   let advancedFilters = $state(false);
   let isLoading = $state(false);
@@ -143,6 +144,7 @@
         verifiedStatus: verifiedStatus,
         lockedStatus: lockedStatus,
         timeOfDay: timeOfDayFilter,
+        source: sourceFilter,
         page: currentPage,
         sortBy: sortBy,
       };
@@ -179,6 +181,7 @@
     verifiedStatus = 'any';
     lockedStatus = 'any';
     timeOfDayFilter = 'any';
+    sourceFilter = '';
     formSubmitted = false;
     results = [];
     errorMessage = '';
@@ -505,6 +508,20 @@
                   <option value="sunrise">{t('search.timeOfDayOptions.sunrise')}</option>
                   <option value="sunset">{t('search.timeOfDayOptions.sunset')}</option>
                 </select>
+              </div>
+
+              <!-- Source -->
+              <div class="form-control">
+                <label class="label" for="sourceFilter">
+                  <span class="label-text">{t('search.fields.source')}</span>
+                </label>
+                <input
+                  type="text"
+                  id="sourceFilter"
+                  bind:value={sourceFilter}
+                  class="input input-bordered w-full"
+                  placeholder={t('search.fields.sourcePlaceholder')}
+                />
               </div>
             </div>
           </div>

@@ -875,8 +875,17 @@ func validateRTSPSection(data json.RawMessage) error {
 		return err
 	}
 
-	// Validate RTSP URLs
-	return validateRTSPURLs(rtspSettings.URLs)
+	// Collect all URLs from both legacy URLs and new Streams field
+	allURLs := make([]string, 0, len(rtspSettings.URLs)+len(rtspSettings.Streams))
+	allURLs = append(allURLs, rtspSettings.URLs...)
+	for _, stream := range rtspSettings.Streams {
+		if stream.URL != "" {
+			allURLs = append(allURLs, stream.URL)
+		}
+	}
+
+	// Validate all RTSP URLs
+	return validateRTSPURLs(allURLs)
 }
 
 // securitySectionAllowedFields defines which fields in the security section can be updated via API
@@ -1627,13 +1636,16 @@ func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
-	// Check for changes in RTSP URLs
-	if len(oldRTSP.URLs) != len(newRTSP.URLs) {
+	// Compare normalized stream configs (merges legacy URLs with new Streams format)
+	oldConfigs := oldRTSP.GetStreamConfigs()
+	newConfigs := newRTSP.GetStreamConfigs()
+
+	if len(oldConfigs) != len(newConfigs) {
 		return true
 	}
 
-	for i, url := range oldRTSP.URLs {
-		if i >= len(newRTSP.URLs) || url != newRTSP.URLs[i] {
+	for i, oldStream := range oldConfigs {
+		if i >= len(newConfigs) || oldStream.URL != newConfigs[i].URL || oldStream.Label != newConfigs[i].Label {
 			return true
 		}
 	}

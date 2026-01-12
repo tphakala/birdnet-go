@@ -37,6 +37,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay: string;
+    source: string;
   }
 
   // API response type (may have date/time instead of timestamp)
@@ -49,6 +50,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay?: string;
+    source?: string;
   }
 
   interface SpeciesData {
@@ -76,11 +78,17 @@
     first_heard_date: string;
   }
 
+  interface SourceData {
+    source_label: string;
+    count: number;
+  }
+
   interface ChartData {
     species: SpeciesData[];
     timeOfDay: TimeOfDayData[];
     trend: TrendData | null;
     newSpecies: NewSpeciesData[];
+    sources: SourceData[];
   }
 
   interface Charts {
@@ -88,6 +96,7 @@
     timeOfDay: Chart | null;
     trend: Chart | null;
     newSpecies: Chart<'bar', [number, number][]> | null;
+    sources: Chart | null;
   }
 
   // State variables
@@ -170,6 +179,7 @@
     timeOfDay: [],
     trend: null,
     newSpecies: [],
+    sources: [],
   });
 
   // Chart instances - using WeakMap for better memory management
@@ -179,6 +189,7 @@
     timeOfDay: null,
     trend: null,
     newSpecies: null,
+    sources: null,
   };
 
   // Format number with thousand separators using safe built-in method
@@ -356,10 +367,19 @@
         fetchTimeOfDayData(startDate || '', endDate || ''),
         fetchTrendData(startDate || '', endDate || ''),
         fetchNewSpeciesData(startDate || '', endDate || ''),
+        fetchSourceData(startDate || '', endDate || ''),
       ]);
 
       // Log any failed API calls (these show up in both dev and prod)
-      const apiNames = ['Summary', 'Species', 'Recent', 'TimeOfDay', 'Trend', 'NewSpecies'];
+      const apiNames = [
+        'Summary',
+        'Species',
+        'Recent',
+        'TimeOfDay',
+        'Trend',
+        'NewSpecies',
+        'Sources',
+      ];
       const failures = results
         .map((result, index) => ({ result, name: safeArrayAccess(apiNames, index) ?? 'Unknown' }))
         .filter(({ result }) => result.status === 'rejected');
@@ -495,6 +515,7 @@
           confidence: detection.confidence,
           timeOfDay:
             detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
+          source: detection.source || '',
         };
       });
     } catch (err) {
@@ -601,6 +622,31 @@
     }
   }
 
+  // Fetch source breakdown data
+  async function fetchSourceData(startDate: string, endDate: string) {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.set('start_date', startDate);
+      if (endDate) params.set('end_date', endDate);
+
+      const url = `/api/v2/analytics/sources/summary?${params}`;
+      logger.debug('Fetching source data:', { url, startDate, endDate });
+
+      const data = await api.get<SourceData[]>(url);
+      chartData.sources = Array.isArray(data) ? data : [];
+
+      logger.debug('Source API response:', {
+        url,
+        dataType: typeof data,
+        isArray: Array.isArray(data),
+        length: chartData.sources.length,
+      });
+    } catch (err) {
+      logger.error('Error fetching source data:', err);
+      chartData.sources = [];
+    }
+  }
+
   // Create all charts after data is loaded and DOM is ready
   function createAllCharts() {
     const chartDataStats = {
@@ -608,10 +654,12 @@
       timeOfDayCount: chartData.timeOfDay?.length || 0,
       trendDataCount: chartData.trend?.data?.length || 0,
       newSpeciesCount: chartData.newSpecies?.length || 0,
+      sourcesCount: chartData.sources?.length || 0,
       hasSpeciesData: (chartData.species?.length || 0) > 0,
       hasTimeData: (chartData.timeOfDay?.length || 0) > 0,
       hasTrendData: (chartData.trend?.data?.length || 0) > 0,
       hasNewSpeciesData: (chartData.newSpecies?.length || 0) > 0,
+      hasSourcesData: (chartData.sources?.length || 0) > 0,
     };
 
     logger.debug('Creating all charts with data:', chartDataStats);
@@ -620,6 +668,7 @@
     createTimeOfDayChart(chartData.timeOfDay);
     createTrendChart(chartData.trend);
     createNewSpeciesChart(chartData.newSpecies);
+    createSourceChart(chartData.sources);
   }
 
   // PERFORMANCE OPTIMIZATION: Update existing charts instead of destroying/recreating
@@ -1127,6 +1176,88 @@
     }
   }
 
+  // Create source breakdown chart (pie/doughnut chart showing detections by source)
+  function createSourceChart(data: SourceData[]) {
+    const canvas = document.getElementById('sourceChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
+      logger.debug('Source chart canvas not found - component may not be mounted yet');
+      return;
+    }
+
+    // Handle empty data case
+    if (!Array.isArray(data) || data.length === 0) {
+      logger.debug('Source chart has no data to display');
+      if (charts.sources) {
+        charts.sources.data.labels = [];
+        charts.sources.data.datasets[0].data = [];
+        charts.sources.data.datasets[0].backgroundColor = [];
+        charts.sources.update('none');
+      }
+      return;
+    }
+
+    // Sort by count descending
+    data.sort((a: SourceData, b: SourceData) => b.count - a.count);
+
+    const labels = data.map((item: SourceData) => item.source_label);
+    const counts = data.map((item: SourceData) => item.count);
+    const backgroundColors = generateColorPalette(data.length, 0.7);
+    const theme = getChartTheme();
+
+    // Update existing chart if it exists
+    if (charts.sources) {
+      charts.sources.data.labels = [...labels];
+      charts.sources.data.datasets[0].data = [...counts];
+      charts.sources.data.datasets[0].backgroundColor = [...backgroundColors];
+      charts.sources.update('none');
+      return;
+    }
+
+    // Create new chart only if it doesn't exist
+    charts.sources = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: t('analytics.charts.detections'),
+            data: counts,
+            backgroundColor: backgroundColors,
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right',
+            labels: {
+              color: theme.color.text,
+            },
+          },
+          tooltip: {
+            ...theme.tooltip,
+            callbacks: {
+              label: context => {
+                const total = counts.reduce((sum, count) => sum + count, 0);
+                const percentage = (((context.raw as number) / total) * 100).toFixed(1);
+                return `${context.label}: ${formatNumber(context.raw as number)} (${percentage}%)`;
+              },
+            },
+          },
+        },
+      },
+    });
+    // Store reference in WeakMap for memory management
+    if (charts.sources) {
+      chartCanvases.set(canvas, charts.sources);
+    }
+  }
+
   // Initialize on mount
   onMount(async () => {
     // Set Chart.js default font
@@ -1324,6 +1455,15 @@
     chartHeight="h-auto"
   />
 
+  <!-- Source Breakdown Chart -->
+  <ChartCard
+    title={t('analytics.charts.detectionsBySource')}
+    chartId="sourceChart"
+    {isLoading}
+    showEmpty={!isLoading && chartData.sources.length === 0}
+    emptyMessage={t('analytics.charts.noSourceData')}
+  />
+
   <!-- Data Table for Recent Detections -->
   <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
@@ -1339,6 +1479,7 @@
             <thead>
               <tr>
                 <th>{t('analytics.recentDetections.headers.dateTime')}</th>
+                <th>{t('analytics.recentDetections.headers.source')}</th>
                 <th>{t('analytics.recentDetections.headers.species')}</th>
                 <th>{t('analytics.recentDetections.headers.confidence')}</th>
                 <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
@@ -1348,6 +1489,13 @@
               {#each recentDetections as detection, index (detection.id ?? index)}
                 <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
                   <td>{detection.timestamp ? formatDateTime(detection.timestamp) : '-'}</td>
+                  <td>
+                    {#if detection.source}
+                      <span class="badge badge-ghost badge-sm">{detection.source}</span>
+                    {:else}
+                      <span class="text-base-content opacity-50">—</span>
+                    {/if}
+                  </td>
                   <td>
                     <div class="flex items-center gap-2">
                       <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">
@@ -1391,7 +1539,7 @@
                 </tr>
               {:else}
                 <tr>
-                  <td colspan="4" class="text-center py-4 text-base-content opacity-50"
+                  <td colspan="5" class="text-center py-4 text-base-content opacity-50"
                     >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
                 </tr>

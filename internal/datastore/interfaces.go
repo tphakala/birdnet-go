@@ -124,6 +124,7 @@ type Interface interface {
 	GetHourlyDistribution(ctx context.Context, startDate, endDate string, species string) ([]HourlyDistributionData, error)
 	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
+	GetSourceSummaryData(ctx context.Context, startDate, endDate string, limit int) ([]SourceSummaryData, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
@@ -155,6 +156,8 @@ type Interface interface {
 	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats() (*DatabaseStats, error)
+	GetOrCreateAudioSource(sourceID, label, sourceType string) (*AudioSourceRecord, error)
+	GetAudioSource(sourceID string) (*AudioSourceRecord, error)
 }
 
 // DatabaseStats contains basic runtime statistics about the database
@@ -1609,6 +1612,7 @@ type SearchFilters struct {
 	UnlockedOnly   bool
 	Device         string
 	TimeOfDay      string // "any", "day", "night", "sunrise", "sunset"
+	Source         string // Filter by source label
 	Page           int
 	PerPage        int
 	SortBy         string
@@ -1733,6 +1737,10 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 
 	if filters.Device != "" {
 		query = query.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
+	}
+
+	if filters.Source != "" {
+		query = query.Where("audio_source_records.label LIKE ?", "%"+filters.Source+"%")
 	}
 
 	return query
@@ -1938,9 +1946,10 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		"note_reviews.verified AS review_verified, " + // Select review status
 		"note_locks.id IS NOT NULL AS is_locked") // Select lock status as boolean
 
-	// Use LEFT JOINs to fetch optional review and lock data
+	// Use LEFT JOINs to fetch optional review, lock, and audio source data
 	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
 	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+	query = query.Joins("LEFT JOIN audio_source_records ON notes.audio_source_id = audio_source_records.id")
 
 	// Apply filters - Pass ds to applyCommonFilters now
 	query = applyCommonFilters(query, filters, ds)
@@ -1949,7 +1958,8 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	// Create a separate query for counting to avoid issues with GROUP BY if added later
 	countQuery := ds.DB.Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id").
+		Joins("LEFT JOIN audio_source_records ON notes.audio_source_id = audio_source_records.id")
 
 	// Apply the *same* filters to the count query - Pass ds here too
 	countQuery = applyCommonFilters(countQuery, filters, ds)
@@ -2285,6 +2295,16 @@ func (ds *DataStore) executeTransaction(tx *gorm.DB, note *Note, results []Resul
 			tx.Rollback()
 		}
 	}()
+
+	if note.AudioSourceID != "" {
+		if err := ds.ensureAudioSourceInTransaction(tx, note, txID, attempt); err != nil {
+			tx.Rollback()
+			if isDatabaseLocked(err) {
+				return err
+			}
+			return err
+		}
+	}
 
 	// Save the note
 	if err := ds.saveNoteInTransaction(tx, note, txID, attempt, txLogger); err != nil {
