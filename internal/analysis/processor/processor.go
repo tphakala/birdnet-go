@@ -1154,8 +1154,8 @@ func parseCommandParams(params []string, detection *Detections) map[string]any {
 	commandParams := make(map[string]any)
 	for _, param := range params {
 		value := getNoteValueByName(&detection.Note, param)
-		// Check if the parameter is confidence and normalize it
-		if param == "confidence" {
+		// Check if the parameter is Confidence and normalize it (0-1 to 0-100)
+		if param == "Confidence" {
 			if confidence, ok := value.(float64); ok {
 				value = confidence * 100
 			}

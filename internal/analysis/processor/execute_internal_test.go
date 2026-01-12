@@ -212,11 +212,9 @@ func TestIsValidParamName_Invalid(t *testing.T) {
 
 func TestIsValidParamName_EmptyString(t *testing.T) {
 	t.Parallel()
-	// Empty string technically passes the loop (no characters to check)
-	// Document this behavior
+	// Empty string should be rejected as invalid
 	result := isValidParamName("")
-	// Current implementation returns true for empty string
-	assert.True(t, result, "Empty string returns true (loop has no iterations)")
+	assert.False(t, result, "Empty string should be rejected")
 }
 
 // =============================================================================
@@ -573,17 +571,14 @@ func TestParseCommandParams_ConfidenceNormalization(t *testing.T) {
 		},
 	}
 
-	// Test with lowercase "confidence" (special handling in parseCommandParams)
-	// Note: getNoteValueByName is case-sensitive, so "confidence" returns nil
-	// while "Confidence" returns the actual value
+	// Confidence is normalized from 0-1 to 0-100 for display
 	params := []string{"Confidence"}
 	result := parseCommandParams(params, detection)
 
-	// The normalization only happens for lowercase "confidence" in the current implementation
-	// so when using "Confidence" we get the raw value
+	// Confidence should be normalized: 0.95 * 100 = 95
 	confValue, ok := result["Confidence"].(float64)
 	require.True(t, ok, "Confidence should be a float64")
-	assert.InDelta(t, 0.95, confValue, 0.001)
+	assert.InDelta(t, 95.0, confValue, 0.001)
 }
 
 func TestParseCommandParams_NonExistentField(t *testing.T) {
