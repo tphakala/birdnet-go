@@ -59,7 +59,8 @@ const (
 	DefaultWeatherLogPath       = "logs/weather.log"
 	DefaultImageproviderLogPath = "logs/imageprovider.log"
 	DefaultSpectrogramLogPath   = "logs/spectrogram.log"
-	DefaultMaxSize              = 100   // MB before rotation
+	DefaultActionsLogPath       = "logs/actions.log"
+	DefaultMaxSize              = 100 // MB before rotation
 	DefaultMaxAge               = 30    // days to keep rotated files
 	DefaultMaxRotatedFiles      = 10    // max number of rotated files
 	DefaultCompressLogs         = false // compression disabled by default
@@ -148,4 +149,7 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	// Spectrogram generation logs
 	ensureModuleOutput(cfg, "spectrogram", DefaultSpectrogramLogPath)
 	ensureModuleOutput(cfg, "spectrogram.prerenderer", DefaultSpectrogramLogPath) // Same file
+
+	// Action processing logs (command execution, database saves, notifications)
+	ensureModuleOutput(cfg, "analysis.processor", DefaultActionsLogPath)
 }
