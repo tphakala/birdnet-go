@@ -211,9 +211,9 @@
 
       eventSource.addEventListener('stream_health', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef -- MessageEvent is a browser global
-          const messageEvent = event as MessageEvent;
-          const data = JSON.parse(messageEvent.data) as StreamHealthResponse & {
+          // Cast to access data property from SSE event
+          const eventData = (event as unknown as { data: string }).data;
+          const data = JSON.parse(eventData) as StreamHealthResponse & {
             event_type: string;
           };
           const matchingStream = streams.find(
@@ -264,15 +264,23 @@
 
   // Validate URL based on stream type
   function validateUrl(url: string, streamType: StreamType): boolean {
-    const protocols: Record<StreamType, string[]> = {
-      rtsp: ['rtsp', 'rtsps'],
-      rtmp: ['rtmp', 'rtmps'],
-      http: ['http', 'https'],
-      hls: ['http', 'https'],
-      udp: ['udp', 'rtp'],
+    // Define allowed protocols for each stream type
+    const getProtocols = (type: StreamType): string[] => {
+      switch (type) {
+        case 'rtsp':
+          return ['rtsp', 'rtsps'];
+        case 'rtmp':
+          return ['rtmp', 'rtmps'];
+        case 'http':
+        case 'hls':
+          return ['http', 'https'];
+        case 'udp':
+          return ['udp', 'rtp'];
+        default:
+          return ['rtsp', 'rtsps'];
+      }
     };
-    const allowedProtocols = protocols[streamType as keyof typeof protocols] ?? protocols.rtsp;
-    return validateProtocolURL(url, allowedProtocols, 2048);
+    return validateProtocolURL(url, getProtocols(streamType), 2048);
   }
 
   // Clear form errors
