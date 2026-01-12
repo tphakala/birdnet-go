@@ -87,6 +87,7 @@ func TestSettings_MigrateRTSPConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			migrated := tt.settings.MigrateRTSPConfig()
 
 			assert.Equal(t, tt.expectMigrated, migrated)
@@ -196,6 +197,7 @@ func TestInferStreamType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.url, func(t *testing.T) {
+			t.Parallel()
 			result := inferStreamType(tt.url)
 			assert.Equal(t, tt.expected, result)
 		})
