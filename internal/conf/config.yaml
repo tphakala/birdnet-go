@@ -216,7 +216,8 @@ realtime:
     # Example stream configurations:
     # streams:
     #   - name: Front Yard Camera       # Required: unique name for this stream
-    #     url: rtsp://user:pass@192.168.1.10:554/stream
+    #     url: rtsp://${RTSP_USER}:${RTSP_PASS}@192.168.1.10:554/stream
+    #     # Note: Use environment variables for credentials instead of hardcoding
     #     type: rtsp                    # Stream type: rtsp, http, hls, rtmp, udp
     #     transport: tcp                # Transport protocol: tcp or udp (rtsp/rtmp only)
     #   - name: Backyard Microphone

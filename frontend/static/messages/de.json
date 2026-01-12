@@ -2078,7 +2078,7 @@
         "namePlaceholder": "z.B. Futterhaus Vorgarten",
         "nameHelp": "Ein beschreibender Name zur Identifizierung dieses Audiostreams",
         "urlLabel": "Stream-URL",
-        "urlHelp": "Stream-URL mit optionalen Anmeldedaten eingeben (z.B. rtsp://benutzer:passwort@host:port/pfad)",
+        "urlHelp": "Stream-URL mit optionalen Anmeldedaten eingeben (z.B. rtsp://host:port/pfad). Umgebungsvariablen für Anmeldedaten verwenden.",
         "typeLabel": "Stream-Typ",
         "typeHelp": "Stream-Protokoll - automatisch aus URL erkannt",
         "transportLabel": "Protokoll",

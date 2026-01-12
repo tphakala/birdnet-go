@@ -1911,7 +1911,7 @@
         "namePlaceholder": "esim. Etupihan ruokinta",
         "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
         "urlLabel": "Striimin URL",
-        "urlHelp": "Syötä strimin URL-osoite valinnaisilla tunnistetiedoilla (esim. rtsp://käyttäjä:salasana@palvelin:portti/polku)",
+        "urlHelp": "Syötä striimin URL-osoite valinnaisilla tunnistetiedoilla (esim. rtsp://palvelin:portti/polku). Käytä ympäristömuuttujia tunnistetiedoille.",
         "typeLabel": "Striimin tyyppi",
         "typeHelp": "Striimin protokolla - tunnistetaan automaattisesti URL:sta",
         "transportLabel": "Protokolla",
@@ -1945,8 +1945,8 @@
           "nameRequired": "Striimin nimi on pakollinen",
           "duplicateName": "Tämän niminen striimi on jo olemassa",
           "urlRequired": "Striimin URL on pakollinen",
-          "invalidUrl": "Virheellinen strimin URL-muoto",
-          "duplicate": "Tämä strimin URL on jo olemassa"
+          "invalidUrl": "Virheellinen striimin URL-muoto",
+          "duplicate": "Tämä striimin URL on jo olemassa"
         }
       }
     },

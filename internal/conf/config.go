@@ -1585,6 +1585,7 @@ func inferStreamType(url string) string {
 // This migration:
 // - Skips if Streams already has entries (already migrated)
 // - Only migrates if URLs has data
+// - Trims whitespace and skips empty URLs
 // - Infers stream type from URL scheme
 // - Preserves the global Transport setting for RTSP/RTMP streams
 // - Returns true if migration occurred, false if skipped
@@ -1607,8 +1608,19 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		globalTransport = "tcp"
 	}
 
+	// Preallocate streams slice with capacity
+	rtsp.Streams = make([]StreamConfig, 0, len(rtsp.URLs))
+	streamIndex := 0
+
 	// Migrate each URL to StreamConfig
-	for i, url := range rtsp.URLs {
+	for _, rawURL := range rtsp.URLs {
+		// Trim whitespace and skip empty URLs
+		url := strings.TrimSpace(rawURL)
+		if url == "" {
+			continue
+		}
+		streamIndex++
+
 		// Infer stream type from URL scheme
 		streamType := inferStreamType(url)
 
@@ -1619,12 +1631,17 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		}
 
 		stream := StreamConfig{
-			Name:      fmt.Sprintf("Stream %d", i+1),
+			Name:      fmt.Sprintf("Stream %d", streamIndex),
 			URL:       url,
 			Type:      streamType,
 			Transport: transport,
 		}
 		rtsp.Streams = append(rtsp.Streams, stream)
+	}
+
+	// If no valid URLs were found, don't mark as migrated
+	if len(rtsp.Streams) == 0 {
+		return false
 	}
 
 	// Clear legacy fields

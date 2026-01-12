@@ -23,7 +23,8 @@
   import { cn } from '$lib/utils/cn';
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
-  import { validateProtocolURL } from '$lib/utils/security';
+  import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
+  import { toastActions } from '$lib/stores/toast';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -32,8 +33,12 @@
 
   const logger = loggers.audio;
 
+  // Maximum allowed URL length for stream configuration
+  const MAX_STREAM_URL_LENGTH = 2048;
+
   // Stream health response types (matching backend API)
   interface StreamHealthResponse {
+    name?: string; // Stream name for unambiguous matching
     url: string;
     is_healthy: boolean;
     process_state: string;
@@ -150,6 +155,19 @@
     return '';
   }
 
+  // Find matching stream by name (preferred) or sanitized URL (fallback)
+  function findMatchingStream(health: StreamHealthResponse): StreamConfig | undefined {
+    // Prefer name-based matching for unambiguous identification
+    if (health.name) {
+      const byName = streams.find(s => s.name === health.name);
+      if (byName) return byName;
+    }
+    // Fallback to URL-based matching (handles legacy responses or missing names)
+    return streams.find(
+      s => sanitizeUrlForComparison(s.url) === health.url || s.url === health.url
+    );
+  }
+
   // Load initial health status
   async function loadHealthStatus() {
     healthLoading = true;
@@ -160,10 +178,7 @@
 
       if (Array.isArray(response)) {
         response.forEach(health => {
-          // Match sanitized URL back to original URL
-          const matchingStream = streams.find(
-            s => sanitizeUrl(s.url) === health.url || s.url === health.url
-          );
+          const matchingStream = findMatchingStream(health);
           if (matchingStream) {
             newHealthMap.set(matchingStream.url, health);
           }
@@ -179,20 +194,6 @@
       // Health loading failure is non-critical, stream cards will show "unknown" status
     } finally {
       healthLoading = false;
-    }
-  }
-
-  // Sanitize URL for comparison (mask credentials)
-  function sanitizeUrl(urlStr: string): string {
-    try {
-      const urlObj = new URL(urlStr);
-      if (urlObj.username || urlObj.password) {
-        urlObj.username = '***';
-        urlObj.password = '***';
-      }
-      return urlObj.toString();
-    } catch {
-      return urlStr.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1***:***$2');
     }
   }
 
@@ -216,9 +217,7 @@
           const data = JSON.parse(eventData) as StreamHealthResponse & {
             event_type: string;
           };
-          const matchingStream = streams.find(
-            s => sanitizeUrl(s.url) === data.url || s.url === data.url
-          );
+          const matchingStream = findMatchingStream(data);
 
           if (matchingStream) {
             // SvelteMap automatically triggers reactivity on set()
@@ -280,7 +279,7 @@
           return ['rtsp', 'rtsps'];
       }
     };
-    return validateProtocolURL(url, getProtocols(streamType), 2048);
+    return validateProtocolURL(url, getProtocols(streamType), MAX_STREAM_URL_LENGTH);
   }
 
   // Clear form errors
@@ -326,13 +325,13 @@
       return;
     }
 
-    // Create new stream config
+    // Create new stream config - only include transport for RTSP/RTMP types
     const newStream: StreamConfig = {
       name: trimmedName,
       url: trimmedUrl,
       type: newStreamType,
-      transport: newTransport,
-    };
+      ...(showTransportInAdd ? { transport: newTransport } : {}),
+    } as StreamConfig;
 
     // Add the new stream
     const updatedStreams = [...streams, newStream];
@@ -350,8 +349,8 @@
     setTimeout(() => loadHealthStatus(), 1000);
   }
 
-  // Update stream
-  function updateStream(index: number, updatedStream: StreamConfig) {
+  // Update stream - returns boolean indicating success
+  function updateStream(index: number, updatedStream: StreamConfig): boolean {
     const updatedStreams = [...streams];
     if (index >= 0 && index < updatedStreams.length) {
       const oldStream = updatedStreams.at(index);
@@ -363,7 +362,8 @@
           component: 'StreamManager',
           action: 'updateStream',
         });
-        return;
+        toastActions.error(t('settings.audio.streams.errors.duplicateName'));
+        return false;
       }
 
       // Check for duplicate URL (excluding current stream)
@@ -375,7 +375,8 @@
           component: 'StreamManager',
           action: 'updateStream',
         });
-        return;
+        toastActions.error(t('settings.audio.streams.errors.duplicate'));
+        return false;
       }
 
       // Update health map if URL changed
@@ -385,7 +386,9 @@
 
       updatedStreams.splice(index, 1, updatedStream);
       onUpdateStreams(updatedStreams);
+      return true;
     }
+    return false;
   }
 
   // Delete stream

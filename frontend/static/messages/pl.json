@@ -2084,7 +2084,7 @@
         "namePlaceholder": "np. Karmnik w Ogrodzie",
         "nameHelp": "Opisowa nazwa do identyfikacji tego strumienia audio",
         "urlLabel": "URL Strumienia",
-        "urlHelp": "Wprowadź URL strumienia z opcjonalnymi danymi logowania (np. rtsp://użytkownik:hasło@host:port/ścieżka)",
+        "urlHelp": "Wprowadź URL strumienia z opcjonalnymi danymi logowania (np. rtsp://host:port/ścieżka). Użyj zmiennych środowiskowych dla danych logowania.",
         "typeLabel": "Typ Strumienia",
         "typeHelp": "Protokół strumienia - wykrywany automatycznie z URL",
         "transportLabel": "Protokół",

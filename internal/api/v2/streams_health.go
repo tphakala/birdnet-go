@@ -577,6 +577,12 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 		sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
 		emptyHealth := myaudio.StreamHealth{}
 		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+
+		// Add stream name and type from config (may be empty if stream was removed from config)
+		info := c.getStreamInfo(prevURL)
+		response.Name = info.Name
+		response.Type = info.Type
+
 		event := SSEStreamHealthData{
 			StreamHealthResponse: response,
 			EventType:            "stream_removed",
@@ -599,6 +605,12 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 // sendStreamHealthUpdate sends a stream health update via SSE
 func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth, eventType string) error {
 	response := convertStreamHealthToResponse(rawURL, health)
+
+	// Add stream name and type from config
+	info := c.getStreamInfo(rawURL)
+	response.Name = info.Name
+	response.Type = info.Type
+
 	event := SSEStreamHealthData{
 		StreamHealthResponse: response,
 		EventType:            eventType,

@@ -1932,7 +1932,7 @@
         "namePlaceholder": "e.g., Front Yard Feeder",
         "nameHelp": "A descriptive name to identify this audio stream",
         "urlLabel": "Stream URL",
-        "urlHelp": "Enter stream URL with optional credentials (e.g., rtsp://user:password@host:port/path)",
+        "urlHelp": "Enter stream URL with optional credentials (e.g., rtsp://host:port/path). Use environment variables for credentials.",
         "typeLabel": "Stream Type",
         "typeHelp": "Stream protocol - auto-detected from URL",
         "transportLabel": "Protocol",

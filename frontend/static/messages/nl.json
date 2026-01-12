@@ -2078,7 +2078,7 @@
         "namePlaceholder": "bijv. Voederhuisje voortuin",
         "nameHelp": "Een beschrijvende naam om deze audiostream te identificeren",
         "urlLabel": "Stream-URL",
-        "urlHelp": "Voer stream-URL in met optionele inloggegevens (bijv. rtsp://gebruiker:wachtwoord@host:poort/pad)",
+        "urlHelp": "Voer stream-URL in met optionele inloggegevens (bijv. rtsp://host:poort/pad). Gebruik omgevingsvariabelen voor inloggegevens.",
         "typeLabel": "Streamtype",
         "typeHelp": "Streamprotocol - automatisch gedetecteerd uit URL",
         "transportLabel": "Protocol",

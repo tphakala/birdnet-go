@@ -141,7 +141,7 @@ export interface StreamConfig {
   name: string; // Required: descriptive name like "Front Yard"
   url: string; // Required: stream URL
   type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
-  transport: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP)
+  transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
 }
 
 // RTSPHealthSettings matches backend RTSPHealthSettings

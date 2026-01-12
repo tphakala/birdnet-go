@@ -21,6 +21,7 @@
   import { Settings, Trash2, Check, X, AlertCircle, Radio } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import type { StreamConfig, StreamType } from '$lib/stores/settings';
@@ -34,7 +35,7 @@
     status?: StreamStatus;
     statusMessage?: string;
     disabled?: boolean;
-    onUpdate: (_stream: StreamConfig) => void;
+    onUpdate: (_stream: StreamConfig) => boolean;
     onDelete: () => void;
   }
 
@@ -94,19 +95,6 @@
   // Get color for this stream based on name hash (stable across deletions)
   let iconColor = $derived(iconColors[hashString(stream.name) % iconColors.length]);
 
-  // Mask credentials in URL for display
-  function maskCredentials(urlStr: string): string {
-    try {
-      const urlObj = new URL(urlStr);
-      if (urlObj.username || urlObj.password) {
-        return urlStr.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1***:***$2');
-      }
-      return urlStr;
-    } catch {
-      return urlStr.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1***:***$2');
-    }
-  }
-
   // Map stream status to StatusPill variant
   function getStatusVariant(s: StreamStatus): StatusVariant {
     switch (s) {
@@ -155,7 +143,7 @@
     }
   }
 
-  let displayUrl = $derived(maskCredentials(stream.url));
+  let displayUrl = $derived(maskUrlCredentials(stream.url));
   let cardStyles = $derived(getCardStyles(status));
 
   // Show transport only for RTSP and RTMP
@@ -177,14 +165,16 @@
 
   function saveEdit() {
     if (editName.trim() && editUrl.trim()) {
-      onUpdate({
+      const success = onUpdate({
         name: editName.trim(),
         url: editUrl.trim(),
         type: editStreamType,
-        // Use selected transport for RTSP/RTMP, default 'tcp' for others (ignored by backend)
-        transport: showTransportInEdit ? editTransport : 'tcp',
-      });
-      isEditing = false;
+        // Use selected transport for RTSP/RTMP, omit for others
+        ...(showTransportInEdit ? { transport: editTransport } : {}),
+      } as StreamConfig);
+      if (success) {
+        isEditing = false;
+      }
     }
   }
 
@@ -367,7 +357,7 @@
             <span class="px-2 py-0.5 rounded text-xs font-semibold bg-info/15 text-info">
               {stream.type.toUpperCase()}
             </span>
-            {#if showTransport}
+            {#if showTransport && stream.transport}
               <span
                 class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary/15 text-secondary"
               >

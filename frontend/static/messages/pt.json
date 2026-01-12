@@ -1911,7 +1911,7 @@
         "namePlaceholder": "ex. Comedouro do Jardim",
         "nameHelp": "Um nome descritivo para identificar este stream de áudio",
         "urlLabel": "URL do Stream",
-        "urlHelp": "Digite a URL do stream com credenciais opcionais (ex. rtsp://usuário:senha@host:porta/caminho)",
+        "urlHelp": "Digite a URL do stream com credenciais opcionais (ex. rtsp://host:porta/caminho). Use variáveis de ambiente para credenciais.",
         "typeLabel": "Tipo de Stream",
         "typeHelp": "Protocolo do stream - detectado automaticamente da URL",
         "transportLabel": "Protocolo",

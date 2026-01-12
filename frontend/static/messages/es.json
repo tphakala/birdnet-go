@@ -1911,7 +1911,7 @@
         "namePlaceholder": "ej. Comedero del Jardín",
         "nameHelp": "Un nombre descriptivo para identificar este stream de audio",
         "urlLabel": "URL del Stream",
-        "urlHelp": "Ingrese la URL del stream con credenciales opcionales (ej. rtsp://usuario:contraseña@host:puerto/ruta)",
+        "urlHelp": "Ingrese la URL del stream con credenciales opcionales (ej. rtsp://host:puerto/ruta). Use variables de entorno para credenciales.",
         "typeLabel": "Tipo de Stream",
         "typeHelp": "Protocolo del stream - detectado automáticamente de la URL",
         "transportLabel": "Protocolo",

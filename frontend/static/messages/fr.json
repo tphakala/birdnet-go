@@ -2037,30 +2037,30 @@
           "retry": "Retry"
         },
         "streams": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
-          "hintsTitle": "Getting started:",
+          "title": "Aucun Flux Configuré",
+          "description": "Ajoutez des flux audio RTSP ou réseau depuis des caméras IP, des serveurs de microphones ou d'autres sources de streaming.",
+          "hintsTitle": "Pour commencer :",
           "hints": {
-            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
-            "multiple": "You can add multiple streams for different locations",
-            "protocol": "Choose TCP for reliability or UDP for lower latency"
+            "rtsp": "Entrez les URL RTSP au format : rtsp://ip:port/stream",
+            "multiple": "Vous pouvez ajouter plusieurs flux pour différents emplacements",
+            "protocol": "Choisissez TCP pour la fiabilité ou UDP pour une latence plus faible"
           }
         }
       },
       "soundCard": {
-        "title": "Sound Card",
-        "description": "Configure local audio input device",
-        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
-        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
-        "noSoundCardCapture": "No sound card capture",
+        "title": "Carte Son",
+        "description": "Configurer le périphérique d'entrée audio local",
+        "audioSourceLabel": "Source Audio (nécessite un redémarrage de l'application pour prendre effet)",
+        "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des chants d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
+        "noSoundCardCapture": "Pas de capture de carte son",
         "empty": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "hintsTitle": "You can:",
-          "hintStream": "Configure network streams in the Streams tab",
-          "hintUsb": "Connect a USB microphone and refresh the list",
-          "goToStreams": "Go to Streams",
-          "refresh": "Refresh Devices"
+          "title": "Aucune Carte Son Détectée",
+          "description": "Aucun périphérique d'entrée audio local n'a été trouvé sur ce système. Ceci est normal pour les déploiements en conteneur ou serveur sans tête.",
+          "hintsTitle": "Vous pouvez :",
+          "hintStream": "Configurer des flux réseau dans l'onglet Flux",
+          "hintUsb": "Connecter un microphone USB et actualiser la liste",
+          "goToStreams": "Aller aux Flux",
+          "refresh": "Actualiser les Périphériques"
         }
       },
       "noSources": {
@@ -2078,7 +2078,7 @@
         "namePlaceholder": "ex. Mangeoire Jardin",
         "nameHelp": "Un nom descriptif pour identifier ce flux audio",
         "urlLabel": "URL du Flux",
-        "urlHelp": "Entrez l'URL du flux avec les identifiants optionnels (ex. rtsp://utilisateur:motdepasse@hôte:port/chemin)",
+        "urlHelp": "Entrez l'URL du flux avec les identifiants optionnels (ex. rtsp://hôte:port/chemin). Utilisez des variables d'environnement pour les identifiants.",
         "typeLabel": "Type de Flux",
         "typeHelp": "Protocole du flux - détecté automatiquement depuis l'URL",
         "transportLabel": "Protocole",
