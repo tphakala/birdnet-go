@@ -2037,30 +2037,30 @@
           "retry": "Retry"
         },
         "streams": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
-          "hintsTitle": "Getting started:",
+          "title": "Aucun Flux Configuré",
+          "description": "Ajoutez des flux audio RTSP ou réseau depuis des caméras IP, des serveurs de microphones ou d'autres sources de streaming.",
+          "hintsTitle": "Pour commencer :",
           "hints": {
-            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
-            "multiple": "You can add multiple streams for different locations",
-            "protocol": "Choose TCP for reliability or UDP for lower latency"
+            "rtsp": "Entrez les URL RTSP au format : rtsp://ip:port/stream",
+            "multiple": "Vous pouvez ajouter plusieurs flux pour différents emplacements",
+            "protocol": "Choisissez TCP pour la fiabilité ou UDP pour une latence plus faible"
           }
         }
       },
       "soundCard": {
-        "title": "Sound Card",
-        "description": "Configure local audio input device",
-        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
-        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
-        "noSoundCardCapture": "No sound card capture",
+        "title": "Carte Son",
+        "description": "Configurer le périphérique d'entrée audio local",
+        "audioSourceLabel": "Source Audio (nécessite un redémarrage de l'application pour prendre effet)",
+        "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des chants d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
+        "noSoundCardCapture": "Pas de capture de carte son",
         "empty": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "hintsTitle": "You can:",
-          "hintStream": "Configure network streams in the Streams tab",
-          "hintUsb": "Connect a USB microphone and refresh the list",
-          "goToStreams": "Go to Streams",
-          "refresh": "Refresh Devices"
+          "title": "Aucune Carte Son Détectée",
+          "description": "Aucun périphérique d'entrée audio local n'a été trouvé sur ce système. Ceci est normal pour les déploiements en conteneur ou serveur sans tête.",
+          "hintsTitle": "Vous pouvez :",
+          "hintStream": "Configurer des flux réseau dans l'onglet Flux",
+          "hintUsb": "Connecter un microphone USB et actualiser la liste",
+          "goToStreams": "Aller aux Flux",
+          "refresh": "Actualiser les Périphériques"
         }
       },
       "noSources": {
@@ -2073,42 +2073,47 @@
         "noStreamsConfigured": "No streams configured"
       },
       "streams": {
-        "streamLabel": "Stream",
-        "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
-        "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
-        "transportLabel": "Protocol",
-        "summary": "{count} stream(s) configured",
-        "healthy": "healthy",
-        "unhealthy": "unhealthy",
-        "unknown": "unknown",
-        "refresh": "Refresh",
-        "addStream": "Add Stream",
-        "deleteConfirm": "Remove this stream?",
-        "restartCount": "Restarted {count} time(s)",
-        "healthLoadError": "Failed to load stream health status",
+        "streamLabel": "Flux",
+        "nameLabel": "Nom du Flux",
+        "namePlaceholder": "ex. Mangeoire Jardin",
+        "nameHelp": "Un nom descriptif pour identifier ce flux audio",
+        "urlLabel": "URL du Flux",
+        "urlHelp": "Entrez l'URL du flux avec les identifiants optionnels (ex. rtsp://hôte:port/chemin). Utilisez des variables d'environnement pour les identifiants.",
+        "typeLabel": "Type de Flux",
+        "typeHelp": "Protocole du flux - détecté automatiquement depuis l'URL",
+        "transportLabel": "Protocole",
+        "summary": "{count} flux configuré(s)",
+        "healthy": "sain",
+        "unhealthy": "défaillant",
+        "unknown": "inconnu",
+        "refresh": "Actualiser",
+        "addStream": "Ajouter un Flux",
+        "deleteConfirm": "Supprimer ce flux ?",
+        "restartCount": "Redémarré {count} fois",
+        "healthLoadError": "Échec du chargement de l'état du flux",
         "status": {
-          "connected": "Connected",
-          "connecting": "Connecting",
-          "error": "Error",
-          "idle": "Idle",
-          "unknown": "Unknown"
+          "connected": "Connecté",
+          "connecting": "Connexion",
+          "error": "Erreur",
+          "idle": "Inactif",
+          "unknown": "Inconnu"
         },
         "emptyState": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
-          "hintsTitle": "Getting Started",
+          "title": "Aucun Flux Configuré",
+          "description": "Ajoutez des flux audio depuis des caméras IP, serveurs Icecast ou autres sources réseau.",
+          "hintsTitle": "Pour Commencer",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "rtsp": "Supporte les flux RTSP, HTTP, HLS, RTMP et UDP/RTP",
+            "credentials": "Les identifiants peuvent être inclus dans l'URL ou via des variables d'environnement",
+            "protocol": "TCP est plus fiable pour RTSP, UDP a une latence plus faible"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
-          "duplicate": "This stream URL already exists"
+          "nameRequired": "Le nom du flux est requis",
+          "duplicateName": "Un flux avec ce nom existe déjà",
+          "urlRequired": "L'URL du flux est requise",
+          "invalidUrl": "Format d'URL de flux invalide",
+          "duplicate": "Cette URL de flux existe déjà"
         }
       }
     },

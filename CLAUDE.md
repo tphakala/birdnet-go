@@ -95,3 +95,32 @@ ast-grep --pattern "export let $PROP" --rewrite "let { $PROP } = \$props()" --la
 3. Check open PRs to avoid conflicts
 4. Format markdown with prettier
 5. Document all exports
+
+## PR Review Workflow
+
+After pushing updates to a PR, request automated reviews:
+
+```bash
+# Request Gemini review
+gh pr comment <PR_NUMBER> --body "/gemini review"
+
+# Or from current branch
+gh pr comment $(gh pr view --json number -q .number) --body "/gemini review"
+```
+
+This triggers automated code review that checks for bugs, security issues, and best practices.
+
+### Handling PR Review Comments
+
+When fetching and addressing code review comments from a PR, use the receiving-code-review skill:
+
+```text
+/superpowers:receiving-code-review
+```
+
+This skill ensures:
+
+- Technical verification before implementing suggestions
+- Appropriate pushback on incorrect feedback
+- No performative agreement - just fix and move on
+- Clarification of unclear items before partial implementation

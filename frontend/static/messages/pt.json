@@ -1906,42 +1906,47 @@
         "noStreamsConfigured": "Nenhum fluxo configurado"
       },
       "streams": {
-        "streamLabel": "Fluxo",
-        "urlLabel": "URL do fluxo",
-        "urlHelp": "Digite a URL RTSP com credenciais opcionais (rtsp://usuario:senha@host:porta/caminho)",
-        "typeLabel": "Tipo de fluxo",
-        "typeLockedNote": "Apenas RTSP é suportado atualmente",
+        "streamLabel": "Stream",
+        "nameLabel": "Nome do Stream",
+        "namePlaceholder": "ex. Comedouro do Jardim",
+        "nameHelp": "Um nome descritivo para identificar este stream de áudio",
+        "urlLabel": "URL do Stream",
+        "urlHelp": "Digite a URL do stream com credenciais opcionais (ex. rtsp://host:porta/caminho). Use variáveis de ambiente para credenciais.",
+        "typeLabel": "Tipo de Stream",
+        "typeHelp": "Protocolo do stream - detectado automaticamente da URL",
         "transportLabel": "Protocolo",
-        "summary": "{count} fluxo(s) configurado(s)",
+        "summary": "{count} stream(s) configurado(s)",
         "healthy": "saudável",
-        "unhealthy": "problemático",
+        "unhealthy": "com falha",
         "unknown": "desconhecido",
         "refresh": "Atualizar",
-        "addStream": "Adicionar fluxo",
-        "deleteConfirm": "Remover este fluxo?",
+        "addStream": "Adicionar Stream",
+        "deleteConfirm": "Remover este stream?",
         "restartCount": "Reiniciado {count} vez(es)",
-        "healthLoadError": "Falha ao carregar status de saúde do fluxo",
+        "healthLoadError": "Falha ao carregar status do stream",
         "status": {
           "connected": "Conectado",
           "connecting": "Conectando",
           "error": "Erro",
-          "idle": "Ocioso",
+          "idle": "Inativo",
           "unknown": "Desconhecido"
         },
         "emptyState": {
-          "title": "Nenhum fluxo configurado",
-          "description": "Adicione fluxos RTSP para capturar áudio de câmeras de rede ou outras fontes RTSP.",
-          "hintsTitle": "Começando",
+          "title": "Nenhum Stream Configurado",
+          "description": "Adicione streams de áudio de câmeras IP, servidores Icecast ou outras fontes de rede.",
+          "hintsTitle": "Primeiros Passos",
           "hints": {
-            "rtsp": "Use URLs RTSP de câmeras IP (ex: rtsp://192.168.1.100:554/stream)",
-            "credentials": "Inclua credenciais na URL se necessário (rtsp://usuario:senha@host/stream)",
-            "protocol": "TCP é mais confiável, UDP tem menor latência"
+            "rtsp": "Suporta streams RTSP, HTTP, HLS, RTMP e UDP/RTP",
+            "credentials": "Credenciais podem ser incluídas na URL ou usar variáveis de ambiente",
+            "protocol": "TCP é mais confiável para RTSP, UDP tem menor latência"
           }
         },
         "errors": {
-          "urlRequired": "URL do fluxo é obrigatória",
-          "invalidUrl": "Formato de URL RTSP inválido",
-          "duplicate": "Esta URL de fluxo já existe"
+          "nameRequired": "Nome do stream é obrigatório",
+          "duplicateName": "Já existe um stream com este nome",
+          "urlRequired": "URL do stream é obrigatória",
+          "invalidUrl": "Formato de URL de stream inválido",
+          "duplicate": "Esta URL de stream já existe"
         }
       }
     },

@@ -125,24 +125,36 @@ export interface SoundLevelSettings {
   interval: number;
 }
 
+// Stream type constants
+export const StreamTypes = {
+  RTSP: 'rtsp',
+  HTTP: 'http',
+  HLS: 'hls',
+  RTMP: 'rtmp',
+  UDP: 'udp',
+} as const;
+
+export type StreamType = (typeof StreamTypes)[keyof typeof StreamTypes];
+
+// StreamConfig represents a single audio stream source
+export interface StreamConfig {
+  name: string; // Required: descriptive name like "Front Yard"
+  url: string; // Required: stream URL
+  type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
+  transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
+}
+
 // RTSPHealthSettings matches backend RTSPHealthSettings
 export interface RTSPHealthSettings {
   healthyDataThreshold: number; // seconds before stream considered unhealthy (default: 60)
   monitoringInterval: number; // health check interval in seconds (default: 30)
 }
 
-// RTSPSettings matches backend RTSPSettings exactly
+// RTSPSettings matches backend RTSPSettings - now uses StreamConfig
 export interface RTSPSettings {
-  transport: string; // RTSP Transport Protocol ("tcp" or "udp")
-  urls: string[]; // RTSP stream URLs - simple string array to match backend
+  streams: StreamConfig[]; // Stream configurations
   health?: RTSPHealthSettings; // health monitoring settings
   ffmpegParameters?: string[]; // optional custom FFmpeg parameters
-}
-
-// Deprecated - kept for backwards compatibility during migration
-export interface RTSPUrl {
-  url: string;
-  enabled: boolean;
 }
 
 export interface AudioQuality {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -34,6 +35,8 @@ type SSEStreamHealthData struct {
 
 // StreamHealthResponse represents the API response for a single stream's health
 type StreamHealthResponse struct {
+	Name             string     `json:"name,omitempty"`                    // Stream name from config (empty if not found)
+	Type             string     `json:"type,omitempty"`                    // Stream type from config (empty if not found)
 	URL              string     `json:"url"`                               // Sanitized RTSP URL
 	IsHealthy        bool       `json:"is_healthy"`                        // Overall health status
 	ProcessState     string     `json:"process_state"`                     // Current process state (idle, starting, running, etc.)
@@ -89,6 +92,8 @@ type StreamsStatusSummaryResponse struct {
 
 // StreamSummaryResponse provides a brief summary of a single stream
 type StreamSummaryResponse struct {
+	Name          string   `json:"name,omitempty"`                    // Stream name from config
+	Type          string   `json:"type,omitempty"`                    // Stream type from config
 	URL           string   `json:"url"`                               // Sanitized RTSP URL
 	IsHealthy     bool     `json:"is_healthy"`                        // Health status
 	ProcessState  string   `json:"process_state"`                     // Current state
@@ -135,6 +140,31 @@ func (c *Controller) initStreamHealthRoutes() {
 		middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 
+// streamInfo holds name and type from stream config
+type streamInfo struct {
+	Name string
+	Type string
+}
+
+// getStreamInfo looks up stream name and type from config by URL.
+// Returns empty values if stream is not found in config.
+// Uses conf.GetSettings() to always get current config, avoiding stale data
+// after config reloads.
+func (c *Controller) getStreamInfo(rawURL string) streamInfo {
+	settings := conf.GetSettings()
+	if settings == nil {
+		return streamInfo{}
+	}
+
+	for _, stream := range settings.Realtime.RTSP.Streams {
+		if stream.URL == rawURL {
+			return streamInfo{Name: stream.Name, Type: stream.Type}
+		}
+	}
+
+	return streamInfo{}
+}
+
 // GetAllStreamsHealth returns health information for all configured RTSP streams
 // @Summary Get health status of all RTSP streams
 // @Description Returns detailed health information for all configured RTSP streams including error diagnostics
@@ -153,7 +183,14 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	response := make([]StreamHealthResponse, 0, len(healthData))
 	for rawURL := range healthData {
 		health := healthData[rawURL]
-		response = append(response, convertStreamHealthToResponse(rawURL, &health))
+		resp := convertStreamHealthToResponse(rawURL, &health)
+
+		// Add stream name and type from config
+		info := c.getStreamInfo(rawURL)
+		resp.Name = info.Name
+		resp.Type = info.Type
+
+		response = append(response, resp)
 	}
 
 	return ctx.JSON(http.StatusOK, response)
@@ -198,6 +235,11 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	// Convert to API response format
 	response := convertStreamHealthToResponse(decodedURL, &health)
 
+	// Add stream name and type from config
+	info := c.getStreamInfo(decodedURL)
+	response.Name = info.Name
+	response.Type = info.Type
+
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -232,7 +274,10 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 		}
 
 		// Build brief summary for this stream
+		info := c.getStreamInfo(rawURL)
 		streamSummary := StreamSummaryResponse{
+			Name:         info.Name,
+			Type:         info.Type,
 			URL:          privacy.SanitizeRTSPUrl(rawURL),
 			IsHealthy:    health.IsHealthy,
 			ProcessState: health.ProcessState.String(),
@@ -532,6 +577,12 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 		sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
 		emptyHealth := myaudio.StreamHealth{}
 		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+
+		// Add stream name and type from config (may be empty if stream was removed from config)
+		info := c.getStreamInfo(prevURL)
+		response.Name = info.Name
+		response.Type = info.Type
+
 		event := SSEStreamHealthData{
 			StreamHealthResponse: response,
 			EventType:            "stream_removed",
@@ -554,6 +605,12 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 // sendStreamHealthUpdate sends a stream health update via SSE
 func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth, eventType string) error {
 	response := convertStreamHealthToResponse(rawURL, health)
+
+	// Add stream name and type from config
+	info := c.getStreamInfo(rawURL)
+	response.Name = info.Name
+	response.Type = info.Type
+
 	event := SSEStreamHealthData{
 		StreamHealthResponse: response,
 		EventType:            eventType,

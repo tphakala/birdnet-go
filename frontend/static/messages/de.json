@@ -2074,40 +2074,45 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "nameLabel": "Stream-Name",
+        "namePlaceholder": "z.B. Futterhaus Vorgarten",
+        "nameHelp": "Ein beschreibender Name zur Identifizierung dieses Audiostreams",
         "urlLabel": "Stream-URL",
-        "urlHelp": "RTSP-URL mit optionalen Anmeldedaten eingeben (rtsp://benutzer:passwort@host:port/pfad)",
+        "urlHelp": "Stream-URL mit optionalen Anmeldedaten eingeben (z.B. rtsp://host:port/pfad). Umgebungsvariablen für Anmeldedaten verwenden.",
         "typeLabel": "Stream-Typ",
-        "typeLockedNote": "Derzeit wird nur RTSP unterstützt",
+        "typeHelp": "Stream-Protokoll - automatisch aus URL erkannt",
         "transportLabel": "Protokoll",
         "summary": "{count} Stream(s) konfiguriert",
         "healthy": "gesund",
-        "unhealthy": "ungesund",
+        "unhealthy": "fehlerhaft",
         "unknown": "unbekannt",
         "refresh": "Aktualisieren",
         "addStream": "Stream hinzufügen",
         "deleteConfirm": "Diesen Stream entfernen?",
-        "restartCount": "{count} mal neu gestartet",
-        "healthLoadError": "Fehler beim Laden des Stream-Gesundheitsstatus",
+        "restartCount": "{count} Mal neu gestartet",
+        "healthLoadError": "Laden des Stream-Status fehlgeschlagen",
         "status": {
           "connected": "Verbunden",
-          "connecting": "Verbinde",
+          "connecting": "Verbindung wird hergestellt",
           "error": "Fehler",
           "idle": "Inaktiv",
           "unknown": "Unbekannt"
         },
         "emptyState": {
           "title": "Keine Streams konfiguriert",
-          "description": "Fügen Sie RTSP-Streams hinzu, um Audio von Netzwerkkameras oder anderen RTSP-Quellen aufzunehmen.",
+          "description": "Fügen Sie Audiostreams von IP-Kameras, Icecast-Servern oder anderen Netzwerkquellen hinzu.",
           "hintsTitle": "Erste Schritte",
           "hints": {
-            "rtsp": "Verwenden Sie RTSP-URLs von IP-Kameras (z.B. rtsp://192.168.1.100:554/stream)",
-            "credentials": "Fügen Sie Anmeldedaten in die URL ein, falls erforderlich (rtsp://benutzer:passwort@host/stream)",
-            "protocol": "TCP ist zuverlässiger, UDP hat geringere Latenz"
+            "rtsp": "Unterstützt RTSP, HTTP, HLS, RTMP und UDP/RTP Streams",
+            "credentials": "Anmeldedaten können in URL oder über Umgebungsvariablen angegeben werden",
+            "protocol": "TCP ist zuverlässiger für RTSP, UDP hat niedrigere Latenz"
           }
         },
         "errors": {
+          "nameRequired": "Stream-Name ist erforderlich",
+          "duplicateName": "Ein Stream mit diesem Namen existiert bereits",
           "urlRequired": "Stream-URL ist erforderlich",
-          "invalidUrl": "Ungültiges RTSP-URL-Format",
+          "invalidUrl": "Ungültiges Stream-URL-Format",
           "duplicate": "Diese Stream-URL existiert bereits"
         }
       }
