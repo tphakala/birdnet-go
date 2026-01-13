@@ -76,7 +76,7 @@ const (
 	// Restart jitter to prevent thundering herd effect
 	restartJitterPercentMax = 20 // Maximum jitter percentage (0-20% random addition to backoff)
 
-	// Timeout settings for FFmpeg RTSP streams
+	// Timeout settings for FFmpeg streams
 	defaultTimeoutMicroseconds = 10000000 // 10 seconds in microseconds
 	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
 
@@ -406,14 +406,14 @@ func generateUniqueFallbackID() string {
 	randomNum, err := rand.Int(rand.Reader, big.NewInt(10000))
 	if err != nil {
 		// Fallback to just timestamp if random fails
-		return fmt.Sprintf("fallback_rtsp_%d", timestamp)
+		return fmt.Sprintf("fallback_stream_%d", timestamp)
 	}
 
-	return fmt.Sprintf("fallback_rtsp_%d_%d", timestamp, randomNum.Int64())
+	return fmt.Sprintf("fallback_stream_%d_%d", timestamp, randomNum.Int64())
 }
 
 // NewFFmpegStream creates a new FFmpeg stream handler.
-// The url parameter specifies the RTSP stream URL, transport specifies the RTSP transport protocol,
+// The url parameter specifies the stream URL, transport specifies the transport protocol (for RTSP),
 // and audioChan is the channel where processed audio data will be sent.
 func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FFmpegStream {
 	// Register or get existing source from registry
@@ -425,28 +425,33 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 			logger.String("url", privacy.SanitizeRTSPUrl(url)),
 			logger.String("operation", "new_ffmpeg_stream"))
 		// Create fallback source when registry is unavailable
+		// Auto-detect source type from URL
+		detectedType := detectSourceTypeFromString(url)
 		fallbackID := generateUniqueFallbackID()
 		source = &AudioSource{
 			ID:               fallbackID,
-			DisplayName:      "RTSP Stream (Fallback)",
-			Type:             SourceTypeRTSP,
+			DisplayName:      "Stream (Fallback)",
+			Type:             detectedType,
 			connectionString: url,
 			SafeString:       privacy.SanitizeRTSPUrl(url),
 			RegisteredAt:     time.Now(),
 			IsActive:         true,
 		}
 	} else {
-		source = registry.GetOrCreateSource(url, SourceTypeRTSP)
+		// Use SourceTypeUnknown to let auto-detection determine the correct type from URL
+		source = registry.GetOrCreateSource(url, SourceTypeUnknown)
 		if source == nil {
-			getStreamLogger().Error("failed to register RTSP source",
+			getStreamLogger().Error("failed to register stream source",
 				logger.String("url", privacy.SanitizeRTSPUrl(url)),
 				logger.String("operation", "new_ffmpeg_stream"))
 			// Create a fallback source for robustness with unique ID
+			// Auto-detect source type from URL
+			detectedType := detectSourceTypeFromString(url)
 			fallbackID := generateUniqueFallbackID()
 			source = &AudioSource{
 				ID:               fallbackID,
-				DisplayName:      "RTSP Stream (Fallback)",
-				Type:             SourceTypeRTSP,
+				DisplayName:      "Stream (Fallback)",
+				Type:             detectedType,
 				connectionString: url,
 				SafeString:       privacy.SanitizeRTSPUrl(url),
 				RegisteredAt:     time.Now(),
@@ -948,7 +953,7 @@ func (s *FFmpegStream) handleSilenceTimeout(startTime time.Time) error {
 		// Format last data description for clearer logging
 		lastDataDesc := formatLastDataDescription(lastData)
 
-		getStreamLogger().Warn("no data received from RTSP source, triggering restart",
+		getStreamLogger().Warn("no data received from stream source, triggering restart",
 			logger.String("url", privacy.SanitizeRTSPUrl(s.source.SafeString)),
 			logger.Float64("timeout_seconds", silenceTimeout.Seconds()),
 			logger.String("last_data", lastDataDesc),
@@ -2017,7 +2022,7 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 			logger.String("component", "ffmpeg-stream"))
 
 		// Report circuit breaker closure to telemetry
-		errorWithContext := errors.Newf("RTSP stream circuit breaker closed after cooldown").
+		errorWithContext := errors.Newf("stream circuit breaker closed after cooldown").
 			Component("ffmpeg-stream").
 			Category(errors.CategoryRTSP).
 			Priority(errors.PriorityLow).
@@ -2129,7 +2134,7 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 			logger.String("component", "ffmpeg-stream"))
 
 		// Report to Sentry with enhanced context
-		errorWithContext := errors.Newf("RTSP stream circuit breaker opened: %s (runtime: %v)", reason, runtime).
+		errorWithContext := errors.Newf("stream circuit breaker opened: %s (runtime: %v)", reason, runtime).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryRTSP).
 			Context("operation", "circuit_breaker_open").
@@ -2308,7 +2313,7 @@ func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
 				logger.String("component", "ffmpeg-stream"))
 
 			// Report failure reset to telemetry
-			errorWithContext := errors.Newf("RTSP stream failures reset after stable operation").
+			errorWithContext := errors.Newf("stream failures reset after stable operation").
 				Component("ffmpeg-stream").
 				Category(errors.CategoryRTSP).
 				Priority(errors.PriorityLow).

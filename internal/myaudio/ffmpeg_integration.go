@@ -62,7 +62,8 @@ func registerSoundLevelProcessorIfEnabled(source string, log logger.Logger) erro
 			Build()
 	}
 
-	audioSource := registry.GetOrCreateSource(source, SourceTypeRTSP)
+	// Use SourceTypeUnknown to let auto-detection determine the correct type from URL
+	audioSource := registry.GetOrCreateSource(source, SourceTypeUnknown)
 	if audioSource == nil {
 		log.Warn("failed to get/create audio source for sound level processor",
 			logger.String("url", privacy.SanitizeRTSPUrl(source)),
@@ -179,7 +180,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	}
 
 	// Start monitoring (health check + watchdog) once we have the audioChan
-	// This is done once across all RTSP streams via sync.Once
+	// This is done once across all streams via sync.Once
 	startMonitoringOnce(manager, unifiedAudioChan)
 
 	// Start the stream
@@ -218,9 +219,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	})
 }
 
-// SyncRTSPStreamsWithConfig synchronizes running RTSP streams with configuration
+// SyncStreamsWithConfig synchronizes running streams with configuration
 // This is called when configuration changes to start/stop streams as needed
-func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
+func SyncStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	// Update logger level based on current configuration
 	UpdateFFmpegLogLevel()
 
@@ -234,8 +235,8 @@ func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	return manager.SyncWithConfig(audioChan)
 }
 
-// GetRTSPStreamHealth returns health information for all RTSP streams
-func GetRTSPStreamHealth() map[string]StreamHealth {
+// GetStreamHealth returns health information for all streams
+func GetStreamHealth() map[string]StreamHealth {
 	manager := getGlobalManager()
 	if manager == nil {
 		return make(map[string]StreamHealth)

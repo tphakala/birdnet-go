@@ -175,7 +175,7 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 // @Router /api/v2/streams/health [get]
 func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	// Convert to API response format
 	// Use a slice instead of map to avoid collisions when multiple URLs
@@ -221,7 +221,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	}
 
 	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	// Find the matching stream (case-sensitive exact match)
 	health, exists := healthData[decodedURL]
@@ -253,7 +253,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 // @Router /api/v2/streams/status [get]
 func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	// Build summary
 	summary := StreamsStatusSummaryResponse{
@@ -405,7 +405,7 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 
 // handleStreamHealthPoll polls for stream health changes and processes updates.
 func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
 		return err
@@ -441,7 +441,7 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	}
 
 	// Pre-allocate state tracking based on initial stream count
-	previousState := make(map[string]streamHealthSnapshot, len(myaudio.GetRTSPStreamHealth()))
+	previousState := make(map[string]streamHealthSnapshot, len(myaudio.GetStreamHealth()))
 
 	ticker := time.NewTicker(streamHealthPollInterval)
 	defer ticker.Stop()

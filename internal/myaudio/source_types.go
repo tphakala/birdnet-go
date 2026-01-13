@@ -11,10 +11,14 @@ import (
 type SourceType string
 
 const (
-	SourceTypeRTSP      SourceType = "rtsp"
-	SourceTypeAudioCard SourceType = "audio_card"
-	SourceTypeFile      SourceType = "file"
-	SourceTypeUnknown   SourceType = "unknown" // Used when type needs to be detected
+	SourceTypeRTSP      SourceType = "rtsp"       // RTSP/RTSPS streams
+	SourceTypeHTTP      SourceType = "http"       // HTTP/HTTPS audio streams
+	SourceTypeHLS       SourceType = "hls"        // HLS (m3u8) streams
+	SourceTypeRTMP      SourceType = "rtmp"       // RTMP/RTMPS streams
+	SourceTypeUDP       SourceType = "udp"        // UDP/RTP streams
+	SourceTypeAudioCard SourceType = "audio_card" // Local audio devices
+	SourceTypeFile      SourceType = "file"       // Audio files
+	SourceTypeUnknown   SourceType = "unknown"    // Used when type needs to be detected
 )
 
 // AudioSource represents a registered audio source with its metadata

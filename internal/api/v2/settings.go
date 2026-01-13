@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
@@ -571,48 +570,6 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 	return handleGenericSection(sectionValue, data, section, skippedFields)
 }
 
-// validateRTSPURLs validates a slice of RTSP URLs
-func validateRTSPURLs(urls []string) error {
-	for i, urlStr := range urls {
-		if err := validateSingleRTSPURL(urlStr); err != nil {
-			return fmt.Errorf("RTSP URL at index %d: %w", i, err)
-		}
-	}
-	return nil
-}
-
-// validateSingleRTSPURL validates a single RTSP URL
-func validateSingleRTSPURL(urlStr string) error {
-	if urlStr == "" {
-		return fmt.Errorf("cannot be empty")
-	}
-
-	parsedURL, err := url.Parse(urlStr)
-	if err != nil {
-		return fmt.Errorf("malformed URL: %w", err)
-	}
-
-	if parsedURL.Scheme != "rtsp" {
-		return fmt.Errorf("must use rtsp:// scheme, got %s://", parsedURL.Scheme)
-	}
-
-	if parsedURL.Host == "" || parsedURL.Hostname() == "" {
-		return fmt.Errorf("missing or invalid host")
-	}
-
-	if portStr := parsedURL.Port(); portStr != "" {
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return fmt.Errorf("invalid port: %w", err)
-		}
-		if port < 1 || port > 65535 {
-			return fmt.Errorf("port %d out of valid range (1-65535)", port)
-		}
-	}
-
-	return nil
-}
-
 // mergeJSONIntoStruct merges JSON data into an existing struct without zeroing out missing fields
 // This is crucial for preserving nested object values when partial updates are sent
 func mergeJSONIntoStruct(data json.RawMessage, target any) error {
@@ -842,7 +799,7 @@ type sectionValidator func(data json.RawMessage) error
 func getSectionValidators() map[string]sectionValidator {
 	return map[string]sectionValidator{
 		"mqtt":                   validateMQTTSection,
-		"rtsp":                   validateRTSPSection,
+		"rtsp":                   validateStreamsSection,
 		"security":               validateSecuritySection,
 		"main":                   validateMainSection,
 		SettingsSectionBirdnet:   validateBirdNETSection,
@@ -868,15 +825,15 @@ func validateMQTTSection(data json.RawMessage) error {
 	return nil
 }
 
-// validateRTSPSection validates RTSP settings
-func validateRTSPSection(data json.RawMessage) error {
+// validateStreamsSection validates stream settings
+func validateStreamsSection(data json.RawMessage) error {
 	var rtspSettings conf.RTSPSettings
 	if err := json.Unmarshal(data, &rtspSettings); err != nil {
 		return err
 	}
 
-	// Validate RTSP URLs
-	return validateRTSPURLs(rtspSettings.URLs)
+	// Validate RTSP streams
+	return rtspSettings.ValidateStreams()
 }
 
 // securitySectionAllowedFields defines which fields in the security section can be updated via API
@@ -1499,7 +1456,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", "info", toastDurationShort},
 	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", "info", toastDurationMedium},
 	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", "info", toastDurationMedium},
-	{"RTSP", "reconfigure_rtsp_sources", rtspSettingsChanged, "Reconfiguring RTSP sources...", "info", toastDurationMedium},
+	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", "info", toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", "info", toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", "warning", toastDurationExtended},
@@ -1617,23 +1574,26 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldMQTT.TLS.ClientKey != newMQTT.TLS.ClientKey
 }
 
-// rtspSettingsChanged checks if RTSP settings have changed
-func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+// streamsSettingsChanged checks if stream settings have changed
+func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldRTSP := oldSettings.Realtime.RTSP
 	newRTSP := currentSettings.Realtime.RTSP
 
-	// Check for changes in RTSP transport protocol
-	if oldRTSP.Transport != newRTSP.Transport {
+	// Check for changes in stream count
+	if len(oldRTSP.Streams) != len(newRTSP.Streams) {
 		return true
 	}
 
-	// Check for changes in RTSP URLs
-	if len(oldRTSP.URLs) != len(newRTSP.URLs) {
-		return true
-	}
-
-	for i, url := range oldRTSP.URLs {
-		if i >= len(newRTSP.URLs) || url != newRTSP.URLs[i] {
+	// Check for changes in individual streams (name, URL, type, or transport)
+	for i, oldStream := range oldRTSP.Streams {
+		if i >= len(newRTSP.Streams) {
+			return true
+		}
+		newStream := newRTSP.Streams[i]
+		if oldStream.Name != newStream.Name ||
+			oldStream.URL != newStream.URL ||
+			oldStream.Type != newStream.Type ||
+			oldStream.Transport != newStream.Transport {
 			return true
 		}
 	}
