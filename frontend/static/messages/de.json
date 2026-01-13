@@ -2104,7 +2104,7 @@
           "hintsTitle": "Erste Schritte",
           "hints": {
             "rtsp": "Unterstützt RTSP, HTTP, HLS, RTMP und UDP Streams",
-            "credentials": "Anmeldedaten in URL einbinden, wenn erforderlich (rtsp://benutzer:passwort@host/stream)",
+            "credentials": "Anmeldedaten können in URL oder über Umgebungsvariablen angegeben werden",
             "protocol": "TCP ist zuverlässiger für RTSP, UDP hat niedrigere Latenz"
           }
         },

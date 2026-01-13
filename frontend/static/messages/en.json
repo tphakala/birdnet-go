@@ -1958,7 +1958,7 @@
           "hintsTitle": "Getting Started",
           "hints": {
             "rtsp": "Supports RTSP, HTTP, HLS, RTMP, and UDP streams",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
+            "credentials": "Credentials can be included in URL or use environment variables",
             "protocol": "TCP is more reliable for RTSP, UDP has lower latency"
           }
         },

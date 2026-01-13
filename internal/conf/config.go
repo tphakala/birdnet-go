@@ -1608,8 +1608,9 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		globalTransport = "tcp"
 	}
 
-	// Preallocate streams slice with capacity
+	// Preallocate streams slice with capacity and track seen URLs for deduplication
 	rtsp.Streams = make([]StreamConfig, 0, len(rtsp.URLs))
+	seenURLs := make(map[string]bool)
 	streamIndex := 0
 
 	// Migrate each URL to StreamConfig
@@ -1619,6 +1620,12 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		if url == "" {
 			continue
 		}
+
+		// Skip duplicate URLs to ensure valid configuration
+		if seenURLs[url] {
+			continue
+		}
+		seenURLs[url] = true
 		streamIndex++
 
 		// Infer stream type from URL scheme

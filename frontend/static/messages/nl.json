@@ -2104,7 +2104,7 @@
           "hintsTitle": "Aan de slag",
           "hints": {
             "rtsp": "Ondersteunt RTSP, HTTP, HLS, RTMP en UDP streams",
-            "credentials": "Voeg inloggegevens toe in URL indien vereist (rtsp://gebruiker:wachtwoord@host/stream)",
+            "credentials": "Inloggegevens kunnen in URL worden opgenomen of via omgevingsvariabelen",
             "protocol": "TCP is betrouwbaarder voor RTSP, UDP heeft lagere latentie"
           }
         },

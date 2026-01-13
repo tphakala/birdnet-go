@@ -1937,7 +1937,7 @@
           "hintsTitle": "Aloitus",
           "hints": {
             "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-striimejä",
-            "credentials": "Sisällytä tunnistetiedot URL:iin tarvittaessa (rtsp://käyttäjä:salasana@palvelin/striimi)",
+            "credentials": "Tunnistetiedot voi sisällyttää URL:iin tai käyttää ympäristömuuttujia",
             "protocol": "TCP on luotettavampi RTSP:lle, UDP:llä on pienempi latenssi"
           }
         },

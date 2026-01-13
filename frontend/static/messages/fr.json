@@ -2104,7 +2104,7 @@
           "hintsTitle": "Pour Commencer",
           "hints": {
             "rtsp": "Supporte les flux RTSP, HTTP, HLS, RTMP et UDP",
-            "credentials": "Incluez les identifiants dans l'URL si nécessaire (rtsp://utilisateur:motdepasse@hôte/flux)",
+            "credentials": "Les identifiants peuvent être inclus dans l'URL ou via des variables d'environnement",
             "protocol": "TCP est plus fiable pour RTSP, UDP a une latence plus faible"
           }
         },

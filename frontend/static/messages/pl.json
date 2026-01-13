@@ -2110,7 +2110,7 @@
           "hintsTitle": "Pierwsze Kroki",
           "hints": {
             "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP",
-            "credentials": "Dołącz dane logowania w URL jeśli wymagane (rtsp://użytkownik:hasło@host/strumień)",
+            "credentials": "Dane logowania można dołączyć w URL lub użyć zmiennych środowiskowych",
             "protocol": "TCP jest bardziej niezawodny dla RTSP, UDP ma niższe opóźnienie"
           }
         },

@@ -1937,7 +1937,7 @@
           "hintsTitle": "Primeros Pasos",
           "hints": {
             "rtsp": "Soporta streams RTSP, HTTP, HLS, RTMP y UDP",
-            "credentials": "Incluya credenciales en la URL si es necesario (rtsp://usuario:contraseña@host/stream)",
+            "credentials": "Las credenciales pueden incluirse en la URL o usar variables de entorno",
             "protocol": "TCP es más confiable para RTSP, UDP tiene menor latencia"
           }
         },
