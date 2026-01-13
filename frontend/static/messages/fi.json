@@ -1901,8 +1901,8 @@
         "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Virrat-välilehdellä."
       },
       "rtspStreams": {
-        "title": "RTSP-virran määritys",
-        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen RTSP-protokollan kautta.",
+        "title": "Äänivirtojen Määritys",
+        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
         "noStreamsConfigured": "Virtoja ei ole määritetty"
       },
       "streams": {

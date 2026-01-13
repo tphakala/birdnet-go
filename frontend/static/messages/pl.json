@@ -2074,8 +2074,8 @@
         "description": "BirdNET-Go potrzebuje wejścia audio do wykrywania ptaków. Proszę skonfigurować co najmniej jedno źródło w karcie Karta Dźwiękowa lub Strumienie."
       },
       "rtspStreams": {
-        "title": "Konfiguracja Strumieni RTSP",
-        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio przez protokół RTSP.",
+        "title": "Konfiguracja Strumieni Audio",
+        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP.",
         "noStreamsConfigured": "Brak skonfigurowanych strumieni"
       },
       "streams": {

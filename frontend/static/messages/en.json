@@ -1922,8 +1922,8 @@
         "streamsConfigured": "{count} stream(s) configured"
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
+        "title": "Audio Stream Configuration",
+        "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols.",
         "noStreamsConfigured": "No streams configured"
       },
       "streams": {
@@ -1968,6 +1968,17 @@
           "urlRequired": "Stream URL is required",
           "invalidUrl": "Invalid stream URL format",
           "duplicate": "This stream URL already exists"
+        },
+        "timeline": {
+          "error": "Error",
+          "noHistory": "No state or error history available.",
+          "stateChange": "State Change",
+          "host": "Host",
+          "troubleshooting": "Troubleshooting",
+          "from": "From",
+          "to": "To",
+          "reason": "Reason",
+          "eventAt": "Event at {time}"
         }
       },
       "audioFilters": {

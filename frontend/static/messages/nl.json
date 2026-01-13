@@ -2068,8 +2068,8 @@
         "description": "BirdNET-Go heeft een audio invoer nodig om vogels te detecteren. Configureer alstublieft tenminste één bron in het Geluidskaart of Streams tabblad."
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuratie",
-        "description": "Configureer netwerk audio streams voor audio opname op afstand via RTSP protocol.",
+        "title": "Audio Stream Configuratie",
+        "description": "Configureer netwerk audio streams voor audio opname op afstand. Ondersteunt RTSP, HTTP, HLS, RTMP en UDP protocollen.",
         "noStreamsConfigured": "Geen streams geconfigureerd"
       },
       "streams": {

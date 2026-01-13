@@ -2068,8 +2068,8 @@
         "description": "BirdNET-Go benötigt eine Audioeingabe, um Vögel zu erkennen. Bitte konfigurieren Sie mindestens eine Quelle im Soundkarten- oder Streams-Tab."
       },
       "rtspStreams": {
-        "title": "RTSP-Stream-Konfiguration",
-        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme über RTSP-Protokoll konfigurieren.",
+        "title": "Audio-Stream-Konfiguration",
+        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme konfigurieren. Unterstützt RTSP-, HTTP-, HLS-, RTMP- und UDP-Protokolle.",
         "noStreamsConfigured": "Keine Streams konfiguriert"
       },
       "streams": {
