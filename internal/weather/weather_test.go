@@ -637,8 +637,8 @@ func TestService_StartPolling(t *testing.T) {
 		registerYrNoResponder(t, http.StatusOK, yrNoSuccessResponse(), nil)
 
 		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
-			// Use very short interval for testing (1 minute is minimum)
-			s.Realtime.Weather.PollInterval = 1
+			// Use a long interval so the ticker doesn't fire during the test
+			s.Realtime.Weather.PollInterval = 60
 		})
 		service := &Service{
 			provider: NewYrNoProvider(),
@@ -647,12 +647,16 @@ func TestService_StartPolling(t *testing.T) {
 			metrics:  nil,
 		}
 
-		// Allow initial fetch to succeed
+		// Channel to signal initial fetch completion (avoids flaky time.Sleep)
+		initialFetchComplete := make(chan struct{})
+
+		// Expect initial fetch to succeed and signal completion
 		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
 			de := args.Get(0).(*datastore.DailyEvents)
 			de.ID = 1
-		}).Return(nil).Maybe()
-		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Maybe()
+			close(initialFetchComplete)
+		}).Return(nil).Once()
+		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
 
 		stopChan := make(chan struct{})
 		done := make(chan struct{})
@@ -662,8 +666,13 @@ func TestService_StartPolling(t *testing.T) {
 			close(done)
 		}()
 
-		// Give it a moment to start
-		time.Sleep(50 * time.Millisecond)
+		// Wait for initial fetch to complete with timeout
+		select {
+		case <-initialFetchComplete:
+			// Initial fetch done, proceed to test stop
+		case <-time.After(2 * time.Second):
+			t.Fatal("Initial fetch did not complete within timeout")
+		}
 
 		// Signal stop
 		close(stopChan)
@@ -675,5 +684,7 @@ func TestService_StartPolling(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("StartPolling did not stop within timeout")
 		}
+
+		mockDB.AssertExpectations(t)
 	})
 }

@@ -462,7 +462,7 @@ func TestNewWundergroundProvider(t *testing.T) {
 	})
 
 	t.Run("custom_client_is_used", func(t *testing.T) {
-		customClient := &http.Client{Timeout: 5}
+		customClient := &http.Client{Timeout: 5 * time.Second}
 		provider := NewWundergroundProvider(customClient)
 		require.NotNil(t, provider)
 	})
