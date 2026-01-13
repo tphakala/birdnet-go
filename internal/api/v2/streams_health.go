@@ -22,6 +22,10 @@ const (
 	// Stream health polling interval - how often to check for changes
 	streamHealthPollInterval = 1 * time.Second
 
+	// Stats update interval - how often to send stats regardless of state changes
+	// This enables real-time bandwidth/bytes display in the UI
+	streamStatsUpdateInterval = 1 * time.Second
+
 	// Rate limiting for stream health SSE endpoint
 	streamHealthRateLimitRequests = 5               // Requests per window
 	streamHealthRateLimitWindow   = 1 * time.Minute // Rate limit window
@@ -413,6 +417,25 @@ func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, p
 	return c.processRemovedStreams(ctx, clientID, healthData, previousState)
 }
 
+// handleStreamStatsUpdate sends periodic stats updates for all active streams.
+// This enables real-time bandwidth and bytes display in the UI regardless of state changes.
+// Note: This sends a lightweight payload without history arrays to reduce bandwidth.
+func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
+	healthData := myaudio.GetStreamHealth()
+
+	for rawURL := range healthData {
+		health := healthData[rawURL]
+		if err := c.sendStreamStatsUpdate(ctx, rawURL, &health); err != nil {
+			c.logDebugIfEnabled("Failed to send stats update, client disconnected",
+				logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
+				logger.String("client_id", clientID),
+				logger.Error(err))
+			return err
+		}
+	}
+	return nil
+}
+
 // StreamHealthUpdates streams real-time RTSP stream health updates via SSE
 // @Summary Stream real-time RTSP stream health updates
 // @Description Establishes an SSE connection to receive real-time updates when stream health changes
@@ -447,6 +470,8 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	defer ticker.Stop()
 	heartbeatTicker := time.NewTicker(sseHeartbeatInterval)
 	defer heartbeatTicker.Stop()
+	statsTicker := time.NewTicker(streamStatsUpdateInterval)
+	defer statsTicker.Stop()
 
 	for {
 		select {
@@ -456,6 +481,11 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 			}
 		case <-ticker.C:
 			if err := c.handleStreamHealthPoll(ctx, clientID, previousState); err != nil {
+				return err
+			}
+		case <-statsTicker.C:
+			// Send periodic stats updates regardless of state changes
+			if err := c.handleStreamStatsUpdate(ctx, clientID); err != nil {
 				return err
 			}
 		case <-ctx.Request().Context().Done():
@@ -627,4 +657,44 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 		logger.String("state", health.ProcessState.String()))
 
 	return nil
+}
+
+// sendStreamStatsUpdate sends a lightweight stats-only update via SSE.
+// This excludes history arrays (ErrorHistory, StateHistory) to reduce bandwidth
+// for frequent periodic updates.
+func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth) error {
+	// Build lightweight response with only essential stats fields
+	var timeSinceData *float64
+	if !health.LastDataReceived.IsZero() {
+		seconds := time.Since(health.LastDataReceived).Seconds()
+		timeSinceData = &seconds
+	}
+
+	info := c.getStreamInfo(rawURL)
+
+	// Create response without history arrays
+	response := StreamHealthResponse{
+		Name:               info.Name,
+		Type:               info.Type,
+		URL:                privacy.SanitizeStreamUrl(rawURL),
+		IsHealthy:          health.IsHealthy,
+		ProcessState:       health.ProcessState.String(),
+		RestartCount:       health.RestartCount,
+		TotalBytesReceived: health.TotalBytesReceived,
+		BytesPerSecond:     health.BytesPerSecond,
+		IsReceivingData:    health.IsReceivingData,
+		TimeSinceData:      timeSinceData,
+		// Explicitly omit: ErrorHistory, StateHistory, LastErrorContext
+	}
+
+	if !health.LastDataReceived.IsZero() {
+		response.LastDataReceived = &health.LastDataReceived
+	}
+
+	event := SSEStreamHealthData{
+		StreamHealthResponse: response,
+		EventType:            "stats_update",
+	}
+
+	return c.sendSSEMessage(ctx, "stream_health", event)
 }

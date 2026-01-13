@@ -1901,8 +1901,8 @@
         "description": "BirdNET-Go necesita una entrada de audio para detectar aves. Por favor configure al menos una fuente en la pestaña Tarjeta de Sonido o Streams."
       },
       "rtspStreams": {
-        "title": "Configuración de stream RTSP",
-        "description": "Configurar flujos de audio de red para captura de audio remota vía protocolo RTSP.",
+        "title": "Configuración de Flujos de Audio",
+        "description": "Configura flujos de audio de red para captura de audio remota. Soporta protocolos RTSP, HTTP, HLS, RTMP y UDP.",
         "noStreamsConfigured": "No hay streams configurados"
       },
       "streams": {

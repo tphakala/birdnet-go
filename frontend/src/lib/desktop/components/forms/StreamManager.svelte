@@ -15,8 +15,7 @@
   @component
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { SvelteMap } from 'svelte/reactivity';
+  import { onMount, onDestroy, setContext } from 'svelte';
   import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { t } from '$lib/i18n';
@@ -36,9 +35,36 @@
   // Maximum allowed URL length for stream configuration
   const MAX_STREAM_URL_LENGTH = 2048;
 
+  // Error context from FFmpeg error parsing (matching backend ErrorContextResponse)
+  export interface ErrorContext {
+    error_type: string;
+    primary_message: string;
+    user_facing_msg: string;
+    troubleshooting_steps?: string[];
+    timestamp: string;
+    // Technical details (optional)
+    target_host?: string;
+    target_port?: number;
+    timeout_duration?: string;
+    http_status?: number;
+    rtsp_method?: string;
+    // Action recommendations
+    should_open_circuit: boolean;
+    should_restart: boolean;
+  }
+
+  // State transition event (matching backend StateTransitionResponse)
+  export interface StateTransition {
+    from_state: string;
+    to_state: string;
+    timestamp: string;
+    reason?: string;
+  }
+
   // Stream health response types (matching backend API)
-  interface StreamHealthResponse {
+  export interface StreamHealthResponse {
     name?: string; // Stream name for unambiguous matching
+    type?: string; // Stream type from config
     url: string;
     is_healthy: boolean;
     process_state: string;
@@ -49,6 +75,11 @@
     total_bytes_received: number;
     bytes_per_second: number;
     is_receiving_data: boolean;
+    // Error diagnostics
+    last_error_context?: ErrorContext | null;
+    error_history?: ErrorContext[];
+    // State history for debugging
+    state_history?: StateTransition[];
   }
 
   interface Props {
@@ -59,8 +90,15 @@
 
   let { streams = [], disabled = false, onUpdateStreams }: Props = $props();
 
-  // Stream health state - using SvelteMap for automatic reactivity
-  let streamHealth = $state(new SvelteMap<string, StreamHealthResponse>());
+  // Stream health state - using $state object passed via context for reactivity
+  // In Svelte 5, passing a $state object to context allows children to access the same reactive proxy
+  // IMPORTANT: Pass the object directly, not a getter. Never reassign - only mutate properties.
+  let streamHealth = $state<Record<string, StreamHealthResponse>>({});
+
+  // Provide the state object via context so children can access it reactively
+  // Pass the object directly - children will see mutations to its properties
+  setContext('streamHealth', streamHealth);
+
   let healthLoading = $state(true);
 
   // Add new stream state
@@ -100,7 +138,7 @@
     let unknown = 0;
 
     streams.forEach(stream => {
-      const health = streamHealth.get(stream.url);
+      const health = streamHealth[stream.url];
       if (!health) {
         unknown++;
       } else if (health.is_healthy && health.is_receiving_data) {
@@ -115,7 +153,7 @@
 
   // Convert backend process state to UI status
   function getStreamStatus(url: string): StreamStatus {
-    const health = streamHealth.get(url);
+    const health = streamHealth[url];
     if (!health) return 'unknown';
 
     const state = health.process_state.toLowerCase();
@@ -134,25 +172,6 @@
     }
 
     return 'unknown';
-  }
-
-  // Get status message for a stream
-  function getStatusMessage(url: string): string {
-    const health = streamHealth.get(url);
-    if (!health) return '';
-
-    if (health.error) {
-      return health.error;
-    }
-    if (health.is_receiving_data && health.bytes_per_second > 0) {
-      const kbps = (health.bytes_per_second / 1024).toFixed(1);
-      return `${kbps} KB/s`;
-    }
-    if (health.restart_count > 0) {
-      return t('settings.audio.streams.restartCount', { count: health.restart_count });
-    }
-
-    return '';
   }
 
   // Find matching stream by name (preferred) or sanitized URL (fallback)
@@ -174,18 +193,21 @@
 
     try {
       const response = await api.get<StreamHealthResponse[]>('/api/v2/streams/health');
-      const newHealthMap = new SvelteMap<string, StreamHealthResponse>();
 
+      // Clear existing entries first (mutate, don't reassign)
+      for (const key of Object.keys(streamHealth)) {
+        delete streamHealth[key];
+      }
+
+      // Add new entries by mutation
       if (Array.isArray(response)) {
         response.forEach(health => {
           const matchingStream = findMatchingStream(health);
           if (matchingStream) {
-            newHealthMap.set(matchingStream.url, health);
+            streamHealth[matchingStream.url] = health;
           }
         });
       }
-
-      streamHealth = newHealthMap;
     } catch (error) {
       logger.warn('Failed to load stream health', error, {
         component: 'StreamManager',
@@ -217,11 +239,12 @@
           const data = JSON.parse(eventData) as StreamHealthResponse & {
             event_type: string;
           };
+
           const matchingStream = findMatchingStream(data);
 
           if (matchingStream) {
-            // SvelteMap automatically triggers reactivity on set()
-            streamHealth.set(matchingStream.url, data);
+            // Update the state - mutate the object to trigger reactivity
+            streamHealth[matchingStream.url] = data;
           }
         } catch (e) {
           logger.warn('Failed to parse stream health event', e, {
@@ -379,9 +402,9 @@
         return false;
       }
 
-      // Update health map if URL changed
+      // Update health state if URL changed
       if (oldStream && oldStream.url !== updatedStream.url) {
-        streamHealth.delete(oldStream.url);
+        delete streamHealth[oldStream.url];
       }
 
       updatedStreams.splice(index, 1, updatedStream);
@@ -397,9 +420,9 @@
     const updatedStreams = streams.filter((_, i) => i !== index);
     onUpdateStreams(updatedStreams);
 
-    // Clean up health data
+    // Clean up health data from state
     if (streamToDelete) {
-      streamHealth.delete(streamToDelete.url);
+      delete streamHealth[streamToDelete.url];
     }
   }
 
@@ -518,7 +541,6 @@
           {stream}
           {index}
           status={getStreamStatus(stream.url)}
-          statusMessage={getStatusMessage(stream.url)}
           {disabled}
           onUpdate={updatedStream => updateStream(index, updatedStream)}
           onDelete={() => deleteStream(index)}
