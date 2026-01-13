@@ -96,9 +96,9 @@ func (s *StreamConfig) Validate() error {
 		return fmt.Errorf("stream name is required")
 	}
 
-	// Name length limit
-	if len(s.Name) > MaxStreamNameLength {
-		return fmt.Errorf("stream name '%s' exceeds maximum length of %d characters", s.Name, MaxStreamNameLength)
+	// Name length limit (check trimmed name for consistency)
+	if len(name) > MaxStreamNameLength {
+		return fmt.Errorf("stream name '%s' exceeds maximum length of %d characters", name, MaxStreamNameLength)
 	}
 
 	// URL is required
@@ -171,7 +171,7 @@ func (r *RTSPSettings) ValidateStreams() error {
 		// Check for duplicate URLs (trimmed for consistency)
 		urlTrimmed := strings.TrimSpace(stream.URL)
 		if urls[urlTrimmed] {
-			return fmt.Errorf("duplicate stream URL in '%s'", stream.Name)
+			return fmt.Errorf("stream '%s' has a duplicate URL: '%s'", stream.Name, stream.URL)
 		}
 		urls[urlTrimmed] = true
 	}

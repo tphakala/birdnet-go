@@ -2103,7 +2103,7 @@
           "description": "Ajoutez des flux audio depuis des caméras IP, serveurs Icecast ou autres sources réseau.",
           "hintsTitle": "Pour Commencer",
           "hints": {
-            "rtsp": "Supporte les flux RTSP, HTTP, HLS, RTMP et UDP",
+            "rtsp": "Supporte les flux RTSP, HTTP, HLS, RTMP et UDP/RTP",
             "credentials": "Les identifiants peuvent être inclus dans l'URL ou via des variables d'environnement",
             "protocol": "TCP est plus fiable pour RTSP, UDP a une latence plus faible"
           }

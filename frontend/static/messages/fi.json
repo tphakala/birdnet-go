@@ -1936,7 +1936,7 @@
           "description": "Lisää äänistriimejä IP-kameroista, Icecast-palvelimista tai muista verkkolähteistä.",
           "hintsTitle": "Aloitus",
           "hints": {
-            "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-striimejä",
+            "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP/RTP-striimejä",
             "credentials": "Tunnistetiedot voi sisällyttää URL:iin tai käyttää ympäristömuuttujia",
             "protocol": "TCP on luotettavampi RTSP:lle, UDP:llä on pienempi latenssi"
           }

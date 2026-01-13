@@ -1936,7 +1936,7 @@
           "description": "Agregue streams de audio desde cámaras IP, servidores Icecast u otras fuentes de red.",
           "hintsTitle": "Primeros Pasos",
           "hints": {
-            "rtsp": "Soporta streams RTSP, HTTP, HLS, RTMP y UDP",
+            "rtsp": "Soporta streams RTSP, HTTP, HLS, RTMP y UDP/RTP",
             "credentials": "Las credenciales pueden incluirse en la URL o usar variables de entorno",
             "protocol": "TCP es más confiable para RTSP, UDP tiene menor latencia"
           }

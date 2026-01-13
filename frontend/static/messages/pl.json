@@ -2109,7 +2109,7 @@
           "description": "Dodaj strumienie audio z kamer IP, serwerów Icecast lub innych źródeł sieciowych.",
           "hintsTitle": "Pierwsze Kroki",
           "hints": {
-            "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP",
+            "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP/RTP",
             "credentials": "Dane logowania można dołączyć w URL lub użyć zmiennych środowiskowych",
             "protocol": "TCP jest bardziej niezawodny dla RTSP, UDP ma niższe opóźnienie"
           }

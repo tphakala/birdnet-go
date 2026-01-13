@@ -2103,7 +2103,7 @@
           "description": "Voeg audiostreams toe van IP-camera's, Icecast-servers of andere netwerkbronnen.",
           "hintsTitle": "Aan de slag",
           "hints": {
-            "rtsp": "Ondersteunt RTSP, HTTP, HLS, RTMP en UDP streams",
+            "rtsp": "Ondersteunt RTSP, HTTP, HLS, RTMP en UDP/RTP streams",
             "credentials": "Inloggegevens kunnen in URL worden opgenomen of via omgevingsvariabelen",
             "protocol": "TCP is betrouwbaarder voor RTSP, UDP heeft lagere latentie"
           }
