@@ -350,7 +350,9 @@
       "confidenceMax": "Porcentagem máxima de confiança",
       "verifiedStatus": "Status verificado",
       "lockedStatus": "Status bloqueado",
-      "timeOfDay": "Hora do dia"
+      "timeOfDay": "Hora do dia",
+      "source": "Fonte",
+      "sourcePlaceholder": "ex. Comedouro do jardim"
     },
     "advancedFilters": "Filtros avançados",
     "showAdvancedFilters": "Mostrar filtros avançados",
@@ -547,6 +549,7 @@
     },
     "headers": {
       "dateTime": "Data e hora",
+      "source": "Fonte",
       "weather": "Clima",
       "species": "Espécie",
       "confidence": "Confiança",
@@ -797,7 +800,9 @@
       "date": "Data",
       "firstHeardOn": "Ouvido pela primeira vez em",
       "firstHeardDate": "Data da primeira audição",
-      "firstHeard": "Primeira audição"
+      "firstHeard": "Primeira audição",
+      "detectionsBySource": "Detecções por fonte",
+      "noSourceData": "Sem dados de fonte disponíveis"
     },
     "recentDetections": {
       "title": "Detecções recentes",
@@ -805,7 +810,8 @@
         "dateTime": "Data e hora",
         "species": "Espécie",
         "confidence": "Confiança",
-        "timeOfDay": "Hora do dia"
+        "timeOfDay": "Hora do dia",
+        "source": "Fonte"
       },
       "noRecentDetections": "Nenhuma detecção recente encontrada",
       "unknownSpecies": "Desconhecida",
@@ -1907,6 +1913,9 @@
       },
       "streams": {
         "streamLabel": "Fluxo",
+        "labelField": "Rótulo",
+        "labelPlaceholder": "ex., Comedouro do quintal, Varanda frontal",
+        "labelHelp": "Nome opcional para identificar este fluxo nos relatórios de detecção",
         "urlLabel": "URL do fluxo",
         "urlHelp": "Digite a URL RTSP com credenciais opcionais (rtsp://usuario:senha@host:porta/caminho)",
         "typeLabel": "Tipo de fluxo",

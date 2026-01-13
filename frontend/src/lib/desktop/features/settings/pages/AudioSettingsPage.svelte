@@ -38,6 +38,7 @@
     audioSettings,
     rtspSettings,
     type EqualizerFilterType,
+    type RTSPStream,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs, {
@@ -107,65 +108,51 @@
     return [noCapture, ...deviceOptions];
   });
 
-  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
-  let settings = $derived(
-    (() => {
-      const audioBase = $audioSettings || {
-        source: '',
-        soundLevel: {
-          enabled: false,
-          interval: 60,
-        },
-        equalizer: {
-          enabled: false,
-          filters: [],
-        },
-        export: {
-          enabled: false,
-          path: 'clips/',
-          type: 'wav' as const,
-          bitrate: '96k',
-          retention: {
-            policy: 'none',
-            maxAge: '7d',
-            maxUsage: '80%',
-            minClips: 10,
-            keepSpectrograms: false,
-          },
-          length: 15, // Default 15 seconds capture length
-          preCapture: 3, // Default 3 seconds pre-detection buffer
-          gain: 0, // Default 0 dB gain (no amplification)
-          normalization: {
-            enabled: false, // Disabled by default
-            targetLUFS: -23.0, // EBU R128 broadcast standard
-            loudnessRange: 7.0, // Typical range for broadcast
-            truePeak: -2.0, // Headroom to prevent clipping
-          },
-        },
-      };
+  const defaultAudioSettings = {
+    source: '',
+    soundLevel: { enabled: false, interval: 60 },
+    equalizer: { enabled: false, filters: [] },
+    export: {
+      enabled: false,
+      path: 'clips/',
+      type: 'wav' as const,
+      bitrate: '96k',
+      retention: {
+        policy: 'none',
+        maxAge: '7d',
+        maxUsage: '80%',
+        minClips: 10,
+        keepSpectrograms: false,
+      },
+      length: 15,
+      preCapture: 3,
+      gain: 0,
+      normalization: { enabled: false, targetLUFS: -23.0, loudnessRange: 7.0, truePeak: -2.0 },
+    },
+  };
 
-      const rtspBase = $rtspSettings || {
-        transport: 'tcp',
-        urls: [],
-      };
-
-      // Ensure urls is always an array even if rtspSettings exists but has undefined/null urls
-      // Also ensure equalizer filters is always an array
-      return {
-        audio: {
-          ...audioBase,
-          equalizer: {
-            enabled: audioBase.equalizer?.enabled ?? false,
-            filters: audioBase.equalizer?.filters ?? [], // Always ensures filters is an array
-          },
-        },
-        rtsp: {
-          transport: rtspBase.transport || 'tcp',
-          urls: rtspBase.urls ?? [], // Always ensures urls is an array
-        },
-      };
-    })()
+  let audioBase = $derived($audioSettings || defaultAudioSettings);
+  let rtspBase = $derived($rtspSettings || { transport: 'tcp', urls: [], streams: [] });
+  let derivedStreams = $derived(
+    rtspBase.streams?.length
+      ? rtspBase.streams
+      : (rtspBase.urls ?? []).map((url: string) => ({ url, label: '' }))
   );
+
+  let settings = $derived({
+    audio: {
+      ...audioBase,
+      equalizer: {
+        enabled: audioBase.equalizer?.enabled ?? false,
+        filters: audioBase.equalizer?.filters ?? [],
+      },
+    },
+    rtsp: {
+      transport: rtspBase.transport || 'tcp',
+      urls: rtspBase.urls ?? [],
+      streams: derivedStreams,
+    },
+  });
   let store = $derived($settingsStore);
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection per tab with $derived
@@ -309,9 +296,15 @@
   });
 
   // Helper function to merge RTSP settings and avoid code duplication
-  function mergeRtsp(partialRtsp: Partial<{ transport: string; urls: string[] }>) {
+  function mergeRtsp(
+    partialRtsp: Partial<{ transport: string; urls: string[]; streams: RTSPStream[] }>
+  ) {
     const storeState = $settingsStore;
-    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
+    const currentRtsp = storeState.formData.realtime?.rtsp || {
+      transport: 'tcp',
+      urls: [],
+      streams: [],
+    };
 
     settingsActions.updateSection('realtime', {
       rtsp: {
@@ -332,8 +325,8 @@
     mergeRtsp({ transport });
   }
 
-  function updateRTSPUrls(urls: string[]) {
-    mergeRtsp({ urls });
+  function updateRTSPStreams(streams: RTSPStream[]) {
+    mergeRtsp({ streams });
   }
 
   function updateExportEnabled(enabled: boolean) {
@@ -598,10 +591,10 @@
       currentData={store.formData.realtime?.rtsp}
     >
       <StreamManager
-        urls={settings.rtsp.urls}
+        streams={settings.rtsp.streams ?? []}
         transport={settings.rtsp.transport}
         disabled={store.isLoading || store.isSaving}
-        onUpdateUrls={updateRTSPUrls}
+        onUpdateStreams={updateRTSPStreams}
         onUpdateTransport={updateRTSPTransport}
       />
     </SettingsSection>

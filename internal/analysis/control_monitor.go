@@ -291,11 +291,15 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 
 	// Prepare the list of active sources (using source IDs, not raw URLs)
 	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 {
+	streamConfigs := settings.Realtime.RTSP.GetStreamConfigs()
+	if len(streamConfigs) > 0 {
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			for _, url := range settings.Realtime.RTSP.URLs {
-				if rtspSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP); rtspSource != nil {
+			for _, stream := range streamConfigs {
+				if stream.URL == "" {
+					continue
+				}
+				if rtspSource := registry.GetOrCreateSource(stream.URL, myaudio.SourceTypeRTSP); rtspSource != nil {
 					sources = append(sources, rtspSource.ID)
 				} else {
 					GetLogger().Warn("Failed to get RTSP source ID from registry for URL during reconfiguration")

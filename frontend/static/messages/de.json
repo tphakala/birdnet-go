@@ -350,7 +350,9 @@
       "confidenceMax": "Maximaler Konfidenzprozentsatz",
       "verifiedStatus": "Verifizierungsstatus",
       "lockedStatus": "Sperrstatus",
-      "timeOfDay": "Tageszeit"
+      "timeOfDay": "Tageszeit",
+      "source": "Quelle",
+      "sourcePlaceholder": "z.B. Garten-Futterstelle"
     },
     "advancedFilters": "Erweiterte Filter",
     "showAdvancedFilters": "Erweiterte Filter anzeigen",
@@ -547,6 +549,7 @@
     },
     "headers": {
       "dateTime": "Datum & Zeit",
+      "source": "Quelle",
       "weather": "Wetter",
       "species": "Art",
       "confidence": "Konfidenz",
@@ -797,7 +800,9 @@
       "date": "Datum",
       "firstHeardOn": "Erstmals gehört am",
       "firstHeardDate": "Datum der Ersthörung",
-      "firstHeard": "Erstmals gehört"
+      "firstHeard": "Erstmals gehört",
+      "detectionsBySource": "Erkennungen nach Quelle",
+      "noSourceData": "Keine Quelldaten verfügbar"
     },
     "recentDetections": {
       "title": "Aktuelle Erkennungen",
@@ -805,7 +810,8 @@
         "dateTime": "Datum & Zeit",
         "species": "Art",
         "confidence": "Konfidenz",
-        "timeOfDay": "Tageszeit"
+        "timeOfDay": "Tageszeit",
+        "source": "Quelle"
       },
       "noRecentDetections": "Keine aktuellen Erkennungen gefunden",
       "unknownSpecies": "Unbekannt",
@@ -2074,6 +2080,9 @@
       },
       "streams": {
         "streamLabel": "Stream",
+        "labelField": "Bezeichnung",
+        "labelPlaceholder": "z.B. Futterhaus Garten, Terrasse",
+        "labelHelp": "Optionaler Name zur Identifizierung dieses Streams in Erkennungsberichten",
         "urlLabel": "Stream-URL",
         "urlHelp": "RTSP-URL mit optionalen Anmeldedaten eingeben (rtsp://benutzer:passwort@host:port/pfad)",
         "typeLabel": "Stream-Typ",

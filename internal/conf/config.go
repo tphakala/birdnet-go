@@ -422,12 +422,46 @@ type RTSPHealthSettings struct {
 	MonitoringInterval   int `json:"monitoringInterval"`   // health check interval in seconds (default: 30)
 }
 
+// RTSPStream represents a single RTSP stream configuration with URL and optional label.
+type RTSPStream struct {
+	URL   string `json:"url" yaml:"url"`     // RTSP stream URL
+	Label string `json:"label" yaml:"label"` // User-friendly label for this stream (optional, auto-generated if empty)
+}
+
 // RTSPSettings contains settings for RTSP streaming.
 type RTSPSettings struct {
 	Transport        string             `json:"transport"`        // RTSP Transport Protocol
-	URLs             []string           `json:"urls"`             // RTSP stream URL
+	URLs             []string           `json:"urls"`             // Legacy: RTSP stream URLs (use Streams for new configs)
+	Streams          []RTSPStream       `json:"streams"`          // RTSP streams with labels
 	Health           RTSPHealthSettings `json:"health"`           // health monitoring settings
 	FFmpegParameters []string           `json:"ffmpegParameters"` // optional custom FFmpeg parameters
+}
+
+// GetStreamConfigs returns normalized stream configurations, merging legacy URLs
+// with new Streams format. Legacy URLs without explicit labels will have empty
+// Label fields (callers should auto-generate labels for display).
+func (r *RTSPSettings) GetStreamConfigs() []RTSPStream {
+	// Start with streams from new format
+	configs := make([]RTSPStream, 0, len(r.Streams)+len(r.URLs))
+	configs = append(configs, r.Streams...)
+
+	// Build a set of URLs already in Streams for deduplication
+	existingURLs := make(map[string]bool, len(r.Streams))
+	for _, s := range r.Streams {
+		existingURLs[s.URL] = true
+	}
+
+	// Add legacy URLs that aren't already in Streams
+	for _, url := range r.URLs {
+		if !existingURLs[url] {
+			configs = append(configs, RTSPStream{
+				URL:   url,
+				Label: "", // Empty label - caller should auto-generate
+			})
+		}
+	}
+
+	return configs
 }
 
 // MQTTSettings contains settings for MQTT integration.

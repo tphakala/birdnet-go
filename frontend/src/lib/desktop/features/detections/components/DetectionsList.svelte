@@ -208,6 +208,7 @@
         <thead>
           <tr class="detection-header-list">
             <th scope="col">{t('detections.headers.dateTime')}</th>
+            <th scope="col" class="hidden lg:table-cell">{t('detections.headers.source')}</th>
             <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
             <th scope="col">{t('detections.headers.species')}</th>
             <th scope="col">{t('detections.headers.confidence')}</th>

@@ -283,16 +283,21 @@ func initializeBuffersForSource(sourceID string) error {
 }
 
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	// If no RTSP URLs and no audio device configured, return early
-	if len(settings.Realtime.RTSP.URLs) == 0 && settings.Realtime.Audio.Source == "" {
+	streamConfigs := settings.Realtime.RTSP.GetStreamConfigs()
+
+	// If no RTSP streams and no audio device configured, return early
+	if len(streamConfigs) == 0 && settings.Realtime.Audio.Source == "" {
 		return
 	}
 
 	// Initialize RTSP sources - the FFmpegManager will handle buffer initialization
-	if len(settings.Realtime.RTSP.URLs) > 0 {
-		for _, url := range settings.Realtime.RTSP.URLs {
+	if len(streamConfigs) > 0 {
+		for _, stream := range streamConfigs {
+			if stream.URL == "" {
+				continue
+			}
 			// CaptureAudioRTSP delegates to FFmpegManager which handles everything
-			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
+			go CaptureAudioRTSP(stream.URL, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 		}
 	}
 

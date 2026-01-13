@@ -308,6 +308,18 @@ func (m *mockStore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	}, nil
 }
 
+func (m *mockStore) GetOrCreateAudioSource(sourceID, label, sourceType string) (*datastore.AudioSourceRecord, error) {
+	return &datastore.AudioSourceRecord{ID: sourceID, Label: label, Type: sourceType}, nil
+}
+
+func (m *mockStore) GetAudioSource(sourceID string) (*datastore.AudioSourceRecord, error) {
+	return &datastore.AudioSourceRecord{ID: sourceID, Label: "", Type: "device"}, nil
+}
+
+func (m *mockStore) GetSourceSummaryData(ctx context.Context, startDate, endDate string, limit int) ([]datastore.SourceSummaryData, error) {
+	return []datastore.SourceSummaryData{}, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore
