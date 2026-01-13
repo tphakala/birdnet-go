@@ -227,7 +227,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	health, exists := healthData[decodedURL]
 	if !exists {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
-			logger.String("requested_url", privacy.SanitizeRTSPUrl(decodedURL)),
+			logger.String("requested_url", privacy.SanitizeStreamUrl(decodedURL)),
 			logger.Int("active_streams", len(healthData)))
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
@@ -278,7 +278,7 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 		streamSummary := StreamSummaryResponse{
 			Name:         info.Name,
 			Type:         info.Type,
-			URL:          privacy.SanitizeRTSPUrl(rawURL),
+			URL:          privacy.SanitizeStreamUrl(rawURL),
 			IsHealthy:    health.IsHealthy,
 			ProcessState: health.ProcessState.String(),
 		}
@@ -303,7 +303,7 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 // convertStreamHealthToResponse converts internal StreamHealth to API response format
 func convertStreamHealthToResponse(rawURL string, health *myaudio.StreamHealth) StreamHealthResponse {
 	response := StreamHealthResponse{
-		URL:                privacy.SanitizeRTSPUrl(rawURL),
+		URL:                privacy.SanitizeStreamUrl(rawURL),
 		IsHealthy:          health.IsHealthy,
 		ProcessState:       health.ProcessState.String(),
 		RestartCount:       health.RestartCount,
@@ -539,7 +539,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
 				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
-					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("client_id", clientID),
 					logger.Error(err))
 				return err
@@ -549,7 +549,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			eventType := determineEventType(previousSnapshot, currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
 				c.logDebugIfEnabled("Failed to send health update, client disconnected",
-					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("event_type", eventType),
 					logger.String("client_id", clientID),
 					logger.String("previous_state", previousSnapshot.ProcessState),
@@ -574,7 +574,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 		}
 
 		// Stream was removed
-		sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
+		sanitizedURL := privacy.SanitizeStreamUrl(prevURL)
 		emptyHealth := myaudio.StreamHealth{}
 		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
 
@@ -621,7 +621,7 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 	}
 
 	c.logDebugIfEnabled("Stream health update sent",
-		logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+		logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 		logger.String("event_type", eventType),
 		logger.Bool("is_healthy", health.IsHealthy),
 		logger.String("state", health.ProcessState.String()))

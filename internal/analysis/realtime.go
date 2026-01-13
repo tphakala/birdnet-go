@@ -1408,10 +1408,10 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 					Type:        myaudio.StreamTypeToSourceType(stream.Type),
 				})
 				if err != nil {
-					safeURL := privacy.SanitizeRTSPUrl(stream.URL)
-					log.Error("failed to register RTSP source",
+					safeURL := privacy.SanitizeStreamUrl(stream.URL)
+					log.Error("failed to register stream source",
 						logger.String("stream_name", stream.Name),
-						logger.String("rtsp_url", safeURL),
+						logger.String("stream_url", safeURL),
 						logger.Error(err))
 					failedSources = append(failedSources, stream.Name)
 					continue
@@ -1422,7 +1422,7 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 
 			// If some sources failed to register, log a summary
 			if len(failedSources) > 0 {
-				log.Warn("some RTSP sources failed to register",
+				log.Warn("some stream sources failed to register",
 					logger.Int("failed_count", len(failedSources)),
 					logger.Int("total_count", len(settings.Realtime.RTSP.Streams)),
 					logger.Any("failed_sources", failedSources))

@@ -662,14 +662,14 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 		registry := myaudio.GetRegistry()
 		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type))
 		if audioSource == nil {
-			errs = append(errs, errors.Newf("failed to get/create RTSP source").
+			errs = append(errs, errors.Newf("failed to get/create stream source").
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
-				Context("operation", "get_or_create_rtsp_source").
+				Context("operation", "get_or_create_stream_source").
 				Context("stream_name", stream.Name).
-				Context("url", privacy.SanitizeRTSPUrl(stream.URL)).
+				Context("url", privacy.SanitizeStreamUrl(stream.URL)).
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(stream.Name, "rtsp", "analysis.soundlevel", fmt.Errorf("failed to get/create RTSP source"))
+			LogSoundLevelProcessorRegistrationFailed(stream.Name, stream.Type, "analysis.soundlevel", fmt.Errorf("failed to get/create stream source"))
 			continue
 		}
 
@@ -686,20 +686,20 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
 				Context("operation", "register_sound_level_processor").
-				Context("source_type", "rtsp").
+				Context("source_type", string(audioSource.Type)).
 				Context("source_id", audioSource.ID).
 				Context("display_name", audioSource.DisplayName).
 				Context("source_url", stream.URL).
 				Context("stream_running", streamRunning).
 				Context("stream_exists", streamExists). // indicates if stream was found in health map
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(audioSource.DisplayName, "rtsp_stream", "analysis.soundlevel", err)
+			LogSoundLevelProcessorRegistrationFailed(audioSource.DisplayName, string(audioSource.Type)+"_stream", "analysis.soundlevel", err)
 		} else {
 			successCount++
 			if _, isActive := activeStreams[stream.URL]; isActive {
-				LogSoundLevelProcessorRegistered(audioSource.DisplayName, "rtsp_active", "analysis.soundlevel")
+				LogSoundLevelProcessorRegistered(audioSource.DisplayName, string(audioSource.Type)+"_active", "analysis.soundlevel")
 			} else {
-				LogSoundLevelProcessorRegistered(audioSource.DisplayName, "rtsp_configured", "analysis.soundlevel")
+				LogSoundLevelProcessorRegistered(audioSource.DisplayName, string(audioSource.Type)+"_configured", "analysis.soundlevel")
 			}
 		}
 	}
@@ -707,7 +707,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	// Warn about active streams that aren't configured (shouldn't normally happen)
 	for url := range activeStreams {
 		if !configuredURLs[url] {
-			LogSoundLevelActiveStreamNotInConfig(privacy.SanitizeRTSPUrl(url))
+			LogSoundLevelActiveStreamNotInConfig(privacy.SanitizeStreamUrl(url))
 		}
 	}
 
@@ -729,27 +729,26 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 		// Get the audio source from registry instead of hardcoded "malgo"
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
+			if audioSource, exists := registry.GetSourceByConnection(settings.Realtime.Audio.Source); exists {
 				myaudio.UnregisterSoundLevelProcessor(audioSource.ID)
 				LogSoundLevelProcessorUnregistered(audioSource.DisplayName, "audio_device", "analysis.soundlevel")
-			} else {
-				GetLogger().Warn("failed to get audio source from registry during sound level processor unregistration",
-					logger.String("source", settings.Realtime.Audio.Source))
 			}
+			// If source doesn't exist, nothing to unregister - this is expected during teardown
 		} else {
 			GetLogger().Warn("registry not available during sound level processor unregistration")
 		}
 	}
 
-	// Unregister all RTSP sources
+	// Unregister all stream sources
 	for _, stream := range settings.Realtime.RTSP.Streams {
 		// Get the source from registry to retrieve its ID
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			if audioSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type)); audioSource != nil {
+			if audioSource, exists := registry.GetSourceByConnection(stream.URL); exists {
 				myaudio.UnregisterSoundLevelProcessor(audioSource.ID)
 				LogSoundLevelProcessorUnregistered(stream.Name, "stream", "analysis.soundlevel")
 			}
+			// If source doesn't exist, nothing to unregister - this is expected during teardown
 		}
 	}
 }

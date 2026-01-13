@@ -802,7 +802,7 @@ func (r *AudioSourceRegistry) sanitizeConnectionString(conn string, sourceType S
 	switch sourceType {
 	case SourceTypeRTSP, SourceTypeHTTP, SourceTypeHLS, SourceTypeRTMP, SourceTypeUDP:
 		// All stream types may contain credentials and should be sanitized
-		return privacy.SanitizeRTSPUrl(conn)
+		return privacy.SanitizeStreamUrl(conn)
 	case SourceTypeAudioCard, SourceTypeFile:
 		// These are generally safe to log as-is
 		return conn
