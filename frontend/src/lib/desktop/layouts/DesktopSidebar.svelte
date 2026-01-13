@@ -153,14 +153,9 @@ Performance Optimizations:
   // Get collapsed state from store (using $ prefix for auto-subscription)
   let isCollapsed = $derived($sidebar);
 
-  // Get actual route from window.location for accurate highlighting
-  // Falls back to currentRoute prop if window is not available
-  let actualRoute = $derived.by(() => {
-    if (typeof window !== 'undefined') {
-      return window.location.pathname;
-    }
-    return currentRoute;
-  });
+  // Use the currentRoute prop for reactive highlighting
+  // This receives the full URL path (e.g., /ui/settings/main) from RootLayout
+  let actualRoute = $derived(currentRoute);
 
   // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
   let routeCache = $derived.by(() => ({

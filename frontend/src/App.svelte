@@ -428,6 +428,7 @@
   <RootLayout
     title={pageTitle}
     {currentPage}
+    currentPath={navigation.currentPath}
     {securityEnabled}
     {accessAllowed}
     {version}
