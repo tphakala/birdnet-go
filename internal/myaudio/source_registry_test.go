@@ -11,6 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants to avoid goconst warnings
+const testLocalStreamURL = "rtsp://test.local/stream"
+
 func TestSourceRegistration(t *testing.T) {
 	registry := newTestRegistry()
 
@@ -197,7 +200,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	registry := GetRegistry()
 
 	// Test that GetOrCreateSource works correctly
-	testURL := "rtsp://test.local/stream"
+	testURL := testLocalStreamURL
 
 	// This should auto-register the source
 	source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
@@ -436,7 +439,7 @@ func TestGetSourceByConnection(t *testing.T) {
 	registry := newTestRegistry()
 
 	// Register a source first
-	testURL := "rtsp://test.local/stream"
+	testURL := testLocalStreamURL
 	source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
 	require.NotNil(t, source)
 
@@ -471,7 +474,7 @@ func TestUnregisterDoesNotCreateOrphanSources(t *testing.T) {
 
 	// Verify no new sources were created
 	finalSources := registry.ListSources()
-	assert.Equal(t, initialCount, len(finalSources),
+	assert.Len(t, finalSources, initialCount,
 		"Looking up non-existent source should not create new entries")
 }
 
@@ -561,7 +564,7 @@ func TestRemoveSource(t *testing.T) {
 	registry := newTestRegistry()
 
 	// Create a source
-	testURL := "rtsp://test.local/stream"
+	testURL := testLocalStreamURL
 	source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
 	require.NotNil(t, source)
 	sourceID := source.ID
@@ -573,7 +576,7 @@ func TestRemoveSource(t *testing.T) {
 
 		// Remove the source
 		err := registry.RemoveSource(sourceID)
-		assert.NoError(t, err, "Should remove source without error")
+		require.NoError(t, err, "Should remove source without error")
 
 		// Verify source is gone
 		_, exists = registry.GetSourceByID(sourceID)
@@ -586,7 +589,7 @@ func TestRemoveSource(t *testing.T) {
 
 	t.Run("returns error for non-existent source", func(t *testing.T) {
 		err := registry.RemoveSource("non_existent_id")
-		assert.Error(t, err, "Should return error for non-existent source")
+		require.Error(t, err, "Should return error for non-existent source")
 		assert.ErrorIs(t, err, ErrSourceNotFound)
 	})
 }
@@ -601,7 +604,7 @@ func TestRemoveSourceByConnection(t *testing.T) {
 
 	t.Run("removes source by connection string", func(t *testing.T) {
 		err := registry.RemoveSourceByConnection(testURL)
-		assert.NoError(t, err, "Should remove source by connection")
+		require.NoError(t, err, "Should remove source by connection")
 
 		// Verify source is gone
 		_, exists := registry.GetSourceByConnection(testURL)
@@ -694,7 +697,7 @@ func TestSourceLifecycle(t *testing.T) {
 
 	// Step 5: Remove source
 	err := registry.RemoveSource(sourceID)
-	assert.NoError(t, err, "Should remove source")
+	require.NoError(t, err, "Should remove source")
 
 	// Step 6: Verify complete cleanup
 	_, exists = registry.GetSourceByID(sourceID)

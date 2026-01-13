@@ -234,7 +234,7 @@ func TestRTSPSettings_ValidateStreams(t *testing.T) {
 				},
 			},
 			wantErr: true,
-			errMsg:  "duplicate stream URL",
+			errMsg:  "has a duplicate URL",
 		},
 		{
 			name: "invalid stream in list",
