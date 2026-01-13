@@ -178,7 +178,7 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 	case "reconfigure_mqtt":
 		cm.handleReconfigureMQTT()
 	case "reconfigure_rtsp_sources":
-		cm.handleReconfigureRTSP()
+		cm.handleReconfigureStreams()
 	case "reconfigure_birdweather":
 		cm.handleReconfigureBirdWeather()
 	case "update_detection_intervals":
@@ -284,25 +284,26 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 	}
 }
 
-// handleReconfigureRTSP reconfigures RTSP sources
-func (cm *ControlMonitor) handleReconfigureRTSP() {
-	GetLogger().Info("Reconfiguring RTSP sources")
+// handleReconfigureStreams reconfigures audio streams
+func (cm *ControlMonitor) handleReconfigureStreams() {
+	GetLogger().Info("Reconfiguring audio streams")
 	settings := conf.Setting()
 
 	// Prepare the list of active sources (using source IDs, not raw URLs)
 	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 {
+	if len(settings.Realtime.RTSP.Streams) > 0 {
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			for _, url := range settings.Realtime.RTSP.URLs {
-				if rtspSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP); rtspSource != nil {
-					sources = append(sources, rtspSource.ID)
+			for _, stream := range settings.Realtime.RTSP.Streams {
+				if streamSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type)); streamSource != nil {
+					sources = append(sources, streamSource.ID)
 				} else {
-					GetLogger().Warn("Failed to get RTSP source ID from registry for URL during reconfiguration")
+					GetLogger().Warn("Failed to get stream source ID from registry during reconfiguration",
+						logger.String("stream_name", stream.Name))
 				}
 			}
 		} else {
-			GetLogger().Warn("Registry not available during RTSP reconfiguration, skipping RTSP sources")
+			GetLogger().Warn("Registry not available during stream reconfiguration, skipping stream sources")
 		}
 	}
 	if settings.Realtime.Audio.Source != "" {
@@ -311,10 +312,10 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
 				sources = append(sources, audioSource.ID)
 			} else {
-				GetLogger().Warn("Failed to get audio source from registry during RTSP reconfiguration")
+				GetLogger().Warn("Failed to get audio source from registry during stream reconfiguration")
 			}
 		} else {
-			GetLogger().Warn("Registry not available during RTSP reconfiguration, skipping audio source")
+			GetLogger().Warn("Registry not available during stream reconfiguration, skipping audio source")
 		}
 	}
 
@@ -387,9 +388,9 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 		}
 	}()
 
-	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
+	myaudio.ReconfigureStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
 
-	GetLogger().Info("RTSP sources reconfigured successfully")
+	GetLogger().Info("Audio streams reconfigured successfully")
 	cm.notifySuccess("Audio capture reconfigured successfully")
 }
 

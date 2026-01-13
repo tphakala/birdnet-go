@@ -34,6 +34,10 @@ type SourceStats struct {
 	Total  int `json:"total_sources"`
 	Active int `json:"active_sources"`
 	RTSP   int `json:"rtsp_sources"`
+	HTTP   int `json:"http_sources"`
+	HLS    int `json:"hls_sources"`
+	RTMP   int `json:"rtmp_sources"`
+	UDP    int `json:"udp_sources"`
 	Device int `json:"device_sources"`
 	File   int `json:"file_sources"`
 }
@@ -188,11 +192,35 @@ func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceT
 
 // detectSourceTypeFromString determines source type from connection string
 func detectSourceTypeFromString(connectionString string) SourceType {
-	// RTSP URLs (including test URLs for testing)
+	// RTSP/RTSPS streams (including test URLs for testing)
 	if strings.HasPrefix(connectionString, "rtsp://") ||
 		strings.HasPrefix(connectionString, "rtsps://") ||
 		strings.HasPrefix(connectionString, "test://") {
 		return SourceTypeRTSP
+	}
+
+	// RTMP/RTMPS streams
+	if strings.HasPrefix(connectionString, "rtmp://") ||
+		strings.HasPrefix(connectionString, "rtmps://") {
+		return SourceTypeRTMP
+	}
+
+	// HLS streams (m3u8 playlists)
+	if strings.HasSuffix(connectionString, ".m3u8") ||
+		strings.Contains(connectionString, ".m3u8?") {
+		return SourceTypeHLS
+	}
+
+	// HTTP/HTTPS audio streams (check after HLS to prioritize .m3u8 detection)
+	if strings.HasPrefix(connectionString, "http://") ||
+		strings.HasPrefix(connectionString, "https://") {
+		return SourceTypeHTTP
+	}
+
+	// UDP/RTP streams
+	if strings.HasPrefix(connectionString, "udp://") ||
+		strings.HasPrefix(connectionString, "rtp://") {
+		return SourceTypeUDP
 	}
 
 	// Audio device patterns
@@ -215,8 +243,8 @@ func detectSourceTypeFromString(connectionString string) SourceType {
 		return SourceTypeFile
 	}
 
-	// Default to audio card for unknown patterns
-	return SourceTypeAudioCard
+	// Default to unknown for unrecognized patterns
+	return SourceTypeUnknown
 }
 
 // ListSources returns all registered sources (without connection strings) in deterministic order
@@ -487,8 +515,11 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 	}
 
 	// Check for shell injection attempts - customize patterns based on source type
-	if sourceType == SourceTypeRTSP {
-		// For RTSP URLs, allow query parameters with ampersands (e.g., ?channel=1&subtype=0)
+	// Stream types (RTSP, HTTP, HLS, RTMP, UDP) allow query parameters with ampersands
+	isStreamType := sourceType == SourceTypeRTSP || sourceType == SourceTypeHTTP ||
+		sourceType == SourceTypeHLS || sourceType == SourceTypeRTMP || sourceType == SourceTypeUDP
+	if isStreamType {
+		// For stream URLs, allow query parameters with ampersands (e.g., ?channel=1&subtype=0)
 		// but still block dangerous shell injection patterns
 		if strings.ContainsAny(connectionString, ";\n\r`|") ||
 			strings.Contains(connectionString, "$(") ||
@@ -525,6 +556,12 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 	switch sourceType {
 	case SourceTypeRTSP:
 		return r.validateRTSPURL(connectionString)
+	case SourceTypeHTTP, SourceTypeHLS:
+		return r.validateHTTPURL(connectionString)
+	case SourceTypeRTMP:
+		return r.validateRTMPURL(connectionString)
+	case SourceTypeUDP:
+		return r.validateUDPURL(connectionString)
 	case SourceTypeFile:
 		return r.validateFilePath(connectionString)
 	case SourceTypeAudioCard:
@@ -584,6 +621,63 @@ func (r *AudioSourceRegistry) validateRTSPURL(rtspURL string) error {
 	// when FFmpeg attempts to connect.
 
 	return nil
+}
+
+// validateStreamURL is a generic validator for stream URLs with scheme validation.
+// It checks for empty URLs, valid schemes, and content after the scheme.
+func (r *AudioSourceRegistry) validateStreamURL(streamURL, urlType, operation string, validSchemes []string) error {
+	if streamURL == "" {
+		return errors.Newf("%s URL cannot be empty", urlType).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", operation).
+			Context("reason", "empty_url").
+			Build()
+	}
+
+	lowerURL := strings.ToLower(streamURL)
+	schemeValid := false
+	for _, scheme := range validSchemes {
+		if strings.HasPrefix(lowerURL, scheme) {
+			schemeValid = true
+			break
+		}
+	}
+	if !schemeValid {
+		return errors.Newf("invalid scheme, expected one of: %v", validSchemes).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", operation).
+			Context("reason", "invalid_scheme").
+			Build()
+	}
+
+	schemeEnd := strings.Index(lowerURL, "://") + 3
+	if len(streamURL) <= schemeEnd {
+		return errors.Newf("%s URL must have content after scheme", urlType).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", operation).
+			Context("reason", "missing_content_after_scheme").
+			Build()
+	}
+
+	return nil
+}
+
+// validateHTTPURL validates HTTP/HTTPS URLs for audio streams
+func (r *AudioSourceRegistry) validateHTTPURL(httpURL string) error {
+	return r.validateStreamURL(httpURL, "HTTP", "validate_http_url", []string{"http://", "https://"})
+}
+
+// validateRTMPURL validates RTMP/RTMPS URLs for audio streams
+func (r *AudioSourceRegistry) validateRTMPURL(rtmpURL string) error {
+	return r.validateStreamURL(rtmpURL, "RTMP", "validate_rtmp_url", []string{"rtmp://", "rtmps://"})
+}
+
+// validateUDPURL validates UDP/RTP URLs for audio streams
+func (r *AudioSourceRegistry) validateUDPURL(udpURL string) error {
+	return r.validateStreamURL(udpURL, "UDP", "validate_udp_url", []string{"udp://", "rtp://"})
 }
 
 // validateFilePath validates file paths for security
@@ -681,6 +775,14 @@ func (r *AudioSourceRegistry) GetSourceStats() SourceStats {
 		switch source.Type {
 		case SourceTypeRTSP:
 			stats.RTSP++
+		case SourceTypeHTTP:
+			stats.HTTP++
+		case SourceTypeHLS:
+			stats.HLS++
+		case SourceTypeRTMP:
+			stats.RTMP++
+		case SourceTypeUDP:
+			stats.UDP++
 		case SourceTypeAudioCard:
 			stats.Device++
 		case SourceTypeFile:
@@ -698,8 +800,9 @@ func (r *AudioSourceRegistry) GetSourceStats() SourceStats {
 
 func (r *AudioSourceRegistry) sanitizeConnectionString(conn string, sourceType SourceType) string {
 	switch sourceType {
-	case SourceTypeRTSP:
-		return privacy.SanitizeRTSPUrl(conn)
+	case SourceTypeRTSP, SourceTypeHTTP, SourceTypeHLS, SourceTypeRTMP, SourceTypeUDP:
+		// All stream types may contain credentials and should be sanitized
+		return privacy.SanitizeStreamUrl(conn)
 	case SourceTypeAudioCard, SourceTypeFile:
 		// These are generally safe to log as-is
 		return conn
@@ -903,6 +1006,25 @@ func (r *AudioSourceRegistry) parseLinuxPlugHWDeviceString(deviceString string) 
 	// Remove "plughw:" prefix and use shared parser
 	params := strings.TrimPrefix(deviceString, "plughw:")
 	return r.parseLinuxDeviceParams(params, deviceString)
+}
+
+// StreamTypeToSourceType converts a config StreamType string to myaudio SourceType.
+// This provides a centralized mapping between the conf and myaudio type systems.
+func StreamTypeToSourceType(streamType string) SourceType {
+	switch streamType {
+	case "rtsp":
+		return SourceTypeRTSP
+	case "http":
+		return SourceTypeHTTP
+	case "hls":
+		return SourceTypeHLS
+	case "rtmp":
+		return SourceTypeRTMP
+	case "udp":
+		return SourceTypeUDP
+	default:
+		return SourceTypeUnknown
+	}
 }
 
 // resolveFriendlyCardName maps ALSA card identifiers to friendly names

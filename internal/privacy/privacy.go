@@ -137,9 +137,10 @@ var (
 	// Separator normalization pattern for API tokens
 	separatorRegex = regexp.MustCompile(`[:=]\s*`)
 
-	// RTSP URL pattern for finding and sanitizing RTSP URLs with credentials
-	// Supports various formats including IPv6 addresses in brackets
-	rtspURLPattern = regexp.MustCompile(`rtsp://(?:[^:]+:[^@]+@)?(?:\[[0-9a-fA-F:]+\]|[^/:\s]+)(?::[0-9]+)?(?:/[^\s]*)?`)
+	// streamURLPattern for finding and sanitizing stream URLs with credentials
+	// Supports RTSP, RTSPS, HTTP, HTTPS, RTMP, RTMPS, UDP, and RTP URLs
+	// including IPv6 addresses in brackets
+	streamURLPattern = regexp.MustCompile(`(?:rtsps?|https?|rtmps?|udp|rtp)://(?:[^:]+:[^@]+@)?(?:\[[0-9a-fA-F:]+\]|[^/:\s]+)(?::[0-9]+)?(?:/[^\s]*)?`)
 
 	// FFmpeg error prefix pattern - matches memory addresses like [rtsp @ 0x55d4a4808980]
 	ffmpegPrefixPattern = regexp.MustCompile(`\[\w+\s*@\s*0x[0-9a-fA-F]+\]\s*`)
@@ -246,9 +247,26 @@ func AnonymizeURL(rawURL string) string {
 	return fmt.Sprintf("url-%x", hash[:hashLenLong])
 }
 
-// SanitizeRTSPUrl removes sensitive information from RTSP URL and returns a display-friendly version
-// It strips credentials while preserving the host, port, and path for debugging
+// streamSchemes defines the URL schemes that should be sanitized for credentials
+var streamSchemes = map[string]bool{
+	"rtsp": true, "rtsps": true,
+	"http": true, "https": true,
+	"rtmp": true, "rtmps": true,
+	"udp": true, "rtp": true,
+}
+
+// SanitizeRTSPUrl removes sensitive information from stream URLs and returns a display-friendly version.
+// It strips credentials while preserving the host, port, and path for debugging.
+// Despite the name, this function handles all stream protocols (RTSP, HTTP, HLS, RTMP, UDP, RTP).
+// Kept for backward compatibility - prefer SanitizeStreamUrl for new code.
 func SanitizeRTSPUrl(source string) string {
+	return SanitizeStreamUrl(source)
+}
+
+// SanitizeStreamUrl removes sensitive information from stream URLs and returns a display-friendly version.
+// It strips credentials while preserving the host, port, and path for debugging.
+// Supports RTSP, RTSPS, HTTP, HTTPS, RTMP, RTMPS, UDP, and RTP URLs.
+func SanitizeStreamUrl(source string) string {
 	// Parse the URL using standard library
 	parsedURL, err := url.Parse(source)
 	if err != nil {
@@ -256,8 +274,8 @@ func SanitizeRTSPUrl(source string) string {
 		return source
 	}
 
-	// Only process RTSP URLs
-	if parsedURL.Scheme != "rtsp" {
+	// Only process supported stream URL schemes
+	if !streamSchemes[parsedURL.Scheme] {
 		return source
 	}
 
@@ -267,10 +285,16 @@ func SanitizeRTSPUrl(source string) string {
 	return parsedURL.String()
 }
 
-// SanitizeRTSPUrls finds and sanitizes all RTSP URLs in a given text
-// It uses regex pattern matching to identify RTSP URLs and replaces them with sanitized versions
+// SanitizeRTSPUrls finds and sanitizes all stream URLs in a given text.
+// Despite the name, it handles all stream protocols. Kept for backward compatibility.
 func SanitizeRTSPUrls(text string) string {
-	return rtspURLPattern.ReplaceAllStringFunc(text, SanitizeRTSPUrl)
+	return SanitizeStreamUrls(text)
+}
+
+// SanitizeStreamUrls finds and sanitizes all stream URLs in a given text.
+// It uses regex pattern matching to identify stream URLs and replaces them with sanitized versions.
+func SanitizeStreamUrls(text string) string {
+	return streamURLPattern.ReplaceAllStringFunc(text, SanitizeStreamUrl)
 }
 
 // SanitizeFFmpegError removes memory addresses from FFmpeg error messages to enable proper deduplication
@@ -278,8 +302,8 @@ func SanitizeRTSPUrls(text string) string {
 func SanitizeFFmpegError(text string) string {
 	// First remove FFmpeg memory address prefixes
 	text = ffmpegPrefixPattern.ReplaceAllString(text, "")
-	// Then sanitize any RTSP URLs
-	return SanitizeRTSPUrls(text)
+	// Then sanitize any stream URLs
+	return SanitizeStreamUrls(text)
 }
 
 // GenerateSystemID creates a unique system identifier
