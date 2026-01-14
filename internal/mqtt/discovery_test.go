@@ -187,8 +187,12 @@ func TestPublishBridgeDiscovery(t *testing.T) {
 	assert.Equal(t, "birdnet/status", payload.StateTopic)
 	assert.Equal(t, "connectivity", payload.DeviceClass)
 	assert.Equal(t, "diagnostic", payload.EntityCategory)
-	assert.Equal(t, "online", payload.PayloadAvailable)
-	assert.Equal(t, "offline", payload.PayloadNotAvailable)
+	assert.Equal(t, StatusPayloadOnline, payload.PayloadOn)
+	assert.Equal(t, StatusPayloadOffline, payload.PayloadOff)
+	// PayloadAvailable/PayloadNotAvailable are intentionally not set
+	// since bridge has no AvailabilityTopic - these would be ignored by HA
+	assert.Empty(t, payload.PayloadAvailable)
+	assert.Empty(t, payload.PayloadNotAvailable)
 
 	// Verify device info
 	assert.Equal(t, "BirdNET-Go", payload.Device.Name)
@@ -733,14 +737,30 @@ func TestShortenDisplayName(t *testing.T) {
 			input:    "",
 			expected: "",
 		},
+		{
+			name:     "UTF-8 multi-byte characters handled safely",
+			input:    "日本語カメラ_ストリーム_フロントヤードの庭_高画質ストリーミング配信", // 34 runes
+			expected: "日本語カメラ_ストリーム_フロントヤードの庭",                         // truncated at _ (22 runes)
+		},
+		{
+			name:     "Mixed ASCII and UTF-8 truncates correctly",
+			input:    "Café_Microphone_Stream_日本語_テスト_追加テキスト文字列", // 41 runes
+			expected: "Café_Microphone_Stream_日本語_テスト",                    // truncated at _ (30 runes)
+		},
+		{
+			name:     "Short UTF-8 string passes through unchanged",
+			input:    "Mikrofon_Gärten",
+			expected: "Mikrofon_Gärten",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := shortenDisplayName(tt.input)
 			assert.Equal(t, tt.expected, result)
-			assert.LessOrEqual(t, len(result), maxDisplayNameLength,
-				"Result should never exceed maxDisplayNameLength")
+			// Check rune length (not byte length) for UTF-8 safety
+			assert.LessOrEqual(t, len([]rune(result)), maxDisplayNameLength,
+				"Result rune count should never exceed maxDisplayNameLength")
 		})
 	}
 }
