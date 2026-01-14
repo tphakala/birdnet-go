@@ -105,6 +105,8 @@ type DiscoveryPayload struct {
 	StateClass          string           `json:"state_class,omitempty"`
 	Icon                string           `json:"icon,omitempty"`
 	EntityCategory      string           `json:"entity_category,omitempty"`
+	PayloadOn           string           `json:"payload_on,omitempty"`
+	PayloadOff          string           `json:"payload_off,omitempty"`
 	PayloadAvailable    string           `json:"payload_available,omitempty"`
 	PayloadNotAvailable string           `json:"payload_not_available,omitempty"`
 	AvailabilityTopic   string           `json:"availability_topic,omitempty"`
@@ -198,6 +200,8 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 		StateTopic:          p.config.BaseTopic + "/status",
 		DeviceClass:         "connectivity",
 		EntityCategory:      "diagnostic",
+		PayloadOn:           "online",
+		PayloadOff:          "offline",
 		PayloadAvailable:    "online",
 		PayloadNotAvailable: "offline",
 		Device: DiscoveryDevice{
@@ -217,11 +221,21 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 // publishSourceDiscovery publishes discovery for a specific audio source.
 func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore.AudioSource, settings *conf.Settings) error {
 	nodeID := SanitizeID(p.config.NodeID)
-	sourceID := SanitizeID(source.ID)
+
+	// Prefer DisplayName for entity IDs when available, fall back to source.ID
+	// This creates user-friendly entity IDs like "mediamtx_streamer_species"
+	// instead of internal IDs like "rtsp_65c31a0b_species"
+	var sourceID string
+	if source.DisplayName != "" {
+		sourceID = SanitizeID(source.DisplayName)
+	} else {
+		sourceID = SanitizeID(source.ID)
+	}
+
 	deviceID := fmt.Sprintf("%s_%s_%s", deviceIDPrefix, nodeID, sourceID)
 	bridgeID := p.bridgeID(nodeID)
 
-	// Determine display name
+	// Determine display name for the device
 	// Use shortenDisplayName when falling back to source.ID to prevent
 	// excessively long device names (e.g., from RTSP URLs or UUIDs)
 	displayName := source.DisplayName
@@ -375,7 +389,13 @@ func (p *Publisher) RemoveDiscovery(ctx context.Context, sources []datastore.Aud
 
 	// Remove each source's sensors
 	for _, source := range sources {
-		sourceID := SanitizeID(source.ID)
+		// Use same logic as publishSourceDiscovery: prefer DisplayName for entity IDs
+		var sourceID string
+		if source.DisplayName != "" {
+			sourceID = SanitizeID(source.DisplayName)
+		} else {
+			sourceID = SanitizeID(source.ID)
+		}
 
 		for _, sensorType := range AllSensorTypes {
 			topic := p.getSensorTopic(nodeID, sourceID, sensorType)

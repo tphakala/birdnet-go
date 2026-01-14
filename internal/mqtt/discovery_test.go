@@ -233,8 +233,9 @@ func TestPublishSourceDiscovery(t *testing.T) {
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Expected topics for the source sensors
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	baseTopicPrefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID
 
 	expectedTopics := []string{
@@ -299,8 +300,9 @@ func TestPublishSourceDiscoveryWithoutSoundLevel(t *testing.T) {
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Sound level topic should NOT be present
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	soundLevelTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_sound_level/config"
 
 	assert.NotContains(t, mock.publishedMessages, soundLevelTopic, "Sound level topic should not be published when disabled")
@@ -340,9 +342,10 @@ func TestRemoveDiscovery(t *testing.T) {
 	assert.Empty(t, mock.publishedMessages[bridgeTopic], "Bridge removal should publish empty payload")
 
 	// Verify sensor removal for each source
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
 	for _, source := range sources {
-		sourceID := SanitizeID(source.ID)
+		sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 		for _, sensorType := range AllSensorTypes {
 			objectID := nodeID + "_" + sourceID + "_" + sensorType
 			topic := "homeassistant/sensor/" + nodeID + "/" + objectID + "/config"
@@ -443,11 +446,12 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 	assert.Len(t, mock.publishedMessages, 10, "Expected 10 discovery messages")
 
 	// Verify each source has its sensors
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
 	for _, source := range sources {
-		sourceID := SanitizeID(source.ID)
+		sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 		speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
-		assert.Contains(t, mock.publishedMessages, speciesTopic, "Species topic not found for source %s", source.ID)
+		assert.Contains(t, mock.publishedMessages, speciesTopic, "Species topic not found for source %s", source.DisplayName)
 	}
 }
 
@@ -505,8 +509,9 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Get the sound level discovery payload
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	soundLevelTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_sound_level/config"
 
 	require.Contains(t, mock.publishedMessages, soundLevelTopic, "Sound level topic not found")
@@ -672,15 +677,16 @@ func TestDeviceNaming_PreservesShortDisplayName(t *testing.T) {
 	err := publisher.publishSourceDiscovery(ctx, source, settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
 
 	var payload DiscoveryPayload
 	err = json.Unmarshal([]byte(mock.publishedMessages[speciesTopic]), &payload)
 	require.NoError(t, err, "Failed to parse discovery payload")
 
-	// DisplayName should be preserved exactly
+	// DisplayName should be preserved exactly in the device name
 	assert.Equal(t, "BirdNET-Go Backyard Camera", payload.Device.Name,
 		"Device name should use the provided DisplayName exactly")
 }
