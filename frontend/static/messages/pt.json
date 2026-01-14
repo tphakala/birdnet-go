@@ -963,7 +963,8 @@
             "label": "Nível do Filtro"
           },
           "hardwareNote": "Os níveis Rigoroso e Máximo requerem configurações de sobreposição mais altas e mais recursos de CPU. RPi 4 ou hardware superior é necessário para esses níveis.",
-          "overlapAdjusted": "Configuração de sobreposição ajustada automaticamente para {overlap}s para atender aos requisitos do filtro"
+          "overlapAdjusted": "Configuração de sobreposição ajustada automaticamente para {overlap}s para atender aos requisitos do filtro",
+          "overlapReduced": "A configuração de sobreposição foi reduzida para {overlap}s para corresponder ao nível do filtro"
         },
         "rangeFilter": {
           "title": "Filtro de alcance",

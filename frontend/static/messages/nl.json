@@ -963,7 +963,8 @@
             "label": "Filterniveau"
           },
           "hardwareNote": "De niveaus \"Strikt\" en \"Maximum\" vereisen hogere overlap-instellingen en meer CPU-bronnen. RPi 4 of betere hardware is vereist voor deze niveaus.",
-          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen"
+          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen",
+          "overlapReduced": "Overlap-instelling verlaagd naar {overlap}s om overeen te komen met het filterniveau"
         },
         "rangeFilter": {
           "title": "Bereik Filter",

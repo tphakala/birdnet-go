@@ -963,7 +963,8 @@
             "label": "Niveau du Filtre"
           },
           "hardwareNote": "Les niveaux Strict et Maximum nécessitent des paramètres de chevauchement plus élevés et plus de ressources CPU. Un RPi 4 ou un matériel supérieur est requis pour ces niveaux.",
-          "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre"
+          "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre",
+          "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre"
         },
         "rangeFilter": {
           "title": "Filtre de portée",
