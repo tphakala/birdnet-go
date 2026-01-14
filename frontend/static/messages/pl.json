@@ -2715,7 +2715,9 @@
       "volumeGain": "Kontrola wzmocnienia głośności: {value} dB",
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",
-      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund"
+      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund",
+      "playbackSpeed": "Prędkość odtwarzania",
+      "speed": "Prędkość"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",
