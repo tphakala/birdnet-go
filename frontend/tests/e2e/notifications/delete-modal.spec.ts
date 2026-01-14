@@ -15,7 +15,6 @@ test.describe('Notification Delete Modal', () => {
       });
 
       if (!configResponse.ok()) {
-        console.warn('Failed to get app config:', configResponse.status());
         return null;
       }
 
@@ -31,14 +30,12 @@ test.describe('Notification Delete Modal', () => {
       });
 
       if (!response.ok()) {
-        console.warn('Failed to create test notification:', response.status());
         return null;
       }
 
       const notification = await response.json();
       return notification.id as string;
-    } catch (error) {
-      console.warn('Error creating test notification:', error);
+    } catch {
       return null;
     }
   }
@@ -96,6 +93,7 @@ test.describe('Notification Delete Modal', () => {
   test('delete modal appears when clicking trashcan icon', async ({ page, request }) => {
     // Create a test notification
     const notificationId = await createTestNotification(request);
+    // eslint-disable-next-line playwright/no-skipped-test -- Conditional skip when API preconditions fail
     test.skip(!notificationId, 'Could not create test notification - skipping test');
 
     try {
@@ -129,6 +127,7 @@ test.describe('Notification Delete Modal', () => {
 
   test('cancel button closes modal without deleting', async ({ page, request }) => {
     const notificationId = await createTestNotification(request);
+    // eslint-disable-next-line playwright/no-skipped-test -- Conditional skip when API preconditions fail
     test.skip(!notificationId, 'Could not create test notification - skipping test');
 
     try {
@@ -159,6 +158,7 @@ test.describe('Notification Delete Modal', () => {
 
   test('delete button removes notification', async ({ page, request }) => {
     const notificationId = await createTestNotification(request);
+    // eslint-disable-next-line playwright/no-skipped-test -- Conditional skip when API preconditions fail
     test.skip(!notificationId, 'Could not create test notification - skipping test');
 
     await page.goto('/ui/notifications', { timeout: 15000 });
@@ -192,6 +192,7 @@ test.describe('Notification Delete Modal', () => {
 
   test('modal has proper backdrop styling', async ({ page, request }) => {
     const notificationId = await createTestNotification(request);
+    // eslint-disable-next-line playwright/no-skipped-test -- Conditional skip when API preconditions fail
     test.skip(!notificationId, 'Could not create test notification - skipping test');
 
     try {
@@ -224,6 +225,7 @@ test.describe('Notification Delete Modal', () => {
 
   test('escape key closes modal', async ({ page, request }) => {
     const notificationId = await createTestNotification(request);
+    // eslint-disable-next-line playwright/no-skipped-test -- Conditional skip when API preconditions fail
     test.skip(!notificationId, 'Could not create test notification - skipping test');
 
     try {
