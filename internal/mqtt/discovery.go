@@ -25,6 +25,12 @@ const (
 // deviceIDPrefix is the standard prefix for all BirdNET-Go device identifiers
 const deviceIDPrefix = "birdnet_go"
 
+// Status payload constants for MQTT availability and state
+const (
+	StatusPayloadOnline  = "online"
+	StatusPayloadOffline = "offline"
+)
+
 // AllSensorTypes lists all sensor types for iteration (e.g., during removal)
 var AllSensorTypes = []string{
 	SensorSpecies,
@@ -58,25 +64,37 @@ func SanitizeID(id string) string {
 	return sanitized
 }
 
+// getSourceID returns the sanitized source identifier for MQTT topics and entity IDs.
+// Prefers DisplayName when available for user-friendly entity IDs like "mediamtx_streamer_species"
+// instead of internal IDs like "rtsp_65c31a0b_species".
+func getSourceID(source datastore.AudioSource) string {
+	if source.DisplayName != "" {
+		return SanitizeID(source.DisplayName)
+	}
+	return SanitizeID(source.ID)
+}
+
 // shortenDisplayName ensures display names stay within maxDisplayNameLength.
 // This prevents excessively long entity names in Home Assistant when
 // source IDs (like RTSP URLs) are used as fallback display names.
+// Uses rune-based operations to safely handle UTF-8 multi-byte characters.
 func shortenDisplayName(name string) string {
-	if len(name) <= maxDisplayNameLength {
+	runes := []rune(name)
+	if len(runes) <= maxDisplayNameLength {
 		return name
 	}
 
 	// For RTSP-style IDs (rtsp_xxxxx...), keep the prefix and truncate
 	const rtspPrefix = "rtsp_"
 	const rtspShortenedLength = len(rtspPrefix) + 8 // "rtsp_" + 8 chars of UUID
-	if strings.HasPrefix(name, rtspPrefix) && len(name) > rtspShortenedLength {
+	if strings.HasPrefix(name, rtspPrefix) && len(runes) > rtspShortenedLength {
 		// Example: "rtsp_a1b2c3d4-e5f6..." -> "rtsp_a1b2c3d4"
-		return name[:rtspShortenedLength]
+		return string(runes[:rtspShortenedLength])
 	}
 
 	// For URLs or other long strings, truncate intelligently
 	// Try to cut at a natural boundary (underscore, hyphen, slash)
-	truncated := name[:maxDisplayNameLength]
+	truncated := runes[:maxDisplayNameLength]
 
 	// Find the last natural break point
 	lastBreak := -1
@@ -88,10 +106,10 @@ func shortenDisplayName(name string) string {
 	}
 
 	if lastBreak > 0 {
-		return truncated[:lastBreak]
+		return string(truncated[:lastBreak])
 	}
 
-	return truncated
+	return string(truncated)
 }
 
 // DiscoveryPayload represents a Home Assistant MQTT discovery message.
@@ -105,6 +123,8 @@ type DiscoveryPayload struct {
 	StateClass          string           `json:"state_class,omitempty"`
 	Icon                string           `json:"icon,omitempty"`
 	EntityCategory      string           `json:"entity_category,omitempty"`
+	PayloadOn           string           `json:"payload_on,omitempty"`
+	PayloadOff          string           `json:"payload_off,omitempty"`
 	PayloadAvailable    string           `json:"payload_available,omitempty"`
 	PayloadNotAvailable string           `json:"payload_not_available,omitempty"`
 	AvailabilityTopic   string           `json:"availability_topic,omitempty"`
@@ -193,13 +213,13 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 	bridgeID := p.bridgeID(nodeID)
 
 	payload := DiscoveryPayload{
-		Name:                "Status",
-		UniqueID:            bridgeID + "_status",
-		StateTopic:          p.config.BaseTopic + "/status",
-		DeviceClass:         "connectivity",
-		EntityCategory:      "diagnostic",
-		PayloadAvailable:    "online",
-		PayloadNotAvailable: "offline",
+		Name:           "Status",
+		UniqueID:       bridgeID + "_status",
+		StateTopic:     p.config.BaseTopic + "/status",
+		DeviceClass:    "connectivity",
+		EntityCategory: "diagnostic",
+		PayloadOn:      StatusPayloadOnline,
+		PayloadOff:     StatusPayloadOffline,
 		Device: DiscoveryDevice{
 			Identifiers:  []string{bridgeID},
 			Name:         p.config.DeviceName,
@@ -217,11 +237,11 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 // publishSourceDiscovery publishes discovery for a specific audio source.
 func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore.AudioSource, settings *conf.Settings) error {
 	nodeID := SanitizeID(p.config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := getSourceID(source)
 	deviceID := fmt.Sprintf("%s_%s_%s", deviceIDPrefix, nodeID, sourceID)
 	bridgeID := p.bridgeID(nodeID)
 
-	// Determine display name
+	// Determine display name for the device
 	// Use shortenDisplayName when falling back to source.ID to prevent
 	// excessively long device names (e.g., from RTSP URLs or UUIDs)
 	displayName := source.DisplayName
@@ -375,7 +395,7 @@ func (p *Publisher) RemoveDiscovery(ctx context.Context, sources []datastore.Aud
 
 	// Remove each source's sensors
 	for _, source := range sources {
-		sourceID := SanitizeID(source.ID)
+		sourceID := getSourceID(source)
 
 		for _, sensorType := range AllSensorTypes {
 			topic := p.getSensorTopic(nodeID, sourceID, sensorType)
