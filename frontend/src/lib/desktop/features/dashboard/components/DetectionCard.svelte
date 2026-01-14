@@ -27,6 +27,7 @@
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { acquireSlot, releaseSlot } from '$lib/utils/imageLoadQueue';
+  import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
   const logger = loggers.ui;
 
@@ -35,7 +36,6 @@
   const SPECTROGRAM_TIMEOUT_MS = 60000;
   const DEFAULT_AUDIO_GAIN = 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
-  const DEFAULT_PLAYBACK_SPEED = 1.0;
   const DEFAULT_DOWNLOAD_NAME = 'detection';
   const AUDIO_FILE_EXTENSION = '.wav';
 

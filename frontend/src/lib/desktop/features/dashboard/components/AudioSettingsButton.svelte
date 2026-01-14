@@ -16,6 +16,7 @@
 <script lang="ts">
   import { Volume2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
   interface Props {
     gainValue: number;
@@ -46,8 +47,6 @@
   const GAIN_MIN_DB = -20;
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 5000;
-  const SPEED_OPTIONS = [0.5, 0.75, 1.0, 1.25, 1.5] as const;
-  const DEFAULT_SPEED = 1.0;
 
   // Generate unique ID for this component instance
   const instanceId = Math.random().toString(36).slice(2, 9);
@@ -63,7 +62,7 @@
 
   // Check if settings have been modified from defaults
   const hasModifiedSettings = $derived(
-    gainValue !== 0 || filterFreq > FILTER_HP_MIN_FREQ || playbackSpeed !== DEFAULT_SPEED
+    gainValue !== 0 || filterFreq > FILTER_HP_MIN_FREQ || playbackSpeed !== DEFAULT_PLAYBACK_SPEED
   );
 
   function updateMenuPosition() {
@@ -131,7 +130,7 @@
   function handleReset() {
     onGainChange(0);
     onFilterChange(FILTER_HP_MIN_FREQ);
-    onSpeedChange(DEFAULT_SPEED);
+    onSpeedChange(DEFAULT_PLAYBACK_SPEED);
   }
 
   $effect(() => {
