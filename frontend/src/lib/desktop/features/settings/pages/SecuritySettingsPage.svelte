@@ -451,7 +451,7 @@
         onchange={updateAutoTLSHost}
       />
 
-      <div class="border-t border-base-300 pt-4 mt-4">
+      <div class="border-t border-[var(--border-100)] pt-4 mt-4">
         <h4 class="text-lg font-medium mb-2">{t('settings.security.httpsSettingsTitle')}</h4>
         <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mb-4">
           {t('settings.security.httpsSettingsDescription')}
@@ -541,15 +541,15 @@
       <div class="space-y-4">
         <!-- Provider Form (shown when adding or editing) -->
         {#if showProviderForm}
-          <div class="card bg-base-200 border border-primary">
-            <div class="card-body">
-              <h3 class="card-title text-base">
+          <div class="rounded-lg overflow-hidden bg-[var(--color-base-200)] border border-[var(--color-primary)]">
+            <div class="p-6">
+              <h3 class="flex items-center gap-2 text-base font-semibold">
                 {editingProviderIndex !== null
                   ? t('settings.security.oauth.form.editTitle')
                   : t('settings.security.oauth.form.addTitle')}
               </h3>
 
-              <div class="space-y-4">
+              <div class="space-y-4 mt-4">
                 <!-- Provider Selector (only for add mode) -->
                 {#if editingProviderIndex === null}
                   <SelectDropdown
@@ -587,16 +587,16 @@
                 {/if}
 
                 <!-- Redirect URI Information -->
-                <div class="bg-base-300 p-3 rounded-lg">
+                <div class="bg-[var(--color-base-300)] p-3 rounded-lg">
                   <div class="text-sm">
                     <p class="font-medium mb-1">{t('settings.security.oauth.redirectUriTitle')}</p>
-                    <code class="text-xs bg-base-200 px-2 py-1 rounded-sm break-all">{getRedirectURI(selectedProvider)}</code>
+                    <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getRedirectURI(selectedProvider)}</code>
                   </div>
                   <a
                     href={getCredentialsUrl(selectedProvider)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
+                    class="text-sm text-[var(--color-primary)] hover:opacity-80 inline-flex items-center gap-1 mt-2"
                   >
                     {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
                     <ExternalLink class="size-4" />
@@ -647,14 +647,14 @@
                 <div class="flex gap-2 justify-end pt-2">
                   <button
                     onclick={closeProviderForm}
-                    class="btn btn-ghost btn-sm"
+                    class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-transparent text-[var(--color-base-content)] hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={store.isLoading || store.isSaving}
                   >
                     {t('settings.security.oauth.form.cancelButton')}
                   </button>
                   <button
                     onclick={saveProvider}
-                    class="btn btn-primary btn-sm"
+                    class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret}
                   >
                     {t('settings.security.oauth.form.saveButton')}
@@ -671,7 +671,7 @@
             {t('settings.security.oauth.providers.title')}
           </h3>
           {#if !showProviderForm && canAddProvider}
-            <button onclick={openAddProviderForm} class="btn btn-sm btn-primary gap-1">
+            <button onclick={openAddProviderForm} class="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed">
               <Plus class="size-4" />
               {t('settings.security.oauth.providers.addButton')}
             </button>
@@ -685,15 +685,15 @@
               {@const providerType = provider.provider as OAuthProviderType}
               {@const IconComponent = getProviderIcon(providerType)}
               <div
-                class="card bg-base-200"
+                class="rounded-lg overflow-hidden bg-[var(--color-base-200)]"
                 class:opacity-50={!provider.enabled}
               >
-                <div class="card-body py-3 px-4">
+                <div class="py-3 px-4">
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex items-center gap-3 min-w-0">
                       <input
                         type="checkbox"
-                        class="toggle toggle-sm toggle-primary"
+                        class="appearance-none w-10 h-5 rounded-full cursor-pointer transition-all relative bg-[var(--color-base-300)] before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-4 before:h-4 before:rounded-full before:bg-[var(--color-base-100)] before:shadow-sm before:transition-transform checked:bg-[var(--color-primary)] checked:before:translate-x-5 focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         checked={provider.enabled}
                         onchange={() => toggleProviderEnabled(index)}
                         aria-label={t('settings.security.oauth.providers.enableToggle')}
@@ -704,7 +704,7 @@
                         <div class="min-w-0">
                           <div class="font-medium truncate">{getProviderDisplayName(providerType)}</div>
                           {#if provider.userId}
-                            <div class="text-xs text-[color:var(--color-base-content)] opacity-60 truncate">
+                            <div class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
                               {provider.userId}
                             </div>
                           {/if}
@@ -714,7 +714,7 @@
                     <div class="flex items-center gap-1 shrink-0">
                       <button
                         onclick={() => openEditProviderForm(index)}
-                        class="btn btn-ghost btn-xs btn-square"
+                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
                         title={t('settings.security.oauth.providers.editButton')}
                         aria-label={t('settings.security.oauth.providers.editButton')}
                         disabled={showProviderForm}
@@ -723,7 +723,7 @@
                       </button>
                       <button
                         onclick={() => deleteProvider(index)}
-                        class="btn btn-ghost btn-xs btn-square text-error"
+                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                         title={t('settings.security.oauth.providers.deleteButton')}
                         aria-label={t('settings.security.oauth.providers.deleteButton')}
                         disabled={showProviderForm}
@@ -737,7 +737,7 @@
             {/each}
           </div>
         {:else if !showProviderForm}
-          <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-60 bg-base-200 rounded-lg">
+          <div class="text-center py-8 text-[var(--color-base-content)] opacity-60 bg-[var(--color-base-200)] rounded-lg">
             <Users class="size-10 mx-auto mb-3 opacity-50" />
             <p class="text-sm font-medium">{t('settings.security.oauth.noProviders')}</p>
             <p class="text-xs mt-1">
@@ -794,8 +794,8 @@
               onchange={updateSubnetBypassSubnet}
             />
 
-            <div class="alert alert-warning">
-              <TriangleAlert class="size-5" />
+            <div class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]">
+              <TriangleAlert class="size-5 shrink-0" />
               <span>
                 <strong>{t('settings.security.securityWarningTitle')}</strong>
                 {t('settings.security.subnetWarningText')}

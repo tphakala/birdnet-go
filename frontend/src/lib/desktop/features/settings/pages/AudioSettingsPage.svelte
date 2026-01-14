@@ -499,8 +499,10 @@
     {#if audioDevices.loading}
       <!-- Loading State -->
       <div class="flex items-center justify-center py-12">
-        <span class="loading loading-spinner loading-lg text-primary"></span>
-        <span class="ml-3 text-[color:var(--color-base-content)] opacity-90"
+        <span
+          class="inline-block w-10 h-10 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+        ></span>
+        <span class="ml-3 text-[var(--color-base-content)] opacity-90"
           >{t('settings.audio.loading')}</span
         >
       </div>
@@ -558,13 +560,13 @@
           <!-- Status indicator -->
           <div class="flex items-center justify-between">
             {#if hasSelectedSoundCard}
-              <div class="flex items-center gap-2 text-sm text-success">
+              <div class="flex items-center gap-2 text-sm text-[var(--color-success)]">
                 <Volume2 class="size-4" />
                 <span>{t('settings.audio.audioCapture.deviceSelected')}</span>
               </div>
             {:else}
               <div
-                class="flex items-center gap-2 text-sm text-[color:var(--color-base-content)] opacity-60"
+                class="flex items-center gap-2 text-sm text-[var(--color-base-content)] opacity-60"
               >
                 <Volume2 class="size-4" />
                 <span>{t('settings.audio.audioCapture.noDeviceSelected')}</span>
@@ -572,7 +574,7 @@
             {/if}
             <button
               type="button"
-              class="btn btn-ghost btn-xs gap-1.5"
+              class="inline-flex items-center justify-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={loadAudioDevices}
               disabled={audioDevices.loading}
             >
@@ -615,7 +617,9 @@
     >
       {#if !settings.audio.export.enabled}
         <!-- Dependency notice when recording is disabled -->
-        <div class="alert alert-info mb-4">
+        <div
+          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)] mb-4"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
@@ -932,7 +936,7 @@
             class="space-y-4 transition-opacity duration-200"
             class:opacity-50={!settings.audio.export.enabled}
           >
-            <h4 class="text-sm font-medium text-base-content">
+            <h4 class="text-sm font-medium text-[var(--color-base-content)]">
               {t('settings.audio.clipRecording.captureSettings')}
             </h4>
             <div class="settings-form-grid">
@@ -1103,19 +1107,24 @@
                 })}
               />
             {:else}
-              <div class="form-control">
-                <label class="label" for="export-bitrate-disabled">
-                  <span class="label-text">{t('settings.audio.fileSettings.bitrateLabel')}</span>
+              <div>
+                <label class="block py-1" for="export-bitrate-disabled">
+                  <span class="text-sm text-[var(--color-base-content)]"
+                    >{t('settings.audio.fileSettings.bitrateLabel')}</span
+                  >
                 </label>
                 <input
                   id="export-bitrate-disabled"
                   type="text"
-                  class="input input-sm input-disabled w-full"
+                  class="block w-full px-3 py-1.5 text-sm bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-md opacity-50 cursor-not-allowed"
                   value="N/A - Lossless"
                   disabled
                   aria-describedby="lossless-note"
                 />
-                <span class="help-text mt-1" id="lossless-note">
+                <span
+                  class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
+                  id="lossless-note"
+                >
                   {t('settings.audio.fileSettings.losslessNote')}
                 </span>
               </div>

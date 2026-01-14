@@ -1234,19 +1234,19 @@
   function getFalsePositiveFilterBadgeClass(level: number): string {
     switch (level) {
       case 0:
-        return 'badge-ghost'; // Off - muted/neutral
+        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]'; // Off - muted/neutral
       case 1:
-        return 'badge-success'; // Lenient - green (easy on resources)
+        return 'bg-[var(--color-success)] text-[var(--color-success-content)]'; // Lenient - green (easy on resources)
       case 2:
-        return 'badge-info'; // Moderate - blue
+        return 'bg-[var(--color-info)] text-[var(--color-info-content)]'; // Moderate - blue
       case 3:
-        return 'badge-warning'; // Balanced - yellow/amber
+        return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]'; // Balanced - yellow/amber
       case 4:
-        return 'badge-error'; // Strict - red (requires RPi 4+)
+        return 'bg-[var(--color-error)] text-[var(--color-error-content)]'; // Strict - red (requires RPi 4+)
       case 5:
-        return 'badge-error'; // Maximum - red (requires RPi 4+)
+        return 'bg-[var(--color-error)] text-[var(--color-error-content)]'; // Maximum - red (requires RPi 4+)
       default:
-        return 'badge-ghost';
+        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
     }
   }
 
@@ -1651,7 +1651,7 @@
       <div class="space-y-6">
         <!-- Bird Images Section -->
         <div class="space-y-4">
-          <h4 class="text-sm font-medium text-base-content/70">
+          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
             {t('settings.main.sections.userInterface.dashboard.birdImages.title')}
           </h4>
 
@@ -1731,11 +1731,11 @@
         </div>
 
         <!-- Divider -->
-        <div class="border-t border-base-200"></div>
+        <div class="border-t border-[var(--color-base-200)]"></div>
 
         <!-- Spectrograms Section -->
         <div class="space-y-4">
-          <h4 class="text-sm font-medium text-base-content/70">
+          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
             {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
           </h4>
 
@@ -1804,7 +1804,7 @@
             <span class="text-sm font-medium">
               {t('settings.main.sections.userInterface.dashboard.spectrogram.style.label')}
             </span>
-            <p class="text-xs text-base-content/60 mt-1">
+            <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
               {t('settings.main.sections.userInterface.dashboard.spectrogram.style.helpText')}
             </p>
 
@@ -1814,9 +1814,9 @@
                 {@const isSelected = currentSpectrogramStyle === style.value}
                 <button
                   type="button"
-                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-primary/50 {isSelected
-                    ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_rgba(37,99,235,0.3)]'
-                    : 'border-base-300 bg-base-100 hover:border-base-content/30'}"
+                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 {isSelected
+                    ? 'border-[var(--color-primary)]/60 bg-[var(--color-primary)]/10 shadow-[0_0_0_1px_rgba(37,99,235,0.3)]'
+                    : 'border-[var(--border-200)] bg-[var(--color-base-100)] hover:border-[var(--color-base-content)]/30'}"
                   disabled={store.isLoading || store.isSaving}
                   onclick={() => updateSpectrogramSetting('style', style.value)}
                 >
@@ -1829,8 +1829,8 @@
                   <!-- Label -->
                   <span
                     class="mt-2 text-xs leading-tight text-center {isSelected
-                      ? 'text-primary font-medium'
-                      : 'text-base-content/70'}"
+                      ? 'text-[var(--color-primary)] font-medium'
+                      : 'text-[var(--color-base-content)]/70'}"
                   >
                     {style.label}
                   </span>
@@ -1839,7 +1839,7 @@
             </div>
 
             <!-- Selected style description -->
-            <p class="text-sm text-base-content/60 italic mt-4">
+            <p class="text-sm text-[var(--color-base-content)]/60 italic mt-4">
               {t(
                 `settings.main.sections.userInterface.dashboard.spectrogram.style.descriptions.${getStyleDescriptionKey(currentSpectrogramStyle)}`
               )}
@@ -1883,7 +1883,7 @@
     >
       <div class="space-y-4">
         <!-- Privacy Notice -->
-        <div class="p-4 bg-base-200 rounded-lg shadow-xs">
+        <div class="p-4 bg-[var(--color-base-200)] rounded-lg shadow-xs">
           <div>
             <h4 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h4>
             <div class="text-sm mt-1">
@@ -2012,14 +2012,14 @@
     >
       <div class="space-y-4">
         <!-- Custom implementation with colored badge -->
-        <div class="form-control min-w-0">
-          <label for="false-positive-filter-level" class="label">
-            <span class="label-text font-medium">
+        <div class="min-w-0">
+          <label for="false-positive-filter-level" class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-[var(--color-base-content)]">
               {t('settings.main.sections.falsePositiveFilter.level.label')}
             </span>
             <span
               class={cn(
-                'badge badge-sm font-medium',
+                'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
                 getFalsePositiveFilterBadgeClass(settings.falsePositiveFilter.level)
               )}
             >
@@ -2029,7 +2029,7 @@
           <input
             id="false-positive-filter-level"
             type="range"
-            class="range range-primary"
+            class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
             min={0}
             max={5}
             step={1}
@@ -2037,8 +2037,8 @@
             oninput={e => updateFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
             disabled={store.isLoading || store.isSaving}
           />
-          <div class="label">
-            <span class="label-text-alt">
+          <div class="mt-1">
+            <span class="text-xs text-[var(--color-base-content)] opacity-60">
               {getFalsePositiveFilterDescription(settings.falsePositiveFilter.level)}
             </span>
           </div>
@@ -2078,15 +2078,15 @@
         />
 
         <!-- Species Count Display -->
-        <div class="form-control">
-          <div class="label justify-start">
-            <span class="label-text"
+        <div>
+          <div class="flex justify-start mb-1">
+            <span class="text-sm text-[var(--color-base-content)]"
               >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
             >
           </div>
           <div class="flex items-center gap-3">
             <div
-              class="text-2xl font-bold text-primary tabular-nums"
+              class="text-2xl font-bold text-[var(--color-primary)] tabular-nums"
               class:opacity-60={rangeFilterState.testing}
             >
               {rangeFilterState.speciesCount !== null
@@ -2094,13 +2094,15 @@
                 : '—'}
             </div>
             {#if rangeFilterState.testing}
-              <span class="loading loading-spinner loading-sm text-primary"></span>
+              <span
+                class="inline-block w-4 h-4 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+              ></span>
             {/if}
           </div>
           <div class="flex gap-2 mt-2">
             <button
               type="button"
-              class="btn btn-sm btn-outline"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
               onclick={() => {
                 rangeFilterState.showModal = true;
@@ -2111,7 +2113,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-sm btn-primary"
+              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!rangeFilterState.speciesCount || rangeFilterState.downloading}
               onclick={downloadSpeciesCSV}
               aria-label={t('common.aria.downloadCsv')}
@@ -2127,12 +2129,15 @@
       </div>
 
       {#if rangeFilterState.error}
-        <div class="alert alert-error mt-4" role="alert">
+        <div
+          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          role="alert"
+        >
           <XCircle class="size-5 shrink-0" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
-            class="btn btn-sm btn-ghost ml-auto"
+            class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             onclick={() => (rangeFilterState.error = null)}
           >
             <X class="size-4" />
@@ -2273,21 +2278,24 @@
       </div>
 
       <!-- Map -->
-      <div class="form-control">
+      <div>
         <div
           bind:this={mapElement}
           id="location-map"
-          class="h-[350px] rounded-xl border border-base-300 relative overflow-hidden"
+          class="h-[350px] rounded-xl border border-[var(--border-200)] relative overflow-hidden"
           role="application"
           aria-label="Map for selecting station location"
         >
           {#if mapLibraryLoading}
             <div
-              class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-xl"
+              class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-100)]/75 rounded-xl"
             >
               <div class="flex flex-col items-center gap-2">
-                <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
-                <span class="text-sm text-base-content">Loading map...</span>
+                <span
+                  class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+                  aria-hidden="true"
+                ></span>
+                <span class="text-sm text-[var(--color-base-content)]">Loading map...</span>
               </div>
             </div>
           {/if}
@@ -2295,7 +2303,7 @@
         <div class="flex gap-2 mt-3">
           <button
             type="button"
-            class="btn btn-sm btn-circle btn-ghost bg-base-300"
+            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Zoom in"
             disabled={!map || mapLibraryLoading}
             onclick={() => map?.zoomIn({ duration: 300 })}
@@ -2304,7 +2312,7 @@
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-circle btn-ghost bg-base-300"
+            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Zoom out"
             disabled={!map || mapLibraryLoading}
             onclick={() => map?.zoomOut({ duration: 300 })}
@@ -2313,7 +2321,7 @@
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-circle btn-ghost bg-base-300"
+            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Expand map to full screen"
             disabled={!map || mapLibraryLoading}
             onclick={openMapModal}
@@ -2321,7 +2329,7 @@
             <Maximize2 class="size-4" />
           </button>
         </div>
-        <p class="text-xs text-info mt-2">
+        <p class="text-xs text-[var(--color-info)] mt-2">
           Hold Ctrl (or Cmd on Mac) + scroll to zoom. Click to set location.
         </p>
       </div>
@@ -2643,48 +2651,57 @@
       <div class="space-y-4">
         {#if databaseStats.loading}
           <div
-            class="flex items-center gap-2 text-base-content/60"
+            class="flex items-center gap-2 text-[var(--color-base-content)]/60"
             role="status"
             aria-live="polite"
           >
-            <span class="loading loading-spinner loading-sm"></span>
+            <span
+              class="inline-block w-4 h-4 border-2 border-[var(--color-base-300)] border-t-current rounded-full animate-spin"
+            ></span>
             <span>{t('settings.main.sections.database.stats.loading')}</span>
           </div>
         {:else if databaseStats.error}
-          <div class="alert alert-error" role="alert">
+          <div
+            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+            role="alert"
+          >
             <XCircle class="size-5" />
             <span>{databaseStats.error}</span>
-            <button type="button" class="btn btn-sm btn-ghost" onclick={() => loadDatabaseStats()}>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              onclick={() => loadDatabaseStats()}
+            >
               {t('settings.main.sections.database.stats.retry')}
             </button>
           </div>
         {:else if databaseStats.data}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <!-- Database Type -->
-            <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">
+            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
+              <div class="text-xs text-[var(--color-base-content)]/60">
                 {t('settings.main.sections.database.stats.type')}
               </div>
-              <div class="stat-value text-lg flex items-center gap-2">
+              <div class="text-lg font-semibold flex items-center gap-2 mt-1">
                 <DatabaseIcon database={databaseStats.data.type} className="size-5" />
                 <span class="capitalize">{databaseStats.data.type}</span>
               </div>
             </div>
 
             <!-- Connection Status -->
-            <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">
+            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
+              <div class="text-xs text-[var(--color-base-content)]/60">
                 {t('settings.main.sections.database.stats.status')}
               </div>
-              <div class="stat-value text-lg">
+              <div class="text-lg font-semibold mt-1">
                 {#if databaseStats.data.connected}
-                  <span class="text-success flex items-center gap-2">
-                    <span class="badge badge-success badge-xs"></span>
+                  <span class="text-[var(--color-success)] flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-[var(--color-success)]"></span>
                     {t('settings.main.sections.database.stats.connected')}
                   </span>
                 {:else}
-                  <span class="text-error flex items-center gap-2">
-                    <span class="badge badge-error badge-xs"></span>
+                  <span class="text-[var(--color-error)] flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
                     {t('settings.main.sections.database.stats.disconnected')}
                   </span>
                 {/if}
@@ -2692,29 +2709,29 @@
             </div>
 
             <!-- Database Size -->
-            <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">
+            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
+              <div class="text-xs text-[var(--color-base-content)]/60">
                 {t('settings.main.sections.database.stats.size')}
               </div>
-              <div class="stat-value text-lg">
+              <div class="text-lg font-semibold mt-1">
                 {formatBytes(databaseStats.data.size_bytes)}
               </div>
             </div>
 
             <!-- Total Detections -->
-            <div class="stat bg-base-200 rounded-box p-4">
-              <div class="stat-title text-xs">
+            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
+              <div class="text-xs text-[var(--color-base-content)]/60">
                 {t('settings.main.sections.database.stats.totalDetections')}
               </div>
-              <div class="stat-value text-lg">
+              <div class="text-lg font-semibold mt-1">
                 {databaseStats.data.total_detections.toLocaleString()}
               </div>
             </div>
           </div>
 
           <!-- Location/Path -->
-          <div class="bg-base-200 rounded-box p-4">
-            <div class="text-xs text-base-content/60 mb-1">
+          <div class="bg-[var(--color-base-200)] rounded-xl p-4">
+            <div class="text-xs text-[var(--color-base-content)]/60 mb-1">
               {t('settings.main.sections.database.stats.location')}
             </div>
             <div class="font-mono text-sm break-all">{databaseStats.data.location}</div>
@@ -2724,7 +2741,7 @@
           <div class="flex justify-end">
             <button
               type="button"
-              class="btn btn-sm btn-ghost gap-2"
+              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={() => loadDatabaseStats()}
               disabled={databaseStats.loading}
             >
@@ -2733,7 +2750,7 @@
             </button>
           </div>
         {:else}
-          <div class="text-base-content/60">
+          <div class="text-[var(--color-base-content)]/60">
             {t('settings.main.sections.database.stats.noData')}
           </div>
         {/if}
@@ -2760,7 +2777,7 @@
     onkeydown={e => e.key === 'Escape' && closeMapModal()}
   >
     <div
-      class="bg-base-100 rounded-2xl p-6 max-w-[95vw] max-h-[95vh] w-full h-full md:max-w-[90vw] md:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+      class="bg-[var(--color-base-100)] rounded-2xl p-6 max-w-[95vw] max-h-[95vh] w-full h-full md:max-w-[90vw] md:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
@@ -2769,7 +2786,7 @@
         </h3>
         <button
           type="button"
-          class="btn btn-sm btn-circle btn-ghost"
+          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           aria-label="Close modal"
           onclick={closeMapModal}
         >
@@ -2777,16 +2794,16 @@
         </button>
       </div>
 
-      <div class="mb-4 p-3 bg-base-200/50 rounded-lg">
+      <div class="mb-4 p-3 bg-[var(--color-base-200)]/50 rounded-lg">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span class="text-[color:var(--color-base-content)] opacity-60"
+            <span class="text-[var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.latitude.label')}</span
             >
             <span class="font-medium ml-2">{settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="text-[color:var(--color-base-content)] opacity-60"
+            <span class="text-[var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.longitude.label')}</span
             >
             <span class="font-medium ml-2">{settings.birdnet.longitude}</span>
@@ -2797,28 +2814,33 @@
       <div class="flex-1 min-h-0">
         <div
           bind:this={modalMapElement}
-          class="w-full h-full rounded-xl border border-base-300 relative overflow-hidden"
+          class="w-full h-full rounded-xl border border-[var(--border-200)] relative overflow-hidden"
           role="application"
           aria-label="Full screen map for selecting station location"
         >
           {#if mapLibraryLoading}
             <div
-              class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-xl"
+              class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-100)]/75 rounded-xl"
             >
               <div class="flex flex-col items-center gap-2">
-                <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
-                <span class="text-sm text-base-content">Loading map...</span>
+                <span
+                  class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+                  aria-hidden="true"
+                ></span>
+                <span class="text-sm text-[var(--color-base-content)]">Loading map...</span>
               </div>
             </div>
           {/if}
         </div>
       </div>
 
-      <div class="flex justify-between items-center mt-4 pt-4 border-t border-base-200">
+      <div
+        class="flex justify-between items-center mt-4 pt-4 border-t border-[var(--color-base-200)]"
+      >
         <div class="flex gap-2">
           <button
             type="button"
-            class="btn btn-sm btn-circle btn-ghost bg-base-200"
+            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-200)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Zoom in"
             disabled={!modalMap || mapLibraryLoading}
             onclick={() => modalMap?.zoomIn({ duration: 300 })}
@@ -2827,7 +2849,7 @@
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-circle btn-ghost bg-base-200"
+            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-200)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Zoom out"
             disabled={!modalMap || mapLibraryLoading}
             onclick={() => modalMap?.zoomOut({ duration: 300 })}
@@ -2835,10 +2857,14 @@
             -
           </button>
         </div>
-        <p class="text-sm text-[color:var(--color-base-content)] opacity-60">
+        <p class="text-sm text-[var(--color-base-content)] opacity-60">
           Click on the map or drag the marker to set location
         </p>
-        <button type="button" class="btn btn-primary" onclick={closeMapModal}>
+        <button
+          type="button"
+          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
+          onclick={closeMapModal}
+        >
           {t('common.done')}
         </button>
       </div>
@@ -2859,7 +2885,7 @@
     onkeydown={e => e.key === 'Escape' && (rangeFilterState.showModal = false)}
   >
     <div
-      class="bg-base-100 rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl"
+      class="bg-[var(--color-base-100)] rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl"
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
@@ -2868,7 +2894,7 @@
         </h3>
         <button
           type="button"
-          class="btn btn-sm btn-circle btn-ghost"
+          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           aria-label="Close modal"
           onclick={() => (rangeFilterState.showModal = false)}
         >
@@ -2876,28 +2902,28 @@
         </button>
       </div>
 
-      <div class="mb-4 p-3 bg-base-200/50 rounded-lg">
+      <div class="mb-4 p-3 bg-[var(--color-base-200)]/50 rounded-lg">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <span class="text-base-content opacity-60"
+            <span class="text-[var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
             >
             <span class="font-medium ml-1">{rangeFilterState.speciesCount}</span>
           </div>
           <div>
-            <span class="text-base-content opacity-60"
+            <span class="text-[var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
             >
             <span class="font-medium ml-1">{settings.birdnet.rangeFilter.threshold}</span>
           </div>
           <div>
-            <span class="text-base-content opacity-60"
+            <span class="text-[var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.latitude')}</span
             >
             <span class="font-medium ml-1">{settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="text-base-content opacity-60"
+            <span class="text-[var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
             >
             <span class="font-medium ml-1">{settings.birdnet.longitude}</span>
@@ -2906,12 +2932,15 @@
       </div>
 
       {#if rangeFilterState.error}
-        <div class="alert alert-error mb-4" role="alert">
+        <div
+          class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          role="alert"
+        >
           <XCircle class="size-5 shrink-0" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
-            class="btn btn-sm btn-ghost ml-auto"
+            class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             onclick={() => (rangeFilterState.error = null)}
           >
             <X class="size-4" />
@@ -2922,33 +2951,37 @@
       <div class="flex-1 overflow-auto">
         {#if rangeFilterState.loading}
           <div class="text-center py-12">
-            <span class="loading loading-spinner loading-lg"></span>
-            <p class="mt-3 text-[color:var(--color-base-content)] opacity-90">
+            <span
+              class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+            ></span>
+            <p class="mt-3 text-[var(--color-base-content)] opacity-90">
               {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
             </p>
           </div>
         {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {#each rangeFilterState.species as species (species.scientificName)}
-              <div class="p-3 rounded-lg hover:bg-base-200/50 transition-colors">
+              <div class="p-3 rounded-lg hover:bg-[var(--color-base-200)]/50 transition-colors">
                 <div class="font-medium">{species.commonName}</div>
-                <div class="text-sm text-[color:var(--color-base-content)] opacity-60 italic">
+                <div class="text-sm text-[var(--color-base-content)] opacity-60 italic">
                   {species.scientificName}
                 </div>
               </div>
             {/each}
           </div>
         {:else}
-          <div class="text-center py-12 text-[color:var(--color-base-content)] opacity-60">
+          <div class="text-center py-12 text-[var(--color-base-content)] opacity-60">
             {t('settings.main.sections.rangeFilter.modal.noSpeciesFound')}
           </div>
         {/if}
       </div>
 
-      <div class="flex justify-between items-center mt-4 pt-4 border-t border-base-200">
+      <div
+        class="flex justify-between items-center mt-4 pt-4 border-t border-[var(--color-base-200)]"
+      >
         <button
           type="button"
-          class="btn btn-sm btn-primary"
+          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={downloadSpeciesCSV}
           disabled={rangeFilterState.loading ||
             rangeFilterState.downloading ||
@@ -2960,7 +2993,7 @@
         </button>
         <button
           type="button"
-          class="btn btn-outline"
+          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
           onclick={() => (rangeFilterState.showModal = false)}
         >
           {t('settings.main.sections.rangeFilter.modal.close')}

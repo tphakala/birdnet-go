@@ -1070,16 +1070,18 @@
         {#if activeSpeciesState.loading || store.isLoading || !store.originalData?.birdnet}
           <div class="flex items-center justify-center py-12">
             <div
-              class="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"
+              class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
             ></div>
           </div>
         {:else if activeSpeciesState.error}
           <!-- Error State -->
-          <div class="p-4 rounded-lg bg-error/10 text-error">
+          <div
+            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
+          >
             <p class="text-sm">{activeSpeciesState.error}</p>
             <button
               type="button"
-              class="mt-2 px-3 py-1.5 text-sm rounded-lg bg-error/20 hover:bg-error/30 transition-colors"
+              class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_25%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_35%,transparent)] transition-colors"
               onclick={() => {
                 const birdnetData = store.formData?.birdnet;
                 if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
@@ -1092,19 +1094,24 @@
           </div>
         {:else if activeSpeciesState.locationNotConfigured}
           <!-- Location Not Configured Warning -->
-          <div class="p-4 rounded-lg bg-warning/10 border border-warning/30">
+          <div
+            class="p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+          >
             <div class="flex items-start gap-3">
-              <MapPin class="size-5 text-warning shrink-0 mt-0.5" />
+              <MapPin class="size-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
               <div>
-                <p class="font-medium text-warning">
+                <p class="font-medium text-[var(--color-warning)]">
                   {t('settings.species.activeSpecies.locationNotConfigured.title') ||
                     'Location Not Configured'}
                 </p>
-                <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mt-1">
+                <p class="text-sm text-[var(--color-base-content)] opacity-70 mt-1">
                   {t('settings.species.activeSpecies.locationNotConfigured.description') ||
                     'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
                 </p>
-                <a href="/ui/settings/main" class="btn btn-warning btn-sm mt-3">
+                <a
+                  href="/ui/settings/main"
+                  class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:opacity-90 transition-colors mt-3"
+                >
                   {t('settings.species.activeSpecies.locationNotConfigured.action') ||
                     'Configure Location'}
                 </a>
@@ -1131,14 +1138,14 @@
                 data-1p-ignore
                 data-lpignore="true"
                 data-form-type="other"
-                class="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-base-300 bg-base-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                class="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
               />
             </div>
 
             <!-- Expand/Collapse Button -->
             <button
               type="button"
-              class="btn btn-outline btn-sm gap-2"
+              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
               onclick={() => (isListExpanded = !isListExpanded)}
               title={isListExpanded
                 ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
@@ -1158,7 +1165,7 @@
             <!-- CSV Download Button -->
             <button
               type="button"
-              class="btn btn-outline btn-sm gap-2"
+              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={downloadActiveSpeciesCSV}
               disabled={!activeSpeciesState.data.species.length}
               title={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
@@ -1174,12 +1181,13 @@
           {#key activeSearchQuery}
             {#if filteredActiveSpecies.length > 0}
               <div
-                class="divide-y divide-base-300 rounded-lg border border-base-300 overflow-hidden overflow-y-auto"
+                class="divide-y divide-[var(--border-200)] rounded-lg border border-[var(--border-200)] overflow-hidden overflow-y-auto"
                 class:max-h-[32rem]={!isListExpanded}
+                class:max-h-[80vh]={isListExpanded}
               >
                 {#each filteredActiveSpecies as species (species.scientificName)}
                   <div
-                    class="flex items-center justify-between p-3 hover:bg-base-200/50 transition-colors"
+                    class="flex items-center justify-between p-3 hover:bg-[var(--color-base-200)]/50 transition-colors"
                   >
                     <!-- Left: Names -->
                     <div class="min-w-0 flex-1">
@@ -1196,12 +1204,16 @@
                       <!-- Badges - fixed width container for alignment -->
                       <div class="flex items-center gap-1.5 w-36 justify-end">
                         {#if species.isManuallyIncluded}
-                          <span class="badge badge-success badge-sm gap-1">
+                          <span
+                            class="inline-flex items-center justify-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--color-success)] text-[var(--color-success-content)]"
+                          >
                             + {t('settings.species.activeSpecies.badges.included')}
                           </span>
                         {/if}
                         {#if species.hasCustomConfig}
-                          <span class="badge badge-secondary badge-sm gap-1">
+                          <span
+                            class="inline-flex items-center justify-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--color-secondary)] text-[var(--color-secondary-content)]"
+                          >
                             ★ {t('settings.species.activeSpecies.badges.configured')}
                           </span>
                         {/if}
@@ -1209,9 +1221,11 @@
 
                       <!-- Score Bar - always in same position -->
                       <div class="flex items-center gap-2">
-                        <div class="w-20 h-2 bg-base-300 rounded-full overflow-hidden">
+                        <div
+                          class="w-20 h-2 bg-[var(--color-base-300)] rounded-full overflow-hidden"
+                        >
                           <div
-                            class="h-full bg-primary rounded-full transition-all"
+                            class="h-full bg-[var(--color-primary)] rounded-full transition-all"
                             style:width="{species.score * 100}%"
                           ></div>
                         </div>
@@ -1270,11 +1284,11 @@
       <!-- Species list -->
       <div class="space-y-2">
         {#each settings.include as species (species)}
-          <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
+          <div class="flex items-center justify-between p-2 rounded-md bg-[var(--color-base-200)]">
             <span class="text-sm">{species}</span>
             <button
               type="button"
-              class="btn btn-ghost btn-xs text-error"
+              class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-300)] text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={() => removeIncludeSpecies(species)}
               disabled={store.isLoading || store.isSaving}
               aria-label="Remove {species}"
@@ -1322,11 +1336,11 @@
       <!-- Species list -->
       <div class="space-y-2">
         {#each settings.exclude as species (species)}
-          <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
+          <div class="flex items-center justify-between p-2 rounded-md bg-[var(--color-base-200)]">
             <span class="text-sm">{species}</span>
             <button
               type="button"
-              class="btn btn-ghost btn-xs text-error"
+              class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-300)] text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={() => removeExcludeSpecies(species)}
               disabled={store.isLoading || store.isSaving}
               aria-label="Remove {species}"
@@ -1376,7 +1390,7 @@
         {#if !showAddForm}
           <button
             type="button"
-            class="btn btn-sm btn-primary gap-2"
+            class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="add-configuration-button"
             onclick={() => (showAddForm = true)}
             disabled={store.isLoading || store.isSaving}
@@ -1403,13 +1417,15 @@
 
       <!-- Compact Add/Edit Form -->
       {#if showAddForm}
-        <div class="border border-base-300 rounded-lg p-3 bg-base-100 space-y-3">
+        <div
+          class="border border-[var(--border-200)] rounded-lg p-3 bg-[var(--color-base-100)] space-y-3"
+        >
           <!-- Main configuration row -->
           <div class="grid grid-cols-12 gap-3 items-end">
             <!-- Species Input -->
             <div class="col-span-4">
-              <label class="label py-1" for="config-species">
-                <span class="label-text text-xs"
+              <label class="flex flex-col gap-1 py-1" for="config-species">
+                <span class="text-xs font-medium text-[var(--color-base-content)]"
                   >{t('settings.species.customConfiguration.columnHeaders.species')}</span
                 >
               </label>
@@ -1430,11 +1446,13 @@
 
             <!-- Threshold -->
             <div class="col-span-3">
-              <label class="label py-1" for="config-threshold">
-                <span class="label-text text-xs"
+              <label class="flex items-center justify-between py-1" for="config-threshold">
+                <span class="text-xs font-medium text-[var(--color-base-content)]"
                   >{t('settings.species.customConfiguration.labels.threshold')}</span
                 >
-                <span class="label-text-alt text-xs">{newThreshold.toFixed(2)}</span>
+                <span class="text-xs text-[var(--color-base-content)] opacity-60"
+                  >{newThreshold.toFixed(2)}</span
+                >
               </label>
               <input
                 id="config-threshold"
@@ -1444,14 +1462,14 @@
                 step="0.01"
                 value={newThreshold}
                 oninput={e => (newThreshold = Number(e.currentTarget.value))}
-                class="range range-xs range-primary"
+                class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
               />
             </div>
 
             <!-- Interval -->
             <div class="col-span-3">
-              <label class="label py-1" for="config-interval">
-                <span class="label-text text-xs"
+              <label class="flex flex-col gap-1 py-1" for="config-interval">
+                <span class="text-xs font-medium text-[var(--color-base-content)]"
                   >{t('settings.species.customConfiguration.labels.intervalSeconds')}</span
                 >
               </label>
@@ -1462,7 +1480,7 @@
                 onchange={e => (newInterval = Number(e.currentTarget.value))}
                 min="0"
                 max="3600"
-                class="input input-xs w-full"
+                class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                 placeholder="0"
               />
             </div>
@@ -1470,8 +1488,7 @@
             <!-- Buttons -->
             <div class="col-span-2 flex gap-1">
               <button
-                class="btn btn-xs btn-primary flex-1"
-                class:loading={store.isSaving}
+                class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="save-config-button"
                 onclick={saveConfig}
                 disabled={!configInputValue.trim() ||
@@ -1481,6 +1498,9 @@
                   store.isSaving}
               >
                 {#if store.isSaving}
+                  <span
+                    class="inline-block w-3 h-3 border-2 border-[var(--color-primary-content)] border-t-transparent rounded-full animate-spin mr-1"
+                  ></span>
                   {t('settings.species.customConfiguration.saving')}
                 {:else}
                   {editingSpecies
@@ -1489,7 +1509,7 @@
                 {/if}
               </button>
               <button
-                class="btn btn-xs btn-ghost flex-1"
+                class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-transparent hover:bg-[var(--color-base-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={cancelEdit}
                 disabled={store.isSaving}
               >
@@ -1499,10 +1519,10 @@
           </div>
 
           <!-- Actions Toggle -->
-          <div class="border-t border-base-300 pt-2">
+          <div class="border-t border-[var(--border-200)] pt-2">
             <button
               type="button"
-              class="flex items-center gap-2 text-xs font-medium hover:text-primary transition-colors"
+              class="flex items-center gap-2 text-xs font-medium hover:text-[var(--color-primary)] transition-colors"
               onclick={() => (showActions = !showActions)}
               aria-expanded={showActions}
               aria-controls="actionsSection"
@@ -1512,7 +1532,8 @@
               </span>
               <span>{t('settings.species.customConfiguration.configureActions')}</span>
               {#if actionCommand}
-                <span class="badge badge-xs badge-accent"
+                <span
+                  class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--color-accent)] text-[var(--color-accent-content)]"
                   >{t('settings.species.customConfiguration.actionsConfigured')}</span
                 >
               {/if}
@@ -1524,8 +1545,8 @@
             <div class="space-y-3 pl-6" id="actionsSection">
               <!-- Command Input -->
               <div>
-                <label class="label py-1" for="action-command">
-                  <span class="label-text text-xs"
+                <label class="flex flex-col gap-1 py-1" for="action-command">
+                  <span class="text-xs font-medium text-[var(--color-base-content)]"
                     >{t('settings.species.actionsModal.command.label')}</span
                   >
                 </label>
@@ -1534,20 +1555,22 @@
                   type="text"
                   bind:value={actionCommand}
                   placeholder={t('settings.species.commandPathPlaceholder')}
-                  class="input input-xs w-full"
+                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                 />
-                <span class="help-text mt-1"
+                <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
                   >{t('settings.species.actionsModal.command.helpText')}</span
                 >
               </div>
 
               <!-- Parameters -->
               <div>
-                <label class="label py-1" for="action-parameters">
-                  <span class="label-text text-xs flex items-center gap-1">
+                <label class="flex flex-col gap-1 py-1" for="action-parameters">
+                  <span
+                    class="text-xs font-medium text-[var(--color-base-content)] flex items-center gap-1"
+                  >
                     {t('settings.species.actionsModal.parameters.label')}
                     <span
-                      class="text-base-content opacity-60"
+                      class="text-[var(--color-base-content)] opacity-60"
                       title="Use buttons below or type directly"
                     >
                       ⓘ
@@ -1559,10 +1582,10 @@
                   type="text"
                   bind:value={actionParameters}
                   placeholder="Click buttons below to add parameters or type manually"
-                  class="input input-xs w-full bg-base-200/50"
+                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-200)] bg-[var(--color-base-200)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   title="Add parameters using the buttons below or type directly (comma-separated)"
                 />
-                <span class="help-text mt-1"
+                <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
                   >{t('settings.species.actionsModal.parameters.helpText')}</span
                 >
               </div>
@@ -1575,51 +1598,60 @@
                 <div class="flex flex-wrap gap-1">
                   <button
                     type="button"
-                    class="btn btn-xs"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
                     onclick={() => addParameter('CommonName')}
                     >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button
                   >
                   <button
                     type="button"
-                    class="btn btn-xs"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
                     onclick={() => addParameter('ScientificName')}
                     >{t('settings.species.actionsModal.parameters.buttons.scientificName')}</button
                   >
                   <button
                     type="button"
-                    class="btn btn-xs"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
                     onclick={() => addParameter('Confidence')}
                     >{t('settings.species.actionsModal.parameters.buttons.confidence')}</button
                   >
-                  <button type="button" class="btn btn-xs" onclick={() => addParameter('Time')}
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    onclick={() => addParameter('Time')}
                     >{t('settings.species.actionsModal.parameters.buttons.time')}</button
                   >
-                  <button type="button" class="btn btn-xs" onclick={() => addParameter('Source')}
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    onclick={() => addParameter('Source')}
                     >{t('settings.species.actionsModal.parameters.buttons.source')}</button
                   >
-                  <button type="button" class="btn btn-xs btn-warning" onclick={clearParameters}
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:opacity-90 transition-colors"
+                    onclick={clearParameters}
                     >{t('settings.species.actionsModal.parameters.buttons.clearParameters')}</button
                   >
                 </div>
               </div>
 
               <!-- Execute Defaults Checkbox -->
-              <div class="form-control">
+              <div>
                 <label
-                  class="label cursor-pointer justify-start gap-2"
+                  class="flex items-center cursor-pointer justify-start gap-2"
                   for="action-execute-defaults"
                 >
                   <input
                     id="action-execute-defaults"
                     type="checkbox"
                     bind:checked={actionExecuteDefaults}
-                    class="checkbox checkbox-xs checkbox-primary"
+                    class="appearance-none w-3.5 h-3.5 border-2 border-[var(--border-200)] rounded bg-[var(--color-base-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
                   />
-                  <span class="label-text text-xs"
+                  <span class="text-xs text-[var(--color-base-content)]"
                     >{t('settings.species.actionsModal.executeDefaults.label')}</span
                   >
                 </label>
-                <span class="help-text mt-1"
+                <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
                   >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
                 >
               </div>
@@ -1632,7 +1664,7 @@
       <div class="space-y-2">
         {#each Object.entries(settings.config) as [species, config] (species)}
           <div
-            class="flex items-center gap-3 p-2 rounded-lg bg-base-100 border border-base-300 hover:border-base-content/20 transition-colors"
+            class="flex items-center gap-3 p-2 rounded-lg bg-[var(--color-base-100)] border border-[var(--border-200)] hover:border-[var(--color-base-content)]/20 transition-colors"
           >
             <!-- Species Name -->
             <div class="flex-1 min-w-0">
@@ -1641,7 +1673,7 @@
 
             <!-- Threshold -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content opacity-60"
+              <span class="text-xs text-[var(--color-base-content)] opacity-60"
                 >{t('settings.species.customConfiguration.list.threshold')}</span
               >
               <span class="font-mono text-xs font-medium">{(config.threshold ?? 0).toFixed(2)}</span
@@ -1650,7 +1682,7 @@
 
             <!-- Interval -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content opacity-60"
+              <span class="text-xs text-[var(--color-base-content)] opacity-60"
                 >{t('settings.species.customConfiguration.list.interval')}</span
               >
               <span class="font-mono text-xs font-medium">
@@ -1662,7 +1694,8 @@
 
             <!-- Action Badge -->
             {#if config.actions?.length > 0}
-              <span class="badge badge-xs badge-accent"
+              <span
+                class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--color-accent)] text-[var(--color-accent-content)]"
                 >{t('settings.species.customConfiguration.list.actionBadge')}</span
               >
             {/if}
@@ -1670,7 +1703,7 @@
             <!-- Actions -->
             <div class="flex items-center gap-1">
               <button
-                class="btn btn-ghost btn-xs"
+                class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={() => startEdit(species)}
                 title={t('settings.species.customConfiguration.list.editTitle')}
                 aria-label={t('settings.species.customConfiguration.list.editTitle')}
@@ -1680,7 +1713,7 @@
               </button>
 
               <button
-                class="btn btn-ghost btn-xs text-error"
+                class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-300)] text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={() => removeConfig(species)}
                 title={t('settings.species.customConfiguration.list.removeTitle')}
                 aria-label={t('settings.species.customConfiguration.list.removeTitle')}
@@ -1695,7 +1728,7 @@
 
       <!-- Empty State -->
       {#if Object.keys(settings.config).length === 0 && !showAddForm}
-        <div class="text-center py-8 text-base-content opacity-60">
+        <div class="text-center py-8 text-[var(--color-base-content)] opacity-60">
           <p class="text-sm">{t('settings.species.customConfiguration.emptyState.title')}</p>
           <p class="text-xs mt-1">
             {t('settings.species.customConfiguration.emptyState.description')}
@@ -1730,13 +1763,13 @@
         {#if trackingSettings?.enabled}
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <!-- New Species Window Days -->
-            <div class="form-control">
-              <label for="new-species-window" class="label">
-                <span class="label-text font-semibold">
+            <div>
+              <label for="new-species-window" class="flex flex-col gap-1 mb-1">
+                <span class="text-sm font-semibold text-[var(--color-base-content)]">
                   {t('settings.species.tracking.newSpeciesWindowDays.label')}
                 </span>
               </label>
-              <div class="join">
+              <div class="flex">
                 <input
                   id="new-species-window"
                   type="number"
@@ -1749,26 +1782,27 @@
                     TRACKING_DEFAULTS.newSpeciesWindowDays,
                     v => updateTrackingSettings({ newSpeciesWindowDays: v })
                   )}
-                  class="input input-bordered join-item w-full"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
-                <span class="btn btn-disabled join-item"
+                <span
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
                   >{t('settings.species.tracking.units.days')}</span
                 >
               </div>
-              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                 {t('settings.species.tracking.newSpeciesWindowDays.helpText')}
               </p>
             </div>
 
             <!-- Sync Interval Minutes -->
-            <div class="form-control">
-              <label for="sync-interval" class="label">
-                <span class="label-text font-semibold">
+            <div>
+              <label for="sync-interval" class="flex flex-col gap-1 mb-1">
+                <span class="text-sm font-semibold text-[var(--color-base-content)]">
                   {t('settings.species.tracking.syncIntervalMinutes.label')}
                 </span>
               </label>
-              <div class="join">
+              <div class="flex">
                 <input
                   id="sync-interval"
                   type="number"
@@ -1781,26 +1815,27 @@
                     TRACKING_DEFAULTS.syncIntervalMinutes,
                     v => updateTrackingSettings({ syncIntervalMinutes: v })
                   )}
-                  class="input input-bordered join-item w-full"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
-                <span class="btn btn-disabled join-item"
+                <span
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
                   >{t('settings.species.tracking.units.min')}</span
                 >
               </div>
-              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                 {t('settings.species.tracking.syncIntervalMinutes.helpText')}
               </p>
             </div>
 
             <!-- Notification Suppression Hours -->
-            <div class="form-control">
-              <label for="notification-suppression" class="label">
-                <span class="label-text font-semibold">
+            <div>
+              <label for="notification-suppression" class="flex flex-col gap-1 mb-1">
+                <span class="text-sm font-semibold text-[var(--color-base-content)]">
                   {t('settings.species.tracking.notificationSuppressionHours.label')}
                 </span>
               </label>
-              <div class="join">
+              <div class="flex">
                 <input
                   id="notification-suppression"
                   type="number"
@@ -1813,14 +1848,15 @@
                     TRACKING_DEFAULTS.notificationSuppressionHours,
                     v => updateTrackingSettings({ notificationSuppressionHours: v })
                   )}
-                  class="input input-bordered join-item w-full"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
-                <span class="btn btn-disabled join-item"
+                <span
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
                   >{t('settings.species.tracking.units.hours')}</span
                 >
               </div>
-              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                 {t('settings.species.tracking.notificationSuppressionHours.helpText')}
               </p>
             </div>
@@ -1864,9 +1900,9 @@
               />
 
               <!-- Reset Day -->
-              <div class="form-control">
-                <label for="yearly-reset-day" class="label">
-                  <span class="label-text font-semibold">
+              <div>
+                <label for="yearly-reset-day" class="flex flex-col gap-1 mb-1">
+                  <span class="text-sm font-semibold text-[var(--color-base-content)]">
                     {t('settings.species.tracking.yearly.resetDay.label')}
                   </span>
                 </label>
@@ -1882,22 +1918,22 @@
                     TRACKING_DEFAULTS.yearlyTracking.resetDay,
                     v => updateTrackingSettings({ yearlyTracking: { resetDay: v } })
                   )}
-                  class="input input-bordered w-full"
+                  class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
-                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                   {t('settings.species.tracking.yearly.resetDay.helpText')}
                 </p>
               </div>
 
               <!-- Window Days -->
-              <div class="form-control">
-                <label for="yearly-window-days" class="label">
-                  <span class="label-text font-semibold">
+              <div>
+                <label for="yearly-window-days" class="flex flex-col gap-1 mb-1">
+                  <span class="text-sm font-semibold text-[var(--color-base-content)]">
                     {t('settings.species.tracking.yearly.windowDays.label')}
                   </span>
                 </label>
-                <div class="join">
+                <div class="flex">
                   <input
                     id="yearly-window-days"
                     type="number"
@@ -1910,14 +1946,15 @@
                       TRACKING_DEFAULTS.yearlyTracking.windowDays,
                       v => updateTrackingSettings({ yearlyTracking: { windowDays: v } })
                     )}
-                    class="input input-bordered join-item w-full"
+                    class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={store.isLoading || store.isSaving}
                   />
-                  <span class="btn btn-disabled join-item"
+                  <span
+                    class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
                     >{t('settings.species.tracking.units.days')}</span
                   >
                 </div>
-                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                   {t('settings.species.tracking.yearly.windowDays.helpText')}
                 </p>
               </div>
@@ -1944,13 +1981,13 @@
 
           {#if trackingSettings?.seasonalTracking?.enabled}
             <!-- Window Days -->
-            <div class="form-control max-w-xs">
-              <label for="seasonal-window-days" class="label">
-                <span class="label-text font-semibold">
+            <div class="max-w-xs">
+              <label for="seasonal-window-days" class="flex flex-col gap-1 mb-1">
+                <span class="text-sm font-semibold text-[var(--color-base-content)]">
                   {t('settings.species.tracking.seasonal.windowDays.label')}
                 </span>
               </label>
-              <div class="join">
+              <div class="flex">
                 <input
                   id="seasonal-window-days"
                   type="number"
@@ -1963,14 +2000,15 @@
                     TRACKING_DEFAULTS.seasonalTracking.windowDays,
                     v => updateTrackingSettings({ seasonalTracking: { windowDays: v } })
                   )}
-                  class="input input-bordered join-item w-full"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
-                <span class="btn btn-disabled join-item"
+                <span
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
                   >{t('settings.species.tracking.units.days')}</span
                 >
               </div>
-              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                 {t('settings.species.tracking.seasonal.windowDays.helpText')}
               </p>
             </div>
@@ -1980,7 +2018,7 @@
               <h4 class="font-medium text-sm mb-2">
                 {t('settings.species.tracking.seasonal.seasons.title')}
               </h4>
-              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mb-4">
+              <p class="text-xs text-[var(--color-base-content)] opacity-60 mb-4">
                 {t('settings.species.tracking.seasonal.seasons.description')}
               </p>
 
@@ -1989,7 +2027,9 @@
                   {@const seasonKey = season as keyof typeof SEASON_DEFAULTS}
                   {@const seasonDefaults = getSeasonDefaults(seasonKey)}
                   {@const currentSeasonData = getCurrentSeasonData(seasonKey)}
-                  <div class="card bg-base-100 border border-base-300 p-4">
+                  <div
+                    class="rounded-lg bg-[var(--color-base-100)] border border-[var(--border-200)] p-4"
+                  >
                     <h5 class="font-medium text-sm mb-3">
                       {t(`settings.species.tracking.seasonal.seasons.${season}`)}
                     </h5>
@@ -2002,9 +2042,9 @@
                         menuSize="sm"
                         onChange={value => updateSeasonDate(seasonKey, 'startMonth', Number(value))}
                       />
-                      <div class="form-control">
-                        <label for={`${season}-start-day`} class="label">
-                          <span class="label-text font-semibold">
+                      <div>
+                        <label for={`${season}-start-day`} class="flex flex-col gap-1 mb-1">
+                          <span class="text-sm font-semibold text-[var(--color-base-content)]">
                             {t('settings.species.tracking.seasonal.seasons.startDay')}
                           </span>
                         </label>
@@ -2019,7 +2059,7 @@
                             seasonDefaults.startDay,
                             v => updateSeasonDate(seasonKey, 'startDay', v)
                           )}
-                          class="input input-bordered w-full"
+                          class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                           disabled={store.isLoading || store.isSaving}
                         />
                       </div>
