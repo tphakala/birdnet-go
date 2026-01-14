@@ -2715,7 +2715,9 @@
       "volumeGain": "Äänenvoimakkuuden vahvistus: {value} dB",
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
-      "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia"
+      "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
+      "playbackSpeed": "Toistonopeus",
+      "speed": "Nopeus"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",

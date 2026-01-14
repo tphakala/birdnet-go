@@ -27,6 +27,7 @@
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { acquireSlot, releaseSlot } from '$lib/utils/imageLoadQueue';
+  import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
   const logger = loggers.ui;
 
@@ -80,10 +81,12 @@
 
   // Menu state for z-index management
   let isMenuOpen = $state(false);
+  let isAudioSettingsOpen = $state(false);
 
   // Audio settings state (per-card, not shared)
   let audioGainValue = $state(DEFAULT_AUDIO_GAIN);
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
+  let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
   let audioContextAvailable = $state(true);
 
   // Queue slot management
@@ -100,8 +103,22 @@
     audioFilterFreq = value;
   }
 
+  function handleSpeedChange(value: number) {
+    audioPlaybackSpeed = value;
+  }
+
   function handleAudioContextAvailable(available: boolean) {
     audioContextAvailable = available;
+  }
+
+  function handleAudioSettingsOpen() {
+    isAudioSettingsOpen = true;
+    onFreezeStart?.();
+  }
+
+  function handleAudioSettingsClose() {
+    isAudioSettingsOpen = false;
+    onFreezeEnd?.();
   }
 
   // Helper: Build spectrogram URL for a detection ID
@@ -183,6 +200,7 @@
     // Reset audio settings to defaults
     audioGainValue = DEFAULT_AUDIO_GAIN;
     audioFilterFreq = DEFAULT_AUDIO_FILTER_FREQ;
+    audioPlaybackSpeed = DEFAULT_PLAYBACK_SPEED;
     audioContextAvailable = true;
   }
 
@@ -296,7 +314,7 @@
   class={cn(
     'detection-card group relative rounded-xl',
     isNew && 'new-detection',
-    isMenuOpen && 'z-[60]'
+    (isMenuOpen || isAudioSettingsOpen) && 'z-[60]'
   )}
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
@@ -348,6 +366,7 @@
       {onFreezeEnd}
       gainValue={audioGainValue}
       filterFreq={audioFilterFreq}
+      playbackSpeed={audioPlaybackSpeed}
       onAudioContextAvailable={handleAudioContextAvailable}
     />
 
@@ -360,9 +379,13 @@
     <AudioSettingsButton
       gainValue={audioGainValue}
       filterFreq={audioFilterFreq}
+      playbackSpeed={audioPlaybackSpeed}
       onGainChange={handleGainChange}
       onFilterChange={handleFilterChange}
+      onSpeedChange={handleSpeedChange}
       disabled={!audioContextAvailable}
+      onMenuOpen={handleAudioSettingsOpen}
+      onMenuClose={handleAudioSettingsClose}
     />
     <CardActionMenu
       {detection}

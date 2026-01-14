@@ -2715,7 +2715,9 @@
       "volumeGain": "Contrôle du gain de volume : {value} dB",
       "filterControl": "Contrôle du filtre",
       "highPassFilter": "Contrôle du filtre passe-haut : {freq} Hz",
-      "seekProgress": "Progression de la lecture audio : {current} / {total} secondes"
+      "seekProgress": "Progression de la lecture audio : {current} / {total} secondes",
+      "playbackSpeed": "Vitesse de lecture",
+      "speed": "Vitesse"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",
