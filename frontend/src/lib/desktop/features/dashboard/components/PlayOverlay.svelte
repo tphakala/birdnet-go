@@ -11,6 +11,7 @@
   - onFreezeEnd?: () => void - Callback when playback ends
   - gainValue?: number - Audio gain in dB (controlled by parent)
   - filterFreq?: number - High-pass filter frequency in Hz (controlled by parent)
+  - playbackSpeed?: number - Playback speed multiplier (controlled by parent)
   - onAudioContextAvailable?: (available: boolean) => void - Callback for audio context status
 -->
 <script lang="ts">
@@ -30,6 +31,7 @@
     onFreezeEnd?: () => void;
     gainValue?: number;
     filterFreq?: number;
+    playbackSpeed?: number;
     onAudioContextAvailable?: (_isAvailable: boolean) => void;
   }
 
@@ -39,6 +41,7 @@
     onFreezeEnd,
     gainValue = 0,
     filterFreq = 20,
+    playbackSpeed = 1.0,
     onAudioContextAvailable,
   }: Props = $props();
 
@@ -87,6 +90,14 @@
     }
   });
 
+  // Update playback speed when prop changes (during playback)
+  $effect(() => {
+    const speed = playbackSpeed;
+    if (audioElement && isPlaying) {
+      applyPlaybackRate(audioElement, speed);
+    }
+  });
+
   async function handlePlayPause(event: MouseEvent) {
     event.stopPropagation();
 
@@ -129,6 +140,12 @@
     isPlaying = true;
     startProgressInterval();
     clearPlayEndTimeout();
+
+    // Apply playback rate when starting
+    if (audioElement) {
+      applyPlaybackRate(audioElement, playbackSpeed);
+    }
+
     onFreezeStart?.();
   }
 
@@ -228,6 +245,22 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Playback speed helpers
+  function applyPlaybackRate(audio: HTMLAudioElement, rate: number) {
+    audio.playbackRate = rate;
+    // Critical for accessibility: disable pitch preservation so
+    // slower playback lowers pitch (tape slow-down effect)
+    // This makes high-frequency bird calls more audible
+    const audioWithPitch = audio as HTMLAudioElement & {
+      preservesPitch?: boolean;
+      mozPreservesPitch?: boolean;
+      webkitPreservesPitch?: boolean;
+    };
+    audioWithPitch.preservesPitch = false;
+    audioWithPitch.mozPreservesPitch = false;
+    audioWithPitch.webkitPreservesPitch = false;
   }
 
   async function initializeAudioContext(): Promise<AudioContext | null> {

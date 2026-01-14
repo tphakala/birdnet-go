@@ -30,7 +30,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { Play, Pause, Volume2, Download, XCircle } from '@lucide/svelte';
+  import { Play, Pause, Download, XCircle } from '@lucide/svelte';
+  import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -95,21 +96,12 @@
   let progressBar: HTMLDivElement;
   // svelte-ignore non_reactive_update
   let spectrogramImage: HTMLImageElement; // Template-only binding
-  // svelte-ignore non_reactive_update
-  let volumeControl!: HTMLDivElement; // Template-only binding
-  // svelte-ignore non_reactive_update
-  let filterControl!: HTMLDivElement; // Template-only binding
-  // svelte-ignore non_reactive_update
-  let volumeSlider: HTMLDivElement;
-  // svelte-ignore non_reactive_update
-  let filterSlider: HTMLDivElement;
 
   // Audio state
   let isPlaying = $state(false);
   let currentTime = $state(0);
   let duration = $state(0);
   let audioContextAvailable = $state(true);
-  let audioContextError = $state<string | null>(null);
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -165,7 +157,6 @@
 
   // Cleanup tracking for memory leak prevention
   let resizeObserver: ResizeObserver | null = null;
-  let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
   let playEndTimeout: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
     element: HTMLElement | Document | Window;
@@ -176,8 +167,7 @@
   // Control state
   let gainValue = $state(0); // dB
   let filterFreq = $state(20); // Hz
-  let showVolumeSlider = $state(false);
-  let showFilterSlider = $state(false);
+  let playbackSpeed = $state(1.0); // Playback rate multiplier
   let showControls = $state(true); // Will be set based on width
   let isMobile = $state(false);
 
@@ -219,26 +209,11 @@
     eventListeners.push({ element, event, handler });
   };
 
-  const clearSliderTimeout = () => {
-    if (sliderTimeout) {
-      clearTimeout(sliderTimeout);
-      sliderTimeout = undefined;
-    }
-  };
-
   const clearPlayEndTimeout = () => {
     if (playEndTimeout) {
       clearTimeout(playEndTimeout);
       playEndTimeout = undefined;
     }
-  };
-
-  const resetSliderTimeout = () => {
-    clearSliderTimeout();
-    sliderTimeout = setTimeout(() => {
-      showVolumeSlider = false;
-      showFilterSlider = false;
-    }, 5000);
   };
 
   // Audio context setup
@@ -258,14 +233,11 @@
       }
 
       audioContextAvailable = true;
-      audioContextError = null;
       return audioContext;
       // eslint-disable-next-line no-unused-vars
     } catch (_e) {
       logger.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
-      audioContextError =
-        'Advanced audio features (volume control, filtering) are not available in this browser.';
       return null;
     }
   };
@@ -379,17 +351,6 @@
     }
   };
 
-  const handleVolumeSlider = (event: MouseEvent) => {
-    if (!volumeSlider) return;
-
-    const rect = volumeSlider.getBoundingClientRect();
-    const clickY = event.clientY - rect.top;
-    const clickPercent = 1 - clickY / rect.height;
-    const newGainDb = clickPercent * (GAIN_MAX_DB + 60) - 60;
-
-    updateGain(newGainDb);
-  };
-
   // Filter control
   const updateFilter = (newFreq: number) => {
     filterFreq = Math.max(FILTER_HP_MIN_FREQ, Math.min(FILTER_HP_MAX_FREQ, newFreq));
@@ -398,15 +359,31 @@
     }
   };
 
-  const handleFilterSlider = (event: MouseEvent) => {
-    if (!filterSlider) return;
+  // Speed control
+  const handleSpeedChange = (newSpeed: number) => {
+    playbackSpeed = newSpeed;
+    if (audioElement) {
+      applyPlaybackRate(audioElement, newSpeed);
+    }
+  };
 
-    const rect = filterSlider.getBoundingClientRect();
-    const clickY = event.clientY - rect.top;
-    const clickPercent = 1 - clickY / rect.height;
-    const newFreq = FILTER_HP_MIN_FREQ + clickPercent * (FILTER_HP_MAX_FREQ - FILTER_HP_MIN_FREQ);
-
-    updateFilter(newFreq);
+  /**
+   * Apply playback rate to audio element with pitch preservation disabled.
+   * Disabling preservesPitch creates the "tape slow-down" effect where
+   * slower playback lowers pitch, making high-frequency bird calls
+   * more audible for users with reduced high-frequency hearing.
+   */
+  const applyPlaybackRate = (audio: HTMLAudioElement, rate: number) => {
+    audio.playbackRate = rate;
+    // Disable pitch preservation for accessibility - slower = lower pitch
+    const audioWithPitch = audio as HTMLAudioElement & {
+      preservesPitch?: boolean;
+      mozPreservesPitch?: boolean;
+      webkitPreservesPitch?: boolean;
+    };
+    audioWithPitch.preservesPitch = false;
+    audioWithPitch.mozPreservesPitch = false;
+    audioWithPitch.webkitPreservesPitch = false;
   };
 
   // Check spectrogram mode on mount/URL change to avoid double-request pattern
@@ -832,6 +809,8 @@
         startInterval();
         // Clear any pending delay timeout and immediately signal play start
         clearPlayEndTimeout();
+        // Apply playback rate when starting
+        applyPlaybackRate(audioElement, playbackSpeed);
         if (onPlayStart) {
           onPlayStart();
         }
@@ -894,18 +873,6 @@
     }
   });
 
-  // Watch for slider visibility changes with proper cleanup
-  $effect(() => {
-    if (showVolumeSlider || showFilterSlider) {
-      resetSliderTimeout();
-    }
-
-    // Cleanup function for the effect
-    return () => {
-      clearSliderTimeout();
-    };
-  });
-
   // Debug effect to track spectrogram loader state changes
   $effect(() => {
     debugLog('loader state changed', {
@@ -937,7 +904,6 @@
     stopInterval();
 
     // Clear any pending timeouts
-    clearSliderTimeout();
     clearPlayEndTimeout();
     clearSpectrogramRetryTimer();
     clearStatusPollTimer();
@@ -1076,122 +1042,22 @@
     <track kind="captions" />
   </audio>
 
-  <!-- Volume control (top controls) -->
+  <!-- Audio settings button (top-right) -->
   {#if showControls}
     <div
-      bind:this={volumeControl}
-      class="absolute top-2 right-2 volume-control transition-opacity duration-200"
-      class:opacity-0={!isMobile && !showVolumeSlider}
+      class="absolute top-2 right-2 transition-opacity duration-200"
+      class:opacity-0={!isMobile}
       class:group-hover:opacity-100={!isMobile}
     >
-      <button
-        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black/50 hover:bg-black/75 transition-all duration-200"
-        class:cursor-not-allowed={!audioContextAvailable}
-        class:opacity-50={!audioContextAvailable}
+      <AudioSettingsButton
+        {gainValue}
+        {filterFreq}
+        {playbackSpeed}
+        onGainChange={updateGain}
+        onFilterChange={updateFilter}
+        onSpeedChange={handleSpeedChange}
         disabled={!audioContextAvailable}
-        onclick={() => {
-          if (audioContextAvailable) {
-            showVolumeSlider = !showVolumeSlider;
-            if (showVolumeSlider) showFilterSlider = false;
-          }
-        }}
-        aria-label={t('media.audio.volume')}
-        title={!audioContextAvailable
-          ? audioContextError || 'Volume control unavailable'
-          : 'Volume control'}
-      >
-        <Volume2 class="size-4" />
-        <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
-      </button>
-
-      {#if showVolumeSlider}
-        <div
-          bind:this={volumeSlider}
-          class="absolute top-0 w-8 bg-black/20 backdrop-blur-xs rounded-sm p-2 volume-slider z-50"
-          style:left="calc(100% + 4px)"
-          style:height="{height}px"
-          role="button"
-          tabindex="0"
-          aria-label={t('media.audio.volumeGain', { value: gainValue })}
-          onclick={handleVolumeSlider}
-          onkeydown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              const rect = volumeSlider.getBoundingClientRect();
-              const centerY = rect.top + rect.height / 2;
-              const mockEvent = { clientY: centerY } as MouseEvent;
-              handleVolumeSlider(mockEvent);
-            }
-          }}
-        >
-          <div class="relative h-full w-2 bg-white/50 rounded-full mx-auto">
-            <div
-              class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
-              style:height="{(gainValue / GAIN_MAX_DB) * 100}%"
-            ></div>
-          </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- Filter control (top controls) -->
-  {#if showControls}
-    <div
-      bind:this={filterControl}
-      class="absolute top-2 left-2 filter-control transition-opacity duration-200"
-      class:opacity-0={!isMobile && !showFilterSlider}
-      class:group-hover:opacity-100={!isMobile}
-    >
-      <button
-        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black/50 hover:bg-black/75 transition-all duration-200"
-        class:cursor-not-allowed={!audioContextAvailable}
-        class:opacity-50={!audioContextAvailable}
-        disabled={!audioContextAvailable}
-        onclick={() => {
-          if (audioContextAvailable) {
-            showFilterSlider = !showFilterSlider;
-            if (showFilterSlider) showVolumeSlider = false;
-          }
-        }}
-        aria-label={t('media.audio.filterControl')}
-        title={!audioContextAvailable
-          ? audioContextError || 'Filter control unavailable'
-          : 'Filter control'}
-      >
-        <span class="text-xs text-white">HP: {Math.round(filterFreq)} Hz</span>
-      </button>
-
-      {#if showFilterSlider}
-        <div
-          bind:this={filterSlider}
-          class="absolute top-0 w-8 bg-black/20 backdrop-blur-xs rounded-sm p-2 filter-slider z-50"
-          style:right="calc(100% + 4px)"
-          style:height="{height}px"
-          role="button"
-          tabindex="0"
-          aria-label={t('media.audio.highPassFilter', { freq: Math.round(filterFreq) })}
-          onclick={handleFilterSlider}
-          onkeydown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              const rect = filterSlider.getBoundingClientRect();
-              const centerY = rect.top + rect.height / 2;
-              const mockEvent = { clientY: centerY } as MouseEvent;
-              handleFilterSlider(mockEvent);
-            }
-          }}
-        >
-          <div class="relative h-full w-2 bg-white/50 rounded-full mx-auto">
-            <div
-              class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
-              style:height="{(Math.log(filterFreq / FILTER_HP_MIN_FREQ) /
-                Math.log(FILTER_HP_MAX_FREQ / FILTER_HP_MIN_FREQ)) *
-                100}%"
-            ></div>
-          </div>
-        </div>
-      {/if}
+      />
     </div>
   {/if}
 
@@ -1285,15 +1151,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .volume-slider,
-  .filter-slider {
-    z-index: 1000;
-  }
-
-  .volume-control button,
-  .filter-control button {
-    backdrop-filter: blur(4px);
-  }
-</style>

@@ -35,6 +35,7 @@
   const SPECTROGRAM_TIMEOUT_MS = 60000;
   const DEFAULT_AUDIO_GAIN = 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
+  const DEFAULT_PLAYBACK_SPEED = 1.0;
   const DEFAULT_DOWNLOAD_NAME = 'detection';
   const AUDIO_FILE_EXTENSION = '.wav';
 
@@ -80,10 +81,12 @@
 
   // Menu state for z-index management
   let isMenuOpen = $state(false);
+  let isAudioSettingsOpen = $state(false);
 
   // Audio settings state (per-card, not shared)
   let audioGainValue = $state(DEFAULT_AUDIO_GAIN);
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
+  let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
   let audioContextAvailable = $state(true);
 
   // Queue slot management
@@ -100,8 +103,22 @@
     audioFilterFreq = value;
   }
 
+  function handleSpeedChange(value: number) {
+    audioPlaybackSpeed = value;
+  }
+
   function handleAudioContextAvailable(available: boolean) {
     audioContextAvailable = available;
+  }
+
+  function handleAudioSettingsOpen() {
+    isAudioSettingsOpen = true;
+    onFreezeStart?.();
+  }
+
+  function handleAudioSettingsClose() {
+    isAudioSettingsOpen = false;
+    onFreezeEnd?.();
   }
 
   // Helper: Build spectrogram URL for a detection ID
@@ -296,7 +313,7 @@
   class={cn(
     'detection-card group relative rounded-xl',
     isNew && 'new-detection',
-    isMenuOpen && 'z-[60]'
+    (isMenuOpen || isAudioSettingsOpen) && 'z-[60]'
   )}
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
@@ -348,6 +365,7 @@
       {onFreezeEnd}
       gainValue={audioGainValue}
       filterFreq={audioFilterFreq}
+      playbackSpeed={audioPlaybackSpeed}
       onAudioContextAvailable={handleAudioContextAvailable}
     />
 
@@ -360,9 +378,13 @@
     <AudioSettingsButton
       gainValue={audioGainValue}
       filterFreq={audioFilterFreq}
+      playbackSpeed={audioPlaybackSpeed}
       onGainChange={handleGainChange}
       onFilterChange={handleFilterChange}
+      onSpeedChange={handleSpeedChange}
       disabled={!audioContextAvailable}
+      onMenuOpen={handleAudioSettingsOpen}
+      onMenuClose={handleAudioSettingsClose}
     />
     <CardActionMenu
       {detection}
