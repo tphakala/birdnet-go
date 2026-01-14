@@ -217,13 +217,13 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	return devices, nil
 }
 
-// ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
-func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
+// ReconfigureStreams handles dynamic reconfiguration of audio streams
+func ReconfigureStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// Use the FFmpeg manager's sync function to handle all configuration changes
 	// This will properly start/stop streams as needed based on the current configuration
-	if err := SyncRTSPStreamsWithConfig(unifiedAudioChan); err != nil {
+	if err := SyncStreamsWithConfig(unifiedAudioChan); err != nil {
 		log := GetLogger()
-		log.Error("error syncing RTSP streams with configuration",
+		log.Error("error syncing streams with configuration",
 			logger.Error(err))
 	}
 
@@ -283,16 +283,16 @@ func initializeBuffersForSource(sourceID string) error {
 }
 
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	// If no RTSP URLs and no audio device configured, return early
-	if len(settings.Realtime.RTSP.URLs) == 0 && settings.Realtime.Audio.Source == "" {
+	// If no RTSP streams and no audio device configured, return early
+	if len(settings.Realtime.RTSP.Streams) == 0 && settings.Realtime.Audio.Source == "" {
 		return
 	}
 
 	// Initialize RTSP sources - the FFmpegManager will handle buffer initialization
-	if len(settings.Realtime.RTSP.URLs) > 0 {
-		for _, url := range settings.Realtime.RTSP.URLs {
+	if len(settings.Realtime.RTSP.Streams) > 0 {
+		for _, stream := range settings.Realtime.RTSP.Streams {
 			// CaptureAudioRTSP delegates to FFmpegManager which handles everything
-			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
+			go CaptureAudioRTSP(stream.URL, stream.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 		}
 	}
 

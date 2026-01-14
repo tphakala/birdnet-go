@@ -235,6 +235,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.retrysettings.maxdelay", 3600)
 	viper.SetDefault("realtime.mqtt.retrysettings.backoffmultiplier", 2.0)
 
+	// Home Assistant MQTT auto-discovery configuration
+	viper.SetDefault("realtime.mqtt.homeassistant.enabled", false)
+	viper.SetDefault("realtime.mqtt.homeassistant.discovery_prefix", "homeassistant")
+	viper.SetDefault("realtime.mqtt.homeassistant.device_name", "BirdNET-Go")
+
 	// Privacy filter configuration
 	viper.SetDefault("realtime.privacyfilter.enabled", true)
 	viper.SetDefault("realtime.privacyfilter.debug", false)

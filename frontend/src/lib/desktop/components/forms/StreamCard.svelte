@@ -8,9 +8,9 @@
   - Card background styling based on connection state
   - Colored stream icon (auto-assigned based on index)
   - Status pill with semantic coloring
-  - Editable stream URL with credential masking
-  - Stream type selector (RTSP only for now, prepared for HTTP, HLS, RTMP)
-  - Protocol selector (TCP/UDP) per stream
+  - Editable stream name and URL with credential masking
+  - Stream type selector (RTSP, HTTP, HLS, RTMP, UDP)
+  - Protocol selector (TCP/UDP) for RTSP and RTMP streams
   - Inline editing mode
   - Delete confirmation
   - Always-visible action buttons for accessibility
@@ -18,53 +18,111 @@
   @component
 -->
 <script lang="ts">
-  import { Settings, Trash2, Check, X, AlertCircle, Radio } from '@lucide/svelte';
+  import { getContext } from 'svelte';
+  import { Settings, Trash2, Check, X, AlertCircle, Radio, ChevronDown } from '@lucide/svelte';
+  import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import type { StreamConfig, StreamType } from '$lib/stores/settings';
+  import type { StreamHealthResponse } from './StreamManager.svelte';
+  import StreamTimeline from './StreamTimeline.svelte';
 
   // Stream health status type
   export type StreamStatus = 'connected' | 'connecting' | 'error' | 'idle' | 'unknown';
 
   interface Props {
-    url: string;
+    stream: StreamConfig;
     index: number;
-    transport: string;
-    streamType?: string;
     status?: StreamStatus;
-    statusMessage?: string;
     disabled?: boolean;
-    onUpdate: (_url: string, _transport: string, _streamType: string) => void;
+    onUpdate: (_stream: StreamConfig) => boolean;
     onDelete: () => void;
   }
 
-  let {
-    url,
-    index,
-    transport = 'tcp',
-    streamType = 'rtsp',
-    status = 'unknown',
-    statusMessage = '',
-    disabled = false,
-    onUpdate,
-    onDelete,
-  }: Props = $props();
+  let { stream, index, status = 'unknown', disabled = false, onUpdate, onDelete }: Props = $props();
+
+  // Get the stream health state from context - the $state object is passed directly
+  // Mutations to this object are reactive and will trigger re-renders
+  const streamHealthMap = getContext<Record<string, StreamHealthResponse>>('streamHealth');
+
+  // Derive health for this stream - accessing properties on the $state object is reactive
+  let health = $derived(streamHealthMap[stream.url] ?? null);
+
+  // Expandable diagnostics state
+  let expanded = $state(false);
+
+  // Utility functions for formatting
+  function formatBytes(bytes: number): string {
+    if (!bytes || bytes === 0) return '--';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+  }
+
+  function formatRate(bytesPerSecond: number): string {
+    if (!bytesPerSecond || bytesPerSecond === 0) return '--';
+    const kbps = bytesPerSecond / 1024;
+    return `${kbps.toFixed(1)} KB/s`;
+  }
+
+  function formatTimeAgo(seconds: number | undefined): string {
+    if (seconds === undefined || seconds === null) return '--';
+    if (seconds < 60) return `${Math.floor(seconds)}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    return `${Math.floor(seconds / 3600)}h ago`;
+  }
+
+  // Derive status message from health object
+  let statusMessage = $derived.by(() => {
+    if (!health) return '';
+    if (health.error) return health.error;
+    return '';
+  });
+
+  // Derive inline stats from health - use $derived.by to ensure proper tracking
+  let totalData = $derived.by(() => {
+    const bytes = health?.total_bytes_received ?? 0;
+    return formatBytes(bytes);
+  });
+
+  let currentRate = $derived.by(() => {
+    const bps = health?.bytes_per_second ?? 0;
+    return formatRate(bps);
+  });
+
+  let lastDataAgo = $derived.by(() => {
+    const secs = health?.time_since_data_seconds;
+    return formatTimeAgo(secs);
+  });
+
+  // Derive connection stability status
+  let connectionStatus = $derived.by(() => {
+    if (!health) return 'Unknown';
+    if (health.process_state === 'circuit_open') return 'Failed';
+    if (health.process_state === 'backoff' || health.process_state === 'restarting')
+      return 'Degraded';
+    if (health.is_healthy && health.is_receiving_data) return 'Stable';
+    return 'Unknown';
+  });
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
+  let editName = $state('');
   let editUrl = $state('');
-  let editTransport = $state('tcp');
-  let editStreamType = $state('rtsp');
+  let editTransport = $state<'tcp' | 'udp'>('tcp');
+  let editStreamType = $state<StreamType>('rtsp');
   let showDeleteConfirm = $state(false);
 
-  // Stream type options (RTSP only for now)
+  // Stream type options (all supported types)
   const streamTypeOptions = [
     { value: 'rtsp', label: 'RTSP' },
-    // Future options - disabled for now
-    // { value: 'http', label: 'HTTP', disabled: true },
-    // { value: 'hls', label: 'HLS', disabled: true },
-    // { value: 'rtmp', label: 'RTMP', disabled: true },
+    { value: 'http', label: 'HTTP' },
+    { value: 'hls', label: 'HLS' },
+    { value: 'rtmp', label: 'RTMP' },
+    { value: 'udp', label: 'UDP/RTP' },
   ];
 
   // Transport protocol options
@@ -73,31 +131,32 @@
     { value: 'udp', label: 'UDP' },
   ];
 
-  // Color palette for stream icons (cycles through)
-  const iconColors = [
-    { bg: 'bg-cyan-500/20', text: 'text-cyan-500', border: 'border-cyan-500/30' },
-    { bg: 'bg-violet-500/20', text: 'text-violet-500', border: 'border-violet-500/30' },
-    { bg: 'bg-emerald-500/20', text: 'text-emerald-500', border: 'border-emerald-500/30' },
-    { bg: 'bg-amber-500/20', text: 'text-amber-500', border: 'border-amber-500/30' },
-    { bg: 'bg-rose-500/20', text: 'text-rose-500', border: 'border-rose-500/30' },
-    { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/30' },
-  ];
-
-  // Get color for this stream based on index
-  let iconColor = $derived(iconColors[index % iconColors.length]);
-
-  // Mask credentials in URL for display
-  function maskCredentials(urlStr: string): string {
-    try {
-      const urlObj = new URL(urlStr);
-      if (urlObj.username || urlObj.password) {
-        return urlStr.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1***:***$2');
-      }
-      return urlStr;
-    } catch {
-      return urlStr.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1***:***$2');
+  // Get icon colors based on stream status
+  function getIconColors(s: StreamStatus): { bg: string; text: string; border: string } {
+    switch (s) {
+      case 'connected':
+        return { bg: 'bg-success/20', text: 'text-success', border: 'border-success/30' };
+      case 'connecting':
+        return { bg: 'bg-warning/20', text: 'text-warning', border: 'border-warning/30' };
+      case 'error':
+        return { bg: 'bg-error/20', text: 'text-error', border: 'border-error/30' };
+      case 'idle':
+        return {
+          bg: 'bg-base-content/10',
+          text: 'text-base-content/50',
+          border: 'border-base-content/20',
+        };
+      default:
+        return {
+          bg: 'bg-base-content/10',
+          text: 'text-base-content/50',
+          border: 'border-base-content/20',
+        };
     }
   }
+
+  // Derive icon color based on current status
+  let iconColor = $derived(getIconColors(status));
 
   // Map stream status to StatusPill variant
   function getStatusVariant(s: StreamStatus): StatusVariant {
@@ -147,13 +206,18 @@
     }
   }
 
-  let displayUrl = $derived(maskCredentials(url));
+  let displayUrl = $derived(maskUrlCredentials(stream.url));
   let cardStyles = $derived(getCardStyles(status));
 
+  // Show transport only for RTSP and RTMP
+  let showTransport = $derived(stream.type === 'rtsp' || stream.type === 'rtmp');
+  let showTransportInEdit = $derived(editStreamType === 'rtsp' || editStreamType === 'rtmp');
+
   function startEdit() {
-    editUrl = url;
-    editTransport = transport;
-    editStreamType = streamType;
+    editName = stream.name;
+    editUrl = stream.url;
+    editTransport = stream.transport ?? 'tcp';
+    editStreamType = stream.type;
     isEditing = true;
   }
 
@@ -163,9 +227,17 @@
   }
 
   function saveEdit() {
-    if (editUrl.trim()) {
-      onUpdate(editUrl.trim(), editTransport, editStreamType);
-      isEditing = false;
+    if (editName.trim() && editUrl.trim()) {
+      const success = onUpdate({
+        name: editName.trim(),
+        url: editUrl.trim(),
+        type: editStreamType,
+        // Use selected transport for RTSP/RTMP, omit for others
+        ...(showTransportInEdit ? { transport: editTransport } : {}),
+      } as StreamConfig);
+      if (success) {
+        isEditing = false;
+      }
     }
   }
 
@@ -224,6 +296,23 @@
     {#if isEditing}
       <!-- Edit Mode -->
       <div class="space-y-4">
+        <!-- Name Input -->
+        <div class="form-control">
+          <label class="label py-1" for="stream-name-{index}">
+            <span class="label-text text-xs font-medium">
+              {t('settings.audio.streams.nameLabel')}
+            </span>
+          </label>
+          <input
+            id="stream-name-{index}"
+            type="text"
+            bind:value={editName}
+            onkeydown={handleKeydown}
+            class="input input-sm w-full text-sm"
+            placeholder={t('settings.audio.streams.namePlaceholder')}
+          />
+        </div>
+
         <!-- URL Input -->
         <div class="form-control">
           <label class="label py-1" for="stream-url-{index}">
@@ -247,24 +336,25 @@
             <SelectDropdown
               value={editStreamType}
               label={t('settings.audio.streams.typeLabel')}
-              helpText={t('settings.audio.streams.typeLockedNote')}
               options={streamTypeOptions}
-              disabled={true}
+              onChange={value => (editStreamType = value as StreamType)}
               groupBy={false}
               menuSize="sm"
             />
           </div>
 
-          <div>
-            <SelectDropdown
-              value={editTransport}
-              label={t('settings.audio.streams.transportLabel')}
-              options={transportOptions}
-              onChange={value => (editTransport = value as string)}
-              groupBy={false}
-              menuSize="sm"
-            />
-          </div>
+          {#if showTransportInEdit}
+            <div>
+              <SelectDropdown
+                value={editTransport}
+                label={t('settings.audio.streams.transportLabel')}
+                options={transportOptions}
+                onChange={value => (editTransport = value as 'tcp' | 'udp')}
+                groupBy={false}
+                menuSize="sm"
+              />
+            </div>
+          {/if}
         </div>
 
         <!-- Action Buttons -->
@@ -277,7 +367,7 @@
             type="button"
             class="btn btn-sm btn-primary gap-1.5"
             onclick={saveEdit}
-            disabled={!editUrl.trim()}
+            disabled={!editName.trim() || !editUrl.trim()}
           >
             <Check class="size-4" />
             {t('common.save')}
@@ -291,9 +381,9 @@
         <div
           class={cn(
             'flex-shrink-0 size-10 rounded-lg flex items-center justify-center border',
-            status === 'error' ? 'bg-error/20 text-error border-error/30' : iconColor.bg,
-            status === 'error' ? '' : iconColor.text,
-            status === 'error' ? '' : iconColor.border
+            iconColor.bg,
+            iconColor.text,
+            iconColor.border
           )}
         >
           <Radio class="size-5" />
@@ -304,8 +394,7 @@
           <!-- Stream Name, Status, and URL on same line where possible -->
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm font-semibold text-base-content">
-              {t('settings.audio.streams.streamLabel')}
-              {index + 1}
+              {stream.name}
             </span>
             <StatusPill
               variant={getStatusVariant(status)}
@@ -322,6 +411,11 @@
           {#if status === 'error' && statusMessage}
             <p class="text-xs text-error mt-1">{statusMessage}</p>
           {/if}
+
+          <!-- Inline Stats Row -->
+          <p class="text-xs text-base-content/70 mt-1.5 mb-1">
+            Total: {totalData} • Rate: {currentRate} • Last: {lastDataAgo}
+          </p>
         </div>
 
         <!-- Right Side: Protocol Tags + Actions -->
@@ -329,11 +423,15 @@
           <!-- Colored Protocol Tags -->
           <div class="hidden sm:flex items-center gap-1.5">
             <span class="px-2 py-0.5 rounded text-xs font-semibold bg-info/15 text-info">
-              {streamType.toUpperCase()}
+              {stream.type.toUpperCase()}
             </span>
-            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary/15 text-secondary">
-              {transport.toUpperCase()}
-            </span>
+            {#if showTransport && stream.transport}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary/15 text-secondary"
+              >
+                {stream.transport.toUpperCase()}
+              </span>
+            {/if}
           </div>
 
           <!-- Action Buttons -->
@@ -356,9 +454,93 @@
             >
               <Trash2 class="size-4" />
             </button>
+            <button
+              type="button"
+              class="p-1.5 rounded-md hover:bg-base-content/10 transition-colors"
+              onclick={() => (expanded = !expanded)}
+              aria-expanded={expanded}
+              aria-controls="diagnostics-{index}"
+              aria-label="Toggle diagnostics"
+            >
+              <ChevronDown
+                class={cn(
+                  'size-4 text-base-content/60 transition-transform duration-200',
+                  expanded && 'rotate-180'
+                )}
+              />
+            </button>
           </div>
         </div>
       </div>
+
+      <!-- Expandable Diagnostics Panel -->
+      {#if expanded}
+        <div
+          id="diagnostics-{index}"
+          class="border-t border-base-content/20 px-3 py-3"
+          transition:slide={{ duration: 200 }}
+        >
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div>
+              <span class="text-base-content/60 font-medium">Process State:</span>
+              <span
+                class={cn(
+                  'ml-2',
+                  health?.process_state === 'circuit_open' || health?.process_state === 'stopped'
+                    ? 'text-error'
+                    : 'text-base-content'
+                )}
+              >
+                {health?.process_state ?? 'Unknown'}
+              </span>
+            </div>
+            <div>
+              <span class="text-base-content/60 font-medium">Last Data:</span>
+              <span class="ml-2 text-base-content">{lastDataAgo}</span>
+            </div>
+            <div>
+              <span class="text-base-content/60 font-medium">Restart Count:</span>
+              <span
+                class={cn(
+                  'ml-2',
+                  (health?.restart_count ?? 0) > 0 ? 'text-warning' : 'text-base-content'
+                )}
+              >
+                {health?.restart_count ?? 0}
+              </span>
+            </div>
+            <div>
+              <span class="text-base-content/60 font-medium">Connection:</span>
+              <span
+                class={cn(
+                  'ml-2',
+                  connectionStatus === 'Stable'
+                    ? 'text-success'
+                    : connectionStatus === 'Degraded'
+                      ? 'text-warning'
+                      : connectionStatus === 'Failed'
+                        ? 'text-error'
+                        : 'text-base-content'
+                )}
+              >
+                {connectionStatus}
+              </span>
+            </div>
+          </div>
+
+          <!-- Timeline Section -->
+          {#if health?.state_history?.length || health?.error_history?.length}
+            <div class="mt-4 pt-4 border-t border-base-content/20">
+              <p class="text-xs font-medium text-base-content/60 mb-3">State & Error History</p>
+              <StreamTimeline
+                stateHistory={health?.state_history}
+                errorHistory={health?.error_history}
+              />
+            </div>
+          {/if}
+        </div>
+      {/if}
     {/if}
   </div>
 </div>

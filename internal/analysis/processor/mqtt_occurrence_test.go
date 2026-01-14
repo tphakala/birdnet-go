@@ -49,6 +49,16 @@ func (m *MockMqttClientWithCapture) TestConnection(_ context.Context, _ chan<- m
 	// Not needed for test
 }
 
+func (m *MockMqttClientWithCapture) PublishWithRetain(_ context.Context, topic, data string, _ bool) error {
+	m.PublishedTopic = topic
+	m.PublishedData = data
+	return m.PublishError
+}
+
+func (m *MockMqttClientWithCapture) RegisterOnConnectHandler(_ mqtt.OnConnectHandler) {
+	// Not needed for test
+}
+
 func TestMqttAction_IncludesOccurrence(t *testing.T) {
 	// Create test note with occurrence value
 	testNote := datastore.Note{

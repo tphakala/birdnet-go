@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -20,6 +21,10 @@ import (
 const (
 	// Stream health polling interval - how often to check for changes
 	streamHealthPollInterval = 1 * time.Second
+
+	// Stats update interval - how often to send stats regardless of state changes
+	// This enables real-time bandwidth/bytes display in the UI
+	streamStatsUpdateInterval = 1 * time.Second
 
 	// Rate limiting for stream health SSE endpoint
 	streamHealthRateLimitRequests = 5               // Requests per window
@@ -34,6 +39,8 @@ type SSEStreamHealthData struct {
 
 // StreamHealthResponse represents the API response for a single stream's health
 type StreamHealthResponse struct {
+	Name             string     `json:"name,omitempty"`                    // Stream name from config (empty if not found)
+	Type             string     `json:"type,omitempty"`                    // Stream type from config (empty if not found)
 	URL              string     `json:"url"`                               // Sanitized RTSP URL
 	IsHealthy        bool       `json:"is_healthy"`                        // Overall health status
 	ProcessState     string     `json:"process_state"`                     // Current process state (idle, starting, running, etc.)
@@ -89,6 +96,8 @@ type StreamsStatusSummaryResponse struct {
 
 // StreamSummaryResponse provides a brief summary of a single stream
 type StreamSummaryResponse struct {
+	Name          string   `json:"name,omitempty"`                    // Stream name from config
+	Type          string   `json:"type,omitempty"`                    // Stream type from config
 	URL           string   `json:"url"`                               // Sanitized RTSP URL
 	IsHealthy     bool     `json:"is_healthy"`                        // Health status
 	ProcessState  string   `json:"process_state"`                     // Current state
@@ -135,6 +144,31 @@ func (c *Controller) initStreamHealthRoutes() {
 		middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 
+// streamInfo holds name and type from stream config
+type streamInfo struct {
+	Name string
+	Type string
+}
+
+// getStreamInfo looks up stream name and type from config by URL.
+// Returns empty values if stream is not found in config.
+// Uses conf.GetSettings() to always get current config, avoiding stale data
+// after config reloads.
+func (c *Controller) getStreamInfo(rawURL string) streamInfo {
+	settings := conf.GetSettings()
+	if settings == nil {
+		return streamInfo{}
+	}
+
+	for _, stream := range settings.Realtime.RTSP.Streams {
+		if stream.URL == rawURL {
+			return streamInfo{Name: stream.Name, Type: stream.Type}
+		}
+	}
+
+	return streamInfo{}
+}
+
 // GetAllStreamsHealth returns health information for all configured RTSP streams
 // @Summary Get health status of all RTSP streams
 // @Description Returns detailed health information for all configured RTSP streams including error diagnostics
@@ -145,7 +179,7 @@ func (c *Controller) initStreamHealthRoutes() {
 // @Router /api/v2/streams/health [get]
 func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	// Convert to API response format
 	// Use a slice instead of map to avoid collisions when multiple URLs
@@ -153,7 +187,14 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	response := make([]StreamHealthResponse, 0, len(healthData))
 	for rawURL := range healthData {
 		health := healthData[rawURL]
-		response = append(response, convertStreamHealthToResponse(rawURL, &health))
+		resp := convertStreamHealthToResponse(rawURL, &health)
+
+		// Add stream name and type from config
+		info := c.getStreamInfo(rawURL)
+		resp.Name = info.Name
+		resp.Type = info.Type
+
+		response = append(response, resp)
 	}
 
 	return ctx.JSON(http.StatusOK, response)
@@ -184,19 +225,24 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	}
 
 	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	// Find the matching stream (case-sensitive exact match)
 	health, exists := healthData[decodedURL]
 	if !exists {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
-			logger.String("requested_url", privacy.SanitizeRTSPUrl(decodedURL)),
+			logger.String("requested_url", privacy.SanitizeStreamUrl(decodedURL)),
 			logger.Int("active_streams", len(healthData)))
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
 	// Convert to API response format
 	response := convertStreamHealthToResponse(decodedURL, &health)
+
+	// Add stream name and type from config
+	info := c.getStreamInfo(decodedURL)
+	response.Name = info.Name
+	response.Type = info.Type
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -211,7 +257,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 // @Router /api/v2/streams/status [get]
 func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	// Build summary
 	summary := StreamsStatusSummaryResponse{
@@ -232,8 +278,11 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 		}
 
 		// Build brief summary for this stream
+		info := c.getStreamInfo(rawURL)
 		streamSummary := StreamSummaryResponse{
-			URL:          privacy.SanitizeRTSPUrl(rawURL),
+			Name:         info.Name,
+			Type:         info.Type,
+			URL:          privacy.SanitizeStreamUrl(rawURL),
 			IsHealthy:    health.IsHealthy,
 			ProcessState: health.ProcessState.String(),
 		}
@@ -258,7 +307,7 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 // convertStreamHealthToResponse converts internal StreamHealth to API response format
 func convertStreamHealthToResponse(rawURL string, health *myaudio.StreamHealth) StreamHealthResponse {
 	response := StreamHealthResponse{
-		URL:                privacy.SanitizeRTSPUrl(rawURL),
+		URL:                privacy.SanitizeStreamUrl(rawURL),
 		IsHealthy:          health.IsHealthy,
 		ProcessState:       health.ProcessState.String(),
 		RestartCount:       health.RestartCount,
@@ -360,12 +409,31 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 
 // handleStreamHealthPoll polls for stream health changes and processes updates.
 func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
-	healthData := myaudio.GetRTSPStreamHealth()
+	healthData := myaudio.GetStreamHealth()
 
 	if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
 		return err
 	}
 	return c.processRemovedStreams(ctx, clientID, healthData, previousState)
+}
+
+// handleStreamStatsUpdate sends periodic stats updates for all active streams.
+// This enables real-time bandwidth and bytes display in the UI regardless of state changes.
+// Note: This sends a lightweight payload without history arrays to reduce bandwidth.
+func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
+	healthData := myaudio.GetStreamHealth()
+
+	for rawURL := range healthData {
+		health := healthData[rawURL]
+		if err := c.sendStreamStatsUpdate(ctx, rawURL, &health); err != nil {
+			c.logDebugIfEnabled("Failed to send stats update, client disconnected",
+				logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
+				logger.String("client_id", clientID),
+				logger.Error(err))
+			return err
+		}
+	}
+	return nil
 }
 
 // StreamHealthUpdates streams real-time RTSP stream health updates via SSE
@@ -396,12 +464,14 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	}
 
 	// Pre-allocate state tracking based on initial stream count
-	previousState := make(map[string]streamHealthSnapshot, len(myaudio.GetRTSPStreamHealth()))
+	previousState := make(map[string]streamHealthSnapshot, len(myaudio.GetStreamHealth()))
 
 	ticker := time.NewTicker(streamHealthPollInterval)
 	defer ticker.Stop()
 	heartbeatTicker := time.NewTicker(sseHeartbeatInterval)
 	defer heartbeatTicker.Stop()
+	statsTicker := time.NewTicker(streamStatsUpdateInterval)
+	defer statsTicker.Stop()
 
 	for {
 		select {
@@ -411,6 +481,11 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 			}
 		case <-ticker.C:
 			if err := c.handleStreamHealthPoll(ctx, clientID, previousState); err != nil {
+				return err
+			}
+		case <-statsTicker.C:
+			// Send periodic stats updates regardless of state changes
+			if err := c.handleStreamStatsUpdate(ctx, clientID); err != nil {
 				return err
 			}
 		case <-ctx.Request().Context().Done():
@@ -494,7 +569,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
 				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
-					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("client_id", clientID),
 					logger.Error(err))
 				return err
@@ -504,7 +579,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			eventType := determineEventType(previousSnapshot, currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
 				c.logDebugIfEnabled("Failed to send health update, client disconnected",
-					logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("event_type", eventType),
 					logger.String("client_id", clientID),
 					logger.String("previous_state", previousSnapshot.ProcessState),
@@ -529,9 +604,15 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 		}
 
 		// Stream was removed
-		sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
+		sanitizedURL := privacy.SanitizeStreamUrl(prevURL)
 		emptyHealth := myaudio.StreamHealth{}
 		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+
+		// Add stream name and type from config (may be empty if stream was removed from config)
+		info := c.getStreamInfo(prevURL)
+		response.Name = info.Name
+		response.Type = info.Type
+
 		event := SSEStreamHealthData{
 			StreamHealthResponse: response,
 			EventType:            "stream_removed",
@@ -554,6 +635,12 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 // sendStreamHealthUpdate sends a stream health update via SSE
 func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth, eventType string) error {
 	response := convertStreamHealthToResponse(rawURL, health)
+
+	// Add stream name and type from config
+	info := c.getStreamInfo(rawURL)
+	response.Name = info.Name
+	response.Type = info.Type
+
 	event := SSEStreamHealthData{
 		StreamHealthResponse: response,
 		EventType:            eventType,
@@ -564,10 +651,50 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 	}
 
 	c.logDebugIfEnabled("Stream health update sent",
-		logger.String("url", privacy.SanitizeRTSPUrl(rawURL)),
+		logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 		logger.String("event_type", eventType),
 		logger.Bool("is_healthy", health.IsHealthy),
 		logger.String("state", health.ProcessState.String()))
 
 	return nil
+}
+
+// sendStreamStatsUpdate sends a lightweight stats-only update via SSE.
+// This excludes history arrays (ErrorHistory, StateHistory) to reduce bandwidth
+// for frequent periodic updates.
+func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth) error {
+	// Build lightweight response with only essential stats fields
+	var timeSinceData *float64
+	if !health.LastDataReceived.IsZero() {
+		seconds := time.Since(health.LastDataReceived).Seconds()
+		timeSinceData = &seconds
+	}
+
+	info := c.getStreamInfo(rawURL)
+
+	// Create response without history arrays
+	response := StreamHealthResponse{
+		Name:               info.Name,
+		Type:               info.Type,
+		URL:                privacy.SanitizeStreamUrl(rawURL),
+		IsHealthy:          health.IsHealthy,
+		ProcessState:       health.ProcessState.String(),
+		RestartCount:       health.RestartCount,
+		TotalBytesReceived: health.TotalBytesReceived,
+		BytesPerSecond:     health.BytesPerSecond,
+		IsReceivingData:    health.IsReceivingData,
+		TimeSinceData:      timeSinceData,
+		// Explicitly omit: ErrorHistory, StateHistory, LastErrorContext
+	}
+
+	if !health.LastDataReceived.IsZero() {
+		response.LastDataReceived = &health.LastDataReceived
+	}
+
+	event := SSEStreamHealthData{
+		StreamHealthResponse: response,
+		EventType:            "stats_update",
+	}
+
+	return c.sendSSEMessage(ctx, "stream_health", event)
 }

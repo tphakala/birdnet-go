@@ -8,5 +8,5 @@
  */
 export function handleBirdImageError(e: Event): void {
   const target = e.currentTarget as globalThis.HTMLImageElement;
-  target.src = '/assets/images/bird-placeholder.svg';
+  target.src = '/ui/assets/bird-placeholder.svg';
 }

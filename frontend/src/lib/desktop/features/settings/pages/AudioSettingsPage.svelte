@@ -38,6 +38,7 @@
     audioSettings,
     rtspSettings,
     type EqualizerFilterType,
+    type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs, {
@@ -145,11 +146,14 @@
       };
 
       const rtspBase = $rtspSettings || {
-        transport: 'tcp',
-        urls: [],
+        streams: [],
+        health: {
+          healthyDataThreshold: 60,
+          monitoringInterval: 30,
+        },
       };
 
-      // Ensure urls is always an array even if rtspSettings exists but has undefined/null urls
+      // Ensure streams is always an array even if rtspSettings exists but has undefined/null streams
       // Also ensure equalizer filters is always an array
       return {
         audio: {
@@ -160,8 +164,8 @@
           },
         },
         rtsp: {
-          transport: rtspBase.transport || 'tcp',
-          urls: rtspBase.urls ?? [], // Always ensures urls is an array
+          streams: rtspBase.streams ?? [], // Always ensures streams is an array
+          health: rtspBase.health,
         },
       };
     })()
@@ -179,7 +183,10 @@
 
   // Streams tab changes
   let streamsTabHasChanges = $derived(
-    hasSettingsChanged(store.originalData.realtime?.rtsp, store.formData.realtime?.rtsp)
+    hasSettingsChanged(
+      store.originalData.realtime?.rtsp?.streams,
+      store.formData.realtime?.rtsp?.streams
+    )
   );
 
   // Audio Normalization section changes (moved here for dependency order)
@@ -308,19 +315,6 @@
     keepSpectrograms: settings.audio.export?.retention?.keepSpectrograms || false,
   });
 
-  // Helper function to merge RTSP settings and avoid code duplication
-  function mergeRtsp(partialRtsp: Partial<{ transport: string; urls: string[] }>) {
-    const storeState = $settingsStore;
-    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
-
-    settingsActions.updateSection('realtime', {
-      rtsp: {
-        ...currentRtsp, // Preserve all existing fields
-        ...partialRtsp, // Apply partial updates
-      },
-    });
-  }
-
   // Update handlers
   function updateAudioSource(source: string) {
     settingsActions.updateSection('realtime', {
@@ -328,12 +322,16 @@
     });
   }
 
-  function updateRTSPTransport(transport: string) {
-    mergeRtsp({ transport });
-  }
+  function updateRTSPStreams(streams: StreamConfig[]) {
+    const storeState = $settingsStore;
+    const currentRtsp = storeState.formData.realtime?.rtsp || { streams: [] };
 
-  function updateRTSPUrls(urls: string[]) {
-    mergeRtsp({ urls });
+    settingsActions.updateSection('realtime', {
+      rtsp: {
+        ...currentRtsp,
+        streams,
+      },
+    });
   }
 
   function updateExportEnabled(enabled: boolean) {
@@ -594,15 +592,13 @@
     <SettingsSection
       title={t('settings.audio.rtspStreams.title')}
       description={t('settings.audio.rtspStreams.description')}
-      originalData={store.originalData.realtime?.rtsp}
-      currentData={store.formData.realtime?.rtsp}
+      originalData={store.originalData.realtime?.rtsp?.streams}
+      currentData={store.formData.realtime?.rtsp?.streams}
     >
       <StreamManager
-        urls={settings.rtsp.urls}
-        transport={settings.rtsp.transport}
+        streams={settings.rtsp.streams}
         disabled={store.isLoading || store.isSaving}
-        onUpdateUrls={updateRTSPUrls}
-        onUpdateTransport={updateRTSPTransport}
+        onUpdateStreams={updateRTSPStreams}
       />
     </SettingsSection>
   </div>

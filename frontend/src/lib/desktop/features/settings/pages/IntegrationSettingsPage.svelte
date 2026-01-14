@@ -46,7 +46,8 @@
     type MQTTSettings,
     type SettingsFormData,
   } from '$lib/stores/settings';
-  import { TriangleAlert, Info } from '@lucide/svelte';
+  import { TriangleAlert, Info, Send } from '@lucide/svelte';
+  import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -77,6 +78,11 @@
         tls: {
           enabled: false,
           skipVerify: false,
+        },
+        homeAssistant: {
+          enabled: false,
+          discoveryPrefix: 'homeassistant',
+          deviceName: 'BirdNET-Go',
         },
       },
       observability: {
@@ -220,6 +226,77 @@
     settingsActions.updateSection('realtime', {
       mqtt: { ...(settings.mqtt as MQTTSettings), retain },
     });
+  }
+
+  // Home Assistant default settings constant (DRY principle)
+  const DEFAULT_HOME_ASSISTANT_SETTINGS = {
+    enabled: false,
+    discoveryPrefix: 'homeassistant',
+    deviceName: 'BirdNET-Go',
+  };
+
+  // Generic Home Assistant update function to reduce duplication
+  function updateMQTTHomeAssistant<K extends keyof typeof DEFAULT_HOME_ASSISTANT_SETTINGS>(
+    field: K,
+    value: (typeof DEFAULT_HOME_ASSISTANT_SETTINGS)[K]
+  ) {
+    settingsActions.updateSection('realtime', {
+      mqtt: {
+        ...(settings.mqtt as MQTTSettings),
+        homeAssistant: {
+          ...(settings.mqtt?.homeAssistant ?? DEFAULT_HOME_ASSISTANT_SETTINGS),
+          [field]: value,
+        },
+      },
+    });
+  }
+
+  // Home Assistant update handlers (wrappers for type-safe binding in templates)
+  function updateMQTTHomeAssistantEnabled(enabled: boolean) {
+    updateMQTTHomeAssistant('enabled', enabled);
+  }
+
+  function updateMQTTHomeAssistantPrefix(discoveryPrefix: string) {
+    updateMQTTHomeAssistant('discoveryPrefix', discoveryPrefix);
+  }
+
+  function updateMQTTHomeAssistantDeviceName(deviceName: string) {
+    updateMQTTHomeAssistant('deviceName', deviceName);
+  }
+
+  // Home Assistant discovery state and handler
+  let isSendingDiscovery = $state(false);
+
+  async function handleSendDiscovery() {
+    if (mqttHasChanges) {
+      // Don't send discovery with unsaved changes
+      return;
+    }
+
+    isSendingDiscovery = true;
+    try {
+      const response = await fetch('/api/v2/integrations/mqtt/homeassistant/discovery', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrfToken() || '',
+        },
+      });
+
+      if (response.ok) {
+        toastActions.success(t('settings.integration.mqtt.homeAssistant.discovery.success'));
+      } else {
+        const result = await response.json();
+        toastActions.error(
+          result.message || t('settings.integration.mqtt.homeAssistant.discovery.error')
+        );
+      }
+    } catch (err) {
+      logger.error('Failed to send Home Assistant discovery', err);
+      toastActions.error(t('settings.integration.mqtt.homeAssistant.discovery.error'));
+    } finally {
+      isSendingDiscovery = false;
+    }
   }
 
   // Observability update handlers
@@ -813,6 +890,32 @@
               onchange={updateMQTTBroker}
             />
 
+            <!-- TLS/SSL Security -->
+            <div class="flex flex-col gap-2">
+              <Checkbox
+                checked={settings.mqtt?.tls?.enabled ?? false}
+                label={t('settings.integration.mqtt.tls.enable')}
+                disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                onchange={updateMQTTTLSEnabled}
+              />
+
+              {#if settings.mqtt?.tls?.enabled}
+                <Checkbox
+                  checked={settings.mqtt?.tls?.skipVerify ?? false}
+                  label={t('settings.integration.mqtt.tls.skipVerify')}
+                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  onchange={updateMQTTTLSSkipVerify}
+                />
+
+                <div class="alert alert-info">
+                  <Info class="size-5" />
+                  <div>
+                    <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
+                  </div>
+                </div>
+              {/if}
+            </div>
+
             <TextInput
               id="mqtt-topic"
               value={settings.mqtt!.topic}
@@ -850,56 +953,95 @@
               </div>
             </div>
 
-            <!-- Message Settings Section -->
+            <!-- Home Assistant Integration Section -->
             <div class="border-t border-base-300 pt-4 mt-2">
               <h3 class="text-sm font-medium mb-3">
-                {t('settings.integration.mqtt.messageSettings.title')}
+                {t('settings.integration.mqtt.homeAssistant.title')}
               </h3>
 
-              <!-- prettier-ignore -->
               <Checkbox
-                checked={(settings.mqtt as MQTTSettings).retain ?? false}
-                onchange={(checked) => updateMQTTRetain(checked)}
-                label={t('settings.integration.mqtt.messageSettings.retain.label')}
+                checked={settings.mqtt?.homeAssistant?.enabled ?? false}
+                label={t('settings.integration.mqtt.homeAssistant.enable')}
                 disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                onchange={updateMQTTHomeAssistantEnabled}
               />
 
-              <!-- Note about MQTT Retain for HomeAssistant -->
               <SettingsNote>
-                <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
+                <span>{@html t('settings.integration.mqtt.homeAssistant.description')}</span>
               </SettingsNote>
-            </div>
 
-            <!-- TLS/SSL Security Section -->
-            <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
+              {#if settings.mqtt?.homeAssistant?.enabled}
+                <!-- Retain Messages for Home Assistant -->
+                <div class="mt-4">
+                  <!-- prettier-ignore -->
+                  <Checkbox
+                    checked={(settings.mqtt as MQTTSettings).retain ?? false}
+                    onchange={(checked) => updateMQTTRetain(checked)}
+                    label={t('settings.integration.mqtt.homeAssistant.retain.label')}
+                    disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  />
 
-              <Checkbox
-                checked={settings.mqtt?.tls?.enabled ?? false}
-                label={t('settings.integration.mqtt.tls.enable')}
-                disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
-                onchange={updateMQTTTLSEnabled}
-              />
+                  <SettingsNote>
+                    <span>{@html t('settings.integration.mqtt.homeAssistant.retain.note')}</span>
+                  </SettingsNote>
+                </div>
 
-              {#if settings.mqtt?.tls?.enabled}
-                <Checkbox
-                  checked={settings.mqtt?.tls?.skipVerify ?? false}
-                  label={t('settings.integration.mqtt.tls.skipVerify')}
-                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
-                  onchange={updateMQTTTLSSkipVerify}
-                />
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <TextInput
+                    id="mqtt-ha-prefix"
+                    value={settings.mqtt?.homeAssistant?.discoveryPrefix ?? 'homeassistant'}
+                    label={t('settings.integration.mqtt.homeAssistant.discoveryPrefix.label')}
+                    placeholder="homeassistant"
+                    disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                    onchange={updateMQTTHomeAssistantPrefix}
+                  />
 
-                <div class="alert alert-info">
+                  <TextInput
+                    id="mqtt-ha-device-name"
+                    value={settings.mqtt?.homeAssistant?.deviceName ?? 'BirdNET-Go'}
+                    label={t('settings.integration.mqtt.homeAssistant.deviceName.label')}
+                    placeholder="BirdNET-Go"
+                    disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                    onchange={updateMQTTHomeAssistantDeviceName}
+                  />
+                </div>
+
+                <div class="alert alert-info mt-4">
                   <Info class="size-5" />
                   <div>
-                    <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
+                    <span>{@html t('settings.integration.mqtt.homeAssistant.sensorsNote')}</span>
                   </div>
+                </div>
+
+                <div class="flex items-center gap-4 mt-4">
+                  <button
+                    class="btn btn-outline btn-sm"
+                    disabled={!settings.mqtt?.enabled ||
+                      store.isLoading ||
+                      store.isSaving ||
+                      isSendingDiscovery ||
+                      mqttHasChanges}
+                    onclick={handleSendDiscovery}
+                  >
+                    {#if isSendingDiscovery}
+                      <span class="loading loading-spinner loading-xs"></span>
+                    {:else}
+                      <Send class="size-4" />
+                    {/if}
+                    {t('settings.integration.mqtt.homeAssistant.discovery.button')}
+                  </button>
+
+                  {#if mqttHasChanges}
+                    <span class="text-sm text-warning">
+                      {t('settings.integration.mqtt.homeAssistant.discovery.saveFirst')}
+                    </span>
+                  {/if}
                 </div>
               {/if}
             </div>
 
             <!-- Test Connection -->
-            <div class="space-y-4">
+            <div class="border-t border-base-300 pt-4 mt-2 space-y-4">
               <div class="flex items-center gap-3">
                 <SettingsButton
                   onclick={testMQTT}

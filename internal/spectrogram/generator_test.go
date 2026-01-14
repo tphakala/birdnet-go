@@ -754,7 +754,7 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	// Test that timeout constants are reasonable
 	defaultTimeout := GetDefaultGenerationTimeout()
-	assert.Equal(t, 60*time.Second, defaultTimeout, "default generation timeout should be 60s")
+	assert.Equal(t, 90*time.Second, defaultTimeout, "default generation timeout should be 90s")
 
 	ffmpegTimeout := GetFFmpegFallbackTimeout()
 	assert.Equal(t, 60*time.Second, ffmpegTimeout, "FFmpeg fallback timeout should be 60s")

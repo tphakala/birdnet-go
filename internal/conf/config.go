@@ -422,25 +422,49 @@ type RTSPHealthSettings struct {
 	MonitoringInterval   int `json:"monitoringInterval"`   // health check interval in seconds (default: 30)
 }
 
-// RTSPSettings contains settings for RTSP streaming.
-type RTSPSettings struct {
-	Transport        string             `json:"transport"`        // RTSP Transport Protocol
-	URLs             []string           `json:"urls"`             // RTSP stream URL
-	Health           RTSPHealthSettings `json:"health"`           // health monitoring settings
-	FFmpegParameters []string           `json:"ffmpegParameters"` // optional custom FFmpeg parameters
+// StreamType constants for supported streaming protocols
+const (
+	StreamTypeRTSP = "rtsp" // RTSP/RTSPS - IP cameras
+	StreamTypeHTTP = "http" // HTTP/HTTPS - Direct streams, Icecast
+	StreamTypeHLS  = "hls"  // HLS - .m3u8 playlists
+	StreamTypeRTMP = "rtmp" // RTMP/RTMPS - OBS, push streams
+	StreamTypeUDP  = "udp"  // UDP/RTP - Low-latency LAN
+)
+
+// StreamConfig represents a single audio stream source
+type StreamConfig struct {
+	Name      string `yaml:"name" json:"name" mapstructure:"name"`                // Required: descriptive name like "Front Yard"
+	URL       string `yaml:"url" json:"url" mapstructure:"url"`                   // Required: stream URL
+	Type      string `yaml:"type" json:"type" mapstructure:"type"`                // Stream type: rtsp, http, hls, rtmp, udp
+	Transport string `yaml:"transport" json:"transport" mapstructure:"transport"` // Transport: tcp or udp (for RTSP/RTMP)
 }
+
+// RTSPSettings contains settings for audio streaming (supports multiple protocols).
+// Note: Struct name kept for backward compatibility with existing code.
+type RTSPSettings struct {
+	Streams          []StreamConfig     `yaml:"streams" json:"streams" mapstructure:"streams"`                                   // Stream configurations
+	URLs             []string           `yaml:"urls,omitempty" json:"urls,omitempty" mapstructure:"urls"`                        // Legacy: accepts old format, migrated on load
+	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`         // Legacy: global default, migrated on load
+	Health           RTSPHealthSettings `yaml:"health" json:"health" mapstructure:"health"`                                      // Health monitoring settings
+	FFmpegParameters []string           `yaml:"ffmpegParameters" json:"ffmpegParameters" mapstructure:"ffmpegParameters"`        // Custom FFmpeg parameters
+}
+
+// CRITICAL: Legacy fields (URLs, Transport) MUST include json tags to accept
+// payloads from older frontends. Without this, saving from a cached old frontend
+// would wipe the user's stream configuration. The migration runs on Load().
 
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
-	Enabled       bool            `json:"enabled"`       // true to enable MQTT
-	Debug         bool            `json:"debug"`         // true to enable MQTT debug
-	Broker        string          `json:"broker"`        // MQTT broker URL
-	Topic         string          `json:"topic"`         // MQTT topic
-	Username      string          `json:"username"`      // MQTT username
-	Password      string          `json:"password"`      // MQTT password
-	Retain        bool            `json:"retain"`        // true to retain messages
-	RetrySettings RetrySettings   `json:"retrySettings"` // settings for retry mechanism
-	TLS           MQTTTLSSettings `json:"tls"`           // TLS/SSL configuration
+	Enabled       bool                  `json:"enabled"`       // true to enable MQTT
+	Debug         bool                  `json:"debug"`         // true to enable MQTT debug
+	Broker        string                `json:"broker"`        // MQTT broker URL
+	Topic         string                `json:"topic"`         // MQTT topic
+	Username      string                `json:"username"`      // MQTT username
+	Password      string                `json:"password"`      // MQTT password
+	Retain        bool                  `json:"retain"`        // true to retain messages
+	RetrySettings RetrySettings         `json:"retrySettings"` // settings for retry mechanism
+	TLS           MQTTTLSSettings       `json:"tls"`           // TLS/SSL configuration
+	HomeAssistant HomeAssistantSettings `json:"homeAssistant"` // Home Assistant auto-discovery settings
 }
 
 // MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections
@@ -450,6 +474,13 @@ type MQTTTLSSettings struct {
 	CACert             string `yaml:"cacert,omitempty" json:"caCert,omitempty"`         // path to CA certificate file (managed internally)
 	ClientCert         string `yaml:"clientcert,omitempty" json:"clientCert,omitempty"` // path to client certificate file (managed internally)
 	ClientKey          string `yaml:"clientkey,omitempty" json:"clientKey,omitempty"`   // path to client key file (managed internally)
+}
+
+// HomeAssistantSettings contains settings for Home Assistant MQTT auto-discovery.
+type HomeAssistantSettings struct {
+	Enabled         bool   `yaml:"enabled" json:"enabled"`                   // true to enable HA auto-discovery
+	DiscoveryPrefix string `yaml:"discovery_prefix" json:"discoveryPrefix"`  // HA discovery topic prefix (default: homeassistant)
+	DeviceName      string `yaml:"device_name" json:"deviceName"`            // base name for devices (default: BirdNET-Go)
 }
 
 // TelemetrySettings contains settings for telemetry.
@@ -1277,6 +1308,18 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Migrate legacy RTSP URLs to new streams format
+	if settings.MigrateRTSPConfig() {
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				GetLogger().Warn("Failed to save migrated RTSP config", logger.Error(err))
+			} else {
+				GetLogger().Info("Saved migrated RTSP configuration", logger.String("path", configFile))
+			}
+		}
+	}
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
@@ -1520,6 +1563,109 @@ func (s *Settings) MigrateOAuthConfig() bool {
 	}
 
 	return migrated
+}
+
+// inferStreamType detects the stream type from URL scheme.
+// Returns StreamTypeRTSP as default for unknown schemes.
+func inferStreamType(url string) string {
+	urlLower := strings.ToLower(url)
+
+	switch {
+	case strings.HasPrefix(urlLower, "rtsp://"), strings.HasPrefix(urlLower, "rtsps://"):
+		return StreamTypeRTSP
+	case strings.HasPrefix(urlLower, "rtmp://"), strings.HasPrefix(urlLower, "rtmps://"):
+		return StreamTypeRTMP
+	case strings.HasPrefix(urlLower, "udp://"), strings.HasPrefix(urlLower, "rtp://"):
+		return StreamTypeUDP
+	case strings.HasPrefix(urlLower, "http://"), strings.HasPrefix(urlLower, "https://"):
+		// Check for HLS (.m3u8) vs generic HTTP
+		if strings.Contains(urlLower, ".m3u8") {
+			return StreamTypeHLS
+		}
+		return StreamTypeHTTP
+	default:
+		return StreamTypeRTSP // Default to RTSP for unknown schemes
+	}
+}
+
+// MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
+// This migration:
+// - Skips if Streams already has entries (already migrated)
+// - Only migrates if URLs has data
+// - Trims whitespace and skips empty URLs
+// - Infers stream type from URL scheme
+// - Preserves the global Transport setting for RTSP/RTMP streams
+// - Returns true if migration occurred, false if skipped
+func (s *Settings) MigrateRTSPConfig() bool {
+	rtsp := &s.Realtime.RTSP
+
+	// Skip if already migrated (new format has streams)
+	if len(rtsp.Streams) > 0 {
+		return false
+	}
+
+	// Skip if no legacy URLs to migrate
+	if len(rtsp.URLs) == 0 {
+		return false
+	}
+
+	// Get global transport, default to tcp
+	globalTransport := rtsp.Transport
+	if globalTransport == "" {
+		globalTransport = "tcp"
+	}
+
+	// Preallocate streams slice with capacity and track seen URLs for deduplication
+	rtsp.Streams = make([]StreamConfig, 0, len(rtsp.URLs))
+	seenURLs := make(map[string]bool)
+	streamIndex := 0
+
+	// Migrate each URL to StreamConfig
+	for _, rawURL := range rtsp.URLs {
+		// Trim whitespace and skip empty URLs
+		url := strings.TrimSpace(rawURL)
+		if url == "" {
+			continue
+		}
+
+		// Skip duplicate URLs to ensure valid configuration
+		if seenURLs[url] {
+			continue
+		}
+		seenURLs[url] = true
+		streamIndex++
+
+		// Infer stream type from URL scheme
+		streamType := inferStreamType(url)
+
+		// Only apply transport setting to RTSP/RTMP types where it makes sense
+		transport := ""
+		if streamType == StreamTypeRTSP || streamType == StreamTypeRTMP {
+			transport = globalTransport
+		}
+
+		stream := StreamConfig{
+			Name:      fmt.Sprintf("Stream %d", streamIndex),
+			URL:       url,
+			Type:      streamType,
+			Transport: transport,
+		}
+		rtsp.Streams = append(rtsp.Streams, stream)
+	}
+
+	// If no valid URLs were found, don't mark as migrated
+	if len(rtsp.Streams) == 0 {
+		return false
+	}
+
+	// Clear legacy fields
+	rtsp.URLs = nil
+	rtsp.Transport = ""
+
+	GetLogger().Info("Migrated RTSP configuration to new streams format",
+		logger.Int("stream_count", len(rtsp.Streams)))
+
+	return true
 }
 
 // GetOAuthProvider returns the OAuth provider configuration for the given provider ID.

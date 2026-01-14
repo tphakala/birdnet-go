@@ -236,7 +236,6 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		api.WithAudioLevelChannel(audioLevelChan),
 		api.WithOAuth2Server(oauth2Server),
 		api.WithSunCalc(sunCalc),
-		api.WithAssetsFS(api.AssetsFs),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP server: %w", err)
@@ -250,7 +249,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	bufferManager := MustNewBufferManager(bn, quitChan, &wg)
 
 	// Start buffer monitors for each audio source only if we have active sources
-	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
+	if len(settings.Realtime.RTSP.Streams) > 0 || settings.Realtime.Audio.Source != "" {
 		if err := bufferManager.UpdateMonitors(sources); err != nil {
 			// Use structured logging to improve error visibility and triage
 			// Extract error details from the enhanced error if available
@@ -265,7 +264,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		}
 	} else {
 		GetLogger().Warn("starting without active audio sources",
-			logger.Int("rtsp_urls", len(settings.Realtime.RTSP.URLs)),
+			logger.Int("rtsp_streams", len(settings.Realtime.RTSP.Streams)),
 			logger.String("audio_source", settings.Realtime.Audio.Source),
 			logger.String("operation", "startup_audio_check"))
 	}
@@ -277,9 +276,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// The control monitor will start sound level monitoring if enabled in settings.
 
 	// RTSP health monitoring is now built into the FFmpeg manager
-	if len(settings.Realtime.RTSP.URLs) > 0 {
+	if len(settings.Realtime.RTSP.Streams) > 0 {
 		GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
-			logger.Int("stream_count", len(settings.Realtime.RTSP.URLs)),
+			logger.Int("stream_count", len(settings.Realtime.RTSP.Streams)),
 			logger.String("operation", "rtsp_monitoring_setup"))
 	}
 
@@ -1386,8 +1385,8 @@ func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datasto
 func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	log := GetLogger()
 	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
-		if len(settings.Realtime.RTSP.URLs) > 0 {
+	if len(settings.Realtime.RTSP.Streams) > 0 || settings.Realtime.Audio.Source != "" {
+		if len(settings.Realtime.RTSP.Streams) > 0 {
 			// Register RTSP sources in the registry and get their source IDs
 			registry := myaudio.GetRegistry()
 			if registry == nil {
@@ -1395,24 +1394,26 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			}
 
 			var failedSources []string
-			for _, url := range settings.Realtime.RTSP.URLs {
-				if url == "" {
-					log.Warn("skipping empty RTSP URL")
+			for _, stream := range settings.Realtime.RTSP.Streams {
+				if stream.URL == "" {
+					log.Warn("skipping stream with empty URL",
+						logger.String("stream_name", stream.Name))
 					continue
 				}
 
-				// Register the source
-				source, err := registry.RegisterSource(url, myaudio.SourceConfig{
+				// Register the source with stream name as display name
+				source, err := registry.RegisterSource(stream.URL, myaudio.SourceConfig{
 					ID:          "", // Let registry generate UUID
-					DisplayName: "", // Let auto-generation use SafeString
-					Type:        myaudio.SourceTypeRTSP,
+					DisplayName: stream.Name,
+					Type:        myaudio.StreamTypeToSourceType(stream.Type),
 				})
 				if err != nil {
-					safeURL := privacy.SanitizeRTSPUrl(url)
-					log.Error("failed to register RTSP source",
-						logger.String("rtsp_url", safeURL),
+					safeURL := privacy.SanitizeStreamUrl(stream.URL)
+					log.Error("failed to register stream source",
+						logger.String("stream_name", stream.Name),
+						logger.String("stream_url", safeURL),
 						logger.Error(err))
-					failedSources = append(failedSources, safeURL)
+					failedSources = append(failedSources, stream.Name)
 					continue
 				}
 
@@ -1421,9 +1422,9 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 
 			// If some sources failed to register, log a summary
 			if len(failedSources) > 0 {
-				log.Warn("some RTSP sources failed to register",
+				log.Warn("some stream sources failed to register",
 					logger.Int("failed_count", len(failedSources)),
-					logger.Int("total_count", len(settings.Realtime.RTSP.URLs)),
+					logger.Int("total_count", len(settings.Realtime.RTSP.Streams)),
 					logger.Any("failed_sources", failedSources))
 			}
 		}
