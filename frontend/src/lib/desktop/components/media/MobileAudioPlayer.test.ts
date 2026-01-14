@@ -10,6 +10,7 @@ vi.mock('$lib/i18n', () => ({
     const translations: Record<string, string> = {
       'common.aria.closeModal': 'Close modal',
     };
+    // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
     return translations[key] ?? key;
   }),
 }));

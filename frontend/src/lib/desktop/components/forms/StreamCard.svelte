@@ -58,7 +58,10 @@
   function formatBytes(bytes: number): string {
     if (!bytes || bytes === 0) return '--';
     const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    // Clamp index to valid array bounds (0 to 3) to prevent out-of-bounds access
+    const rawIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+    const i = Math.min(Math.max(0, rawIndex), units.length - 1);
+    // eslint-disable-next-line security/detect-object-injection -- Index clamped to valid range [0, units.length-1]
     return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
   }
 

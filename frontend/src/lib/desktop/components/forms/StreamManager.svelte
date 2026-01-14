@@ -153,6 +153,7 @@
 
   // Convert backend process state to UI status
   function getStreamStatus(url: string): StreamStatus {
+    // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = streamHealth[url];
     if (!health) return 'unknown';
 
@@ -196,6 +197,7 @@
 
       // Clear existing entries first (mutate, don't reassign)
       for (const key of Object.keys(streamHealth)) {
+        // eslint-disable-next-line security/detect-object-injection -- Key from Object.keys on internal state object
         delete streamHealth[key];
       }
 

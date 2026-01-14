@@ -138,10 +138,12 @@ const translations: Record<string, string> = {
 
 vi.mock('$lib/i18n', () => ({
   t: vi.fn((key: string, params?: Record<string, unknown>) => {
+    // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
     let result = translations[key] || key;
     // Handle interpolation for params like {time}, {count}, etc.
     if (params) {
       for (const [paramKey, paramValue] of Object.entries(params)) {
+        // eslint-disable-next-line security/detect-non-literal-regexp -- paramKey from Object.entries on controlled params object
         result = result.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramValue));
       }
     }
