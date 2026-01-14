@@ -919,6 +919,7 @@ type BirdNETConfig struct {
 	Longitude   float64             `json:"longitude"`                                      // longitude of recording location for prediction filtering
 	Latitude    float64             `json:"latitude"`                                       // latitude of recording location for prediction filtering
 	Threads     int                 `json:"threads"`                                        // number of CPU threads to use for analysis
+	BatchSize   int                 `json:"batchSize"`                                      // Deprecated: ignored, batch size is auto-calculated from Overlap
 	Locale      string              `json:"locale"`                                         // language to use for labels
 	RangeFilter RangeFilterSettings `json:"rangeFilter"`                                    // range filter settings
 	ModelPath   string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"` // path to external model file (empty for embedded)
@@ -1798,7 +1799,7 @@ func GetTestSettings() *Settings {
 	settings.BirdNET.Sensitivity = 1.0
 	settings.BirdNET.Threshold = 0.8
 	settings.BirdNET.Overlap = 0.0
-	settings.BirdNET.Locale = "en"
+	settings.BirdNET.Locale = "en-uk"
 
 	// Dashboard settings with thumbnails
 	settings.Realtime.Dashboard.Thumbnails.Debug = false

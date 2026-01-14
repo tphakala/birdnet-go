@@ -189,6 +189,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureTelemetry()
 	case "reconfigure_species_tracking":
 		cm.handleReconfigureSpeciesTracking()
+	case "reconfigure_batch_inference":
+		cm.handleReconfigureBatchInference()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
@@ -662,4 +664,27 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		logger.Int("sync_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
 		logger.String("hemisphere", hemisphere))
 	cm.notifySuccess("Species tracking reconfigured successfully")
+}
+
+// handleReconfigureBatchInference reconfigures batch inference based on new overlap setting
+func (cm *ControlMonitor) handleReconfigureBatchInference() {
+	settings := conf.Setting()
+
+	if cm.bn == nil {
+		GetLogger().Error("BirdNET not available for batch inference reconfiguration")
+		cm.notifyError("Failed to reconfigure batch inference", fmt.Errorf("BirdNET not available"))
+		return
+	}
+
+	oldBatchSize := cm.bn.GetBatchSize()
+	cm.bn.UpdateBatchSize(settings.BirdNET.Overlap)
+	newBatchSize := cm.bn.GetBatchSize()
+
+	if oldBatchSize != newBatchSize {
+		GetLogger().Info("Batch inference reconfigured",
+			logger.Float64("overlap", settings.BirdNET.Overlap),
+			logger.Int("old_batch_size", oldBatchSize),
+			logger.Int("new_batch_size", newBatchSize))
+		cm.notifySuccess("Batch inference reconfigured")
+	}
 }

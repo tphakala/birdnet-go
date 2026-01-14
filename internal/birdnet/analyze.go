@@ -132,7 +132,7 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	}
 
 	// Use optimized top-k algorithm instead of full sort + trim
-	topResults := getTopKResults(results, 10)
+	topResults := getTopKResults(results, DefaultTopKResults)
 
 	// Log prediction timing for performance monitoring
 	duration := time.Since(start)
@@ -147,6 +147,170 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 
 	// Return the top 10 results
 	return topResults, nil
+}
+
+// PredictBatch performs batch inference on multiple audio samples simultaneously.
+// This is more efficient than calling Predict multiple times when processing
+// multiple audio sources or high-overlap chunks.
+func (bn *BirdNET) PredictBatch(samples [][]float32) ([][]datastore.Results, error) {
+	span, _ := StartSpan(context.Background(), "birdnet.predict_batch", "Batch species prediction")
+	defer span.Finish()
+
+	start := time.Now()
+	batchSize := len(samples)
+	span.SetTag("model", bn.ModelInfo.ID)
+	span.SetData("batch_size", batchSize)
+
+	if batchSize == 0 {
+		span.SetTag("error", "true")
+		span.SetData("error_type", "empty_samples")
+		return nil, errors.Newf("samples cannot be nil or empty").
+			Category(errors.CategoryValidation).
+			Context("batch_size", 0).
+			Build()
+	}
+
+	sampleSize := SampleSize
+
+	// Validate all samples have correct size
+	for i, sample := range samples {
+		if len(sample) != sampleSize {
+			span.SetTag("error", "true")
+			span.SetData("error_type", "invalid_sample_size")
+			span.SetData("sample_index", i)
+			return nil, errors.Newf("sample %d has wrong size: expected %d, got %d", i, sampleSize, len(sample)).
+				Category(errors.CategoryValidation).
+				Context("sample_index", i).
+				Context("expected_size", sampleSize).
+				Context("actual_size", len(sample)).
+				Build()
+		}
+	}
+
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+
+	// Resize input tensor for batch
+	// nolint:gosec // G115: batchSize is bounded by available memory (realistic max ~hundreds of samples),
+	// sampleSize is constant 144000, both safely within int32 range
+	newShape := []int32{int32(batchSize), int32(sampleSize)}
+	if status := bn.AnalysisInterpreter.ResizeInputTensor(0, newShape); status != tflite.OK {
+		span.SetTag("error", "true")
+		span.SetData("error_type", "resize_tensor_failed")
+		return nil, errors.Newf("failed to resize input tensor: %v", status).
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("batch_size", batchSize).
+			Context("status_code", status).
+			Build()
+	}
+
+	// Restore tensor shape to single-sample mode when done.
+	// Register defer immediately after resize succeeds to ensure cleanup
+	// even if subsequent operations (AllocateTensors, etc.) fail.
+	defer func() {
+		// nolint:gosec // G115: sampleSize is constant 144000, safely within int32 range
+		singleShape := []int32{1, int32(sampleSize)}
+		if status := bn.AnalysisInterpreter.ResizeInputTensor(0, singleShape); status != tflite.OK {
+			bn.Debug("Warning: failed to restore tensor shape after batch: %v", status)
+		}
+		if status := bn.AnalysisInterpreter.AllocateTensors(); status != tflite.OK {
+			bn.Debug("Warning: failed to reallocate tensors after batch: %v", status)
+		}
+	}()
+
+	if status := bn.AnalysisInterpreter.AllocateTensors(); status != tflite.OK {
+		span.SetTag("error", "true")
+		span.SetData("error_type", "allocate_tensors_failed")
+		return nil, errors.Newf("failed to allocate tensors after resize: %v", status).
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("batch_size", batchSize).
+			Context("status_code", status).
+			Build()
+	}
+
+	// Copy all samples to input tensor
+	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
+	if inputTensor == nil {
+		span.SetTag("error", "true")
+		span.SetData("error_type", "input_tensor_nil")
+		return nil, errors.Newf("cannot get input tensor").
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("batch_size", batchSize).
+			Build()
+	}
+
+	inputData := inputTensor.Float32s()
+	for i, sample := range samples {
+		offset := i * sampleSize
+		copy(inputData[offset:offset+sampleSize], sample)
+	}
+
+	// Invoke inference
+	if status := bn.AnalysisInterpreter.Invoke(); status != tflite.OK {
+		span.SetTag("error", "true")
+		span.SetData("error_type", "invoke_failed")
+		return nil, errors.Newf("batch inference failed: %v", status).
+			Category(errors.CategoryAudio).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("batch_size", batchSize).
+			Context("status_code", status).
+			Build()
+	}
+
+	// Extract results for each sample in batch
+	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
+	if outputTensor == nil {
+		span.SetTag("error", "true")
+		span.SetData("error_type", "output_tensor_nil")
+		return nil, errors.Newf("cannot get output tensor").
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("batch_size", batchSize).
+			Build()
+	}
+	numSpecies := outputTensor.Dim(1)
+	outputData := outputTensor.Float32s()
+
+	allResults := make([][]datastore.Results, batchSize)
+	for i := range batchSize {
+		offset := i * numSpecies
+		predictions := make([]float32, numSpecies)
+		copy(predictions, outputData[offset:offset+numSpecies])
+
+		confidence := applySigmoidToPredictions(predictions, bn.Settings.BirdNET.Sensitivity)
+		results, err := pairLabelsAndConfidence(bn.Settings.BirdNET.Labels, confidence)
+		if err != nil {
+			span.SetTag("error", "true")
+			span.SetData("error_type", "label_mismatch")
+			span.SetData("sample_index", i)
+			return nil, errors.Wrap(err).
+				Category(errors.CategoryValidation).
+				Context("sample_index", i).
+				Context("label_count", len(bn.Settings.BirdNET.Labels)).
+				Context("confidence_count", len(confidence)).
+				Build()
+		}
+
+		allResults[i] = getTopKResults(results, DefaultTopKResults)
+	}
+
+	// Record metrics and complete span
+	duration := time.Since(start)
+	bn.Debug("Batch prediction completed in %v for %d samples", duration, batchSize)
+
+	span.SetData("total_duration_ms", duration.Milliseconds())
+	span.SetData("avg_duration_per_sample_ms", duration.Milliseconds()/int64(batchSize))
+	span.SetTag("error", "false")
+
+	// Record batch metrics if available
+	if globalMetrics != nil {
+		globalMetrics.RecordPrediction(bn.ModelInfo.ID, duration.Seconds(), nil)
+	}
+
+	return allResults, nil
 }
 
 // AnalyzeAudio processes audio data in chunks and predicts species using the BirdNET model.
