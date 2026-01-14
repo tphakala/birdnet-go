@@ -976,7 +976,7 @@
           },
           "hardwareNote": "Poziomy Ścisły i Maksymalny wymagają wyższych ustawień nakładania i większych zasobów CPU. Dla tych poziomów wymagany jest RPi 4 lub lepszy sprzęt.",
           "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra",
-          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
+          "overlapReduced": "Ustawienie nakładania zmniejszono do {overlap}s, aby dopasować do poziomu filtra"
         },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
