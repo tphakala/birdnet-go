@@ -58,6 +58,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
+			Priority(errors.PriorityHigh). // User-configured script issues should notify users
 			Context("operation", "validate_command_path").
 			Context("command_type", "external_script").
 			Build()
@@ -74,6 +75,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
+			Priority(errors.PriorityHigh). // User-configured script issues should notify users
 			Context("operation", "build_command_arguments").
 			Context("param_count", len(a.Params)).
 			Context("param_keys", strings.Join(paramKeys, ", ")).
@@ -144,6 +146,7 @@ func validateCommandPath(command string) (string, error) {
 		return "", errors.Newf("command must use absolute path").
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
+			Priority(errors.PriorityHigh). // User-configured script issues should notify users
 			Context("operation", "validate_command_path").
 			Context("security_check", "absolute_path_required").
 			Context("path_classification", "relative_path").
@@ -188,6 +191,7 @@ func validateCommandPath(command string) (string, error) {
 			return "", errors.Newf("command is not executable").
 				Component("analysis.processor").
 				Category(errors.CategoryValidation).
+				Priority(errors.PriorityHigh). // User-configured script issues should notify users
 				Context("operation", "validate_command_path").
 				Context("security_check", "executable_permission").
 				Context("file_mode", info.Mode().String()).
@@ -220,6 +224,7 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 			return nil, errors.Newf("invalid parameter name").
 				Component("analysis.processor").
 				Category(errors.CategoryValidation).
+				Priority(errors.PriorityHigh). // User-configured script issues should notify users
 				Context("operation", "build_command_arguments").
 				Context("security_check", "parameter_name_validation").
 				Context("validation_rule", "alphanumeric_underscore_dash_only").
@@ -266,6 +271,9 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 
 // isValidParamName checks if a parameter name contains only safe characters
 func isValidParamName(name string) bool {
+	if name == "" {
+		return false
+	}
 	for _, r := range name {
 		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') &&
 			(r < '0' || r > '9') && r != '_' && r != '-' {

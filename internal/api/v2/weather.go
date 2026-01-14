@@ -236,7 +236,7 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 	var targetHourData *HourlyWeatherResponse
 	for i := range hourlyWeather {
 		hw := &hourlyWeather[i]
-		storedHourStr := hw.Time.Format("15")
+		storedHourStr := hw.Time.In(time.Local).Format("15")
 		storedHour, err := strconv.Atoi(storedHourStr)
 		if err != nil {
 			return c.HandleError(ctx, echo.NewHTTPError(http.StatusInternalServerError),
@@ -435,7 +435,7 @@ func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWea
 // buildHourlyWeatherResponse creates an HourlyWeatherResponse from an HourlyWeather struct
 func (c *Controller) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) HourlyWeatherResponse {
 	return HourlyWeatherResponse{
-		Time:        hw.Time.Format("15:04:05"), // Consider if Timezone matters here
+		Time:        hw.Time.In(time.Local).Format("15:04:05"),
 		Temperature: hw.Temperature,
 		FeelsLike:   hw.FeelsLike,
 		TempMin:     hw.TempMin,
@@ -472,8 +472,8 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get latest weather data", http.StatusInternalServerError)
 	}
 
-	// Get the date from the latest weather
-	date := latestWeather.Time.Format("2006-01-02")
+	// Get the date from the latest weather (convert to local time for correct date)
+	date := latestWeather.Time.In(time.Local).Format("2006-01-02")
 
 	// Build response with hourly data
 	response := struct {

@@ -2,75 +2,38 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 
-// Define interfaces and mock class at module level
-interface SSEOptions {
-  max_retry_time?: number;
-  withCredentials?: boolean;
+// Define type for notification callback
+type NotificationCallback = (notification: Record<string, unknown>) => void;
+
+// Store registered callbacks for test simulation
+const registeredCallbacks: Set<NotificationCallback> = new Set();
+
+// Helper to simulate notifications in tests
+function simulateSSENotification(notification: Record<string, unknown>) {
+  registeredCallbacks.forEach(callback => callback(notification));
 }
 
-class MockReconnectingEventSource {
-  url: string;
-  options: SSEOptions | undefined;
-  onopen: ((event: Event) => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
+// Store helper on globalThis for test access
+const globalWithHelper = globalThis as typeof globalThis & {
+  simulateSSENotification: typeof simulateSSENotification;
+};
+globalWithHelper.simulateSSENotification = simulateSSENotification;
 
-  constructor(url: string, options?: SSEOptions) {
-    this.url = url;
-    this.options = options;
-    // Store instance for test access
-    const global = globalThis as typeof globalThis & {
-      mockSSEInstance: MockReconnectingEventSource;
-    };
-    global.mockSSEInstance = this;
-  }
-
-  close() {
-    // Mock close
-  }
-
-  // Helper method for tests to simulate messages
-  simulateMessage(data: Record<string, unknown>) {
-    if (this.onmessage) {
-      this.onmessage(new MessageEvent('message', { data: JSON.stringify(data) }));
-    }
-  }
-}
-
-// Mock ReconnectingEventSource before any imports that might use it
-vi.mock('reconnecting-eventsource', () => {
-  // Return the class directly in the factory function
-  return {
-    default: class {
-      url: string;
-      options: SSEOptions | undefined;
-      onopen: ((event: Event) => void) | null = null;
-      onmessage: ((event: MessageEvent) => void) | null = null;
-      onerror: ((event: Event) => void) | null = null;
-
-      constructor(url: string, options?: SSEOptions) {
-        this.url = url;
-        this.options = options;
-        // Store instance for test access
-        const global = globalThis as typeof globalThis & {
-          mockSSEInstance: MockReconnectingEventSource;
-        };
-        global.mockSSEInstance = this as MockReconnectingEventSource;
-      }
-
-      close() {
-        // Mock close
-      }
-
-      // Helper method for tests to simulate messages
-      simulateMessage(data: Record<string, unknown>) {
-        if (this.onmessage) {
-          this.onmessage(new MessageEvent('message', { data: JSON.stringify(data) }));
-        }
-      }
-    },
-  };
-});
+// Mock sseNotifications singleton - the component now uses callback registration
+vi.mock('$lib/stores/sseNotifications', () => ({
+  sseNotifications: {
+    registerNotificationCallback: vi.fn((callback: NotificationCallback) => {
+      registeredCallbacks.add(callback);
+      // Return unsubscribe function
+      return () => {
+        registeredCallbacks.delete(callback);
+      };
+    }),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    getIsConnected: vi.fn().mockReturnValue(true),
+  },
+}));
 
 // Mock dependencies
 vi.mock('$lib/utils/api', () => ({
@@ -212,8 +175,8 @@ describe('NotificationBell Component', () => {
 
   afterEach(() => {
     cleanup();
-    const global = globalThis as typeof globalThis & { mockSSEInstance?: unknown };
-    delete global.mockSSEInstance;
+    // Clear registered SSE callbacks between tests
+    registeredCallbacks.clear();
   });
 
   describe('Basic Functionality', () => {
@@ -324,14 +287,8 @@ describe('NotificationBell Component', () => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
-      // Send first notification
+      // Send first notification via SSE callback
       const notification1 = {
-        eventType: 'notification',
         id: 'new-1',
         type: 'info',
         title: 'Duplicate Test',
@@ -341,7 +298,7 @@ describe('NotificationBell Component', () => {
         priority: 'medium',
       };
 
-      sseInstance.simulateMessage(notification1);
+      simulateSSENotification(notification1);
       await tick();
 
       // Open dropdown to check
@@ -358,7 +315,7 @@ describe('NotificationBell Component', () => {
         timestamp: new Date(Date.now() + 1000).toISOString(),
       };
 
-      sseInstance.simulateMessage(notification2);
+      simulateSSENotification(notification2);
       await tick();
 
       // Should still have same number of notifications (deduplicated)
@@ -380,15 +337,9 @@ describe('NotificationBell Component', () => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
       // Send first notification (1 hour ago)
       const oldTimestamp = new Date(Date.now() - 3600000).toISOString();
       const notification1 = {
-        eventType: 'notification',
         id: 'time-1',
         type: 'info',
         title: 'Time Test',
@@ -398,7 +349,7 @@ describe('NotificationBell Component', () => {
         priority: 'medium',
       };
 
-      sseInstance.simulateMessage(notification1);
+      simulateSSENotification(notification1);
       await tick();
 
       // Open dropdown
@@ -416,7 +367,7 @@ describe('NotificationBell Component', () => {
         timestamp: newTimestamp,
       };
 
-      sseInstance.simulateMessage(notification2);
+      simulateSSENotification(notification2);
       await tick();
 
       // Should show updated timestamp - the notification now has the newer timestamp
@@ -436,14 +387,8 @@ describe('NotificationBell Component', () => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
       // Send low priority notification
       const notification1 = {
-        eventType: 'notification',
         id: 'priority-1',
         type: 'info',
         title: 'Priority Test',
@@ -453,7 +398,7 @@ describe('NotificationBell Component', () => {
         priority: 'low',
       };
 
-      sseInstance.simulateMessage(notification1);
+      simulateSSENotification(notification1);
       await tick();
 
       // Open dropdown
@@ -471,7 +416,7 @@ describe('NotificationBell Component', () => {
         priority: 'critical',
       };
 
-      sseInstance.simulateMessage(notification2);
+      simulateSSENotification(notification2);
       await tick();
 
       // Priority should be escalated to critical
@@ -489,14 +434,8 @@ describe('NotificationBell Component', () => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
       // Send unread notification
       const notification1 = {
-        eventType: 'notification',
         id: 'read-1',
         type: 'info',
         title: 'Read Status Test',
@@ -506,7 +445,7 @@ describe('NotificationBell Component', () => {
         priority: 'medium',
       };
 
-      sseInstance.simulateMessage(notification1);
+      simulateSSENotification(notification1);
       await tick();
 
       // Open dropdown and mark as read
@@ -533,7 +472,7 @@ describe('NotificationBell Component', () => {
       await fireEvent.click(button);
       await tick();
 
-      sseInstance.simulateMessage(notification2);
+      simulateSSENotification(notification2);
       await tick();
 
       // Should maintain read status (not add to unread count)
@@ -551,15 +490,9 @@ describe('NotificationBell Component', () => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
       // Send multiple notifications
       const notifications = [
         {
-          eventType: 'notification',
           id: 'pos-1',
           type: 'info',
           title: 'First',
@@ -569,7 +502,6 @@ describe('NotificationBell Component', () => {
           priority: 'medium',
         },
         {
-          eventType: 'notification',
           id: 'pos-2',
           type: 'warning',
           title: 'Second',
@@ -579,7 +511,6 @@ describe('NotificationBell Component', () => {
           priority: 'medium',
         },
         {
-          eventType: 'notification',
           id: 'pos-3',
           type: 'error',
           title: 'Third',
@@ -592,7 +523,7 @@ describe('NotificationBell Component', () => {
 
       // Send all notifications
       for (const notif of notifications) {
-        sseInstance.simulateMessage(notif);
+        simulateSSENotification(notif);
         await tick();
       }
 
@@ -613,7 +544,7 @@ describe('NotificationBell Component', () => {
         timestamp: new Date(Date.now() + 10000).toISOString(),
       };
 
-      sseInstance.simulateMessage(duplicateFirst);
+      simulateSSENotification(duplicateFirst);
       await tick();
 
       // Check new order - First should now be at top
@@ -630,14 +561,8 @@ describe('NotificationBell Component', () => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
       // Send notification with type 'info'
       const notification1 = {
-        eventType: 'notification',
         id: 'type-1',
         type: 'info',
         title: 'Same Title',
@@ -647,7 +572,7 @@ describe('NotificationBell Component', () => {
         priority: 'medium',
       };
 
-      sseInstance.simulateMessage(notification1);
+      simulateSSENotification(notification1);
       await tick();
 
       // Send notification with same title/message but different type
@@ -657,7 +582,7 @@ describe('NotificationBell Component', () => {
         type: 'error', // Different type
       };
 
-      sseInstance.simulateMessage(notification2);
+      simulateSSENotification(notification2);
       await tick();
 
       // Open dropdown
@@ -671,81 +596,63 @@ describe('NotificationBell Component', () => {
   });
 
   describe('SSE Connection', () => {
-    it('should handle SSE connection events', async () => {
+    it('should register callback with sseNotifications singleton', async () => {
+      // Import the mocked module to verify it was called
+      const { sseNotifications } = await import('$lib/stores/sseNotifications');
+
       render(NotificationBell);
 
       await waitFor(() => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
+      // Verify that the component registered a callback
+      expect(sseNotifications.registerNotificationCallback).toHaveBeenCalled();
+    });
+
+    it('should handle SSE notifications via callback', async () => {
+      render(NotificationBell);
+
+      await waitFor(() => {
+        expect(api.get).toHaveBeenCalled();
+      });
+
+      // Send a notification via the callback system
+      const notification = {
+        id: 'sse-test-1',
+        type: 'info',
+        title: 'SSE Test',
+        message: 'SSE notification test',
+        timestamp: new Date().toISOString(),
+        read: false,
+        priority: 'medium',
       };
-      const sseInstance = global.mockSSEInstance;
 
-      // Test various SSE event types
-      const events = [
-        { eventType: 'connected', clientId: 'test-client' },
-        { eventType: 'heartbeat' },
-        { eventType: 'toast', message: 'Toast message' }, // Should be ignored
-      ];
+      simulateSSENotification(notification);
+      await tick();
 
-      for (const event of events) {
-        sseInstance.simulateMessage(event);
-        await tick();
-      }
-
-      // Toast events should not add notifications
+      // Open dropdown and verify notification appears
       const button = screen.getByRole('button', { name: /notifications/i });
       await fireEvent.click(button);
 
-      expect(screen.queryByText('Toast message')).not.toBeInTheDocument();
+      expect(screen.getByText('SSE Test')).toBeInTheDocument();
+      expect(screen.getByText('SSE notification test')).toBeInTheDocument();
     });
 
-    it('should handle SSE errors gracefully', async () => {
+    it('should remain functional even if no notifications received', async () => {
       render(NotificationBell);
 
       await waitFor(() => {
         expect(api.get).toHaveBeenCalled();
       });
 
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
-      // Simulate error
-      if (sseInstance.onerror) {
-        sseInstance.onerror(new Event('error'));
-      }
-
-      // Component should still be functional
+      // Component should still be functional without SSE notifications
       const button = screen.getByRole('button', { name: /notifications/i });
       expect(button).toBeInTheDocument();
-    });
 
-    it('should handle malformed SSE messages', async () => {
-      render(NotificationBell);
-
-      await waitFor(() => {
-        expect(api.get).toHaveBeenCalled();
-      });
-
-      const global = globalThis as typeof globalThis & {
-        mockSSEInstance: MockReconnectingEventSource;
-      };
-      const sseInstance = global.mockSSEInstance;
-
-      // Send malformed JSON
-      if (sseInstance.onmessage) {
-        sseInstance.onmessage(new MessageEvent('message', { data: 'invalid json' }));
-      }
-
-      await tick();
-
-      // Component should still be functional
-      const button = screen.getByRole('button', { name: /notifications/i });
-      expect(button).toBeInTheDocument();
+      // Can still open dropdown
+      await fireEvent.click(button);
+      expect(screen.getByText('Test Notification 1')).toBeInTheDocument();
     });
   });
 

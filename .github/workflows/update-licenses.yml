@@ -28,40 +28,40 @@ jobs:
 
       - name: Generate LICENSES.md
         run: |
-          # Create assets directory if it doesn't exist
-          mkdir -p assets
-          
-          echo "# Licenses" > assets/LICENSES.md
-          echo "" >> assets/LICENSES.md
-          echo "## BirdNET-Go" >> assets/LICENSES.md
-          echo "" >> assets/LICENSES.md
-          echo "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International" >> assets/LICENSES.md
-          echo "https://creativecommons.org/licenses/by-nc-sa/4.0/" >> assets/LICENSES.md
-          echo "" >> assets/LICENSES.md
-          echo "## Dependencies" >> assets/LICENSES.md
-          echo "" >> assets/LICENSES.md
-          
+          # Create frontend/static directory if it doesn't exist
+          mkdir -p frontend/static
+
+          echo "# Licenses" > frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "## BirdNET-Go" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International" >> frontend/static/LICENSES.md
+          echo "https://creativecommons.org/licenses/by-nc-sa/4.0/" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "## Dependencies" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+
           # Get licenses excluding internal packages unless they have a LICENSE file
           go-licenses csv github.com/tphakala/birdnet-go/... | while IFS=, read -r package license source; do
             # Skip internal packages and cmd packages unless they contain a LICENSE file
             if [[ $package == *"/internal/"* || $package == *"/cmd/"* ]] && ! [[ -f "${source}/LICENSE" ]]; then
               continue
             fi
-            
+
             # Skip the main module
             if [[ $package == "github.com/tphakala/birdnet-go" ]]; then
               continue
             fi
-            
-            echo "### $package" >> assets/LICENSES.md
-            echo "" >> assets/LICENSES.md
-            echo "License: $license" >> assets/LICENSES.md
-            echo "Source: $source" >> assets/LICENSES.md
-            echo "" >> assets/LICENSES.md
+
+            echo "### $package" >> frontend/static/LICENSES.md
+            echo "" >> frontend/static/LICENSES.md
+            echo "License: $license" >> frontend/static/LICENSES.md
+            echo "Source: $source" >> frontend/static/LICENSES.md
+            echo "" >> frontend/static/LICENSES.md
           done
 
           # Create a symbolic link in root directory
-          ln -sf assets/LICENSES.md LICENSES.md
+          ln -sf frontend/static/LICENSES.md LICENSES.md
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5

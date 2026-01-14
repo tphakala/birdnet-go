@@ -934,8 +934,7 @@
             "label": "Caminho dos rótulos (Requer reinicialização para aplicar)",
             "placeholder": "Caminho para o arquivo de rótulos",
             "helpText": "Caminho para o arquivo de rótulos do modelo externo, arquivo .zip ou .txt. Insira o caminho absoluto ou relativo ao binário birdnet-go. Deixe vazio para usar os rótulos incorporados padrão."
-          },
-          "description": "Configure arquivos personalizados de modelo e rótulos do BirdNET para detecção especializada"
+          }
         },
         "dynamicThreshold": {
           "title": "Limiar dinâmico",
@@ -955,8 +954,7 @@
           "expireTime": {
             "label": "Tempo de expiração do limiar dinâmico (horas)",
             "helpText": "O número de horas durante as quais os ajustes de limiar dinâmico permanecem válidos. Após esse período, o limiar dinâmico é redefinido."
-          },
-          "description": "Ajusta automaticamente a sensibilidade de detecção com base em observações anteriores"
+          }
         },
         "falsePositiveFilter": {
           "title": "Filtro de Falsos Positivos",
@@ -1008,8 +1006,7 @@
             "loadingSpecies": "Carregando espécies...",
             "noSpeciesFound": "Nenhuma espécie encontrada com as configurações atuais",
             "close": "Fechar"
-          },
-          "description": "Limita a detecção a espécies prováveis em sua região geográfica"
+          }
         },
         "database": {
           "title": "Configurações do banco de dados",
@@ -1904,47 +1901,52 @@
         "description": "BirdNET-Go precisa de uma entrada de áudio para detectar pássaros. Por favor, configure pelo menos uma fonte na aba Placa de Som ou Fluxos."
       },
       "rtspStreams": {
-        "title": "Configuração de fluxo RTSP",
-        "description": "Configure fluxos de áudio de rede para captura de áudio remota via protocolo RTSP.",
+        "title": "Configuração de Fluxos de Áudio",
+        "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP.",
         "noStreamsConfigured": "Nenhum fluxo configurado"
       },
       "streams": {
-        "streamLabel": "Fluxo",
-        "urlLabel": "URL do fluxo",
-        "urlHelp": "Digite a URL RTSP com credenciais opcionais (rtsp://usuario:senha@host:porta/caminho)",
-        "typeLabel": "Tipo de fluxo",
-        "typeLockedNote": "Apenas RTSP é suportado atualmente",
+        "streamLabel": "Stream",
+        "nameLabel": "Nome do Stream",
+        "namePlaceholder": "ex. Comedouro do Jardim",
+        "nameHelp": "Um nome descritivo para identificar este stream de áudio",
+        "urlLabel": "URL do Stream",
+        "urlHelp": "Digite a URL do stream com credenciais opcionais (ex. rtsp://host:porta/caminho). Use variáveis de ambiente para credenciais.",
+        "typeLabel": "Tipo de Stream",
+        "typeHelp": "Protocolo do stream - detectado automaticamente da URL",
         "transportLabel": "Protocolo",
-        "summary": "{count} fluxo(s) configurado(s)",
+        "summary": "{count} stream(s) configurado(s)",
         "healthy": "saudável",
-        "unhealthy": "problemático",
+        "unhealthy": "com falha",
         "unknown": "desconhecido",
         "refresh": "Atualizar",
-        "addStream": "Adicionar fluxo",
-        "deleteConfirm": "Remover este fluxo?",
+        "addStream": "Adicionar Stream",
+        "deleteConfirm": "Remover este stream?",
         "restartCount": "Reiniciado {count} vez(es)",
-        "healthLoadError": "Falha ao carregar status de saúde do fluxo",
+        "healthLoadError": "Falha ao carregar status do stream",
         "status": {
           "connected": "Conectado",
           "connecting": "Conectando",
           "error": "Erro",
-          "idle": "Ocioso",
+          "idle": "Inativo",
           "unknown": "Desconhecido"
         },
         "emptyState": {
-          "title": "Nenhum fluxo configurado",
-          "description": "Adicione fluxos RTSP para capturar áudio de câmeras de rede ou outras fontes RTSP.",
-          "hintsTitle": "Começando",
+          "title": "Nenhum Stream Configurado",
+          "description": "Adicione streams de áudio de câmeras IP, servidores Icecast ou outras fontes de rede.",
+          "hintsTitle": "Primeiros Passos",
           "hints": {
-            "rtsp": "Use URLs RTSP de câmeras IP (ex: rtsp://192.168.1.100:554/stream)",
-            "credentials": "Inclua credenciais na URL se necessário (rtsp://usuario:senha@host/stream)",
-            "protocol": "TCP é mais confiável, UDP tem menor latência"
+            "rtsp": "Suporta streams RTSP, HTTP, HLS, RTMP e UDP/RTP",
+            "credentials": "Credenciais podem ser incluídas na URL ou usar variáveis de ambiente",
+            "protocol": "TCP é mais confiável para RTSP, UDP tem menor latência"
           }
         },
         "errors": {
-          "urlRequired": "URL do fluxo é obrigatória",
-          "invalidUrl": "Formato de URL RTSP inválido",
-          "duplicate": "Esta URL de fluxo já existe"
+          "nameRequired": "Nome do stream é obrigatório",
+          "duplicateName": "Já existe um stream com este nome",
+          "urlRequired": "URL do stream é obrigatória",
+          "invalidUrl": "Formato de URL de stream inválido",
+          "duplicate": "Esta URL de stream já existe"
         }
       }
     },
@@ -1996,18 +1998,35 @@
             "helpText": "A senha MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Configurações de mensagem",
-          "retain": {
-            "label": "Reter mensagens",
-            "note": "<strong>Usuários do Home Assistant:</strong> É recomendado ativar a flag de retenção para integração com Home Assistant. Sem retenção, os sensores MQTT aparecerão como 'desconhecido' quando o Home Assistant reiniciar."
-          }
-        },
         "tls": {
           "title": "Segurança TLS/SSL",
           "enable": "Ativar TLS/SSL",
           "skipVerify": "Ignorar verificação de certificado",
           "configNote": "<strong>Configuração TLS:</strong><br />• TLS padrão: Deixe os certificados vazios para brokers públicos<br />• Certificados autoassinados: Forneça o certificado CA<br />• TLS mútuo (mTLS): Forneça todos os três certificados"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Ativar Home Assistant MQTT Discovery",
+          "description": "Quando ativado, o BirdNET-Go registra automaticamente dispositivos e sensores no Home Assistant através do protocolo de descoberta MQTT. Os dispositivos aparecerão no registro de dispositivos do Home Assistant sem configuração YAML manual.",
+          "discoveryPrefix": {
+            "label": "Prefixo de descoberta",
+            "helpText": "O prefixo de tópico MQTT para mensagens de descoberta do Home Assistant. O padrão é 'homeassistant'. Altere isso apenas se você configurou um prefixo de descoberta personalizado no Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nome do dispositivo",
+            "helpText": "O nome base para dispositivos conforme aparecem no Home Assistant. Cada fonte de áudio terá seu próprio dispositivo vinculado a este dispositivo principal do BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Sensores criados:</strong> Para cada fonte de áudio, o Home Assistant receberá: Última espécie, Confiança, Nome científico e Nível de som (se ativado). O dispositivo ponte inclui status de disponibilidade online/offline.",
+          "discovery": {
+            "button": "Enviar Discovery",
+            "success": "Mensagens de descoberta enviadas ao Home Assistant",
+            "error": "Falha ao enviar mensagens de descoberta",
+            "saveFirst": "Salve as configurações antes de enviar a descoberta"
+          },
+          "retain": {
+            "label": "Reter mensagens",
+            "note": "<strong>Recomendado:</strong> Ative a flag de retenção para garantir que os sensores MQTT mostrem valores após reiniciar o Home Assistant."
+          }
         },
         "test": {
           "button": "Testar conexão MQTT",
@@ -2564,7 +2583,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Carregando dados...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2573,7 +2592,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Carregando dados...",
       "error": "Falha ao carregar dados",
       "sortBy": "Ordenar por {column}",
       "rowsPerPage": "Linhas por página",

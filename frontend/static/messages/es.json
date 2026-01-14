@@ -1901,26 +1901,29 @@
         "description": "BirdNET-Go necesita una entrada de audio para detectar aves. Por favor configure al menos una fuente en la pestaña Tarjeta de Sonido o Streams."
       },
       "rtspStreams": {
-        "title": "Configuración de stream RTSP",
-        "description": "Configurar flujos de audio de red para captura de audio remota vía protocolo RTSP.",
+        "title": "Configuración de Flujos de Audio",
+        "description": "Configura flujos de audio de red para captura de audio remota. Soporta protocolos RTSP, HTTP, HLS, RTMP y UDP.",
         "noStreamsConfigured": "No hay streams configurados"
       },
       "streams": {
         "streamLabel": "Stream",
-        "urlLabel": "URL del stream",
-        "urlHelp": "Ingrese URL RTSP con credenciales opcionales (rtsp://usuario:contraseña@host:puerto/ruta)",
-        "typeLabel": "Tipo de stream",
-        "typeLockedNote": "Solo RTSP es soportado actualmente",
+        "nameLabel": "Nombre del Stream",
+        "namePlaceholder": "ej. Comedero del Jardín",
+        "nameHelp": "Un nombre descriptivo para identificar este stream de audio",
+        "urlLabel": "URL del Stream",
+        "urlHelp": "Ingrese la URL del stream con credenciales opcionales (ej. rtsp://host:puerto/ruta). Use variables de entorno para credenciales.",
+        "typeLabel": "Tipo de Stream",
+        "typeHelp": "Protocolo del stream - detectado automáticamente de la URL",
         "transportLabel": "Protocolo",
         "summary": "{count} stream(s) configurado(s)",
         "healthy": "saludable",
-        "unhealthy": "no saludable",
+        "unhealthy": "con errores",
         "unknown": "desconocido",
         "refresh": "Actualizar",
-        "addStream": "Añadir stream",
+        "addStream": "Agregar Stream",
         "deleteConfirm": "¿Eliminar este stream?",
         "restartCount": "Reiniciado {count} vez/veces",
-        "healthLoadError": "Error al cargar el estado de salud del stream",
+        "healthLoadError": "Error al cargar el estado del stream",
         "status": {
           "connected": "Conectado",
           "connecting": "Conectando",
@@ -1929,18 +1932,20 @@
           "unknown": "Desconocido"
         },
         "emptyState": {
-          "title": "No hay streams configurados",
-          "description": "Añadir streams RTSP para capturar audio de cámaras de red u otras fuentes RTSP.",
-          "hintsTitle": "Primeros pasos",
+          "title": "No hay Streams Configurados",
+          "description": "Agregue streams de audio desde cámaras IP, servidores Icecast u otras fuentes de red.",
+          "hintsTitle": "Primeros Pasos",
           "hints": {
-            "rtsp": "Use URLs RTSP de cámaras IP (ej., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Incluya credenciales en la URL si es necesario (rtsp://usuario:contraseña@host/stream)",
-            "protocol": "TCP es más confiable, UDP tiene menor latencia"
+            "rtsp": "Soporta streams RTSP, HTTP, HLS, RTMP y UDP/RTP",
+            "credentials": "Las credenciales pueden incluirse en la URL o usar variables de entorno",
+            "protocol": "TCP es más confiable para RTSP, UDP tiene menor latencia"
           }
         },
         "errors": {
+          "nameRequired": "El nombre del stream es requerido",
+          "duplicateName": "Ya existe un stream con este nombre",
           "urlRequired": "La URL del stream es requerida",
-          "invalidUrl": "Formato de URL RTSP inválido",
+          "invalidUrl": "Formato de URL de stream inválido",
           "duplicate": "Esta URL de stream ya existe"
         }
       }
@@ -1993,18 +1998,35 @@
             "helpText": "La contraseña MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Configuración de mensajes",
-          "retain": {
-            "label": "Retener mensajes",
-            "note": "<strong>Usuarios de Home Assistant:</strong> Se recomienda habilitar la bandera de retención para la integración con Home Assistant. Sin retención, los sensores MQTT aparecerán como 'desconocidos' cuando Home Assistant se reinicie."
-          }
-        },
         "tls": {
           "title": "Seguridad TLS/SSL",
           "enable": "Habilitar TLS/SSL",
           "skipVerify": "Omitir verificación de certificado",
           "configNote": "<strong>Configuración TLS:</strong><br />• TLS estándar: Deje los certificados vacíos para brokers públicos<br />• Certificados autofirmados: Proporcione el certificado CA<br />• TLS mutuo (mTLS): Proporcione los tres certificados"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Habilitar Home Assistant MQTT Discovery",
+          "description": "Cuando está habilitado, BirdNET-Go registra automáticamente dispositivos y sensores con Home Assistant a través del protocolo de descubrimiento MQTT. Los dispositivos aparecerán en el registro de dispositivos de Home Assistant sin configuración YAML manual.",
+          "discoveryPrefix": {
+            "label": "Prefijo de descubrimiento",
+            "helpText": "El prefijo de tema MQTT para mensajes de descubrimiento de Home Assistant. El valor predeterminado es 'homeassistant'. Solo cambie esto si ha configurado un prefijo de descubrimiento personalizado en Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nombre del dispositivo",
+            "helpText": "El nombre base para los dispositivos tal como aparecen en Home Assistant. Cada fuente de audio tendrá su propio dispositivo vinculado a este dispositivo principal de BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Sensores creados:</strong> Para cada fuente de audio, Home Assistant recibirá: Última especie, Confianza, Nombre científico y Nivel de sonido (si está habilitado). El dispositivo puente incluye estado de disponibilidad en línea/fuera de línea.",
+          "discovery": {
+            "button": "Enviar Discovery",
+            "success": "Mensajes de descubrimiento enviados a Home Assistant",
+            "error": "Error al enviar mensajes de descubrimiento",
+            "saveFirst": "Guarde la configuración antes de enviar el descubrimiento"
+          },
+          "retain": {
+            "label": "Retener mensajes",
+            "note": "<strong>Recomendado:</strong> Habilite la bandera de retención para asegurar que los sensores MQTT muestren valores después de reiniciar Home Assistant."
+          }
         },
         "test": {
           "button": "Probar conexión MQTT",
@@ -2561,7 +2583,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Cargando datos...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2570,7 +2592,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Cargando datos...",
       "error": "Error al cargar datos",
       "sortBy": "Ordenar por {column}",
       "rowsPerPage": "Filas por página",

@@ -7,8 +7,17 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
+)
+
+const (
+	// mqttConnectionTimeout is the timeout for MQTT connection attempts
+	mqttConnectionTimeout = 30 * time.Second
+	// discoveryPublishTimeout is the timeout for publishing discovery messages
+	discoveryPublishTimeout = 30 * time.Second
 )
 
 // GetMQTTClient safely returns the current MQTT client
@@ -28,10 +37,12 @@ func (p *Processor) SetMQTTClient(client mqtt.Client) {
 // DisconnectMQTTClient safely disconnects and removes the MQTT client
 func (p *Processor) DisconnectMQTTClient() {
 	p.mqttMutex.Lock()
-	defer p.mqttMutex.Unlock()
-	if p.MqttClient != nil {
-		p.MqttClient.Disconnect()
-		p.MqttClient = nil
+	client := p.MqttClient
+	p.MqttClient = nil
+	p.mqttMutex.Unlock()
+
+	if client != nil {
+		client.Disconnect()
 	}
 }
 
@@ -49,6 +60,9 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 
 // initializeMQTT initializes the MQTT client if enabled in settings
 func (p *Processor) initializeMQTT(settings *conf.Settings) {
+	if settings == nil {
+		return
+	}
 	if !settings.Realtime.MQTT.Enabled {
 		return
 	}
@@ -61,8 +75,13 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 		return
 	}
 
-	// Create a context with a 30-second timeout for the connection attempt
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Register Home Assistant discovery handler if enabled
+	if settings.Realtime.MQTT.HomeAssistant.Enabled {
+		p.registerHomeAssistantDiscovery(mqttClient, settings)
+	}
+
+	// Create a context with a timeout for the connection attempt
+	ctx, cancel := context.WithTimeout(context.Background(), mqttConnectionTimeout)
 	defer cancel() // Ensure the cancel function is called to release resources
 
 	// Attempt to connect to the MQTT broker
@@ -73,4 +92,123 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 
 	// Set the client only if connection was successful
 	p.SetMQTTClient(mqttClient)
+}
+
+// RegisterHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
+// This is called during MQTT initialization and after MQTT reconfiguration.
+func (p *Processor) RegisterHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
+	if client == nil || settings == nil {
+		return
+	}
+	if !settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return
+	}
+	p.registerHomeAssistantDiscovery(client, settings)
+}
+
+// registerHomeAssistantDiscovery registers the OnConnect handler for Home Assistant discovery.
+func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings *conf.Settings) {
+	log := GetLogger()
+	haSettings := settings.Realtime.MQTT.HomeAssistant
+
+	// Register the OnConnect handler
+	client.RegisterOnConnectHandler(func() {
+		log.Info("MQTT connected, publishing Home Assistant discovery messages")
+
+		// Create a context for publishing
+		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
+		defer cancel()
+
+		// Publish discovery messages using the helper
+		if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
+			log.Error("Failed to publish Home Assistant discovery",
+				logger.Error(err))
+		}
+	})
+
+	log.Info("Home Assistant discovery handler registered",
+		logger.String("discovery_prefix", haSettings.DiscoveryPrefix),
+		logger.String("device_name", haSettings.DeviceName))
+}
+
+// publishHomeAssistantDiscovery publishes Home Assistant discovery messages.
+// This is the shared implementation used by both the OnConnect handler and manual trigger.
+func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, settings *conf.Settings) error {
+	haSettings := settings.Realtime.MQTT.HomeAssistant
+	discoveryConfig := mqtt.DiscoveryConfig{
+		DiscoveryPrefix: haSettings.DiscoveryPrefix,
+		BaseTopic:       settings.Realtime.MQTT.Topic,
+		DeviceName:      haSettings.DeviceName,
+		NodeID:          settings.Main.Name,
+		Version:         settings.Version,
+	}
+
+	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
+	sources := p.getAudioSourcesForDiscovery()
+
+	return publisher.PublishDiscovery(ctx, sources, settings)
+}
+
+// TriggerHomeAssistantDiscovery manually triggers Home Assistant discovery messages.
+// This can be called from the API to force republishing of discovery messages.
+func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
+	log := GetLogger()
+
+	// Guard against nil settings during startup/teardown
+	if p.Settings == nil {
+		return fmt.Errorf("settings not initialized")
+	}
+
+	// Check if MQTT is enabled and Home Assistant discovery is enabled
+	if !p.Settings.Realtime.MQTT.Enabled {
+		return fmt.Errorf("MQTT is not enabled")
+	}
+	if !p.Settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return fmt.Errorf("home assistant discovery is not enabled")
+	}
+
+	// Get the MQTT client
+	client := p.GetMQTTClient()
+	if client == nil || !client.IsConnected() {
+		return fmt.Errorf("MQTT client not connected")
+	}
+
+	log.Info("Manually triggering Home Assistant discovery")
+
+	// Publish discovery messages with timeout
+	publishCtx, cancel := context.WithTimeout(ctx, discoveryPublishTimeout)
+	defer cancel()
+
+	if err := p.publishHomeAssistantDiscovery(publishCtx, client, p.Settings); err != nil {
+		log.Error("Failed to publish Home Assistant discovery", logger.Error(err))
+		return fmt.Errorf("failed to publish discovery: %w", err)
+	}
+
+	return nil
+}
+
+// getAudioSourcesForDiscovery retrieves audio sources from the registry for HA discovery.
+func (p *Processor) getAudioSourcesForDiscovery() []datastore.AudioSource {
+	registry := myaudio.GetRegistry()
+	registrySources := registry.ListSources()
+
+	// Convert myaudio.AudioSource to datastore.AudioSource
+	sources := make([]datastore.AudioSource, 0, len(registrySources))
+	for _, src := range registrySources {
+		sources = append(sources, datastore.AudioSource{
+			ID:          src.ID,
+			SafeString:  src.SafeString,
+			DisplayName: src.DisplayName,
+		})
+	}
+
+	// If no sources registered yet, create a default source
+	if len(sources) == 0 {
+		sources = append(sources, datastore.AudioSource{
+			ID:          "default",
+			DisplayName: "Default",
+		})
+	}
+
+	return sources
 }

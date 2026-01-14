@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import AudioSettingsPage from './AudioSettingsPage.svelte';
-import type { SettingsFormData } from '$lib/stores/settings';
+import type { SettingsFormData, StreamConfig } from '$lib/stores/settings';
 
 // Mock utilities needed by AudioSettingsPage
 vi.mock('$lib/utils/security', () => ({
@@ -46,8 +46,8 @@ vi.mock('$lib/utils/settingsChanges', () => ({
   }),
 }));
 
-// Mock RTSPUrlInput component
-vi.mock('$lib/desktop/components/forms/RTSPUrlInput.svelte');
+// Mock StreamManager component
+vi.mock('$lib/desktop/components/forms/StreamManager.svelte');
 
 // Mock appState for CSRF token
 vi.mock('$lib/stores/appState.svelte', () => ({
@@ -167,7 +167,17 @@ vi.mock('$lib/stores/settings', async () => {
   };
 });
 
-describe('AudioSettingsPage - RTSP Stream Configuration', () => {
+// Helper function to create StreamConfig objects
+function createStreamConfig(
+  name: string,
+  url: string,
+  type: 'rtsp' | 'http' | 'hls' | 'rtmp' | 'udp' = 'rtsp',
+  transport: 'tcp' | 'udp' = 'tcp'
+): StreamConfig {
+  return { name, url, type, transport };
+}
+
+describe('AudioSettingsPage - Stream Configuration', () => {
   let originalFetch: typeof global.fetch;
 
   beforeEach(async () => {
@@ -234,8 +244,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             },
           },
           rtsp: {
-            transport: 'tcp',
-            urls: [],
+            streams: [],
           },
         },
       } as unknown as SettingsFormData,
@@ -288,8 +297,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
             },
           },
           rtsp: {
-            transport: 'tcp',
-            urls: [],
+            streams: [],
           },
         },
       } as unknown as SettingsFormData,
@@ -312,56 +320,52 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
     vi.restoreAllMocks();
   });
 
-  describe('RTSP URL Management', () => {
+  describe('Stream Management', () => {
     // Note: UI rendering tests removed - component now uses tabbed interface
     // RTSP section is on a separate tab and requires navigation to access
-    // UI structure is tested by RTSPUrlInput.test.ts and RTSPUrlManager.test.ts
+    // UI structure is tested by StreamManager.test.ts
 
-    it('should call updateRTSPUrls when URLs are added', async () => {
+    it('should call updateRTSPStreams when streams are added', async () => {
       const { settingsActions } = await import('$lib/stores/settings');
       const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
       render(AudioSettingsPage);
 
-      // Simulate adding URLs through the RTSPUrlInput component
-      const newUrls: string[] = [
-        'rtsp://192.168.1.100:554/stream1',
-        'rtsp://192.168.1.101:554/stream2',
+      // Simulate adding streams through the StreamManager component
+      const newStreams: StreamConfig[] = [
+        createStreamConfig('Stream 1', 'rtsp://192.168.1.100:554/stream1'),
+        createStreamConfig('Stream 2', 'rtsp://192.168.1.101:554/stream2'),
       ];
 
-      // Since RTSPUrlInput is mocked, we directly call the update function
+      // Since StreamManager is mocked, we directly call the update function
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: newUrls,
+          streams: newStreams,
         },
       });
 
       expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: newUrls,
+          streams: newStreams,
         },
       });
     });
 
-    it('should handle empty RTSP URLs array', async () => {
+    it('should handle empty streams array', async () => {
       const { settingsStore } = await import('$lib/stores/settings');
       render(AudioSettingsPage);
 
       const store = get(settingsStore);
-      expect(store.formData.realtime?.rtsp?.urls).toEqual([]);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual([]);
     });
 
-    // Note: "should update RTSP transport protocol" test removed - requires tab navigation
-
-    it('should handle multiple RTSP URLs from config', async () => {
+    it('should handle multiple streams from config', async () => {
       const { settingsStore } = await import('$lib/stores/settings');
 
-      // Set initial URLs in the store
-      const initialUrls: string[] = [
-        'rtsps://192.168.40.125:7441/VbTsd1jklShb6wLs?enableSrtp',
-        'rtsps://192.168.40.125:7441/2uX4KEa73ZCljhw2?enableSrtp',
-        'rtsps://192.168.40.125:7441/JUFhxKg39V0bQDMq?enableSrtp',
+      // Set initial streams in the store
+      const initialStreams: StreamConfig[] = [
+        createStreamConfig('Camera 1', 'rtsps://192.168.40.125:7441/VbTsd1jklShb6wLs?enableSrtp'),
+        createStreamConfig('Camera 2', 'rtsps://192.168.40.125:7441/2uX4KEa73ZCljhw2?enableSrtp'),
+        createStreamConfig('Camera 3', 'rtsps://192.168.40.125:7441/JUFhxKg39V0bQDMq?enableSrtp'),
       ];
 
       settingsStore.update(store => ({
@@ -371,8 +375,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           realtime: {
             ...(store.formData.realtime ?? {}),
             rtsp: {
-              transport: 'tcp',
-              urls: initialUrls,
+              streams: initialStreams,
             },
           },
         },
@@ -382,11 +385,11 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
 
       await waitFor(() => {
         const store = get(settingsStore);
-        expect(store.formData.realtime?.rtsp?.urls).toEqual(initialUrls);
+        expect(store.formData.realtime?.rtsp?.streams).toEqual(initialStreams);
       });
     });
 
-    it('should validate RTSP URL format', async () => {
+    it('should validate stream URL format', async () => {
       const { validateProtocolURL } = await import('$lib/utils/security');
 
       // Valid RTSP URLs
@@ -399,23 +402,15 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       expect(validateProtocolURL('invalid-url', ['rtsp'], 2048)).toBe(false);
     });
 
-    // Note: "should handle disabled state for RTSP inputs" test removed - requires tab navigation
-
-    it('should detect changes in RTSP configuration', async () => {
+    it('should detect changes in stream configuration', async () => {
       const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
 
       const original = {
-        rtsp: {
-          transport: 'tcp',
-          urls: [],
-        },
+        streams: [],
       };
 
       const modified = {
-        rtsp: {
-          transport: 'tcp',
-          urls: ['rtsp://192.168.1.100:554/stream'],
-        },
+        streams: [createStreamConfig('Stream 1', 'rtsp://192.168.1.100:554/stream')],
       };
 
       expect(hasSettingsChanged(original, modified)).toBe(true);
@@ -423,44 +418,40 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
     });
   });
 
-  describe('Issue #1112 - Blank RTSP Stream Contents', () => {
-    // Note: "should render RTSPUrlInput component with empty URLs initially" removed - requires tab navigation
-
-    it('should call onUpdate callback when adding new RTSP URL', async () => {
+  describe('Issue #1112 - Blank Stream Contents', () => {
+    it('should call onUpdateStreams callback when adding new stream', async () => {
       const { settingsActions, settingsStore } = await import('$lib/stores/settings');
       const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
       render(AudioSettingsPage);
 
-      // Simulate user adding a new RTSP URL
-      const newUrl = 'rtsp://192.168.1.100:554/stream';
+      // Simulate user adding a new stream
+      const newStream = createStreamConfig('Front Yard', 'rtsp://192.168.1.100:554/stream');
 
-      // Simulate the RTSPUrlInput component calling onUpdate
+      // Simulate the StreamManager component calling onUpdateStreams
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [newUrl],
+          streams: [newStream],
         },
       });
 
       expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [newUrl],
+          streams: [newStream],
         },
       });
 
       // Verify the store was updated
       const store = get(settingsStore);
-      expect(store.formData.realtime?.rtsp?.urls).toEqual([newUrl]);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual([newStream]);
     });
 
-    it('should handle removal of RTSP URLs', async () => {
+    it('should handle removal of streams', async () => {
       const { settingsStore, settingsActions } = await import('$lib/stores/settings');
 
-      // Start with multiple URLs
-      const initialUrls: string[] = [
-        'rtsp://192.168.1.100:554/stream1',
-        'rtsp://192.168.1.101:554/stream2',
+      // Start with multiple streams
+      const initialStreams: StreamConfig[] = [
+        createStreamConfig('Stream 1', 'rtsp://192.168.1.100:554/stream1'),
+        createStreamConfig('Stream 2', 'rtsp://192.168.1.101:554/stream2'),
       ];
 
       settingsStore.update(store => ({
@@ -470,8 +461,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           realtime: {
             ...(store.formData.realtime ?? {}),
             rtsp: {
-              transport: 'tcp',
-              urls: initialUrls,
+              streams: initialStreams,
             },
           },
         },
@@ -480,26 +470,25 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
       render(AudioSettingsPage);
 
-      // Simulate removing the first URL
+      // Simulate removing the first stream
+      const remainingStreams = [initialStreams[1]!]; // eslint-disable-line @typescript-eslint/no-non-null-assertion -- Safe: test data
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [initialUrls[1]!], // eslint-disable-line @typescript-eslint/no-non-null-assertion -- Safe: test data
+          streams: remainingStreams,
         },
       });
 
       expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [initialUrls[1]],
+          streams: remainingStreams,
         },
       });
     });
 
-    it('should handle updating existing RTSP URLs', async () => {
+    it('should handle updating existing streams', async () => {
       const { settingsStore, settingsActions } = await import('$lib/stores/settings');
 
-      const initialUrl = 'rtsp://192.168.1.100:554/stream';
+      const initialStream = createStreamConfig('Front Yard', 'rtsp://192.168.1.100:554/stream');
 
       settingsStore.update(store => ({
         ...store,
@@ -508,8 +497,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           realtime: {
             ...(store.formData.realtime ?? {}),
             rtsp: {
-              transport: 'tcp',
-              urls: [initialUrl],
+              streams: [initialStream],
             },
           },
         },
@@ -518,50 +506,46 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
       render(AudioSettingsPage);
 
-      // Simulate updating the URL
-      const updatedUrl = 'rtsp://192.168.1.100:554/updated-stream';
+      // Simulate updating the stream
+      const updatedStream = createStreamConfig(
+        'Front Yard Updated',
+        'rtsp://192.168.1.100:554/updated-stream'
+      );
 
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [updatedUrl],
+          streams: [updatedStream],
         },
       });
 
       expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [updatedUrl],
+          streams: [updatedStream],
         },
       });
     });
 
-    // Note: "should pass correct props to RTSPUrlInput component" removed - requires tab navigation
-
-    it('should handle empty string RTSP URLs gracefully', async () => {
+    it('should handle empty streams array gracefully', async () => {
       const { settingsActions, settingsStore } = await import('$lib/stores/settings');
       const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
       render(AudioSettingsPage);
 
-      // Try to add an empty URL (should be filtered out)
+      // Try to set empty streams array
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: [],
+          streams: [],
         },
       });
 
       expect(updateSectionSpy).toHaveBeenCalled();
 
       const store = get(settingsStore);
-      expect(store.formData.realtime?.rtsp?.urls).toEqual([]);
+      expect(store.formData.realtime?.rtsp?.streams).toEqual([]);
     });
-
-    // Note: "should preserve RTSP URLs when switching transport protocol" removed - requires tab navigation
   });
 
   describe('Edge Cases and Error Handling', () => {
-    it('should handle malformed RTSP URLs', async () => {
+    it('should handle malformed URLs', async () => {
       const { validateProtocolURL } = await import('$lib/utils/security');
 
       // Test various malformed URLs
@@ -571,7 +555,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       expect(validateProtocolURL('rtsp://[invalid-ipv6', ['rtsp'], 2048)).toBe(true); // URL validation is basic
     });
 
-    it('should handle extremely long RTSP URLs', async () => {
+    it('should handle extremely long URLs', async () => {
       const { validateProtocolURL } = await import('$lib/utils/security');
 
       const longUrl = 'rtsp://' + 'a'.repeat(2050); // Exceeds 2048 limit
@@ -580,36 +564,31 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       const validLongUrl = 'rtsp://' + 'a'.repeat(2040); // Within limit
       expect(validateProtocolURL(validLongUrl, ['rtsp'], 2048)).toBe(true);
     });
-
-    // Note: "should handle null/undefined RTSP settings gracefully" removed - requires tab navigation
-    // Note: "should handle saving while RTSP URLs are being edited" removed - requires tab navigation
-    // Note: "should handle API error when loading audio devices" removed - uses outdated DOM structure
   });
 
   describe('Integration with Settings Store', () => {
-    it('should persist RTSP URLs to settings store', async () => {
+    it('should persist streams to settings store', async () => {
       const { settingsActions, settingsStore } = await import('$lib/stores/settings');
-      const urls: string[] = [
-        'rtsp://192.168.1.100:554/stream1',
-        'rtsp://192.168.1.101:554/stream2',
+      const streams: StreamConfig[] = [
+        createStreamConfig('Stream 1', 'rtsp://192.168.1.100:554/stream1'),
+        createStreamConfig('Stream 2', 'rtsp://192.168.1.101:554/stream2'),
       ];
 
       render(AudioSettingsPage);
 
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls,
+          streams,
         },
       });
 
       await waitFor(() => {
         const store = get(settingsStore);
-        expect(store.formData.realtime?.rtsp?.urls).toEqual(urls);
+        expect(store.formData.realtime?.rtsp?.streams).toEqual(streams);
       });
     });
 
-    it('should reflect RTSP changes in hasChanges indicator', async () => {
+    it('should reflect stream changes in hasChanges indicator', async () => {
       const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
       const { settingsStore, settingsActions } = await import('$lib/stores/settings');
 
@@ -641,8 +620,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           },
           realtime: {
             rtsp: {
-              transport: 'tcp',
-              urls: [],
+              streams: [],
             },
           },
         } as unknown as SettingsFormData,
@@ -671,8 +649,7 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
           },
           realtime: {
             rtsp: {
-              transport: 'tcp',
-              urls: [],
+              streams: [],
             },
           },
         } as unknown as SettingsFormData,
@@ -680,18 +657,17 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
 
       render(AudioSettingsPage);
 
-      // Add a new URL
+      // Add a new stream
       settingsActions.updateSection('realtime', {
         rtsp: {
-          transport: 'tcp',
-          urls: ['rtsp://192.168.1.100:554/stream'],
+          streams: [createStreamConfig('Stream 1', 'rtsp://192.168.1.100:554/stream')],
         },
       });
 
       const store = get(settingsStore);
       const hasChanges = hasSettingsChanged(
-        store.originalData.realtime?.rtsp,
-        store.formData.realtime?.rtsp
+        store.originalData.realtime?.rtsp?.streams,
+        store.formData.realtime?.rtsp?.streams
       );
 
       expect(hasChanges).toBe(true);

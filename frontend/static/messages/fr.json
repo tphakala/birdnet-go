@@ -1720,18 +1720,35 @@
             "helpText": "Le mot de passe MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Paramètres des messages",
-          "retain": {
-            "label": "Conserver les messages",
-            "note": "<strong>Utilisateurs Home Assistant :</strong> Il est recommandé d'activer le drapeau de conservation pour l'intégration Home Assistant. Sans conservation, les capteurs MQTT apparaîtront comme 'inconnus' lors du redémarrage de Home Assistant."
-          }
-        },
         "tls": {
           "title": "Sécurité TLS/SSL",
           "enable": "Activer TLS/SSL",
           "skipVerify": "Ignorer la vérification du certificat",
           "configNote": "<strong>Configuration TLS :</strong><br />• TLS standard : Laissez les certificats vides pour les courtiers publics<br />• Certificats auto-signés : Fournissez le certificat CA<br />• TLS mutuel (mTLS) : Fournissez les trois certificats"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Activer Home Assistant MQTT Discovery",
+          "description": "Lorsqu'elle est activée, BirdNET-Go enregistre automatiquement les appareils et capteurs auprès de Home Assistant via le protocole de découverte MQTT. Les appareils apparaîtront dans le registre des appareils de Home Assistant sans configuration YAML manuelle.",
+          "discoveryPrefix": {
+            "label": "Préfixe de découverte",
+            "helpText": "Le préfixe de sujet MQTT pour les messages de découverte Home Assistant. La valeur par défaut est 'homeassistant'. Ne modifiez ceci que si vous avez configuré un préfixe de découverte personnalisé dans Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nom de l'appareil",
+            "helpText": "Le nom de base des appareils tels qu'ils apparaissent dans Home Assistant. Chaque source audio aura son propre appareil lié à cet appareil principal BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Capteurs créés :</strong> Pour chaque source audio, Home Assistant recevra : Dernière espèce, Confiance, Nom scientifique et Niveau sonore (si activé). L'appareil pont inclut l'état de disponibilité en ligne/hors ligne.",
+          "discovery": {
+            "button": "Envoyer la découverte",
+            "success": "Messages de découverte envoyés à Home Assistant",
+            "error": "Échec de l'envoi des messages de découverte",
+            "saveFirst": "Enregistrez les paramètres avant d'envoyer la découverte"
+          },
+          "retain": {
+            "label": "Conserver les messages",
+            "note": "<strong>Recommandé :</strong> Activez le drapeau de conservation pour garantir que les capteurs MQTT affichent des valeurs après le redémarrage de Home Assistant."
+          }
         },
         "test": {
           "button": "Tester la connexion MQTT",
@@ -2020,30 +2037,30 @@
           "retry": "Retry"
         },
         "streams": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
-          "hintsTitle": "Getting started:",
+          "title": "Aucun Flux Configuré",
+          "description": "Ajoutez des flux audio RTSP ou réseau depuis des caméras IP, des serveurs de microphones ou d'autres sources de streaming.",
+          "hintsTitle": "Pour commencer :",
           "hints": {
-            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
-            "multiple": "You can add multiple streams for different locations",
-            "protocol": "Choose TCP for reliability or UDP for lower latency"
+            "rtsp": "Entrez les URL RTSP au format : rtsp://ip:port/stream",
+            "multiple": "Vous pouvez ajouter plusieurs flux pour différents emplacements",
+            "protocol": "Choisissez TCP pour la fiabilité ou UDP pour une latence plus faible"
           }
         }
       },
       "soundCard": {
-        "title": "Sound Card",
-        "description": "Configure local audio input device",
-        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
-        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
-        "noSoundCardCapture": "No sound card capture",
+        "title": "Carte Son",
+        "description": "Configurer le périphérique d'entrée audio local",
+        "audioSourceLabel": "Source Audio (nécessite un redémarrage de l'application pour prendre effet)",
+        "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des chants d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
+        "noSoundCardCapture": "Pas de capture de carte son",
         "empty": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "hintsTitle": "You can:",
-          "hintStream": "Configure network streams in the Streams tab",
-          "hintUsb": "Connect a USB microphone and refresh the list",
-          "goToStreams": "Go to Streams",
-          "refresh": "Refresh Devices"
+          "title": "Aucune Carte Son Détectée",
+          "description": "Aucun périphérique d'entrée audio local n'a été trouvé sur ce système. Ceci est normal pour les déploiements en conteneur ou serveur sans tête.",
+          "hintsTitle": "Vous pouvez :",
+          "hintStream": "Configurer des flux réseau dans l'onglet Flux",
+          "hintUsb": "Connecter un microphone USB et actualiser la liste",
+          "goToStreams": "Aller aux Flux",
+          "refresh": "Actualiser les Périphériques"
         }
       },
       "noSources": {
@@ -2051,47 +2068,52 @@
         "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
-        "noStreamsConfigured": "No streams configured"
+        "title": "Configuration des Flux Audio",
+        "description": "Configurez les flux audio réseau pour la capture audio à distance. Supporte les protocoles RTSP, HTTP, HLS, RTMP et UDP.",
+        "noStreamsConfigured": "Aucun flux configuré"
       },
       "streams": {
-        "streamLabel": "Stream",
-        "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
-        "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
-        "transportLabel": "Protocol",
-        "summary": "{count} stream(s) configured",
-        "healthy": "healthy",
-        "unhealthy": "unhealthy",
-        "unknown": "unknown",
-        "refresh": "Refresh",
-        "addStream": "Add Stream",
-        "deleteConfirm": "Remove this stream?",
-        "restartCount": "Restarted {count} time(s)",
-        "healthLoadError": "Failed to load stream health status",
+        "streamLabel": "Flux",
+        "nameLabel": "Nom du Flux",
+        "namePlaceholder": "ex. Mangeoire Jardin",
+        "nameHelp": "Un nom descriptif pour identifier ce flux audio",
+        "urlLabel": "URL du Flux",
+        "urlHelp": "Entrez l'URL du flux avec les identifiants optionnels (ex. rtsp://hôte:port/chemin). Utilisez des variables d'environnement pour les identifiants.",
+        "typeLabel": "Type de Flux",
+        "typeHelp": "Protocole du flux - détecté automatiquement depuis l'URL",
+        "transportLabel": "Protocole",
+        "summary": "{count} flux configuré(s)",
+        "healthy": "sain",
+        "unhealthy": "défaillant",
+        "unknown": "inconnu",
+        "refresh": "Actualiser",
+        "addStream": "Ajouter un Flux",
+        "deleteConfirm": "Supprimer ce flux ?",
+        "restartCount": "Redémarré {count} fois",
+        "healthLoadError": "Échec du chargement de l'état du flux",
         "status": {
-          "connected": "Connected",
-          "connecting": "Connecting",
-          "error": "Error",
-          "idle": "Idle",
-          "unknown": "Unknown"
+          "connected": "Connecté",
+          "connecting": "Connexion",
+          "error": "Erreur",
+          "idle": "Inactif",
+          "unknown": "Inconnu"
         },
         "emptyState": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
-          "hintsTitle": "Getting Started",
+          "title": "Aucun Flux Configuré",
+          "description": "Ajoutez des flux audio depuis des caméras IP, serveurs Icecast ou autres sources réseau.",
+          "hintsTitle": "Pour Commencer",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "rtsp": "Supporte les flux RTSP, HTTP, HLS, RTMP et UDP/RTP",
+            "credentials": "Les identifiants peuvent être inclus dans l'URL ou via des variables d'environnement",
+            "protocol": "TCP est plus fiable pour RTSP, UDP a une latence plus faible"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
-          "duplicate": "This stream URL already exists"
+          "nameRequired": "Le nom du flux est requis",
+          "duplicateName": "Un flux avec ce nom existe déjà",
+          "urlRequired": "L'URL du flux est requise",
+          "invalidUrl": "Format d'URL de flux invalide",
+          "duplicate": "Cette URL de flux existe déjà"
         }
       }
     },
@@ -2561,7 +2583,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Chargement des données...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2570,7 +2592,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Chargement des données...",
       "error": "Échec du chargement des données",
       "sortBy": "Trier par {column}",
       "rowsPerPage": "Lignes par page",
