@@ -963,7 +963,8 @@
             "label": "Suodatustaso"
           },
           "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
-          "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi"
+          "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
         },
         "rangeFilter": {
           "title": "Aluesuodatin",

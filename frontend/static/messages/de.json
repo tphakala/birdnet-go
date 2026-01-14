@@ -963,7 +963,8 @@
             "label": "Filterstufe"
           },
           "hardwareNote": "Die Stufen \"Streng\" und \"Maximum\" erfordern höhere Überlappungseinstellungen und mehr CPU-Ressourcen. RPi 4 oder bessere Hardware ist für diese Stufen erforderlich.",
-          "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen"
+          "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen",
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
         },
         "rangeFilter": {
           "title": "Reichweitenfilter",

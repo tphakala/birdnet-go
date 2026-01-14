@@ -726,6 +726,7 @@ export type TranslationKey =
   | 'settings.main.sections.falsePositiveFilter.level.label'
   | 'settings.main.sections.falsePositiveFilter.hardwareNote'
   | 'settings.main.sections.falsePositiveFilter.overlapAdjusted' // params: overlap
+  | 'settings.main.sections.falsePositiveFilter.overlapReduced' // params: overlap
   | 'settings.main.sections.rangeFilter.title'
   | 'settings.main.sections.rangeFilter.description'
   | 'settings.main.sections.rangeFilter.stationLocation.label'
@@ -2019,6 +2020,7 @@ export type TranslationParams = {
   'analytics.advanced.detections': { count: string | number };
   'settings.notFound.message': { section: string | number };
   'settings.main.sections.falsePositiveFilter.overlapAdjusted': { overlap: string | number };
+  'settings.main.sections.falsePositiveFilter.overlapReduced': { overlap: string | number };
   'settings.support.supportReport.userMessage.githubTip': { systemId: string | number };
   'settings.support.supportReport.userMessage.systemIdNote': { systemId: string | number };
   'settings.support.supportReport.statusMessages.uploadSuccessWithId': { dumpId: string | number };

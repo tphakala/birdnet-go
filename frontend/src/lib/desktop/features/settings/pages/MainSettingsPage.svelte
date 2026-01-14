@@ -1176,6 +1176,9 @@
   }
 
   // False Positive Filter helpers and update handler
+  // Tolerance for floating-point comparison (overlap values have 1 decimal precision)
+  const OVERLAP_COMPARISON_TOLERANCE = 0.001;
+
   // Minimum overlap values must match backend: internal/analysis/processor/false_positive_filter.go
   const falsePositiveFilterLevels = [
     {
@@ -1247,22 +1250,39 @@
     }
   }
 
-  function updateFalsePositiveFilterLevel(level: number) {
-    // Get minimum overlap required for this level
-    const minOverlap = getMinimumOverlapForLevel(level);
+  function updateFalsePositiveFilterLevel(newLevel: number) {
+    // Get the OLD level before updating
+    const oldLevel = settings.falsePositiveFilter.level;
+    const oldMinOverlap = getMinimumOverlapForLevel(oldLevel);
+
+    // Get minimum overlap required for the NEW level
+    const newMinOverlap = getMinimumOverlapForLevel(newLevel);
     const currentOverlap = settings.birdnet.overlap;
 
     // Update the filter level
     settingsActions.updateSection('realtime', {
-      falsePositiveFilter: { level },
+      falsePositiveFilter: { level: newLevel },
     });
 
-    // Auto-adjust overlap if current value is below minimum required
-    if (currentOverlap < minOverlap) {
-      settingsActions.updateSection('birdnet', { overlap: minOverlap });
+    // Auto-adjust overlap if current value is below minimum required (going UP)
+    if (currentOverlap < newMinOverlap) {
+      settingsActions.updateSection('birdnet', { overlap: newMinOverlap });
       toastActions.info(
         t('settings.main.sections.falsePositiveFilter.overlapAdjusted', {
-          overlap: minOverlap.toFixed(1),
+          overlap: newMinOverlap.toFixed(1),
+        })
+      );
+    }
+    // Auto-reduce overlap if going DOWN and overlap equals the old minimum
+    // (indicating it was set by the filter, not manually by the user)
+    else if (
+      newMinOverlap < oldMinOverlap &&
+      Math.abs(currentOverlap - oldMinOverlap) < OVERLAP_COMPARISON_TOLERANCE
+    ) {
+      settingsActions.updateSection('birdnet', { overlap: newMinOverlap });
+      toastActions.info(
+        t('settings.main.sections.falsePositiveFilter.overlapReduced', {
+          overlap: newMinOverlap.toFixed(1),
         })
       );
     }
