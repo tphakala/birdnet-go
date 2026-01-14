@@ -53,7 +53,7 @@ func registerSoundLevelProcessorIfEnabled(source string, log logger.Logger) erro
 	// Guard against nil registry during initialization to prevent panic
 	if registry == nil {
 		log.Warn("registry not available during sound level processor registration",
-			logger.String("url", privacy.SanitizeRTSPUrl(source)),
+			logger.String("url", privacy.SanitizeStreamUrl(source)),
 			logger.String("operation", "register_sound_level"))
 		return errors.Newf("registry not available during initialization").
 			Component("ffmpeg-integration").
@@ -62,16 +62,17 @@ func registerSoundLevelProcessorIfEnabled(source string, log logger.Logger) erro
 			Build()
 	}
 
-	audioSource := registry.GetOrCreateSource(source, SourceTypeRTSP)
+	// Use SourceTypeUnknown to let auto-detection determine the correct type from URL
+	audioSource := registry.GetOrCreateSource(source, SourceTypeUnknown)
 	if audioSource == nil {
 		log.Warn("failed to get/create audio source for sound level processor",
-			logger.String("url", privacy.SanitizeRTSPUrl(source)),
+			logger.String("url", privacy.SanitizeStreamUrl(source)),
 			logger.String("operation", "register_sound_level"))
 		return errors.Newf("failed to get/create audio source").
 			Component("ffmpeg-integration").
 			Category(errors.CategorySystem).
 			Context("operation", "register_sound_level_processor").
-			Context("source", privacy.SanitizeRTSPUrl(source)).
+			Context("source", privacy.SanitizeStreamUrl(source)).
 			Build()
 	}
 
@@ -164,7 +165,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// Check FFmpeg availability
 	if conf.GetFfmpegBinaryName() == "" {
 		getIntegrationLogger().Error("FFmpeg not available",
-			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.String("url", privacy.SanitizeStreamUrl(url)),
 			logger.String("operation", "capture_audio_rtsp"))
 		return
 	}
@@ -173,19 +174,19 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	manager := getGlobalManager()
 	if manager == nil {
 		getIntegrationLogger().Error("FFmpeg manager is not available",
-			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.String("url", privacy.SanitizeStreamUrl(url)),
 			logger.String("operation", "capture_audio_rtsp"))
 		return
 	}
 
 	// Start monitoring (health check + watchdog) once we have the audioChan
-	// This is done once across all RTSP streams via sync.Once
+	// This is done once across all streams via sync.Once
 	startMonitoringOnce(manager, unifiedAudioChan)
 
 	// Start the stream
 	if err := manager.StartStream(url, transport, unifiedAudioChan); err != nil {
 		getIntegrationLogger().Error("failed to start stream",
-			logger.String("url", privacy.SanitizeRTSPUrl(url)),
+			logger.String("url", privacy.SanitizeStreamUrl(url)),
 			logger.Error(err),
 			logger.String("transport", transport),
 			logger.String("operation", "capture_audio_rtsp"))
@@ -200,7 +201,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 				// Stop the stream
 				if err := manager.StopStream(url); err != nil {
 					getIntegrationLogger().Warn("failed to stop stream",
-						logger.String("url", privacy.SanitizeRTSPUrl(url)),
+						logger.String("url", privacy.SanitizeStreamUrl(url)),
 						logger.Error(err),
 						logger.String("operation", "quit_signal"))
 				}
@@ -209,7 +210,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 				// Restart the stream
 				if err := manager.RestartStream(url); err != nil {
 					getIntegrationLogger().Warn("failed to restart stream",
-						logger.String("url", privacy.SanitizeRTSPUrl(url)),
+						logger.String("url", privacy.SanitizeStreamUrl(url)),
 						logger.Error(err),
 						logger.String("operation", "restart_signal"))
 				}
@@ -218,9 +219,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	})
 }
 
-// SyncRTSPStreamsWithConfig synchronizes running RTSP streams with configuration
+// SyncStreamsWithConfig synchronizes running streams with configuration
 // This is called when configuration changes to start/stop streams as needed
-func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
+func SyncStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	// Update logger level based on current configuration
 	UpdateFFmpegLogLevel()
 
@@ -234,8 +235,8 @@ func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	return manager.SyncWithConfig(audioChan)
 }
 
-// GetRTSPStreamHealth returns health information for all RTSP streams
-func GetRTSPStreamHealth() map[string]StreamHealth {
+// GetStreamHealth returns health information for all streams
+func GetStreamHealth() map[string]StreamHealth {
 	manager := getGlobalManager()
 	if manager == nil {
 		return make(map[string]StreamHealth)

@@ -11,6 +11,7 @@
   import FilterForm from '../components/forms/FilterForm.svelte';
   import ChartCard from '../components/ui/ChartCard.svelte';
   import StatCard from '../components/ui/StatCard.svelte';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 
   const logger = getLogger('app');
 
@@ -1357,12 +1358,7 @@
                           )}"
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
-                          onerror={e => {
-                            const target = e.currentTarget as HTMLImageElement;
-                            if (target) {
-                              target.src = '/assets/images/bird-placeholder.svg';
-                            }
-                          }}
+                          onerror={handleBirdImageError}
                           loading="lazy"
                           decoding="async"
                           fetchpriority="low"
@@ -1417,12 +1413,7 @@
                     )}"
                     alt={detection.commonName || 'Unknown species'}
                     class="w-full h-full object-cover"
-                    onerror={e => {
-                      const target = e.currentTarget as HTMLImageElement;
-                      if (target) {
-                        target.src = '/assets/images/bird-placeholder.svg';
-                      }
-                    }}
+                    onerror={handleBirdImageError}
                     loading="lazy"
                     decoding="async"
                     fetchpriority="low"

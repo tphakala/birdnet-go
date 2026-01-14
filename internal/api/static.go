@@ -21,17 +21,11 @@ type StaticFileServer struct {
 	devMode     bool
 	devModePath string
 	initOnce    sync.Once
-
-	// Embedded assets filesystem (sounds, images, etc.)
-	assetsFS fs.FS
 }
 
 // NewStaticFileServer creates a new static file server.
-// assetsFS is optional and provides the embedded assets filesystem for /assets/* routes.
-func NewStaticFileServer(assetsFS fs.FS) *StaticFileServer {
-	return &StaticFileServer{
-		assetsFS: assetsFS,
-	}
+func NewStaticFileServer() *StaticFileServer {
+	return &StaticFileServer{}
 }
 
 // initDevMode checks if frontend/dist exists on disk and enables dev mode if so.
@@ -78,17 +72,6 @@ func (sfs *StaticFileServer) RegisterRoutes(e *echo.Echo) {
 
 	// Serve Svelte static assets from /ui/assets/*
 	e.GET("/ui/assets/*", sfs.handleAssetRequest)
-
-	// Serve embedded assets (sounds, images, etc.) from /assets/*
-	if sfs.assetsFS != nil {
-		e.GET("/assets/*", sfs.handleEmbeddedAssetRequest)
-	}
-}
-
-// handleEmbeddedAssetRequest serves assets from the embedded filesystem.
-func (sfs *StaticFileServer) handleEmbeddedAssetRequest(c echo.Context) error {
-	path := c.Param("*")
-	return sfs.ServeEmbeddedFS(c, sfs.assetsFS, path)
 }
 
 // handleAssetRequest serves static assets based on dev/prod mode.

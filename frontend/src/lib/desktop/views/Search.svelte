@@ -3,6 +3,7 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { getLocale, t } from '$lib/i18n';
   import { dashboardSettings } from '$lib/stores/settings';
@@ -704,11 +705,9 @@
                           alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={e => {
-                            const target = e.target as HTMLImageElement;
-                            if (target) {
-                              target.src = '/assets/images/bird-placeholder.svg';
-                              target.classList.add('p-2');
-                            }
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.src = '/ui/assets/bird-placeholder.svg';
+                            target.classList.add('p-2');
                           }}
                           loading="lazy"
                           decoding="async"
@@ -867,11 +866,9 @@
                                 alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
                                 onerror={e => {
-                                  const target = e.target as HTMLImageElement;
-                                  if (target) {
-                                    target.src = '/assets/images/bird-placeholder.svg';
-                                    target.classList.add('p-2');
-                                  }
+                                  const target = e.currentTarget as HTMLImageElement;
+                                  target.src = '/ui/assets/bird-placeholder.svg';
+                                  target.classList.add('p-2');
                                 }}
                                 loading="lazy"
                                 decoding="async"
@@ -930,12 +927,7 @@
                         )}"
                         alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                         class="w-full h-full object-cover"
-                        onerror={e => {
-                          const target = e.currentTarget as HTMLImageElement;
-                          if (target) {
-                            target.src = '/assets/images/bird-placeholder.svg';
-                          }
-                        }}
+                        onerror={handleBirdImageError}
                         loading="lazy"
                         decoding="async"
                         fetchpriority="low"

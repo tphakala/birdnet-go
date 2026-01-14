@@ -1871,3 +1871,195 @@ func TestScrubCredentialURL(t *testing.T) {
 		assert.Equal(t, "https://example.com/api/v1", result)
 	})
 }
+
+// TestSanitizeStreamUrl tests the multi-protocol URL sanitization function
+func TestSanitizeStreamUrl(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// RTSP protocol
+		{
+			name:     "RTSP with credentials",
+			input:    "rtsp://admin:password@192.168.1.100:554/stream",
+			expected: "rtsp://192.168.1.100:554/stream",
+		},
+		{
+			name:     "RTSPS with credentials",
+			input:    "rtsps://user:secret@secure.camera.local/stream",
+			expected: "rtsps://secure.camera.local/stream",
+		},
+		{
+			name:     "RTSP without credentials",
+			input:    "rtsp://192.168.1.100:554/stream",
+			expected: "rtsp://192.168.1.100:554/stream",
+		},
+
+		// HTTP protocol
+		{
+			name:     "HTTP with basic auth",
+			input:    "http://user:pass@stream.example.com/live",
+			expected: "http://stream.example.com/live",
+		},
+		{
+			name:     "HTTPS with basic auth",
+			input:    "https://apiuser:apikey@api.example.com/stream",
+			expected: "https://api.example.com/stream",
+		},
+		{
+			name:     "HTTP without credentials",
+			input:    "http://stream.example.com/live",
+			expected: "http://stream.example.com/live",
+		},
+
+		// RTMP protocol
+		{
+			name:     "RTMP with credentials",
+			input:    "rtmp://broadcaster:streamkey@live.example.com/app/stream",
+			expected: "rtmp://live.example.com/app/stream",
+		},
+		{
+			name:     "RTMPS with credentials",
+			input:    "rtmps://user:key@secure.live.com/app/stream",
+			expected: "rtmps://secure.live.com/app/stream",
+		},
+		{
+			name:     "RTMP without credentials",
+			input:    "rtmp://live.example.com/app/stream",
+			expected: "rtmp://live.example.com/app/stream",
+		},
+
+		// UDP protocol
+		{
+			name:     "UDP multicast no credentials",
+			input:    "udp://239.0.0.1:1234",
+			expected: "udp://239.0.0.1:1234",
+		},
+		{
+			name:     "UDP with options",
+			input:    "udp://@239.0.0.1:1234?pkt_size=1316",
+			expected: "udp://239.0.0.1:1234?pkt_size=1316", // @ is stripped as it's parsed as empty username
+		},
+		{
+			name:     "RTP stream",
+			input:    "rtp://239.0.0.1:5004",
+			expected: "rtp://239.0.0.1:5004",
+		},
+
+		// HLS protocol (typically uses query params for auth)
+		{
+			name:     "HLS with auth token in URL credentials",
+			input:    "https://apikey:secret@cdn.example.com/playlist.m3u8",
+			expected: "https://cdn.example.com/playlist.m3u8",
+		},
+		{
+			name:     "HLS without credentials",
+			input:    "https://cdn.example.com/playlist.m3u8?token=abc123",
+			expected: "https://cdn.example.com/playlist.m3u8?token=abc123",
+		},
+
+		// Edge cases
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "Non-URL string",
+			input:    "not a url",
+			expected: "not a url",
+		},
+		{
+			name:     "URL with special characters in password",
+			input:    "rtsp://admin:p%40ss%2Fw0rd@192.168.1.100/stream",
+			expected: "rtsp://192.168.1.100/stream",
+		},
+		{
+			name:     "URL with port and path",
+			input:    "http://user:pass@example.com:8080/path/to/stream",
+			expected: "http://example.com:8080/path/to/stream",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := SanitizeStreamUrl(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeStreamUrl_CredentialRemoval verifies credentials are properly removed
+func TestSanitizeStreamUrl_CredentialRemoval(t *testing.T) {
+	t.Parallel()
+
+	sensitiveTests := []struct {
+		name       string
+		input      string
+		mustRemove []string // These strings must NOT appear in output
+	}{
+		{
+			name:       "RTSP admin credentials",
+			input:      "rtsp://admin:SuperSecret123@192.168.1.100/stream",
+			mustRemove: []string{"admin", "SuperSecret123", "admin:SuperSecret123"},
+		},
+		{
+			name:       "HTTP API key",
+			input:      "http://apiuser:sk-abcdef123456@api.service.com/stream",
+			mustRemove: []string{"apiuser", "sk-abcdef123456"},
+		},
+		{
+			name:       "RTMP stream key",
+			input:      "rtmp://streamer:live_key_xyz789@ingest.stream.com/live/mystream",
+			mustRemove: []string{"streamer", "live_key_xyz789"},
+		},
+		{
+			name:       "Complex password with symbols",
+			input:      "rtsp://user:P@$$w0rd!#$@camera.local/stream",
+			mustRemove: []string{"user:", "P@$$w0rd!#$"},
+		},
+	}
+
+	for _, tt := range sensitiveTests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := SanitizeStreamUrl(tt.input)
+
+			for _, sensitive := range tt.mustRemove {
+				assert.NotContains(t, result, sensitive,
+					"Sanitized URL should not contain '%s'", sensitive)
+			}
+		})
+	}
+}
+
+// TestSanitizeStreamUrlBackwardCompatibility verifies SanitizeRTSPUrl works as wrapper
+func TestSanitizeStreamUrlBackwardCompatibility(t *testing.T) {
+	t.Parallel()
+
+	testCases := []string{
+		"rtsp://admin:pass@192.168.1.100/stream",
+		"http://user:pass@example.com/live",
+		"rtmp://key:secret@live.com/app/stream",
+		"https://api:token@cdn.example.com/playlist.m3u8",
+	}
+
+	for _, input := range testCases {
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+
+			// Both functions should return the same result
+			rtspResult := SanitizeRTSPUrl(input)
+			streamResult := SanitizeStreamUrl(input)
+
+			assert.Equal(t, streamResult, rtspResult,
+				"SanitizeRTSPUrl should return same result as SanitizeStreamUrl")
+		})
+	}
+}

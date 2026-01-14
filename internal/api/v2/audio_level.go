@@ -58,9 +58,9 @@ type audioLevelManager struct {
 	connectionMu sync.Mutex
 	// Total connection counter for monitoring
 	totalConnections int64
-	// RTSP anonymization map for non-authenticated users (bounded to maxRTSPSources)
-	rtspAnonymMap map[string]string
-	rtspAnonymMu  sync.RWMutex
+	// Stream anonymization map for non-authenticated users (bounded to maxStreamSources)
+	streamAnonymMap map[string]string
+	streamAnonymMu  sync.RWMutex
 
 	// Fan-out broadcaster for audio level data
 	subscribers   map[chan myaudio.AudioLevelData]struct{}
@@ -71,13 +71,13 @@ type audioLevelManager struct {
 	broadcasterCancel context.CancelFunc
 }
 
-// Maximum number of RTSP sources to cache in anonymization map
-const maxRTSPAnonymMapSize = 100
+// Maximum number of stream sources to cache in anonymization map
+const maxStreamAnonymMapSize = 100
 
 // Global audio level manager instance
 // TODO: Consider moving to Controller struct for better encapsulation
 var audioLevelMgr = &audioLevelManager{
-	rtspAnonymMap: make(map[string]string),
+	streamAnonymMap: make(map[string]string),
 	subscribers:   make(map[chan myaudio.AudioLevelData]struct{}),
 }
 
@@ -159,24 +159,24 @@ func unsubscribeFromAudioLevels(ch chan myaudio.AudioLevelData) {
 	// that the handler is processing. The channel will be garbage collected.
 }
 
-// cacheRTSPAnonymName stores an anonymized name for an RTSP source with bounded map size.
-// If the map exceeds maxRTSPAnonymMapSize, it clears the map to prevent unbounded growth.
+// cacheStreamAnonymName stores an anonymized name for a stream source with bounded map size.
+// If the map exceeds maxStreamAnonymMapSize, it clears the map to prevent unbounded growth.
 // This is acceptable because the map is only a cache for performance; lookups will
 // regenerate the name if not found.
-func cacheRTSPAnonymName(sourceID, displayName string) {
-	audioLevelMgr.rtspAnonymMu.Lock()
-	defer audioLevelMgr.rtspAnonymMu.Unlock()
+func cacheStreamAnonymName(sourceID, displayName string) {
+	audioLevelMgr.streamAnonymMu.Lock()
+	defer audioLevelMgr.streamAnonymMu.Unlock()
 
 	// If map is at capacity and this is a new entry, clear the map
 	// This is a simple strategy; in practice RTSP source count is typically small
-	if len(audioLevelMgr.rtspAnonymMap) >= maxRTSPAnonymMapSize {
-		if _, exists := audioLevelMgr.rtspAnonymMap[sourceID]; !exists {
+	if len(audioLevelMgr.streamAnonymMap) >= maxStreamAnonymMapSize {
+		if _, exists := audioLevelMgr.streamAnonymMap[sourceID]; !exists {
 			// Clear the map to prevent unbounded growth
-			audioLevelMgr.rtspAnonymMap = make(map[string]string)
+			audioLevelMgr.streamAnonymMap = make(map[string]string)
 		}
 	}
 
-	audioLevelMgr.rtspAnonymMap[sourceID] = displayName
+	audioLevelMgr.streamAnonymMap[sourceID] = displayName
 }
 
 // initAudioLevelRoutes registers audio level SSE endpoints
@@ -388,7 +388,7 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]myau
 	}
 
 	// Add configured RTSP sources
-	c.addRTSPSourcesToLevels(registry, levels, isAuthenticated)
+	c.addStreamSourcesToLevels(registry, levels, isAuthenticated)
 
 	return levels
 }
@@ -401,17 +401,17 @@ func (c *Controller) getAudioCardSource(registry *myaudio.AudioSourceRegistry) *
 	return registry.GetOrCreateSource(c.Settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
 }
 
-// addRTSPSourcesToLevels adds all configured RTSP sources to the levels map.
-func (c *Controller) addRTSPSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]myaudio.AudioLevelData, isAuthenticated bool) {
-	for i, url := range c.Settings.Realtime.RTSP.URLs {
-		source := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
+// addStreamSourcesToLevels adds all configured stream sources to the levels map.
+func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]myaudio.AudioLevelData, isAuthenticated bool) {
+	for i, stream := range c.Settings.Realtime.RTSP.Streams {
+		source := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type))
 		if source == nil {
 			continue
 		}
 		displayName := source.DisplayName
 		if !isAuthenticated {
 			displayName = fmt.Sprintf("camera-%d", i+1)
-			cacheRTSPAnonymName(source.ID, displayName)
+			cacheStreamAnonymName(source.ID, displayName)
 		}
 		levels[source.ID] = createAudioLevelEntry(source, displayName)
 	}
@@ -461,14 +461,16 @@ func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string
 	switch source.Type {
 	case myaudio.SourceTypeAudioCard:
 		return audioSourceDefaultName
-	case myaudio.SourceTypeRTSP:
-		audioLevelMgr.rtspAnonymMu.RLock()
-		if name, exists := audioLevelMgr.rtspAnonymMap[source.ID]; exists {
-			audioLevelMgr.rtspAnonymMu.RUnlock()
+	case myaudio.SourceTypeRTSP, myaudio.SourceTypeHTTP, myaudio.SourceTypeHLS,
+		myaudio.SourceTypeRTMP, myaudio.SourceTypeUDP:
+		// All stream types use the same anonymization pattern
+		audioLevelMgr.streamAnonymMu.RLock()
+		if name, exists := audioLevelMgr.streamAnonymMap[source.ID]; exists {
+			audioLevelMgr.streamAnonymMu.RUnlock()
 			return name
 		}
-		audioLevelMgr.rtspAnonymMu.RUnlock()
-		// Fallback for unmapped RTSP sources
+		audioLevelMgr.streamAnonymMu.RUnlock()
+		// Fallback for unmapped stream sources
 		idPrefix := source.ID
 		if len(source.ID) > anonymizedIDPrefixLen {
 			idPrefix = source.ID[:anonymizedIDPrefixLen]
@@ -483,26 +485,36 @@ func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string
 
 // getAnonymizedSourceNameFallback returns anonymized name when registry is unavailable
 func (c *Controller) getAnonymizedSourceNameFallback(sourceID string) string {
-	switch {
-	case strings.HasPrefix(sourceID, "audio_card_"):
+	// Check for audio card source
+	if strings.HasPrefix(sourceID, "audio_card_") {
 		return audioSourceDefaultName
-	case strings.HasPrefix(sourceID, "rtsp_"):
-		audioLevelMgr.rtspAnonymMu.RLock()
-		if name, exists := audioLevelMgr.rtspAnonymMap[sourceID]; exists {
-			audioLevelMgr.rtspAnonymMu.RUnlock()
+	}
+
+	// Check for file source
+	if strings.HasPrefix(sourceID, "file_") {
+		return "file-source"
+	}
+
+	// Check for any stream source type (rtsp_, http_, hls_, rtmp_, udp_)
+	streamPrefixes := []string{"rtsp_", "http_", "hls_", "rtmp_", "udp_"}
+	for _, prefix := range streamPrefixes {
+		if !strings.HasPrefix(sourceID, prefix) {
+			continue
+		}
+		audioLevelMgr.streamAnonymMu.RLock()
+		if name, exists := audioLevelMgr.streamAnonymMap[sourceID]; exists {
+			audioLevelMgr.streamAnonymMu.RUnlock()
 			return name
 		}
-		audioLevelMgr.rtspAnonymMu.RUnlock()
+		audioLevelMgr.streamAnonymMu.RUnlock()
 		idPrefix := sourceID
 		if len(sourceID) > anonymizedIDPrefixLen {
 			idPrefix = sourceID[:anonymizedIDPrefixLen]
 		}
 		return fmt.Sprintf("camera-%s", idPrefix)
-	case strings.HasPrefix(sourceID, "file_"):
-		return "file-source"
-	default:
-		return "unknown-source"
 	}
+
+	return "unknown-source"
 }
 
 // isSourceInactive checks if a source should be considered inactive

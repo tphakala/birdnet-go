@@ -1,1 +1,1 @@
-assets/LICENSES.md
+frontend/static/LICENSES.md

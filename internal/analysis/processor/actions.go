@@ -994,9 +994,16 @@ func (a *BirdWeatherAction) Execute(data any) error {
 	return nil
 }
 
+// NoteWithBirdImage wraps a Note with bird image data for MQTT publishing.
+// The SourceID field enables Home Assistant to filter detections by source.
+//
+// IMPORTANT: JSON field names are part of the public MQTT API contract.
+// Changing them breaks existing Home Assistant and other MQTT integrations.
+// See: https://github.com/tphakala/birdnet-go/discussions/1759
 type NoteWithBirdImage struct {
 	datastore.Note
-	BirdImage imageprovider.BirdImage
+	SourceID  string                  `json:"sourceId"`  // Audio source ID for HA filtering (added for HA discovery)
+	BirdImage imageprovider.BirdImage `json:"BirdImage"` // PascalCase for backward compatibility - DO NOT CHANGE
 }
 
 // Execute sends the note to the MQTT broker
@@ -1052,8 +1059,12 @@ func (a *MqttAction) Execute(data any) error {
 	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
 
-	// Wrap note with bird image (using copy)
-	noteWithBirdImage := NoteWithBirdImage{Note: noteCopy, BirdImage: birdImage}
+	// Wrap note with bird image (using copy) and include SourceID for HA filtering
+	noteWithBirdImage := NoteWithBirdImage{
+		Note:      noteCopy,
+		SourceID:  noteCopy.Source.ID,
+		BirdImage: birdImage,
+	}
 
 	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(noteWithBirdImage)

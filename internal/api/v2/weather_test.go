@@ -212,8 +212,8 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
-	// Create mock data
-	mockTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+	// Create mock data - use Local time since weather data is stored in local time
+	mockTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.Local)
 	mockHourlyData := []datastore.HourlyWeather{
 		{
 			Time:        mockTime,
@@ -391,9 +391,9 @@ func TestGetHourlyWeatherForHour(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
-	// Create mock data for two hours
-	mockTime1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC) // 12:00
-	mockTime2 := time.Date(2023, 1, 1, 13, 0, 0, 0, time.UTC) // 13:00
+	// Create mock data for two hours - use Local time since weather data is stored in local time
+	mockTime1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.Local) // 12:00
+	mockTime2 := time.Date(2023, 1, 1, 13, 0, 0, 0, time.Local) // 13:00
 	mockHourlyData := []datastore.HourlyWeather{
 		{
 			Time:        mockTime1,
@@ -454,8 +454,8 @@ func TestGetHourlyWeatherForHourNotFound(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
-	// Create mock data for hour 12 only
-	mockTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+	// Create mock data for hour 12 only - use Local time since weather data is stored in local time
+	mockTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.Local)
 	mockHourlyData := []datastore.HourlyWeather{
 		{
 			Time:        mockTime,
@@ -548,8 +548,8 @@ func TestGetWeatherForDetection(t *testing.T) {
 		CityName: "Helsinki",
 	}
 
-	// Create mock hourly weather
-	mockTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+	// Create mock hourly weather - use Local time since weather data is stored in local time
+	mockTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.Local)
 	mockHourlyData := []datastore.HourlyWeather{
 		{
 			Time:        mockTime,
@@ -637,8 +637,8 @@ func TestGetLatestWeather(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
-	// Create mock latest hourly weather
-	mockLatestTime := time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC)
+	// Create mock latest hourly weather - use Local time since weather data is stored in local time
+	mockLatestTime := time.Date(2023, 1, 1, 15, 0, 0, 0, time.Local)
 	mockLatestWeather := &datastore.HourlyWeather{
 		Time:        mockLatestTime,
 		Temperature: 7.5,

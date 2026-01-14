@@ -83,10 +83,10 @@ type Stats struct {
 
 // NewPreRenderer creates a new pre-renderer instance.
 // The parentCtx is used for lifecycle management and cancellation.
-// If logger is nil, logger.Global() is used to prevent nil pointer panics.
+// If logger is nil, GetPreRendererLogger() is used to prevent nil pointer panics.
 func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *securefs.SecureFS, log logger.Logger) *PreRenderer {
 	if log == nil {
-		log = logger.Global().Module("spectrogram.prerenderer")
+		log = GetPreRendererLogger()
 	}
 	ctx, cancel := context.WithCancel(parentCtx)
 
@@ -330,8 +330,8 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		// This provides visibility into the pre-rendering pipeline without debug mode
 		pr.logger.Info("Spectrogram generation queued",
 			logger.Any("note_id", job.NoteID),
-			logger.Int("queue_depth", currentQueueDepth),     // Current backlog (0-3 for default queue size)
-			logger.Int64("total_queued", totalQueued),        // Lifetime counter
+			logger.Int("queue_depth", currentQueueDepth), // Current backlog (0-3 for default queue size)
+			logger.Int64("total_queued", totalQueued),    // Lifetime counter
 			logger.String("operation", "spectrogram_queued"))
 		return nil
 	default:
