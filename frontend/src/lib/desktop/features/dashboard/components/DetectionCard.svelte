@@ -200,6 +200,7 @@
     // Reset audio settings to defaults
     audioGainValue = DEFAULT_AUDIO_GAIN;
     audioFilterFreq = DEFAULT_AUDIO_FILTER_FREQ;
+    audioPlaybackSpeed = DEFAULT_PLAYBACK_SPEED;
     audioContextAvailable = true;
   }
 

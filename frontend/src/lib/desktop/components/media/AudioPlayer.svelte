@@ -35,6 +35,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
+  import { applyPlaybackRate, dbToGain } from '$lib/utils/audio';
 
   const logger = loggers.audio;
 
@@ -148,6 +149,7 @@
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
+  let isInitializingContext = $state(false);
   let audioNodes: {
     source: MediaElementAudioSourceNode;
     gain: GainNode;
@@ -191,7 +193,6 @@
   const progressId = $derived(`progress-${detectionId}`);
 
   // Utility functions
-  const dbToGain = (db: number): number => Math.pow(10, db / 20);
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -285,12 +286,21 @@
         audioElement.pause();
       } else {
         // Initialize audio context on first play
-        if (!audioContext) {
-          audioContext = await initializeAudioContext();
-          if (audioContext && !audioNodes) {
-            audioNodes = createAudioNodes(audioContext, audioElement);
+        // Guard against rapid clicks that could create multiple AudioContexts
+        if (!audioContext && !isInitializingContext) {
+          isInitializingContext = true;
+          try {
+            audioContext = await initializeAudioContext();
+            if (audioContext && !audioNodes) {
+              audioNodes = createAudioNodes(audioContext, audioElement);
+            }
+          } finally {
+            isInitializingContext = false;
           }
         }
+
+        // Safety check: component may have unmounted during async initialization
+        if (!audioElement) return;
 
         await audioElement.play();
       }
@@ -365,25 +375,6 @@
     if (audioElement) {
       applyPlaybackRate(audioElement, newSpeed);
     }
-  };
-
-  /**
-   * Apply playback rate to audio element with pitch preservation disabled.
-   * Disabling preservesPitch creates the "tape slow-down" effect where
-   * slower playback lowers pitch, making high-frequency bird calls
-   * more audible for users with reduced high-frequency hearing.
-   */
-  const applyPlaybackRate = (audio: HTMLAudioElement, rate: number) => {
-    audio.playbackRate = rate;
-    // Disable pitch preservation for accessibility - slower = lower pitch
-    const audioWithPitch = audio as HTMLAudioElement & {
-      preservesPitch?: boolean;
-      mozPreservesPitch?: boolean;
-      webkitPreservesPitch?: boolean;
-    };
-    audioWithPitch.preservesPitch = false;
-    audioWithPitch.mozPreservesPitch = false;
-    audioWithPitch.webkitPreservesPitch = false;
   };
 
   // Check spectrogram mode on mount/URL change to avoid double-request pattern

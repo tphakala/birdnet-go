@@ -20,6 +20,7 @@
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
+  import { applyPlaybackRate, dbToGain } from '$lib/utils/audio';
 
   const logger = loggers.audio;
 
@@ -59,6 +60,7 @@
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
+  let isInitializingContext = $state(false);
   let audioNodes = $state<{
     source: MediaElementAudioSourceNode;
     gain: GainNode;
@@ -68,9 +70,6 @@
   const PLAY_END_DELAY_MS = 3000;
 
   const audioUrl = $derived(`/api/v2/audio/${detectionId}`);
-
-  // Web Audio API helpers
-  const dbToGain = (db: number): number => Math.pow(10, db / 20);
 
   // Update audio nodes when gain/filter props change
   // Read values unconditionally to ensure they're tracked as dependencies
@@ -111,12 +110,21 @@
         audioElement.pause();
       } else {
         // Initialize audio context on first play (for gain/filter controls)
-        if (!audioContext) {
-          audioContext = await initializeAudioContext();
-          if (audioContext && !audioNodes) {
-            audioNodes = createAudioNodes(audioContext, audioElement);
+        // Guard against rapid clicks that could create multiple AudioContexts
+        if (!audioContext && !isInitializingContext) {
+          isInitializingContext = true;
+          try {
+            audioContext = await initializeAudioContext();
+            if (audioContext && !audioNodes) {
+              audioNodes = createAudioNodes(audioContext, audioElement);
+            }
+          } finally {
+            isInitializingContext = false;
           }
         }
+
+        // Safety check: component may have unmounted during async initialization
+        if (!audioElement) return;
 
         isLoading = true;
         await audioElement.play();
@@ -245,22 +253,6 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  // Playback speed helpers
-  function applyPlaybackRate(audio: HTMLAudioElement, rate: number) {
-    audio.playbackRate = rate;
-    // Critical for accessibility: disable pitch preservation so
-    // slower playback lowers pitch (tape slow-down effect)
-    // This makes high-frequency bird calls more audible
-    const audioWithPitch = audio as HTMLAudioElement & {
-      preservesPitch?: boolean;
-      mozPreservesPitch?: boolean;
-      webkitPreservesPitch?: boolean;
-    };
-    audioWithPitch.preservesPitch = false;
-    audioWithPitch.mozPreservesPitch = false;
-    audioWithPitch.webkitPreservesPitch = false;
   }
 
   async function initializeAudioContext(): Promise<AudioContext | null> {

@@ -244,18 +244,13 @@
         <span class="setting-label">
           {t('media.audio.playbackSpeed')}: {playbackSpeed}×
         </span>
-        <div
-          class="speed-button-group"
-          role="radiogroup"
-          aria-label={t('media.audio.playbackSpeed')}
-        >
+        <div class="speed-button-group" role="group" aria-label={t('media.audio.playbackSpeed')}>
           {#each SPEED_OPTIONS as speed}
             <button
               class="speed-option"
               class:active={playbackSpeed === speed}
               onclick={() => onSpeedChange(speed)}
-              role="radio"
-              aria-checked={playbackSpeed === speed}
+              aria-pressed={playbackSpeed === speed}
             >
               {speed}×
             </button>
