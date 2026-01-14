@@ -25,6 +25,9 @@ interface ToastState {
   defaultDuration: number;
 }
 
+// Maximum number of toasts to display at once
+const MAX_TOASTS = 3;
+
 const initialState: ToastState = {
   toasts: [],
   defaultPosition: 'top-right',
@@ -66,10 +69,17 @@ export const toastActions = {
       actions: options.actions ?? [],
     };
 
-    toastStore.update(state => ({
-      ...state,
-      toasts: [...state.toasts, toast],
-    }));
+    toastStore.update(state => {
+      let newToasts = [...state.toasts, toast];
+      // Remove oldest toasts if we exceed the limit
+      if (newToasts.length > MAX_TOASTS) {
+        newToasts = newToasts.slice(-MAX_TOASTS);
+      }
+      return {
+        ...state,
+        toasts: newToasts,
+      };
+    });
 
     return id;
   },
