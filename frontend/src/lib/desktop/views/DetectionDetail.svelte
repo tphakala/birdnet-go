@@ -343,7 +343,7 @@
         <!-- Responsive layout: stack on mobile, row on md+ -->
         <div class="flex flex-col md:flex-row gap-4 items-start">
           <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
-          <div class="flex gap-3 md:gap-4 items-center flex-1 min-w-0 w-full">
+          <div class="flex gap-3 md:gap-4 items-center flex-1 min-w-0 md:min-w-[240px] w-full">
             <SpeciesThumbnail
               scientificName={detection.scientificName}
               commonName={detection.commonName}
@@ -369,11 +369,13 @@
             </div>
           </div>
 
-          <!-- Mobile: place Date/Time and Confidence side-by-side; md+: flow as normal -->
-          <div class="grid grid-cols-2 gap-4 md:contents w-full">
+          <!-- Mobile: 2-column grid; md+: flex row with fixed-width sections -->
+          <div
+            class="grid grid-cols-2 gap-4 w-full md:flex md:flex-row md:gap-4 md:w-auto md:shrink-0"
+          >
             <!-- Section 2: Date & Time (fixed width) -->
             <div
-              class="md:shrink-0 md:text-center md:min-w-[120px] w-full"
+              class="md:shrink-0 md:text-center md:min-w-[120px] w-full md:w-auto"
               role="region"
               aria-labelledby="datetime-heading"
             >
@@ -398,7 +400,7 @@
 
             <!-- Section 3: Weather Conditions (fixed width) -->
             <div
-              class="hidden md:block md:shrink-0 md:text-center md:min-w-[180px] w-full"
+              class="hidden md:block md:shrink-0 md:text-center md:min-w-[180px] w-full md:w-auto"
               role="region"
               aria-labelledby="weather-heading"
             >
