@@ -214,13 +214,9 @@ func deepCopyValue(v any) any {
 		}
 		return result
 	case map[string]string:
-		result := make(map[string]string, len(val))
-		maps.Copy(result, val)
-		return result
+		return maps.Clone(val)
 	case map[string]int:
-		result := make(map[string]int, len(val))
-		maps.Copy(result, val)
-		return result
+		return maps.Clone(val)
 	case []any:
 		result := make([]any, len(val))
 		for i, v := range val {
@@ -228,29 +224,17 @@ func deepCopyValue(v any) any {
 		}
 		return result
 	case []string:
-		result := make([]string, len(val))
-		copy(result, val)
-		return result
+		return slices.Clone(val)
 	case []int:
-		result := make([]int, len(val))
-		copy(result, val)
-		return result
+		return slices.Clone(val)
 	case []int64:
-		result := make([]int64, len(val))
-		copy(result, val)
-		return result
+		return slices.Clone(val)
 	case []float64:
-		result := make([]float64, len(val))
-		copy(result, val)
-		return result
+		return slices.Clone(val)
 	case []bool:
-		result := make([]bool, len(val))
-		copy(result, val)
-		return result
+		return slices.Clone(val)
 	case []byte:
-		result := make([]byte, len(val))
-		copy(result, val)
-		return result
+		return slices.Clone(val)
 	default:
 		// Primitive types (string, int, float64, bool, etc.) and pointers/structs
 		// are returned as-is - primitives are value types, and pointers/structs
