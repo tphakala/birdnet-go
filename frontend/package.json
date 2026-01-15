@@ -87,7 +87,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/svelte": "^5.2.8",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^24.1.0",
+    "@types/node": "^25.0.9",
     "@typescript-eslint/eslint-plugin": "^8.36.0",
     "@typescript-eslint/parser": "^8.36.0",
     "@vitest/browser": "^4.0.16",
