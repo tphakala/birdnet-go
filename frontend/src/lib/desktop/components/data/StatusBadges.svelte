@@ -29,7 +29,7 @@
 -->
 <script module lang="ts">
   // Module-level constants (shared across all instances)
-  const sizeClasses: Record<string, string> = {
+  const sizeClasses: { sm: string; md: string; lg: string } = {
     sm: 'status-badge-sm',
     md: 'status-badge-md',
     lg: 'status-badge-lg',
@@ -58,8 +58,8 @@
 
   let { detection, className = '', size = 'md' }: Props = $props();
 
-  // Derive size class once to avoid duplication (direct access since size is typed)
-  const sizeClass = $derived(sizeClasses[size] ?? '');
+  // Derive size class once (type guarantees valid key)
+  const sizeClass = $derived(sizeClasses[size]);
 
   function getStatusBadgeClass(verified: VerificationStatus): string {
     // Direct access with fallback since verified is typed
