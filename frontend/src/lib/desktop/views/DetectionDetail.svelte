@@ -70,14 +70,31 @@
 
   const logger = loggers.ui;
 
+  // Constants
+  const TAB_FOCUS_DELAY_MS = 50;
+  type TabType = 'overview' | 'taxonomy' | 'history' | 'notes' | 'review';
+
+  // Helper to calculate detection duration with NaN safety
+  function calculateDuration(endTime: string, beginTime: string): string {
+    const end = parseFloat(endTime);
+    const begin = parseFloat(beginTime);
+    const duration = end - begin;
+    if (Number.isNaN(duration)) return '—';
+    return `${duration}s`;
+  }
+
   interface Props {
     detectionId?: string;
   }
 
-  let { detectionId }: Props = $props();
+  const { detectionId: detectionIdProp }: Props = $props();
+
+  // Resolved detection ID - initialized by $effect below, not directly from prop
+  // to ensure reactive updates work correctly
+  let resolvedDetectionId = $state<string | undefined>(undefined);
 
   // State
-  let activeTab = $state<'overview' | 'taxonomy' | 'history' | 'notes' | 'review'>('overview');
+  let activeTab = $state<TabType>('overview');
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -103,33 +120,46 @@
   let speciesController: AbortController | null = null;
   let taxonomyController: AbortController | null = null;
 
-  // Extract detection ID from URL if not provided and fetch data reactively
+  // Resolve detection ID from URL if not provided via prop
   $effect(() => {
-    if (!detectionId) {
+    if (!detectionIdProp) {
       const pathParts = window.location.pathname.split('/');
       const detectionIndex = pathParts.indexOf('detections');
       if (detectionIndex !== -1 && pathParts[detectionIndex + 1]) {
-        detectionId = pathParts[detectionIndex + 1];
+        resolvedDetectionId = pathParts[detectionIndex + 1];
       }
+    } else {
+      resolvedDetectionId = detectionIdProp;
     }
+  });
 
-    // Check for tab query parameter to set initial active tab
+  // Initialize tab from URL query parameter
+  $effect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
     if (tabParam && ['overview', 'taxonomy', 'history', 'notes', 'review'].includes(tabParam)) {
-      activeTab = tabParam as typeof activeTab;
+      activeTab = tabParam as TabType;
     }
+  });
 
-    // Fetch detection data when detectionId changes
-    if (detectionId) {
+  // Fetch detection data when resolvedDetectionId changes
+  $effect(() => {
+    if (resolvedDetectionId) {
       fetchDetection();
     }
+
+    // Cleanup: abort pending requests when component unmounts or ID changes
+    return () => {
+      detectionController?.abort();
+      speciesController?.abort();
+      taxonomyController?.abort();
+    };
   });
 
   // Fetch detection data
   async function fetchDetection() {
-    if (!detectionId) {
-      detectionError = 'No detection ID provided';
+    if (!resolvedDetectionId) {
+      detectionError = t('detections.errors.noIdProvided');
       isLoadingDetection = false;
       return;
     }
@@ -142,31 +172,37 @@
     detectionError = null;
 
     try {
-      const response = await fetch(`/api/v2/detections/${detectionId}`, {
+      const response = await fetch(`/api/v2/detections/${resolvedDetectionId}`, {
         signal: detectionController.signal,
       });
+
+      // Check if request was aborted during fetch
+      if (detectionController.signal.aborted) return;
+
       if (response.ok) {
-        detection = (await response.json()) as Detection;
+        const data = (await response.json()) as Detection;
+        // Check again after await - signal may have been aborted during JSON parsing
+        if (detectionController.signal.aborted) return;
+        detection = data;
       } else {
         let errorMessage: string;
         switch (response.status) {
           case 404:
-            errorMessage = 'Detection not found. It may have been deleted or the ID is incorrect.';
+            errorMessage = t('detections.errors.notFound');
             break;
           case 403:
-            errorMessage = "You don't have permission to view this detection.";
+            errorMessage = t('detections.errors.noPermission');
             break;
           case 401:
-            errorMessage = 'Please log in to view this detection.';
+            errorMessage = t('detections.errors.loginRequired');
             break;
           case 500:
           case 502:
           case 503:
-            errorMessage =
-              'Server error. Please try again later or contact support if the problem persists.';
+            errorMessage = t('detections.errors.serverError');
             break;
           default:
-            errorMessage = `Failed to load detection (Error ${response.status}). Please try refreshing the page.`;
+            errorMessage = t('detections.errors.loadFailed', { status: response.status });
         }
         throw new Error(errorMessage);
       }
@@ -181,7 +217,8 @@
         // Request was aborted, don't update state
         return;
       }
-      detectionError = error instanceof Error ? error.message : 'Failed to load detection';
+      detectionError =
+        error instanceof Error ? error.message : t('detections.errors.loadFailed', { status: '' });
       logger.error('Error fetching detection:', error);
     } finally {
       isLoadingDetection = false;
@@ -201,8 +238,13 @@
         `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`,
         { signal: speciesController.signal }
       );
+      // Check if request was aborted during fetch
+      if (speciesController.signal.aborted) return;
       if (response.ok) {
-        speciesInfo = await response.json();
+        const data = await response.json();
+        // Check again after await
+        if (speciesController.signal.aborted) return;
+        speciesInfo = data;
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -229,8 +271,13 @@
         `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`,
         { signal: taxonomyController.signal }
       );
+      // Check if request was aborted during fetch
+      if (taxonomyController.signal.aborted) return;
       if (response.ok) {
-        taxonomyInfo = await response.json();
+        const data = await response.json();
+        // Check again after await
+        if (taxonomyController.signal.aborted) return;
+        taxonomyInfo = data;
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -263,8 +310,30 @@
     // Switch back to overview tab after successful save
     activeTab = 'overview';
     // Refetch detection data to show updated status
-    if (detectionId) {
+    if (resolvedDetectionId) {
       fetchDetection();
+    }
+  }
+
+  // Keyboard navigation handler for tab buttons
+  function handleTabKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      return;
+    }
+
+    const tabs: TabType[] = ['overview', 'taxonomy', 'history', 'notes'];
+    if (canReview) tabs.push('review');
+
+    const currentIndex = tabs.indexOf(activeTab);
+    if (currentIndex === -1) return;
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      activeTab = tabs[(currentIndex + 1) % tabs.length];
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      activeTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length];
     }
   }
 
@@ -272,17 +341,24 @@
   $effect(() => {
     // Focus the active tab panel when tab changes for keyboard users
     const activePanel = document.getElementById(`tab-panel-${activeTab}`);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     if (activePanel && document.activeElement?.getAttribute('role') === 'tab') {
       // Small delay to ensure the panel is rendered
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         activePanel.focus();
-      }, 50);
+      }, TAB_FOCUS_DELAY_MS);
     }
+
+    // Cleanup: clear timeout when effect re-runs or component unmounts
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   });
 
   // URL state management - update URL when tab changes
   $effect(() => {
-    if (typeof window !== 'undefined' && detectionId) {
+    if (typeof window !== 'undefined' && resolvedDetectionId) {
       const url = new URL(window.location.href);
 
       // Update or remove tab parameter based on active tab
@@ -513,11 +589,11 @@
       >
         <div class="flex justify-between">
           <span class="text-base-content opacity-60">{t('detections.metadata.source')}:</span>
-          <span>{detection.source ?? 'Unknown'}</span>
+          <span>{detection.source ?? t('common.values.unknown')}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-base-content opacity-60">{t('detections.metadata.duration')}:</span>
-          <span>{parseFloat(detection.endTime) - parseFloat(detection.beginTime)}s</span>
+          <span>{calculateDuration(detection.endTime, detection.beginTime)}</span>
         </div>
         {#if detection.verified !== 'unverified'}
           <div class="flex justify-between">
@@ -542,14 +618,15 @@
           <div class="flex items-center justify-between mb-2">
             <span class="text-lg font-medium capitalize">{speciesInfo.rarity.status}</span>
             <span class="text-sm text-base-content opacity-60">
-              Score: {(speciesInfo.rarity.score * 100).toFixed(1)}%
+              {t('species.rarity.score')}: {(speciesInfo.rarity.score * 100).toFixed(1)}%
             </span>
           </div>
           {#if speciesInfo.rarity.location_based}
             <p class="text-sm text-base-content opacity-60">
-              Based on location: {speciesInfo.rarity.latitude.toFixed(2)}, {speciesInfo.rarity.longitude.toFixed(
-                2
-              )}
+              {t('species.rarity.basedOnLocation', {
+                latitude: speciesInfo.rarity.latitude.toFixed(2),
+                longitude: speciesInfo.rarity.longitude.toFixed(2),
+              })}
             </p>
           {/if}
         </div>
@@ -821,30 +898,7 @@
             aria-controls="tab-panel-overview"
             tabindex={activeTab === 'overview' ? 0 : -1}
             onclick={() => (activeTab = 'overview')}
-            onkeydown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                activeTab = 'overview';
-              } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                // Move to next tab
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const nextIndex = (currentIndex + 1) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[nextIndex] as typeof activeTab;
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                // Move to previous tab
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[prevIndex] as typeof activeTab;
-              }
-            }}
+            onkeydown={handleTabKeydown}
           >
             {t('detections.tabs.overview')}
           </button>
@@ -857,28 +911,7 @@
             aria-controls="tab-panel-taxonomy"
             tabindex={activeTab === 'taxonomy' ? 0 : -1}
             onclick={() => (activeTab = 'taxonomy')}
-            onkeydown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                activeTab = 'taxonomy';
-              } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const nextIndex = (currentIndex + 1) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[nextIndex] as typeof activeTab;
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[prevIndex] as typeof activeTab;
-              }
-            }}
+            onkeydown={handleTabKeydown}
           >
             {t('detections.tabs.taxonomy')}
           </button>
@@ -891,28 +924,7 @@
             aria-controls="tab-panel-history"
             tabindex={activeTab === 'history' ? 0 : -1}
             onclick={() => (activeTab = 'history')}
-            onkeydown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                activeTab = 'history';
-              } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const nextIndex = (currentIndex + 1) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[nextIndex] as typeof activeTab;
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[prevIndex] as typeof activeTab;
-              }
-            }}
+            onkeydown={handleTabKeydown}
           >
             {t('detections.tabs.history')}
           </button>
@@ -925,28 +937,7 @@
             aria-controls="tab-panel-notes"
             tabindex={activeTab === 'notes' ? 0 : -1}
             onclick={() => (activeTab = 'notes')}
-            onkeydown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                activeTab = 'notes';
-              } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const nextIndex = (currentIndex + 1) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[nextIndex] as typeof activeTab;
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const tabs = ['overview', 'taxonomy', 'history', 'notes'];
-                if (canReview) tabs.push('review');
-                const currentIndex = tabs.indexOf(activeTab);
-                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                activeTab = tabs[prevIndex] as typeof activeTab;
-              }
-            }}
+            onkeydown={handleTabKeydown}
           >
             {t('detections.tabs.notes')}
           </button>
@@ -960,26 +951,7 @@
               aria-controls="tab-panel-review"
               tabindex={activeTab === 'review' ? 0 : -1}
               onclick={() => (activeTab = 'review')}
-              onkeydown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  activeTab = 'review';
-                } else if (e.key === 'ArrowRight') {
-                  e.preventDefault();
-                  const tabs = ['overview', 'taxonomy', 'history', 'notes', 'review'];
-                  const currentIndex = tabs.indexOf(activeTab);
-                  const nextIndex = (currentIndex + 1) % tabs.length;
-                  // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                  activeTab = tabs[nextIndex] as typeof activeTab;
-                } else if (e.key === 'ArrowLeft') {
-                  e.preventDefault();
-                  const tabs = ['overview', 'taxonomy', 'history', 'notes', 'review'];
-                  const currentIndex = tabs.indexOf(activeTab);
-                  const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                  // eslint-disable-next-line security/detect-object-injection -- Safe: hardcoded array with calculated index
-                  activeTab = tabs[prevIndex] as typeof activeTab;
-                }
-              }}
+              onkeydown={handleTabKeydown}
             >
               {t('common.actions.review')}
             </button>

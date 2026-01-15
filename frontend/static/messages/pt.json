@@ -148,7 +148,8 @@
     },
     "values": {
       "yes": "Sim",
-      "no": "Não"
+      "no": "Não",
+      "unknown": "Desconhecido"
     },
     "modal": {
       "confirmAction": "Confirmar ação",
@@ -542,6 +543,14 @@
   },
   "detections": {
     "title": "Detecções",
+    "errors": {
+      "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",
+      "noPermission": "Você não tem permissão para visualizar esta detecção.",
+      "loginRequired": "Faça login para visualizar esta detecção.",
+      "serverError": "Erro no servidor. Tente novamente mais tarde ou entre em contato com o suporte se o problema persistir.",
+      "loadFailed": "Falha ao carregar detecção (Erro {status}). Atualize a página.",
+      "noIdProvided": "ID da detecção não fornecido."
+    },
     "titles": {
       "hourly": "Resultados por hora às {hour}:00 em {date}",
       "hourlyRange": "Resultados por hora de {startHour}:00 a {endHour}:00 em {date}",
@@ -649,7 +658,9 @@
   },
   "species": {
     "rarity": {
-      "title": "Raridade da espécie"
+      "title": "Raridade da espécie",
+      "score": "Pontuação",
+      "basedOnLocation": "Baseado na localização: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Classificação taxonômica",

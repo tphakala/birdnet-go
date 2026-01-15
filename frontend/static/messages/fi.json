@@ -138,7 +138,8 @@
     },
     "values": {
       "yes": "Kyllä",
-      "no": "Ei"
+      "no": "Ei",
+      "unknown": "Tuntematon"
     },
     "modal": {
       "confirmAction": "Vahvista toiminto",
@@ -572,6 +573,14 @@
     "pagination": {
       "showing": "Näytetään {from}-{to} / {total} tuloksesta"
     },
+    "errors": {
+      "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
+      "noPermission": "Sinulla ei ole oikeutta tarkastella tätä havaintoa.",
+      "loginRequired": "Kirjaudu sisään tarkastellaksesi tätä havaintoa.",
+      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen tai ota yhteyttä tukeen, jos ongelma jatkuu.",
+      "loadFailed": "Havainnon lataaminen epäonnistui (Virhe {status}). Päivitä sivu.",
+      "noIdProvided": "Havainnon tunnistetta ei annettu."
+    },
     "weather": {
       "title": "Weather Information",
       "noData": "No weather data",
@@ -649,7 +658,9 @@
   },
   "species": {
     "rarity": {
-      "title": "Lajin harvinaisuus"
+      "title": "Lajin harvinaisuus",
+      "score": "Pisteet",
+      "basedOnLocation": "Sijainnin perusteella: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",

@@ -138,7 +138,8 @@
     },
     "values": {
       "yes": "Ja",
-      "no": "Nee"
+      "no": "Nee",
+      "unknown": "Onbekend"
     },
     "modal": {
       "confirmAction": "Aktie bevestigen",
@@ -645,11 +646,21 @@
       "loading": "Herkenningsdetails laden...",
       "loaded": "Herkenningsdetails geladen voor {species}",
       "error": "Fout bij het laden van herkenning: {error}"
+    },
+    "errors": {
+      "notFound": "Detectie niet gevonden. Deze is mogelijk verwijderd of de ID is onjuist.",
+      "noPermission": "U heeft geen toestemming om deze detectie te bekijken.",
+      "loginRequired": "Log in om deze detectie te bekijken.",
+      "serverError": "Serverfout. Probeer het later opnieuw of neem contact op met de ondersteuning als het probleem aanhoudt.",
+      "loadFailed": "Kon detectie niet laden (Fout {status}). Ververs de pagina.",
+      "noIdProvided": "Geen detectie-ID opgegeven."
     }
   },
   "species": {
     "rarity": {
-      "title": "Soort zeldzaamheid"
+      "title": "Soort zeldzaamheid",
+      "score": "Score",
+      "basedOnLocation": "Gebaseerd op locatie: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taxonomische klassificatie",
