@@ -343,7 +343,9 @@ func (c *Controller) processNotificationEvent(ctx echo.Context, clientID string,
 
 // sendToastEvent sends a toast event via SSE
 func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
-	toastEvent := c.createToastEventData(notif)
+	// Clone notification to prevent concurrent access issues during JSON marshaling
+	safeNotif := notif.Clone()
+	toastEvent := c.createToastEventData(safeNotif)
 
 	if err := c.sendSSEMessage(ctx, "toast", toastEvent); err != nil {
 		c.logNotificationError("failed to send toast SSE", err, clientID)
@@ -358,8 +360,11 @@ func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *no
 
 // sendNotificationEvent sends a notification event via SSE
 func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+	// Clone notification to prevent concurrent access issues during JSON marshaling
+	safeNotif := notif.Clone()
+
 	event := SSENotificationData{
-		Notification: notif,
+		Notification: safeNotif,
 		EventType:    "notification",
 	}
 

@@ -315,3 +315,50 @@ func TestCloneNilNotification(t *testing.T) {
 	clone := nilNotif.Clone()
 	assert.Nil(t, clone, "Clone of nil should return nil")
 }
+
+// TestCloneDeepCopiesNestedMetadata verifies that Clone() creates a true deep copy
+// of nested structures in metadata, preventing the concurrent access issues from #1409
+func TestCloneDeepCopiesNestedMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Create notification with nested metadata (simulating stream status notification)
+	original := NewNotification(TypeInfo, PriorityMedium, "Stream Status", "RTSP stream disconnected")
+	original.WithMetadata("streamInfo", map[string]any{
+		"source": "rtsp://camera.local",
+		"status": "disconnected",
+		"stats": map[string]any{
+			"bytesReceived": 12345,
+			"errors":        []any{"timeout", "connection reset"},
+		},
+	})
+
+	clone := original.Clone()
+
+	// Verify nested map was copied
+	originalStreamInfo := original.Metadata["streamInfo"].(map[string]any)
+	cloneStreamInfo := clone.Metadata["streamInfo"].(map[string]any)
+
+	// Modify the nested map in the clone
+	cloneStreamInfo["status"] = "reconnecting"
+
+	// With shallow copy, this would fail - the original would be modified too
+	assert.Equal(t, "disconnected", originalStreamInfo["status"],
+		"Modifying nested metadata in clone should not affect original (deep copy required)")
+
+	// Modify deeply nested structure
+	cloneStats := cloneStreamInfo["stats"].(map[string]any)
+	cloneStats["bytesReceived"] = 99999
+
+	originalStats := originalStreamInfo["stats"].(map[string]any)
+	// Original still has the int type (not cloned), verify it wasn't modified
+	assert.Equal(t, 12345, originalStats["bytesReceived"],
+		"Modifying deeply nested metadata in clone should not affect original")
+
+	// Verify nested slices have independent backing arrays
+	cloneErrors := cloneStats["errors"].([]any)
+	cloneErrors[0] = "modified error"
+
+	originalErrors := originalStats["errors"].([]any)
+	assert.Equal(t, "timeout", originalErrors[0],
+		"Modifying nested slice in clone should not affect original")
+}
