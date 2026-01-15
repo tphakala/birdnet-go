@@ -73,6 +73,7 @@ describe('i18n store - race condition handling', () => {
       const getNestedValue = (obj: Record<string, unknown>, path: string): unknown => {
         return path.split('.').reduce<unknown>((current, key) => {
           if (current && typeof current === 'object' && key in current) {
+            // eslint-disable-next-line security/detect-object-injection -- key is from controlled path.split()
             return (current as Record<string, unknown>)[key];
           }
           return undefined;

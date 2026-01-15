@@ -88,7 +88,6 @@
 .sp-species-common-name {
   font-weight: var(--sp-common-font-weight);
   line-height: var(--sp-common-line-height);
-  word-wrap: break-word;
   overflow-wrap: break-word;
   hyphens: auto;
   cursor: pointer;
@@ -105,7 +104,6 @@
   line-height: var(--sp-common-line-height);
   font-style: var(--sp-scientific-style);
   color: var(--sp-scientific-color, oklch(var(--bc) / 0.4));
-  word-wrap: break-word;
   overflow-wrap: break-word;
   hyphens: auto;
 }
