@@ -5,7 +5,7 @@ package notification
 
 import (
 	"fmt"
-	"maps"
+	"reflect"
 	"slices"
 	"sort"
 	"sync"
@@ -199,46 +199,58 @@ func deepCopyMetadata(src map[string]any) map[string]any {
 	return deepCopyValue(src).(map[string]any)
 }
 
-// deepCopyValue recursively deep copies a value, handling maps, slices, and primitives.
+// deepCopyValue recursively deep copies a value using reflection to handle any
+// map or slice type generically. This ensures all nested collections are properly
+// deep-copied, preventing concurrent access issues regardless of the specific type.
 // Pointer types and custom structs are copied by reference (not dereferenced).
 func deepCopyValue(v any) any {
 	if v == nil {
 		return nil
 	}
 
-	switch val := v.(type) {
-	case map[string]any:
-		result := make(map[string]any, len(val))
-		for k, v := range val {
-			result[k] = deepCopyValue(v)
+	original := reflect.ValueOf(v)
+
+	// We only need to handle maps and slices, as they are reference types
+	// that can cause concurrent access issues. Primitives are copied by value,
+	// and pointers/structs typically don't need deep copying for our SSE use case.
+	switch original.Kind() {
+	case reflect.Map:
+		// Create a new map of the same type
+		newMap := reflect.MakeMap(original.Type())
+		iter := original.MapRange()
+		for iter.Next() {
+			// Recursively copy the value
+			copiedValue := deepCopyValue(iter.Value().Interface())
+
+			// If copiedValue is nil, we need a zero value of the correct type
+			if copiedValue == nil {
+				newMap.SetMapIndex(iter.Key(), reflect.Zero(iter.Value().Type()))
+			} else {
+				newMap.SetMapIndex(iter.Key(), reflect.ValueOf(copiedValue))
+			}
 		}
-		return result
-	case map[string]string:
-		return maps.Clone(val)
-	case map[string]int:
-		return maps.Clone(val)
-	case []any:
-		result := make([]any, len(val))
-		for i, v := range val {
-			result[i] = deepCopyValue(v)
+		return newMap.Interface()
+
+	case reflect.Slice:
+		// Create a new slice of the same type, length, and capacity
+		newSlice := reflect.MakeSlice(original.Type(), original.Len(), original.Cap())
+		for i := 0; i < original.Len(); i++ {
+			elem := original.Index(i)
+			// Recursively copy the element
+			copiedElem := deepCopyValue(elem.Interface())
+
+			if copiedElem == nil {
+				newSlice.Index(i).Set(reflect.Zero(elem.Type()))
+			} else {
+				newSlice.Index(i).Set(reflect.ValueOf(copiedElem))
+			}
 		}
-		return result
-	case []string:
-		return slices.Clone(val)
-	case []int:
-		return slices.Clone(val)
-	case []int64:
-		return slices.Clone(val)
-	case []float64:
-		return slices.Clone(val)
-	case []bool:
-		return slices.Clone(val)
-	case []byte:
-		return slices.Clone(val)
+		return newSlice.Interface()
+
 	default:
-		// Primitive types (string, int, float64, bool, etc.) and pointers/structs
-		// are returned as-is - primitives are value types, and pointers/structs
-		// typically don't need deep copying for our SSE serialization use case
+		// For primitive types, pointers, structs, etc., return the value as-is.
+		// Primitives are value types, and pointers/structs typically don't need
+		// deep copying for our SSE serialization use case.
 		return v
 	}
 }

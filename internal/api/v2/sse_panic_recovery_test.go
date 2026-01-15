@@ -83,4 +83,28 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 		assert.Contains(t, body, "event: notification")
 		assert.Contains(t, body, "data:")
 	})
+
+	t.Run("value that panics during marshal is recovered", func(t *testing.T) {
+		// Reset recorder for fresh response
+		rec = httptest.NewRecorder()
+		ctx = e.NewContext(req, rec)
+
+		// Use a custom type that panics during JSON marshaling
+		// to verify the recover() block in safeMarshalJSON works correctly.
+		badData := &panicMarshaler{}
+
+		err := c.sendSSEMessage(ctx, "test_panic", badData)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "JSON marshal panic")
+		assert.Contains(t, err.Error(), "intentional panic for testing")
+	})
+}
+
+// panicMarshaler is a helper type that panics during JSON marshaling.
+// Used to test the recover() block in safeMarshalJSON.
+type panicMarshaler struct{}
+
+// MarshalJSON implements json.Marshaler and panics when called.
+func (p *panicMarshaler) MarshalJSON() ([]byte, error) {
+	panic("intentional panic for testing")
 }
