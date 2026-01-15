@@ -105,13 +105,19 @@ func TestNotificationTiming_CrossMidnight(t *testing.T) {
 		"Should have been seen before (Dec 15)")
 
 	// Verify what would happen with processing time (the bug scenario)
-	// After year reset on Jan 1, yearly tracking would consider it potentially new
+	// After year reset on Jan 1, yearly tracking would consider it "new for this year"
 	statusWithProcessingTime := tracker.GetSpeciesStatus(testSpecies, processingTime)
-	t.Logf("Status with processing time (Jan 1 00:05): IsNew=%v, DaysSinceFirst=%d",
-		statusWithProcessingTime.IsNew, statusWithProcessingTime.DaysSinceFirst)
+	t.Logf("Status with processing time (Jan 1 00:05): IsNew=%v, DaysSinceFirst=%d, IsNewThisYear=%v",
+		statusWithProcessingTime.IsNew, statusWithProcessingTime.DaysSinceFirst, statusWithProcessingTime.IsNewThisYear)
 
-	// Note: The difference in behavior depends on the yearly reset logic
-	// The key point is that we should be using detectionTime, not processingTime
+	// With processing time (Jan 1), the species would be incorrectly marked as "first of year"
+	// because the yearly reset happened on Jan 1 and this is the first check in 2026.
+	// This demonstrates why using detection time (BeginTime) is important.
+	assert.True(t, statusWithProcessingTime.IsNewThisYear,
+		"Using processing time (Jan 1) should incorrectly mark species as new for the year")
+
+	// The key point: using detection time (Dec 31) gives correct behavior,
+	// while processing time (Jan 1) gives incorrect behavior
 }
 
 // TestNotificationTiming_BeginTimeUsed validates that DatabaseAction.Execute
@@ -185,8 +191,8 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 	status := tracker.GetSpeciesStatus("Parus major", beginTime)
 
 	// The species should have been recorded as first seen at BeginTime
-	assert.True(t, status.IsNew || status.DaysSinceFirst == 0,
-		"Species should be marked as new or first seen today based on BeginTime")
+	assert.True(t, status.IsNew, "Species should be marked as new based on BeginTime")
+	assert.Equal(t, 0, status.DaysSinceFirst, "DaysSinceFirst should be 0 for a new detection")
 
 	t.Logf("Species status: IsNew=%v, DaysSinceFirst=%d, IsNewThisYear=%v",
 		status.IsNew, status.DaysSinceFirst, status.IsNewThisYear)
