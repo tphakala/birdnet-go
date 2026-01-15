@@ -2,6 +2,7 @@
   "common": {
     "loading": "Loading...",
     "error": "Error",
+    "unknown": "Unknown",
     "retry": "Retry",
     "retrying": "Retrying",
     "save": "Save",

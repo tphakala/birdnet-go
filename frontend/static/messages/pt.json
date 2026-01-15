@@ -12,6 +12,7 @@
   "common": {
     "loading": "Carregando...",
     "error": "Erro",
+    "unknown": "Desconhecido",
     "retry": "Tentar novamente",
     "retrying": "Tentando novamente",
     "save": "Salvar",

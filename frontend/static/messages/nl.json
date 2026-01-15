@@ -2,6 +2,7 @@
   "common": {
     "loading": "Inlezen ...",
     "error": "Fout",
+    "unknown": "Onbekend",
     "retry": "Opnieuw proberen",
     "retrying": "Opnieuw aan het proberen",
     "save": "Bewaren",

@@ -2,6 +2,7 @@
   "common": {
     "loading": "Ładowanie...",
     "error": "Błąd",
+    "unknown": "Nieznany",
     "retry": "Ponów próbę",
     "retrying": "Ponawianie próby",
     "save": "Zapisz",

@@ -2,6 +2,7 @@
   "common": {
     "loading": "Chargement...",
     "error": "Erreur",
+    "unknown": "Inconnu",
     "retry": "Réessayer",
     "retrying": "Nouvelle tentative",
     "save": "Enregistrer",

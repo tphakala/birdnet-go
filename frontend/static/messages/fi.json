@@ -2,6 +2,7 @@
   "common": {
     "loading": "Ladataan...",
     "error": "Virhe",
+    "unknown": "Tuntematon",
     "retry": "Yritä uudelleen",
     "retrying": "Yritetään uudelleen",
     "save": "Tallenna",
