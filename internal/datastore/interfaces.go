@@ -811,6 +811,14 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 // This is primarily used for testing timezone behavior. In production, use GetHourlyWeather
 // which automatically uses the system's local timezone.
 func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location) ([]HourlyWeather, error) {
+	if loc == nil {
+		return nil, errors.Newf("location cannot be nil for GetHourlyWeatherInLocation").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_hourly_weather_in_location").
+			Build()
+	}
+
 	var hourlyWeather []HourlyWeather
 
 	// Parse the requested date to get the day boundaries in the specified timezone
