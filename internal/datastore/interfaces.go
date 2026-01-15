@@ -827,7 +827,7 @@ func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location)
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryValidation).
-			Context("operation", "get_hourly_weather").
+			Context("operation", "get_hourly_weather_in_location").
 			Context("date", date).
 			Build()
 	}
