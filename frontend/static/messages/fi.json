@@ -149,7 +149,8 @@
       "status": {
         "verifiedCorrect": "Todennettu oikeaksi",
         "falsePositive": "Virheellinen havainto",
-        "notReviewed": "Ei tarkistettu"
+        "notReviewed": "Ei tarkistettu",
+        "locked": "Lukittu"
       },
       "form": {
         "correctDetection": "Oikea havainto",

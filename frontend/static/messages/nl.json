@@ -149,7 +149,8 @@
       "status": {
         "verifiedCorrect": "Goedgekeurd",
         "falsePositive": "Afgekeurd",
-        "notReviewed": "Niet beoordeeld"
+        "notReviewed": "Niet beoordeeld",
+        "locked": "Vergrendeld"
       },
       "form": {
         "correctDetection": "Herkenning goedgekeurd",
