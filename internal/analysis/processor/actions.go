@@ -1360,7 +1360,9 @@ func (a *SSEAction) waitForDatabaseID() error {
 	// triggering user notifications. This is a transient timing issue, not a user-actionable
 	// problem. The structured error system converts errors to notifications, which we want
 	// to avoid for this non-critical timeout.
-	return fmt.Errorf("database ID not found for %s after %v", a.Note.CommonName, SSEDatabaseIDTimeout)
+	// Note: Species name is NOT included in error message to prevent log injection.
+	// The species is already captured in structured log fields by the caller.
+	return fmt.Errorf("database ID not found after %v", SSEDatabaseIDTimeout)
 }
 
 // findNoteInDatabase searches for the note in database by unique characteristics
@@ -1390,16 +1392,17 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 			Build()
 	}
 
-	// Filter results to find the exact match based on date, time, and source
+	// Filter results to find the exact match based on BeginTime and source
+	// Using BeginTime (time.Time) is more robust than Date+Time strings as it's the
+	// actual detection timestamp and avoids string formatting/precision issues
 	for i := range notes {
 		note := &notes[i]
 		// Check if this note matches our expected characteristics
 		// Include SourceNode to prevent matching wrong detection in high-activity periods
 		// Only compare SourceNode if both have values (handles legacy data)
 		sourceMatches := a.Note.SourceNode == "" || note.SourceNode == "" || note.SourceNode == a.Note.SourceNode
-		if note.Date == a.Note.Date &&
-			note.ScientificName == a.Note.ScientificName &&
-			note.Time == a.Note.Time &&
+		if note.ScientificName == a.Note.ScientificName &&
+			note.BeginTime.Equal(a.Note.BeginTime) &&
 			sourceMatches {
 			return note, nil
 		}
@@ -1410,7 +1413,6 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 		Category(errors.CategoryNotFound).
 		Context("operation", "find_note_in_database").
 		Context("species", a.Note.ScientificName).
-		Context("date", a.Note.Date).
-		Context("time", a.Note.Time).
+		Context("begin_time", a.Note.BeginTime.Format("2006-01-02 15:04:05.000")).
 		Build()
 }
