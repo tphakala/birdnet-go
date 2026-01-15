@@ -21,10 +21,11 @@ const CRITICAL_FALLBACKS: Record<string, string> = {
   'common.error': 'Error',
   'common.retry': 'Retry',
   'common.retrying': 'Retrying',
-  'error.server.title': 'Server Error',
-  'error.server.description': 'Unable to connect to the server. Please try again.',
+  'error.server.title': 'Server Connection Error',
+  'error.server.description':
+    'Unable to connect to the server. Please check your connection and try again.',
   'error.generic.componentLoadError': 'Component Load Error',
-  'error.generic.failedToLoadComponent': 'Failed to load the requested component.',
+  'error.generic.failedToLoadComponent': 'Failed to load the requested component',
 };
 
 // Initialize locale from localStorage, browser preferences, or use default

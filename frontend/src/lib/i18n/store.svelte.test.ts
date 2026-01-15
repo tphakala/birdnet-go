@@ -12,6 +12,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import {
   t,
   getCriticalFallbacks,
@@ -21,6 +24,10 @@ import {
   isLoading,
   setLocale,
 } from './store.svelte';
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 describe('i18n store - race condition handling', () => {
   describe('critical fallbacks', () => {
@@ -55,6 +62,32 @@ describe('i18n store - race condition handling', () => {
 
       // Original should not be modified
       expect(fallbacks2['common.loading']).toBe('Loading...');
+    });
+
+    it('should match values in en.json to prevent drift', () => {
+      // Read the actual en.json file to verify CRITICAL_FALLBACKS stays in sync
+      const enJsonPath = resolve(__dirname, '../../../static/messages/en.json');
+      const enJson = JSON.parse(readFileSync(enJsonPath, 'utf8')) as Record<string, unknown>;
+
+      // Helper to get nested value from en.json using dot notation
+      const getNestedValue = (obj: Record<string, unknown>, path: string): unknown => {
+        return path.split('.').reduce<unknown>((current, key) => {
+          if (current && typeof current === 'object' && key in current) {
+            return (current as Record<string, unknown>)[key];
+          }
+          return undefined;
+        }, obj);
+      };
+
+      const fallbacks = getCriticalFallbacks();
+
+      // Verify each critical fallback matches the corresponding en.json value
+      for (const [key, fallbackValue] of Object.entries(fallbacks)) {
+        const enJsonValue = getNestedValue(enJson, key);
+        expect(enJsonValue, `CRITICAL_FALLBACKS['${key}'] should match en.json`).toBe(
+          fallbackValue
+        );
+      }
     });
   });
 
