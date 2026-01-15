@@ -27,8 +27,25 @@
   - false_positive: Red badge for verified false positives
   - unverified: Gray badge for unverified detections
 -->
+<script module lang="ts">
+  // Module-level constants (shared across all instances)
+  const sizeClasses: Record<string, string> = {
+    sm: 'status-badge-sm',
+    md: 'status-badge-md',
+    lg: 'status-badge-lg',
+  };
+
+  const statusBadgeClassMap: Record<string, string> = {
+    correct: 'status-badge correct',
+    false_positive: 'status-badge false-positive',
+  };
+
+  const DEFAULT_STATUS_BADGE_CLASS = 'status-badge unverified';
+</script>
+
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
   import { safeGet } from '$lib/utils/security';
 
@@ -43,30 +60,23 @@
 
   let { detection, className = '', size = 'md' }: Props = $props();
 
-  const sizeClasses: Record<Size, string> = {
-    sm: 'status-badge-sm',
-    md: 'status-badge-md',
-    lg: 'status-badge-lg',
-  };
-
-  const statusBadgeClassMap: Partial<Record<VerificationStatus, string>> = {
-    correct: 'status-badge correct',
-    false_positive: 'status-badge false',
-  };
-
-  const statusTextMap: Record<VerificationStatus, string> = {
-    correct: 'correct',
-    false_positive: 'false',
-    unverified: 'unverified',
-  };
+  // Derive size class once to avoid duplication
+  const sizeClass = $derived(safeGet(sizeClasses, size, ''));
 
   function getStatusBadgeClass(verified: VerificationStatus): string {
-    const baseClass = safeGet(statusBadgeClassMap, verified, 'status-badge unverified');
-    return `${baseClass} ${safeGet(sizeClasses, size, '')}`;
+    const baseClass = safeGet(statusBadgeClassMap, verified, DEFAULT_STATUS_BADGE_CLASS);
+    return cn(baseClass, sizeClass);
   }
 
   function getStatusText(verified: VerificationStatus): string {
-    return safeGet(statusTextMap, verified, 'unverified');
+    switch (verified) {
+      case 'correct':
+        return t('common.review.status.verifiedCorrect');
+      case 'false_positive':
+        return t('common.review.status.falsePositive');
+      default:
+        return t('common.review.status.notReviewed');
+    }
   }
 </script>
 
@@ -78,17 +88,24 @@
 
   <!-- Locked badge -->
   {#if detection.locked}
-    <div class="status-badge locked {safeGet(sizeClasses, size, '')}">locked</div>
+    <div class={cn('status-badge locked', sizeClass)}>
+      {t('common.review.status.locked')}
+    </div>
   {/if}
 
   <!-- Comments badge -->
   {#if detection.comments && detection.comments.length > 0}
-    <div class="status-badge comment {safeGet(sizeClasses, size, '')}">comment</div>
+    <div class={cn('status-badge comment', sizeClass)}>
+      {t('common.review.comment')}
+    </div>
   {/if}
 </div>
 
 <style>
   .status-badge {
+    /* Default badge color (unverified) */
+    --badge-color: var(--color-secondary);
+
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -98,6 +115,11 @@
     font-weight: 500;
     white-space: nowrap;
     border: 1px solid;
+
+    /* Apply badge color consistently */
+    color: var(--badge-color);
+    border-color: var(--badge-color);
+    background-color: color-mix(in srgb, var(--badge-color) 10%, transparent);
   }
 
   /* Size variants */
@@ -116,64 +138,20 @@
     font-size: 0.875rem; /* 14px - larger for emphasis */
   }
 
-  .status-badge.unverified {
-    color: #6b7280;
-    border-color: #6b7280;
-    background-color: #f3f4f6;
-  }
-
+  /* Status-specific badge colors */
   .status-badge.correct {
-    color: #059669;
-    border-color: #059669;
-    background-color: #ecfdf5;
+    --badge-color: var(--color-success);
   }
 
-  .status-badge.false {
-    color: #dc2626;
-    border-color: #dc2626;
-    background-color: #fef2f2;
+  .status-badge.false-positive {
+    --badge-color: var(--color-error);
   }
 
   .status-badge.locked {
-    color: #d97706;
-    border-color: #d97706;
-    background-color: #fffbeb;
+    --badge-color: var(--color-warning);
   }
 
   .status-badge.comment {
-    color: #2563eb;
-    border-color: #2563eb;
-    background-color: #eff6ff;
-  }
-
-  /* Dark theme status badges */
-  :global([data-theme='dark']) .status-badge.unverified {
-    color: #9ca3af;
-    border-color: #9ca3af;
-    background-color: rgb(156 163 175 / 0.1);
-  }
-
-  :global([data-theme='dark']) .status-badge.correct {
-    color: #34d399;
-    border-color: #34d399;
-    background-color: rgb(52 211 153 / 0.1);
-  }
-
-  :global([data-theme='dark']) .status-badge.false {
-    color: #f87171;
-    border-color: #f87171;
-    background-color: rgb(248 113 113 / 0.1);
-  }
-
-  :global([data-theme='dark']) .status-badge.locked {
-    color: #fbbf24;
-    border-color: #fbbf24;
-    background-color: rgb(251 191 36 / 0.1);
-  }
-
-  :global([data-theme='dark']) .status-badge.comment {
-    color: #60a5fa;
-    border-color: #60a5fa;
-    background-color: rgb(96 165 250 / 0.1);
+    --badge-color: var(--color-primary);
   }
 </style>
