@@ -107,10 +107,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			{Time: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC), Temperature: 15.0},
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		// Query for local date "2024-01-15" in Auckland timezone
 		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
@@ -142,10 +140,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			{Time: time.Date(2024, 1, 15, 11, 0, 0, 0, time.UTC), Temperature: 20.0},
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		// Query for local date "2024-01-15" in Auckland timezone
 		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
@@ -176,10 +172,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			{Time: time.Date(2024, 7, 15, 22, 0, 0, 0, time.UTC), Temperature: 12.0},
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		// Query for the local date in New York timezone
 		results, err := ds.GetHourlyWeatherInLocation("2024-07-15", newYork)
@@ -232,10 +226,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			{Time: baseDate.Add(1 * time.Hour).UTC(), Temperature: 10.0},  // 01:00 local
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err := ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		results, err := ds.GetHourlyWeather(localDateStr)
 		require.NoError(t, err)
@@ -272,10 +264,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			{Time: time.Date(2024, 3, 11, 4, 30, 0, 0, time.UTC), Temperature: 99.0},
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		results, err := ds.GetHourlyWeatherInLocation("2024-03-10", newYork)
 		require.NoError(t, err)
@@ -311,10 +301,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			{Time: time.Date(2024, 11, 4, 5, 30, 0, 0, time.UTC), Temperature: 99.0},
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		results, err := ds.GetHourlyWeatherInLocation("2024-11-03", newYork)
 		require.NoError(t, err)
@@ -395,10 +383,8 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 			{Time: time.Date(2024, 1, 1, 18, 0, 0, 0, time.UTC), Temperature: 2.0},
 		}
 
-		for i := range weatherRecords {
-			err := ds.DB.Create(&weatherRecords[i]).Error
-			require.NoError(t, err)
-		}
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		// Query for New Year's Day in New York timezone
 		results, err := ds.GetHourlyWeatherInLocation("2024-01-01", newYork)
@@ -425,14 +411,15 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 
 		// Insert many weather records for a single day
 		baseTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+		weatherRecords := make([]HourlyWeather, 100)
 		for i := range 100 {
-			weather := &HourlyWeather{
+			weatherRecords[i] = HourlyWeather{
 				Time:        baseTime.Add(time.Duration(i) * 15 * time.Minute),
 				Temperature: 15.0 + float64(i)*0.1,
 			}
-			err := ds.DB.Create(weather).Error
-			require.NoError(t, err)
 		}
+		err := ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
 
 		start := time.Now()
 		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", time.UTC)
@@ -488,18 +475,12 @@ func TestGetHourlyWeather_RegressionTests(t *testing.T) {
 
 		// Weather from late in UTC day
 		// For GMT+13, this appears on the next local day
-		earlyWeather := &HourlyWeather{
-			Time:        time.Date(2026, 1, 14, 20, 0, 0, 0, time.UTC), // 09:00 next day local
-			Temperature: 15.0,
-		}
-		laterWeather := &HourlyWeather{
-			Time:        time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC), // 23:00 same day local
-			Temperature: 18.0,
+		weatherRecords := []HourlyWeather{
+			{Time: time.Date(2026, 1, 14, 20, 0, 0, 0, time.UTC), Temperature: 15.0}, // 09:00 next day local
+			{Time: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC), Temperature: 18.0}, // 23:00 same day local
 		}
 
-		err = ds.DB.Create(earlyWeather).Error
-		require.NoError(t, err)
-		err = ds.DB.Create(laterWeather).Error
+		err = ds.DB.Create(&weatherRecords).Error
 		require.NoError(t, err)
 
 		// Both should be found for local date 2026-01-15 in Auckland timezone
