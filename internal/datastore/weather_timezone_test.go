@@ -55,8 +55,12 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("UTC weather crosses midnight boundary - timezone ahead of UTC", func(t *testing.T) {
-		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
+
+		// Load Pacific/Auckland timezone (GMT+13 during NZDT)
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err, "Failed to load Pacific/Auckland timezone")
 
 		// Simulate user in GMT+13 timezone
 		// Weather stored at 2024-01-14 20:30:00 UTC
@@ -68,21 +72,25 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			Humidity:    70,
 			WeatherIcon: "sunny",
 		}
-		err := ds.DB.Create(weather).Error
+		err = ds.DB.Create(weather).Error
 		require.NoError(t, err)
 
-		// Query for local date "2024-01-15"
-		// This should match the weather record because in local time it's on 2024-01-15
+		// Query for local date "2024-01-15" in Auckland timezone
+		// This should match the weather record because in Auckland time it's on 2024-01-15
 		// The fix converts the local date to UTC range: 2024-01-14 11:00:00 to 2024-01-15 11:00:00
-		results, err := ds.GetHourlyWeather("2024-01-15")
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
 		require.NoError(t, err)
-		assert.Len(t, results, 1, "Should find weather that falls within local date range")
+		require.Len(t, results, 1, "Should find weather that falls within local date range")
 		assert.InEpsilon(t, 18.5, results[0].Temperature, 0.0001)
 	})
 
 	t.Run("multiple weather records across local day", func(t *testing.T) {
-		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
+
+		// Load Pacific/Auckland timezone
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err, "Failed to load Pacific/Auckland timezone")
 
 		// Insert weather records throughout a local day in GMT+13
 		// Local day 2024-01-15 spans UTC: 2024-01-14 11:00:00 to 2024-01-15 11:00:00
@@ -104,8 +112,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Query for local date "2024-01-15"
-		results, err := ds.GetHourlyWeather("2024-01-15")
+		// Query for local date "2024-01-15" in Auckland timezone
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
 		require.NoError(t, err)
 		assert.Len(t, results, 5, "Should find all weather records within the local day")
 
@@ -115,8 +123,12 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("weather just outside local day boundary should not be included", func(t *testing.T) {
-		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
+
+		// Load Pacific/Auckland timezone
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err, "Failed to load Pacific/Auckland timezone")
 
 		// For GMT+13, local day 2024-01-15 spans UTC: 2024-01-14 11:00:00 to 2024-01-15 11:00:00
 		weatherRecords := []HourlyWeather{
@@ -135,8 +147,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Query for local date "2024-01-15"
-		results, err := ds.GetHourlyWeather("2024-01-15")
+		// Query for local date "2024-01-15" in Auckland timezone
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
 		require.NoError(t, err)
 		assert.Len(t, results, 2, "Should only include weather within the exact local day range")
 
@@ -149,16 +161,19 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		t.Parallel()
 		ds := setupWeatherTestDB(t)
 
-		// This test demonstrates behavior for timezones behind UTC
-		// Note: The exact number of results depends on the system's actual timezone
-		// Create a date in local time and add weather throughout that local day
-		baseDate := time.Date(2024, 7, 15, 0, 0, 0, 0, time.Local)
-		localDateStr := baseDate.Format("2006-01-02")
+		// Load America/New_York timezone (UTC-5 or UTC-4 depending on DST)
+		newYork, err := time.LoadLocation("America/New_York")
+		require.NoError(t, err, "Failed to load America/New_York timezone")
 
+		// For July 15, 2024, New York is UTC-4 (EDT)
+		// Local day 2024-07-15 spans UTC: 2024-07-15 04:00:00 to 2024-07-16 04:00:00
 		weatherRecords := []HourlyWeather{
-			{Time: baseDate.Add(2 * time.Hour).UTC(), Temperature: 10.0},
-			{Time: baseDate.Add(8 * time.Hour).UTC(), Temperature: 15.0},
-			{Time: baseDate.Add(18 * time.Hour).UTC(), Temperature: 12.0},
+			// 2024-07-15 02:00 local = 2024-07-15 06:00 UTC
+			{Time: time.Date(2024, 7, 15, 6, 0, 0, 0, time.UTC), Temperature: 10.0},
+			// 2024-07-15 08:00 local = 2024-07-15 12:00 UTC
+			{Time: time.Date(2024, 7, 15, 12, 0, 0, 0, time.UTC), Temperature: 15.0},
+			// 2024-07-15 18:00 local = 2024-07-15 22:00 UTC
+			{Time: time.Date(2024, 7, 15, 22, 0, 0, 0, time.UTC), Temperature: 12.0},
 		}
 
 		for i := range weatherRecords {
@@ -166,8 +181,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Query for the local date
-		results, err := ds.GetHourlyWeather(localDateStr)
+		// Query for the local date in New York timezone
+		results, err := ds.GetHourlyWeatherInLocation("2024-07-15", newYork)
 		require.NoError(t, err)
 		assert.Len(t, results, 3, "Should find all weather within the local day")
 	})
@@ -234,12 +249,15 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("daylight saving time boundary", func(t *testing.T) {
-		t.Setenv("TZ", "America/New_York") // Simulate DST-aware timezone to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
 
-		// Test around DST boundary (using a fixed date for consistency)
-		// Note: This test demonstrates the importance of timezone-aware queries
-		// In real systems, time.Local will handle DST transitions automatically
+		// Load America/New_York timezone to test DST handling
+		newYork, err := time.LoadLocation("America/New_York")
+		require.NoError(t, err, "Failed to load America/New_York timezone")
+
+		// Test around DST boundary (March 10, 2024 - spring forward in US)
+		// On this date, clocks jump from 2:00 AM to 3:00 AM local time
 		weatherRecords := []HourlyWeather{
 			{Time: time.Date(2024, 3, 10, 6, 0, 0, 0, time.UTC), Temperature: 8.0},
 			{Time: time.Date(2024, 3, 10, 12, 0, 0, 0, time.UTC), Temperature: 12.0},
@@ -251,7 +269,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		results, err := ds.GetHourlyWeather("2024-03-10")
+		results, err := ds.GetHourlyWeatherInLocation("2024-03-10", newYork)
 		require.NoError(t, err)
 		assert.NotEmpty(t, results, "Should handle DST boundary dates")
 	})
@@ -260,7 +278,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 // TestGetHourlyWeather_EdgeCases tests edge cases and error conditions
 func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 	t.Run("midnight UTC", func(t *testing.T) {
-		t.Setenv("TZ", "UTC") // Simulate UTC to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
 
 		// Weather at exactly midnight UTC
@@ -271,7 +289,8 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 		err := ds.DB.Create(weather).Error
 		require.NoError(t, err)
 
-		results, err := ds.GetHourlyWeather("2024-01-15")
+		// Query using UTC timezone to test midnight handling
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", time.UTC)
 		require.NoError(t, err)
 		assert.Len(t, results, 1, "Should handle midnight UTC correctly")
 	})
@@ -298,13 +317,20 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("year boundary", func(t *testing.T) {
-		t.Setenv("TZ", "America/New_York") // Simulate New York timezone to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
 
-		// New Year's Eve and New Year's Day
+		// Load America/New_York timezone
+		newYork, err := time.LoadLocation("America/New_York")
+		require.NoError(t, err, "Failed to load America/New_York timezone")
+
+		// New Year's Day in New York (EST = UTC-5)
+		// Local Jan 1 spans UTC: 2024-01-01 05:00:00 to 2024-01-02 05:00:00
 		weatherRecords := []HourlyWeather{
-			{Time: time.Date(2023, 12, 31, 23, 0, 0, 0, time.UTC), Temperature: 2.0},
-			{Time: time.Date(2024, 1, 1, 1, 0, 0, 0, time.UTC), Temperature: 1.0},
+			// 2024-01-01 06:00 UTC = 2024-01-01 01:00 local (New Year's Day)
+			{Time: time.Date(2024, 1, 1, 6, 0, 0, 0, time.UTC), Temperature: 1.0},
+			// 2024-01-01 18:00 UTC = 2024-01-01 13:00 local (New Year's Day)
+			{Time: time.Date(2024, 1, 1, 18, 0, 0, 0, time.UTC), Temperature: 2.0},
 		}
 
 		for i := range weatherRecords {
@@ -312,12 +338,12 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Query for New Year's Day
-		results, err := ds.GetHourlyWeather("2024-01-01")
+		// Query for New Year's Day in New York timezone
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-01", newYork)
 		require.NoError(t, err)
-		assert.NotEmpty(t, results, "Should handle year boundary")
+		assert.Len(t, results, 2, "Should find both weather records on New Year's Day")
 
-		// The exact count depends on timezone, but we should get at least the 01:00 record
+		// Verify we got the correct records
 		hasNewYearRecord := false
 		for _, r := range results {
 			if r.Temperature == 1.0 {
@@ -347,7 +373,7 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 		}
 
 		start := time.Now()
-		results, err := ds.GetHourlyWeather("2024-01-15")
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", time.UTC)
 		duration := time.Since(start)
 
 		require.NoError(t, err)
@@ -359,8 +385,12 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 // TestGetHourlyWeather_RegressionTests tests for the original timezone bug
 func TestGetHourlyWeather_RegressionTests(t *testing.T) {
 	t.Run("regression: morning detections show no weather (GMT+13)", func(t *testing.T) {
-		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
+
+		// Load Pacific/Auckland timezone
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err, "Failed to load Pacific/Auckland timezone")
 
 		// This reproduces the original bug scenario:
 		// User in GMT+13 timezone at 9:00 AM local on 2026-01-15
@@ -375,20 +405,24 @@ func TestGetHourlyWeather_RegressionTests(t *testing.T) {
 			Humidity:    70,
 			WeatherIcon: "partly-cloudy",
 		}
-		err := ds.DB.Create(weather).Error
+		err = ds.DB.Create(weather).Error
 		require.NoError(t, err)
 
-		// Query for local date "2026-01-15"
+		// Query for local date "2026-01-15" in Auckland timezone
 		// The fix ensures this weather record is found
-		results, err := ds.GetHourlyWeather("2026-01-15")
+		results, err := ds.GetHourlyWeatherInLocation("2026-01-15", auckland)
 		require.NoError(t, err)
-		assert.Len(t, results, 1, "REGRESSION: Should find weather for morning detections in GMT+13")
+		require.Len(t, results, 1, "REGRESSION: Should find weather for morning detections in GMT+13")
 		assert.Equal(t, "partly-cloudy", results[0].WeatherIcon)
 	})
 
 	t.Run("regression: weather appears after UTC catches up", func(t *testing.T) {
-		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
+		t.Parallel()
 		ds := setupWeatherTestDB(t)
+
+		// Load Pacific/Auckland timezone
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err, "Failed to load Pacific/Auckland timezone")
 
 		// Weather from late in UTC day
 		// For GMT+13, this appears on the next local day
@@ -401,13 +435,13 @@ func TestGetHourlyWeather_RegressionTests(t *testing.T) {
 			Temperature: 18.0,
 		}
 
-		err := ds.DB.Create(earlyWeather).Error
+		err = ds.DB.Create(earlyWeather).Error
 		require.NoError(t, err)
 		err = ds.DB.Create(laterWeather).Error
 		require.NoError(t, err)
 
-		// Both should be found for local date 2026-01-15
-		results, err := ds.GetHourlyWeather("2026-01-15")
+		// Both should be found for local date 2026-01-15 in Auckland timezone
+		results, err := ds.GetHourlyWeatherInLocation("2026-01-15", auckland)
 		require.NoError(t, err)
 		assert.Len(t, results, 2, "Should find both weather records that span the local day")
 	})

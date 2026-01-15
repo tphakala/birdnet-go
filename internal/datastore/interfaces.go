@@ -804,10 +804,17 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 // This function converts UTC timestamps to local time before matching dates,
 // ensuring weather data is retrieved correctly across timezone boundaries.
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
+	return ds.GetHourlyWeatherInLocation(date, time.Local)
+}
+
+// GetHourlyWeatherInLocation retrieves hourly weather data by date using a specific timezone.
+// This is primarily used for testing timezone behavior. In production, use GetHourlyWeather
+// which automatically uses the system's local timezone.
+func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location) ([]HourlyWeather, error) {
 	var hourlyWeather []HourlyWeather
 
-	// Parse the requested date to get the day boundaries in local time
-	localDate, err := time.ParseInLocation("2006-01-02", date, time.Local)
+	// Parse the requested date to get the day boundaries in the specified timezone
+	localDate, err := time.ParseInLocation("2006-01-02", date, loc)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -817,7 +824,7 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 			Build()
 	}
 
-	// Calculate the start and end of the day in local time
+	// Calculate the start and end of the day in the specified timezone
 	dayStart := localDate
 	dayEnd := localDate.Add(24 * time.Hour)
 
