@@ -79,7 +79,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.40.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.41.0/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -139,7 +139,7 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.7/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.9/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
@@ -194,7 +194,7 @@ Source: ISC
 
 ### github.com/k3a/html2text
 
-License: https://github.com/k3a/html2text/blob/v1.2.1/LICENSE
+License: https://github.com/k3a/html2text/blob/v1.3.0/LICENSE
 Source: MIT
 
 ### github.com/klauspost/cpuid/v2
@@ -209,7 +209,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.14.0/LICENSE
+License: https://github.com/labstack/echo/blob/v4.15.0/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -394,7 +394,7 @@ Source: MIT
 
 ### github.com/tphakala/go-tflite
 
-License: https://github.com/tphakala/go-tflite/blob/2dad4328ec9e/LICENSE
+License: https://github.com/tphakala/go-tflite/blob/v0.1.1/LICENSE
 Source: MIT
 
 ### github.com/tphakala/simd
@@ -454,12 +454,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.46.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.47.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.48.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.49.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -494,7 +494,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.259.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.260.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
@@ -531,3 +531,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
 Source: MIT
+
