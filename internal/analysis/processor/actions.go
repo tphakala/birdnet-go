@@ -1401,8 +1401,9 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 		// Include SourceNode to prevent matching wrong detection in high-activity periods
 		// Only compare SourceNode if both have values (handles legacy data)
 		sourceMatches := a.Note.SourceNode == "" || note.SourceNode == "" || note.SourceNode == a.Note.SourceNode
+		// Truncate to millisecond precision for comparison to handle potential database precision loss
 		if note.ScientificName == a.Note.ScientificName &&
-			note.BeginTime.Equal(a.Note.BeginTime) &&
+			note.BeginTime.Truncate(time.Millisecond).Equal(a.Note.BeginTime.Truncate(time.Millisecond)) &&
 			sourceMatches {
 			return note, nil
 		}
