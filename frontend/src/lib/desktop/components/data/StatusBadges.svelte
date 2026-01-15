@@ -59,10 +59,12 @@
   let { detection, className = '', size = 'md' }: Props = $props();
 
   // Derive size class once (type guarantees valid key)
+  // eslint-disable-next-line security/detect-object-injection -- size is typed as 'sm' | 'md' | 'lg'
   const sizeClass = $derived(sizeClasses[size]);
 
   function getStatusBadgeClass(verified: VerificationStatus): string {
     // Direct access with fallback since verified is typed
+    // eslint-disable-next-line security/detect-object-injection -- verified is typed VerificationStatus
     const baseClass = statusBadgeClassMap[verified] ?? DEFAULT_STATUS_BADGE_CLASS;
     return cn(baseClass, sizeClass);
   }
