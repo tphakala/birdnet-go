@@ -138,7 +138,8 @@
     },
     "values": {
       "yes": "Tak",
-      "no": "Nie"
+      "no": "Nie",
+      "unknown": "Nieznany"
     },
     "modal": {
       "confirmAction": "Potwierdź Akcję",
@@ -645,11 +646,21 @@
       "loading": "Ładowanie szczegółów detekcji...",
       "loaded": "Szczegóły detekcji załadowane dla {species}",
       "error": "Błąd ładowania detekcji: {error}"
+    },
+    "errors": {
+      "notFound": "Nie znaleziono detekcji. Mogła zostać usunięta lub identyfikator jest nieprawidłowy.",
+      "noPermission": "Nie masz uprawnień do wyświetlenia tej detekcji.",
+      "loginRequired": "Zaloguj się, aby wyświetlić tę detekcję.",
+      "serverError": "Błąd serwera. Spróbuj ponownie później lub skontaktuj się z pomocą techniczną, jeśli problem będzie się powtarzał.",
+      "loadFailed": "Nie udało się załadować detekcji (Błąd {status}). Odśwież stronę.",
+      "noIdProvided": "Nie podano identyfikatora detekcji."
     }
   },
   "species": {
     "rarity": {
-      "title": "Rzadkość Gatunku"
+      "title": "Rzadkość Gatunku",
+      "score": "Wynik",
+      "basedOnLocation": "Na podstawie lokalizacji: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Klasyfikacja Taksonomiczna",

@@ -138,7 +138,8 @@
     },
     "values": {
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "unknown": "Unknown"
     },
     "modal": {
       "confirmAction": "Confirm Action",
@@ -645,11 +646,21 @@
       "loading": "Loading detection details...",
       "loaded": "Detection details loaded for {species}",
       "error": "Error loading detection: {error}"
+    },
+    "errors": {
+      "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
+      "noPermission": "You don't have permission to view this detection.",
+      "loginRequired": "Please log in to view this detection.",
+      "serverError": "Server error. Please try again later or contact support if the problem persists.",
+      "loadFailed": "Failed to load detection (Error {status}). Please try refreshing the page.",
+      "noIdProvided": "No detection ID provided."
     }
   },
   "species": {
     "rarity": {
-      "title": "Species Rarity"
+      "title": "Species Rarity",
+      "score": "Score",
+      "basedOnLocation": "Based on location: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taxonomic Classification",

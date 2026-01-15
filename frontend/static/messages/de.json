@@ -138,7 +138,8 @@
     },
     "values": {
       "yes": "Ja",
-      "no": "Nein"
+      "no": "Nein",
+      "unknown": "Unbekannt"
     },
     "modal": {
       "confirmAction": "Aktion bestätigen",
@@ -645,11 +646,21 @@
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
       "error": "Fehler beim Laden der Erkennung: {error}"
+    },
+    "errors": {
+      "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",
+      "noPermission": "Sie haben keine Berechtigung, diese Erkennung anzuzeigen.",
+      "loginRequired": "Bitte melden Sie sich an, um diese Erkennung anzuzeigen.",
+      "serverError": "Serverfehler. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support, wenn das Problem weiterhin besteht.",
+      "loadFailed": "Fehler beim Laden der Erkennung (Fehler {status}). Bitte aktualisieren Sie die Seite.",
+      "noIdProvided": "Keine Erkennungs-ID angegeben."
     }
   },
   "species": {
     "rarity": {
-      "title": "Seltenheit der Art"
+      "title": "Seltenheit der Art",
+      "score": "Bewertung",
+      "basedOnLocation": "Basierend auf Standort: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taxonomische Klassifizierung",
