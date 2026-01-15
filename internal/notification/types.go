@@ -181,13 +181,82 @@ func (n *Notification) Clone() *Notification {
 		clone.ExpiresAt = &expiresAt
 	}
 
-	// Deep copy Metadata map
+	// Deep copy Metadata map to handle nested structures safely
 	if n.Metadata != nil {
-		clone.Metadata = make(map[string]any, len(n.Metadata))
-		maps.Copy(clone.Metadata, n.Metadata)
+		clone.Metadata = deepCopyMetadata(n.Metadata)
 	}
 
 	return clone
+}
+
+// deepCopyMetadata creates a deep copy of the metadata map that preserves Go types.
+// This ensures nested maps/slices are fully copied, preventing concurrent access issues
+// when the original metadata is modified while being serialized.
+func deepCopyMetadata(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	return deepCopyValue(src).(map[string]any)
+}
+
+// deepCopyValue recursively deep copies a value, handling maps, slices, and primitives.
+// Pointer types and custom structs are copied by reference (not dereferenced).
+func deepCopyValue(v any) any {
+	if v == nil {
+		return nil
+	}
+
+	switch val := v.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(val))
+		for k, v := range val {
+			result[k] = deepCopyValue(v)
+		}
+		return result
+	case map[string]string:
+		result := make(map[string]string, len(val))
+		maps.Copy(result, val)
+		return result
+	case map[string]int:
+		result := make(map[string]int, len(val))
+		maps.Copy(result, val)
+		return result
+	case []any:
+		result := make([]any, len(val))
+		for i, v := range val {
+			result[i] = deepCopyValue(v)
+		}
+		return result
+	case []string:
+		result := make([]string, len(val))
+		copy(result, val)
+		return result
+	case []int:
+		result := make([]int, len(val))
+		copy(result, val)
+		return result
+	case []int64:
+		result := make([]int64, len(val))
+		copy(result, val)
+		return result
+	case []float64:
+		result := make([]float64, len(val))
+		copy(result, val)
+		return result
+	case []bool:
+		result := make([]bool, len(val))
+		copy(result, val)
+		return result
+	case []byte:
+		result := make([]byte, len(val))
+		copy(result, val)
+		return result
+	default:
+		// Primitive types (string, int, float64, bool, etc.) and pointers/structs
+		// are returned as-is - primitives are value types, and pointers/structs
+		// typically don't need deep copying for our SSE serialization use case
+		return v
+	}
 }
 
 // NotificationStore interface defines methods for persisting notifications
