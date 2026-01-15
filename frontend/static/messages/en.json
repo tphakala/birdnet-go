@@ -2,6 +2,7 @@
   "common": {
     "loading": "Loading...",
     "error": "Error",
+    "unknown": "Unknown",
     "retry": "Retry",
     "retrying": "Retrying",
     "save": "Save",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Settings Not Found",
       "sectionNotFound": "The requested settings section \"{section}\" could not be found.",
       "loadingMap": "Loading map...",
+      "mapZoomHelp": "Hold Ctrl (or Cmd on Mac) + scroll to zoom. Click to set location.",
+      "mapSetLocationHelp": "Click on the map or drag the marker to set location",
       "imageNotAvailable": "Image not available",
       "search": "Search..."
     },
@@ -1980,6 +1983,20 @@
           "to": "To",
           "reason": "Reason",
           "eventAt": "Event at {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Toggle diagnostics",
+          "processState": "Process State",
+          "lastData": "Last Data",
+          "restartCount": "Restart Count",
+          "connection": "Connection",
+          "stateErrorHistory": "State & Error History"
+        },
+        "connectionStatus": {
+          "stable": "Stable",
+          "degraded": "Degraded",
+          "failed": "Failed",
+          "unknown": "Unknown"
         }
       },
       "audioFilters": {

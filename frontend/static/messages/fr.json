@@ -2,6 +2,7 @@
   "common": {
     "loading": "Chargement...",
     "error": "Erreur",
+    "unknown": "Inconnu",
     "retry": "Réessayer",
     "retrying": "Nouvelle tentative",
     "save": "Enregistrer",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Paramètres non trouvés",
       "sectionNotFound": "Section \"{section}\" non trouvée",
       "loadingMap": "Chargement de la carte...",
+      "mapZoomHelp": "Maintenez Ctrl (ou Cmd sur Mac) + faites défiler pour zoomer. Cliquez pour définir l'emplacement.",
+      "mapSetLocationHelp": "Cliquez sur la carte ou faites glisser le marqueur pour définir l'emplacement",
       "imageNotAvailable": "Image non disponible",
       "search": "Rechercher..."
     },
@@ -577,8 +580,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Ciel clair",
@@ -2115,6 +2121,31 @@
           "urlRequired": "L'URL du flux est requise",
           "invalidUrl": "Format d'URL de flux invalide",
           "duplicate": "Cette URL de flux existe déjà"
+        },
+        "timeline": {
+          "error": "Erreur",
+          "noHistory": "Aucun historique d'état ou d'erreur disponible.",
+          "stateChange": "Changement d'état",
+          "host": "Hôte",
+          "troubleshooting": "Dépannage",
+          "from": "De",
+          "to": "Vers",
+          "reason": "Raison",
+          "eventAt": "Événement à {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Afficher/masquer les diagnostics",
+          "processState": "État du processus",
+          "lastData": "Dernières données",
+          "restartCount": "Redémarrages",
+          "connection": "Connexion",
+          "stateErrorHistory": "Historique des états et erreurs"
+        },
+        "connectionStatus": {
+          "stable": "Stable",
+          "degraded": "Dégradée",
+          "failed": "Échouée",
+          "unknown": "Inconnue"
         }
       }
     },

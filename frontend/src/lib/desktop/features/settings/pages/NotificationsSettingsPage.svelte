@@ -876,19 +876,21 @@
       <div class="space-y-4">
         {#if loadingTemplate}
           <div class="flex justify-center py-4">
-            <span class="loading loading-spinner loading-md"></span>
+            <span
+              class="inline-block w-6 h-6 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+            ></span>
           </div>
         {:else if templateConfig}
-          <div class="card bg-base-200">
-            <div class="card-body">
-              <h3 class="card-title text-base">
+          <div class="rounded-lg bg-[var(--color-base-200)]">
+            <div class="p-6">
+              <h3 class="text-base font-semibold mb-4">
                 {t('settings.notifications.templates.newSpeciesTitle')}
               </h3>
 
               <div class="space-y-4">
-                <div class="form-control">
-                  <label for="template-title" class="label">
-                    <span class="label-text font-semibold"
+                <div>
+                  <label for="template-title" class="block mb-1">
+                    <span class="text-sm font-semibold text-[var(--color-base-content)]"
                       >{t('settings.notifications.templates.titleLabel')}</span
                     >
                   </label>
@@ -896,21 +898,21 @@
                     id="template-title"
                     type="text"
                     bind:value={editedTitle}
-                    class="input w-full font-mono text-sm"
+                    class="w-full h-10 px-3 font-mono text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                     placeholder={t('settings.notifications.templates.titlePlaceholder')}
                   />
                 </div>
 
-                <div class="form-control">
-                  <label for="template-message" class="label">
-                    <span class="label-text font-semibold"
+                <div>
+                  <label for="template-message" class="block mb-1">
+                    <span class="text-sm font-semibold text-[var(--color-base-content)]"
                       >{t('settings.notifications.templates.messageLabel')}</span
                     >
                   </label>
                   <textarea
                     id="template-message"
                     bind:value={editedMessage}
-                    class="textarea w-full font-mono text-sm"
+                    class="w-full px-3 py-2 font-mono text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors resize-y"
                     rows="6"
                     placeholder={t('settings.notifications.templates.messagePlaceholder')}
                   ></textarea>
@@ -918,9 +920,10 @@
 
                 {#if templateStatusMessage}
                   <div
-                    class="alert py-2 px-3 text-sm"
-                    class:alert-success={templateStatusType === 'success'}
-                    class:alert-error={templateStatusType === 'error'}
+                    class="flex items-center gap-2 py-2 px-3 text-sm rounded-lg {templateStatusType ===
+                    'success'
+                      ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]'
+                      : 'bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]'}"
                     role="alert"
                     aria-live="assertive"
                   >
@@ -937,10 +940,12 @@
 
                 {#if statusMessage}
                   <div
-                    class="alert py-2 px-3 text-sm"
-                    class:alert-info={statusType === 'info'}
-                    class:alert-success={statusType === 'success'}
-                    class:alert-error={statusType === 'error'}
+                    class="flex items-center gap-2 py-2 px-3 text-sm rounded-lg {statusType ===
+                    'info'
+                      ? 'bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]'
+                      : statusType === 'success'
+                        ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]'
+                        : 'bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]'}"
                     role="status"
                     aria-live="polite"
                   >
@@ -960,20 +965,22 @@
                 <div class="flex gap-2 justify-end">
                   <button
                     onclick={resetTemplates}
-                    class="btn btn-ghost btn-sm"
+                    class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={savingTemplate || generating}
                   >
                     {t('settings.notifications.templates.resetButton')}
                   </button>
                   <button
                     onclick={saveTemplateConfig}
-                    class="btn btn-sm"
-                    class:btn-primary={hasTemplateChanges}
-                    class:btn-ghost={!hasTemplateChanges}
+                    class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed {hasTemplateChanges
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:ring-[var(--color-primary)]'
+                      : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:ring-[var(--color-base-content)]'}"
                     disabled={savingTemplate || generating || !hasTemplateChanges}
                   >
                     {#if savingTemplate}
-                      <span class="loading loading-spinner loading-xs"></span>
+                      <span
+                        class="inline-block w-3 h-3 border-2 border-[var(--color-base-300)] border-t-current rounded-full animate-spin"
+                      ></span>
                       <span>{t('settings.notifications.templates.savingButton')}</span>
                     {:else}
                       <span
@@ -986,13 +993,15 @@
                   <button
                     onclick={sendTestNewSpeciesNotification}
                     disabled={generating || savingTemplate}
-                    class="btn btn-secondary btn-sm"
+                    class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-secondary)] text-[var(--color-secondary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title={hasTemplateChanges
                       ? t('settings.notifications.templates.testWithUnsavedChanges')
                       : t('settings.notifications.templates.testNormal')}
                   >
                     {#if generating}
-                      <span class="loading loading-spinner loading-xs"></span>
+                      <span
+                        class="inline-block w-3 h-3 border-2 border-[var(--color-base-300)] border-t-current rounded-full animate-spin"
+                      ></span>
                       <span>{t('settings.notifications.templates.sendingButton')}</span>
                     {:else}
                       <span class="flex items-center gap-1">
@@ -1006,14 +1015,14 @@
             </div>
           </div>
 
-          <div class="card bg-base-200">
-            <div class="card-body">
-              <h3 class="card-title text-base">
+          <div class="rounded-lg bg-[var(--color-base-200)]">
+            <div class="p-6">
+              <h3 class="text-base font-semibold mb-4">
                 {t('settings.notifications.templates.availableVariables')}
               </h3>
-              <p class="text-sm text-[color:var(--color-base-content)] opacity-80 mb-3">
+              <p class="text-sm text-[var(--color-base-content)] opacity-80 mb-3">
                 {t('settings.notifications.templates.variablesDescription')}
-                <code class="bg-base-300 px-1 rounded-sm"
+                <code class="bg-[var(--color-base-300)] px-1 rounded-sm"
                   >&#123;&#123;.VariableName&#125;&#125;</code
                 >
               </p>
@@ -1021,10 +1030,10 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
                 {#each templateFields as field (field.name)}
                   <div class="flex items-baseline gap-2">
-                    <code class="font-mono text-primary shrink-0"
+                    <code class="font-mono text-[var(--color-primary)] shrink-0"
                       >&#123;&#123;.{field.name}&#125;&#125;</code
                     >
-                    <span class="text-[color:var(--color-base-content)] opacity-70"
+                    <span class="text-[var(--color-base-content)] opacity-70"
                       >{field.description}</span
                     >
                   </div>
@@ -1034,12 +1043,12 @@
               <!-- Privacy Note - Collapsible -->
               <details class="mt-4 text-xs">
                 <summary
-                  class="cursor-pointer text-[color:var(--color-base-content)] opacity-60 hover:text-[color:var(--color-base-content)] hover:opacity-80 flex items-center gap-1"
+                  class="cursor-pointer text-[var(--color-base-content)] opacity-60 hover:text-[var(--color-base-content)] hover:opacity-80 flex items-center gap-1"
                 >
                   <Info class="size-3.5" />
                   {t('settings.notifications.privacy.title')}
                 </summary>
-                <div class="mt-2 pl-5 text-[color:var(--color-base-content)] opacity-60 space-y-1">
+                <div class="mt-2 pl-5 text-[var(--color-base-content)] opacity-60 space-y-1">
                   <p>{t('settings.notifications.privacy.description')}</p>
                   <p>{t('settings.notifications.privacy.recommendation')}</p>
                 </div>
@@ -1061,7 +1070,9 @@
   >
     {#if loadingPush}
       <div class="flex justify-center py-4">
-        <span class="loading loading-spinner loading-md"></span>
+        <span
+          class="inline-block w-6 h-6 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+        ></span>
       </div>
     {:else}
       <div class="space-y-4">
@@ -1074,35 +1085,35 @@
         />
 
         {#if pushSettings.enabled}
-          <p class="text-sm text-[color:var(--color-base-content)] opacity-70">
+          <p class="text-sm text-[var(--color-base-content)] opacity-70">
             {t('settings.notifications.push.enabledDescription')}
           </p>
         {:else}
-          <p class="text-sm text-[color:var(--color-base-content)] opacity-50">
+          <p class="text-sm text-[var(--color-base-content)] opacity-50">
             {t('settings.notifications.push.disabled')}
           </p>
         {/if}
 
         <!-- Detection Filters Section -->
         {#if pushSettings.enabled}
-          <div class="card bg-base-200">
-            <div class="card-body">
-              <h3 class="card-title text-base">
+          <div class="rounded-lg bg-[var(--color-base-200)]">
+            <div class="p-6">
+              <h3 class="text-base font-semibold mb-4">
                 {t('settings.notifications.push.filters.title')}
               </h3>
-              <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mb-2">
+              <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-2">
                 {t('settings.notifications.push.filters.description')}
               </p>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Minimum Confidence Threshold -->
-                <div class="form-control">
-                  <label for="min-confidence" class="label">
-                    <span class="label-text font-semibold">
+                <div>
+                  <label for="min-confidence" class="block mb-1">
+                    <span class="text-sm font-semibold text-[var(--color-base-content)]">
                       {t('settings.notifications.push.filters.minConfidence.label')}
                     </span>
                   </label>
-                  <div class="join">
+                  <div class="flex">
                     <input
                       id="min-confidence"
                       type="number"
@@ -1115,24 +1126,27 @@
                         pushSettings.minConfidenceThreshold =
                           Math.max(0, Math.min(100, parseInt(target.value) || 0)) / 100;
                       }}
-                      class="input input-bordered join-item w-full"
+                      class="flex-1 h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                       disabled={savingPush}
                     />
-                    <span class="btn btn-disabled join-item">%</span>
+                    <span
+                      class="inline-flex items-center justify-center px-3 text-sm bg-[var(--color-base-300)] border border-l-0 border-[var(--border-200)] rounded-r-lg"
+                      >%</span
+                    >
                   </div>
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                     {t('settings.notifications.push.filters.minConfidence.helpText')}
                   </p>
                 </div>
 
                 <!-- Species Cooldown -->
-                <div class="form-control">
-                  <label for="species-cooldown" class="label">
-                    <span class="label-text font-semibold">
+                <div>
+                  <label for="species-cooldown" class="block mb-1">
+                    <span class="text-sm font-semibold text-[var(--color-base-content)]">
                       {t('settings.notifications.push.filters.speciesCooldown.label')}
                     </span>
                   </label>
-                  <div class="join">
+                  <div class="flex">
                     <input
                       id="species-cooldown"
                       type="number"
@@ -1147,14 +1161,15 @@
                           Math.min(1440, parseInt(target.value) || 0)
                         );
                       }}
-                      class="input input-bordered join-item w-full"
+                      class="flex-1 h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                       disabled={savingPush}
                     />
-                    <span class="btn btn-disabled join-item"
+                    <span
+                      class="inline-flex items-center justify-center px-3 text-sm bg-[var(--color-base-300)] border border-l-0 border-[var(--border-200)] rounded-r-lg"
                       >{t('settings.notifications.push.filters.speciesCooldown.unit')}</span
                     >
                   </div>
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                     {t('settings.notifications.push.filters.speciesCooldown.helpText')}
                   </p>
                 </div>
@@ -1165,9 +1180,9 @@
 
         <!-- Provider Form Modal -->
         {#if showProviderForm}
-          <div class="card bg-base-200 border border-primary">
-            <div class="card-body">
-              <h3 class="card-title text-base">
+          <div class="rounded-lg bg-[var(--color-base-200)] border border-[var(--color-primary)]">
+            <div class="p-6">
+              <h3 class="text-base font-semibold mb-4">
                 {editingProviderIndex !== null
                   ? t('settings.notifications.push.form.editTitle')
                   : t('settings.notifications.push.form.addTitle')}
@@ -1211,7 +1226,7 @@
                     )}
                     onchange={value => (serviceFormData.discordWebhookUrl = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.discord.webhookUrl.helpText')}
                   </p>
                 {:else if selectedService === 'telegram'}
@@ -1224,7 +1239,7 @@
                     )}
                     onchange={value => (serviceFormData.telegramBotToken = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.telegram.botToken.helpText')}
                   </p>
                   <TextInput
@@ -1236,7 +1251,7 @@
                     )}
                     onchange={value => (serviceFormData.telegramChatId = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.telegram.chatId.helpText')}
                   </p>
                 {:else if selectedService === 'ntfy'}
@@ -1247,7 +1262,7 @@
                     placeholder={t('settings.notifications.push.services.ntfy.server.placeholder')}
                     onchange={value => (serviceFormData.ntfyServer = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.ntfy.server.helpText')}
                   </p>
                   <TextInput
@@ -1257,7 +1272,7 @@
                     placeholder={t('settings.notifications.push.services.ntfy.topic.placeholder')}
                     onchange={value => (serviceFormData.ntfyTopic = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.ntfy.topic.helpText')}
                   </p>
                 {:else if selectedService === 'gotify'}
@@ -1270,7 +1285,7 @@
                     )}
                     onchange={value => (serviceFormData.gotifyServer = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.gotify.server.helpText')}
                   </p>
                   <TextInput
@@ -1280,7 +1295,7 @@
                     placeholder={t('settings.notifications.push.services.gotify.token.placeholder')}
                     onchange={value => (serviceFormData.gotifyToken = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.gotify.token.helpText')}
                   </p>
                 {:else if selectedService === 'pushover'}
@@ -1293,7 +1308,7 @@
                     )}
                     onchange={value => (serviceFormData.pushoverApiToken = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.pushover.apiToken.helpText')}
                   </p>
                   <TextInput
@@ -1305,7 +1320,7 @@
                     )}
                     onchange={value => (serviceFormData.pushoverUserKey = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.pushover.userKey.helpText')}
                   </p>
                 {:else if selectedService === 'slack'}
@@ -1318,7 +1333,7 @@
                     )}
                     onchange={value => (serviceFormData.slackWebhookUrl = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.slack.webhookUrl.helpText')}
                   </p>
                 {:else if selectedService === 'ifttt'}
@@ -1331,7 +1346,7 @@
                     )}
                     onchange={value => (serviceFormData.iftttWebhookKey = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.ifttt.webhookKey.helpText')}
                   </p>
                   <TextInput
@@ -1343,7 +1358,7 @@
                     )}
                     onchange={value => (serviceFormData.iftttEventName = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.ifttt.eventName.helpText')}
                   </p>
                 {:else if selectedService === 'webhook'}
@@ -1354,41 +1369,41 @@
                     placeholder={t('settings.notifications.push.services.webhook.url.placeholder')}
                     onchange={value => (serviceFormData.webhookUrl = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.webhook.url.helpText')}
                   </p>
 
                   <!-- HTTP Method -->
-                  <div class="form-control">
-                    <label class="label" for="webhook-method">
-                      <span class="label-text font-semibold"
+                  <div class="">
+                    <label class="block py-1" for="webhook-method">
+                      <span class="text-sm font-semibold text-[var(--color-base-content)]"
                         >{t('settings.notifications.push.services.webhook.method.label')}</span
                       >
                     </label>
                     <select
                       id="webhook-method"
-                      class="select select-bordered w-full"
+                      class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                       bind:value={serviceFormData.webhookMethod}
                     >
                       <option value="POST">POST</option>
                       <option value="PUT">PUT</option>
                       <option value="PATCH">PATCH</option>
                     </select>
-                    <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                    <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                       {t('settings.notifications.push.services.webhook.method.helpText')}
                     </p>
                   </div>
 
                   <!-- Authentication Type -->
-                  <div class="form-control">
-                    <label class="label" for="webhook-auth-type">
-                      <span class="label-text font-semibold"
+                  <div class="">
+                    <label class="block py-1" for="webhook-auth-type">
+                      <span class="text-sm font-semibold text-[var(--color-base-content)]"
                         >{t('settings.notifications.push.services.webhook.auth.label')}</span
                       >
                     </label>
                     <select
                       id="webhook-auth-type"
-                      class="select select-bordered w-full"
+                      class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                       bind:value={serviceFormData.webhookAuthType}
                     >
                       <option value="none"
@@ -1401,7 +1416,7 @@
                         >{t('settings.notifications.push.services.webhook.auth.basic')}</option
                       >
                     </select>
-                    <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                    <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
                       {t('settings.notifications.push.services.webhook.auth.helpText')}
                     </p>
                   </div>
@@ -1417,7 +1432,7 @@
                       )}
                       onchange={value => (serviceFormData.webhookBearerToken = value)}
                     />
-                    <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                    <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                       {t('settings.notifications.push.services.webhook.bearerToken.helpText')}
                     </p>
                   {/if}
@@ -1443,7 +1458,7 @@
                       )}
                       onchange={value => (serviceFormData.webhookBasicPass = value)}
                     />
-                    <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                    <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                       {t('settings.notifications.push.services.webhook.basicAuth.helpText')}
                     </p>
                   {/if}
@@ -1455,18 +1470,18 @@
                     placeholder={t('settings.notifications.push.services.custom.url.placeholder')}
                     onchange={value => (serviceFormData.customUrl = value)}
                   />
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.custom.url.helpText')}
                   </p>
                   <!-- URL Formats Help for Custom -->
                   <details class="text-xs">
                     <summary
-                      class="cursor-pointer text-[color:var(--color-base-content)] opacity-60 hover:opacity-80"
+                      class="cursor-pointer text-[var(--color-base-content)] opacity-60 hover:opacity-80"
                     >
                       {t('settings.notifications.push.form.urlFormats.title')}
                     </summary>
                     <div
-                      class="mt-2 pl-2 space-y-1 font-mono text-[color:var(--color-base-content)] opacity-70"
+                      class="mt-2 pl-2 space-y-1 font-mono text-[var(--color-base-content)] opacity-70"
                     >
                       <p>
                         <strong>{t('settings.notifications.push.form.urlFormats.discord')}:</strong>
@@ -1498,7 +1513,7 @@
                         href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="link link-primary inline-flex items-center gap-1 mt-2"
+                        class="inline-flex items-center gap-1 mt-2 text-[var(--color-primary)] hover:underline"
                       >
                         {t('settings.notifications.push.form.urlFormats.moreServices')}
                         <ExternalLink class="size-3" />
@@ -1509,7 +1524,7 @@
 
                 <!-- Service Validation Error -->
                 {#if serviceValidationError}
-                  <p class="text-xs text-error">{serviceValidationError}</p>
+                  <p class="text-xs text-[var(--color-error)]">{serviceValidationError}</p>
                 {/if}
 
                 <!-- Provider Name -->
@@ -1520,16 +1535,16 @@
                   placeholder={t('settings.notifications.push.form.name.placeholder')}
                   onchange={value => (providerFormData.name = value)}
                 />
-                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 -mt-2">
+                <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                   {t('settings.notifications.push.form.name.helpText')}
                 </p>
 
                 <!-- Notification Types -->
-                <fieldset class="form-control">
-                  <legend class="label-text font-semibold mb-1">
+                <fieldset class="">
+                  <legend class="text-sm font-semibold text-[var(--color-base-content)] mb-1">
                     {t('settings.notifications.push.form.notificationTypes.label')}
                   </legend>
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mb-2">
+                  <p class="text-xs text-[var(--color-base-content)] opacity-60 mb-2">
                     {t('settings.notifications.push.form.notificationTypes.helpText')}
                   </p>
                   <div class="flex flex-wrap gap-4">
@@ -1570,12 +1585,15 @@
 
                 <!-- Form Actions -->
                 <div class="flex gap-2 justify-end">
-                  <button onclick={closeProviderForm} class="btn btn-ghost btn-sm">
+                  <button
+                    onclick={closeProviderForm}
+                    class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
+                  >
                     {t('settings.notifications.push.form.cancelButton')}
                   </button>
                   <button
                     onclick={saveProvider}
-                    class="btn btn-primary btn-sm"
+                    class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={!isServiceFormValid}
                   >
                     {t('settings.notifications.push.form.saveButton')}
@@ -1593,7 +1611,10 @@
               {t('settings.notifications.push.providers.title')}
             </h3>
             {#if !showProviderForm}
-              <button onclick={openAddProviderForm} class="btn btn-sm btn-primary gap-1">
+              <button
+                onclick={openAddProviderForm}
+                class="inline-flex items-center justify-center gap-1 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
+              >
                 <Plus class="size-4" />
                 {t('settings.notifications.push.providers.addButton')}
               </button>
@@ -1604,15 +1625,15 @@
             <div class="space-y-2">
               {#each pushSettings.providers as provider, index (`${provider.type}:${provider.name}:${index}`)}
                 <div
-                  class="card bg-base-200"
+                  class="rounded-lg bg-[var(--color-base-200)]"
                   class:opacity-50={!provider.enabled || !pushSettings.enabled}
                 >
-                  <div class="card-body py-3 px-4">
+                  <div class="py-3 px-4">
                     <div class="flex items-center justify-between gap-4">
                       <div class="flex items-center gap-3 min-w-0">
                         <input
                           type="checkbox"
-                          class="toggle toggle-sm toggle-primary"
+                          class="appearance-none w-10 h-5 rounded-full cursor-pointer transition-all relative bg-[var(--color-base-300)] before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-4 before:h-4 before:rounded-full before:bg-[var(--color-base-100)] before:shadow-sm before:transition-transform checked:bg-[var(--color-primary)] checked:before:translate-x-5 disabled:opacity-50 disabled:cursor-not-allowed"
                           checked={provider.enabled}
                           disabled={!pushSettings.enabled}
                           onchange={() => toggleProviderEnabled(index)}
@@ -1620,9 +1641,7 @@
                         />
                         <div class="min-w-0">
                           <div class="font-medium truncate">{provider.name}</div>
-                          <div
-                            class="text-xs text-[color:var(--color-base-content)] opacity-60 truncate"
-                          >
+                          <div class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
                             {#if provider.type === 'webhook'}
                               {provider.endpoints?.[0]?.url || ''}
                             {:else}
@@ -1634,14 +1653,16 @@
                         </div>
                       </div>
                       <div class="flex items-center gap-1 shrink-0">
-                        <span class="badge badge-sm badge-ghost">
+                        <span
+                          class="inline-flex items-center justify-center px-1.5 py-px text-xs font-medium rounded-full bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]"
+                        >
                           {provider.type === 'webhook'
                             ? t('settings.notifications.push.providers.typeBadge.webhook')
                             : t('settings.notifications.push.providers.typeBadge.shoutrrr')}
                         </span>
                         <button
                           onclick={() => openEditProviderForm(index)}
-                          class="btn btn-ghost btn-xs btn-square"
+                          class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           title={t('settings.notifications.push.providers.editButton')}
                           disabled={showProviderForm}
                         >
@@ -1649,7 +1670,7 @@
                         </button>
                         <button
                           onclick={() => deleteProvider(index)}
-                          class="btn btn-ghost btn-xs btn-square text-error"
+                          class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           title={t('settings.notifications.push.providers.deleteButton')}
                           disabled={showProviderForm}
                         >
@@ -1663,7 +1684,7 @@
             </div>
           {:else if !showProviderForm}
             <div
-              class="text-center py-8 text-[color:var(--color-base-content)] opacity-60 bg-base-200 rounded-lg"
+              class="text-center py-8 text-[var(--color-base-content)] opacity-60 bg-[var(--color-base-200)] rounded-lg"
             >
               <Send class="size-10 mx-auto mb-3 opacity-50" />
               <p class="text-sm font-medium">{t('settings.notifications.push.noProviders')}</p>
@@ -1677,9 +1698,10 @@
         <!-- Status Message -->
         {#if pushStatusMessage}
           <div
-            class="alert py-2 px-3 text-sm"
-            class:alert-success={pushStatusType === 'success'}
-            class:alert-error={pushStatusType === 'error'}
+            class="flex items-center gap-2 py-2 px-3 text-sm rounded-lg {pushStatusType ===
+            'success'
+              ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]'
+              : 'bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]'}"
             role="alert"
             aria-live="assertive"
           >

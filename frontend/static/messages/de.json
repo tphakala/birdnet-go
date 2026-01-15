@@ -2,6 +2,7 @@
   "common": {
     "loading": "Wird geladen...",
     "error": "Fehler",
+    "unknown": "Unbekannt",
     "retry": "Erneut versuchen",
     "retrying": "Wird erneut versucht",
     "save": "Speichern",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Einstellungen nicht gefunden",
       "sectionNotFound": "Abschnitt \"{section}\" nicht gefunden",
       "loadingMap": "Karte wird geladen...",
+      "mapZoomHelp": "Strg (oder Cmd auf Mac) + Scrollen zum Zoomen gedrückt halten. Klicken um Standort zu setzen.",
+      "mapSetLocationHelp": "Klicken Sie auf die Karte oder ziehen Sie die Markierung um den Standort zu setzen",
       "imageNotAvailable": "Bild nicht verfügbar",
       "search": "Suchen..."
     },
@@ -583,8 +586,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Klarer Himmel",
@@ -2115,6 +2121,31 @@
           "urlRequired": "Stream-URL ist erforderlich",
           "invalidUrl": "Ungültiges Stream-URL-Format",
           "duplicate": "Diese Stream-URL existiert bereits"
+        },
+        "timeline": {
+          "error": "Fehler",
+          "noHistory": "Keine Status- oder Fehlerhistorie verfügbar.",
+          "stateChange": "Statusänderung",
+          "host": "Host",
+          "troubleshooting": "Fehlerbehebung",
+          "from": "Von",
+          "to": "Nach",
+          "reason": "Grund",
+          "eventAt": "Ereignis um {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Diagnose umschalten",
+          "processState": "Prozessstatus",
+          "lastData": "Letzte Daten",
+          "restartCount": "Neustarts",
+          "connection": "Verbindung",
+          "stateErrorHistory": "Status- & Fehlerhistorie"
+        },
+        "connectionStatus": {
+          "stable": "Stabil",
+          "degraded": "Beeinträchtigt",
+          "failed": "Fehlgeschlagen",
+          "unknown": "Unbekannt"
         }
       }
     },

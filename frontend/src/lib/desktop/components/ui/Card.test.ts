@@ -13,9 +13,11 @@ describe('Card', () => {
   it('renders with default props', () => {
     const { container } = renderCard();
 
-    const card = container.querySelector('.card');
+    // Now uses native Tailwind classes with CSS variables
+    const card = container.querySelector('.rounded-lg');
     expect(card).toBeInTheDocument();
-    expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs');
+    expect(card).toHaveClass('rounded-lg', 'overflow-hidden', 'shadow-sm');
+    expect(card?.className).toContain('bg-[var(--color-base-100)]');
   });
 
   it('renders with title', () => {
@@ -28,7 +30,7 @@ describe('Card', () => {
   it('renders with custom className', () => {
     const { container } = renderCard({ className: 'custom-class' });
 
-    const card = container.querySelector('.card');
+    const card = container.querySelector('.rounded-lg');
     expect(card).toHaveClass('custom-class');
   });
 
@@ -36,7 +38,7 @@ describe('Card', () => {
     const { container } = renderCard({ padding: false, title: 'Test' });
 
     // The content div should not have padding classes when padding is false
-    const contentDiv = container.querySelector('.card > div:last-child');
+    const contentDiv = container.querySelector('.rounded-lg > div:last-child');
     expect(contentDiv).toBeInTheDocument();
     expect(contentDiv).not.toHaveClass('px-6', 'pb-6');
   });

@@ -2,6 +2,7 @@
   "common": {
     "loading": "Inlezen ...",
     "error": "Fout",
+    "unknown": "Onbekend",
     "retry": "Opnieuw proberen",
     "retrying": "Opnieuw aan het proberen",
     "save": "Bewaren",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Instellingen niet gevonden",
       "sectionNotFound": "Sectie \"{section}\" niet gevonden",
       "loadingMap": "Kaart laden...",
+      "mapZoomHelp": "Houd Ctrl (of Cmd op Mac) ingedrukt + scroll om te zoomen. Klik om locatie in te stellen.",
+      "mapSetLocationHelp": "Klik op de kaart of sleep de markering om de locatie in te stellen",
       "imageNotAvailable": "Afbeelding niet beschikbaar",
       "search": "Zoeken..."
     },
@@ -583,8 +586,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Helder",
@@ -2115,6 +2121,31 @@
           "urlRequired": "Stream-URL is verplicht",
           "invalidUrl": "Ongeldig stream-URL-formaat",
           "duplicate": "Deze stream-URL bestaat al"
+        },
+        "timeline": {
+          "error": "Fout",
+          "noHistory": "Geen status- of foutgeschiedenis beschikbaar.",
+          "stateChange": "Statuswijziging",
+          "host": "Host",
+          "troubleshooting": "Probleemoplossing",
+          "from": "Van",
+          "to": "Naar",
+          "reason": "Reden",
+          "eventAt": "Gebeurtenis om {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Diagnose tonen/verbergen",
+          "processState": "Processtatus",
+          "lastData": "Laatste data",
+          "restartCount": "Herstarts",
+          "connection": "Verbinding",
+          "stateErrorHistory": "Status- en foutgeschiedenis"
+        },
+        "connectionStatus": {
+          "stable": "Stabiel",
+          "degraded": "Verslechterd",
+          "failed": "Mislukt",
+          "unknown": "Onbekend"
         }
       }
     },
