@@ -52,7 +52,8 @@ const (
 	MQTTPublishTimeout = 10 * time.Second
 
 	// DatabaseSearchLimit is the maximum number of results when searching for notes
-	DatabaseSearchLimit = 10
+	// Set high enough to handle high-activity periods (e.g., dawn chorus)
+	DatabaseSearchLimit = 50
 
 	// CompositeActionTimeout is the default timeout for each action in a composite action
 	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
@@ -1225,14 +1226,16 @@ func (a *SSEAction) Execute(data any) error {
 	// This ensures the frontend can properly load audio/spectrogram via API endpoints
 	if a.Note.ID == 0 {
 		if err := a.waitForDatabaseID(); err != nil {
-			// Log warning but don't fail the SSE broadcast
-			GetLogger().Warn("Database ID not ready for SSE broadcast",
+			// Cannot broadcast without database ID - frontend would fail to load audio/spectrogram
+			// Skip SSE broadcast gracefully - the detection is still saved and will appear on page refresh
+			GetLogger().Warn("Skipping SSE broadcast - database ID not available within timeout",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
 				logger.String("species", a.Note.CommonName),
-				logger.Any("note_id", a.Note.ID),
-				logger.String("operation", "sse_wait_database_id"))
+				logger.Error(err),
+				logger.Duration("timeout", SSEDatabaseIDTimeout),
+				logger.String("operation", "sse_broadcast_skipped"))
+			return nil // Not an error - graceful degradation
 		}
 	}
 
@@ -1353,14 +1356,13 @@ func (a *SSEAction) waitForDatabaseID() error {
 		time.Sleep(SSEDatabaseCheckInterval)
 	}
 
-	// Timeout reached
-	return errors.Newf("database ID not assigned for %s after %v timeout", a.Note.CommonName, SSEDatabaseIDTimeout).
-		Component("analysis.processor").
-		Category(errors.CategoryTimeout).
-		Context("operation", "wait_for_database_id").
-		Context("species", a.Note.CommonName).
-		Context("timeout_seconds", SSEDatabaseIDTimeout.Seconds()).
-		Build()
+	// Timeout reached - intentionally using fmt.Errorf instead of errors.Newf to avoid
+	// triggering user notifications. This is a transient timing issue, not a user-actionable
+	// problem. The structured error system converts errors to notifications, which we want
+	// to avoid for this non-critical timeout.
+	// Note: Species name is NOT included in error message to prevent log injection.
+	// The species is already captured in structured log fields by the caller.
+	return fmt.Errorf("database ID not found after %v", SSEDatabaseIDTimeout)
 }
 
 // findNoteInDatabase searches for the note in database by unique characteristics
@@ -1390,13 +1392,19 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 			Build()
 	}
 
-	// Filter results to find the exact match based on date and time
+	// Filter results to find the exact match based on BeginTime and source
+	// Using BeginTime (time.Time) is more robust than Date+Time strings as it's the
+	// actual detection timestamp and avoids string formatting/precision issues
 	for i := range notes {
 		note := &notes[i]
 		// Check if this note matches our expected characteristics
-		if note.Date == a.Note.Date &&
-			note.ScientificName == a.Note.ScientificName &&
-			note.Time == a.Note.Time { // Exact time match
+		// Include SourceNode to prevent matching wrong detection in high-activity periods
+		// Only compare SourceNode if both have values (handles legacy data)
+		sourceMatches := a.Note.SourceNode == "" || note.SourceNode == "" || note.SourceNode == a.Note.SourceNode
+		// Truncate to millisecond precision for comparison to handle potential database precision loss
+		if note.ScientificName == a.Note.ScientificName &&
+			note.BeginTime.Truncate(time.Millisecond).Equal(a.Note.BeginTime.Truncate(time.Millisecond)) &&
+			sourceMatches {
 			return note, nil
 		}
 	}
@@ -1406,7 +1414,6 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 		Category(errors.CategoryNotFound).
 		Context("operation", "find_note_in_database").
 		Context("species", a.Note.ScientificName).
-		Context("date", a.Note.Date).
-		Context("time", a.Note.Time).
+		Context("begin_time", a.Note.BeginTime.Format("2006-01-02 15:04:05.000")).
 		Build()
 }
