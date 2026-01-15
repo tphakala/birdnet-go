@@ -8,6 +8,25 @@ const logger = getLogger('app');
 // Note: Type imports will be used when type-safe translation is implemented
 // import type { TranslationKey, GetParams } from './types.generated.js';
 
+/**
+ * Critical fallback translations for keys needed before async load completes.
+ * These prevent showing raw keys during initial render before translations load.
+ * Only include strings needed for the loading/error screens.
+ *
+ * IMPORTANT: Keep these in sync with en.json. These are intentional duplicates
+ * to ensure the loading UI works before any network request completes.
+ */
+const CRITICAL_FALLBACKS: Record<string, string> = {
+  'common.loading': 'Loading...',
+  'common.error': 'Error',
+  'common.retry': 'Retry',
+  'common.retrying': 'Retrying',
+  'error.server.title': 'Server Error',
+  'error.server.description': 'Unable to connect to the server. Please try again.',
+  'error.generic.componentLoadError': 'Component Load Error',
+  'error.generic.failedToLoadComponent': 'Failed to load the requested component.',
+};
+
 // Initialize locale from localStorage, browser preferences, or use default
 function getInitialLocale(): Locale {
   if (typeof localStorage !== 'undefined') {
@@ -27,7 +46,29 @@ let messages = $state<Record<string, string>>({});
 let loading = $state(false);
 // Keep previous messages while loading new ones
 let previousMessages = $state<Record<string, string>>({});
+// Track if initial translation load has completed (for first load only)
+let initialLoadComplete = $state(false);
 /* eslint-enable no-undef */
+
+// Promise that resolves when translations are first loaded
+let initialLoadResolver: (() => void) | null = null;
+const initialLoadPromise = new Promise<void>(resolve => {
+  initialLoadResolver = resolve;
+});
+
+/**
+ * Mark initial load as complete and resolve the promise.
+ * This is a helper to avoid TypeScript narrowing issues with the resolver.
+ * @internal
+ */
+function markInitialLoadComplete(): void {
+  if (!initialLoadComplete) {
+    initialLoadComplete = true;
+    if (initialLoadResolver) {
+      initialLoadResolver();
+    }
+  }
+}
 
 /**
  * Get the current locale
@@ -90,6 +131,8 @@ async function loadMessages(locale: Locale): Promise<void> {
     previousMessages = {};
     // Clear cache only after successfully loading new messages
     clearTranslationCache();
+    // Mark initial load as complete and resolve the promise
+    markInitialLoadComplete();
     // Update localStorage cache
     try {
       localStorage.setItem(`birdnet-messages-${locale}`, JSON.stringify(messages));
@@ -123,6 +166,8 @@ async function loadMessages(locale: Locale): Promise<void> {
           previousMessages = {};
           // Clear cache after loading fallback messages
           clearTranslationCache();
+          // Mark initial load as complete and resolve the promise
+          markInitialLoadComplete();
           // Update localStorage cache for fallback
           try {
             localStorage.setItem(`birdnet-messages-${DEFAULT_LOCALE}`, JSON.stringify(messages));
@@ -142,6 +187,10 @@ async function loadMessages(locale: Locale): Promise<void> {
       messages = previousMessages;
       previousMessages = {};
     }
+
+    // Mark initial load as complete even on failure to prevent waitForTranslations() from hanging
+    // Components will use critical fallbacks for essential UI strings
+    markInitialLoadComplete();
 
     logger.warn('Translation loading failed, restored previous messages to prevent UI degradation');
   } finally {
@@ -223,6 +272,14 @@ export function t(key: string, params?: Record<string, unknown>): string {
         return cachedValue.value;
       }
     }
+
+    // Check critical fallbacks for essential UI strings (loading/error screens)
+    // This prevents showing raw keys during initial render before translations load
+    if (key in CRITICAL_FALLBACKS) {
+      // eslint-disable-next-line security/detect-object-injection
+      return CRITICAL_FALLBACKS[key];
+    }
+
     return key;
   }
 
@@ -286,6 +343,8 @@ if (typeof window !== 'undefined') {
     try {
       messages = JSON.parse(cachedMessages);
       loading = false;
+      // Mark initial load as complete since we have cached translations
+      markInitialLoadComplete();
     } catch {
       // Continue with async load
     }
@@ -318,4 +377,35 @@ export function isLoading(): boolean {
  */
 export function hasTranslations(): boolean {
   return Object.keys(messages).length > 0;
+}
+
+/**
+ * Check if translations are ready for use (initial load completed)
+ * This is reactive and can be used in $derived expressions.
+ * @returns True if initial translation load has completed
+ */
+export function translationsReady(): boolean {
+  return initialLoadComplete;
+}
+
+/**
+ * Wait for translations to be loaded.
+ * Returns a promise that resolves when translations are available.
+ * Useful for components that need to wait before rendering translated content.
+ * @returns Promise that resolves when translations are loaded
+ */
+export function waitForTranslations(): Promise<void> {
+  // If already loaded, resolve immediately
+  if (initialLoadComplete) {
+    return Promise.resolve();
+  }
+  return initialLoadPromise;
+}
+
+/**
+ * Get the critical fallback translations for testing.
+ * @internal
+ */
+export function getCriticalFallbacks(): Record<string, string> {
+  return { ...CRITICAL_FALLBACKS };
 }
