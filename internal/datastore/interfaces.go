@@ -800,26 +800,37 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 }
 
 // GetHourlyWeather retrieves hourly weather data by date from the database.
+// The date parameter should be in local timezone format (YYYY-MM-DD).
+// This function converts UTC timestamps to local time before matching dates,
+// ensuring weather data is retrieved correctly across timezone boundaries.
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	var hourlyWeather []HourlyWeather
 
-	// Get database-specific date format
-	dateFormat := ds.GetDateFormat("time")
-	if dateFormat == "" {
-		// Safely get database type for error context
-		dialectName := DialectUnknown
-		if d := ds.Dialector(); d != nil {
-			dialectName = d.Name()
-		}
-		return nil, errors.Newf("unsupported database type for date formatting").
+	// Parse the requested date to get the day boundaries in local time
+	localDate, err := time.ParseInLocation("2006-01-02", date, time.Local)
+	if err != nil {
+		return nil, errors.New(err).
 			Component("datastore").
-			Category(errors.CategoryConfiguration).
+			Category(errors.CategoryValidation).
 			Context("operation", "get_hourly_weather").
-			Context("database_type", dialectName).
+			Context("date", date).
 			Build()
 	}
 
-	err := ds.DB.Where(dateFormat+" = ?", date).
+	// Calculate the start and end of the day in local time
+	dayStart := localDate
+	dayEnd := localDate.Add(24 * time.Hour)
+
+	// Convert local time boundaries to UTC for database query
+	// Weather records are stored in UTC, so we need to query the UTC range
+	// that corresponds to the local date
+	utcStart := dayStart.UTC()
+	utcEnd := dayEnd.UTC()
+
+	// Query using time range instead of date string extraction
+	// This ensures we get all weather records that fall within the local date,
+	// regardless of timezone differences between storage and display
+	err = ds.DB.Where("time >= ? AND time < ?", utcStart, utcEnd).
 		Order("time ASC").
 		Find(&hourlyWeather).Error
 
@@ -829,6 +840,8 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_hourly_weather").
 			Context("date", date).
+			Context("utc_start", utcStart.Format(time.RFC3339)).
+			Context("utc_end", utcEnd.Format(time.RFC3339)).
 			Build()
 	}
 
