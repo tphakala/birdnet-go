@@ -47,8 +47,6 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
-  import { safeGet } from '$lib/utils/security';
-
   type Size = 'sm' | 'md' | 'lg';
   type VerificationStatus = Detection['verified'];
 
@@ -60,11 +58,12 @@
 
   let { detection, className = '', size = 'md' }: Props = $props();
 
-  // Derive size class once to avoid duplication
-  const sizeClass = $derived(safeGet(sizeClasses, size, ''));
+  // Derive size class once to avoid duplication (direct access since size is typed)
+  const sizeClass = $derived(sizeClasses[size] ?? '');
 
   function getStatusBadgeClass(verified: VerificationStatus): string {
-    const baseClass = safeGet(statusBadgeClassMap, verified, DEFAULT_STATUS_BADGE_CLASS);
+    // Direct access with fallback since verified is typed
+    const baseClass = statusBadgeClassMap[verified] ?? DEFAULT_STATUS_BADGE_CLASS;
     return cn(baseClass, sizeClass);
   }
 
@@ -80,7 +79,7 @@
   }
 </script>
 
-<div class={cn('flex flex-wrap gap-1', className)}>
+<div class={cn('flex flex-wrap gap-1', className)} role="status">
   <!-- Verification status badge -->
   <div class={getStatusBadgeClass(detection.verified)}>
     {getStatusText(detection.verified)}
@@ -96,7 +95,7 @@
   <!-- Comments badge -->
   {#if detection.comments && detection.comments.length > 0}
     <div class={cn('status-badge comment', sizeClass)}>
-      {t('common.review.comment')}
+      {t('common.review.form.comment')}
     </div>
   {/if}
 </div>
