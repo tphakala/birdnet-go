@@ -205,8 +205,8 @@ github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9R
 github.com/tklauser/numcpus v0.11.0/go.mod h1:z+LwcLq54uWZTX0u/bGobaV34u6V7KNlTZejzM6/3MQ=
 github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3 h1:hD7Uw+Js4mZXlfLYnMoxRnHSczcq8JZWvb1nJn9ZZLY=
 github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3/go.mod h1:YEoLmuRHr0LG0zHpCWVkdGi4EqeiULta/nNCFntKMuc=
-github.com/tphakala/go-tflite v0.1.1 h1:HhP/ifkCNvJFJj+9zPD+3d2jvr2DMuX9nFoIw/XF5uE=
-github.com/tphakala/go-tflite v0.1.1/go.mod h1:fDE48JMvNlDtdjhzShuhkEnikhmTvkom1jxuxP28atQ=
+github.com/tphakala/go-tflite v0.2.1 h1:YAFeFmxzppj1kGSB6TJFcTzbvAWY4REZbuNK9NNq7o4=
+github.com/tphakala/go-tflite v0.2.1/go.mod h1:CswKd8GY0zI1dD0hHNHZoLrN4rUrwTQBwWZ1cM09hHQ=
 github.com/tphakala/goth v0.0.0-20251225195455-a4b17a573e8f h1:cwFTLlrHXrfzgziEj6LFdpAiAPHrkYUfrRd081++lLc=
 github.com/tphakala/goth v0.0.0-20251225195455-a4b17a573e8f/go.mod h1:KFKsaAp/nxZJ/NY+1cVYnfpjQ+1eeptVkzxQYIPMy+o=
 github.com/tphakala/simd v1.0.22 h1:3wHL91t4yvhCB0ycyTznvucTHax+QGpYkvOhqfraTYw=
