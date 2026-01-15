@@ -28,8 +28,6 @@ func setupWeatherTestDB(t *testing.T) *DataStore {
 
 // TestGetHourlyWeather_TimezoneHandling tests that weather queries work correctly across timezones
 func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
-	t.Parallel()
-
 	t.Run("UTC weather matches local date - same timezone", func(t *testing.T) {
 		t.Parallel()
 		ds := setupWeatherTestDB(t)
@@ -57,7 +55,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("UTC weather crosses midnight boundary - timezone ahead of UTC", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// Simulate user in GMT+13 timezone
@@ -83,7 +81,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("multiple weather records across local day", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// Insert weather records throughout a local day in GMT+13
@@ -117,7 +115,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("weather just outside local day boundary should not be included", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// For GMT+13, local day 2024-01-15 spans UTC: 2024-01-14 11:00:00 to 2024-01-15 11:00:00
@@ -236,7 +234,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 	})
 
 	t.Run("daylight saving time boundary", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "America/New_York") // Simulate DST-aware timezone to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// Test around DST boundary (using a fixed date for consistency)
@@ -261,10 +259,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 
 // TestGetHourlyWeather_EdgeCases tests edge cases and error conditions
 func TestGetHourlyWeather_EdgeCases(t *testing.T) {
-	t.Parallel()
-
 	t.Run("midnight UTC", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "UTC") // Simulate UTC to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// Weather at exactly midnight UTC
@@ -302,7 +298,7 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("year boundary", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "America/New_York") // Simulate New York timezone to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// New Year's Eve and New Year's Day
@@ -362,10 +358,8 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 
 // TestGetHourlyWeather_RegressionTests tests for the original timezone bug
 func TestGetHourlyWeather_RegressionTests(t *testing.T) {
-	t.Parallel()
-
 	t.Run("regression: morning detections show no weather (GMT+13)", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// This reproduces the original bug scenario:
@@ -393,7 +387,7 @@ func TestGetHourlyWeather_RegressionTests(t *testing.T) {
 	})
 
 	t.Run("regression: weather appears after UTC catches up", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("TZ", "Pacific/Auckland") // Simulate GMT+13 to make test deterministic
 		ds := setupWeatherTestDB(t)
 
 		// Weather from late in UTC day
