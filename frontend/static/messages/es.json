@@ -159,7 +159,8 @@
       "status": {
         "verifiedCorrect": "Verificado correcto",
         "falsePositive": "Falso positivo",
-        "notReviewed": "No revisado"
+        "notReviewed": "No revisado",
+        "locked": "Bloqueado"
       },
       "form": {
         "correctDetection": "Detección correcta",
