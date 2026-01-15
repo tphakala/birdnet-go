@@ -800,26 +800,54 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 }
 
 // GetHourlyWeather retrieves hourly weather data by date from the database.
+// The date parameter should be in local timezone format (YYYY-MM-DD).
+// This function converts UTC timestamps to local time before matching dates,
+// ensuring weather data is retrieved correctly across timezone boundaries.
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
-	var hourlyWeather []HourlyWeather
+	return ds.GetHourlyWeatherInLocation(date, time.Local)
+}
 
-	// Get database-specific date format
-	dateFormat := ds.GetDateFormat("time")
-	if dateFormat == "" {
-		// Safely get database type for error context
-		dialectName := DialectUnknown
-		if d := ds.Dialector(); d != nil {
-			dialectName = d.Name()
-		}
-		return nil, errors.Newf("unsupported database type for date formatting").
+// GetHourlyWeatherInLocation retrieves hourly weather data by date using a specific timezone.
+// This is primarily used for testing timezone behavior. In production, use GetHourlyWeather
+// which automatically uses the system's local timezone.
+func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location) ([]HourlyWeather, error) {
+	if loc == nil {
+		return nil, errors.Newf("location cannot be nil for GetHourlyWeatherInLocation").
 			Component("datastore").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "get_hourly_weather").
-			Context("database_type", dialectName).
+			Category(errors.CategoryValidation).
+			Context("operation", "get_hourly_weather_in_location").
 			Build()
 	}
 
-	err := ds.DB.Where(dateFormat+" = ?", date).
+	var hourlyWeather []HourlyWeather
+
+	// Parse the requested date to get the day boundaries in the specified timezone
+	localDate, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_hourly_weather_in_location").
+			Context("date", date).
+			Build()
+	}
+
+	// Calculate the start and end of the day in the specified timezone
+	// Use AddDate instead of Add(24*time.Hour) to correctly handle DST transitions
+	// where days can be 23 hours (spring forward) or 25 hours (fall back)
+	dayStart := localDate
+	dayEnd := localDate.AddDate(0, 0, 1)
+
+	// Convert local time boundaries to UTC for database query
+	// Weather records are stored in UTC, so we need to query the UTC range
+	// that corresponds to the local date
+	utcStart := dayStart.UTC()
+	utcEnd := dayEnd.UTC()
+
+	// Query using time range instead of date string extraction
+	// This ensures we get all weather records that fall within the local date,
+	// regardless of timezone differences between storage and display
+	err = ds.DB.Where("time >= ? AND time < ?", utcStart, utcEnd).
 		Order("time ASC").
 		Find(&hourlyWeather).Error
 
@@ -829,6 +857,8 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_hourly_weather").
 			Context("date", date).
+			Context("utc_start", utcStart.Format(time.RFC3339)).
+			Context("utc_end", utcEnd.Format(time.RFC3339)).
 			Build()
 	}
 
