@@ -27,6 +27,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
+// setupMockDatastore creates a mock datastore with standard expectations for species tracker tests.
+// This reduces duplication across notification timing tests.
+func setupMockDatastore(t *testing.T) *mocks.MockInterface {
+	t.Helper()
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	mockDS.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	mockDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	mockDS.On("Save", mock.AnythingOfType("*datastore.Note"), mock.Anything).
+		Return(nil).Maybe()
+	mockDS.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).Maybe()
+	return mockDS
+}
+
 // TestNotificationTiming_CrossMidnight validates that detections occurring
 // before midnight are correctly attributed to the correct day even when
 // processed after midnight.
@@ -35,20 +53,7 @@ import (
 func TestNotificationTiming_CrossMidnight(t *testing.T) {
 	t.Parallel()
 
-	// Create mock datastore
-	mockDS := mocks.NewMockInterface(t)
-
-	// Setup mock expectations for species tracker initialization
-	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	mockDS.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil).Maybe()
-	mockDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-
-	// Setup mock for note save
-	mockDS.On("Save", mock.AnythingOfType("*datastore.Note"), mock.Anything).
-		Return(nil).Maybe()
+	mockDS := setupMockDatastore(t)
 
 	// Create species tracker with yearly tracking enabled
 	settings := &conf.SpeciesTrackingSettings{
@@ -79,6 +84,7 @@ func TestNotificationTiming_CrossMidnight(t *testing.T) {
 	// First, record a detection for this species in 2025 (before midnight)
 	// This simulates having seen the species earlier in 2025
 	previousDetection := time.Date(2025, 12, 15, 10, 0, 0, 0, time.UTC)
+	// daysSinceFirstSeen is intentionally ignored - we only need to establish prior detection
 	isNew, _ := tracker.CheckAndUpdateSpecies(testSpecies, previousDetection)
 	assert.True(t, isNew, "First detection in 2025 should be new")
 
@@ -113,18 +119,7 @@ func TestNotificationTiming_CrossMidnight(t *testing.T) {
 func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 	t.Parallel()
 
-	// Create mock datastore
-	mockDS := mocks.NewMockInterface(t)
-
-	// Setup mock expectations
-	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	mockDS.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil).Maybe()
-	mockDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	mockDS.On("Save", mock.AnythingOfType("*datastore.Note"), mock.Anything).
-		Return(nil).Maybe()
+	mockDS := setupMockDatastore(t)
 
 	// Create species tracker
 	settings := &conf.SpeciesTrackingSettings{
@@ -202,17 +197,7 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 func TestNotificationTiming_SuppressionWindowUsesBeginTime(t *testing.T) {
 	t.Parallel()
 
-	// Create mock datastore
-	mockDS := mocks.NewMockInterface(t)
-
-	mockDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	mockDS.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil).Maybe()
-	mockDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	mockDS.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
-		Return(nil).Maybe()
+	mockDS := setupMockDatastore(t)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:                      true,

@@ -631,7 +631,7 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.String("species", a.Note.CommonName),
 				logger.String("source", a.Note.Source.SafeString),
 				logger.Time("begin_time", a.Note.BeginTime),
-				logger.Int("duration_seconds", 15),
+				logger.Int("duration_seconds", captureLength),
 				logger.String("operation", "read_audio_segment"))
 			return err
 		}
