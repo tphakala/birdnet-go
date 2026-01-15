@@ -1991,6 +1991,12 @@
           "restartCount": "Restart Count",
           "connection": "Connection",
           "stateErrorHistory": "State & Error History"
+        },
+        "connectionStatus": {
+          "stable": "Stable",
+          "degraded": "Degraded",
+          "failed": "Failed",
+          "unknown": "Unknown"
         }
       },
       "audioFilters": {

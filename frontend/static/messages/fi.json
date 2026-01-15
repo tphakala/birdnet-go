@@ -1973,6 +1973,12 @@
           "restartCount": "Uudelleenkäynnistykset",
           "connection": "Yhteys",
           "stateErrorHistory": "Tila- ja virhehistoria"
+        },
+        "connectionStatus": {
+          "stable": "Vakaa",
+          "degraded": "Heikentynyt",
+          "failed": "Epäonnistunut",
+          "unknown": "Tuntematon"
         }
       }
     },

@@ -562,7 +562,7 @@
                         : 'text-[var(--color-base-content)]'
                 )}
               >
-                {connectionStatus}
+                {t(`settings.audio.streams.connectionStatus.${connectionStatus.toLowerCase()}`)}
               </span>
             </div>
           </div>

@@ -1973,6 +1973,12 @@
           "restartCount": "Reinicios",
           "connection": "Conexión",
           "stateErrorHistory": "Historial de estados y errores"
+        },
+        "connectionStatus": {
+          "stable": "Estable",
+          "degraded": "Degradada",
+          "failed": "Fallida",
+          "unknown": "Desconocido"
         }
       }
     },

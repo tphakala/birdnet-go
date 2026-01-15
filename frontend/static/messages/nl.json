@@ -2140,6 +2140,12 @@
           "restartCount": "Herstarts",
           "connection": "Verbinding",
           "stateErrorHistory": "Status- en foutgeschiedenis"
+        },
+        "connectionStatus": {
+          "stable": "Stabiel",
+          "degraded": "Verslechterd",
+          "failed": "Mislukt",
+          "unknown": "Onbekend"
         }
       }
     },

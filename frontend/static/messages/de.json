@@ -2140,6 +2140,12 @@
           "restartCount": "Neustarts",
           "connection": "Verbindung",
           "stateErrorHistory": "Status- & Fehlerhistorie"
+        },
+        "connectionStatus": {
+          "stable": "Stabil",
+          "degraded": "Beeinträchtigt",
+          "failed": "Fehlgeschlagen",
+          "unknown": "Unbekannt"
         }
       }
     },

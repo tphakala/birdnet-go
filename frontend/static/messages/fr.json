@@ -2140,6 +2140,12 @@
           "restartCount": "Redémarrages",
           "connection": "Connexion",
           "stateErrorHistory": "Historique des états et erreurs"
+        },
+        "connectionStatus": {
+          "stable": "Stable",
+          "degraded": "Dégradée",
+          "failed": "Échouée",
+          "unknown": "Inconnue"
         }
       }
     },
