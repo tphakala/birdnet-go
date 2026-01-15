@@ -121,7 +121,7 @@ jobs:
       # Optional: Create a GitHub release for tagged builds
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           tag_name: ${{ steps.get_build_version.outputs.build_version }}
