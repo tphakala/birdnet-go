@@ -11,6 +11,7 @@ require (
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/google/uuid v1.6.0
+	github.com/jarcoal/httpmock v1.4.1
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/k3a/html2text v1.2.1
 	github.com/klauspost/cpuid/v2 v2.3.0
@@ -30,8 +31,8 @@ require (
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	github.com/tphakala/simd v1.0.22
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.46.0
-	golang.org/x/net v0.48.0
+	golang.org/x/crypto v0.47.0
+	golang.org/x/net v0.49.0
 	golang.org/x/term v0.39.0
 	golang.org/x/text v0.33.0
 	google.golang.org/api v0.259.0
@@ -59,7 +60,6 @@ require (
 	github.com/googleapis/gax-go/v2 v2.16.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/jarcoal/httpmock v1.4.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/markbates/going v1.0.0 // indirect
