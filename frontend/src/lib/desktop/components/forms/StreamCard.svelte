@@ -488,7 +488,7 @@
               onclick={() => (expanded = !expanded)}
               aria-expanded={expanded}
               aria-controls="diagnostics-{index}"
-              aria-label="Toggle diagnostics"
+              aria-label={t('settings.audio.streams.diagnostics.toggleDiagnostics')}
             >
               <ChevronDown
                 class={cn(
@@ -511,7 +511,9 @@
           <!-- Stats Grid -->
           <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium">Process State:</span>
+              <span class="text-[var(--color-base-content)]/60 font-medium"
+                >{t('settings.audio.streams.diagnostics.processState')}:</span
+              >
               <span
                 class={cn(
                   'ml-2',
@@ -520,15 +522,19 @@
                     : 'text-[var(--color-base-content)]'
                 )}
               >
-                {health?.process_state ?? 'Unknown'}
+                {health?.process_state ?? t('common.unknown')}
               </span>
             </div>
             <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium">Last Data:</span>
+              <span class="text-[var(--color-base-content)]/60 font-medium"
+                >{t('settings.audio.streams.diagnostics.lastData')}:</span
+              >
               <span class="ml-2 text-[var(--color-base-content)]">{lastDataAgo}</span>
             </div>
             <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium">Restart Count:</span>
+              <span class="text-[var(--color-base-content)]/60 font-medium"
+                >{t('settings.audio.streams.diagnostics.restartCount')}:</span
+              >
               <span
                 class={cn(
                   'ml-2',
@@ -541,7 +547,9 @@
               </span>
             </div>
             <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium">Connection:</span>
+              <span class="text-[var(--color-base-content)]/60 font-medium"
+                >{t('settings.audio.streams.diagnostics.connection')}:</span
+              >
               <span
                 class={cn(
                   'ml-2',
@@ -563,7 +571,7 @@
           {#if health?.state_history?.length || health?.error_history?.length}
             <div class="mt-4 pt-4 border-t border-[var(--color-base-content)]/20">
               <p class="text-xs font-medium text-[var(--color-base-content)]/60 mb-3">
-                State & Error History
+                {t('settings.audio.streams.diagnostics.stateErrorHistory')}
               </p>
               <StreamTimeline
                 stateHistory={health?.state_history}

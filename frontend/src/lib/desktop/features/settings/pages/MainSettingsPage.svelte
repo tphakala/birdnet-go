@@ -1244,8 +1244,6 @@
 
   function getFalsePositiveFilterBadgeClass(level: number): string {
     switch (level) {
-      case 0:
-        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]'; // Off - muted/neutral
       case 1:
         return 'bg-[var(--color-success)] text-[var(--color-success-content)]'; // Lenient - green (easy on resources)
       case 2:
@@ -1253,11 +1251,11 @@
       case 3:
         return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]'; // Balanced - yellow/amber
       case 4:
-        return 'bg-[var(--color-error)] text-[var(--color-error-content)]'; // Strict - red (requires RPi 4+)
       case 5:
-        return 'bg-[var(--color-error)] text-[var(--color-error-content)]'; // Maximum - red (requires RPi 4+)
+        return 'bg-[var(--color-error)] text-[var(--color-error-content)]'; // Strict/Maximum - red (requires RPi 4+)
+      case 0:
       default:
-        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
+        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]'; // Off - muted/neutral
     }
   }
 

@@ -273,7 +273,7 @@
               </div>
 
               <div
-                class="bg-[var(--color-base-100)] rounded-lg p-3 border border-[var(--color-base-300)]"
+                class="bg-[var(--color-base-100)] rounded-lg p-3 border border-[var(--border-200)]"
               >
                 <h4 class="font-semibold text-sm mb-2">
                   {t('settings.support.supportReport.whatsIncluded.title')}

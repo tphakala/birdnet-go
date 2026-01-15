@@ -1513,7 +1513,7 @@
                         href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="link link-primary inline-flex items-center gap-1 mt-2"
+                        class="inline-flex items-center gap-1 mt-2 text-[var(--color-primary)] hover:underline"
                       >
                         {t('settings.notifications.push.form.urlFormats.moreServices')}
                         <ExternalLink class="size-3" />

@@ -1982,6 +1982,14 @@
           "to": "To",
           "reason": "Reason",
           "eventAt": "Event at {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Toggle diagnostics",
+          "processState": "Process State",
+          "lastData": "Last Data",
+          "restartCount": "Restart Count",
+          "connection": "Connection",
+          "stateErrorHistory": "State & Error History"
         }
       },
       "audioFilters": {
