@@ -52,7 +52,8 @@ const (
 	MQTTPublishTimeout = 10 * time.Second
 
 	// DatabaseSearchLimit is the maximum number of results when searching for notes
-	DatabaseSearchLimit = 10
+	// Set high enough to handle high-activity periods (e.g., dawn chorus)
+	DatabaseSearchLimit = 50
 
 	// CompositeActionTimeout is the default timeout for each action in a composite action
 	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
@@ -1227,13 +1228,11 @@ func (a *SSEAction) Execute(data any) error {
 		if err := a.waitForDatabaseID(); err != nil {
 			// Cannot broadcast without database ID - frontend would fail to load audio/spectrogram
 			// Skip SSE broadcast gracefully - the detection is still saved and will appear on page refresh
-			if a.Settings.Debug {
-				GetLogger().Debug("Skipping SSE broadcast - database ID not available within timeout",
-					logger.String("component", "analysis.processor.actions"),
-					logger.String("detection_id", a.CorrelationID),
-					logger.String("species", a.Note.CommonName),
-					logger.String("operation", "sse_broadcast_skipped"))
-			}
+			GetLogger().Warn("Skipping SSE broadcast - database ID not available within timeout",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", a.Note.CommonName),
+				logger.String("operation", "sse_broadcast_skipped"))
 			return nil // Not an error - graceful degradation
 		}
 	}
@@ -1355,8 +1354,10 @@ func (a *SSEAction) waitForDatabaseID() error {
 		time.Sleep(SSEDatabaseCheckInterval)
 	}
 
-	// Timeout reached - return simple error (not a structured error that could trigger notifications)
-	// This is a transient timing issue, not a user-actionable problem
+	// Timeout reached - intentionally using fmt.Errorf instead of errors.Newf to avoid
+	// triggering user notifications. This is a transient timing issue, not a user-actionable
+	// problem. The structured error system converts errors to notifications, which we want
+	// to avoid for this non-critical timeout.
 	return fmt.Errorf("database ID not found for %s after %v", a.Note.CommonName, SSEDatabaseIDTimeout)
 }
 
@@ -1392,10 +1393,12 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 		note := &notes[i]
 		// Check if this note matches our expected characteristics
 		// Include SourceNode to prevent matching wrong detection in high-activity periods
+		// Only compare SourceNode if both have values (handles legacy data)
+		sourceMatches := a.Note.SourceNode == "" || note.SourceNode == "" || note.SourceNode == a.Note.SourceNode
 		if note.Date == a.Note.Date &&
 			note.ScientificName == a.Note.ScientificName &&
 			note.Time == a.Note.Time &&
-			note.SourceNode == a.Note.SourceNode { // Exact match including source
+			sourceMatches {
 			return note, nil
 		}
 	}
