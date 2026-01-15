@@ -51,7 +51,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		results, err := ds.GetHourlyWeather(localDate)
 		require.NoError(t, err)
 		assert.Len(t, results, 1, "Should find weather for the local date")
-		assert.Equal(t, 15.5, results[0].Temperature)
+		assert.InEpsilon(t, 15.5, results[0].Temperature, 0.0001)
 	})
 
 	t.Run("UTC weather crosses midnight boundary - timezone ahead of UTC", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		results, err := ds.GetHourlyWeather("2024-01-15")
 		require.NoError(t, err)
 		assert.Len(t, results, 1, "Should find weather that falls within local date range")
-		assert.Equal(t, 18.5, results[0].Temperature)
+		assert.InEpsilon(t, 18.5, results[0].Temperature, 0.0001)
 	})
 
 	t.Run("multiple weather records across local day", func(t *testing.T) {
@@ -110,8 +110,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		assert.Len(t, results, 5, "Should find all weather records within the local day")
 
 		// Verify results are ordered by time
-		assert.Equal(t, 12.0, results[0].Temperature, "First record should be start of local day")
-		assert.Equal(t, 15.0, results[4].Temperature, "Last record should be end of local day")
+		assert.InEpsilon(t, 12.0, results[0].Temperature, 0.0001, "First record should be start of local day")
+		assert.InEpsilon(t, 15.0, results[4].Temperature, 0.0001, "Last record should be end of local day")
 	})
 
 	t.Run("weather just outside local day boundary should not be included", func(t *testing.T) {
@@ -141,8 +141,8 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		assert.Len(t, results, 2, "Should only include weather within the exact local day range")
 
 		// Verify we got the correct records
-		assert.Equal(t, 12.0, results[0].Temperature)
-		assert.Equal(t, 18.0, results[1].Temperature)
+		assert.InEpsilon(t, 12.0, results[0].Temperature, 0.0001)
+		assert.InEpsilon(t, 18.0, results[1].Temperature, 0.0001)
 	})
 
 	t.Run("timezone behind UTC - negative offset", func(t *testing.T) {
@@ -227,10 +227,10 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		require.Len(t, results, 4, "Should find all 4 weather records")
 
 		// Verify ascending order by checking temperatures
-		assert.Equal(t, 10.0, results[0].Temperature, "Should be ordered by time (earliest first)")
-		assert.Equal(t, 12.0, results[1].Temperature)
-		assert.Equal(t, 20.0, results[2].Temperature)
-		assert.Equal(t, 22.0, results[3].Temperature, "Should be ordered by time (latest last)")
+		assert.InEpsilon(t, 10.0, results[0].Temperature, 0.0001, "Should be ordered by time (earliest first)")
+		assert.InEpsilon(t, 12.0, results[1].Temperature, 0.0001)
+		assert.InEpsilon(t, 20.0, results[2].Temperature, 0.0001)
+		assert.InEpsilon(t, 22.0, results[3].Temperature, 0.0001, "Should be ordered by time (latest last)")
 	})
 
 	t.Run("daylight saving time boundary", func(t *testing.T) {
@@ -337,7 +337,7 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 
 		// Insert many weather records for a single day
 		baseTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			weather := &HourlyWeather{
 				Time:        baseTime.Add(time.Duration(i) * 15 * time.Minute),
 				Temperature: 15.0 + float64(i)*0.1,
