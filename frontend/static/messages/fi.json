@@ -451,6 +451,9 @@
         "sunrise": "Auringonnousu klo {time}",
         "sunset": "Auringonlasku klo {time}"
       },
+      "weather": {
+        "label": "Sää"
+      },
       "legend": {
         "less": "Vähemmän",
         "more": "Enemmän"
@@ -960,7 +963,8 @@
             "label": "Suodatustaso"
           },
           "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
-          "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi"
+          "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
+          "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa"
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
@@ -1171,6 +1175,20 @@
                   "scientificDark": "Harmaasävy Dolph-ikkunalla, tumma tausta",
                   "highContrastDark": "Korkea värikylläisyys tummalla taustalla",
                   "scientific": "Harmaasävy Dolph-ikkunalla, vaalea tausta (xeno-canto-tyylinen)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamiikka-alue",
+                "helpText": "Säätää kontrastia - pienemmät arvot tuovat heikot signaalit paremmin esiin, suuremmat arvot näyttävät enemmän yksityiskohtia.",
+                "options": {
+                  "highContrast": "Korkea kontrasti (80 dB)",
+                  "standard": "Standardi (100 dB)",
+                  "extended": "Laajennettu (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
+                  "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. SoX-oletusarvo."
                 }
               },
               "enabled": {
@@ -1884,47 +1902,52 @@
         "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Virrat-välilehdellä."
       },
       "rtspStreams": {
-        "title": "RTSP-virran määritys",
-        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen RTSP-protokollan kautta.",
+        "title": "Äänivirtojen Määritys",
+        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
         "noStreamsConfigured": "Virtoja ei ole määritetty"
       },
       "streams": {
-        "streamLabel": "Virta",
-        "urlLabel": "Virran URL",
-        "urlHelp": "Syötä RTSP-URL valinnaisten tunnistetietojen kanssa (rtsp://käyttäjä:salasana@isäntä:portti/polku)",
-        "typeLabel": "Virran tyyppi",
-        "typeLockedNote": "Vain RTSP on tällä hetkellä tuettu",
+        "streamLabel": "Striimi",
+        "nameLabel": "Striimin nimi",
+        "namePlaceholder": "esim. Etupihan ruokinta",
+        "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
+        "urlLabel": "Striimin URL",
+        "urlHelp": "Syötä striimin URL-osoite valinnaisilla tunnistetiedoilla (esim. rtsp://palvelin:portti/polku). Käytä ympäristömuuttujia tunnistetiedoille.",
+        "typeLabel": "Striimin tyyppi",
+        "typeHelp": "Striimin protokolla - tunnistetaan automaattisesti URL:sta",
         "transportLabel": "Protokolla",
-        "summary": "{count} virta(a) määritetty",
-        "healthy": "terve",
-        "unhealthy": "epäterve",
+        "summary": "{count} striimi(ä) määritetty",
+        "healthy": "kunnossa",
+        "unhealthy": "viallinen",
         "unknown": "tuntematon",
         "refresh": "Päivitä",
-        "addStream": "Lisää virta",
-        "deleteConfirm": "Poista tämä virta?",
+        "addStream": "Lisää striimi",
+        "deleteConfirm": "Poista tämä striimi?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
-        "healthLoadError": "Virran terveystilan lataus epäonnistui",
+        "healthLoadError": "Striimin tilan lataus epäonnistui",
         "status": {
           "connected": "Yhdistetty",
           "connecting": "Yhdistetään",
           "error": "Virhe",
-          "idle": "Jouten",
+          "idle": "Odottaa",
           "unknown": "Tuntematon"
         },
         "emptyState": {
-          "title": "Virtoja ei ole määritetty",
-          "description": "Lisää RTSP-virtoja tallentaaksesi ääntä verkkokameroista tai muista RTSP-lähteistä.",
-          "hintsTitle": "Aloittaminen",
+          "title": "Ei määritettyjä striimejä",
+          "description": "Lisää äänistriimejä IP-kameroista, Icecast-palvelimista tai muista verkkolähteistä.",
+          "hintsTitle": "Aloitus",
           "hints": {
-            "rtsp": "Käytä RTSP-URL-osoitteita IP-kameroista (esim. rtsp://192.168.1.100:554/virta)",
-            "credentials": "Sisällytä tunnistetiedot URL-osoitteeseen tarvittaessa (rtsp://käyttäjä:salasana@isäntä/virta)",
-            "protocol": "TCP on luotettavampi, UDP:llä on pienempi viive"
+            "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP/RTP-striimejä",
+            "credentials": "Tunnistetiedot voi sisällyttää URL:iin tai käyttää ympäristömuuttujia",
+            "protocol": "TCP on luotettavampi RTSP:lle, UDP:llä on pienempi latenssi"
           }
         },
         "errors": {
-          "urlRequired": "Virran URL vaaditaan",
-          "invalidUrl": "Virheellinen RTSP-URL-muoto",
-          "duplicate": "Tämä virran URL on jo olemassa"
+          "nameRequired": "Striimin nimi on pakollinen",
+          "duplicateName": "Tämän niminen striimi on jo olemassa",
+          "urlRequired": "Striimin URL on pakollinen",
+          "invalidUrl": "Virheellinen striimin URL-muoto",
+          "duplicate": "Tämä striimin URL on jo olemassa"
         }
       }
     },
@@ -1976,18 +1999,35 @@
             "helpText": "MQTT-salasana."
           }
         },
-        "messageSettings": {
-          "title": "Viestiasetukset",
-          "retain": {
-            "label": "Säilytä viestit",
-            "note": "<strong>Home Assistant -käyttäjät:</strong> On suositeltavaa ottaa käyttöön säilytyslippu Home Assistant -integraatiota varten. Ilman säilytystä MQTT-anturit näkyvät 'tuntemattomina' kun Home Assistant käynnistyy uudelleen."
-          }
-        },
         "tls": {
           "title": "TLS/SSL-suojaus",
           "enable": "Ota käyttöön TLS/SSL",
           "skipVerify": "Ohita varmenteen tarkistus",
           "configNote": "<strong>TLS-asetukset:</strong><br />• Vakio TLS: Jätä varmenteet tyhjäksi julkisille välittäjille<br />• Itse allekirjoitetut varmenteet: Anna CA-varmenne<br />• Molemminpuolinen TLS (mTLS): Anna kaikki kolme varmennetta"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Ota käyttöön Home Assistant MQTT Discovery",
+          "description": "Kun käytössä, BirdNET-Go rekisteröi automaattisesti laitteet ja anturit Home Assistantiin MQTT-discovery-protokollan kautta. Laitteet ilmestyvät Home Assistantin laiterekisteriin ilman manuaalista YAML-konfiguraatiota.",
+          "discoveryPrefix": {
+            "label": "Discovery-etuliite",
+            "helpText": "MQTT-aiheen etuliite Home Assistant discovery -viesteille. Oletusarvo on 'homeassistant'. Muuta tätä vain, jos olet määrittänyt mukautetun discovery-etuliitteen Home Assistantissa."
+          },
+          "deviceName": {
+            "label": "Laitteen nimi",
+            "helpText": "Laitteiden perusnimi sellaisena kuin ne näkyvät Home Assistantissa. Jokaisella äänilähteellä on oma laite, joka on linkitetty tähän BirdNET-Go-päälaitteeseen."
+          },
+          "sensorsNote": "<strong>Luodut anturit:</strong> Jokaista äänilähdettä kohden Home Assistant saa: Viimeisin laji, Luottamus, Tieteellinen nimi ja Äänitaso (jos käytössä). Siltalaitteessa on online/offline-saatavuustila.",
+          "discovery": {
+            "button": "Lähetä Discovery",
+            "success": "Discovery-viestit lähetetty Home Assistantiin",
+            "error": "Discovery-viestien lähetys epäonnistui",
+            "saveFirst": "Tallenna asetukset ennen discoveryn lähettämistä"
+          },
+          "retain": {
+            "label": "Säilytä viestit",
+            "note": "<strong>Suositus:</strong> Ota käyttöön säilytyslippu varmistaaksesi, että MQTT-anturit näyttävät arvoja Home Assistantin uudelleenkäynnistyksen jälkeen."
+          }
         },
         "test": {
           "button": "Testaa MQTT-yhteys",
@@ -2544,7 +2584,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ladataan tietoja...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2553,7 +2593,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ladataan tietoja...",
       "error": "Tietojen lataus epäonnistui",
       "sortBy": "Lajittele {column}",
       "rowsPerPage": "Rivejä sivulla",
@@ -2677,7 +2716,9 @@
       "volumeGain": "Äänenvoimakkuuden vahvistus: {value} dB",
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
-      "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia"
+      "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
+      "playbackSpeed": "Toistonopeus",
+      "speed": "Nopeus"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",

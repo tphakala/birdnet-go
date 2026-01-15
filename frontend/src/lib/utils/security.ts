@@ -367,3 +367,43 @@ export function ensureRequiredProperties<T extends object>(
   if (obj == null) return { ...defaults };
   return { ...defaults, ...obj };
 }
+
+/**
+ * Mask credentials in URLs for safe display
+ * Uses URL object to handle all protocol schemes uniformly
+ * Prevents credential exposure in UI for any URL type (RTSP, RTMP, HTTP, etc.)
+ */
+export function maskUrlCredentials(urlStr: string): string {
+  // Length protection to prevent ReDoS
+  if (!urlStr || urlStr.length > 2048) return urlStr;
+
+  try {
+    const urlObj = new URL(urlStr);
+    if (urlObj.username || urlObj.password) {
+      urlObj.username = '***';
+      urlObj.password = '***';
+      return urlObj.toString();
+    }
+    return urlStr;
+  } catch {
+    // Fallback for malformed URLs - use indexOf for safe credential detection
+    const protoEnd = urlStr.indexOf('://');
+    if (protoEnd === -1) return urlStr;
+
+    const atIndex = urlStr.indexOf('@', protoEnd + 3);
+    if (atIndex === -1) return urlStr;
+
+    // Found credentials: protocol://...@host -> protocol://***:***@host
+    const protocol = urlStr.slice(0, protoEnd + 3);
+    const rest = urlStr.slice(atIndex);
+    return protocol + '***:***' + rest;
+  }
+}
+
+/**
+ * Sanitize URL for comparison purposes (credentials masked)
+ * Returns a normalized URL string suitable for equality checks
+ */
+export function sanitizeUrlForComparison(urlStr: string): string {
+  return maskUrlCredentials(urlStr);
+}

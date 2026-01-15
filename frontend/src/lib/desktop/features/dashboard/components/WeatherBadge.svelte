@@ -6,6 +6,7 @@
 
   Props:
   - weatherIcon: string - Weather code identifier
+  - description?: string - Raw weather description (yr.no symbol) for fallback
   - temperature?: number - Temperature value
   - units?: string - Temperature unit system
   - timeOfDay?: string - Day/night context for icon
@@ -15,41 +16,35 @@
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
   import { formatTemperatureCompact, type TemperatureUnit } from '$lib/utils/formatters';
+  import {
+    WEATHER_ICON_MAP,
+    UNKNOWN_WEATHER_INFO,
+    getEffectiveWeatherCode,
+  } from '$lib/utils/weather';
 
   interface Props {
     weatherIcon: string;
+    description?: string;
     temperature?: number;
     units?: string;
     timeOfDay?: string;
     className?: string;
   }
 
-  let { weatherIcon, temperature, units, timeOfDay = 'day', className = '' }: Props = $props();
+  let {
+    weatherIcon,
+    description,
+    temperature,
+    units,
+    timeOfDay = 'day',
+    className = '',
+  }: Props = $props();
 
-  // Weather icon mapping
-  const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
-    '01': { day: '☀️', night: '🌙', description: 'Clear sky' },
-    '02': { day: '⛅', night: '☁️', description: 'Few clouds' },
-    '03': { day: '☁️', night: '☁️', description: 'Scattered clouds' },
-    '04': { day: '☁️', night: '☁️', description: 'Broken clouds' },
-    '09': { day: '🌧️', night: '🌧️', description: 'Shower rain' },
-    '10': { day: '🌦️', night: '🌧️', description: 'Rain' },
-    '11': { day: '⛈️', night: '⛈️', description: 'Thunderstorm' },
-    '13': { day: '❄️', night: '❄️', description: 'Snow' },
-    '50': { day: '🌫️', night: '🌫️', description: 'Mist' },
-  };
-
-  // Extract icon code
-  const iconCode = $derived.by(() => {
-    if (!weatherIcon || typeof weatherIcon !== 'string') return '';
-    const match = weatherIcon.match(/^(\d{2})[dn]?$/);
-    return match ? match[1] : '';
-  });
+  // Get effective icon code with fallback to description-based derivation
+  const iconCode = $derived(getEffectiveWeatherCode(weatherIcon, description));
 
   const isNight = $derived(timeOfDay === 'night' || weatherIcon?.endsWith('n'));
-  const iconData = $derived(
-    safeGet(weatherIconMap, iconCode, { day: '❓', night: '❓', description: 'Unknown' })
-  );
+  const iconData = $derived(safeGet(WEATHER_ICON_MAP, iconCode, UNKNOWN_WEATHER_INFO));
   const icon = $derived(isNight ? iconData.night : iconData.day);
 
   // Format temperature with conversion from Celsius (internal storage) to display unit

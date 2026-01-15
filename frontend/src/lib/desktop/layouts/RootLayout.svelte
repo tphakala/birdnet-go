@@ -12,6 +12,7 @@
   interface Props {
     title?: string;
     currentPage?: string;
+    currentPath?: string;
     securityEnabled?: boolean;
     accessAllowed?: boolean;
     version?: string;
@@ -24,6 +25,7 @@
   let {
     title = 'Dashboard',
     currentPage = 'dashboard',
+    currentPath,
     securityEnabled = false,
     accessAllowed = true,
     version = 'Development Build',
@@ -144,7 +146,7 @@
     {securityEnabled}
     {accessAllowed}
     {version}
-    currentRoute={`/ui/${currentPage}`}
+    currentRoute={currentPath ?? `/ui/${currentPage}`}
     onNavigate={handleNavigate}
     {authConfig}
   />

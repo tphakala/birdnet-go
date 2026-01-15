@@ -451,6 +451,9 @@
         "sunrise": "Wschód słońca o {time}",
         "sunset": "Zachód słońca o {time}"
       },
+      "weather": {
+        "label": "Pogoda"
+      },
       "legend": {
         "less": "Mniej",
         "more": "Więcej"
@@ -972,7 +975,8 @@
             "label": "Poziom Filtra"
           },
           "hardwareNote": "Poziomy Ścisły i Maksymalny wymagają wyższych ustawień nakładania i większych zasobów CPU. Dla tych poziomów wymagany jest RPi 4 lub lepszy sprzęt.",
-          "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra"
+          "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra",
+          "overlapReduced": "Ustawienie nakładania zmniejszono do {overlap}s, aby dopasować do poziomu filtra"
         },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
@@ -1183,6 +1187,20 @@
                   "scientificDark": "Skala szarości z oknem Dolpha, ciemne tło",
                   "highContrastDark": "Wysoka saturacja kolorów z ciemnym tłem",
                   "scientific": "Skala szarości z oknem Dolpha, jasne tło (styl xeno-canto)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Zakres Dynamiczny",
+                "helpText": "Kontroluje kontrast - niższe wartości lepiej wyróżniają słabe sygnały, wyższe wartości pokazują więcej szczegółów.",
+                "options": {
+                  "highContrast": "Wysoki Kontrast (80 dB)",
+                  "standard": "Standardowy (100 dB)",
+                  "extended": "Rozszerzony (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Najlepszy dla słabych sygnałów. Śpiew ptaków wyraźnie wyróżnia się z szumu tła. Zalecany dla stylów naukowych/skali szarości.",
+                  "standard": "Domyślne zrównoważone ustawienie. Dobre dla większości zastosowań.",
+                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość SoX."
                 }
               },
               "enabled": {
@@ -1709,18 +1727,35 @@
             "helpText": "Hasło MQTT."
           }
         },
-        "messageSettings": {
-          "title": "Ustawienia Wiadomości",
-          "retain": {
-            "label": "Zachowaj Wiadomości",
-            "note": "<strong>Użytkownicy Home Assistant:</strong> Zaleca się włączenie flagi zachowania dla integracji Home Assistant. Bez zachowania, czujniki MQTT będą wyświetlane jako 'nieznane' po restarcie Home Assistant."
-          }
-        },
         "tls": {
           "title": "Bezpieczeństwo TLS/SSL",
           "enable": "Włącz TLS/SSL",
           "skipVerify": "Pomiń Weryfikację Certyfikatu",
           "configNote": "<strong>Konfiguracja TLS:</strong><br />• Standardowe TLS: Zostaw certyfikaty puste dla publicznych brokerów<br />• Certyfikaty self-signed: Podaj Certyfikat CA<br />• Mutual TLS (mTLS): Podaj wszystkie trzy certyfikaty"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Włącz Home Assistant MQTT Discovery",
+          "description": "Po włączeniu BirdNET-Go automatycznie rejestruje urządzenia i czujniki w Home Assistant poprzez protokół wykrywania MQTT. Urządzenia pojawią się w rejestrze urządzeń Home Assistant bez ręcznej konfiguracji YAML.",
+          "discoveryPrefix": {
+            "label": "Prefiks wykrywania",
+            "helpText": "Prefiks tematu MQTT dla wiadomości wykrywania Home Assistant. Domyślnie 'homeassistant'. Zmień to tylko jeśli skonfigurowałeś niestandardowy prefiks wykrywania w Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nazwa urządzenia",
+            "helpText": "Podstawowa nazwa urządzeń wyświetlana w Home Assistant. Każde źródło audio będzie miało własne urządzenie połączone z tym głównym urządzeniem BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Utworzone czujniki:</strong> Dla każdego źródła audio Home Assistant otrzyma: Ostatni gatunek, Pewność, Nazwa naukowa i Poziom dźwięku (jeśli włączony). Urządzenie mostka zawiera status dostępności online/offline.",
+          "discovery": {
+            "button": "Wyślij Discovery",
+            "success": "Wiadomości wykrywania wysłane do Home Assistant",
+            "error": "Nie udało się wysłać wiadomości wykrywania",
+            "saveFirst": "Zapisz ustawienia przed wysłaniem wykrywania"
+          },
+          "retain": {
+            "label": "Zachowaj Wiadomości",
+            "note": "<strong>Zalecane:</strong> Włącz flagę zachowania, aby upewnić się, że czujniki MQTT pokazują wartości po restarcie Home Assistant."
+          }
         },
         "test": {
           "button": "Testuj Połączenie MQTT",
@@ -2040,26 +2075,29 @@
         "description": "BirdNET-Go potrzebuje wejścia audio do wykrywania ptaków. Proszę skonfigurować co najmniej jedno źródło w karcie Karta Dźwiękowa lub Strumienie."
       },
       "rtspStreams": {
-        "title": "Konfiguracja Strumieni RTSP",
-        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio przez protokół RTSP.",
+        "title": "Konfiguracja Strumieni Audio",
+        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP.",
         "noStreamsConfigured": "Brak skonfigurowanych strumieni"
       },
       "streams": {
         "streamLabel": "Strumień",
-        "urlLabel": "Adres URL Strumienia",
-        "urlHelp": "Wprowadź adres URL RTSP z opcjonalnymi danymi uwierzytelniającymi (rtsp://użytkownik:hasło@host:port/ścieżka)",
+        "nameLabel": "Nazwa Strumienia",
+        "namePlaceholder": "np. Karmnik w Ogrodzie",
+        "nameHelp": "Opisowa nazwa do identyfikacji tego strumienia audio",
+        "urlLabel": "URL Strumienia",
+        "urlHelp": "Wprowadź URL strumienia z opcjonalnymi danymi logowania (np. rtsp://host:port/ścieżka). Użyj zmiennych środowiskowych dla danych logowania.",
         "typeLabel": "Typ Strumienia",
-        "typeLockedNote": "Obecnie obsługiwany jest tylko RTSP",
+        "typeHelp": "Protokół strumienia - wykrywany automatycznie z URL",
         "transportLabel": "Protokół",
-        "summary": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}",
+        "summary": "{count} strumień(i) skonfigurowany(ch)",
         "healthy": "sprawny",
         "unhealthy": "niesprawny",
         "unknown": "nieznany",
         "refresh": "Odśwież",
         "addStream": "Dodaj Strumień",
         "deleteConfirm": "Usunąć ten strumień?",
-        "restartCount": "{count, plural, one {Zrestartowano # raz} few {Zrestartowano # razy} other {Zrestartowano # razy}}",
-        "healthLoadError": "Nie udało się załadować statusu sprawności strumienia",
+        "restartCount": "Zrestartowano {count} raz(y)",
+        "healthLoadError": "Nie udało się załadować statusu strumienia",
         "status": {
           "connected": "Połączony",
           "connecting": "Łączenie",
@@ -2069,18 +2107,20 @@
         },
         "emptyState": {
           "title": "Brak Skonfigurowanych Strumieni",
-          "description": "Dodaj strumienie RTSP, aby przechwytywać dźwięk z kamer sieciowych lub innych źródeł RTSP.",
+          "description": "Dodaj strumienie audio z kamer IP, serwerów Icecast lub innych źródeł sieciowych.",
           "hintsTitle": "Pierwsze Kroki",
           "hints": {
-            "rtsp": "Użyj adresów URL RTSP z kamer IP (np. rtsp://192.168.1.100:554/strumień)",
-            "credentials": "Dołącz dane uwierzytelniające w URL, jeśli wymagane (rtsp://użytkownik:hasło@host/strumień)",
-            "protocol": "TCP jest bardziej niezawodny, UDP ma mniejsze opóźnienie"
+            "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP/RTP",
+            "credentials": "Dane logowania można dołączyć w URL lub użyć zmiennych środowiskowych",
+            "protocol": "TCP jest bardziej niezawodny dla RTSP, UDP ma niższe opóźnienie"
           }
         },
         "errors": {
-          "urlRequired": "Adres URL strumienia jest wymagany",
-          "invalidUrl": "Nieprawidłowy format adresu URL RTSP",
-          "duplicate": "Ten adres URL strumienia już istnieje"
+          "nameRequired": "Nazwa strumienia jest wymagana",
+          "duplicateName": "Strumień o tej nazwie już istnieje",
+          "urlRequired": "URL strumienia jest wymagany",
+          "invalidUrl": "Nieprawidłowy format URL strumienia",
+          "duplicate": "Ten URL strumienia już istnieje"
         }
       }
     },
@@ -2505,12 +2545,6 @@
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
       "mysqlHostPlaceholder": "Wprowadź host MySQL",
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
-    },
-    "tabs": {
-      "navigation": "Karty nawigacji ustawień",
-      "hasChanges": "Ta karta ma niezapisane zmiany",
-      "setAsDefault": "Ustaw jako domyślne",
-      "defaultIndicator": "Domyślne źródło wejściowe"
     }
   },
   "auth": {
@@ -2550,7 +2584,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Ładowanie danych...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2559,7 +2593,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Ładowanie danych...",
       "error": "Nie udało się załadować danych",
       "sortBy": "Sortuj według {column}",
       "rowsPerPage": "Wierszy na stronę",
@@ -2683,7 +2716,9 @@
       "volumeGain": "Kontrola wzmocnienia głośności: {value} dB",
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",
-      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund"
+      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund",
+      "playbackSpeed": "Prędkość odtwarzania",
+      "speed": "Prędkość"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",

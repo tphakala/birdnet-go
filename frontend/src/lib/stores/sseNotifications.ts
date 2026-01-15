@@ -2,9 +2,21 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
 import { loggers } from '$lib/utils/logger';
-import { sanitizeNotificationMessage } from '$lib/utils/notifications';
+import {
+  sanitizeNotificationMessage,
+  isValidNotification,
+  type Notification,
+} from '$lib/utils/notifications';
 
 const logger = loggers.sse;
+
+// SSE connection configuration
+const SSE_ENDPOINT = '/api/v2/notifications/stream';
+const SSE_MAX_RETRY_MS = 30000;
+const SSE_RETRY_DELAY_MS = 5000;
+const SSE_INIT_DELAY_MS = 100;
+const TOAST_DEFAULT_DURATION_MS = 5000;
+const TOAST_DEFAULT_POSITION: ToastPosition = 'top-right';
 
 interface SSENotification {
   message: string;
@@ -25,9 +37,41 @@ interface SSEToastData {
   };
 }
 
+// Callback type for notification events
+type NotificationCallback = (notification: Notification) => void;
+
 class SSENotificationManager {
   private eventSource: ReconnectingEventSource | null = null;
   private isConnected = false;
+  private readonly notificationCallbacks: Set<NotificationCallback> = new Set();
+
+  /**
+   * Register a callback to receive raw notification events
+   * Used by components like NotificationBell that need the full notification data
+   */
+  registerNotificationCallback(callback: NotificationCallback): () => void {
+    this.notificationCallbacks.add(callback);
+    // Return unsubscribe function
+    return () => {
+      this.notificationCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Notify all registered callbacks of a new notification
+   */
+  private notifyCallbacks(notification: Notification): void {
+    this.notificationCallbacks.forEach(callback => {
+      try {
+        callback(notification);
+      } catch (error) {
+        logger.error('Error in notification callback', error, {
+          component: 'sseNotifications',
+          action: 'notifyCallbacks',
+        });
+      }
+    });
+  }
 
   /**
    * Start listening for SSE notifications
@@ -39,8 +83,8 @@ class SSENotificationManager {
 
     try {
       // Create connection to SSE endpoint
-      this.eventSource = new ReconnectingEventSource('/api/v2/notifications/stream', {
-        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
+      this.eventSource = new ReconnectingEventSource(SSE_ENDPOINT, {
+        max_retry_time: SSE_MAX_RETRY_MS,
         withCredentials: true, // Authentication required for notification stream
       });
 
@@ -56,7 +100,12 @@ class SSENotificationManager {
           this.handleNotification(notification);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for backwards compatibility
-          logger.warn('SSE general message parsing error (ignored):', error, 'Data:', event.data);
+          // Avoid logging raw payload to prevent leaking sensitive content
+          logger.warn('SSE general message parsing error (ignored)', error, {
+            component: 'sseNotifications',
+            action: 'onmessage',
+            dataLength: typeof event.data === 'string' ? event.data.length : undefined,
+          });
         }
       };
 
@@ -71,14 +120,8 @@ class SSENotificationManager {
 
       // Handle connected event
       this.eventSource.addEventListener('connected', (event: Event) => {
-        try {
-          const messageEvent = event as MessageEvent;
-          const data = JSON.parse(messageEvent.data);
-          logger.info('SSE connected:', data);
-        } catch (error) {
-          // Log parsing errors for debugging while ignoring them for connection events
-          logger.warn('SSE connected event parsing error (ignored):', error);
-        }
+        const messageEvent = event as MessageEvent;
+        logger.info('SSE connected:', messageEvent.data);
       });
 
       // Handle toast messages
@@ -95,15 +138,24 @@ class SSENotificationManager {
         }
       });
 
-      // Handle heartbeat
-      this.eventSource.addEventListener('heartbeat', (event: Event) => {
+      // Handle notification events for registered callbacks
+      this.eventSource.addEventListener('notification', (event: Event) => {
         try {
           const messageEvent = event as MessageEvent;
-          JSON.parse(messageEvent.data);
-          // Heartbeat received successfully - could add connection health tracking here
+          const parsed: unknown = JSON.parse(messageEvent.data);
+          if (!isValidNotification(parsed)) {
+            logger.warn('Invalid notification event payload (ignored)', null, {
+              component: 'sseNotifications',
+              action: 'handleNotification',
+            });
+            return;
+          }
+          this.notifyCallbacks(parsed);
         } catch (error) {
-          // Log parsing errors for debugging while ignoring them for heartbeat
-          logger.warn('SSE heartbeat parsing error (ignored):', error);
+          logger.error('Error processing notification event', error, {
+            component: 'sseNotifications',
+            action: 'handleNotification',
+          });
         }
       });
     } catch (error) {
@@ -111,8 +163,8 @@ class SSENotificationManager {
         component: 'sseNotifications',
         action: 'connect',
       });
-      // Try again in 5 seconds
-      setTimeout(() => this.connect(), 5000);
+      // Retry after SSE_RETRY_DELAY_MS
+      setTimeout(() => this.connect(), SSE_RETRY_DELAY_MS);
     }
   }
 
@@ -124,7 +176,7 @@ class SSENotificationManager {
     const toastType = this.mapNotificationType(notification.type);
 
     // Show toast with appropriate duration
-    const duration = notification.type === 'error' ? null : 5000; // Errors don't auto-dismiss
+    const duration = notification.type === 'error' ? null : TOAST_DEFAULT_DURATION_MS;
 
     toastActions.show(sanitizeNotificationMessage(notification.message), toastType, {
       duration,
@@ -154,8 +206,8 @@ class SSENotificationManager {
       : undefined;
 
     toastActions.show(sanitizeNotificationMessage(toastData.message), toastData.type, {
-      duration: toastData.duration ?? 5000,
-      position: 'top-right' as ToastPosition,
+      duration: toastData.duration ?? TOAST_DEFAULT_DURATION_MS,
+      position: TOAST_DEFAULT_POSITION,
       actions,
     });
   }
@@ -202,7 +254,7 @@ export const sseNotifications = new SSENotificationManager();
 // Auto-connect when module is imported
 if (typeof window !== 'undefined') {
   // Initialize after a short delay to ensure the app is ready
-  setTimeout(() => sseNotifications.connect(), 100);
+  setTimeout(() => sseNotifications.connect(), SSE_INIT_DELAY_MS);
 
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => sseNotifications.disconnect());

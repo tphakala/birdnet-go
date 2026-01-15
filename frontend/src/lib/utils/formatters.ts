@@ -296,3 +296,80 @@ export function formatTemperatureCompact(
 
   return `${Math.round(converted)}${symbol}`;
 }
+
+/**
+ * Wind speed conversion constant: 1 m/s = 2.23694 mph
+ */
+const MS_TO_MPH = 2.23694;
+
+/**
+ * Convert wind speed from m/s to the specified unit system.
+ * All wind speeds are stored internally in meters per second (m/s).
+ *
+ * @param metersPerSecond - Wind speed in m/s
+ * @param unit - Target unit system: 'metric'/'standard' (m/s), 'imperial' (mph)
+ * @returns Wind speed converted to the target unit
+ */
+export function convertWindSpeed(metersPerSecond: number, unit: TemperatureUnit): number {
+  switch (unit) {
+    case 'imperial':
+      // m/s to mph: m/s * 2.23694
+      return metersPerSecond * MS_TO_MPH;
+    case 'metric':
+    case 'standard':
+      // m/s, no conversion needed
+      return metersPerSecond;
+    default: {
+      // Exhaustive check - ensures all TemperatureUnit cases are handled
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _exhaustiveCheck: never = unit;
+      return metersPerSecond;
+    }
+  }
+}
+
+/**
+ * Get the wind speed unit label for display.
+ *
+ * @param unit - Unit system: 'metric', 'imperial', or 'standard'
+ * @returns Unit label (m/s or mph)
+ */
+export function getWindSpeedUnit(unit: TemperatureUnit): string {
+  switch (unit) {
+    case 'imperial':
+      return 'mph';
+    case 'metric':
+    case 'standard':
+      return 'm/s';
+    default: {
+      // Exhaustive check - ensures all TemperatureUnit cases are handled
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _exhaustiveCheck: never = unit;
+      return 'm/s';
+    }
+  }
+}
+
+/**
+ * Format wind speed for display with conversion and unit label.
+ * All wind speeds are stored internally in m/s and converted for display.
+ *
+ * @param metersPerSecond - Wind speed in m/s (as stored in database)
+ * @param unit - Display unit system: 'metric', 'imperial', or 'standard'
+ * @param decimals - Number of decimal places (default: 0 for whole numbers)
+ * @returns Formatted wind speed string with unit (e.g., "11 mph")
+ */
+export function formatWindSpeed(
+  metersPerSecond: number | undefined | null,
+  unit: TemperatureUnit = 'metric',
+  decimals: number = 0
+): string {
+  if (metersPerSecond === undefined || metersPerSecond === null || isNaN(metersPerSecond)) {
+    return 'N/A';
+  }
+
+  const converted = convertWindSpeed(metersPerSecond, unit);
+  const unitLabel = getWindSpeedUnit(unit);
+
+  return `${converted.toFixed(decimals)} ${unitLabel}`;
+}

@@ -451,6 +451,9 @@
         "sunrise": "Zonsopgang om {time}",
         "sunset": "Zonsondergang om {time}"
       },
+      "weather": {
+        "label": "Weer"
+      },
       "legend": {
         "less": "Minder",
         "more": "Meer"
@@ -960,7 +963,8 @@
             "label": "Filterniveau"
           },
           "hardwareNote": "De niveaus \"Strikt\" en \"Maximum\" vereisen hogere overlap-instellingen en meer CPU-bronnen. RPi 4 of betere hardware is vereist voor deze niveaus.",
-          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen"
+          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen",
+          "overlapReduced": "Overlap-instelling verlaagd naar {overlap}s om overeen te komen met het filterniveau"
         },
         "rangeFilter": {
           "title": "Bereik Filter",
@@ -1171,6 +1175,20 @@
                   "scientificDark": "Grijstinten met Dolph-venster, donkere achtergrond",
                   "highContrastDark": "Hoge kleurverzadiging met donkere achtergrond",
                   "scientific": "Grijstinten met Dolph-venster, lichte achtergrond (xeno-canto stijl)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamisch Bereik",
+                "helpText": "Bepaalt het contrast - lagere waarden laten zwakke signalen beter uitkomen, hogere waarden tonen meer detail.",
+                "options": {
+                  "highContrast": "Hoog Contrast (80 dB)",
+                  "standard": "Standaard (100 dB)",
+                  "extended": "Uitgebreid (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideaal voor zwakke signalen. Vogelgeluiden komen duidelijk uit boven de achtergrondruis. Aanbevolen voor wetenschappelijke/grijstinten stijlen.",
+                  "standard": "Standaard gebalanceerde instelling. Goed voor de meeste toepassingen.",
+                  "extended": "Meer detail zichtbaar maar lager contrast. SoX standaardwaarde."
                 }
               },
               "enabled": {
@@ -1703,18 +1721,35 @@
             "helpText": "Het MQTT wachtwoord."
           }
         },
-        "messageSettings": {
-          "title": "Bericht Instellingen",
-          "retain": {
-            "label": "Behoud Berichten",
-            "note": "<strong>Home Assistant Gebruikers:</strong> Het wordt aanbevolen om de retain vlag in te schakelen voor Home Assistant integratie. Zonder retain zullen MQTT sensors als 'onbekend' verschijnen wanneer Home Assistant herstart."
-          }
-        },
         "tls": {
           "title": "TLS/SSL Beveiliging",
           "enable": "Schakel TLS/SSL in",
           "skipVerify": "Sla Certificaat Verificatie over",
           "configNote": "<strong>TLS Configuratie:</strong><br />• Standaard TLS: Laat certificaten leeg voor publieke brokers<br />• Self-signed certificaten: Geef CA Certificaat<br />• Wederzijdse TLS (mTLS): Geef alle drie certificaten"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Schakel Home Assistant MQTT Discovery in",
+          "description": "Wanneer ingeschakeld, registreert BirdNET-Go automatisch apparaten en sensoren bij Home Assistant via het MQTT discovery protocol. Apparaten verschijnen in het Home Assistant apparatenregister zonder handmatige YAML-configuratie.",
+          "discoveryPrefix": {
+            "label": "Discovery Prefix",
+            "helpText": "Het MQTT topic prefix voor Home Assistant discovery berichten. Standaard is 'homeassistant'. Wijzig dit alleen als je een aangepast discovery prefix hebt geconfigureerd in Home Assistant."
+          },
+          "deviceName": {
+            "label": "Apparaatnaam",
+            "helpText": "De basisnaam voor apparaten zoals ze verschijnen in Home Assistant. Elke audiobron heeft zijn eigen apparaat gekoppeld aan dit hoofd BirdNET-Go apparaat."
+          },
+          "sensorsNote": "<strong>Aangemaakte Sensoren:</strong> Voor elke audiobron ontvangt Home Assistant: Laatste Soort, Betrouwbaarheid, Wetenschappelijke Naam en Geluidsniveau (indien ingeschakeld). Het bridge apparaat bevat online/offline beschikbaarheidsstatus.",
+          "discovery": {
+            "button": "Verstuur Discovery",
+            "success": "Discovery berichten verzonden naar Home Assistant",
+            "error": "Verzenden van discovery berichten mislukt",
+            "saveFirst": "Sla instellingen op voordat je discovery verstuurt"
+          },
+          "retain": {
+            "label": "Behoud Berichten",
+            "note": "<strong>Aanbevolen:</strong> Schakel de retain vlag in om te zorgen dat MQTT sensoren waarden tonen na herstart van Home Assistant."
+          }
         },
         "test": {
           "button": "Test MQTT Verbinding",
@@ -2034,26 +2069,29 @@
         "description": "BirdNET-Go heeft een audio invoer nodig om vogels te detecteren. Configureer alstublieft tenminste één bron in het Geluidskaart of Streams tabblad."
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuratie",
-        "description": "Configureer netwerk audio streams voor audio opname op afstand via RTSP protocol.",
+        "title": "Audio Stream Configuratie",
+        "description": "Configureer netwerk audio streams voor audio opname op afstand. Ondersteunt RTSP, HTTP, HLS, RTMP en UDP protocollen.",
         "noStreamsConfigured": "Geen streams geconfigureerd"
       },
       "streams": {
         "streamLabel": "Stream",
-        "urlLabel": "Stream URL",
-        "urlHelp": "Voer RTSP URL in met optionele credentials (rtsp://gebruiker:wachtwoord@host:poort/pad)",
-        "typeLabel": "Stream Type",
-        "typeLockedNote": "Alleen RTSP wordt momenteel ondersteund",
+        "nameLabel": "Streamnaam",
+        "namePlaceholder": "bijv. Voederhuisje voortuin",
+        "nameHelp": "Een beschrijvende naam om deze audiostream te identificeren",
+        "urlLabel": "Stream-URL",
+        "urlHelp": "Voer stream-URL in met optionele inloggegevens (bijv. rtsp://host:poort/pad). Gebruik omgevingsvariabelen voor inloggegevens.",
+        "typeLabel": "Streamtype",
+        "typeHelp": "Streamprotocol - automatisch gedetecteerd uit URL",
         "transportLabel": "Protocol",
         "summary": "{count} stream(s) geconfigureerd",
         "healthy": "gezond",
         "unhealthy": "ongezond",
         "unknown": "onbekend",
         "refresh": "Vernieuwen",
-        "addStream": "Stream Toevoegen",
+        "addStream": "Stream toevoegen",
         "deleteConfirm": "Deze stream verwijderen?",
-        "restartCount": "{count} keer opnieuw gestart",
-        "healthLoadError": "Laden van stream gezondheid status mislukt",
+        "restartCount": "{count} keer herstart",
+        "healthLoadError": "Laden van streamstatus mislukt",
         "status": {
           "connected": "Verbonden",
           "connecting": "Verbinden",
@@ -2062,19 +2100,21 @@
           "unknown": "Onbekend"
         },
         "emptyState": {
-          "title": "Geen Streams Geconfigureerd",
-          "description": "Voeg RTSP streams toe om audio vast te leggen van netwerk camera's of andere RTSP bronnen.",
-          "hintsTitle": "Aan de Slag",
+          "title": "Geen streams geconfigureerd",
+          "description": "Voeg audiostreams toe van IP-camera's, Icecast-servers of andere netwerkbronnen.",
+          "hintsTitle": "Aan de slag",
           "hints": {
-            "rtsp": "Gebruik RTSP URLs van IP camera's (bijv., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Voeg credentials toe in URL indien vereist (rtsp://gebruiker:wachtwoord@host/stream)",
-            "protocol": "TCP is betrouwbaarder, UDP heeft lagere latentie"
+            "rtsp": "Ondersteunt RTSP, HTTP, HLS, RTMP en UDP/RTP streams",
+            "credentials": "Inloggegevens kunnen in URL worden opgenomen of via omgevingsvariabelen",
+            "protocol": "TCP is betrouwbaarder voor RTSP, UDP heeft lagere latentie"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is vereist",
-          "invalidUrl": "Ongeldig RTSP URL formaat",
-          "duplicate": "Deze stream URL bestaat al"
+          "nameRequired": "Streamnaam is verplicht",
+          "duplicateName": "Er bestaat al een stream met deze naam",
+          "urlRequired": "Stream-URL is verplicht",
+          "invalidUrl": "Ongeldig stream-URL-formaat",
+          "duplicate": "Deze stream-URL bestaat al"
         }
       }
     },
@@ -2544,7 +2584,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Gegevens inlezen ...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2553,7 +2593,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Gegevens inlezen ...",
       "error": "Gegevens inlezen is mislukt",
       "sortBy": "Sorteer op {column}",
       "rowsPerPage": "Rijen per pagina",
@@ -2677,7 +2716,9 @@
       "volumeGain": "Volume versterking: {value} dB",
       "filterControl": "Filter bediening",
       "highPassFilter": "Hoog-doorlaat filter: {freq} Hz",
-      "seekProgress": "Voortgang verder spoelen: {current} / {total} seconds"
+      "seekProgress": "Voortgang verder spoelen: {current} / {total} seconden",
+      "playbackSpeed": "Afspeelsnelheid",
+      "speed": "Snelheid"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram nog niet beschikbaar",

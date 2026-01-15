@@ -11,6 +11,7 @@
   - onFreezeEnd?: () => void - Callback when playback ends
   - gainValue?: number - Audio gain in dB (controlled by parent)
   - filterFreq?: number - High-pass filter frequency in Hz (controlled by parent)
+  - playbackSpeed?: number - Playback speed multiplier (controlled by parent)
   - onAudioContextAvailable?: (available: boolean) => void - Callback for audio context status
 -->
 <script lang="ts">
@@ -19,6 +20,7 @@
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
+  import { applyPlaybackRate, dbToGain } from '$lib/utils/audio';
 
   const logger = loggers.audio;
 
@@ -30,6 +32,7 @@
     onFreezeEnd?: () => void;
     gainValue?: number;
     filterFreq?: number;
+    playbackSpeed?: number;
     onAudioContextAvailable?: (_isAvailable: boolean) => void;
   }
 
@@ -39,6 +42,7 @@
     onFreezeEnd,
     gainValue = 0,
     filterFreq = 20,
+    playbackSpeed = 1.0,
     onAudioContextAvailable,
   }: Props = $props();
 
@@ -56,6 +60,7 @@
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
+  let isInitializingContext = $state(false);
   let audioNodes = $state<{
     source: MediaElementAudioSourceNode;
     gain: GainNode;
@@ -65,9 +70,6 @@
   const PLAY_END_DELAY_MS = 3000;
 
   const audioUrl = $derived(`/api/v2/audio/${detectionId}`);
-
-  // Web Audio API helpers
-  const dbToGain = (db: number): number => Math.pow(10, db / 20);
 
   // Update audio nodes when gain/filter props change
   // Read values unconditionally to ensure they're tracked as dependencies
@@ -87,6 +89,14 @@
     }
   });
 
+  // Update playback speed when prop changes (during playback)
+  $effect(() => {
+    const speed = playbackSpeed;
+    if (audioElement && isPlaying) {
+      applyPlaybackRate(audioElement, speed);
+    }
+  });
+
   async function handlePlayPause(event: MouseEvent) {
     event.stopPropagation();
 
@@ -100,12 +110,21 @@
         audioElement.pause();
       } else {
         // Initialize audio context on first play (for gain/filter controls)
-        if (!audioContext) {
-          audioContext = await initializeAudioContext();
-          if (audioContext && !audioNodes) {
-            audioNodes = createAudioNodes(audioContext, audioElement);
+        // Guard against rapid clicks that could create multiple AudioContexts
+        if (!audioContext && !isInitializingContext) {
+          isInitializingContext = true;
+          try {
+            audioContext = await initializeAudioContext();
+            if (audioContext && !audioNodes) {
+              audioNodes = createAudioNodes(audioContext, audioElement);
+            }
+          } finally {
+            isInitializingContext = false;
           }
         }
+
+        // Safety check: component may have unmounted during async initialization
+        if (!audioElement) return;
 
         isLoading = true;
         await audioElement.play();
@@ -129,6 +148,12 @@
     isPlaying = true;
     startProgressInterval();
     clearPlayEndTimeout();
+
+    // Apply playback rate when starting
+    if (audioElement) {
+      applyPlaybackRate(audioElement, playbackSpeed);
+    }
+
     onFreezeStart?.();
   }
 

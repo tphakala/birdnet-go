@@ -9,7 +9,7 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.17.0/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.18.0/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -144,7 +144,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.15.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.16.0/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -474,17 +474,17 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.39.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.40.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.38.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.39.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.32.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.33.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -494,17 +494,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.258.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.259.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/97cd9d5aeac2/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/0a764e51fe1b/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.77.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.78.0/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
@@ -531,4 +531,3 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
 Source: MIT
-

@@ -124,11 +124,31 @@ const translations: Record<string, string> = {
   'settings.audio.clipSettings.title': 'Clip Settings',
   'settings.audio.clipSettings.description':
     'Configure audio clip capture and processing for identified bird calls',
+  // Stream timeline translations
+  'settings.audio.streams.timeline.error': 'Error',
+  'settings.audio.streams.timeline.noHistory': 'No state or error history available.',
+  'settings.audio.streams.timeline.stateChange': 'State Change',
+  'settings.audio.streams.timeline.host': 'Host',
+  'settings.audio.streams.timeline.troubleshooting': 'Troubleshooting',
+  'settings.audio.streams.timeline.from': 'From',
+  'settings.audio.streams.timeline.to': 'To',
+  'settings.audio.streams.timeline.reason': 'Reason',
+  'settings.audio.streams.timeline.eventAt': 'Event at {time}',
 };
 
 vi.mock('$lib/i18n', () => ({
-  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with predefined translations
-  t: vi.fn((key: string) => translations[key] || key),
+  t: vi.fn((key: string, params?: Record<string, unknown>) => {
+    // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
+    let result = translations[key] || key;
+    // Handle interpolation for params like {time}, {count}, etc.
+    if (params) {
+      for (const [paramKey, paramValue] of Object.entries(params)) {
+        // eslint-disable-next-line security/detect-non-literal-regexp -- paramKey from Object.entries on controlled params object
+        result = result.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramValue));
+      }
+    }
+    return result;
+  }),
   getLocale: vi.fn(() => 'en'),
   setLocale: vi.fn(),
   isValidLocale: vi.fn(() => true),

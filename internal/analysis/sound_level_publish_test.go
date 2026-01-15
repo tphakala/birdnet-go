@@ -1566,6 +1566,17 @@ func (m *mockMQTTClient) SetControlChannel(ch chan string) {
 	// Not needed for our tests
 }
 
+func (m *mockMQTTClient) PublishWithRetain(ctx context.Context, topic, payload string, retain bool) error {
+	if m.publishFunc != nil {
+		return m.publishFunc(ctx, topic, payload)
+	}
+	return nil
+}
+
+func (m *mockMQTTClient) RegisterOnConnectHandler(handler mqtt.OnConnectHandler) {
+	// Not needed for our tests
+}
+
 // createMockProcessor creates a processor suitable for testing with minimal config
 func createMockProcessor(publishFunc func(ctx context.Context, topic, payload string) error) *processor.Processor {
 	settings := &conf.Settings{

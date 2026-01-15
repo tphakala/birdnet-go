@@ -34,6 +34,20 @@ const (
 	MaxAudioGain = 40.0  // Maximum allowed audio gain in dB
 )
 
+// Stream validation constants
+const (
+	MaxStreamNameLength = 64
+)
+
+// ValidStreamTypes contains all supported stream types
+var ValidStreamTypes = map[string]bool{
+	StreamTypeRTSP: true,
+	StreamTypeHTTP: true,
+	StreamTypeHLS:  true,
+	StreamTypeRTMP: true,
+	StreamTypeUDP:  true,
+}
+
 // EBU R128 normalization limits
 const (
 	MinTargetLUFS    = -40.0 // Minimum target loudness in LUFS
@@ -72,6 +86,97 @@ type ValidationResult struct {
 	Errors     []string // Validation errors (fatal)
 	Warnings   []string // Non-fatal warnings
 	Normalized any      // Normalized/transformed config (type matches input)
+}
+
+// Validate validates a single stream configuration
+func (s *StreamConfig) Validate() error {
+	// Name is required
+	name := strings.TrimSpace(s.Name)
+	if name == "" {
+		return fmt.Errorf("stream name is required")
+	}
+
+	// Name length limit (check trimmed name for consistency)
+	if len(name) > MaxStreamNameLength {
+		return fmt.Errorf("stream name '%s' exceeds maximum length of %d characters", name, MaxStreamNameLength)
+	}
+
+	// URL is required
+	if strings.TrimSpace(s.URL) == "" {
+		return fmt.Errorf("stream URL is required for '%s'", s.Name)
+	}
+
+	// Validate stream type
+	if !ValidStreamTypes[s.Type] {
+		return fmt.Errorf("invalid stream type '%s' for '%s': must be one of rtsp, http, hls, rtmp, udp", s.Type, s.Name)
+	}
+
+	// Validate transport (only tcp/udp allowed, empty defaults to tcp)
+	if s.Transport != "" && s.Transport != "tcp" && s.Transport != "udp" {
+		return fmt.Errorf("invalid transport '%s' for '%s': must be tcp or udp", s.Transport, s.Name)
+	}
+
+	// Validate URL scheme matches type
+	return s.validateURLScheme()
+}
+
+// validateURLScheme checks URL scheme matches declared stream type
+func (s *StreamConfig) validateURLScheme() error {
+	urlLower := strings.ToLower(s.URL)
+
+	switch s.Type {
+	case StreamTypeRTSP:
+		if !strings.HasPrefix(urlLower, "rtsp://") && !strings.HasPrefix(urlLower, "rtsps://") {
+			return fmt.Errorf("stream '%s': RTSP type requires rtsp:// or rtsps:// URL", s.Name)
+		}
+	case StreamTypeHTTP:
+		if !strings.HasPrefix(urlLower, "http://") && !strings.HasPrefix(urlLower, "https://") {
+			return fmt.Errorf("stream '%s': HTTP type requires http:// or https:// URL", s.Name)
+		}
+	case StreamTypeHLS:
+		if !strings.HasPrefix(urlLower, "http://") && !strings.HasPrefix(urlLower, "https://") {
+			return fmt.Errorf("stream '%s': HLS type requires http:// or https:// URL", s.Name)
+		}
+	case StreamTypeRTMP:
+		if !strings.HasPrefix(urlLower, "rtmp://") && !strings.HasPrefix(urlLower, "rtmps://") {
+			return fmt.Errorf("stream '%s': RTMP type requires rtmp:// or rtmps:// URL", s.Name)
+		}
+	case StreamTypeUDP:
+		if !strings.HasPrefix(urlLower, "udp://") && !strings.HasPrefix(urlLower, "rtp://") {
+			return fmt.Errorf("stream '%s': UDP type requires udp:// or rtp:// URL", s.Name)
+		}
+	}
+
+	return nil
+}
+
+// ValidateStreams validates the streams collection for uniqueness and individual validity
+func (r *RTSPSettings) ValidateStreams() error {
+	names := make(map[string]bool)
+	urls := make(map[string]bool)
+
+	for i, stream := range r.Streams {
+		// Validate individual stream
+		if err := stream.Validate(); err != nil {
+			return fmt.Errorf("stream %d: %w", i+1, err)
+		}
+
+		// Check for duplicate names (case-insensitive)
+		nameLower := strings.ToLower(strings.TrimSpace(stream.Name))
+		if names[nameLower] {
+			return fmt.Errorf("duplicate stream name: '%s'", stream.Name)
+		}
+		names[nameLower] = true
+
+		// Check for duplicate URLs (trimmed for consistency)
+		urlTrimmed := strings.TrimSpace(stream.URL)
+		if urls[urlTrimmed] {
+			return fmt.Errorf("stream '%s' has a duplicate URL: '%s'", stream.Name, stream.URL)
+		}
+		urls[urlTrimmed] = true
+	}
+
+	return nil
 }
 
 // ValidateBirdNETSettings performs BirdNET validation without side effects.
@@ -544,7 +649,14 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
-	// Add more realtime settings validation as needed
+	// Validate stream configurations
+	if err := settings.RTSP.ValidateStreams(); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "stream-config").
+			Build()
+	}
+
 	return nil
 }
 

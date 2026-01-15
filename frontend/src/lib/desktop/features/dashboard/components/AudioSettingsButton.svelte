@@ -1,29 +1,46 @@
 <!--
   AudioSettingsButton.svelte
 
-  A button that opens audio settings popup for gain and high-pass filter control.
+  A button that opens audio settings popup for gain, high-pass filter, and playback speed control.
   Designed to be placed outside overflow-hidden containers with fixed positioning for the menu.
 
   Props:
   - gainValue: number - Current gain value in dB
   - filterFreq: number - Current high-pass filter frequency in Hz
+  - playbackSpeed: number - Current playback speed multiplier
   - onGainChange: (value: number) => void - Callback when gain changes
   - onFilterChange: (value: number) => void - Callback when filter changes
+  - onSpeedChange: (value: number) => void - Callback when speed changes
   - disabled?: boolean - Whether the button is disabled (e.g., AudioContext not available)
 -->
 <script lang="ts">
   import { Volume2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
   interface Props {
     gainValue: number;
     filterFreq: number;
+    playbackSpeed: number;
     onGainChange: (_value: number) => void;
     onFilterChange: (_value: number) => void;
+    onSpeedChange: (_value: number) => void;
     disabled?: boolean;
+    onMenuOpen?: () => void;
+    onMenuClose?: () => void;
   }
 
-  let { gainValue, filterFreq, onGainChange, onFilterChange, disabled = false }: Props = $props();
+  let {
+    gainValue,
+    filterFreq,
+    playbackSpeed,
+    onGainChange,
+    onFilterChange,
+    onSpeedChange,
+    disabled = false,
+    onMenuOpen,
+    onMenuClose,
+  }: Props = $props();
 
   // Constants
   const GAIN_MAX_DB = 24;
@@ -44,7 +61,9 @@
   let gainSliderElement: HTMLInputElement;
 
   // Check if settings have been modified from defaults
-  const hasModifiedSettings = $derived(gainValue !== 0 || filterFreq > FILTER_HP_MIN_FREQ);
+  const hasModifiedSettings = $derived(
+    gainValue !== 0 || filterFreq > FILTER_HP_MIN_FREQ || playbackSpeed !== DEFAULT_PLAYBACK_SPEED
+  );
 
   function updateMenuPosition() {
     if (!menuElement || !buttonElement) return;
@@ -76,11 +95,14 @@
     showSettings = !showSettings;
 
     if (showSettings) {
+      onMenuOpen?.();
       globalThis.requestAnimationFrame(() => {
         updateMenuPosition();
         // Focus first slider when dialog opens
         gainSliderElement?.focus();
       });
+    } else {
+      onMenuClose?.();
     }
   }
 
@@ -93,12 +115,14 @@
       !buttonElement.contains(event.target as Node)
     ) {
       showSettings = false;
+      onMenuClose?.();
     }
   }
 
   function handleKeydown(event: KeyboardEvent) {
     if (showSettings && event.key === 'Escape') {
       showSettings = false;
+      onMenuClose?.();
       buttonElement?.focus();
     }
   }
@@ -106,6 +130,7 @@
   function handleReset() {
     onGainChange(0);
     onFilterChange(FILTER_HP_MIN_FREQ);
+    onSpeedChange(DEFAULT_PLAYBACK_SPEED);
   }
 
   $effect(() => {
@@ -210,6 +235,25 @@
             class="slider"
           />
           <span class="slider-value">{Math.round(filterFreq)} Hz</span>
+        </div>
+      </div>
+
+      <!-- Playback speed control -->
+      <div class="setting-item">
+        <span class="setting-label">
+          {t('media.audio.playbackSpeed')}: {playbackSpeed}×
+        </span>
+        <div class="speed-button-group" role="group" aria-label={t('media.audio.playbackSpeed')}>
+          {#each SPEED_OPTIONS as speed}
+            <button
+              class="speed-option"
+              class:active={playbackSpeed === speed}
+              onclick={() => onSpeedChange(speed)}
+              aria-pressed={playbackSpeed === speed}
+            >
+              {speed}×
+            </button>
+          {/each}
         </div>
       </div>
 
@@ -408,5 +452,47 @@
 
   :global([data-theme='light']) .reset-button:hover:not(:disabled) {
     background-color: var(--color-base-300);
+  }
+
+  /* Speed button group */
+  .speed-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .speed-option {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: rgb(148 163 184);
+    background-color: rgb(51 65 85 / 0.5);
+    border-radius: 0.25rem;
+    transition: all 0.15s ease;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .speed-option:hover {
+    background-color: rgb(51 65 85);
+    color: white;
+  }
+
+  .speed-option.active {
+    background-color: rgb(59 130 246);
+    color: white;
+  }
+
+  :global([data-theme='light']) .speed-option {
+    color: var(--color-base-content);
+    background-color: var(--color-base-200);
+  }
+
+  :global([data-theme='light']) .speed-option:hover {
+    background-color: var(--color-base-300);
+  }
+
+  :global([data-theme='light']) .speed-option.active {
+    background-color: rgb(59 130 246);
+    color: white;
   }
 </style>

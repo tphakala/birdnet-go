@@ -451,6 +451,9 @@
         "sunrise": "Sunrise at {time}",
         "sunset": "Sunset at {time}"
       },
+      "weather": {
+        "label": "Weather"
+      },
       "legend": {
         "less": "Less",
         "more": "More"
@@ -975,7 +978,8 @@
             "label": "Filter Level"
           },
           "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
-          "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements"
+          "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
         },
         "rangeFilter": {
           "title": "Range Filter",
@@ -1186,6 +1190,20 @@
                   "scientificDark": "Grayscale with Dolph window, dark background",
                   "highContrastDark": "High color saturation with dark background",
                   "scientific": "Grayscale with Dolph window, light background (xeno-canto style)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamic Range",
+                "helpText": "Controls contrast - lower values make weak signals stand out better, higher values show more detail.",
+                "options": {
+                  "highContrast": "High Contrast (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Extended (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Best for weak signals. Bird calls stand out clearly from background noise. Recommended for scientific/grayscale styles.",
+                  "standard": "Default balanced setting. Good for most use cases.",
+                  "extended": "More detail visible but lower contrast. SoX default value."
                 }
               },
               "enabled": {
@@ -1712,18 +1730,35 @@
             "helpText": "The MQTT password."
           }
         },
-        "messageSettings": {
-          "title": "Message Settings",
-          "retain": {
-            "label": "Retain Messages",
-            "note": "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts."
-          }
-        },
         "tls": {
           "title": "TLS/SSL Security",
           "enable": "Enable TLS/SSL",
           "skipVerify": "Skip Certificate Verification",
           "configNote": "<strong>TLS Configuration:</strong><br />• Standard TLS: Leave certificates empty for public brokers<br />• Self-signed certificates: Provide CA Certificate<br />• Mutual TLS (mTLS): Provide all three certificates"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Enable Home Assistant MQTT Discovery",
+          "description": "When enabled, BirdNET-Go automatically registers devices and sensors with Home Assistant through MQTT discovery protocol. Devices will appear in Home Assistant's device registry without manual YAML configuration.",
+          "discoveryPrefix": {
+            "label": "Discovery Prefix",
+            "helpText": "The MQTT topic prefix for Home Assistant discovery messages. Default is 'homeassistant'. Only change this if you've configured a custom discovery prefix in Home Assistant."
+          },
+          "deviceName": {
+            "label": "Device Name",
+            "helpText": "The base name for devices as they appear in Home Assistant. Each audio source will have its own device linked to this main BirdNET-Go device."
+          },
+          "sensorsNote": "<strong>Sensors Created:</strong> For each audio source, Home Assistant will receive: Last Species, Confidence, Scientific Name, and Sound Level (if enabled). The bridge device includes online/offline availability status.",
+          "discovery": {
+            "button": "Send Discovery",
+            "success": "Discovery messages sent to Home Assistant",
+            "error": "Failed to send discovery messages",
+            "saveFirst": "Save settings before sending discovery"
+          },
+          "retain": {
+            "label": "Retain Messages",
+            "note": "<strong>Recommended:</strong> Enable the retain flag to ensure MQTT sensors show values after Home Assistant restarts."
+          }
         },
         "test": {
           "button": "Test MQTT Connection",
@@ -1888,16 +1923,19 @@
         "streamsConfigured": "{count} stream(s) configured"
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
+        "title": "Audio Stream Configuration",
+        "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols.",
         "noStreamsConfigured": "No streams configured"
       },
       "streams": {
         "streamLabel": "Stream",
+        "nameLabel": "Stream Name",
+        "namePlaceholder": "e.g., Front Yard Feeder",
+        "nameHelp": "A descriptive name to identify this audio stream",
         "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
+        "urlHelp": "Enter stream URL with optional credentials (e.g., rtsp://host:port/path). Use environment variables for credentials.",
         "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
+        "typeHelp": "Stream protocol - auto-detected from URL",
         "transportLabel": "Protocol",
         "summary": "{count} stream(s) configured",
         "healthy": "healthy",
@@ -1917,18 +1955,31 @@
         },
         "emptyState": {
           "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
+          "description": "Add audio streams from IP cameras, Icecast servers, or other network sources.",
           "hintsTitle": "Getting Started",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "rtsp": "Supports RTSP, HTTP, HLS, RTMP, and UDP/RTP streams",
+            "credentials": "Credentials can be included in URL or use environment variables",
+            "protocol": "TCP is more reliable for RTSP, UDP has lower latency"
           }
         },
         "errors": {
+          "nameRequired": "Stream name is required",
+          "duplicateName": "A stream with this name already exists",
           "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
+          "invalidUrl": "Invalid stream URL format",
           "duplicate": "This stream URL already exists"
+        },
+        "timeline": {
+          "error": "Error",
+          "noHistory": "No state or error history available.",
+          "stateChange": "State Change",
+          "host": "Host",
+          "troubleshooting": "Troubleshooting",
+          "from": "From",
+          "to": "To",
+          "reason": "Reason",
+          "eventAt": "Event at {time}"
         }
       },
       "audioFilters": {
@@ -2669,7 +2720,9 @@
       "volumeGain": "Volume gain control: {value} dB",
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",
-      "seekProgress": "Seek audio progress: {current} / {total} seconds"
+      "seekProgress": "Seek audio progress: {current} / {total} seconds",
+      "playbackSpeed": "Playback speed",
+      "speed": "Speed"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",

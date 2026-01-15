@@ -134,11 +134,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius") // Temperature display unit: "celsius" or "fahrenheit"
 
 	// Spectrogram pre-rendering configuration
-	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false) // Opt-in for safety
-	viper.SetDefault("realtime.dashboard.spectrogram.mode", "auto")   // Default to auto mode (generate on demand)
-	viper.SetDefault("realtime.dashboard.spectrogram.size", "sm")     // 400px, matches frontend RecentDetectionsCard
-	viper.SetDefault("realtime.dashboard.spectrogram.raw", true)      // Raw spectrogram (no axes/legend)
-	viper.SetDefault("realtime.dashboard.spectrogram.style", "default") // Visual style preset
+	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                        // Opt-in for safety
+	viper.SetDefault("realtime.dashboard.spectrogram.mode", "auto")                          // Default to auto mode (generate on demand)
+	viper.SetDefault("realtime.dashboard.spectrogram.size", "sm")                            // 400px, matches frontend RecentDetectionsCard
+	viper.SetDefault("realtime.dashboard.spectrogram.raw", true)                             // Raw spectrogram (no axes/legend)
+	viper.SetDefault("realtime.dashboard.spectrogram.style", "default")                      // Visual style preset
+	viper.SetDefault("realtime.dashboard.spectrogram.dynamicrange", SpectrogramDynamicRangeStandard) // Dynamic range in dB (100 = standard)
 
 	// Retention policy configuration
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)
@@ -233,6 +234,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.retrysettings.initialdelay", 30)
 	viper.SetDefault("realtime.mqtt.retrysettings.maxdelay", 3600)
 	viper.SetDefault("realtime.mqtt.retrysettings.backoffmultiplier", 2.0)
+
+	// Home Assistant MQTT auto-discovery configuration
+	viper.SetDefault("realtime.mqtt.homeassistant.enabled", false)
+	viper.SetDefault("realtime.mqtt.homeassistant.discovery_prefix", "homeassistant")
+	viper.SetDefault("realtime.mqtt.homeassistant.device_name", "BirdNET-Go")
 
 	// Privacy filter configuration
 	viper.SetDefault("realtime.privacyfilter.enabled", true)

@@ -451,6 +451,9 @@
         "sunrise": "Sonnenaufgang um {time}",
         "sunset": "Sonnenuntergang um {time}"
       },
+      "weather": {
+        "label": "Wetter"
+      },
       "legend": {
         "less": "Weniger",
         "more": "Mehr"
@@ -960,7 +963,8 @@
             "label": "Filterstufe"
           },
           "hardwareNote": "Die Stufen \"Streng\" und \"Maximum\" erfordern höhere Überlappungseinstellungen und mehr CPU-Ressourcen. RPi 4 oder bessere Hardware ist für diese Stufen erforderlich.",
-          "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen"
+          "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen",
+          "overlapReduced": "Überlappungseinstellung auf {overlap}s reduziert, um der Filterstufe zu entsprechen"
         },
         "rangeFilter": {
           "title": "Reichweitenfilter",
@@ -1171,6 +1175,20 @@
                   "scientificDark": "Graustufen mit Dolph-Fenster, dunkler Hintergrund",
                   "highContrastDark": "Hohe Farbsättigung mit dunklem Hintergrund",
                   "scientific": "Graustufen mit Dolph-Fenster, heller Hintergrund (xeno-canto-Stil)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamikbereich",
+                "helpText": "Steuert den Kontrast - niedrigere Werte lassen schwache Signale besser hervorstechen, höhere Werte zeigen mehr Details.",
+                "options": {
+                  "highContrast": "Hoher Kontrast (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Erweitert (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Ideal für schwache Signale. Vogelrufe heben sich deutlich vom Hintergrundrauschen ab. Empfohlen für wissenschaftliche/Graustufen-Stile.",
+                  "standard": "Ausgewogene Standardeinstellung. Gut für die meisten Anwendungsfälle.",
+                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. SoX-Standardwert."
                 }
               },
               "enabled": {
@@ -1703,18 +1721,35 @@
             "helpText": "Das MQTT-Passwort."
           }
         },
-        "messageSettings": {
-          "title": "Nachrichteneinstellungen",
-          "retain": {
-            "label": "Nachrichten beibehalten",
-            "note": "<strong>Home Assistant-Benutzer:</strong> Es wird empfohlen, das Retain-Flag für die Home Assistant-Integration zu aktivieren. Ohne Retain erscheinen MQTT-Sensoren als 'unbekannt', wenn Home Assistant neu startet."
-          }
-        },
         "tls": {
           "title": "TLS/SSL-Sicherheit",
           "enable": "TLS/SSL aktivieren",
           "skipVerify": "Zertifikatsüberprüfung überspringen",
           "configNote": "<strong>TLS-Konfiguration:</strong><br />• Standard-TLS: Zertifikate für öffentliche Broker leer lassen<br />• Selbstsignierte Zertifikate: CA-Zertifikat bereitstellen<br />• Mutual TLS (mTLS): Alle drei Zertifikate bereitstellen"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Home Assistant MQTT Discovery aktivieren",
+          "description": "Wenn aktiviert, registriert BirdNET-Go automatisch Geräte und Sensoren bei Home Assistant über das MQTT-Discovery-Protokoll. Geräte erscheinen ohne manuelle YAML-Konfiguration in der Home Assistant-Geräteregistrierung.",
+          "discoveryPrefix": {
+            "label": "Discovery-Präfix",
+            "helpText": "Das MQTT-Topic-Präfix für Home Assistant Discovery-Nachrichten. Standard ist 'homeassistant'. Ändern Sie dies nur, wenn Sie ein benutzerdefiniertes Discovery-Präfix in Home Assistant konfiguriert haben."
+          },
+          "deviceName": {
+            "label": "Gerätename",
+            "helpText": "Der Basisname für Geräte, wie sie in Home Assistant erscheinen. Jede Audioquelle hat ihr eigenes Gerät, das mit diesem BirdNET-Go-Hauptgerät verknüpft ist."
+          },
+          "sensorsNote": "<strong>Erstellte Sensoren:</strong> Für jede Audioquelle erhält Home Assistant: Letzte Art, Konfidenz, wissenschaftlicher Name und Schallpegel (wenn aktiviert). Das Bridge-Gerät enthält Online/Offline-Verfügbarkeitsstatus.",
+          "discovery": {
+            "button": "Discovery senden",
+            "success": "Discovery-Nachrichten an Home Assistant gesendet",
+            "error": "Senden der Discovery-Nachrichten fehlgeschlagen",
+            "saveFirst": "Einstellungen speichern, bevor Discovery gesendet wird"
+          },
+          "retain": {
+            "label": "Nachrichten beibehalten",
+            "note": "<strong>Empfohlen:</strong> Aktivieren Sie das Retain-Flag, um sicherzustellen, dass MQTT-Sensoren nach einem Neustart von Home Assistant Werte anzeigen."
+          }
         },
         "test": {
           "button": "MQTT-Verbindung testen",
@@ -2034,46 +2069,51 @@
         "description": "BirdNET-Go benötigt eine Audioeingabe, um Vögel zu erkennen. Bitte konfigurieren Sie mindestens eine Quelle im Soundkarten- oder Streams-Tab."
       },
       "rtspStreams": {
-        "title": "RTSP-Stream-Konfiguration",
-        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme über RTSP-Protokoll konfigurieren.",
+        "title": "Audio-Stream-Konfiguration",
+        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme konfigurieren. Unterstützt RTSP-, HTTP-, HLS-, RTMP- und UDP-Protokolle.",
         "noStreamsConfigured": "Keine Streams konfiguriert"
       },
       "streams": {
         "streamLabel": "Stream",
+        "nameLabel": "Stream-Name",
+        "namePlaceholder": "z.B. Futterhaus Vorgarten",
+        "nameHelp": "Ein beschreibender Name zur Identifizierung dieses Audiostreams",
         "urlLabel": "Stream-URL",
-        "urlHelp": "RTSP-URL mit optionalen Anmeldedaten eingeben (rtsp://benutzer:passwort@host:port/pfad)",
+        "urlHelp": "Stream-URL mit optionalen Anmeldedaten eingeben (z.B. rtsp://host:port/pfad). Umgebungsvariablen für Anmeldedaten verwenden.",
         "typeLabel": "Stream-Typ",
-        "typeLockedNote": "Derzeit wird nur RTSP unterstützt",
+        "typeHelp": "Stream-Protokoll - automatisch aus URL erkannt",
         "transportLabel": "Protokoll",
         "summary": "{count} Stream(s) konfiguriert",
         "healthy": "gesund",
-        "unhealthy": "ungesund",
+        "unhealthy": "fehlerhaft",
         "unknown": "unbekannt",
         "refresh": "Aktualisieren",
         "addStream": "Stream hinzufügen",
         "deleteConfirm": "Diesen Stream entfernen?",
-        "restartCount": "{count} mal neu gestartet",
-        "healthLoadError": "Fehler beim Laden des Stream-Gesundheitsstatus",
+        "restartCount": "{count} Mal neu gestartet",
+        "healthLoadError": "Laden des Stream-Status fehlgeschlagen",
         "status": {
           "connected": "Verbunden",
-          "connecting": "Verbinde",
+          "connecting": "Verbindung wird hergestellt",
           "error": "Fehler",
           "idle": "Inaktiv",
           "unknown": "Unbekannt"
         },
         "emptyState": {
           "title": "Keine Streams konfiguriert",
-          "description": "Fügen Sie RTSP-Streams hinzu, um Audio von Netzwerkkameras oder anderen RTSP-Quellen aufzunehmen.",
+          "description": "Fügen Sie Audiostreams von IP-Kameras, Icecast-Servern oder anderen Netzwerkquellen hinzu.",
           "hintsTitle": "Erste Schritte",
           "hints": {
-            "rtsp": "Verwenden Sie RTSP-URLs von IP-Kameras (z.B. rtsp://192.168.1.100:554/stream)",
-            "credentials": "Fügen Sie Anmeldedaten in die URL ein, falls erforderlich (rtsp://benutzer:passwort@host/stream)",
-            "protocol": "TCP ist zuverlässiger, UDP hat geringere Latenz"
+            "rtsp": "Unterstützt RTSP, HTTP, HLS, RTMP und UDP/RTP Streams",
+            "credentials": "Anmeldedaten können in URL oder über Umgebungsvariablen angegeben werden",
+            "protocol": "TCP ist zuverlässiger für RTSP, UDP hat niedrigere Latenz"
           }
         },
         "errors": {
+          "nameRequired": "Stream-Name ist erforderlich",
+          "duplicateName": "Ein Stream mit diesem Namen existiert bereits",
           "urlRequired": "Stream-URL ist erforderlich",
-          "invalidUrl": "Ungültiges RTSP-URL-Format",
+          "invalidUrl": "Ungültiges Stream-URL-Format",
           "duplicate": "Diese Stream-URL existiert bereits"
         }
       }
@@ -2544,7 +2584,7 @@
       "title": "Weather Information",
       "noData": "No weather data",
       "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "loading": "Daten werden geladen...",
       "labels": {
         "temperature": "Temperature",
         "weather": "Weather",
@@ -2553,7 +2593,6 @@
         "pressure": "Pressure",
         "cloudCover": "Cloud Cover"
       },
-      "loading": "Daten werden geladen...",
       "error": "Fehler beim Laden der Daten",
       "sortBy": "Sortieren nach {column}",
       "rowsPerPage": "Zeilen pro Seite",
@@ -2677,7 +2716,9 @@
       "volumeGain": "Lautstärkeverstärkung: {value} dB",
       "filterControl": "Filtersteuerung",
       "highPassFilter": "Hochpassfilter-Steuerung: {freq} Hz",
-      "seekProgress": "Audio-Fortschritt: {current} / {total} Sekunden"
+      "seekProgress": "Audio-Fortschritt: {current} / {total} Sekunden",
+      "playbackSpeed": "Wiedergabegeschwindigkeit",
+      "speed": "Tempo"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramm noch nicht generiert",

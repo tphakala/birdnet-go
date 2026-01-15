@@ -25,7 +25,8 @@ import (
 
 const (
 	// defaultGenerationTimeout is the default timeout for spectrogram generation
-	defaultGenerationTimeout = 60 * time.Second
+	// Increased to 90s to accommodate slow storage (e.g., SD cards) under I/O pressure
+	defaultGenerationTimeout = 90 * time.Second
 
 	// ffmpegFallbackTimeout is the timeout for FFmpeg fallback when Sox fails.
 	// This is independent of the Sox timeout to ensure FFmpeg has adequate time
@@ -35,8 +36,9 @@ const (
 	// soxWaitFallbackTimeout is the fallback timeout for waiting on Sox process completion
 	soxWaitFallbackTimeout = 30 * time.Second
 
-	// dynamicRange for sox spectrogram generation (-z parameter)
-	dynamicRange = "100"
+	// defaultDynamicRange is the default dynamic range for sox spectrogram generation (-z parameter)
+	// This is used as fallback when no valid setting is configured
+	defaultDynamicRange = "100"
 
 	// durationCacheTTL is how long duration cache entries remain valid
 	durationCacheTTL = 10 * time.Minute
@@ -124,15 +126,33 @@ type Generator struct {
 }
 
 // NewGenerator creates a new generator instance.
-// If logger is nil, logger.Global() is used to prevent nil pointer panics.
+// If logger is nil, GetLogger() is used to prevent nil pointer panics.
 func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, log logger.Logger) *Generator {
 	if log == nil {
-		log = logger.Global().Module("spectrogram")
+		log = GetLogger()
 	}
 	return &Generator{
 		settings: settings,
 		sfs:      sfs,
 		logger:   log,
+	}
+}
+
+// getDynamicRange returns the configured dynamic range value for Sox -z parameter.
+// Returns the default value ("100") if not configured or if an invalid value is set.
+func (g *Generator) getDynamicRange() string {
+	dr := g.settings.Realtime.Dashboard.Spectrogram.DynamicRange
+	if dr == "" {
+		return defaultDynamicRange
+	}
+	// Validate it's one of the known presets
+	switch dr {
+	case conf.SpectrogramDynamicRangeHighContrast,
+		conf.SpectrogramDynamicRangeStandard,
+		conf.SpectrogramDynamicRangeExtended:
+		return dr
+	default:
+		return defaultDynamicRange
 	}
 }
 
@@ -194,9 +214,10 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 
 	// Try Sox first (faster, direct processing)
 	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw); err != nil {
-		g.logger.Debug("Sox generation failed, trying FFmpeg fallback",
+		g.logger.Warn("Sox spectrogram generation failed, falling back to FFmpeg (style settings may not be applied)",
 			logger.String("audio_path", audioPath),
-			logger.Error(err))
+			logger.Error(err),
+			logger.Int64("sox_duration_ms", time.Since(start).Milliseconds()))
 
 		// Create FRESH context for FFmpeg fallback with full timeout.
 		// This ensures FFmpeg has adequate time even if Sox consumed most of the
@@ -526,18 +547,19 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	// Build Sox arguments for PCM stdin
 	// PCM format parameters use constants from conf package for consistency
 	args := []string{
-		"-t", "raw",                            // Input type: raw/headerless PCM
-		"-r", strconv.Itoa(conf.SampleRate),    // Sample rate: 48kHz
-		"-e", "signed",                         // Encoding: signed integer
-		"-b", strconv.Itoa(conf.BitDepth),      // Bit depth: 16-bit
-		"-c", strconv.Itoa(conf.NumChannels),   // Channels: mono
-		"-",                      // Read from stdin
-		"-n",                     // No audio output (null output)
-		"rate", soxResampleRate,  // Resample to 24kHz for spectrogram
-		"spectrogram",            // Effect: spectrogram
+		"-t", "raw", // Input type: raw/headerless PCM
+		"-r", strconv.Itoa(conf.SampleRate), // Sample rate: 48kHz
+		"-e", "signed", // Encoding: signed integer
+		"-b", strconv.Itoa(conf.BitDepth), // Bit depth: 16-bit
+		"-c", strconv.Itoa(conf.NumChannels), // Channels: mono
+		"-",                     // Read from stdin
+		"-n",                    // No audio output (null output)
+		"rate", soxResampleRate, // Resample to 24kHz for spectrogram
+		"spectrogram",             // Effect: spectrogram
 		"-x", strconv.Itoa(width), // Width in pixels
 		"-y", strconv.Itoa(width / heightRatio), // Height in pixels (half of width)
-		"-o", outputPath,         // Output PNG file
+		"-z", g.getDynamicRange(), // Dynamic range in dB
+		"-o", outputPath, // Output PNG file
 	}
 
 	// Add raw flag if requested (no axes/legend)
@@ -671,7 +693,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	captureLengthStr := strconv.Itoa(int(duration + durationRoundingOffset))
 
 	// Add duration and remaining common parameters
-	args = append(args, "-d", captureLengthStr, "-z", dynamicRange, "-o", outputPath)
+	args = append(args, "-d", captureLengthStr, "-z", g.getDynamicRange(), "-o", outputPath)
 
 	// Add raw flag if requested (no axes/legends)
 	if raw {
