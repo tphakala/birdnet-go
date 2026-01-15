@@ -35,28 +35,27 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", http.NoBody)
 	ctx := e.NewContext(req, rec)
 
-	t.Run("channel value causes marshal error not panic", func(t *testing.T) {
-		// Channels cannot be marshaled to JSON and would cause a panic
-		// in unsafe code. Our recovery should catch this.
+	t.Run("channel value causes marshal error", func(t *testing.T) {
+		// Channels cannot be marshaled to JSON. json.Marshal returns an error
+		// for this, which our wrapper should handle gracefully.
 		badData := map[string]any{
 			"channel": make(chan int),
 			"normal":  "value",
 		}
 
-		// Should return error, not panic
 		err := c.sendSSEMessage(ctx, "test", badData)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "marshal")
 	})
 
-	t.Run("function value causes marshal error not panic", func(t *testing.T) {
-		// Functions cannot be marshaled to JSON
+	t.Run("function value causes marshal error", func(t *testing.T) {
+		// Functions cannot be marshaled to JSON. json.Marshal returns an error
+		// for this, which our wrapper should handle gracefully.
 		badData := map[string]any{
 			"func":   func() {},
 			"normal": "value",
 		}
 
-		// Should return error, not panic
 		err := c.sendSSEMessage(ctx, "test", badData)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "marshal")
