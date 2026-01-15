@@ -1233,6 +1233,7 @@ func (a *SSEAction) Execute(data any) error {
 				logger.String("detection_id", a.CorrelationID),
 				logger.String("species", a.Note.CommonName),
 				logger.Error(err),
+				logger.Duration("timeout", SSEDatabaseIDTimeout),
 				logger.String("operation", "sse_broadcast_skipped"))
 			return nil // Not an error - graceful degradation
 		}
