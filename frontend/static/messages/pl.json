@@ -76,6 +76,8 @@
       "settingsNotFound": "Nie znaleziono ustawień",
       "sectionNotFound": "Nie znaleziono sekcji \"{section}\"",
       "loadingMap": "Ładowanie mapy...",
+      "mapZoomHelp": "Przytrzymaj Ctrl (lub Cmd na Macu) + przewiń aby powiększyć. Kliknij aby ustawić lokalizację.",
+      "mapSetLocationHelp": "Kliknij na mapę lub przeciągnij znacznik aby ustawić lokalizację",
       "imageNotAvailable": "Obraz niedostępny",
       "search": "Szukaj..."
     },
@@ -583,8 +585,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Czyste Niebo",
@@ -2121,6 +2126,25 @@
           "urlRequired": "URL strumienia jest wymagany",
           "invalidUrl": "Nieprawidłowy format URL strumienia",
           "duplicate": "Ten URL strumienia już istnieje"
+        },
+        "timeline": {
+          "error": "Błąd",
+          "noHistory": "Brak dostępnej historii stanu lub błędów.",
+          "stateChange": "Zmiana stanu",
+          "host": "Host",
+          "troubleshooting": "Rozwiązywanie problemów",
+          "from": "Od",
+          "to": "Do",
+          "reason": "Powód",
+          "eventAt": "Zdarzenie o {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Przełącz diagnostykę",
+          "processState": "Stan procesu",
+          "lastData": "Ostatnie dane",
+          "restartCount": "Restarty",
+          "connection": "Połączenie",
+          "stateErrorHistory": "Historia stanów i błędów"
         }
       }
     },

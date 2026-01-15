@@ -76,6 +76,8 @@
       "settingsNotFound": "Asetuksia ei löydy",
       "sectionNotFound": "Osaa \"{section}\" ei löydy",
       "loadingMap": "Ladataan karttaa...",
+      "mapZoomHelp": "Pidä Ctrl (tai Cmd Macissa) + vieritä lähentääksesi. Napsauta asettaaksesi sijainnin.",
+      "mapSetLocationHelp": "Napsauta karttaa tai vedä merkkiä asettaaksesi sijainnin",
       "imageNotAvailable": "Kuva ei saatavilla",
       "search": "Hae..."
     },
@@ -583,8 +585,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Selkeä taivas",
@@ -1948,6 +1953,25 @@
           "urlRequired": "Striimin URL on pakollinen",
           "invalidUrl": "Virheellinen striimin URL-muoto",
           "duplicate": "Tämä striimin URL on jo olemassa"
+        },
+        "timeline": {
+          "error": "Virhe",
+          "noHistory": "Ei tila- tai virhehistoriaa saatavilla.",
+          "stateChange": "Tilamuutos",
+          "host": "Isäntä",
+          "troubleshooting": "Vianmääritys",
+          "from": "Mistä",
+          "to": "Mihin",
+          "reason": "Syy",
+          "eventAt": "Tapahtuma {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Näytä/piilota diagnostiikka",
+          "processState": "Prosessin tila",
+          "lastData": "Viimeisin data",
+          "restartCount": "Uudelleenkäynnistykset",
+          "connection": "Yhteys",
+          "stateErrorHistory": "Tila- ja virhehistoria"
         }
       }
     },
