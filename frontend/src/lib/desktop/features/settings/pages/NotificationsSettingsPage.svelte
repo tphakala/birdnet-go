@@ -1375,14 +1375,14 @@
 
                   <!-- HTTP Method -->
                   <div class="">
-                    <label class="label" for="webhook-method">
+                    <label class="block py-1" for="webhook-method">
                       <span class="text-sm font-semibold text-[var(--color-base-content)]"
                         >{t('settings.notifications.push.services.webhook.method.label')}</span
                       >
                     </label>
                     <select
                       id="webhook-method"
-                      class="select select-bordered w-full"
+                      class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                       bind:value={serviceFormData.webhookMethod}
                     >
                       <option value="POST">POST</option>
@@ -1396,14 +1396,14 @@
 
                   <!-- Authentication Type -->
                   <div class="">
-                    <label class="label" for="webhook-auth-type">
+                    <label class="block py-1" for="webhook-auth-type">
                       <span class="text-sm font-semibold text-[var(--color-base-content)]"
                         >{t('settings.notifications.push.services.webhook.auth.label')}</span
                       >
                     </label>
                     <select
                       id="webhook-auth-type"
-                      class="select select-bordered w-full"
+                      class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                       bind:value={serviceFormData.webhookAuthType}
                     >
                       <option value="none"

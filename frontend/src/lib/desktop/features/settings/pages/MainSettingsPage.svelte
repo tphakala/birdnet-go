@@ -455,6 +455,10 @@
     }
   }
 
+  // Store event handler reference for cleanup
+  let modalTrapHandler: ((_event: KeyboardEvent) => void) | null = null;
+  let modalElement: HTMLElement | null = null;
+
   $effect(() => {
     if (rangeFilterState.showModal) {
       previouslyFocusedElement = document.activeElement as HTMLElement;
@@ -471,18 +475,25 @@
             modal.focus();
           }
 
-          const trapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
-          modal.addEventListener('keydown', trapHandler);
-
-          return () => {
-            modal.removeEventListener('keydown', trapHandler);
-          };
+          // Store references for cleanup
+          modalElement = modal;
+          modalTrapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
+          modal.addEventListener('keydown', modalTrapHandler);
         }
       }, 0);
     } else if (previouslyFocusedElement) {
       previouslyFocusedElement.focus();
       previouslyFocusedElement = null;
     }
+
+    // Cleanup function - properly removes the event listener
+    return () => {
+      if (modalElement && modalTrapHandler) {
+        modalElement.removeEventListener('keydown', modalTrapHandler);
+        modalElement = null;
+        modalTrapHandler = null;
+      }
+    };
   });
 
   // Map state - LAZY LOADED when Location tab is active
@@ -2295,7 +2306,9 @@
                   class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
                   aria-hidden="true"
                 ></span>
-                <span class="text-sm text-[var(--color-base-content)]">Loading map...</span>
+                <span class="text-sm text-[var(--color-base-content)]"
+                  >{t('common.ui.loadingMap')}</span
+                >
               </div>
             </div>
           {/if}
@@ -2330,7 +2343,7 @@
           </button>
         </div>
         <p class="text-xs text-[var(--color-info)] mt-2">
-          Hold Ctrl (or Cmd on Mac) + scroll to zoom. Click to set location.
+          {t('common.ui.mapZoomHelp')}
         </p>
       </div>
     </SettingsSection>
@@ -2827,7 +2840,9 @@
                   class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
                   aria-hidden="true"
                 ></span>
-                <span class="text-sm text-[var(--color-base-content)]">Loading map...</span>
+                <span class="text-sm text-[var(--color-base-content)]"
+                  >{t('common.ui.loadingMap')}</span
+                >
               </div>
             </div>
           {/if}
@@ -2858,7 +2873,7 @@
           </button>
         </div>
         <p class="text-sm text-[var(--color-base-content)] opacity-60">
-          Click on the map or drag the marker to set location
+          {t('common.ui.mapSetLocationHelp')}
         </p>
         <button
           type="button"

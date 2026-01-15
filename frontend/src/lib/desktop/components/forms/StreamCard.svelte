@@ -156,11 +156,6 @@
           border: 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
         };
       case 'idle':
-        return {
-          bg: 'bg-[var(--color-base-content)]/10',
-          text: 'text-[var(--color-base-content)]/50',
-          border: 'border-[var(--color-base-content)]/20',
-        };
       default:
         return {
           bg: 'bg-[var(--color-base-content)]/10',
@@ -183,7 +178,6 @@
       case 'error':
         return 'error';
       case 'idle':
-        return 'neutral';
       default:
         return 'neutral';
     }
@@ -215,7 +209,6 @@
       case 'error':
         return 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]';
       case 'idle':
-        return 'border-[var(--border-200)] bg-[var(--color-base-200)]/50';
       default:
         return 'border-[var(--border-200)] bg-[var(--color-base-200)]/50';
     }

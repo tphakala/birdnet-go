@@ -76,6 +76,8 @@
       "settingsNotFound": "Settings Not Found",
       "sectionNotFound": "The requested settings section \"{section}\" could not be found.",
       "loadingMap": "Loading map...",
+      "mapZoomHelp": "Hold Ctrl (or Cmd on Mac) + scroll to zoom. Click to set location.",
+      "mapSetLocationHelp": "Click on the map or drag the marker to set location",
       "imageNotAvailable": "Image not available",
       "search": "Search..."
     },

@@ -168,7 +168,8 @@ describe('ToggleField', () => {
     });
 
     const toggle = screen.getByRole('checkbox');
-    expect(toggle).toHaveClass('toggle-error');
+    // Now uses native Tailwind class for error state
+    expect(toggle.className).toContain('checked:bg-[var(--color-error)]');
   });
 
   it('applies primary styling by default', () => {
@@ -181,11 +182,12 @@ describe('ToggleField', () => {
     });
 
     const toggle = screen.getByRole('checkbox');
-    expect(toggle).toHaveClass('toggle-primary');
+    // Now uses native Tailwind class for primary state
+    expect(toggle.className).toContain('checked:bg-[var(--color-primary)]');
   });
 
   it('applies custom className', () => {
-    render(ToggleField, {
+    const { container } = render(ToggleField, {
       props: {
         label: 'Test Toggle',
         value: false,
@@ -194,8 +196,9 @@ describe('ToggleField', () => {
       },
     });
 
-    const container = screen.getByText('Test Toggle').closest('.form-control');
-    expect(container).toHaveClass('custom-class');
+    // The wrapper div has the custom class - now uses min-w-0 instead of form-control
+    const wrapper = container.querySelector('.min-w-0');
+    expect(wrapper).toHaveClass('custom-class');
   });
 
   it('generates unique field IDs', () => {
@@ -244,7 +247,7 @@ describe('ToggleField', () => {
   });
 
   it('uses flexbox layout with proper alignment', () => {
-    render(ToggleField, {
+    const { container } = render(ToggleField, {
       props: {
         label: 'Test Toggle',
         value: false,
@@ -252,8 +255,9 @@ describe('ToggleField', () => {
       },
     });
 
-    const container = screen.getByText('Test Toggle').closest('.form-control');
-    const flexContainer = container?.querySelector('.flex');
+    // The wrapper now uses min-w-0 instead of form-control
+    const wrapper = container.querySelector('.min-w-0');
+    const flexContainer = wrapper?.querySelector('.flex');
 
     expect(flexContainer).toHaveClass('items-center', 'justify-between');
   });
@@ -345,7 +349,7 @@ describe('ToggleField', () => {
   });
 
   it('renders without description when not provided', () => {
-    render(ToggleField, {
+    const { container } = render(ToggleField, {
       props: {
         label: 'Test Toggle',
         value: false,
@@ -356,8 +360,9 @@ describe('ToggleField', () => {
     // Should only have the main label, no description
     expect(screen.getByText('Test Toggle')).toBeInTheDocument();
 
-    // Check that there's no element with label-text-alt class (description styling)
-    const container = screen.getByText('Test Toggle').closest('.form-control');
-    expect(container?.querySelector('.label-text-alt')).toBeNull();
+    // Check that there's no element with description styling (text-xs opacity-70)
+    const wrapper = container.querySelector('.min-w-0');
+    const description = wrapper?.querySelector('.text-xs.opacity-70');
+    expect(description).toBeNull();
   });
 });

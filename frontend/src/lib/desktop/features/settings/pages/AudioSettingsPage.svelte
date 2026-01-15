@@ -52,7 +52,15 @@
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
-  import { Volume2, Radio, SlidersHorizontal, FileAudio, Clock, RefreshCw } from '@lucide/svelte';
+  import {
+    Volume2,
+    Radio,
+    SlidersHorizontal,
+    FileAudio,
+    Clock,
+    RefreshCw,
+    Info,
+  } from '@lucide/svelte';
   import { api } from '$lib/utils/api';
 
   const logger = loggers.audio;
@@ -620,19 +628,7 @@
         <div
           class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)] mb-4"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="stroke-current shrink-0 w-6 h-6"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
+          <Info class="size-6 shrink-0" />
           <span>{t('settings.audio.audioNormalization.requiresRecording')}</span>
         </div>
       {/if}
@@ -1116,7 +1112,7 @@
                 <input
                   id="export-bitrate-disabled"
                   type="text"
-                  class="block w-full px-3 py-1.5 text-sm bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-md opacity-50 cursor-not-allowed"
+                  class="block w-full px-3 py-1.5 text-sm bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-200)] rounded-md opacity-50 cursor-not-allowed"
                   value="N/A - Lossless"
                   disabled
                   aria-describedby="lossless-note"
