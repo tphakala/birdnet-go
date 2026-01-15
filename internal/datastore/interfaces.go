@@ -825,8 +825,10 @@ func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location)
 	}
 
 	// Calculate the start and end of the day in the specified timezone
+	// Use AddDate instead of Add(24*time.Hour) to correctly handle DST transitions
+	// where days can be 23 hours (spring forward) or 25 hours (fall back)
 	dayStart := localDate
-	dayEnd := localDate.Add(24 * time.Hour)
+	dayEnd := localDate.AddDate(0, 0, 1)
 
 	// Convert local time boundaries to UTC for database query
 	// Weather records are stored in UTC, so we need to query the UTC range

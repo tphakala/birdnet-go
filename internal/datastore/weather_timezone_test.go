@@ -248,20 +248,28 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		assert.InEpsilon(t, 22.0, results[3].Temperature, 0.0001, "Should be ordered by time (latest last)")
 	})
 
-	t.Run("daylight saving time boundary", func(t *testing.T) {
+	t.Run("DST spring forward - 23 hour day boundary", func(t *testing.T) {
 		t.Parallel()
 		ds := setupWeatherTestDB(t)
 
-		// Load America/New_York timezone to test DST handling
+		// Load America/New_York timezone for DST testing
 		newYork, err := time.LoadLocation("America/New_York")
 		require.NoError(t, err, "Failed to load America/New_York timezone")
 
-		// Test around DST boundary (March 10, 2024 - spring forward in US)
-		// On this date, clocks jump from 2:00 AM to 3:00 AM local time
+		// March 10, 2024 - Spring Forward in US (23-hour day)
+		// Clocks jump from 2:00 AM to 3:00 AM EST -> EDT
+		// Before DST: EST (UTC-5), After DST: EDT (UTC-4)
+		// Local March 10 spans: 2024-03-10 05:00 UTC to 2024-03-11 04:00 UTC (23 hours)
+
 		weatherRecords := []HourlyWeather{
-			{Time: time.Date(2024, 3, 10, 6, 0, 0, 0, time.UTC), Temperature: 8.0},
-			{Time: time.Date(2024, 3, 10, 12, 0, 0, 0, time.UTC), Temperature: 12.0},
-			{Time: time.Date(2024, 3, 10, 18, 0, 0, 0, time.UTC), Temperature: 15.0},
+			// Start of day (2024-03-10 00:00 local = 2024-03-10 05:00 UTC)
+			{Time: time.Date(2024, 3, 10, 5, 0, 0, 0, time.UTC), Temperature: 1.0},
+			// Mid-day (2024-03-10 12:00 local = 2024-03-10 16:00 UTC, now EDT)
+			{Time: time.Date(2024, 3, 10, 16, 0, 0, 0, time.UTC), Temperature: 2.0},
+			// End of day (2024-03-10 23:30 local = 2024-03-11 03:30 UTC)
+			{Time: time.Date(2024, 3, 11, 3, 30, 0, 0, time.UTC), Temperature: 3.0},
+			// NEXT day start (2024-03-11 00:30 local = 2024-03-11 04:30 UTC) - should NOT be included
+			{Time: time.Date(2024, 3, 11, 4, 30, 0, 0, time.UTC), Temperature: 99.0},
 		}
 
 		for i := range weatherRecords {
@@ -271,7 +279,61 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 
 		results, err := ds.GetHourlyWeatherInLocation("2024-03-10", newYork)
 		require.NoError(t, err)
-		assert.NotEmpty(t, results, "Should handle DST boundary dates")
+		assert.Len(t, results, 3, "Should find exactly 3 records within the 23-hour DST day")
+
+		// Verify the next day's record is NOT included
+		for _, r := range results {
+			assert.NotEqual(t, 99.0, r.Temperature, "Should NOT include weather from next day")
+		}
+	})
+
+	t.Run("DST fall back - 25 hour day boundary", func(t *testing.T) {
+		t.Parallel()
+		ds := setupWeatherTestDB(t)
+
+		// Load America/New_York timezone for DST testing
+		newYork, err := time.LoadLocation("America/New_York")
+		require.NoError(t, err, "Failed to load America/New_York timezone")
+
+		// November 3, 2024 - Fall Back in US (25-hour day)
+		// Clocks fall back from 2:00 AM to 1:00 AM EDT -> EST
+		// Before DST: EDT (UTC-4), After DST: EST (UTC-5)
+		// Local Nov 3 spans: 2024-11-03 04:00 UTC to 2024-11-04 05:00 UTC (25 hours)
+
+		weatherRecords := []HourlyWeather{
+			// Start of day (2024-11-03 00:00 local = 2024-11-03 04:00 UTC)
+			{Time: time.Date(2024, 11, 3, 4, 0, 0, 0, time.UTC), Temperature: 1.0},
+			// Mid-day (2024-11-03 12:00 local = 2024-11-03 16:00 UTC, still EDT)
+			{Time: time.Date(2024, 11, 3, 16, 0, 0, 0, time.UTC), Temperature: 2.0},
+			// Late night in the "extra" hour (2024-11-03 23:30 local = 2024-11-04 04:30 UTC, now EST)
+			{Time: time.Date(2024, 11, 4, 4, 30, 0, 0, time.UTC), Temperature: 3.0},
+			// NEXT day start (2024-11-04 00:30 local = 2024-11-04 05:30 UTC) - should NOT be included
+			{Time: time.Date(2024, 11, 4, 5, 30, 0, 0, time.UTC), Temperature: 99.0},
+		}
+
+		for i := range weatherRecords {
+			err := ds.DB.Create(&weatherRecords[i]).Error
+			require.NoError(t, err)
+		}
+
+		results, err := ds.GetHourlyWeatherInLocation("2024-11-03", newYork)
+		require.NoError(t, err)
+		assert.Len(t, results, 3, "Should find exactly 3 records within the 25-hour DST day")
+
+		// Verify the next day's record is NOT included
+		for _, r := range results {
+			assert.NotEqual(t, 99.0, r.Temperature, "Should NOT include weather from next day")
+		}
+
+		// Verify the late-night record from the 25th hour IS included
+		hasLateRecord := false
+		for _, r := range results {
+			if r.Temperature == 3.0 {
+				hasLateRecord = true
+				break
+			}
+		}
+		assert.True(t, hasLateRecord, "Should include weather from the extra hour on fall back day")
 	})
 }
 
