@@ -394,7 +394,7 @@ Source: MIT
 
 ### github.com/tphakala/go-tflite
 
-License: https://github.com/tphakala/go-tflite/blob/v0.1.1/LICENSE
+License: https://github.com/tphakala/go-tflite/blob/v0.2.1/LICENSE
 Source: MIT
 
 ### github.com/tphakala/simd
@@ -531,3 +531,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
 Source: MIT
+
