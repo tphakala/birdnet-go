@@ -133,12 +133,14 @@
     }
   });
 
-  // Initialize tab from URL query parameter
+  // Initialize tab from URL query parameter (with permission check for review tab)
   $effect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
-    if (tabParam && ['overview', 'taxonomy', 'history', 'notes', 'review'].includes(tabParam)) {
-      activeTab = tabParam as TabType;
+    const validTabs: TabType[] = ['overview', 'taxonomy', 'history', 'notes', 'review'];
+    if (tabParam && validTabs.includes(tabParam as TabType)) {
+      // If review tab requested but user lacks permission, fall back to overview
+      activeTab = tabParam === 'review' && !canReview ? 'overview' : (tabParam as TabType);
     }
   });
 
@@ -315,13 +317,8 @@
     }
   }
 
-  // Keyboard navigation handler for tab buttons
+  // Keyboard navigation handler for tab buttons (arrow keys only - Enter/Space use native button behavior)
   function handleTabKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      return;
-    }
-
     const tabs: TabType[] = ['overview', 'taxonomy', 'history', 'notes'];
     if (canReview) tabs.push('review');
 
