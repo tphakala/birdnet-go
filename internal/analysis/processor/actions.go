@@ -1225,14 +1225,16 @@ func (a *SSEAction) Execute(data any) error {
 	// This ensures the frontend can properly load audio/spectrogram via API endpoints
 	if a.Note.ID == 0 {
 		if err := a.waitForDatabaseID(); err != nil {
-			// Log warning but don't fail the SSE broadcast
-			GetLogger().Warn("Database ID not ready for SSE broadcast",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
-				logger.Any("note_id", a.Note.ID),
-				logger.String("operation", "sse_wait_database_id"))
+			// Cannot broadcast without database ID - frontend would fail to load audio/spectrogram
+			// Skip SSE broadcast gracefully - the detection is still saved and will appear on page refresh
+			if a.Settings.Debug {
+				GetLogger().Debug("Skipping SSE broadcast - database ID not available within timeout",
+					logger.String("component", "analysis.processor.actions"),
+					logger.String("detection_id", a.CorrelationID),
+					logger.String("species", a.Note.CommonName),
+					logger.String("operation", "sse_broadcast_skipped"))
+			}
+			return nil // Not an error - graceful degradation
 		}
 	}
 
@@ -1353,14 +1355,9 @@ func (a *SSEAction) waitForDatabaseID() error {
 		time.Sleep(SSEDatabaseCheckInterval)
 	}
 
-	// Timeout reached
-	return errors.Newf("database ID not assigned for %s after %v timeout", a.Note.CommonName, SSEDatabaseIDTimeout).
-		Component("analysis.processor").
-		Category(errors.CategoryTimeout).
-		Context("operation", "wait_for_database_id").
-		Context("species", a.Note.CommonName).
-		Context("timeout_seconds", SSEDatabaseIDTimeout.Seconds()).
-		Build()
+	// Timeout reached - return simple error (not a structured error that could trigger notifications)
+	// This is a transient timing issue, not a user-actionable problem
+	return fmt.Errorf("database ID not found for %s after %v", a.Note.CommonName, SSEDatabaseIDTimeout)
 }
 
 // findNoteInDatabase searches for the note in database by unique characteristics
@@ -1390,13 +1387,15 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 			Build()
 	}
 
-	// Filter results to find the exact match based on date and time
+	// Filter results to find the exact match based on date, time, and source
 	for i := range notes {
 		note := &notes[i]
 		// Check if this note matches our expected characteristics
+		// Include SourceNode to prevent matching wrong detection in high-activity periods
 		if note.Date == a.Note.Date &&
 			note.ScientificName == a.Note.ScientificName &&
-			note.Time == a.Note.Time { // Exact time match
+			note.Time == a.Note.Time &&
+			note.SourceNode == a.Note.SourceNode { // Exact match including source
 			return note, nil
 		}
 	}
