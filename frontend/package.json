@@ -110,7 +110,7 @@
     "prettier": "^3.6.2",
     "prettier-plugin-svelte": "^3.4.0",
     "stylelint": "^16.22.0",
-    "stylelint-config-standard": "^38.0.0",
+    "stylelint-config-standard": "^40.0.0",
     "svelte": "^5.35.6",
     "svelte-check": "^4.2.2",
     "svelte-eslint-parser": "^1.2.0",
