@@ -586,7 +586,7 @@ func (a *DatabaseAction) Execute(data any) error {
 	if a.NewSpeciesTracker != nil {
 		// Use atomic check-and-update to prevent duplicate "new species" notifications
 		// when multiple detections of the same species arrive concurrently
-		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, time.Now())
+		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, a.Note.BeginTime)
 	}
 
 	// Save note to database
@@ -631,7 +631,7 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.String("species", a.Note.CommonName),
 				logger.String("source", a.Note.Source.SafeString),
 				logger.Time("begin_time", a.Note.BeginTime),
-				logger.Int("duration_seconds", 15),
+				logger.Int("duration_seconds", captureLength),
 				logger.String("operation", "read_audio_segment"))
 			return err
 		}
@@ -700,7 +700,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 	// Check notification suppression if tracker is available
 	if a.NewSpeciesTracker != nil {
-		notificationTime = time.Now()
+		notificationTime = a.Note.BeginTime
 
 		// Check if notification should be suppressed for this species
 		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, notificationTime) {
