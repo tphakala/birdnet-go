@@ -120,16 +120,30 @@
   let speciesController: AbortController | null = null;
   let taxonomyController: AbortController | null = null;
 
+  // Validate detection ID to prevent path traversal attacks
+  // Only allow alphanumeric characters, hyphens, and underscores
+  function isValidDetectionId(id: string): boolean {
+    return /^[a-zA-Z0-9_-]+$/.test(id);
+  }
+
   // Resolve detection ID from URL if not provided via prop
   $effect(() => {
     if (!detectionIdProp) {
       const pathParts = window.location.pathname.split('/');
       const detectionIndex = pathParts.indexOf('detections');
       if (detectionIndex !== -1 && pathParts[detectionIndex + 1]) {
-        resolvedDetectionId = pathParts[detectionIndex + 1];
+        const candidateId = pathParts[detectionIndex + 1];
+        // Validate ID to prevent path traversal (e.g., ../users)
+        if (isValidDetectionId(candidateId)) {
+          resolvedDetectionId = candidateId;
+        } else {
+          detectionError = t('detections.errors.noIdProvided');
+        }
       }
-    } else {
+    } else if (isValidDetectionId(detectionIdProp)) {
       resolvedDetectionId = detectionIdProp;
+    } else {
+      detectionError = t('detections.errors.noIdProvided');
     }
   });
 
