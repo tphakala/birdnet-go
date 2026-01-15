@@ -7,14 +7,15 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.18.0
 	github.com/gen2brain/malgo v0.11.24
-	github.com/getsentry/sentry-go v0.40.0
+	github.com/getsentry/sentry-go v0.41.0
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/google/uuid v1.6.0
+	github.com/jarcoal/httpmock v1.4.1
 	github.com/jlaffaye/ftp v0.2.0
-	github.com/k3a/html2text v1.2.1
+	github.com/k3a/html2text v1.3.0
 	github.com/klauspost/cpuid/v2 v2.3.0
-	github.com/labstack/echo/v4 v4.14.0
+	github.com/labstack/echo/v4 v4.15.0
 	github.com/nicholas-fedor/shoutrrr v0.13.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.10
@@ -27,14 +28,14 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
-	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
+	github.com/tphakala/go-tflite v0.1.1
 	github.com/tphakala/simd v1.0.22
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.46.0
-	golang.org/x/net v0.48.0
+	golang.org/x/crypto v0.47.0
+	golang.org/x/net v0.49.0
 	golang.org/x/term v0.39.0
 	golang.org/x/text v0.33.0
-	google.golang.org/api v0.259.0
+	google.golang.org/api v0.260.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -55,11 +56,10 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.9 // indirect
 	github.com/googleapis/gax-go/v2 v2.16.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/jarcoal/httpmock v1.4.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/markbates/going v1.0.0 // indirect
