@@ -2,6 +2,7 @@ package events
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -61,6 +62,27 @@ func NewResourceEventWithPath(resourceType string, currentValue, threshold float
 	return event
 }
 
+// NewResourceEventWithPaths creates a new resource event with multiple paths (for aggregated disk alerts)
+func NewResourceEventWithPaths(resourceType string, currentValue, threshold float64, severity, mountPoint string, paths []string) ResourceEvent {
+	event := &resourceEventImpl{
+		resourceType: resourceType,
+		currentValue: currentValue,
+		threshold:    threshold,
+		severity:     severity,
+		timestamp:    time.Now(),
+		metadata:     make(map[string]any),
+		path:         mountPoint,
+	}
+	// Store mount point and all affected paths in metadata
+	if mountPoint != "" {
+		event.metadata["path"] = mountPoint
+	}
+	if len(paths) > 0 {
+		event.metadata["paths"] = paths
+	}
+	return event
+}
+
 // GetResourceType returns the type of resource
 func (e *resourceEventImpl) GetResourceType() string {
 	return e.resourceType
@@ -95,31 +117,39 @@ func (e *resourceEventImpl) GetMetadata() map[string]any {
 func (e *resourceEventImpl) GetMessage() string {
 	var resourceName string
 	switch e.resourceType {
-	case "cpu":
+	case ResourceCPU:
 		resourceName = "CPU"
-	case "memory":
+	case ResourceMemory:
 		resourceName = "Memory"
-	case "disk":
+	case ResourceDisk:
 		resourceName = "Disk"
 	default:
 		resourceName = e.resourceType
 	}
 
 	// Include path in message for disk resources
-	if e.resourceType == "disk" && e.path != "" {
+	if e.resourceType == ResourceDisk && e.path != "" {
 		resourceName = fmt.Sprintf("%s (%s)", resourceName, e.path)
 	}
 
+	var baseMessage string
 	switch e.severity {
-	case "recovery":
-		return fmt.Sprintf("%s usage has returned to normal (%.1f%%)", resourceName, e.currentValue)
-	case "warning":
-		return fmt.Sprintf("%s usage warning: %.1f%% (threshold: %.1f%%)", resourceName, e.currentValue, e.threshold)
-	case "critical":
-		return fmt.Sprintf("%s usage critical: %.1f%% (threshold: %.1f%%)", resourceName, e.currentValue, e.threshold)
+	case SeverityRecovery:
+		baseMessage = fmt.Sprintf("%s usage has returned to normal (%.1f%%)", resourceName, e.currentValue)
+	case SeverityWarning:
+		baseMessage = fmt.Sprintf("%s usage warning: %.1f%% (threshold: %.1f%%)", resourceName, e.currentValue, e.threshold)
+	case SeverityCritical:
+		baseMessage = fmt.Sprintf("%s usage critical: %.1f%% (threshold: %.1f%%)", resourceName, e.currentValue, e.threshold)
 	default:
-		return fmt.Sprintf("%s usage: %.1f%%", resourceName, e.currentValue)
+		baseMessage = fmt.Sprintf("%s usage: %.1f%%", resourceName, e.currentValue)
 	}
+
+	// Append affected paths if multiple paths are present
+	if paths, ok := e.metadata["paths"].([]string); ok && len(paths) > 1 {
+		baseMessage += fmt.Sprintf("\nAffected paths: %s", strings.Join(paths, ", "))
+	}
+
+	return baseMessage
 }
 
 // GetPath returns the path for disk resources or empty string for others
