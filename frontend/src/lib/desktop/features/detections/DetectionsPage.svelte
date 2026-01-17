@@ -5,6 +5,7 @@
   import DetectionsCard from './components/DetectionsCard.svelte';
   import { getLogger } from '$lib/utils/logger';
   import { getLocalDateString } from '$lib/utils/date';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = getLogger('app');
 
@@ -165,7 +166,7 @@
   // Handle details click
   function handleDetailsClick(id: number) {
     // Navigate to detection details page
-    window.location.href = `/ui/detections/${id}`;
+    window.location.href = buildAppUrl(`/ui/detections/${id}`);
   }
 
   // Listen for search updates from SearchBox

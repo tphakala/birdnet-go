@@ -1,7 +1,23 @@
-import { describe, it, expect } from 'vitest';
-import { extractRelativePath, isRelativePath, normalizePath } from './urlHelpers';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  extractRelativePath,
+  isRelativePath,
+  normalizePath,
+  getAppBasePath,
+  buildAppUrl,
+} from './urlHelpers';
 
 describe('URL Helpers', () => {
+  // Store original window.location descriptor for tests that mock it
+  const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+
+  afterEach(() => {
+    // Restore original window.location after tests that mock it
+    if (originalLocationDescriptor) {
+      Object.defineProperty(window, 'location', originalLocationDescriptor);
+    }
+  });
+
   describe('extractRelativePath', () => {
     describe('input validation', () => {
       it('should handle undefined inputs', () => {
@@ -242,6 +258,145 @@ describe('URL Helpers', () => {
         expect(result).toBe(expected);
         expect(isRelativePath(result)).toBe(true);
       }
+    });
+  });
+
+  describe('getAppBasePath', () => {
+    it('should return empty string for direct access (no proxy prefix)', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should return empty string for root /ui path', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/' };
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should extract Home Assistant Ingress prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/JNTY7napnEu_u3o-sW3pCx0lp_TsZKcsJ13o3lcoZ90/ui/dashboard',
+      };
+      expect(getAppBasePath()).toBe(
+        '/api/hassio_ingress/JNTY7napnEu_u3o-sW3pCx0lp_TsZKcsJ13o3lcoZ90'
+      );
+    });
+
+    it('should extract simple proxy prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/birdnet/ui/detections' };
+      expect(getAppBasePath()).toBe('/proxy/birdnet');
+    });
+
+    it('should handle paths with detection IDs', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN123/ui/detections/33518',
+      };
+      expect(getAppBasePath()).toBe('/api/hassio_ingress/TOKEN123');
+    });
+
+    it('should handle paths with query parameters (pathname only)', () => {
+      // Note: pathname doesn't include query string, but path might have /ui in multiple places
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/myproxy/ui/analytics' };
+      expect(getAppBasePath()).toBe('/myproxy');
+    });
+
+    it('should return empty string when pathname has no /ui', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/some/other/path' };
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should handle root path', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/' };
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should handle SSR (no window)', () => {
+      // This tests the typeof window check - we can't easily test this in jsdom
+      // but we verify the function handles edge cases
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui' };
+      expect(getAppBasePath()).toBe('');
+    });
+  });
+
+  describe('buildAppUrl', () => {
+    it('should return path unchanged for direct access', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+      expect(buildAppUrl('/ui/detections/123')).toBe('/ui/detections/123');
+    });
+
+    it('should prepend ingress prefix to path', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN/ui/dashboard',
+      };
+      expect(buildAppUrl('/ui/detections/123')).toBe('/api/hassio_ingress/TOKEN/ui/detections/123');
+    });
+
+    it('should handle paths with query parameters', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN/ui/dashboard',
+      };
+      expect(buildAppUrl('/ui/detections/123?tab=review')).toBe(
+        '/api/hassio_ingress/TOKEN/ui/detections/123?tab=review'
+      );
+    });
+
+    it('should handle paths with hash fragments', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/proxy/ui/settings',
+      };
+      expect(buildAppUrl('/ui/settings#audio')).toBe('/proxy/ui/settings#audio');
+    });
+
+    it('should work with various path formats', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/custom-proxy/ui/analytics/species',
+      };
+
+      expect(buildAppUrl('/ui/')).toBe('/custom-proxy/ui/');
+      expect(buildAppUrl('/ui/dashboard')).toBe('/custom-proxy/ui/dashboard');
+      expect(buildAppUrl('/ui/detections/33518?tab=review')).toBe(
+        '/custom-proxy/ui/detections/33518?tab=review'
+      );
+    });
+  });
+
+  describe('Ingress integration scenarios', () => {
+    it('should correctly build review detection URL through ingress', () => {
+      // Simulate being on dashboard through Home Assistant Ingress
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/JNTY7napnEu_u3o-sW3pCx0lp_TsZKcsJ13o3lcoZ90/ui/dashboard',
+      };
+
+      const detectionId = 33518;
+      const reviewUrl = buildAppUrl(`/ui/detections/${detectionId}?tab=review`);
+
+      expect(reviewUrl).toBe(
+        '/api/hassio_ingress/JNTY7napnEu_u3o-sW3pCx0lp_TsZKcsJ13o3lcoZ90/ui/detections/33518?tab=review'
+      );
+    });
+
+    it('should work correctly without proxy (direct access)', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+
+      const detectionId = 33518;
+      const reviewUrl = buildAppUrl(`/ui/detections/${detectionId}?tab=review`);
+
+      expect(reviewUrl).toBe('/ui/detections/33518?tab=review');
     });
   });
 });
