@@ -2,6 +2,7 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
 import { loggers } from '$lib/utils/logger';
+import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
 import {
   sanitizeNotificationMessage,
   isValidNotification,
@@ -195,7 +196,9 @@ class SSENotificationManager {
             label: toastData.action.label,
             onClick: () => {
               if (toastData.action?.url) {
-                window.location.href = toastData.action.url;
+                // Use buildAppUrl for internal URLs to support reverse proxy scenarios
+                const url = toastData.action.url;
+                window.location.href = isRelativePath(url) ? buildAppUrl(url) : url;
               } else if (toastData.action?.handler) {
                 // Handle custom actions if needed
                 logger.debug('Toast action handler:', toastData.action.handler);

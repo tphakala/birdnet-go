@@ -2,6 +2,10 @@
  * URL manipulation utility functions
  */
 
+import { loggers } from './logger';
+
+const logger = loggers.ui;
+
 /**
  * Extracts a relative path from a full path by removing the base path prefix.
  * Ensures the resulting path always starts with '/'.
@@ -155,9 +159,9 @@ export function buildAppUrl(path: string): string {
   // Validate input to prevent open redirect vulnerabilities
   // Only allow relative paths (starting with / but not //)
   if (!isRelativePath(path)) {
-    console.error('buildAppUrl was called with a non-relative path:', path);
+    logger.error('buildAppUrl was called with a non-relative path:', path);
     // Return safe fallback to prevent open redirect
-    return basePath + '/ui/';
+    return basePath + '/ui/dashboard';
   }
 
   return basePath + path;
