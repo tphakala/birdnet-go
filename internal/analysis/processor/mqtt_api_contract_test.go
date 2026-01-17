@@ -57,9 +57,10 @@ var mqttAPIContractFields = struct {
 	ProcessingTime string
 
 	// Detection message root-level fields (explicit JSON tags)
-	SourceID   string // camelCase - added for Home Assistant discovery
-	Occurrence string // lowercase with omitempty
-	BirdImage  string // PascalCase - DO NOT CHANGE (backward compatibility)
+	DetectionID string // camelCase - database ID for URL construction (issue #1748)
+	SourceID    string // camelCase - added for Home Assistant discovery
+	Occurrence  string // lowercase with omitempty
+	BirdImage   string // PascalCase - DO NOT CHANGE (backward compatibility)
 
 	// BirdImage nested fields (from imageprovider.BirdImage)
 	// These use PascalCase because Go's default JSON marshaling is used
@@ -84,9 +85,10 @@ var mqttAPIContractFields = struct {
 	ProcessingTime: "ProcessingTime",
 
 	// Root-level fields with explicit tags
-	SourceID:   "sourceId",  // camelCase - new field for HA
-	Occurrence: "occurrence", // lowercase with omitempty
-	BirdImage:  "BirdImage", // PascalCase - FROZEN for backward compatibility
+	DetectionID: "detectionId", // camelCase - database ID for URL construction (issue #1748)
+	SourceID:    "sourceId",    // camelCase - new field for HA
+	Occurrence:  "occurrence",  // lowercase with omitempty
+	BirdImage:   "BirdImage",   // PascalCase - FROZEN for backward compatibility
 
 	// BirdImage nested fields (PascalCase - Go default)
 	BirdImageURL:            "URL",
@@ -111,6 +113,7 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 	// Create a complete NoteWithBirdImage struct with all fields populated
 	note := NoteWithBirdImage{
 		Note: datastore.Note{
+			ID:             12345, // Simulated database ID
 			CommonName:     "American Robin",
 			ScientificName: "Turdus migratorius",
 			Confidence:     0.95,
@@ -123,7 +126,8 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 			Occurrence:     0.75,
 			Source:         testAudioSource(),
 		},
-		SourceID: "test-source-1",
+		DetectionID: 12345, // Should match Note.ID for URL construction
+		SourceID:    "test-source-1",
 		BirdImage: imageprovider.BirdImage{
 			URL:            "https://example.com/bird.jpg",
 			ScientificName: "Turdus migratorius",
@@ -169,6 +173,16 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 			"MQTT API CONTRACT VIOLATION: Time field must be PascalCase")
 		assert.Contains(t, jsonMap, mqttAPIContractFields.ClipName,
 			"MQTT API CONTRACT VIOLATION: ClipName field must be PascalCase")
+	})
+
+	t.Run("DetectionID uses camelCase (for URL construction)", func(t *testing.T) {
+		// This is a new field for constructing API URLs (issue #1748)
+		assert.Contains(t, jsonMap, mqttAPIContractFields.DetectionID,
+			"MQTT API CONTRACT: detectionId field must be present for URL construction")
+		detectionID, ok := jsonMap[mqttAPIContractFields.DetectionID].(float64)
+		require.True(t, ok, "detectionId must be a number")
+		assert.InDelta(t, 12345, detectionID, 0.001,
+			"detectionId value mismatch")
 	})
 
 	t.Run("SourceID uses camelCase (new field for HA)", func(t *testing.T) {
@@ -320,6 +334,7 @@ func TestMQTTAPIContract_AllExpectedFieldsPresent(t *testing.T) {
 
 	note := NoteWithBirdImage{
 		Note: datastore.Note{
+			ID:             67890, // Database primary key
 			CommonName:     "House Sparrow",
 			ScientificName: "Passer domesticus",
 			Confidence:     0.87,
@@ -332,7 +347,8 @@ func TestMQTTAPIContract_AllExpectedFieldsPresent(t *testing.T) {
 			Occurrence:     0.65,
 			Source:         testAudioSource(),
 		},
-		SourceID: "garden-mic",
+		DetectionID: 67890, // Should match Note.ID for URL construction
+		SourceID:    "garden-mic",
 		BirdImage: imageprovider.BirdImage{
 			URL:            "https://example.com/sparrow.jpg",
 			ScientificName: "Passer domesticus",
@@ -366,6 +382,7 @@ func TestMQTTAPIContract_AllExpectedFieldsPresent(t *testing.T) {
 		"ClipName",       // PascalCase - from embedded Note
 		"ProcessingTime", // PascalCase - from embedded Note
 		"occurrence",     // lowercase - from embedded Note (explicit tag)
+		"detectionId",    // camelCase - database ID for URL construction (issue #1748)
 		"sourceId",       // camelCase - new field for HA discovery
 		"BirdImage",      // PascalCase - FROZEN for backward compatibility
 	}

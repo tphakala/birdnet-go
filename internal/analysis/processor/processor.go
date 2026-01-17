@@ -1156,6 +1156,12 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	var actions []Action
 	var databaseAction *DatabaseAction
 	var sseAction *SSEAction
+	var mqttAction *MqttAction
+
+	// Create shared context for actions that need database ID.
+	// This enables downstream actions (SSE, MQTT) to access the database-assigned
+	// detection ID without polling, when combined with CompositeAction for sequential execution.
+	detectionCtx := &DetectionContext{}
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
@@ -1179,6 +1185,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			NewSpeciesTracker: tracker,
 			processor:         p, // Add processor reference for source name resolution
 			PreRenderer:       p.preRenderer,
+			DetectionCtx:      detectionCtx, // Share context for downstream actions
 			Note:              detection.Note,
 			Results:           detection.Results,
 			Ds:                p.Ds,
@@ -1202,6 +1209,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			Note:           detection.Note,
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
+			DetectionCtx:   detectionCtx, // Share context from DatabaseAction
 			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
 			Ds:             p.Ds,
@@ -1209,39 +1217,76 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		}
 	}
 
-	// CRITICAL FIX for GitHub issue #1158: Race condition between DatabaseAction and SSEAction
-	//
-	// Problem: When both database and SSE are enabled, they execute concurrently via the job queue.
-	// SSEAction polls for database records that haven't been saved yet, causing timeout errors:
-	//   - "database ID not assigned for Eastern Wood-Pewee after 10s timeout"
-	//   - "note not found in database"
-	//   - "audio file ... not ready after 5s timeout"
-	//
-	// Solution: Combine DatabaseAction and SSEAction into a CompositeAction that executes them
-	// sequentially. This ensures the database save completes before SSE attempts to broadcast,
-	// eliminating the race condition while maintaining all other actions' concurrent execution.
-	//
-	// This is particularly important on resource-constrained hardware (e.g., Raspberry Pi with
-	// SD cards) where database writes can take several seconds to complete.
-	if databaseAction != nil && sseAction != nil {
-		// Create composite action for sequential execution
-		compositeAction := &CompositeAction{
-			Actions:       []Action{databaseAction, sseAction},
-			Description:   "Database save and SSE broadcast (sequential)",
-			CorrelationID: detection.CorrelationID,
-		}
-		actions = append(actions, compositeAction)
-	} else {
-		// Add them individually if only one is enabled
-		if databaseAction != nil {
-			actions = append(actions, databaseAction)
-		}
-		if sseAction != nil {
-			actions = append(actions, sseAction)
+	// Create MQTT action if enabled and client is available
+	// NOTE: MqttAction must be created before the CompositeAction to be included in the sequence
+	if p.Settings.Realtime.MQTT.Enabled {
+		mqttClient := p.GetMQTTClient()
+		if mqttClient != nil && mqttClient.IsConnected() {
+			// Create MQTT retry config from settings
+			mqttRetryConfig := jobqueue.RetryConfig{
+				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,
+				MaxRetries:   p.Settings.Realtime.MQTT.RetrySettings.MaxRetries,
+				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
+				Multiplier:   p.Settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
+			}
+
+			mqttAction = &MqttAction{
+				Settings:       p.Settings,
+				MqttClient:     mqttClient,
+				EventTracker:   p.GetEventTracker(),
+				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
+				Note:           detection.Note,
+				BirdImageCache: p.BirdImageCache,
+				RetryConfig:    mqttRetryConfig,
+				CorrelationID:  detection.CorrelationID,
+			}
 		}
 	}
 
+	// CRITICAL FIX for GitHub issue #1158 and #1748: Race condition and data visibility
+	//
+	// Problem: When database, SSE, and MQTT are enabled, they execute concurrently via the job queue.
+	// SSE and MQTT need the database-assigned Note.ID, but each action holds a VALUE COPY of Note.
+	// CompositeAction ensures sequential execution (timing), but doesn't share data between copies.
+	//
+	// Solution: Combine DatabaseAction, SSEAction, and MqttAction into a CompositeAction that:
+	// 1. Executes them sequentially (Database → SSE → MQTT)
+	// 2. Uses DetectionContext to share the database ID atomically between actions
+	//
+	// This ensures:
+	// - Database save completes before downstream actions
+	// - SSE/MQTT receive the correct detection ID for URL construction
+	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
+	//
+	// See: https://github.com/tphakala/birdnet-go/issues/1158 (race condition)
+	// See: https://github.com/tphakala/birdnet-go/issues/1748 (detection ID in MQTT)
+	var sequentialActions []Action
+	if databaseAction != nil {
+		sequentialActions = append(sequentialActions, databaseAction)
+	}
+	if sseAction != nil {
+		sequentialActions = append(sequentialActions, sseAction)
+	}
+	if mqttAction != nil {
+		sequentialActions = append(sequentialActions, mqttAction)
+	}
+
+	if len(sequentialActions) > 1 {
+		// Create composite action for sequential execution with shared context
+		compositeAction := &CompositeAction{
+			Actions:       sequentialActions,
+			Description:   "Database save, SSE broadcast, and MQTT publish (sequential)",
+			CorrelationID: detection.CorrelationID,
+		}
+		actions = append(actions, compositeAction)
+	} else if len(sequentialActions) == 1 {
+		// Only one action enabled, add it directly
+		actions = append(actions, sequentialActions[0])
+	}
+
 	// Add BirdWeatherAction if enabled and client is initialized
+	// NOTE: BirdWeather runs independently (doesn't need detection ID from database)
 	if p.Settings.Realtime.Birdweather.Enabled {
 		bwClient := p.GetBwClient() // Use getter for thread safety
 		if bwClient != nil {
@@ -1262,31 +1307,6 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 				pcmData:       detection.pcmData3s,
 				RetryConfig:   bwRetryConfig,
 				CorrelationID: detection.CorrelationID,
-			})
-		}
-	}
-
-	// Add MQTT action if enabled and client is available
-	if p.Settings.Realtime.MQTT.Enabled {
-		mqttClient := p.GetMQTTClient()
-		if mqttClient != nil && mqttClient.IsConnected() {
-			// Create MQTT retry config from settings
-			mqttRetryConfig := jobqueue.RetryConfig{
-				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,
-				MaxRetries:   p.Settings.Realtime.MQTT.RetrySettings.MaxRetries,
-				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
-				Multiplier:   p.Settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
-			}
-
-			actions = append(actions, &MqttAction{
-				Settings:       p.Settings,
-				MqttClient:     mqttClient,
-				EventTracker:   p.GetEventTracker(),
-				Note:           detection.Note,
-				BirdImageCache: p.BirdImageCache,
-				RetryConfig:    mqttRetryConfig,
-				CorrelationID:  detection.CorrelationID,
 			})
 		}
 	}

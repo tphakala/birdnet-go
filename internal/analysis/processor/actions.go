@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -63,6 +64,23 @@ const (
 	ExecuteCommandTimeout = 5 * time.Minute
 )
 
+// DetectionContext provides thread-safe shared state for detection pipeline actions.
+// This enables downstream actions (MQTT, SSE) to access data set by upstream actions
+// (Database) without polling, when used with CompositeAction for sequential execution.
+//
+// The context is created once per detection in getActionsForItem() and shared among
+// all actions that need access to the database-assigned detection ID.
+type DetectionContext struct {
+	// NoteID holds the database primary key after successful save.
+	// Use atomic operations: Store() in DatabaseAction, Load() in MqttAction/SSEAction.
+	NoteID atomic.Uint64
+
+	// AudioExportFailed indicates that audio export failed in DatabaseAction.
+	// When true, downstream actions should skip waiting for the audio file.
+	// This prevents the 5-second timeout delay when audio export fails.
+	AudioExportFailed atomic.Bool
+}
+
 // Action is the base interface for all actions that can be executed
 type Action interface {
 	Execute(data any) error
@@ -94,6 +112,7 @@ type DatabaseAction struct {
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
 	PreRenderer       PreRendererSubmit       // Spectrogram pre-renderer
+	DetectionCtx      *DetectionContext       // Shared context for downstream actions (MQTT, SSE)
 	Description       string
 	CorrelationID     string     // Detection correlation ID for log tracking
 	mu                sync.Mutex // Protect concurrent access to Note and Results
@@ -157,6 +176,7 @@ type MqttAction struct {
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
+	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
@@ -175,6 +195,7 @@ type SSEAction struct {
 	Note           datastore.Note
 	BirdImageCache *imageprovider.BirdImageCache
 	EventTracker   *EventTracker
+	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
@@ -605,10 +626,21 @@ func (a *DatabaseAction) Execute(data any) error {
 		return err
 	}
 
+	// Share the database ID with downstream actions (MQTT, SSE) immediately.
+	// This must happen before audio export so downstream actions get the ID
+	// even if audio export fails.
+	if a.DetectionCtx != nil {
+		a.DetectionCtx.NoteID.Store(uint64(a.Note.ID))
+	}
+
 	// After successful save, publish detection event for new species
 	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
-	// Save audio clip to file if enabled
+	// Save audio clip to file if enabled.
+	// IMPORTANT: Audio export errors are logged but NOT returned.
+	// This allows downstream actions (SSE, MQTT) to proceed with the detection.
+	// The detection record is valuable even without audio - users integrating with
+	// Home Assistant want the detection event regardless of audio export status.
 	if a.Settings.Realtime.Audio.Export.Enabled {
 		captureLength := a.Settings.Realtime.Audio.Export.Length
 
@@ -624,8 +656,8 @@ func (a *DatabaseAction) Execute(data any) error {
 		// export audio clip from capture buffer
 		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, captureLength)
 		if err != nil {
-			// Add structured logging
-			GetLogger().Error("Failed to read audio segment from buffer",
+			// Log error but don't return - allow chain to continue for MQTT/SSE
+			GetLogger().Error("Audio export failed (continuing with detection broadcast)",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.Error(err),
@@ -633,43 +665,49 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.String("source", a.Note.Source.SafeString),
 				logger.Time("begin_time", a.Note.BeginTime),
 				logger.Int("duration_seconds", captureLength),
-				logger.String("operation", "read_audio_segment"))
-			return err
-		}
+				logger.String("operation", "audio_export_non_fatal"))
+			// Signal to downstream actions that audio export failed
+			// This prevents SSEAction from waiting 5 seconds for a file that won't appear
+			if a.DetectionCtx != nil {
+				a.DetectionCtx.AudioExportFailed.Store(true)
+			}
+		} else {
+			// Create a SaveAudioAction and execute it
+			saveAudioAction := &SaveAudioAction{
+				Settings:      a.Settings,
+				ClipName:      a.Note.ClipName,
+				pcmData:       pcmData,
+				NoteID:        a.Note.ID,
+				PreRenderer:   a.PreRenderer,
+				CorrelationID: a.CorrelationID,
+			}
 
-		// Create a SaveAudioAction and execute it
-		saveAudioAction := &SaveAudioAction{
-			Settings:      a.Settings,
-			ClipName:      a.Note.ClipName,
-			pcmData:       pcmData,
-			NoteID:        a.Note.ID,
-			PreRenderer:   a.PreRenderer,
-			CorrelationID: a.CorrelationID,
-		}
-
-		if err := saveAudioAction.Execute(nil); err != nil {
-			// Add structured logging
-			GetLogger().Error("Failed to save audio clip",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
-				logger.String("clip_name", a.Note.ClipName),
-				logger.String("operation", "save_audio_clip"))
-			return err
-		}
-
-		if a.Settings.Debug {
-			// Add structured logging
-			GetLogger().Debug("Saved audio clip successfully",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", a.Note.CommonName),
-				logger.String("clip_name", a.Note.ClipName),
-				logger.String("detection_time", a.Note.Time),
-				logger.Time("begin_time", a.Note.BeginTime),
-				logger.Time("end_time", time.Now()),
-				logger.String("operation", "save_audio_clip_debug"))
+			if err := saveAudioAction.Execute(nil); err != nil {
+				// Log error but don't return - allow chain to continue for MQTT/SSE
+				GetLogger().Error("Audio export failed (continuing with detection broadcast)",
+					logger.String("component", "analysis.processor.actions"),
+					logger.String("detection_id", a.CorrelationID),
+					logger.Error(err),
+					logger.String("species", a.Note.CommonName),
+					logger.String("clip_name", a.Note.ClipName),
+					logger.String("operation", "audio_export_non_fatal"))
+				// Signal to downstream actions that audio export failed
+				// This prevents SSEAction from waiting 5 seconds for a file that won't appear
+				if a.DetectionCtx != nil {
+					a.DetectionCtx.AudioExportFailed.Store(true)
+				}
+			} else if a.Settings.Debug {
+				// Add structured logging
+				GetLogger().Debug("Saved audio clip successfully",
+					logger.String("component", "analysis.processor.actions"),
+					logger.String("detection_id", a.CorrelationID),
+					logger.String("species", a.Note.CommonName),
+					logger.String("clip_name", a.Note.ClipName),
+					logger.String("detection_time", a.Note.Time),
+					logger.Time("begin_time", a.Note.BeginTime),
+					logger.Time("end_time", time.Now()),
+					logger.String("operation", "save_audio_clip_debug"))
+			}
 		}
 	}
 
@@ -1017,8 +1055,9 @@ func (a *BirdWeatherAction) Execute(data any) error {
 // See: https://github.com/tphakala/birdnet-go/discussions/1759
 type NoteWithBirdImage struct {
 	datastore.Note
-	SourceID  string                  `json:"sourceId"`  // Audio source ID for HA filtering (added for HA discovery)
-	BirdImage imageprovider.BirdImage `json:"BirdImage"` // PascalCase for backward compatibility - DO NOT CHANGE
+	DetectionID uint                    `json:"detectionId"` // Database ID for URL construction (e.g., /api/v2/audio/{id})
+	SourceID    string                  `json:"sourceId"`    // Audio source ID for HA filtering (added for HA discovery)
+	BirdImage   imageprovider.BirdImage `json:"BirdImage"`   // PascalCase for backward compatibility - DO NOT CHANGE
 }
 
 // Execute sends the note to the MQTT broker
@@ -1071,14 +1110,26 @@ func (a *MqttAction) Execute(data any) error {
 	// Get bird image of detected bird using the shared helper
 	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Note.ScientificName, a.Note.CommonName, a.CorrelationID)
 
+	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence)
+	var detectionID uint
+	if a.DetectionCtx != nil {
+		detectionID = uint(a.DetectionCtx.NoteID.Load())
+	}
+
 	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
 
-	// Wrap note with bird image (using copy) and include SourceID for HA filtering
+	// Update the Note's ID field for consistency in embedded JSON
+	if detectionID > 0 {
+		noteCopy.ID = detectionID
+	}
+
+	// Wrap note with bird image (using copy) and include detection ID and SourceID
 	noteWithBirdImage := NoteWithBirdImage{
-		Note:      noteCopy,
-		SourceID:  noteCopy.Source.ID,
-		BirdImage: birdImage,
+		Note:        noteCopy,
+		DetectionID: detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
+		SourceID:    noteCopy.Source.ID,
+		BirdImage:   birdImage,
 	}
 
 	// Create a JSON representation of the note
@@ -1215,30 +1266,18 @@ func (a *SSEAction) Execute(data any) error {
 		return nil
 	}
 
-	// FIXME: delay SSE broadcasts by sleeping here for a moment, this should be
-	// fixed by proper synchronization of audio file writer, database ID assignment
-	// and SSE broadcast.
-	const sleepTime = 5 * time.Second
-	time.Sleep(sleepTime)
-
-	// Wait for audio file to be available if this detection has an audio clip assigned
-	// This properly handles per-species audio settings and avoids false positives
-	if a.Note.ClipName != "" {
-		if err := a.waitForAudioFile(); err != nil {
-			// Log warning but don't fail the SSE broadcast
-			GetLogger().Warn("Audio file not ready for SSE broadcast",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
-				logger.String("clip_name", a.Note.ClipName),
-				logger.String("operation", "sse_wait_audio_file"))
+	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence).
+	// This replaces the old polling-based waitForDatabaseID() approach with proper synchronization.
+	if a.DetectionCtx != nil {
+		noteID := uint(a.DetectionCtx.NoteID.Load())
+		if noteID > 0 {
+			a.Note.ID = noteID
 		}
 	}
 
-	// Wait for database ID to be assigned if Note.ID is 0 (new detection)
-	// This ensures the frontend can properly load audio/spectrogram via API endpoints
-	if a.Note.ID == 0 {
+	// Fallback to polling if DetectionCtx wasn't set (legacy compatibility)
+	// This should only happen if SSEAction runs outside of CompositeAction
+	if a.Note.ID == 0 && a.DetectionCtx == nil {
 		if err := a.waitForDatabaseID(); err != nil {
 			// Cannot broadcast without database ID - frontend would fail to load audio/spectrogram
 			// Skip SSE broadcast gracefully - the detection is still saved and will appear on page refresh
@@ -1250,6 +1289,32 @@ func (a *SSEAction) Execute(data any) error {
 				logger.Duration("timeout", SSEDatabaseIDTimeout),
 				logger.String("operation", "sse_broadcast_skipped"))
 			return nil // Not an error - graceful degradation
+		}
+	}
+
+	// Wait for audio file to be available if this detection has an audio clip assigned
+	// AND audio export didn't fail in DatabaseAction.
+	// This properly handles per-species audio settings and avoids false positives.
+	if a.Note.ClipName != "" {
+		// Skip waiting if audio export failed - the file will never appear
+		// This prevents a 5-second timeout delay when DatabaseAction couldn't export audio
+		audioExportFailed := a.DetectionCtx != nil && a.DetectionCtx.AudioExportFailed.Load()
+		if audioExportFailed {
+			GetLogger().Debug("Skipping audio file wait - export failed in DatabaseAction",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", a.Note.CommonName),
+				logger.String("clip_name", a.Note.ClipName),
+				logger.String("operation", "sse_skip_audio_wait"))
+		} else if err := a.waitForAudioFile(); err != nil {
+			// Log warning but don't fail the SSE broadcast
+			GetLogger().Warn("Audio file not ready for SSE broadcast",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.Error(err),
+				logger.String("species", a.Note.CommonName),
+				logger.String("clip_name", a.Note.ClipName),
+				logger.String("operation", "sse_wait_audio_file"))
 		}
 	}
 
@@ -1343,7 +1408,13 @@ func (a *SSEAction) waitForAudioFile() error {
 		Build()
 }
 
-// waitForDatabaseID waits for the Note to be saved to database and ID assigned
+// waitForDatabaseID waits for the Note to be saved to database and ID assigned.
+//
+// Deprecated: This polling-based approach is a legacy fallback. When SSEAction is
+// created via getDefaultActions(), it always receives a DetectionContext which
+// provides the database ID without polling via atomic.Uint64. This method is retained
+// for backward compatibility with custom action configurations that may create SSEAction
+// without a DetectionContext. Consider removing in a future major version.
 func (a *SSEAction) waitForDatabaseID() error {
 	// We need to query the database to find this note by unique characteristics
 	// Since we don't have the ID yet, we'll search by time, species, and confidence
@@ -1379,7 +1450,10 @@ func (a *SSEAction) waitForDatabaseID() error {
 	return fmt.Errorf("database ID not found after %v", SSEDatabaseIDTimeout)
 }
 
-// findNoteInDatabase searches for the note in database by unique characteristics
+// findNoteInDatabase searches for the note in database by unique characteristics.
+//
+// Deprecated: This is a helper for the deprecated waitForDatabaseID() method.
+// See waitForDatabaseID() deprecation notice for details.
 func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	if a.Ds == nil {
 		return nil, errors.Newf("datastore not available").
