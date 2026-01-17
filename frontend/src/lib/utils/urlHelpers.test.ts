@@ -377,7 +377,10 @@ describe('URL Helpers', () => {
       // Protocol-relative URLs should be rejected and return safe fallback
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       expect(buildAppUrl('//evil.com/path')).toBe('/ui/');
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'buildAppUrl was called with a non-relative path:',
+        '//evil.com/path'
+      );
       consoleSpy.mockRestore();
     });
 
@@ -387,7 +390,10 @@ describe('URL Helpers', () => {
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       expect(buildAppUrl('https://evil.com')).toBe('/proxy/ui/');
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'buildAppUrl was called with a non-relative path:',
+        'https://evil.com'
+      );
       consoleSpy.mockRestore();
     });
   });
