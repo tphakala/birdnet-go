@@ -85,3 +85,68 @@ export function normalizePath(path: unknown, addTrailingSlash = false): string {
 
   return normalized;
 }
+
+/**
+ * Gets the base path prefix for the app (everything before /ui/).
+ * Handles reverse proxy scenarios like Home Assistant Ingress.
+ *
+ * This is useful when the app is served behind a reverse proxy that adds
+ * a prefix to all URLs, such as Home Assistant Ingress which uses paths like:
+ * /api/hassio_ingress/TOKEN/ui/dashboard
+ *
+ * @returns The base path prefix (empty string if no prefix, or the prefix path)
+ *
+ * @example
+ * // Direct access
+ * // pathname: '/ui/dashboard'
+ * getAppBasePath() // returns ''
+ *
+ * @example
+ * // Home Assistant Ingress
+ * // pathname: '/api/hassio_ingress/TOKEN/ui/dashboard'
+ * getAppBasePath() // returns '/api/hassio_ingress/TOKEN'
+ *
+ * @example
+ * // Custom proxy
+ * // pathname: '/proxy/birdnet/ui/settings'
+ * getAppBasePath() // returns '/proxy/birdnet'
+ */
+export function getAppBasePath(): string {
+  if (typeof window === 'undefined') return '';
+
+  const pathname = window.location.pathname;
+
+  // Find the index of '/ui' in the pathname
+  const uiIndex = pathname.indexOf('/ui');
+
+  // If /ui is not found or is at the start (index 0), there's no prefix
+  if (uiIndex <= 0) return '';
+
+  // Return everything before /ui
+  return pathname.substring(0, uiIndex);
+}
+
+/**
+ * Builds a full URL path that works with any proxy configuration.
+ * Automatically detects and prepends the app's base path (if behind a proxy).
+ *
+ * Use this function instead of hardcoded paths like `/ui/detections/123`
+ * to ensure URLs work correctly when accessed through reverse proxies.
+ *
+ * @param path - Path starting with /ui/ (e.g., '/ui/detections/123?tab=review')
+ * @returns Full path including any proxy prefix
+ *
+ * @example
+ * // Direct access (pathname: '/ui/dashboard')
+ * buildAppUrl('/ui/detections/123?tab=review')
+ * // returns '/ui/detections/123?tab=review'
+ *
+ * @example
+ * // Home Assistant Ingress (pathname: '/api/hassio_ingress/TOKEN/ui/dashboard')
+ * buildAppUrl('/ui/detections/123?tab=review')
+ * // returns '/api/hassio_ingress/TOKEN/ui/detections/123?tab=review'
+ */
+export function buildAppUrl(path: string): string {
+  const basePath = getAppBasePath();
+  return basePath + path;
+}

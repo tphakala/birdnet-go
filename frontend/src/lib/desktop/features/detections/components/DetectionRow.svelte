@@ -39,6 +39,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = loggers.ui;
 
@@ -89,13 +90,13 @@
       onDetailsClick(detection.id);
     } else {
       // Default navigation to detection detail page
-      window.location.href = `/ui/detections/${detection.id}`;
+      window.location.href = buildAppUrl(`/ui/detections/${detection.id}`);
     }
   }
 
   // Action handlers
   function handleReview() {
-    window.location.href = `/ui/detections/${detection.id}?tab=review`;
+    window.location.href = buildAppUrl(`/ui/detections/${detection.id}?tab=review`);
   }
 
   function handleToggleSpecies() {

@@ -33,6 +33,7 @@
 import { writable } from 'svelte/store';
 import { loggers } from '$lib/utils/logger';
 import { getCsrfToken } from '$lib/utils/api';
+import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = loggers.auth;
 
@@ -124,7 +125,7 @@ function createAuthStore() {
           });
 
           // Redirect to the Svelte UI root
-          window.location.href = '/ui/';
+          window.location.href = buildAppUrl('/ui/');
         } else {
           const errorMsg = `Logout failed: ${response.statusText}`;
           logger.error('Logout failed', {
