@@ -158,6 +158,34 @@ func TestDynamicThresholdCooldownPreventsRapidLearning(t *testing.T) {
 	assert.Equal(t, 1, p.DynamicThresholds["test species"].HighConfCount, "HighConfCount should be 1 despite multiple detections")
 }
 
+// TestDynamicThresholdExpiryWithHighConfidenceDetection verifies that when a threshold
+// expires and a high-confidence detection arrives simultaneously, the threshold
+// is reset first and then learns from a clean state (level 0 -> level 1)
+func TestDynamicThresholdExpiryWithHighConfidenceDetection(t *testing.T) {
+	p := newTestProcessor()
+
+	baseThreshold := float32(0.80)
+	p.addSpeciesToDynamicThresholds("test species", "Testus speciesus", baseThreshold)
+
+	// Manually set threshold to level 2 (simulating prior learning)
+	dt := p.DynamicThresholds["test species"]
+	dt.Level = 2
+	dt.HighConfCount = 2
+	dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
+	// Set timer to expired (in the past)
+	dt.Timer = time.Now().Add(-1 * time.Hour)
+	dt.LastLearnedAt = time.Now().Add(-2 * time.Hour)
+
+	// High-confidence detection arrives after expiry
+	result := datastore.Results{Confidence: 0.95}
+	adjusted := p.getAdjustedConfidenceThreshold("test species", result, baseThreshold, false)
+
+	// Should reset first (level 0), then learn to level 1 (75% of base)
+	assert.InDelta(t, 0.60, adjusted, 0.001, "After expiry+high-conf, should reset and learn to Level 1 (0.80 * 0.75)")
+	assert.Equal(t, 1, dt.Level, "Level should be 1 after reset and first learning")
+	assert.Equal(t, 1, dt.HighConfCount, "HighConfCount should be 1 after reset and first learning")
+}
+
 // TestDynamicThresholdMinimumFloor verifies that dynamic threshold
 // never goes below the configured minimum
 func TestDynamicThresholdMinimumFloor(t *testing.T) {

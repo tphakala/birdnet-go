@@ -102,6 +102,22 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 
 	now := time.Now()
 
+	// Reset expired thresholds before processing the new detection
+	// This must run before the high-confidence check so that if a high-confidence
+	// detection arrives after expiry, the learning starts from a clean state
+	if now.After(dt.Timer) {
+		dt.Level = 0
+		dt.CurrentValue = float64(baseThreshold)
+		dt.HighConfCount = 0
+		dt.LastLearnedAt = time.Time{}
+		if previousLevel != 0 {
+			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, dt.CurrentValue, changeReasonExpiry, 0)
+		}
+		// Update previous state after reset for accurate event recording
+		previousLevel = 0
+		previousValue = dt.CurrentValue
+	}
+
 	// If the detection confidence exceeds the trigger threshold
 	if result.Confidence > float32(p.Settings.Realtime.DynamicThreshold.Trigger) {
 		// Always extend the timer to keep threshold active while species is being detected
@@ -136,17 +152,6 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 			if dt.Level != previousLevel {
 				p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level, previousValue, dt.CurrentValue, changeReasonHighConfidence, float64(result.Confidence))
 			}
-		}
-	} else if now.After(dt.Timer) {
-		// Reset the dynamic threshold if the timer has expired
-		dt.Level = 0
-		dt.CurrentValue = float64(baseThreshold)
-		dt.HighConfCount = 0
-		dt.LastLearnedAt = time.Time{} // Reset so next high-confidence detection triggers learning immediately
-
-		// Record expiry event if level was not already 0 (BG-59)
-		if previousLevel != 0 {
-			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, float64(baseThreshold), changeReasonExpiry, 0)
 		}
 	}
 
