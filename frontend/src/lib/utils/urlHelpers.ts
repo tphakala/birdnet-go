@@ -150,6 +150,14 @@ export function getAppBasePath(): string {
  * // returns '/api/hassio_ingress/TOKEN/ui/detections/123?tab=review'
  */
 export function buildAppUrl(path: string): string {
+  // Validate input to prevent open redirect vulnerabilities
+  // Only allow relative paths (starting with / but not //)
+  if (!isRelativePath(path)) {
+    console.error('buildAppUrl was called with a non-relative path:', path);
+    // Return safe fallback to prevent open redirect
+    return getAppBasePath() + '/ui/';
+  }
+
   const basePath = getAppBasePath();
   return basePath + path;
 }
