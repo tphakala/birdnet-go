@@ -8,6 +8,16 @@ import {
 } from './urlHelpers';
 
 describe('URL Helpers', () => {
+  // Store original window.location descriptor for tests that mock it
+  const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+
+  afterEach(() => {
+    // Restore original window.location after tests that mock it
+    if (originalLocationDescriptor) {
+      Object.defineProperty(window, 'location', originalLocationDescriptor);
+    }
+  });
+
   describe('extractRelativePath', () => {
     describe('input validation', () => {
       it('should handle undefined inputs', () => {
@@ -252,16 +262,6 @@ describe('URL Helpers', () => {
   });
 
   describe('getAppBasePath', () => {
-    // Store original window.location descriptor
-    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
-
-    afterEach(() => {
-      // Restore original window.location
-      if (originalDescriptor) {
-        Object.defineProperty(window, 'location', originalDescriptor);
-      }
-    });
-
     it('should return empty string for direct access (no proxy prefix)', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/ui/dashboard' };
@@ -327,14 +327,6 @@ describe('URL Helpers', () => {
   });
 
   describe('buildAppUrl', () => {
-    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
-
-    afterEach(() => {
-      if (originalDescriptor) {
-        Object.defineProperty(window, 'location', originalDescriptor);
-      }
-    });
-
     it('should return path unchanged for direct access', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/ui/dashboard' };
@@ -382,14 +374,6 @@ describe('URL Helpers', () => {
   });
 
   describe('Ingress integration scenarios', () => {
-    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
-
-    afterEach(() => {
-      if (originalDescriptor) {
-        Object.defineProperty(window, 'location', originalDescriptor);
-      }
-    });
-
     it('should correctly build review detection URL through ingress', () => {
       // Simulate being on dashboard through Home Assistant Ingress
       // @ts-expect-error - Mocking window.location

@@ -116,10 +116,11 @@ export function getAppBasePath(): string {
 
   const pathname = window.location.pathname;
 
-  // Split pathname into segments and find the last exact 'ui' segment
+  // Split pathname into segments and find the first exact 'ui' segment
   // This avoids false matches on paths like '/ui-proxy/...' or '/my-ui-service/...'
+  // Using indexOf (first match) ensures we find the app boundary, not nested ui paths
   const segments = pathname.split('/').filter(Boolean);
-  const uiIndex = segments.lastIndexOf('ui');
+  const uiIndex = segments.indexOf('ui');
 
   // If 'ui' segment not found or is the first segment, there's no prefix
   if (uiIndex <= 0) return '';
