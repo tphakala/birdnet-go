@@ -42,6 +42,9 @@
   let pageTitleKey = $state<string>('navigation.dashboard');
   let loadingComponent = $state<boolean>(false);
 
+  // Track the last path we routed to, to avoid duplicate routing
+  let lastRoutedPath = $state<string | null>(null);
+
   // Derived translated title - automatically updates when language changes
   let pageTitle = $derived(t(pageTitleKey));
   let dynamicErrorCode = $state<string | null>(null);
@@ -368,13 +371,33 @@
 
     // Determine current route from URL path (use store which has normalized path)
     handleRouting(navigation.currentPath);
+
+    // Set lastRoutedPath to prevent the reactive $effect from re-routing immediately
+    lastRoutedPath = navigation.currentPath;
+  });
+
+  // Reactive routing: automatically handle route changes when navigation.currentPath updates.
+  // This ensures that any call to navigation.navigate() (from any component) triggers routing,
+  // not just calls through App's navigate() wrapper.
+  $effect(() => {
+    const currentPath = navigation.currentPath;
+
+    // Skip if app isn't initialized yet (onMount handles initial routing)
+    if (!appInitialized) return;
+
+    // Skip if we already routed to this path (prevents duplicate routing)
+    if (currentPath === lastRoutedPath) return;
+
+    lastRoutedPath = currentPath;
+    handleRouting(currentPath);
   });
 
   // Use $effect for browser back/forward navigation with automatic cleanup
   $effect(() => {
     const handlePopState = () => {
       navigation.handlePopState();
-      handleRouting(navigation.currentPath);
+      // The reactive routing effect above will handle the actual routing
+      // when navigation.currentPath updates
     };
 
     window.addEventListener('popstate', handlePopState);

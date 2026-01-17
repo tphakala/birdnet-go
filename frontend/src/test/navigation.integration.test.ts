@@ -16,6 +16,10 @@
  * 2. The fix works (tests pass after fix)
  */
 
+/* eslint-disable no-console -- Console statements are intentional for test feedback */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Dynamic DOM queries may return null */
+/* eslint-disable security/detect-non-literal-regexp -- Dynamic route patterns are intentional */
+
 import { describe, expect, it } from 'vitest';
 import { apiCall, integrationUtils } from './integration-setup';
 
