@@ -23,6 +23,17 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
       - name: Install go-licenses
         run: go install github.com/google/go-licenses@latest
 
@@ -62,6 +73,10 @@ jobs:
 
           # Create a symbolic link in root directory
           ln -sf frontend/static/LICENSES.md LICENSES.md
+
+      - name: Format LICENSES.md
+        working-directory: frontend
+        run: npx prettier --write static/LICENSES.md
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8
