@@ -14,12 +14,11 @@
 
   /**
    * Client-side navigation function.
-   * Updates URL via History API and triggers route handling.
-   * Page title translation is automatic via $derived(t(pageTitleKey)).
+   * Updates URL via History API. Route handling is triggered reactively
+   * by the $effect watching navigation.currentPath.
    */
   function navigate(url: string): void {
     navigation.navigate(url);
-    handleRouting(navigation.currentPath);
   }
 
   // Dynamic imports for heavy pages - properly typed component references
@@ -369,20 +368,16 @@
       logger.debug('SSE notifications manager initialized');
     }
 
-    // Determine current route from URL path (use store which has normalized path)
-    handleRouting(navigation.currentPath);
-
-    // Set lastRoutedPath to prevent the reactive $effect from re-routing immediately
-    lastRoutedPath = navigation.currentPath;
+    // Initial routing is handled by the reactive $effect below when appInitialized becomes true
   });
 
   // Reactive routing: automatically handle route changes when navigation.currentPath updates.
-  // This ensures that any call to navigation.navigate() (from any component) triggers routing,
-  // not just calls through App's navigate() wrapper.
+  // This handles both initial routing (when appInitialized becomes true) and subsequent
+  // navigation from any component calling navigation.navigate().
   $effect(() => {
     const currentPath = navigation.currentPath;
 
-    // Skip if app isn't initialized yet (onMount handles initial routing)
+    // Skip if app isn't initialized yet
     if (!appInitialized) return;
 
     // Skip if we already routed to this path (prevents duplicate routing)
