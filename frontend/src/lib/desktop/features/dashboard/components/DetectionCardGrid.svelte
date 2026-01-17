@@ -32,7 +32,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   const logger = loggers.ui;
 
@@ -176,7 +176,7 @@
 
   // Action handlers
   function handleReview(detection: Detection) {
-    window.location.href = buildAppUrl(`/ui/detections/${detection.id}?tab=review`);
+    navigation.navigate(`/ui/detections/${detection.id}?tab=review`);
   }
 
   function handleToggleSpecies(detection: Detection) {

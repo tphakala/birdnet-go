@@ -28,7 +28,7 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import { toastActions } from '$lib/stores/toast';
   import { api } from '$lib/utils/api';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -178,7 +178,7 @@
         } catch {
           // Silently handle mark as read failures
         }
-        window.location.href = buildAppUrl(`/ui/detections/${noteId}`);
+        navigation.navigate(`/ui/detections/${noteId}`);
       }
     }
   }

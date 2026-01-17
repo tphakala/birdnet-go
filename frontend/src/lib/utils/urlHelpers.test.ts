@@ -6,6 +6,7 @@ import {
   getAppBasePath,
   buildAppUrl,
 } from './urlHelpers';
+import { loggers } from './logger';
 
 describe('URL Helpers', () => {
   // Store original window.location descriptor for tests that mock it
@@ -375,26 +376,26 @@ describe('URL Helpers', () => {
       window.location = { pathname: '/ui/dashboard' };
 
       // Protocol-relative URLs should be rejected and return safe fallback
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      expect(buildAppUrl('//evil.com/path')).toBe('/ui/');
-      expect(consoleSpy).toHaveBeenCalledWith(
+      const loggerSpy = vi.spyOn(loggers.ui, 'error').mockImplementation(() => {});
+      expect(buildAppUrl('//evil.com/path')).toBe('/ui/dashboard');
+      expect(loggerSpy).toHaveBeenCalledWith(
         'buildAppUrl was called with a non-relative path:',
         '//evil.com/path'
       );
-      consoleSpy.mockRestore();
+      loggerSpy.mockRestore();
     });
 
     it('should prevent open redirect with absolute URLs', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/proxy/ui/dashboard' };
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      expect(buildAppUrl('https://evil.com')).toBe('/proxy/ui/');
-      expect(consoleSpy).toHaveBeenCalledWith(
+      const loggerSpy = vi.spyOn(loggers.ui, 'error').mockImplementation(() => {});
+      expect(buildAppUrl('https://evil.com')).toBe('/proxy/ui/dashboard');
+      expect(loggerSpy).toHaveBeenCalledWith(
         'buildAppUrl was called with a non-relative path:',
         'https://evil.com'
       );
-      consoleSpy.mockRestore();
+      loggerSpy.mockRestore();
     });
   });
 

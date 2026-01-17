@@ -4,6 +4,7 @@
   import AudioLevelIndicator from '$lib/desktop/components/ui/AudioLevelIndicator.svelte';
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
   import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
+  import { navigation } from '$lib/stores/navigation.svelte';
   import { Menu } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
@@ -66,8 +67,8 @@
     if (onNavigate) {
       onNavigate(url);
     } else {
-      // Default navigation
-      window.location.href = url;
+      // Fallback to navigation store for proxy-aware navigation
+      navigation.navigate(url);
     }
   }
 </script>
@@ -115,7 +116,7 @@
     {#if showNotifications}
       <NotificationBell
         {debugMode}
-        onNavigateToNotifications={() => handleNavigate('/notifications')}
+        onNavigateToNotifications={() => handleNavigate('/ui/notifications')}
       />
     {/if}
 

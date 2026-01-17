@@ -59,7 +59,7 @@ Performance Optimizations:
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   const logger = getLogger('app');
 
@@ -1121,7 +1121,7 @@ Performance Optimizations:
   // eslint-disable-next-line no-unused-vars
   function _handleDetectionClick(detection: Detection) {
     // Navigate to detection detail view
-    window.location.href = buildAppUrl(`/ui/detections/${detection.id}`);
+    navigation.navigate(`/ui/detections/${detection.id}`);
   }
 </script>
 
