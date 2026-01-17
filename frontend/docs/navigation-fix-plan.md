@@ -14,6 +14,7 @@ Code review identified redundancies introduced by the fix that should be cleaned
 **Lines:** 20-23
 
 **Current code:**
+
 ```svelte
 function navigate(url: string): void {
   navigation.navigate(url);
@@ -24,6 +25,7 @@ function navigate(url: string): void {
 **Problem:** The `$effect` at lines 382-393 already reacts to `navigation.currentPath` changes and calls `handleRouting()`. Having the call in `navigate()` causes double routing.
 
 **Fix:**
+
 ```svelte
 function navigate(url: string): void {
   navigation.navigate(url);
@@ -31,6 +33,7 @@ function navigate(url: string): void {
 ```
 
 **Verification:**
+
 - Routing triggered once per navigation (not twice)
 - All navigation paths still work (sidebar, detection clicks, back/forward)
 
@@ -42,27 +45,29 @@ function navigate(url: string): void {
 **Lines:** 372-376
 
 **Current code:**
+
 ```svelte
 // Determine current route from URL path (use store which has normalized path)
-handleRouting(navigation.currentPath);
-
-// Set lastRoutedPath to prevent the reactive $effect from re-routing immediately
-lastRoutedPath = navigation.currentPath;
+handleRouting(navigation.currentPath); // Set lastRoutedPath to prevent the reactive $effect from
+re-routing immediately lastRoutedPath = navigation.currentPath;
 ```
 
 **Problem:** This manual routing in `onMount` is redundant because:
+
 - The `$effect` at lines 382-393 handles routing when `appInitialized` becomes true
 - We're setting `lastRoutedPath` as a band-aid to prevent the `$effect` from double-routing
 
 **Proposed fix:** Remove both lines and let the `$effect` handle initial routing.
 
 **Risk assessment:**
+
 - **Low risk:** The `$effect` already contains the logic to route when `appInitialized` is true
 - **Concern:** The `$effect` has `if (!appInitialized) return;` guard - need to verify timing
 
 **Alternative:** Keep current approach if timing issues discovered during testing.
 
 **Verification:**
+
 - App loads correctly on first visit
 - Initial route matches URL
 - No flash of wrong content
@@ -70,14 +75,17 @@ lastRoutedPath = navigation.currentPath;
 ## Not Fixing (Deferred)
 
 ### 3. `loadingComponent` blocking issue
+
 - Known limitation, complex fix
 - Tracked for future work
 
 ### 4. daisyUI classes in error/loading templates
+
 - Existing code, not part of this change
 - Separate cleanup task
 
 ### 5. `GenericErrorPage` typed as `any`
+
 - Minor type safety issue
 - Can fix separately
 
