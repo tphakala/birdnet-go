@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   extractRelativePath,
   isRelativePath,
@@ -317,9 +317,7 @@ describe('URL Helpers', () => {
       expect(getAppBasePath()).toBe('');
     });
 
-    it('should handle SSR (no window)', () => {
-      // This tests the typeof window check - we can't easily test this in jsdom
-      // but we verify the function handles edge cases
+    it('should return empty string for path "/ui" (ui at root)', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/ui' };
       expect(getAppBasePath()).toBe('');
@@ -370,6 +368,33 @@ describe('URL Helpers', () => {
       expect(buildAppUrl('/ui/detections/33518?tab=review')).toBe(
         '/custom-proxy/ui/detections/33518?tab=review'
       );
+    });
+
+    it('should prevent open redirect with protocol-relative URLs', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+
+      // Protocol-relative URLs should be rejected and return safe fallback
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(buildAppUrl('//evil.com/path')).toBe('/ui/');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'buildAppUrl was called with a non-relative path:',
+        '//evil.com/path'
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should prevent open redirect with absolute URLs', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/ui/dashboard' };
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(buildAppUrl('https://evil.com')).toBe('/proxy/ui/');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'buildAppUrl was called with a non-relative path:',
+        'https://evil.com'
+      );
+      consoleSpy.mockRestore();
     });
   });
 

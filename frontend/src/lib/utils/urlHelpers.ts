@@ -151,5 +151,14 @@ export function getAppBasePath(): string {
  */
 export function buildAppUrl(path: string): string {
   const basePath = getAppBasePath();
+
+  // Validate input to prevent open redirect vulnerabilities
+  // Only allow relative paths (starting with / but not //)
+  if (!isRelativePath(path)) {
+    console.error('buildAppUrl was called with a non-relative path:', path);
+    // Return safe fallback to prevent open redirect
+    return basePath + '/ui/';
+  }
+
   return basePath + path;
 }
