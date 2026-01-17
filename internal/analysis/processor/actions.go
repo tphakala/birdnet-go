@@ -653,24 +653,33 @@ func (a *DatabaseAction) Execute(data any) error {
 			logger.Int("capture_length", captureLength),
 			logger.String("operation", "note_begin_end_capture_length"))
 
-		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, captureLength)
-		if err != nil {
-			// Log error but don't return - allow chain to continue for MQTT/SSE
-			GetLogger().Error("Audio export failed (continuing with detection broadcast)",
+		// handleAudioExportError logs the error and signals downstream actions.
+		// This helper reduces duplication between buffer read and save failures.
+		handleAudioExportError := func(err error, extraFields ...logger.Field) {
+			fields := []logger.Field{
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.Error(err),
 				logger.String("species", a.Note.CommonName),
-				logger.String("source", a.Note.Source.SafeString),
-				logger.Time("begin_time", a.Note.BeginTime),
-				logger.Int("duration_seconds", captureLength),
-				logger.String("operation", "audio_export_non_fatal"))
+				logger.String("operation", "audio_export_non_fatal"),
+			}
+			fields = append(fields, extraFields...)
+			GetLogger().Error("Audio export failed (continuing with detection broadcast)", fields...)
+
 			// Signal to downstream actions that audio export failed
 			// This prevents SSEAction from waiting 5 seconds for a file that won't appear
 			if a.DetectionCtx != nil {
 				a.DetectionCtx.AudioExportFailed.Store(true)
 			}
+		}
+
+		// export audio clip from capture buffer
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, captureLength)
+		if err != nil {
+			handleAudioExportError(err,
+				logger.String("source", a.Note.Source.SafeString),
+				logger.Time("begin_time", a.Note.BeginTime),
+				logger.Int("duration_seconds", captureLength))
 		} else {
 			// Create a SaveAudioAction and execute it
 			saveAudioAction := &SaveAudioAction{
@@ -683,19 +692,7 @@ func (a *DatabaseAction) Execute(data any) error {
 			}
 
 			if err := saveAudioAction.Execute(nil); err != nil {
-				// Log error but don't return - allow chain to continue for MQTT/SSE
-				GetLogger().Error("Audio export failed (continuing with detection broadcast)",
-					logger.String("component", "analysis.processor.actions"),
-					logger.String("detection_id", a.CorrelationID),
-					logger.Error(err),
-					logger.String("species", a.Note.CommonName),
-					logger.String("clip_name", a.Note.ClipName),
-					logger.String("operation", "audio_export_non_fatal"))
-				// Signal to downstream actions that audio export failed
-				// This prevents SSEAction from waiting 5 seconds for a file that won't appear
-				if a.DetectionCtx != nil {
-					a.DetectionCtx.AudioExportFailed.Store(true)
-				}
+				handleAudioExportError(err, logger.String("clip_name", a.Note.ClipName))
 			} else if a.Settings.Debug {
 				// Add structured logging
 				GetLogger().Debug("Saved audio clip successfully",
@@ -1298,8 +1295,7 @@ func (a *SSEAction) Execute(data any) error {
 	if a.Note.ClipName != "" {
 		// Skip waiting if audio export failed - the file will never appear
 		// This prevents a 5-second timeout delay when DatabaseAction couldn't export audio
-		audioExportFailed := a.DetectionCtx != nil && a.DetectionCtx.AudioExportFailed.Load()
-		if audioExportFailed {
+		if a.DetectionCtx != nil && a.DetectionCtx.AudioExportFailed.Load() {
 			GetLogger().Debug("Skipping audio file wait - export failed in DatabaseAction",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
