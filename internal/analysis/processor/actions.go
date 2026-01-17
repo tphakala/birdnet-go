@@ -947,10 +947,24 @@ func (a *BirdWeatherAction) Execute(data any) error {
 
 	// Try to publish with appropriate error handling
 	if err := a.BwClient.Publish(&note, pcmData); err != nil {
-		// Log the error with retry information if retries are enabled
-		// Sanitize error before logging
+		// Check if this is a CategoryNotFound error (e.g., species not recognized by Birdweather)
+		// These are expected for non-bird species and should not be logged at error level
+		if errors.IsNotFound(err) {
+			// Log at debug level for expected validation failures (unknown species)
+			GetLogger().Debug("BirdWeather upload skipped: species not recognized",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", note.CommonName),
+				logger.String("scientific_name", note.ScientificName),
+				logger.String("operation", "birdweather_upload"))
+			// Return nil - this is not an error condition worth retrying
+			return nil
+		}
+
+		// Sanitize error before logging (only for actual errors, not expected conditions)
 		sanitizedErr := privacy.WrapError(err)
-		// Add structured logging
+
+		// Add structured logging for actual errors
 		GetLogger().Error("Failed to upload to BirdWeather",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),

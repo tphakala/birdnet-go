@@ -812,7 +812,12 @@ func (b *BwClient) testDetectionPost(ctx context.Context, soundscapeID string) T
 		// Post the test detection
 		err := b.PostDetection(soundscapeID, timestamp, commonName, scientificName, confidence)
 		if err != nil {
-			log.Error("BirdWeather detection post failed", logger.Error(err))
+			// Check if this is a CategoryNotFound error (species not recognized)
+			if errors.IsNotFound(err) {
+				log.Debug("BirdWeather detection post skipped: species not recognized", logger.Error(err))
+			} else {
+				log.Error("BirdWeather detection post failed", logger.Error(err))
+			}
 			return fmt.Errorf("failed to post detection: %w", err)
 		}
 

@@ -268,6 +268,8 @@ func getErrorLevel(category ErrorCategory) sentry.Level {
 		return sentry.LevelWarning // Usually recoverable
 	case CategoryConfiguration, CategorySystem:
 		return sentry.LevelError // Environment issues
+	case CategoryNotFound:
+		return sentry.LevelInfo // Expected condition for unknown species/taxonomy lookups
 	default:
 		return sentry.LevelError
 	}
