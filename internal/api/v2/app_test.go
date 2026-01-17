@@ -286,7 +286,8 @@ func TestGetAppConfig_CSRFTokenFromContext(t *testing.T) {
 	assert.Equal(t, expectedToken, response.CSRFToken, "CSRF token should match context value")
 }
 
-// TestGetAppConfig_NoCSRFToken tests behavior when CSRF token is not in context.
+// TestGetAppConfig_NoCSRFToken tests that EnsureCSRFToken generates a token
+// when none exists in context or cookie (Echo v4.15.0 compatibility fix).
 func TestGetAppConfig_NoCSRFToken(t *testing.T) {
 	e, controller := setupAppConfigTest(t, nil)
 
@@ -294,7 +295,7 @@ func TestGetAppConfig_NoCSRFToken(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/app/config")
-	// Don't set csrf in context
+	// Don't set csrf in context - EnsureCSRFToken will generate one
 
 	err := controller.GetAppConfig(c)
 	require.NoError(t, err)
@@ -304,7 +305,20 @@ func TestGetAppConfig_NoCSRFToken(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Empty(t, response.CSRFToken, "CSRF token should be empty when not in context")
+	// EnsureCSRFToken now generates a token when none exists
+	assert.NotEmpty(t, response.CSRFToken, "CSRF token should be generated when not in context")
+
+	// Verify the token was also set as a cookie
+	cookies := rec.Result().Cookies()
+	var csrfCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "csrf" {
+			csrfCookie = c
+			break
+		}
+	}
+	require.NotNil(t, csrfCookie, "CSRF cookie should be set")
+	assert.Equal(t, response.CSRFToken, csrfCookie.Value, "Cookie and response token should match")
 }
 
 // TestGetAppConfig_ResponseFormat validates the JSON response structure.
@@ -407,6 +421,7 @@ func TestGetAppConfig_NoSensitiveDataExposed(t *testing.T) {
 }
 
 // TestGetAppConfig_InvalidCSRFTokenType tests behavior with non-string CSRF token.
+// EnsureCSRFToken should generate a new token when the context value is invalid.
 func TestGetAppConfig_InvalidCSRFTokenType(t *testing.T) {
 	e, controller := setupAppConfigTest(t, nil)
 
@@ -415,7 +430,7 @@ func TestGetAppConfig_InvalidCSRFTokenType(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/app/config")
 
-	// Set invalid type for csrf - should not panic
+	// Set invalid type for csrf - should not panic, will generate new token
 	c.Set("csrf", 12345) // int instead of string
 
 	err := controller.GetAppConfig(c)
@@ -426,8 +441,8 @@ func TestGetAppConfig_InvalidCSRFTokenType(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	// Should fall back to empty string
-	assert.Empty(t, response.CSRFToken, "Invalid CSRF type should result in empty token")
+	// EnsureCSRFToken generates a new token when context value is invalid type
+	assert.NotEmpty(t, response.CSRFToken, "New token should be generated when context has invalid type")
 }
 
 // TestGetAppConfig_NilAuthService tests behavior when auth service is nil.
@@ -1069,15 +1084,20 @@ func FuzzGetAppConfig_CSRFToken(f *testing.F) {
 			t.Errorf("Response is not valid JSON: %v", jsonErr)
 		}
 
-		// For valid UTF-8 tokens, verify they are returned unchanged.
-		// Invalid UTF-8 sequences may be transformed by JSON encoding,
-		// so we only check valid UTF-8 strings for exact match.
-		if utf8.ValidString(csrfToken) {
+		// For valid non-empty UTF-8 tokens, verify they are returned unchanged.
+		// Empty tokens trigger EnsureCSRFToken to generate a new one.
+		// Invalid UTF-8 sequences may be transformed by JSON encoding.
+		if utf8.ValidString(csrfToken) && csrfToken != "" {
 			if response.CSRFToken != csrfToken {
 				t.Errorf("CSRF token mismatch for valid UTF-8: expected %q, got %q", csrfToken, response.CSRFToken)
 			}
+		} else if csrfToken == "" {
+			// Empty input triggers token generation
+			if response.CSRFToken == "" {
+				t.Errorf("Expected generated token for empty input, got empty")
+			}
 		}
-		// For invalid UTF-8, just ensure we get a non-empty response if input was non-empty
+		// For invalid UTF-8, just ensure we get a non-empty response
 		// (JSON encoding may replace invalid bytes with replacement characters)
 	})
 }

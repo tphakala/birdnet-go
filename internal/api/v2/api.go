@@ -321,16 +321,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.Group.Use(middleware.Recover())          // Recover should be early
 	c.Group.Use(c.TunnelDetectionMiddleware()) // Add tunnel detection **before** logging
 	// c.Group.Use(middleware.Logger())        // Removed: Use custom LoggingMiddleware below for structured logging
-	c.Group.Use(middleware.CORS())          // CORS handling
+	// NOTE: CORS middleware is configured at the global Echo level in server.go
+	// Removing duplicate CORS here to avoid conflicts with global CORS configuration
 	c.Group.Use(middleware.BodyLimit("1M")) // Limit request body to 1MB to prevent DoS attacks
 	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
 
-	// NOTE: CSRF Protection Consideration
-	// The V2 API uses Bearer token authentication (Authorization: Bearer <token>)
-	// which is not vulnerable to CSRF attacks since browsers cannot automatically
-	// include Bearer tokens in cross-origin requests. CSRF protection is only
-	// needed for cookie-based authentication. If session-based auth is added
-	// in the future, consider adding CSRF middleware for those specific endpoints.
+	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken()
+	// which handles Echo v4.15.0's Sec-Fetch-Site optimization that may skip token generation
+	// for same-origin requests. Global CSRF middleware in server.go handles validation.
 
 	// Initialize start time for uptime tracking
 	now := time.Now()
