@@ -116,14 +116,16 @@ export function getAppBasePath(): string {
 
   const pathname = window.location.pathname;
 
-  // Find the index of '/ui' in the pathname
-  const uiIndex = pathname.indexOf('/ui');
+  // Split pathname into segments and find the last exact 'ui' segment
+  // This avoids false matches on paths like '/ui-proxy/...' or '/my-ui-service/...'
+  const segments = pathname.split('/').filter(Boolean);
+  const uiIndex = segments.lastIndexOf('ui');
 
-  // If /ui is not found or is at the start (index 0), there's no prefix
+  // If 'ui' segment not found or is the first segment, there's no prefix
   if (uiIndex <= 0) return '';
 
-  // Return everything before /ui
-  return pathname.substring(0, uiIndex);
+  // Return everything before the 'ui' segment
+  return '/' + segments.slice(0, uiIndex).join('/');
 }
 
 /**
