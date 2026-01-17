@@ -8,6 +8,31 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// Threshold level multipliers define how much the base threshold is reduced at each level.
+// Level 1: 25% reduction, Level 2: 50% reduction, Level 3: 75% reduction (maximum)
+const (
+	thresholdLevel1Multiplier = 0.75 // First high-confidence detection: 75% of base
+	thresholdLevel2Multiplier = 0.50 // Second high-confidence detection: 50% of base
+	thresholdLevel3Multiplier = 0.25 // Third+ high-confidence detection: 25% of base (minimum)
+)
+
+// Threshold change reason constants for event recording
+const (
+	changeReasonHighConfidence = "high_confidence" // Threshold lowered due to high-confidence detection
+	changeReasonExpiry         = "expiry"          // Threshold reset due to timer expiration
+)
+
+// DynamicThreshold represents the dynamic threshold configuration for a species.
+type DynamicThreshold struct {
+	Level          int
+	CurrentValue   float64
+	Timer          time.Time
+	HighConfCount  int
+	ValidHours     int
+	ScientificName string
+	LastLearnedAt  time.Time // Tracks when the last threshold learning event occurred to prevent multiple learnings within a single detection window
+}
+
 // addSpeciesToDynamicThresholds adds a species to the dynamic thresholds map if it doesn't already exist.
 func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase, scientificName string, baseThreshold float32) {
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
@@ -64,46 +89,71 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 	previousLevel := dt.Level
 	previousValue := dt.CurrentValue
 
+	// Calculate the learning cooldown based on detection window duration
+	// This prevents multiple threshold learnings within a single detection event
+	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	learningCooldown := captureLength - preCaptureLength
+	// Enforce minimum 5 seconds to prevent issues with misconfigured short windows
+	const minCooldown = 5 * time.Second
+	if learningCooldown < minCooldown {
+		learningCooldown = minCooldown
+	}
+
+	now := time.Now()
+
 	// If the detection confidence exceeds the trigger threshold
 	if result.Confidence > float32(p.Settings.Realtime.DynamicThreshold.Trigger) {
-		dt.HighConfCount++
-		dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
+		// Always extend the timer to keep threshold active while species is being detected
+		dt.Timer = now.Add(time.Duration(dt.ValidHours) * time.Hour)
 
-		// Adjust the dynamic threshold based on the number of high-confidence detections
-		switch dt.HighConfCount {
-		case 1:
-			dt.Level = 1
-			dt.CurrentValue = float64(baseThreshold * 0.75)
-		case 2:
-			dt.Level = 2
-			dt.CurrentValue = float64(baseThreshold * 0.5)
-		case 3:
-			dt.Level = 3
-			dt.CurrentValue = float64(baseThreshold * 0.25)
-		}
+		// Only learn from this detection if enough time has passed since last learning
+		// This ensures learnings happen across different detection events, not within a single window
+		if dt.LastLearnedAt.IsZero() || now.Sub(dt.LastLearnedAt) >= learningCooldown {
+			dt.HighConfCount++
+			dt.LastLearnedAt = now
 
-		// Apply minimum threshold clamp BEFORE recording event so event shows actual value
-		if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
-			dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
-		}
+			// Adjust the dynamic threshold based on the number of high-confidence detections
+			switch dt.HighConfCount {
+			case 1:
+				dt.Level = 1
+				dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
+			case 2:
+				dt.Level = 2
+				dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
+			default:
+				// Level 3 is the maximum reduction; any count >= 3 stays at this level
+				dt.Level = 3
+				dt.CurrentValue = float64(baseThreshold * thresholdLevel3Multiplier)
+			}
 
-		// Record event if level changed (BG-59)
-		if dt.Level != previousLevel {
-			p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level, previousValue, dt.CurrentValue, "high_confidence", float64(result.Confidence))
+			// Apply minimum threshold clamp BEFORE recording event so event shows actual value
+			if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
+				dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
+			}
+
+			// Record event if level changed (BG-59)
+			if dt.Level != previousLevel {
+				p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level, previousValue, dt.CurrentValue, changeReasonHighConfidence, float64(result.Confidence))
+			}
 		}
-	} else if time.Now().After(dt.Timer) {
+	} else if now.After(dt.Timer) {
 		// Reset the dynamic threshold if the timer has expired
 		dt.Level = 0
 		dt.CurrentValue = float64(baseThreshold)
 		dt.HighConfCount = 0
+		dt.LastLearnedAt = time.Time{} // Reset so next high-confidence detection triggers learning immediately
 
 		// Record expiry event if level was not already 0 (BG-59)
 		if previousLevel != 0 {
-			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, float64(baseThreshold), "expiry", 0)
+			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, float64(baseThreshold), changeReasonExpiry, 0)
 		}
 	}
 
-	// Ensure the dynamic threshold doesn't fall below the minimum threshold (also handles expiry case)
+	// Final minimum threshold enforcement - this is intentionally separate from the clamp inside
+	// the learning block (lines 113-116). That clamp ensures event recording shows the actual
+	// clamped value. This clamp handles edge cases: expiry resets, and any code paths that
+	// might bypass the learning block but still need minimum enforcement.
 	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
 		dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
 	}

@@ -89,16 +89,6 @@ type Processor struct {
 	logDedup *LogDeduplicator // Handles log deduplication logic
 }
 
-// DynamicThreshold represents the dynamic threshold configuration for a species.
-type DynamicThreshold struct {
-	Level          int
-	CurrentValue   float64
-	Timer          time.Time
-	HighConfCount  int
-	ValidHours     int
-	ScientificName string
-}
-
 type Detections struct {
 	CorrelationID string              // Unique detection identifier for log correlation
 	pcmData3s     []byte              // 3s PCM data containing the detection
@@ -117,10 +107,6 @@ type PendingDetection struct {
 	FlushDeadline time.Time  // Deadline by which the detection must be processed
 	Count         int        // Number of times this detection has been updated
 }
-
-// mutex is used to synchronize access to the PendingDetections map,
-// ensuring thread safety when the map is accessed or modified by concurrent goroutines.
-var mutex sync.Mutex
 
 // suggestLevelForDisabledFilter provides smart recommendations for filter levels
 // when filtering is disabled (level 0). It analyzes current overlap settings
