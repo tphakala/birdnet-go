@@ -102,10 +102,48 @@ describe('navigation store', () => {
       expect(nav.currentPath).toBe('/ui/settings/audio');
     });
 
-    it('should handle paths with query parameters in internal state', () => {
+    it('should strip query parameters from currentPath but preserve in browser URL', () => {
       const nav = createNavigation();
       nav.navigate('/ui/detections?page=2');
-      expect(nav.currentPath).toBe('/ui/detections?page=2');
+      // currentPath should only contain pathname (matches window.location.pathname behavior)
+      expect(nav.currentPath).toBe('/ui/detections');
+      // Browser URL should include query string
+      expect(window.history.pushState).toHaveBeenCalledWith({}, '', '/ui/detections?page=2');
+    });
+
+    it('should handle detection detail with tab query parameter', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/detections/123?tab=review');
+      // currentPath should only contain pathname for routing
+      expect(nav.currentPath).toBe('/ui/detections/123');
+      // Browser URL should include query string
+      expect(window.history.pushState).toHaveBeenCalledWith(
+        {},
+        '',
+        '/ui/detections/123?tab=review'
+      );
+    });
+
+    it('should strip hash fragments from currentPath but preserve in browser URL', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/dashboard#section');
+      // currentPath should only contain pathname
+      expect(nav.currentPath).toBe('/ui/dashboard');
+      // Browser URL should include hash
+      expect(window.history.pushState).toHaveBeenCalledWith({}, '', '/ui/dashboard#section');
+    });
+
+    it('should handle both query string and hash fragment', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/detections/123?tab=review#notes');
+      // currentPath should only contain pathname
+      expect(nav.currentPath).toBe('/ui/detections/123');
+      // Browser URL should include both query and hash
+      expect(window.history.pushState).toHaveBeenCalledWith(
+        {},
+        '',
+        '/ui/detections/123?tab=review#notes'
+      );
     });
   });
 
@@ -203,5 +241,32 @@ describe('navigation store with proxy prefix', () => {
 
     expect(buildAppUrl).toHaveBeenCalledWith('/ui/settings');
     expect(window.history.pushState).toHaveBeenCalledWith({}, '', '/proxy/ui/settings');
+  });
+
+  it('should preserve query string with proxy prefix in browser URL', async () => {
+    const { buildAppUrl } = await import('$lib/utils/urlHelpers');
+
+    // Configure mock to add proxy prefix
+    vi.mocked(buildAppUrl).mockImplementation((path: string) => `/proxy${path}`);
+
+    Object.defineProperty(window, 'location', {
+      value: { pathname: '/proxy/ui/dashboard' },
+      writable: true,
+      configurable: true,
+    });
+
+    const nav = createNavigation();
+    nav.navigate('/ui/detections/123?tab=review');
+
+    // currentPath should not include query string
+    expect(nav.currentPath).toBe('/ui/detections/123');
+    // buildAppUrl should be called with pathname only
+    expect(buildAppUrl).toHaveBeenCalledWith('/ui/detections/123');
+    // Browser URL should include proxy prefix AND query string
+    expect(window.history.pushState).toHaveBeenCalledWith(
+      {},
+      '',
+      '/proxy/ui/detections/123?tab=review'
+    );
   });
 });

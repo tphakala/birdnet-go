@@ -88,16 +88,49 @@ export function createNavigation(): NavigationStore {
    * Navigate to a new path using SPA navigation (no page reload).
    * Updates both internal state and browser URL bar with proxy-aware URL.
    *
-   * @param url - Path to navigate to (e.g., '/ui/detections/123')
+   * Query parameters are preserved in the browser URL but NOT stored in currentPath.
+   * This matches the behavior on page reload where window.location.pathname
+   * (which doesn't include query string) is used for routing.
+   *
+   * @param url - Path to navigate to, optionally with query string (e.g., '/ui/detections/123?tab=review')
    */
   function navigate(url: string): void {
-    // Normalize the path for internal state
-    const normalizedPath = normalizeUiPath(url);
+    // Separate pathname from query string and hash fragment
+    // Only pathname goes to currentPath (matches window.location.pathname behavior)
+    // Query and hash are preserved in browser URL only
+    let pathname: string;
+    let suffix: string; // query string + hash fragment
+
+    // Find the first ? or # to split pathname from suffix
+    const queryIndex = url.indexOf('?');
+    const hashIndex = url.indexOf('#');
+
+    let splitIndex: number;
+    if (queryIndex === -1 && hashIndex === -1) {
+      splitIndex = -1;
+    } else if (queryIndex === -1) {
+      splitIndex = hashIndex;
+    } else if (hashIndex === -1) {
+      splitIndex = queryIndex;
+    } else {
+      splitIndex = Math.min(queryIndex, hashIndex);
+    }
+
+    if (splitIndex !== -1) {
+      pathname = url.substring(0, splitIndex);
+      suffix = url.substring(splitIndex);
+    } else {
+      pathname = url;
+      suffix = '';
+    }
+
+    // Normalize only the pathname for internal routing state
+    const normalizedPath = normalizeUiPath(pathname);
     currentPath = normalizedPath;
 
     if (typeof window !== 'undefined') {
-      // Build proxy-aware URL for the browser address bar
-      const fullUrl = buildAppUrl(normalizedPath);
+      // Build proxy-aware URL for the browser address bar (includes query/hash)
+      const fullUrl = buildAppUrl(normalizedPath) + suffix;
       window.history.pushState({}, '', fullUrl);
     }
   }
