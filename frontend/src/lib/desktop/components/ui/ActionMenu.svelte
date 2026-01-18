@@ -201,9 +201,9 @@
           <div class="flex items-center gap-2">
             <SquarePen class="size-4" />
             <span>Review detection</span>
-            {#if detection.review?.verified === 'correct'}
+            {#if detection.verified === 'correct'}
               <span class="badge badge-success badge-sm">✓</span>
-            {:else if detection.review?.verified === 'false_positive'}
+            {:else if detection.verified === 'false_positive'}
               <span class="badge badge-error badge-sm">✗</span>
             {/if}
           </div>
