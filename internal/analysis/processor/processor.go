@@ -543,11 +543,6 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 			continue
 		}
 
-		// Add species to dynamic thresholds if enabled and passed filters
-		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			p.addSpeciesToDynamicThresholds(speciesLowercase, scientificName, baseThreshold)
-		}
-
 		// Create the detection
 		detection := p.createDetection(item, result, scientificName, commonName, speciesCode)
 		detections = append(detections, detection)
