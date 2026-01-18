@@ -860,28 +860,22 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
-	// Check for results once and extract values
-	hasResults := len(item.Detection.Results) > 0
-	var confidence float32
-	if hasResults {
-		confidence = item.Detection.Results[0].Confidence
-	}
+	// Use item.Confidence directly - it's the correct confidence for THIS species,
+	// not Results[0].Confidence which could be a different (higher confidence) species
+	confidence := float32(item.Confidence)
 
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
 		logger.Int("match_count", item.Count),
-		logger.Float64("confidence", float64(confidence)),
-		logger.Bool("has_results", hasResults),
+		logger.Float64("confidence", item.Confidence),
 		logger.String("operation", "approve_detection"))
 
 	// Learn from this approved high-confidence detection for dynamic threshold adjustment.
 	// This is the correct place for learning - only approved detections should affect thresholds,
 	// not pending detections that may later be discarded as false positives.
-	if hasResults {
-		speciesLowercase := strings.ToLower(item.Detection.Note.CommonName)
-		p.LearnFromApprovedDetection(speciesLowercase, item.Detection.Note.ScientificName, confidence)
-	}
+	speciesLowercase := strings.ToLower(item.Detection.Note.CommonName)
+	p.LearnFromApprovedDetection(speciesLowercase, item.Detection.Note.ScientificName, confidence)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
