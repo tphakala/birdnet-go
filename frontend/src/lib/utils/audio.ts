@@ -2,6 +2,26 @@
  * Audio utility functions for playback control.
  */
 
+// =============================================================================
+// Timing Constants
+// =============================================================================
+
+/** Delay before signaling play end after pause/stop (prevents UI flicker) */
+export const PLAY_END_DELAY_MS = 3000;
+
+/** Safety timeout for iOS Safari canplay event fallback */
+export const CANPLAY_TIMEOUT_MS = 3000;
+
+/** Progress update interval for smooth playhead animation */
+export const PROGRESS_UPDATE_INTERVAL_MS = 50;
+
+/** Minimum width in pixels to show full audio controls */
+export const MIN_CONTROLS_WIDTH_PX = 175;
+
+// =============================================================================
+// Playback Speed
+// =============================================================================
+
 /**
  * Playback speed options available in the UI.
  * These are discrete steps chosen for accessibility:

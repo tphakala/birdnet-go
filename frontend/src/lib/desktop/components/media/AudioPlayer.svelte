@@ -28,14 +28,31 @@
 -->
 
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { Play, Pause, Download, XCircle } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
-  import { applyPlaybackRate, dbToGain } from '$lib/utils/audio';
+  import {
+    applyPlaybackRate,
+    dbToGain,
+    PLAY_END_DELAY_MS,
+    CANPLAY_TIMEOUT_MS,
+    PROGRESS_UPDATE_INTERVAL_MS,
+    MIN_CONTROLS_WIDTH_PX,
+  } from '$lib/utils/audio';
+  import {
+    getAudioContext,
+    isAudioContextSupported,
+    releaseAudioContext,
+  } from '$lib/utils/audioContextManager';
+  import {
+    createAudioNodeChain,
+    disconnectAudioNodes,
+    type AudioNodeChain,
+  } from '$lib/utils/audioNodes';
 
   const logger = loggers.audio;
 
@@ -48,7 +65,7 @@
   };
 
   // Web Audio API types - these are built-in browser types
-  /* global AudioContext, MediaElementAudioSourceNode, GainNode, DynamicsCompressorNode, BiquadFilterNode, EventListener, ResizeObserver */
+  /* global Audio, AudioContext, EventListener, ResizeObserver */
 
   // Size type for spectrogram
   type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -126,6 +143,8 @@
   // Spectrogram retry state
   let spectrogramRetryCount = $state(0);
   let spectrogramRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // Cache key for forcing spectrogram reload via Svelte reactivity (instead of direct DOM manipulation)
+  let spectrogramCacheKey = $state(0);
 
   // Spectrogram generation status
   let spectrogramStatus = $state<{
@@ -137,29 +156,32 @@
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
 
-  // User-requested spectrogram generation state
-  // TODO: Wire up UI components for generate button when spectrogramNeedsGeneration is true
-  // eslint-disable-next-line no-unused-vars
+  // ==========================================================================
+  // User-requested spectrogram generation (INCOMPLETE FEATURE)
+  // TODO: This feature allows users to manually trigger spectrogram generation
+  // when spectrogramMode is 'user-requested'. Currently the backend supports this
+  // but the UI (generate button) is not wired up. To complete:
+  // 1. Add a "Generate Spectrogram" button in the error state when spectrogramNeedsGeneration is true
+  // 2. Wire the button to call handleGenerateSpectrogram()
+  // 3. Show generationError if generation fails
+  // Related functions: checkSpectrogramMode(), handleGenerateSpectrogram()
+  // ==========================================================================
+  /* eslint-disable no-unused-vars */
   let spectrogramNeedsGeneration = $state(false);
   let isGeneratingSpectrogram = $state(false);
-  // eslint-disable-next-line no-unused-vars
   let generationError = $state<string | null>(null);
-  // Default to "auto" mode if backend doesn't specify
   let spectrogramMode = $state<string>('auto');
+  /* eslint-enable no-unused-vars */
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
   let isInitializingContext = $state(false);
-  let audioNodes: {
-    source: MediaElementAudioSourceNode;
-    gain: GainNode;
-    compressor: DynamicsCompressorNode;
-    filters: { highPass: BiquadFilterNode };
-  } | null = null;
+  let audioNodes: AudioNodeChain | null = null;
 
   // Cleanup tracking for memory leak prevention
   let resizeObserver: ResizeObserver | null = null;
   let playEndTimeout: ReturnType<typeof setTimeout> | undefined;
+  let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
     element: HTMLElement | Document | Window;
     event: string;
@@ -177,14 +199,21 @@
   const GAIN_MAX_DB = 24;
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
-  const FILTER_HP_DEFAULT_FREQ = 20;
-  const PLAY_END_DELAY_MS = 3000; // 3 second delay after audio stops before resuming updates
+  // PLAY_END_DELAY_MS imported from $lib/utils/audio
   // Spinner delay is now handled by useDelayedLoading utility
 
   // Computed values
-  const spectrogramUrl = $derived(
+  // Base URL without cache-busting parameters
+  const spectrogramBaseUrl = $derived(
     showSpectrogram
-      ? `/api/v2/spectrogram/${detectionId}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+      ? `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+      : null
+  );
+
+  // Active URL with cache-busting for reactive reloads (retry count + cache key)
+  const spectrogramUrl = $derived(
+    spectrogramBaseUrl
+      ? `${spectrogramBaseUrl}&cache=${spectrogramCacheKey}${spectrogramRetryCount > 0 ? `&retry=${spectrogramRetryCount}` : ''}`
       : null
   );
 
@@ -217,64 +246,20 @@
     }
   };
 
-  // Audio context setup
+  // Audio context setup - uses shared singleton manager
   const initializeAudioContext = async () => {
     try {
-      // Check if AudioContext is available (webkitAudioContext for Safari)
-      type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
-      const AudioContextClass = window.AudioContext || (window as WebkitWindow).webkitAudioContext;
-      if (!AudioContextClass) {
+      if (!isAudioContextSupported()) {
         throw new Error('AudioContext not supported');
       }
-
-      audioContext = new AudioContextClass();
-
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-
+      audioContext = await getAudioContext();
       audioContextAvailable = true;
       return audioContext;
-      // eslint-disable-next-line no-unused-vars
-    } catch (_e) {
+    } catch {
       logger.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
       return null;
     }
-  };
-
-  // Create audio processing nodes
-  const createAudioNodes = (audioContext: AudioContext, audio: HTMLAudioElement) => {
-    const audioSource = audioContext.createMediaElementSource(audio);
-    const gainNode = audioContext.createGain();
-    gainNode.gain.value = 1;
-
-    const highPassFilter = audioContext.createBiquadFilter();
-    highPassFilter.type = 'highpass';
-    highPassFilter.frequency.value = FILTER_HP_DEFAULT_FREQ;
-    highPassFilter.Q.value = 1;
-
-    const compressor = audioContext.createDynamicsCompressor();
-    compressor.threshold.value = -24;
-    compressor.knee.value = 30;
-    compressor.ratio.value = 12;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.25;
-
-    audioSource
-      .connect(highPassFilter)
-      .connect(gainNode)
-      .connect(compressor)
-      .connect(audioContext.destination);
-
-    return {
-      source: audioSource,
-      gain: gainNode,
-      compressor,
-      filters: {
-        highPass: highPassFilter,
-      },
-    };
   };
 
   // Audio event handlers
@@ -292,7 +277,11 @@
           try {
             audioContext = await initializeAudioContext();
             if (audioContext && !audioNodes) {
-              audioNodes = createAudioNodes(audioContext, audioElement);
+              audioNodes = createAudioNodeChain(audioContext, audioElement, {
+                gainDb: gainValue,
+                highPassFreq: filterFreq,
+                includeCompressor: true,
+              });
             }
           } finally {
             isInitializingContext = false;
@@ -306,7 +295,7 @@
       }
     } catch (err) {
       logger.error('Error playing audio:', err);
-      error = 'Failed to play audio';
+      error = t('media.audio.playError');
     }
   };
 
@@ -320,7 +309,7 @@
 
   const startInterval = () => {
     if (updateInterval) clearInterval(updateInterval);
-    updateInterval = setInterval(updateProgress, 100);
+    updateInterval = setInterval(updateProgress, PROGRESS_UPDATE_INTERVAL_MS);
   };
 
   const stopInterval = () => {
@@ -365,7 +354,7 @@
   const updateFilter = (newFreq: number) => {
     filterFreq = Math.max(FILTER_HP_MIN_FREQ, Math.min(FILTER_HP_MAX_FREQ, newFreq));
     if (audioNodes) {
-      audioNodes.filters.highPass.frequency.value = filterFreq;
+      audioNodes.highPass.frequency.value = filterFreq;
     }
   };
 
@@ -377,18 +366,9 @@
     }
   };
 
+  // Part of user-requested spectrogram generation feature (see TODO above)
   // Check spectrogram mode on mount/URL change to avoid double-request pattern
-  // NOTE: Current implementation requires an initial network request to detect mode.
-  //
-  // Future optimization options:
-  // 1. Read from global settings store (if spectrogram mode is exposed frontend-wide)
-  // 2. Call dedicated /api/v2/spectrogram/:id/info endpoint for lightweight metadata
-  // 3. Use format query parameter (e.g., ?format=json) for explicit JSON responses
-  //
-  // The current approach is acceptable as it eliminates the previous double-request
-  // pattern where BOTH the <img> load AND a subsequent fetch() would fail before
-  // showing the generate button.
-  // eslint-disable-next-line no-unused-vars
+  /* eslint-disable no-unused-vars */
   const checkSpectrogramMode = async () => {
     if (!spectrogramUrl) {
       spectrogramMode = 'auto';
@@ -460,7 +440,7 @@
     // Create new AbortController for this poll request
     statusPollAbortController = new AbortController();
 
-    const statusUrl = `/api/v2/spectrogram/${detectionId}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`;
+    const statusUrl = `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`;
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
@@ -489,17 +469,13 @@
           status.status === 'completed' ||
           status.status === 'generated'
         ) {
-          // Spectrogram is ready, stop polling and try to load it
+          // Spectrogram is ready, stop polling and reload via reactive cache key
           debugLog('pollSpectrogramStatus: spectrogram ready, reloading image');
           clearStatusPollTimer();
           spectrogramStatus = null;
-          // Force reload the image using Svelte binding
-          if (spectrogramImage && spectrogramUrl) {
-            const url = new URL(spectrogramUrl, window.location.origin);
-            url.searchParams.set('t', Date.now().toString());
-            spectrogramImage.src = url.toString();
-            debugLog('pollSpectrogramStatus: image src updated', { src: url.toString() });
-          }
+          // Force reload by incrementing cache key (triggers Svelte reactivity)
+          spectrogramCacheKey++;
+          debugLog('pollSpectrogramStatus: cache key updated', { cacheKey: spectrogramCacheKey });
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
           debugLog('pollSpectrogramStatus: still processing, scheduling next poll');
@@ -596,17 +572,12 @@
         currentStatus: spectrogramStatus?.status,
       });
 
-      spectrogramRetryCount++;
-
-      // Schedule retry
+      // Schedule retry by incrementing retry count after delay
+      // (spectrogramUrl is derived from spectrogramRetryCount, so this triggers reload)
       clearSpectrogramRetryTimer();
       spectrogramRetryTimer = setTimeout(() => {
-        // Force reload by modifying URL with timestamp
-        const url = new URL(img.src);
-        url.searchParams.set('retry', spectrogramRetryCount.toString());
-        url.searchParams.set('t', Date.now().toString());
-        img.src = url.toString();
-        debugLog('handleSpectrogramError: retry attempted', { newSrc: url.toString() });
+        spectrogramRetryCount++;
+        debugLog('handleSpectrogramError: retry attempted', { retryCount: spectrogramRetryCount });
       }, retryDelay);
 
       return; // Don't set error state yet
@@ -646,9 +617,7 @@
     }
   };
 
-  // Handle user-requested spectrogram generation
-  // TODO: Wire up to generate button in UI when spectrogramNeedsGeneration is true
-  // eslint-disable-next-line no-unused-vars
+  // Part of user-requested spectrogram generation feature (see TODO in state declarations)
   const handleGenerateSpectrogram = async () => {
     if (isGeneratingSpectrogram) {
       debugLog('handleGenerateSpectrogram: already generating, skipping');
@@ -664,7 +633,7 @@
     try {
       // Build POST URL using URL and URLSearchParams
       const generateUrl = new URL(
-        `/api/v2/spectrogram/${detectionId}/generate`,
+        `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/generate`,
         window.location.origin
       );
       const params = new URLSearchParams();
@@ -709,18 +678,14 @@
         });
         debugLog('handleGenerateSpectrogram: immediate success', { path: data.path });
 
-        // Reset state and reload the spectrogram
+        // Reset state and reload the spectrogram via reactive cache key
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
         spectrogramLoader.setLoading(true);
 
-        // Reload the image with cache-busting parameter
-        if (spectrogramImage && spectrogramUrl) {
-          const url = new URL(spectrogramUrl, window.location.origin);
-          url.searchParams.set('t', Date.now().toString());
-          spectrogramImage.src = url.toString();
-          debugLog('handleGenerateSpectrogram: reloading image', { src: url.toString() });
-        }
+        // Reload by incrementing cache key (triggers Svelte reactivity)
+        spectrogramCacheKey++;
+        debugLog('handleGenerateSpectrogram: cache key updated', { cacheKey: spectrogramCacheKey });
       } else {
         // Error response
         let errorMessage = `Generation failed with status ${response.status}`;
@@ -747,26 +712,50 @@
       debugLog('handleGenerateSpectrogram: completed');
     }
   };
+  /* eslint-enable no-unused-vars */
 
-  // Track previous URL to avoid unnecessary resets
-  let previousSpectrogramUrl = $state<string | null>(null);
+  // Track previous base URL to detect when detection changes (not just cache key updates)
+  let previousSpectrogramBaseUrl = $state<string | null>(null);
 
-  // Handle spectrogram URL changes with proper loading state
+  // Handle spectrogram base URL changes (different detection) with proper loading state
   $effect(() => {
-    // Only reset loading state if URL actually changed
-    if (spectrogramUrl && spectrogramUrl !== previousSpectrogramUrl && !spectrogramLoader.error) {
-      debugLog('spectrogramUrl changed', {
-        from: previousSpectrogramUrl,
-        to: spectrogramUrl,
+    // Only reset loading state if base URL actually changed (new detection)
+    if (
+      spectrogramBaseUrl &&
+      spectrogramBaseUrl !== previousSpectrogramBaseUrl &&
+      !spectrogramLoader.error
+    ) {
+      debugLog('spectrogramBaseUrl changed', {
+        from: previousSpectrogramBaseUrl,
+        to: spectrogramBaseUrl,
       });
 
-      previousSpectrogramUrl = spectrogramUrl;
+      previousSpectrogramBaseUrl = spectrogramBaseUrl;
 
-      // Reset retry count and clear any pending retry timer for new spectrogram
+      // Reset retry/cache state for new spectrogram
       spectrogramRetryCount = 0;
+      spectrogramCacheKey = 0;
       clearSpectrogramRetryTimer();
       // Abort any in-flight status polling when URL changes
       clearStatusPollTimer();
+    }
+  });
+
+  // Sync audio source when URL changes (replaces template binding for iOS Safari compatibility)
+  $effect(() => {
+    if (audioElement && audioUrl) {
+      // Compare resolved URLs to avoid unnecessary reloads
+      const absoluteUrl = new URL(audioUrl, window.location.origin).href;
+      if (audioElement.src !== absoluteUrl) {
+        debugLog('audioUrl changed, updating src', { from: audioElement.src, to: audioUrl });
+        audioElement.src = audioUrl;
+        // Reset playback state for new audio
+        isPlaying = false;
+        currentTime = 0;
+        progress = 0;
+        duration = 0;
+        error = null;
+      }
     }
   });
 
@@ -778,13 +767,20 @@
       showSpectrogram,
     });
 
+    // Create audio element dynamically to avoid iOS Safari issues
+    // where DOM-bound audio elements don't fire canplay events
+    audioElement = new Audio();
+    audioElement.preload = 'metadata';
+    audioElement.src = audioUrl;
+    audioElement.id = audioId;
+
     // Check if mobile
     isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
     // Check width for control visibility
     if (playerContainer) {
       const checkWidth = () => {
-        showControls = playerContainer.offsetWidth >= 175;
+        showControls = playerContainer.offsetWidth >= MIN_CONTROLS_WIDTH_PX;
       };
       checkWidth();
 
@@ -793,7 +789,8 @@
       resizeObserver.observe(playerContainer);
     }
 
-    if (audioElement) {
+    // audioElement is now guaranteed to exist (created above)
+    {
       // Add all audio event listeners with proper tracking
       addTrackedEventListener(audioElement, 'play', () => {
         isPlaying = true;
@@ -834,12 +831,37 @@
       addTrackedEventListener(audioElement, 'timeupdate', handleTimeUpdate);
       addTrackedEventListener(audioElement, 'loadedmetadata', handleLoadedMetadata);
 
+      // Safety timeout for canplay event (iOS Safari fallback)
+      // If canplay doesn't fire within 3 seconds of loadstart, assume ready
       addTrackedEventListener(audioElement, 'loadstart', () => {
         isLoading = true;
+        // Clear any existing timeout
+        if (canplayTimeoutId) clearTimeout(canplayTimeoutId);
+        // Set new timeout as fallback for iOS Safari
+        canplayTimeoutId = setTimeout(() => {
+          if (isLoading) {
+            logger.warn('canplay timeout - assuming audio ready', { detectionId });
+            isLoading = false;
+          }
+        }, CANPLAY_TIMEOUT_MS);
+      });
+
+      addTrackedEventListener(audioElement, 'canplay', () => {
+        // Clear timeout since canplay fired normally
+        if (canplayTimeoutId) {
+          clearTimeout(canplayTimeoutId);
+          canplayTimeoutId = undefined;
+        }
+        isLoading = false;
       });
 
       addTrackedEventListener(audioElement, 'error', () => {
-        error = 'Failed to load audio';
+        // Clear timeout on error
+        if (canplayTimeoutId) {
+          clearTimeout(canplayTimeoutId);
+          canplayTimeoutId = undefined;
+        }
+        error = t('media.audio.error');
         isLoading = false;
       });
 
@@ -862,6 +884,56 @@
       debugLog('onMount: spectrogram already loaded from cache');
       spectrogramLoader.setLoading(false);
     }
+
+    // Cleanup function (Svelte 5 pattern)
+    return () => {
+      debugLog('cleanup: component destroying', {
+        isPlaying,
+        spectrogramRetryCount,
+        hasStatusPollTimer: !!statusPollTimer,
+      });
+
+      // Stop any running intervals
+      stopInterval();
+
+      // Clear any pending timeouts
+      clearPlayEndTimeout();
+      clearSpectrogramRetryTimer();
+      clearStatusPollTimer();
+      spectrogramLoader.cleanup();
+
+      // Clear canplay safety timeout
+      if (canplayTimeoutId) {
+        clearTimeout(canplayTimeoutId);
+        canplayTimeoutId = undefined;
+      }
+
+      // Remove all tracked event listeners
+      eventListeners.forEach(({ element, event, handler }) => {
+        element.removeEventListener(event, handler);
+      });
+      eventListeners = [];
+
+      // Disconnect ResizeObserver
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+
+      // Stop audio playback to prevent resource leaks
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
+      }
+
+      // Clean up Web Audio API resources using shared utilities
+      disconnectAudioNodes(audioNodes);
+      audioNodes = null;
+
+      // Release reference to shared audio context (doesn't close it - it's reused)
+      releaseAudioContext();
+      audioContext = null;
+    };
   });
 
   // Debug effect to track spectrogram loader state changes
@@ -883,64 +955,6 @@
       });
     }
   });
-
-  onDestroy(() => {
-    debugLog('onDestroy: component destroying', {
-      isPlaying,
-      spectrogramRetryCount,
-      hasStatusPollTimer: !!statusPollTimer,
-    });
-
-    // Stop any running intervals
-    stopInterval();
-
-    // Clear any pending timeouts
-    clearPlayEndTimeout();
-    clearSpectrogramRetryTimer();
-    clearStatusPollTimer();
-    spectrogramLoader.cleanup();
-
-    // Remove all tracked event listeners
-    eventListeners.forEach(({ element, event, handler }) => {
-      element.removeEventListener(event, handler);
-    });
-    eventListeners = [];
-
-    // Disconnect ResizeObserver
-    if (resizeObserver) {
-      resizeObserver.disconnect();
-      resizeObserver = null;
-    }
-
-    // Clean up Web Audio API resources
-    if (audioNodes) {
-      try {
-        audioNodes.source.disconnect();
-        audioNodes.gain.disconnect();
-        audioNodes.compressor.disconnect();
-        audioNodes.filters.highPass.disconnect();
-        // eslint-disable-next-line no-unused-vars
-      } catch (_e) {
-        // Nodes may already be disconnected, ignore errors
-
-        logger.warn('Error disconnecting audio nodes during cleanup');
-      }
-      audioNodes = null;
-    }
-
-    // Close audio context
-    if (audioContext) {
-      try {
-        audioContext.close();
-        // eslint-disable-next-line no-unused-vars
-      } catch (_e) {
-        // Context may already be closed, ignore errors
-
-        logger.warn('Error closing audio context during cleanup');
-      }
-      audioContext = null;
-    }
-  });
 </script>
 
 <div
@@ -953,7 +967,9 @@
   {#if spectrogramUrl}
     <!-- Screen reader announcement for loading state -->
     <div class="sr-only" role="status" aria-live="polite">
-      {spectrogramLoader.loading ? 'Loading spectrogram...' : 'Spectrogram loaded'}
+      {spectrogramLoader.loading
+        ? t('components.audio.spectrogramLoading')
+        : t('components.audio.spectrogramLoaded')}
     </div>
 
     <!-- Loading spinner overlay -->
@@ -964,7 +980,7 @@
         <div
           class="loading loading-spinner loading-sm md:loading-md text-primary"
           role="status"
-          aria-label="Loading spectrogram"
+          aria-label={t('components.audio.spectrogramLoadingAria')}
         ></div>
       </div>
     {/if}
@@ -979,7 +995,9 @@
       >
         <div class="text-center p-2">
           <XCircle class="size-6 sm:size-8 mx-auto mb-1 text-base-content/30" aria-hidden="true" />
-          <span class="text-xs sm:text-sm text-base-content/50">Spectrogram unavailable</span>
+          <span class="text-xs sm:text-sm text-base-content/50"
+            >{t('components.audio.spectrogramUnavailable')}</span
+          >
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
@@ -990,13 +1008,17 @@
         <div
           class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"
           role="status"
-          aria-label="Generating spectrogram"
+          aria-label={t('components.audio.spectrogramGeneratingAria')}
         ></div>
         <div class="text-xs sm:text-sm text-base-content mt-1" role="status" aria-live="polite">
           {#if spectrogramStatus.status === 'queued'}
-            <span>Queue: {spectrogramStatus.queuePosition}</span>
+            <span
+              >{t('components.audio.queuePosition', {
+                position: spectrogramStatus.queuePosition,
+              })}</span
+            >
           {:else}
-            <span>Generating...</span>
+            <span>{t('components.audio.generating')}</span>
           {/if}
         </div>
         {#if spectrogramStatus.message}
@@ -1028,10 +1050,7 @@
     {/if}
   {/if}
 
-  <!-- Audio element -->
-  <audio bind:this={audioElement} id={audioId} src={audioUrl} preload="metadata" class="hidden">
-    <track kind="captions" />
-  </audio>
+  <!-- Audio element is created dynamically in onMount for iOS Safari compatibility -->
 
   <!-- Audio settings button (top-right) -->
   {#if showControls}

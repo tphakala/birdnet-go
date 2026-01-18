@@ -40,10 +40,13 @@ vi.mock('$lib/utils/logger', () => ({
   },
 }));
 
+/* global Audio */
+
 describe('AudioPlayer', () => {
   let mockPlay: ReturnType<typeof vi.fn>;
   let mockPause: ReturnType<typeof vi.fn>;
   const eventHandlers: Record<string, EventListener[]> = {};
+  let mockAudioInstance: HTMLAudioElement;
   const audioPlayerTest = createComponentTestFactory(AudioPlayer);
 
   beforeEach(() => {
@@ -95,6 +98,13 @@ describe('AudioPlayer', () => {
       get: vi.fn().mockReturnValue(0),
       set: vi.fn(),
     });
+
+    // Mock Audio constructor (audio elements are now created dynamically)
+    mockAudioInstance = document.createElement('audio') as HTMLAudioElement;
+    // Use a class mock that returns our controlled instance
+    vi.spyOn(window, 'Audio').mockImplementation(function (this: HTMLAudioElement) {
+      return mockAudioInstance;
+    } as unknown as typeof Audio);
   });
 
   afterEach(() => {
@@ -109,14 +119,14 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with audio URL', () => {
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
     });
 
-    const audio = container.querySelector('audio');
-    expect(audio).toBeInTheDocument();
-    expect(audio).toHaveAttribute('src', '/audio/test.mp3');
+    // Audio element is created dynamically via new Audio(), not in DOM
+    expect(window.Audio).toHaveBeenCalled();
+    expect(mockAudioInstance.src).toContain('/audio/test.mp3');
   });
 
   it('renders with spectrogram', () => {
@@ -128,7 +138,8 @@ describe('AudioPlayer', () => {
 
     const img = screen.getByAltText('Audio spectrogram');
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', '/api/v2/spectrogram/test-123?size=md');
+    // URL includes cache-busting parameter
+    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/test-123\?size=md&cache=\d+/);
   });
 
   it('generates spectrogram URL from detectionId', () => {
@@ -140,7 +151,8 @@ describe('AudioPlayer', () => {
     });
 
     const img = screen.getByAltText('Audio spectrogram');
-    expect(img).toHaveAttribute('src', '/api/v2/spectrogram/123?size=md');
+    // URL includes cache-busting parameter
+    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/123\?size=md&cache=\d+/);
   });
 
   it('shows play button when paused', () => {
@@ -172,16 +184,15 @@ describe('AudioPlayer', () => {
       get: vi.fn().mockReturnValue(false),
     });
 
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
     });
 
-    // Simulate play event
-    const audio = container.querySelector('audio');
+    // Simulate play event using mockAudioInstance
     const playHandlers = safeGet(eventHandlers, 'play', []);
-    if (playHandlers.length > 0 && audio) {
-      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
+    if (playHandlers.length > 0) {
+      playHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('play')));
     }
 
     await waitFor(() => {
@@ -191,16 +202,17 @@ describe('AudioPlayer', () => {
   });
 
   it('formats time correctly', async () => {
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
     });
 
-    // Simulate loadedmetadata event
-    const audio = container.querySelector('audio');
+    // Simulate loadedmetadata event using mockAudioInstance
     const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
-    if (metadataHandlers.length > 0 && audio) {
-      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
+    if (metadataHandlers.length > 0) {
+      metadataHandlers.forEach(handler =>
+        handler.call(mockAudioInstance, new Event('loadedmetadata'))
+      );
     }
 
     await waitFor(() => {
@@ -218,22 +230,23 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
     });
 
-    // Simulate metadata loading first
-    const audio = container.querySelector('audio');
+    // Simulate metadata loading first using mockAudioInstance
     const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
-    if (metadataHandlers.length > 0 && audio) {
-      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
+    if (metadataHandlers.length > 0) {
+      metadataHandlers.forEach(handler =>
+        handler.call(mockAudioInstance, new Event('loadedmetadata'))
+      );
     }
 
     // Simulate play
     const playHandlers = safeGet(eventHandlers, 'play', []);
-    if (playHandlers.length > 0 && audio) {
-      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
+    if (playHandlers.length > 0) {
+      playHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('play')));
     }
 
     // Simulate time progress
@@ -259,11 +272,12 @@ describe('AudioPlayer', () => {
       detectionId: 'test-123',
     });
 
-    // Load metadata first
-    const audio = container.querySelector('audio');
+    // Load metadata first using mockAudioInstance
     const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
-    if (metadataHandlers.length > 0 && audio) {
-      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
+    if (metadataHandlers.length > 0) {
+      metadataHandlers.forEach(handler =>
+        handler.call(mockAudioInstance, new Event('loadedmetadata'))
+      );
     }
 
     const progressBar = container.querySelector('#progress-test-123');
@@ -298,17 +312,18 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
       showSpectrogram: true,
     });
 
-    // Load metadata
-    const audio = container.querySelector('audio');
+    // Load metadata using mockAudioInstance
     const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
-    if (metadataHandlers.length > 0 && audio) {
-      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
+    if (metadataHandlers.length > 0) {
+      metadataHandlers.forEach(handler =>
+        handler.call(mockAudioInstance, new Event('loadedmetadata'))
+      );
     }
 
     // Wait for the spectrogram to load
@@ -320,7 +335,8 @@ describe('AudioPlayer', () => {
     // Since the component doesn't currently support clicking on spectrogram for seeking,
     // we'll test that the spectrogram is displayed correctly
     const img = screen.getByAltText('Audio spectrogram');
-    expect(img).toHaveAttribute('src', '/api/v2/spectrogram/test-123?size=md');
+    // URL includes cache-busting parameter
+    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/test-123\?size=md&cache=\d+/);
   });
 
   it('handles keyboard controls', async () => {
@@ -331,11 +347,12 @@ describe('AudioPlayer', () => {
       detectionId: 'test-123',
     });
 
-    // Load metadata first so duration is set
-    const audio = container.querySelector('audio');
+    // Load metadata first so duration is set using mockAudioInstance
     const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
-    if (metadataHandlers.length > 0 && audio) {
-      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
+    if (metadataHandlers.length > 0) {
+      metadataHandlers.forEach(handler =>
+        handler.call(mockAudioInstance, new Event('loadedmetadata'))
+      );
     }
 
     await waitFor(() => {
@@ -389,19 +406,17 @@ describe('AudioPlayer', () => {
     const onPlayStart = vi.fn();
     const onPlayEnd = vi.fn();
 
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
       onPlayStart,
       onPlayEnd,
     });
 
-    const audio = container.querySelector('audio');
-
-    // Test play event
+    // Test play event using mockAudioInstance
     const playHandlers = safeGet(eventHandlers, 'play', []);
-    if (playHandlers.length > 0 && audio) {
-      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
+    if (playHandlers.length > 0) {
+      playHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('play')));
     }
     expect(onPlayStart).toHaveBeenCalledTimes(1);
 
@@ -409,8 +424,8 @@ describe('AudioPlayer', () => {
 
     // Test pause event (should trigger onPlayEnd after delay)
     const pauseHandlers = safeGet(eventHandlers, 'pause', []);
-    if (pauseHandlers.length > 0 && audio) {
-      pauseHandlers.forEach(handler => handler.call(audio, new Event('pause')));
+    if (pauseHandlers.length > 0) {
+      pauseHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('pause')));
     }
 
     // Fast forward past the delay
@@ -419,26 +434,25 @@ describe('AudioPlayer', () => {
   });
 
   it('handles audio error', async () => {
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
       showSpectrogram: true,
     });
 
-    const audio = container.querySelector('audio');
+    // Trigger error using mockAudioInstance
     const errorHandlers = safeGet(eventHandlers, 'error', []);
-    if (errorHandlers.length > 0 && audio) {
-      errorHandlers.forEach(handler => handler.call(audio, new Event('error')));
+    if (errorHandlers.length > 0) {
+      errorHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('error')));
     }
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load audio')).toBeInTheDocument();
+      expect(screen.getByText('media.audio.error')).toBeInTheDocument();
     });
   });
 
   it('handles spectrogram error', async () => {
-    // Use fake timers to control retry delays
-    vi.useFakeTimers();
+    // Fake timers already set in beforeEach
 
     audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
@@ -446,43 +460,33 @@ describe('AudioPlayer', () => {
       showSpectrogram: true,
     });
 
-    // Wait for the spectrogram image to appear first
-    await waitFor(() => {
-      const img = screen.getByAltText('Audio spectrogram');
-      expect(img).toBeInTheDocument();
-    });
-
+    // Get the spectrogram image
     const img = screen.getByAltText('Audio spectrogram');
+    expect(img).toBeInTheDocument();
 
     // Trigger error and advance through all retry attempts
     // The component retries 4 times with delays: 500ms, 1000ms, 2000ms, 4000ms
     for (let i = 0; i < 5; i++) {
-      fireEvent.error(img);
+      await fireEvent.error(img);
       // Advance timers to trigger next retry or final error state
-      await vi.advanceTimersByTimeAsync(4000);
+      await vi.advanceTimersByTimeAsync(5000);
     }
 
     // After all retries are exhausted, error state should be shown
-    await waitFor(
-      () => {
-        expect(screen.getByText('Spectrogram unavailable')).toBeInTheDocument();
-      },
-      { timeout: 1000 }
-    );
-
-    // Restore real timers
-    vi.useRealTimers();
+    // The component shows i18n key when translation is not mocked for this key
+    expect(screen.getByText('components.audio.spectrogramUnavailable')).toBeInTheDocument();
   });
 
   it('shows controls when rendered', () => {
-    const { container } = audioPlayerTest.render({
+    audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
       showSpectrogram: false, // Disable spectrogram to avoid loading spinner
     });
 
-    const audio = container.querySelector('audio');
-    expect(audio).toHaveAttribute('src', '/audio/test.mp3');
+    // Audio element is created dynamically via new Audio(), not in DOM
+    expect(window.Audio).toHaveBeenCalled();
+    expect(mockAudioInstance.src).toContain('/audio/test.mp3');
 
     const playButton = screen.getByLabelText('Play');
     expect(playButton).toBeInTheDocument();
@@ -503,16 +507,15 @@ describe('AudioPlayer', () => {
   it('cleans up interval on unmount', async () => {
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
-    const { container, unmount } = audioPlayerTest.render({
+    const { unmount } = audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
     });
 
-    // Start playing
-    const audio = container.querySelector('audio');
+    // Start playing using mockAudioInstance
     const playHandlers = safeGet(eventHandlers, 'play', []);
-    if (playHandlers.length > 0 && audio) {
-      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
+    if (playHandlers.length > 0) {
+      playHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('play')));
     }
 
     unmount();
@@ -536,17 +539,18 @@ describe('AudioPlayer', () => {
       showSpectrogram: true,
     });
 
-    // Load metadata
-    const audio = container.querySelector('audio');
+    // Load metadata using mockAudioInstance
     const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
-    if (metadataHandlers.length > 0 && audio) {
-      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
+    if (metadataHandlers.length > 0) {
+      metadataHandlers.forEach(handler =>
+        handler.call(mockAudioInstance, new Event('loadedmetadata'))
+      );
     }
 
     // Start playing
     const playHandlers = safeGet(eventHandlers, 'play', []);
-    if (playHandlers.length > 0 && audio) {
-      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
+    if (playHandlers.length > 0) {
+      playHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('play')));
     }
 
     // Progress to middle
