@@ -130,15 +130,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Delete old releases
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        with:
-          keep_latest: 14
-          delete_tags: true
-          delete_tag_pattern: ^nightly-
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   get-version:
     runs-on: ubuntu-latest
     outputs:
@@ -171,3 +162,21 @@ jobs:
       cleanup-old-images: true
       keep-images-count: 14
     secrets: inherit
+
+  cleanup:
+    name: Cleanup old nightly releases
+    needs: nightly
+    runs-on: ubuntu-latest
+    # Run cleanup even if some builds failed, but not if cancelled
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Delete old releases
+        # Non-critical cleanup - don't fail the workflow if this errors
+        continue-on-error: true
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 14
+          delete_tags: true
+          delete_tag_pattern: ^nightly-
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
