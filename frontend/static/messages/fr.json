@@ -2773,6 +2773,16 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spectrogramme non disponible",
+      "spectrogramLoading": "Chargement du spectrogramme...",
+      "spectrogramLoaded": "Spectrogramme chargé",
+      "spectrogramLoadingAria": "Chargement du spectrogramme",
+      "spectrogramGeneratingAria": "Génération du spectrogramme",
+      "generating": "Génération...",
+      "queuePosition": "File d'attente: {position}",
+      "loadError": "Échec du chargement audio"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Valeur ajustée au minimum ({value})",
@@ -2798,11 +2808,6 @@
       "subnet": {
         "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
       }
-    },
-    "audio": {
-      "spectrogramUnavailable": "Spectrogramme non disponible",
-      "generating": "Génération en cours...",
-      "queuePosition": "File d'attente : {position}"
     },
     "datePicker": {
       "today": "Aujourd'hui",

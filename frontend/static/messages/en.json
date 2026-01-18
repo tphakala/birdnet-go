@@ -2765,8 +2765,13 @@
   "components": {
     "audio": {
       "spectrogramUnavailable": "Spectrogram unavailable",
+      "spectrogramLoading": "Loading spectrogram...",
+      "spectrogramLoaded": "Spectrogram loaded",
+      "spectrogramLoadingAria": "Loading spectrogram",
+      "spectrogramGeneratingAria": "Generating spectrogram",
       "generating": "Generating...",
-      "queuePosition": "Queue: {position}"
+      "queuePosition": "Queue: {position}",
+      "loadError": "Failed to load audio"
     },
     "forms": {
       "numberField": {

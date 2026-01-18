@@ -2775,8 +2775,13 @@
   "components": {
     "audio": {
       "spectrogramUnavailable": "Spektrogrammi ei saatavilla",
+      "spectrogramLoading": "Ladataan spektrogrammia...",
+      "spectrogramLoaded": "Spektrogrammi ladattu",
+      "spectrogramLoadingAria": "Ladataan spektrogrammia",
+      "spectrogramGeneratingAria": "Luodaan spektrogrammia",
       "generating": "Luodaan...",
-      "queuePosition": "Jono: {position}"
+      "queuePosition": "Jono: {position}",
+      "loadError": "Äänitiedoston lataaminen epäonnistui"
     },
     "forms": {
       "numberField": {
