@@ -62,13 +62,13 @@ func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase, scientificNa
 	}
 }
 
-// getAdjustedConfidenceThreshold applies dynamic threshold logic to adjust the confidence threshold based on recent detections.
-// If isCustomThreshold is true (species has a user-configured threshold), the function returns it unchanged,
-// ensuring user intent is never overridden by automatic dynamic adjustments.
-func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, result datastore.Results, baseThreshold float32, isCustomThreshold bool) float32 {
+// getAdjustedConfidenceThreshold returns the current dynamic threshold for a species.
+// This function does NOT trigger learning from detections - learning happens separately
+// in LearnFromApprovedDetection() when a detection is approved.
+// Note: This function may reset expired thresholds as a side effect.
+// If isCustomThreshold is true (species has a user-configured threshold), the function returns it unchanged.
+func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, baseThreshold float32, isCustomThreshold bool) float32 {
 	// If this is a custom user-configured threshold, respect it and don't apply dynamic adjustments.
-	// Dynamic threshold is meant to learn from detections for species using the global threshold,
-	// not to override explicit user configuration.
 	if isCustomThreshold {
 		return baseThreshold
 	}
@@ -85,80 +85,26 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 		return baseThreshold
 	}
 
-	// Track previous state for event recording
-	previousLevel := dt.Level
-	previousValue := dt.CurrentValue
-
-	// Calculate the learning cooldown based on detection window duration
-	// This prevents multiple threshold learnings within a single detection event
-	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
-	learningCooldown := captureLength - preCaptureLength
-	// Enforce minimum 5 seconds to prevent issues with misconfigured short windows
-	const minCooldown = 5 * time.Second
-	if learningCooldown < minCooldown {
-		learningCooldown = minCooldown
-	}
-
 	now := time.Now()
 
-	// Reset expired thresholds before processing the new detection
-	// This must run before the high-confidence check so that if a high-confidence
-	// detection arrives after expiry, the learning starts from a clean state
-	if now.After(dt.Timer) {
+	// Check for expired thresholds and reset if needed
+	// Guard ensures we only reset if not already at base state (prevents redundant work)
+	if now.After(dt.Timer) && (dt.Level > 0 || dt.HighConfCount > 0) {
+		// Track previous state for event recording
+		previousLevel := dt.Level
+		previousValue := dt.CurrentValue
+
 		dt.Level = 0
 		dt.CurrentValue = float64(baseThreshold)
 		dt.HighConfCount = 0
 		dt.LastLearnedAt = time.Time{}
+
 		if previousLevel != 0 {
 			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, dt.CurrentValue, changeReasonExpiry, 0)
 		}
-		// Update previous state after reset for accurate event recording
-		previousLevel = 0
-		previousValue = dt.CurrentValue
 	}
 
-	// If the detection confidence exceeds the trigger threshold
-	if result.Confidence > float32(p.Settings.Realtime.DynamicThreshold.Trigger) {
-		// Always extend the timer to keep threshold active while species is being detected
-		dt.Timer = now.Add(time.Duration(dt.ValidHours) * time.Hour)
-
-		// Only learn from this detection if enough time has passed since last learning
-		// This ensures learnings happen across different detection events, not within a single window
-		if dt.LastLearnedAt.IsZero() || now.Sub(dt.LastLearnedAt) >= learningCooldown {
-			dt.HighConfCount++
-			dt.LastLearnedAt = now
-
-			// Adjust the dynamic threshold based on the number of high-confidence detections
-			switch dt.HighConfCount {
-			case 1:
-				dt.Level = 1
-				dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
-			case 2:
-				dt.Level = 2
-				dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
-			default:
-				// Level 3 is the maximum reduction; any count >= 3 stays at this level
-				dt.Level = 3
-				dt.CurrentValue = float64(baseThreshold * thresholdLevel3Multiplier)
-			}
-
-			// Apply minimum threshold clamp BEFORE recording event so event shows actual value
-			if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
-				dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
-			}
-
-			// Record event if level changed (BG-59)
-			if dt.Level != previousLevel {
-				p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level, previousValue, dt.CurrentValue, changeReasonHighConfidence, float64(result.Confidence))
-			}
-		}
-	}
-
-	// Final minimum threshold enforcement - this is intentionally separate from the clamp inside
-	// the learning block (lines 113-116). That clamp ensures event recording shows the actual
-	// clamped value. This clamp handles edge cases: expiry resets, and any code paths that
-	// might bypass the learning block but still need minimum enforcement.
+	// Apply minimum threshold enforcement
 	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
 		dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
 	}
@@ -190,6 +136,103 @@ func (p *Processor) recordThresholdEvent(speciesName string, previousLevel, newL
 			log.Error("Failed to save threshold event", logger.String("species", speciesName), logger.Error(err))
 		}
 	}()
+}
+
+// LearnFromApprovedDetection updates the dynamic threshold for a species based on an
+// approved high-confidence detection. This should only be called when a detection has
+// been confirmed (approved), not when first detected. This ensures that false positives
+// (discarded detections) do not trigger threshold learning.
+func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName string, confidence float32) {
+	if !p.Settings.Realtime.DynamicThreshold.Enabled {
+		return
+	}
+
+	// Only learn from detections that exceed the trigger threshold
+	if confidence <= float32(p.Settings.Realtime.DynamicThreshold.Trigger) {
+		return
+	}
+
+	// Check if this species has a custom threshold - don't learn for custom thresholds
+	config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, speciesLowercase, scientificName)
+	if exists && config.Threshold > 0 {
+		return
+	}
+
+	// Use global threshold as base (species has no custom threshold)
+	baseThreshold := float32(p.Settings.BirdNET.Threshold)
+
+	// Calculate learning cooldown based on detection window duration
+	// This prevents multiple threshold learnings within a single detection event
+	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	learningCooldown := captureLength - preCaptureLength
+	const minCooldown = 5 * time.Second
+	if learningCooldown < minCooldown {
+		learningCooldown = minCooldown
+	}
+
+	// Ensure species exists in threshold map (reuses existing initialization logic)
+	p.addSpeciesToDynamicThresholds(speciesLowercase, scientificName, baseThreshold)
+
+	p.thresholdsMutex.Lock()
+	defer p.thresholdsMutex.Unlock()
+
+	dt := p.DynamicThresholds[speciesLowercase]
+	if dt == nil {
+		// Species was removed concurrently (e.g., via ResetDynamicThreshold)
+		// Skip learning for this edge case
+		return
+	}
+
+	now := time.Now()
+	previousLevel := dt.Level
+	previousValue := dt.CurrentValue
+
+	// Always extend the timer when we see an approved high-confidence detection
+	dt.Timer = now.Add(time.Duration(dt.ValidHours) * time.Hour)
+
+	// Only learn if enough time has passed since last learning
+	// This ensures learnings happen across different detection events, not within a single window
+	if !dt.LastLearnedAt.IsZero() && now.Sub(dt.LastLearnedAt) < learningCooldown {
+		return
+	}
+
+	dt.HighConfCount++
+	dt.LastLearnedAt = now
+
+	// Adjust the dynamic threshold based on the number of high-confidence detections
+	switch dt.HighConfCount {
+	case 1:
+		dt.Level = 1
+		dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
+	case 2:
+		dt.Level = 2
+		dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
+	default:
+		// Level 3 is the maximum reduction; any count >= 3 stays at this level
+		dt.Level = 3
+		dt.CurrentValue = float64(baseThreshold * thresholdLevel3Multiplier)
+	}
+
+	// Apply minimum threshold clamp
+	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
+		dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
+	}
+
+	// Record event if level changed
+	if dt.Level != previousLevel {
+		p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level,
+			previousValue, dt.CurrentValue, changeReasonHighConfidence, float64(confidence))
+	}
+
+	if p.Settings.Realtime.DynamicThreshold.Debug {
+		log := GetLogger()
+		log.Debug("Learned from approved detection",
+			logger.String("species", speciesLowercase),
+			logger.Float32("confidence", confidence),
+			logger.Int("level", dt.Level),
+			logger.Float64("threshold", dt.CurrentValue))
+	}
 }
 
 // updateDynamicThreshold updates the dynamic threshold for a given species if enabled.

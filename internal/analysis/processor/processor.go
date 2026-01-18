@@ -608,7 +608,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 		// Use lookupSpeciesConfig to support both common name and scientific name lookups
 		config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
-		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold, isCustomThreshold)
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
 	}
@@ -860,19 +860,22 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
-	// Safely get confidence value
-	var confidence float64
-	if len(item.Detection.Results) > 0 {
-		confidence = float64(item.Detection.Results[0].Confidence)
-	}
+	// Use item.Confidence directly - it's the correct confidence for THIS species,
+	// not Results[0].Confidence which could be a different (higher confidence) species
+	confidence := float32(item.Confidence)
 
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
 		logger.Int("match_count", item.Count),
-		logger.Float64("confidence", confidence),
-		logger.Bool("has_results", len(item.Detection.Results) > 0),
+		logger.Float64("confidence", item.Confidence),
 		logger.String("operation", "approve_detection"))
+
+	// Learn from this approved high-confidence detection for dynamic threshold adjustment.
+	// This is the correct place for learning - only approved detections should affect thresholds,
+	// not pending detections that may later be discarded as false positives.
+	// Note: speciesName is already lowercase (from pendingDetections map key)
+	p.LearnFromApprovedDetection(speciesName, item.Detection.Note.ScientificName, confidence)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
