@@ -323,9 +323,7 @@
 
   // Handle review card completion
   function handleReviewComplete() {
-    // Switch back to overview tab after successful save
-    activeTab = 'overview';
-    // Refetch detection data to show updated status
+    // Stay on review tab - just refetch detection data to show updated status
     if (resolvedDetectionId) {
       fetchDetection();
     }

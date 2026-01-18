@@ -32,13 +32,9 @@
   const detectionDateTime = $derived(getDetectionDateTime(detection.date, detection.time));
   const relativeTime = $derived(formatRelativeTime(detectionDateTime));
 
-  // Check verification status
-  const isVerified = $derived(
-    detection.verified === 'correct' || detection.review?.verified === 'correct'
-  );
-  const isFalsePositive = $derived(
-    detection.verified === 'false_positive' || detection.review?.verified === 'false_positive'
-  );
+  // Check verification status (API returns verified directly on detection)
+  const isVerified = $derived(detection.verified === 'correct');
+  const isFalsePositive = $derived(detection.verified === 'false_positive');
 
   // Thumbnail URL
   const thumbnailUrl = $derived(

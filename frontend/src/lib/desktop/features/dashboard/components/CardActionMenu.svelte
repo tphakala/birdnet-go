@@ -168,9 +168,9 @@
         <button onclick={() => handleAction(onReview)} class="menu-item" role="menuitem">
           <SquarePen class="size-4" />
           <span>{t('dashboard.recentDetections.actions.review')}</span>
-          {#if detection.review?.verified === 'correct'}
+          {#if detection.verified === 'correct'}
             <span class="badge badge-success badge-sm">✓</span>
-          {:else if detection.review?.verified === 'false_positive'}
+          {:else if detection.verified === 'false_positive'}
             <span class="badge badge-error badge-sm">✗</span>
           {/if}
         </button>
