@@ -874,8 +874,8 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Learn from this approved high-confidence detection for dynamic threshold adjustment.
 	// This is the correct place for learning - only approved detections should affect thresholds,
 	// not pending detections that may later be discarded as false positives.
-	speciesLowercase := strings.ToLower(item.Detection.Note.CommonName)
-	p.LearnFromApprovedDetection(speciesLowercase, item.Detection.Note.ScientificName, confidence)
+	// Note: speciesName is already lowercase (from pendingDetections map key)
+	p.LearnFromApprovedDetection(speciesName, item.Detection.Note.ScientificName, confidence)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
