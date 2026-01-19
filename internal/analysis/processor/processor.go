@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -90,10 +91,14 @@ type Processor struct {
 }
 
 type Detections struct {
-	CorrelationID string              // Unique detection identifier for log correlation
-	pcmData3s     []byte              // 3s PCM data containing the detection
-	Note          datastore.Note      // Note containing highest match
-	Results       []datastore.Results // Full BirdNET prediction results
+	CorrelationID string                       // Unique detection identifier for log correlation
+	pcmData3s     []byte                       // 3s PCM data containing the detection
+	Result        detection.Result             // Detection result containing highest match
+	Results       []detection.AdditionalResult // Additional BirdNET prediction results
+
+	// Deprecated: Use Result instead. Kept for backward compatibility during transition.
+	// Will be removed after all actions are migrated to use Result.
+	Note datastore.Note
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -653,13 +658,24 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
 
-	// Create the note
+	// Create the legacy note (kept for backward compatibility)
 	note := p.NewWithSpeciesInfo(
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
 		item.Source.ID, clipName,
 		item.ElapsedTime, occurrence)
+
+	// Create the new detection.Result
+	detectionResult := p.createDetectionResult(
+		beginTime, endTime,
+		scientificName, commonName, speciesCode,
+		float64(result.Confidence),
+		item.Source, clipName,
+		item.ElapsedTime, occurrence)
+
+	// Convert additional results from datastore.Results to detection.AdditionalResult
+	additionalResults := p.convertToAdditionalResults(item.Results)
 
 	// Update species tracker if enabled
 	p.speciesTrackerMu.RLock()
@@ -676,9 +692,116 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	return Detections{
 		CorrelationID: correlationID,
 		pcmData3s:     item.PCMdata,
-		Note:          note,
-		Results:       item.Results,
+		Result:        detectionResult,
+		Results:       additionalResults,
+		Note:          note, // Deprecated: kept for backward compatibility
 	}
+}
+
+// createDetectionResult creates a detection.Result from the given parameters.
+func (p *Processor) createDetectionResult(
+	beginTime, endTime time.Time,
+	scientificName, commonName, speciesCode string,
+	confidence float64,
+	source datastore.AudioSource, clipName string,
+	elapsedTime time.Duration, occurrence float64) detection.Result {
+
+	// Detection time is adjusted to account for the 3-second analysis chunk
+	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
+
+	// Resolve audio source info from registry
+	audioSource := p.resolveAudioSource(source)
+
+	return detection.Result{
+		Timestamp:      detectionTime,
+		SourceNode:     p.Settings.Main.Name,
+		AudioSource:    audioSource,
+		BeginTime:      beginTime,
+		EndTime:        endTime,
+		Species: detection.Species{
+			ScientificName: scientificName,
+			CommonName:     commonName,
+			Code:           speciesCode,
+		},
+		Confidence:     math.Round(confidence*100) / 100,
+		Latitude:       p.Settings.BirdNET.Latitude,
+		Longitude:      p.Settings.BirdNET.Longitude,
+		Threshold:      p.Settings.BirdNET.Threshold,
+		Sensitivity:    p.Settings.BirdNET.Sensitivity,
+		ClipName:       clipName,
+		ProcessingTime: elapsedTime,
+		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)),
+		Model:          detection.DefaultModelInfo(),
+	}
+}
+
+// resolveAudioSource resolves the audio source details from the registry.
+func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.AudioSource {
+	// Default to using the source directly
+	audioSource := detection.AudioSource{
+		ID:          source.ID,
+		SafeString:  source.SafeString,
+		DisplayName: source.DisplayName,
+	}
+
+	// Try to get additional details from registry
+	registry := myaudio.GetRegistry()
+	if registry != nil {
+		if existingSource, exists := registry.GetSourceByID(source.ID); exists {
+			audioSource.SafeString = existingSource.SafeString
+			audioSource.DisplayName = existingSource.DisplayName
+			// Determine type from the source
+			audioSource.Type = determineSourceType(existingSource.SafeString)
+		}
+	}
+
+	return audioSource
+}
+
+// determineSourceType determines the audio source type from its connection string.
+func determineSourceType(safeString string) string {
+	switch {
+	case strings.HasPrefix(safeString, "rtsp://"):
+		return "rtsp"
+	case strings.HasPrefix(safeString, "hw:"):
+		return "alsa"
+	case strings.Contains(safeString, "pulse"):
+		return "pulseaudio"
+	default:
+		return "unknown"
+	}
+}
+
+// convertToAdditionalResults converts a slice of datastore.Results to detection.AdditionalResult.
+func (p *Processor) convertToAdditionalResults(results []datastore.Results) []detection.AdditionalResult {
+	additional := make([]detection.AdditionalResult, 0, len(results))
+	for _, r := range results {
+		sp := detection.ParseSpeciesString(r.Species)
+		additional = append(additional, detection.AdditionalResult{
+			Species:    sp,
+			Confidence: float64(r.Confidence),
+		})
+	}
+	return additional
+}
+
+// convertToLegacyResults converts detection.AdditionalResult back to datastore.Results.
+// This is used for backward compatibility during the transition period.
+//
+// Deprecated: Remove once all actions are migrated to use detection.Result.
+func convertToLegacyResults(results []detection.AdditionalResult) []datastore.Results {
+	legacy := make([]datastore.Results, 0, len(results))
+	for _, r := range results {
+		speciesStr := r.Species.ScientificName + "_" + r.Species.CommonName
+		if r.Species.Code != "" {
+			speciesStr += "_" + r.Species.Code
+		}
+		legacy = append(legacy, datastore.Results{
+			Species:    speciesStr,
+			Confidence: float32(r.Confidence),
+		})
+	}
+	return legacy
 }
 
 // syncSpeciesTrackerIfNeeded syncs the species tracker if conditions are met
@@ -1080,13 +1203,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 }
 
 // getActionsForItem determines the actions to be taken for a given detection.
-func (p *Processor) getActionsForItem(detection *Detections) []Action {
+func (p *Processor) getActionsForItem(det *Detections) []Action {
 	// Check if species has custom configuration using both common and scientific name lookup
-	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, detection.Note.CommonName, detection.Note.ScientificName); exists {
+	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, det.Note.CommonName, det.Note.ScientificName); exists {
 		if p.Settings.Debug {
 			GetLogger().Debug("species config exists for custom actions",
-				logger.String("commonName", detection.Note.CommonName),
-				logger.String("scientificName", detection.Note.ScientificName),
+				logger.String("commonName", det.Note.CommonName),
+				logger.String("scientificName", det.Note.ScientificName),
 				logger.String("operation", "custom_action_check"))
 		}
 
@@ -1099,7 +1222,7 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 			case "ExecuteCommand":
 				actions = append(actions, &ExecuteCommandAction{
 					Command: actionConfig.Command,
-					Params:  parseCommandParams(actionConfig.Parameters, detection),
+					Params:  parseCommandParams(actionConfig.Parameters, det),
 				})
 			case "SendNotification":
 				// Add notification action handling
@@ -1118,26 +1241,26 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 
 		// If executeDefaults is true, combine custom and default actions
 		if len(actions) > 0 && executeDefaults {
-			defaultActions := p.getDefaultActions(detection)
+			defaultActions := p.getDefaultActions(det)
 			return append(actions, defaultActions...)
 		}
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
-	defaultActions := p.getDefaultActions(detection)
+	defaultActions := p.getDefaultActions(det)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
-		logger.String("species", strings.ToLower(detection.Note.CommonName)),
+		logger.String("species", strings.ToLower(det.Note.CommonName)),
 		logger.Int("actions_count", len(defaultActions)),
 		logger.String("operation", "get_default_actions"))
 	return defaultActions
 }
 
 // Helper function to parse command parameters
-func parseCommandParams(params []string, detection *Detections) map[string]any {
+func parseCommandParams(params []string, det *Detections) map[string]any {
 	commandParams := make(map[string]any)
 	for _, param := range params {
-		value := getNoteValueByName(&detection.Note, param)
+		value := getNoteValueByName(&det.Note, param)
 		// Check if the parameter is Confidence and normalize it (0-1 to 0-100)
 		if param == "Confidence" {
 			if confidence, ok := value.(float64); ok {
@@ -1150,7 +1273,7 @@ func parseCommandParams(params []string, detection *Detections) map[string]any {
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
-func (p *Processor) getDefaultActions(detection *Detections) []Action {
+func (p *Processor) getDefaultActions(det *Detections) []Action {
 	var actions []Action
 	var databaseAction *DatabaseAction
 	var sseAction *SSEAction
@@ -1166,8 +1289,9 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		actions = append(actions, &LogAction{
 			Settings:      p.Settings,
 			EventTracker:  p.GetEventTracker(),
-			Note:          detection.Note,
-			CorrelationID: detection.CorrelationID,
+			Result:        det.Result,
+			Note:          det.Note, // Deprecated: kept for backward compat
+			CorrelationID: det.CorrelationID,
 		})
 	}
 
@@ -1184,10 +1308,10 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			processor:         p, // Add processor reference for source name resolution
 			PreRenderer:       p.preRenderer,
 			DetectionCtx:      detectionCtx, // Share context for downstream actions
-			Note:              detection.Note,
-			Results:           detection.Results,
+			Note:              det.Note,
+			Results:           convertToLegacyResults(det.Results), // Convert back for backward compatibility
 			Ds:                p.Ds,
-			CorrelationID:     detection.CorrelationID,
+			CorrelationID:     det.CorrelationID,
 		}
 	}
 
@@ -1204,14 +1328,14 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 		sseAction = &SSEAction{
 			Settings:       p.Settings,
-			Note:           detection.Note,
+			Note:           det.Note,
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
 			DetectionCtx:   detectionCtx, // Share context from DatabaseAction
 			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
 			Ds:             p.Ds,
-			CorrelationID:  detection.CorrelationID,
+			CorrelationID:  det.CorrelationID,
 		}
 	}
 
@@ -1234,10 +1358,10 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 				MqttClient:     mqttClient,
 				EventTracker:   p.GetEventTracker(),
 				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
-				Note:           detection.Note,
+				Note:           det.Note,
 				BirdImageCache: p.BirdImageCache,
 				RetryConfig:    mqttRetryConfig,
-				CorrelationID:  detection.CorrelationID,
+				CorrelationID:  det.CorrelationID,
 			}
 		}
 	}
@@ -1275,7 +1399,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		compositeAction := &CompositeAction{
 			Actions:       sequentialActions,
 			Description:   "Database save, SSE broadcast, and MQTT publish (sequential)",
-			CorrelationID: detection.CorrelationID,
+			CorrelationID: det.CorrelationID,
 		}
 		actions = append(actions, compositeAction)
 	} else if len(sequentialActions) == 1 {
@@ -1301,10 +1425,10 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 				Settings:      p.Settings,
 				EventTracker:  p.GetEventTracker(),
 				BwClient:      bwClient,
-				Note:          detection.Note,
-				pcmData:       detection.pcmData3s,
+				Note:          det.Note,
+				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
-				CorrelationID: detection.CorrelationID,
+				CorrelationID: det.CorrelationID,
 			})
 		}
 	}
@@ -1565,55 +1689,46 @@ func (p *Processor) NewWithSpeciesInfo(
 	elapsedTime time.Duration,
 	occurrence float64) datastore.Note {
 
-	// detectionTime is time now minus 3 seconds to account for the delay in the detection
+	// Detection time is adjusted to account for the 3-second analysis chunk
 	now := time.Now()
 	date := now.Format("2006-01-02")
-	detectionTime := now.Add(-2 * time.Second)
+	detectionTime := now.Add(-detection.DetectionTimeOffset)
 	timeStr := detectionTime.Format("15:04:05")
 
+	// Resolve audio source from registry
 	var sourceStruct datastore.AudioSource
-	if p.Settings.Input.Path != "" {
-		// For file input, create simple source struct
-		sourceStruct = datastore.AudioSource{
-			ID:          source, // Use original source as ID for file operations
-			SafeString:  p.Settings.Input.Path,
-			DisplayName: filepath.Base(p.Settings.Input.Path),
-		}
-	} else {
-		// Use registry to get proper AudioSource struct with ID, SafeString, and DisplayName
-		registry := myaudio.GetRegistry()
-		if registry != nil {
-			// Try to get existing source by connection string
-			if existingSource, exists := registry.GetSourceByConnection(source); exists {
-				sourceStruct = datastore.AudioSource{
-					ID:          existingSource.ID,          // Use source ID for buffer operations
-					SafeString:  existingSource.SafeString,  // Use sanitized string for logging
-					DisplayName: existingSource.DisplayName, // Use display name for UI
-				}
-			} else {
-				// Try to get by ID directly
-				if registrySource, exists := registry.GetSourceByID(source); exists {
-					sourceStruct = datastore.AudioSource{
-						ID:          registrySource.ID,
-						SafeString:  registrySource.SafeString,
-						DisplayName: registrySource.DisplayName,
-					}
-				} else {
-					// Last resort: create struct with manual sanitization for safety
-					sourceStruct = datastore.AudioSource{
-						ID:          source,                          // Use original as ID
-						SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
-						DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
-					}
-				}
+	registry := myaudio.GetRegistry()
+	if registry != nil {
+		// Try to get existing source by connection string
+		if existingSource, exists := registry.GetSourceByConnection(source); exists {
+			sourceStruct = datastore.AudioSource{
+				ID:          existingSource.ID,          // Use source ID for buffer operations
+				SafeString:  existingSource.SafeString,  // Use sanitized string for logging
+				DisplayName: existingSource.DisplayName, // Use display name for UI
 			}
 		} else {
-			// Fallback when registry not available
-			sourceStruct = datastore.AudioSource{
-				ID:          source,                          // Use original as ID
-				SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
-				DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+			// Try to get by ID directly
+			if registrySource, exists := registry.GetSourceByID(source); exists {
+				sourceStruct = datastore.AudioSource{
+					ID:          registrySource.ID,
+					SafeString:  registrySource.SafeString,
+					DisplayName: registrySource.DisplayName,
+				}
+			} else {
+				// Last resort: create struct with manual sanitization for safety
+				sourceStruct = datastore.AudioSource{
+					ID:          source,                          // Use original as ID
+					SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
+					DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+				}
 			}
+		}
+	} else {
+		// Fallback when registry not available
+		sourceStruct = datastore.AudioSource{
+			ID:          source,                          // Use original as ID
+			SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
+			DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
 		}
 	}
 

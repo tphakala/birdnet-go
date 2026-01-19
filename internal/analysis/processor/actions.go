@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -27,7 +28,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
-	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -96,7 +96,8 @@ type ContextAction interface {
 
 type LogAction struct {
 	Settings      *conf.Settings
-	Note          datastore.Note
+	Result        detection.Result // New domain model for logging
+	Note          datastore.Note   // Deprecated: kept for backward compat during transition
 	EventTracker  *EventTracker
 	Description   string
 	CorrelationID string     // Detection correlation ID for log tracking
@@ -562,32 +563,32 @@ func (a *LogAction) Execute(data any) error {
 	defer a.mu.Unlock()
 
 	// Check if the event should be handled for this species (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, LogToFile) {
+	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, LogToFile) {
 		return nil
 	}
 
-	// Log note to file
-	if err := observation.LogNoteToFile(a.Settings, &a.Note); err != nil {
+	// Log detection result to file using new detection package
+	if err := detection.LogToFile(a.Settings, &a.Result); err != nil {
 		// If an error occurs when logging to a file, wrap and return the error.
 		// Add structured logging
-		GetLogger().Error("Failed to log note to file",
+		GetLogger().Error("Failed to log detection to file",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.Error(err),
-			logger.String("species", a.Note.CommonName),
-			logger.Float64("confidence", a.Note.Confidence),
-			logger.String("clip_name", a.Note.ClipName),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.Float64("confidence", a.Result.Confidence),
+			logger.String("clip_name", a.Result.ClipName),
 			logger.String("operation", "log_to_file"))
 	}
 	// Add structured logging for console output
 	GetLogger().Info("Detection logged",
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
-		logger.String("species", a.Note.CommonName),
-		logger.Float64("confidence", a.Note.Confidence),
-		logger.String("time", a.Note.Time),
+		logger.String("species", a.Result.Species.CommonName),
+		logger.Float64("confidence", a.Result.Confidence),
+		logger.String("time", a.Result.Time()),
 		logger.String("operation", "console_output"))
-	fmt.Printf("%s %s %.2f\n", a.Note.Time, a.Note.CommonName, a.Note.Confidence)
+	fmt.Printf("%s %s %.2f\n", a.Result.Time(), a.Result.Species.CommonName, a.Result.Confidence)
 
 	return nil
 }
