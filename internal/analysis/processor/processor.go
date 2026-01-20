@@ -737,20 +737,21 @@ func (p *Processor) createDetectionResult(
 
 // resolveAudioSource resolves the audio source details from the registry.
 func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.AudioSource {
-	// Default to using the source directly
+	// Default to using the source directly, including type determination
 	audioSource := detection.AudioSource{
 		ID:          source.ID,
 		SafeString:  source.SafeString,
 		DisplayName: source.DisplayName,
+		Type:        determineSourceType(source.SafeString),
 	}
 
 	// Try to get additional details from registry
 	registry := myaudio.GetRegistry()
 	if registry != nil {
 		if existingSource, exists := registry.GetSourceByID(source.ID); exists {
+			audioSource.ID = existingSource.ID
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
-			// Determine type from the source
 			audioSource.Type = determineSourceType(existingSource.SafeString)
 		}
 	}
@@ -1697,38 +1698,34 @@ func (p *Processor) NewWithSpeciesInfo(
 
 	// Resolve audio source from registry
 	var sourceStruct datastore.AudioSource
+	foundInRegistry := false
 	registry := myaudio.GetRegistry()
 	if registry != nil {
 		// Try to get existing source by connection string
 		if existingSource, exists := registry.GetSourceByConnection(source); exists {
 			sourceStruct = datastore.AudioSource{
-				ID:          existingSource.ID,          // Use source ID for buffer operations
-				SafeString:  existingSource.SafeString,  // Use sanitized string for logging
-				DisplayName: existingSource.DisplayName, // Use display name for UI
+				ID:          existingSource.ID,
+				SafeString:  existingSource.SafeString,
+				DisplayName: existingSource.DisplayName,
 			}
-		} else {
+			foundInRegistry = true
+		} else if registrySource, exists := registry.GetSourceByID(source); exists {
 			// Try to get by ID directly
-			if registrySource, exists := registry.GetSourceByID(source); exists {
-				sourceStruct = datastore.AudioSource{
-					ID:          registrySource.ID,
-					SafeString:  registrySource.SafeString,
-					DisplayName: registrySource.DisplayName,
-				}
-			} else {
-				// Last resort: create struct with manual sanitization for safety
-				sourceStruct = datastore.AudioSource{
-					ID:          source,                          // Use original as ID
-					SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
-					DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
-				}
+			sourceStruct = datastore.AudioSource{
+				ID:          registrySource.ID,
+				SafeString:  registrySource.SafeString,
+				DisplayName: registrySource.DisplayName,
 			}
+			foundInRegistry = true
 		}
-	} else {
-		// Fallback when registry not available
+	}
+
+	if !foundInRegistry {
+		// Fallback when registry not available or source not found
 		sourceStruct = datastore.AudioSource{
-			ID:          source,                          // Use original as ID
-			SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
-			DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+			ID:          source,
+			SafeString:  privacy.SanitizeRTSPUrl(source),
+			DisplayName: privacy.SanitizeRTSPUrl(source),
 		}
 	}
 

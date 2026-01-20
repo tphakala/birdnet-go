@@ -146,7 +146,7 @@ func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, end
 		}
 	}
 	if end.IsZero() {
-		end = time.Now()
+		end = time.Now().In(r.tz)
 	}
 
 	filters := &AdvancedSearchFilters{
@@ -426,7 +426,7 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 			}
 		}
 		if end.IsZero() {
-			end = time.Now()
+			end = time.Now().In(r.tz)
 		}
 		legacy.DateRange = &DateRange{
 			Start: start,

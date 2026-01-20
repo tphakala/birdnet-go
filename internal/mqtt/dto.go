@@ -68,7 +68,11 @@ type BirdImageDTO struct {
 }
 
 // NewMQTTEventDTO creates an MQTTEventDTO from a detection.Result.
+// Returns nil if the input is nil.
 func NewMQTTEventDTO(r *detection.Result) *MQTTEventDTO {
+	if r == nil {
+		return nil
+	}
 	dto := &MQTTEventDTO{
 		Date:           r.Date(),
 		Time:           r.Time(),

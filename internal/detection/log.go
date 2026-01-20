@@ -12,6 +12,9 @@ import (
 // LogToFile saves the detection Result to a log file.
 // The log format is: "HH:MM:SS CommonName" (or "HH:MM:SS PM CommonName" for 12h format).
 func LogToFile(settings *conf.Settings, result *Result) error {
+	if settings == nil {
+		return fmt.Errorf("settings cannot be nil")
+	}
 	if result == nil {
 		return fmt.Errorf("result cannot be nil")
 	}
