@@ -1080,9 +1080,9 @@ func (a *MqttAction) Execute(data any) error {
 		GetLogger().Warn("MQTT client not connected, skipping publish",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
-			logger.Float64("confidence", a.Note.Confidence),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
+			logger.Float64("confidence", a.Result.Confidence),
 			logger.String("operation", "mqtt_connection_check"),
 			logger.String("status", "waiting_reconnect"))
 		// MQTT connection failures are retryable because:
@@ -1100,7 +1100,7 @@ func (a *MqttAction) Execute(data any) error {
 	}
 
 	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, MQTTPublish) {
+	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, MQTTPublish) {
 		return nil
 	}
 
@@ -1117,7 +1117,7 @@ func (a *MqttAction) Execute(data any) error {
 	}
 
 	// Get bird image of detected bird using the shared helper
-	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Note.ScientificName, a.Note.CommonName, a.CorrelationID)
+	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
 
 	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence)
 	var detectionID uint
@@ -1125,19 +1125,19 @@ func (a *MqttAction) Execute(data any) error {
 		detectionID = uint(a.DetectionCtx.NoteID.Load())
 	}
 
-	// Create a copy of the Note (source is already sanitized in SafeString field)
-	noteCopy := a.Note
+	// Convert Result to Note for JSON marshaling (backward compatible MQTT payload)
+	note := datastore.NoteFromResult(&a.Result)
 
 	// Update the Note's ID field for consistency in embedded JSON
 	if detectionID > 0 {
-		noteCopy.ID = detectionID
+		note.ID = detectionID
 	}
 
-	// Wrap note with bird image (using copy) and include detection ID and SourceID
+	// Wrap note with bird image and include detection ID and SourceID
 	noteWithBirdImage := NoteWithBirdImage{
-		Note:        noteCopy,
+		Note:        note,
 		DetectionID: detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
-		SourceID:    noteCopy.Source.ID,
+		SourceID:    note.Source.ID,
 		BirdImage:   birdImage,
 	}
 
@@ -1148,8 +1148,8 @@ func (a *MqttAction) Execute(data any) error {
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.Error(err),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.String("operation", "json_marshal"))
 		return err
 	}
@@ -1173,10 +1173,10 @@ func (a *MqttAction) Execute(data any) error {
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.Error(sanitizedErr),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
-			logger.Float64("confidence", a.Note.Confidence),
-			logger.String("clip_name", a.Note.ClipName),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
+			logger.Float64("confidence", a.Result.Confidence),
+			logger.String("clip_name", a.Result.ClipName),
 			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.Bool("is_eof_error", isEOFErr),
@@ -1192,10 +1192,10 @@ func (a *MqttAction) Execute(data any) error {
 			Component("analysis.processor").
 			Category(errors.CategoryMQTTPublish).
 			Context("operation", "mqtt_publish").
-			Context("species", a.Note.CommonName).
-			Context("confidence", a.Note.Confidence).
+			Context("species", a.Result.Species.CommonName).
+			Context("confidence", a.Result.Confidence).
 			Context("topic", a.Settings.Realtime.MQTT.Topic).
-			Context("clip_name", a.Note.ClipName).
+			Context("clip_name", a.Result.ClipName).
 			Context("integration", "mqtt").
 			Context("retryable", true). // MQTT publish failures are typically retryable
 			Context("is_eof_error", isEOFErr).
@@ -1208,9 +1208,9 @@ func (a *MqttAction) Execute(data any) error {
 		GetLogger().Debug("Successfully published to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
-			logger.Float64("confidence", a.Note.Confidence),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
+			logger.Float64("confidence", a.Result.Confidence),
 			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
 			logger.String("operation", "mqtt_publish_success"))
 	}
