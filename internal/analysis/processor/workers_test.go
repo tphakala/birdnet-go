@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -445,29 +446,47 @@ func TestEnqueueTask(t *testing.T) {
 		}
 
 		// Create a large detection with many results
-		detection := Detections{
+		now := time.Now()
+		det := Detections{
+			Result: detection.Result{
+				Timestamp:  now,
+				SourceNode: "test-node",
+				AudioSource: detection.AudioSource{
+					ID:          "test-source",
+					SafeString:  "test-source",
+					DisplayName: "test-source",
+				},
+				BeginTime: now,
+				EndTime:   now.Add(15 * time.Second),
+				Species: detection.Species{
+					ScientificName: "Testus birdus",
+					CommonName:     "Test Bird",
+				},
+				Confidence: 0.95,
+				Model:      detection.DefaultModelInfo(),
+			},
 			Note: datastore.Note{
 				CommonName:     "Test Bird",
 				ScientificName: "Testus birdus",
 				Confidence:     0.95,
 				Source:         testAudioSource(),
-				BeginTime:      time.Now(),
-				EndTime:        time.Now().Add(15 * time.Second),
+				BeginTime:      now,
+				EndTime:        now.Add(15 * time.Second),
 			},
 		}
 
 		// Add a large number of results
 		for i := range 100 {
-			detection.Results = append(detection.Results, datastore.Results{
-				Species:    fmt.Sprintf("Test Bird %d", i),
-				Confidence: float32(i) / 100.0,
+			det.Results = append(det.Results, detection.AdditionalResult{
+				Species:    detection.Species{ScientificName: fmt.Sprintf("Test Bird %d", i), CommonName: fmt.Sprintf("Test Bird %d", i)},
+				Confidence: float64(i) / 100.0,
 			})
 		}
 
 		// Create a task with this large detection
 		task := &Task{
 			Type:      TaskTypeAction,
-			Detection: detection,
+			Detection: det,
 			Action:    &MockAction{},
 		}
 

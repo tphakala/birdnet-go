@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
@@ -33,6 +34,27 @@ func testAudioSource() datastore.AudioSource {
 func testDetection() Detections {
 	now := time.Now()
 	return Detections{
+		Result: detection.Result{
+			Timestamp:  now,
+			SourceNode: "test-node",
+			AudioSource: detection.AudioSource{
+				ID:          "test-source",
+				SafeString:  "test-source",
+				DisplayName: "test-source",
+			},
+			BeginTime: now,
+			EndTime:   now.Add(15 * time.Second),
+			Species: detection.Species{
+				ScientificName: "Testus birdus",
+				CommonName:     "Test Bird",
+			},
+			Confidence: 0.95,
+			Model:      detection.DefaultModelInfo(),
+		},
+		Results: []detection.AdditionalResult{
+			{Species: detection.Species{ScientificName: "Testus birdus", CommonName: "Test Bird"}, Confidence: 0.95},
+		},
+		// Legacy Note kept for backward compatibility during transition
 		Note: datastore.Note{
 			CommonName:     "Test Bird",
 			ScientificName: "Testus birdus",
@@ -42,9 +64,6 @@ func testDetection() Detections {
 			Time:           now.Format("15:04:05"),
 			BeginTime:      now,
 			EndTime:        now.Add(15 * time.Second),
-		},
-		Results: []datastore.Results{
-			{Species: "Testus birdus", Confidence: 0.95},
 		},
 	}
 }
@@ -58,6 +77,27 @@ func createSimpleDetection() Detections {
 func testDetectionWithSpecies(commonName, scientificName string, confidence float64) Detections {
 	now := time.Now()
 	return Detections{
+		Result: detection.Result{
+			Timestamp:  now,
+			SourceNode: "test-node",
+			AudioSource: detection.AudioSource{
+				ID:          "test-source",
+				SafeString:  "test-source",
+				DisplayName: "test-source",
+			},
+			BeginTime: now,
+			EndTime:   now.Add(15 * time.Second),
+			Species: detection.Species{
+				ScientificName: scientificName,
+				CommonName:     commonName,
+			},
+			Confidence: confidence,
+			Model:      detection.DefaultModelInfo(),
+		},
+		Results: []detection.AdditionalResult{
+			{Species: detection.Species{ScientificName: scientificName, CommonName: commonName}, Confidence: confidence},
+		},
+		// Legacy Note kept for backward compatibility during transition
 		Note: datastore.Note{
 			CommonName:     commonName,
 			ScientificName: scientificName,
@@ -67,9 +107,6 @@ func testDetectionWithSpecies(commonName, scientificName string, confidence floa
 			Time:           now.Format("15:04:05"),
 			BeginTime:      now,
 			EndTime:        now.Add(15 * time.Second),
-		},
-		Results: []datastore.Results{
-			{Species: scientificName, Confidence: float32(confidence)},
 		},
 	}
 }

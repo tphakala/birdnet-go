@@ -35,7 +35,6 @@ type BirdNET struct {
 The package provides methods for analyzing audio samples and producing detection results:
 
 - `Predict()` - Performs inference on audio samples to detect bird species
-- `ProcessChunk()` - Processes a chunk of audio data, returning structured observation notes
 - `EnrichResultWithTaxonomy()` - Adds taxonomy information to detection results
 
 ### Model Registry
@@ -197,4 +196,4 @@ The package depends on:
 
 - `github.com/tphakala/go-tflite` - TensorFlow Lite bindings for Go
 - `github.com/tphakala/go-tflite/delegates/xnnpack` - XNNPACK acceleration for TensorFlow Lite
-- Internal packages including `conf`, `datastore`, `observation`, and `cpuspec`
+- Internal packages including `conf`, `datastore`, `detection`, and `cpuspec`

@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/observation"
 	tflite "github.com/tphakala/go-tflite"
 )
 
@@ -195,8 +195,8 @@ func isSpeciesExcluded(label string, excludeList []string) bool {
 
 // matchesSpecies checks if a label matches a species name (either common or scientific)
 func matchesSpecies(label, speciesName string) bool {
-	scientificName, commonName, _ := observation.ParseSpeciesString(label)
-	return strings.EqualFold(scientificName, speciesName) || strings.EqualFold(commonName, speciesName)
+	sp := detection.ParseSpeciesString(label)
+	return strings.EqualFold(sp.ScientificName, speciesName) || strings.EqualFold(sp.CommonName, speciesName)
 }
 
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
@@ -404,8 +404,8 @@ func PrintSpeciesScores(date time.Time, speciesScores []SpeciesScore) {
 	fmt.Println(strings.Repeat("-", 33), strings.Repeat("-", 33), strings.Repeat("-", 6))
 
 	for _, speciesScore := range speciesScores {
-		scientificName, commonName, _ := observation.ParseSpeciesString(speciesScore.Label)
-		fmt.Printf("%-33s %-33s %.4f\n", scientificName, commonName, speciesScore.Score)
+		sp := detection.ParseSpeciesString(speciesScore.Label)
+		fmt.Printf("%-33s %-33s %.4f\n", sp.ScientificName, sp.CommonName, speciesScore.Score)
 	}
 
 	fmt.Printf("\nTotal number of species: %d\n", numSpecies)
