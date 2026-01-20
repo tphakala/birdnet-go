@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -45,9 +46,10 @@ func LogToFile(settings *conf.Settings, result *Result) error {
 	}
 
 	// Format the detection data for logging - prefer CommonName, fallback to ScientificName
-	speciesName := result.Species.CommonName
+	// Trim whitespace to avoid blank entries in log
+	speciesName := strings.TrimSpace(result.Species.CommonName)
 	if speciesName == "" {
-		speciesName = result.Species.ScientificName
+		speciesName = strings.TrimSpace(result.Species.ScientificName)
 	}
 	logString := fmt.Sprintf("%s %s\n", result.Timestamp.Format(timeFormat), speciesName)
 

@@ -658,8 +658,13 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
 
+	// Compute detection time once to ensure Note and Result have consistent timestamps
+	// This prevents date mismatch around midnight when time.Now() would be called separately
+	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
+
 	// Create the legacy note (kept for backward compatibility)
 	note := p.NewWithSpeciesInfo(
+		detectionTime,
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
@@ -668,6 +673,7 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 
 	// Create the new detection.Result
 	detectionResult := p.createDetectionResult(
+		detectionTime,
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
@@ -699,15 +705,15 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 }
 
 // createDetectionResult creates a detection.Result from the given parameters.
+// detectionTime should be pre-computed by the caller to ensure timestamp consistency
+// with other detection artifacts (e.g., Note) created from the same analysis.
 func (p *Processor) createDetectionResult(
+	detectionTime time.Time,
 	beginTime, endTime time.Time,
 	scientificName, commonName, speciesCode string,
 	confidence float64,
 	source datastore.AudioSource, clipName string,
 	elapsedTime time.Duration, occurrence float64) detection.Result {
-
-	// Detection time is adjusted to account for the 3-second analysis chunk
-	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
 
 	// Resolve audio source info from registry
 	audioSource := p.resolveAudioSource(source)
@@ -1680,9 +1686,12 @@ func (p *Processor) Shutdown() error {
 	return nil
 }
 
-// NewWithSpeciesInfo creates a new observation note with pre-parsed species information
-// This ensures that the species code from the taxonomy lookup is preserved
+// NewWithSpeciesInfo creates a new observation note with pre-parsed species information.
+// This ensures that the species code from the taxonomy lookup is preserved.
+// detectionTime should be pre-computed by the caller to ensure timestamp consistency
+// with other detection artifacts (e.g., Result) created from the same analysis.
 func (p *Processor) NewWithSpeciesInfo(
+	detectionTime time.Time,
 	beginTime, endTime time.Time,
 	scientificName, commonName, speciesCode string,
 	confidence float64,
@@ -1690,9 +1699,7 @@ func (p *Processor) NewWithSpeciesInfo(
 	elapsedTime time.Duration,
 	occurrence float64) datastore.Note {
 
-	// Detection time is adjusted to account for the 3-second analysis chunk
-	// Both date and time must use detectionTime to avoid date mismatch around midnight
-	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
+	// Use the provided detection time for both date and time to ensure consistency
 	date := detectionTime.Format("2006-01-02")
 	timeStr := detectionTime.Format("15:04:05")
 

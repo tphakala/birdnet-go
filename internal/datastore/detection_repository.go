@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/mapper"
@@ -67,7 +68,10 @@ func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Re
 
 // Delete removes a detection by ID.
 func (r *detectionRepository) Delete(ctx context.Context, id string) error {
-	return r.store.Delete(id)
+	if err := r.store.Delete(id); err != nil {
+		return fmt.Errorf("failed to delete detection %s: %w", id, err)
+	}
+	return nil
 }
 
 // GetRecent retrieves the most recent detections.
@@ -112,11 +116,14 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 		offset = filters.Offset
 	}
 
+	// SpeciesDetections params: species, date, hour, duration, sortAscending, limit, offset
+	// Empty date/hour means all dates/hours; duration=1 means no hour-based filtering
 	notes, err := r.store.SpeciesDetections(species, "", "", 1, false, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
 	}
 
+	// CountSpeciesDetections params: species, date, hour, duration
 	total, err := r.store.CountSpeciesDetections(species, "", "", 1)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
@@ -337,6 +344,7 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 			ID:          note.Source.ID,
 			DisplayName: note.Source.DisplayName,
 			SafeString:  note.Source.SafeString,
+			Type:        determineSourceType(note.Source.SafeString),
 		},
 		BeginTime: note.BeginTime,
 		EndTime:   note.EndTime,
@@ -469,4 +477,19 @@ func (r *detectionRepository) parseID(id string) (uint, error) {
 		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
 	}
 	return uint(n), nil
+}
+
+// determineSourceType determines the audio source type from its identifier string.
+// Returns "rtsp", "alsa", "pulseaudio", or "unknown".
+func determineSourceType(safeString string) string {
+	switch {
+	case strings.HasPrefix(safeString, "rtsp://"):
+		return "rtsp"
+	case strings.HasPrefix(safeString, "hw:"):
+		return "alsa"
+	case strings.Contains(safeString, "pulse"):
+		return "pulseaudio"
+	default:
+		return "unknown"
+	}
 }
