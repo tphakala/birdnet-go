@@ -92,6 +92,8 @@ type Interface interface {
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
 	GetNoteComments(noteID string) ([]NoteComment, error)
+	// GetNoteResults returns the additional predictions for a note.
+	GetNoteResults(noteID string) ([]Results, error)
 	SaveNoteComment(comment *NoteComment) error
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
@@ -1093,6 +1095,31 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 	}
 
 	return comments, nil
+}
+
+// GetNoteResults returns the additional predictions for a note.
+func (ds *DataStore) GetNoteResults(noteID string) ([]Results, error) {
+	// Parse ID for consistency and MySQL compatibility
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_note_results").
+			Context("note_id", noteID).
+			Build()
+	}
+
+	var results []Results
+	if err := ds.DB.Where("note_id = ?", id).Find(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note_results").
+			Context("note_id", noteID).
+			Build()
+	}
+	return results, nil
 }
 
 // SaveNoteComment saves a new comment for a note
