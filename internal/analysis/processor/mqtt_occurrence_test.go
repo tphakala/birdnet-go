@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
 
@@ -60,16 +60,23 @@ func (m *MockMqttClientWithCapture) RegisterOnConnectHandler(_ mqtt.OnConnectHan
 }
 
 func TestMqttAction_IncludesOccurrence(t *testing.T) {
-	// Create test note with occurrence value
-	testNote := datastore.Note{
-		CommonName:     "American Robin",
-		ScientificName: "Turdus migratorius",
-		Confidence:     0.95,
-		ClipName:       "test_clip.wav",
-		Date:           "2024-01-15",
-		Time:           "12:00:00",
-		Occurrence:     0.75, // This should appear in MQTT message
-		Source:         testAudioSource(),
+	now := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	// Create test Result (single source of truth)
+	testResult := detection.Result{
+		Timestamp: now,
+		Species: detection.Species{
+			CommonName:     "American Robin",
+			ScientificName: "Turdus migratorius",
+		},
+		Confidence: 0.95,
+		ClipName:   "test_clip.wav",
+		Occurrence: 0.75, // This should appear in MQTT message
+		AudioSource: detection.AudioSource{
+			ID:          "test-source",
+			SafeString:  "test-source",
+			DisplayName: "Test Source",
+		},
 	}
 
 	// Create mock MQTT client to capture published data
@@ -103,8 +110,8 @@ func TestMqttAction_IncludesOccurrence(t *testing.T) {
 	// Create MQTT action
 	action := &MqttAction{
 		Settings:       settings,
-		Note:           testNote,
-		BirdImageCache: nil, // No image cache for this test
+		Result:         testResult, // Domain model (single source of truth)
+		BirdImageCache: nil,        // No image cache for this test
 		MqttClient:     mockClient,
 		EventTracker:   eventTracker,
 		RetryConfig:    retryConfig,
@@ -140,16 +147,23 @@ func TestMqttAction_IncludesOccurrence(t *testing.T) {
 }
 
 func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
-	// Create test note with zero occurrence value
-	testNote := datastore.Note{
-		CommonName:     "House Sparrow",
-		ScientificName: "Passer domesticus",
-		Confidence:     0.85,
-		ClipName:       "test_clip2.wav",
-		Date:           "2024-01-15",
-		Time:           "14:00:00",
-		Occurrence:     0.0, // Zero occurrence should be omitted
-		Source:         testAudioSource(),
+	now := time.Date(2024, 1, 15, 14, 0, 0, 0, time.UTC)
+
+	// Create test Result (single source of truth)
+	testResult := detection.Result{
+		Timestamp: now,
+		Species: detection.Species{
+			CommonName:     "House Sparrow",
+			ScientificName: "Passer domesticus",
+		},
+		Confidence: 0.85,
+		ClipName:   "test_clip2.wav",
+		Occurrence: 0.0, // Zero occurrence should be omitted
+		AudioSource: detection.AudioSource{
+			ID:          "test-source",
+			SafeString:  "test-source",
+			DisplayName: "Test Source",
+		},
 	}
 
 	// Create mock MQTT client to capture published data
@@ -183,7 +197,7 @@ func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
 	// Create MQTT action
 	action := &MqttAction{
 		Settings:       settings,
-		Note:           testNote,
+		Result:         testResult, // Domain model (single source of truth)
 		BirdImageCache: nil,
 		MqttClient:     mockClient,
 		EventTracker:   eventTracker,

@@ -33,21 +33,10 @@ func NewDetectionRepository(store Interface, tz *time.Location) DetectionReposit
 // Save persists a detection result and its additional predictions.
 func (r *detectionRepository) Save(ctx context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) error {
 	// Convert domain model to legacy Note for existing Save method
-	note := r.resultToNote(result)
+	note := NoteFromResult(result)
 
 	// Convert additional results to legacy Results
-	// Format: ScientificName_CommonName or ScientificName_CommonName_Code
-	results := make([]Results, 0, len(additionalResults))
-	for _, ar := range additionalResults {
-		speciesStr := ar.Species.ScientificName + "_" + ar.Species.CommonName
-		if ar.Species.Code != "" {
-			speciesStr += "_" + ar.Species.Code
-		}
-		results = append(results, Results{
-			Species:    speciesStr,
-			Confidence: float32(ar.Confidence),
-		})
-	}
+	results := AdditionalResultsToDatastoreResults(additionalResults)
 
 	// Use existing Save method
 	if err := r.store.Save(&note, results); err != nil {
@@ -317,10 +306,14 @@ func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id strin
 	return nil, nil
 }
 
-// Helper methods
-
-// resultToNote converts a domain Result to a legacy Note.
-func (r *detectionRepository) resultToNote(result *detection.Result) Note {
+// NoteFromResult converts a detection.Result to a datastore.Note.
+// This is exported for use by action structs (DatabaseAction, MqttAction, SSEAction)
+// that need to convert the domain model to the legacy Note type for persistence
+// or JSON serialization.
+//
+// Note: The Results field is not populated. Callers should use
+// AdditionalResultsToDatastoreResults separately if needed.
+func NoteFromResult(result *detection.Result) Note {
 	return Note{
 		ID:             result.ID,
 		SourceNode:     result.SourceNode,
@@ -344,8 +337,33 @@ func (r *detectionRepository) resultToNote(result *detection.Result) Note {
 			DisplayName: result.AudioSource.DisplayName,
 		},
 		Occurrence: result.Occurrence,
+		Verified:   result.Verified,
+		Locked:     result.Locked,
 	}
 }
+
+// AdditionalResultsToDatastoreResults converts a slice of detection.AdditionalResult
+// to datastore.Results for database persistence or JSON serialization.
+func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) []Results {
+	if len(results) == 0 {
+		return nil
+	}
+
+	dsResults := make([]Results, len(results))
+	for i, r := range results {
+		speciesStr := r.Species.ScientificName + "_" + r.Species.CommonName
+		if r.Species.Code != "" {
+			speciesStr += "_" + r.Species.Code
+		}
+		dsResults[i] = Results{
+			Species:    speciesStr,
+			Confidence: float32(r.Confidence),
+		}
+	}
+	return dsResults
+}
+
+// Helper methods
 
 // noteToResult converts a legacy Note to a domain Result.
 func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error) {

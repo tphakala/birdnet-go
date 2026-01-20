@@ -42,7 +42,6 @@ func createTestDetections(commonName string) Detections {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: commonName},
 		},
-		Note: datastore.Note{CommonName: commonName},
 	}
 }
 
@@ -643,7 +642,6 @@ func TestParseCommandParams_EmptyParams(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	result := parseCommandParams([]string{}, det)
@@ -657,7 +655,6 @@ func TestParseCommandParams_NilParams(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	result := parseCommandParams(nil, det)
@@ -675,11 +672,6 @@ func TestParseCommandParams_ExtractsNoteFields(t *testing.T) {
 				ScientificName: "Turdus migratorius",
 			},
 		},
-		Note: datastore.Note{
-			CommonName:     "American Robin",
-			ScientificName: "Turdus migratorius",
-			Date:           "2024-01-15",
-		},
 	}
 
 	params := []string{"CommonName", "ScientificName", "Date"}
@@ -696,10 +688,6 @@ func TestParseCommandParams_ConfidenceNormalization(t *testing.T) {
 	det := &Detections{
 		Result: detection.Result{
 			Species:    detection.Species{CommonName: "Test Bird"},
-			Confidence: 0.95, // Stored as 0-1
-		},
-		Note: datastore.Note{
-			CommonName: "Test Bird",
 			Confidence: 0.95, // Stored as 0-1
 		},
 	}
@@ -721,7 +709,6 @@ func TestParseCommandParams_NonExistentField(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	params := []string{"NonExistentField"}
@@ -764,7 +751,6 @@ func TestExecuteCommandAction_InvalidCommand(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	err := action.Execute(det)
@@ -814,7 +800,6 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	err = action.Execute(det)
@@ -859,7 +844,6 @@ func TestExecuteCommandAction_Timeout(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	// Use a 1 second timeout - short enough to test timeout but long enough
@@ -914,7 +898,6 @@ func TestExecuteCommandAction_WithParameters(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	err = action.Execute(det)
@@ -976,7 +959,6 @@ func TestExecuteCommandAction_CommandInjectionPrevention(t *testing.T) {
 				Result: detection.Result{
 					Species: detection.Species{CommonName: "Test Bird"},
 				},
-				Note: datastore.Note{CommonName: "Test Bird"},
 			}
 
 			_ = action.Execute(det)
@@ -1044,7 +1026,6 @@ func TestExecuteCommandAction_UnicodeInParameters(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	err = action.Execute(det)
@@ -1054,7 +1035,7 @@ func TestExecuteCommandAction_UnicodeInParameters(t *testing.T) {
 	output, err := os.ReadFile(outputPath) //nolint:gosec // test file path is controlled
 	require.NoError(t, err)
 	assert.Contains(t, string(output), "Sparrow")
-	// Note: shell may handle emoji differently, just verify the script ran
+	// The shell may handle emoji differently, just verify the script ran
 }
 
 func TestExecuteCommandAction_LargeOutput(t *testing.T) {
@@ -1116,7 +1097,6 @@ func TestExecuteCommandAction_EnvironmentIsolation(t *testing.T) {
 		Result: detection.Result{
 			Species: detection.Species{CommonName: "Test Bird"},
 		},
-		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	err = action.Execute(det)

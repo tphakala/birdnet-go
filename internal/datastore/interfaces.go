@@ -2171,7 +2171,9 @@ func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTim
 
 // saveNoteInTransaction saves a note within a transaction
 func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string, attempt int, txLogger logger.Logger) error {
-	if err := tx.Create(note).Error; err != nil {
+	// Omit Results to prevent GORM auto-save of associations.
+	// Results are saved separately in saveResultsInTransaction for explicit error handling.
+	if err := tx.Omit("Results").Create(note).Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
