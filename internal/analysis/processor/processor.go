@@ -1308,7 +1308,8 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			processor:         p, // Add processor reference for source name resolution
 			PreRenderer:       p.preRenderer,
 			DetectionCtx:      detectionCtx, // Share context for downstream actions
-			Note:              det.Note,
+			Result:            det.Result,   // Domain model (single source of truth)
+			Note:              det.Note,     // Deprecated: kept temporarily
 			Results:           convertToLegacyResults(det.Results), // Convert back for backward compatibility
 			Ds:                p.Ds,
 			CorrelationID:     det.CorrelationID,
@@ -1328,7 +1329,8 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 
 		sseAction = &SSEAction{
 			Settings:       p.Settings,
-			Note:           det.Note,
+			Result:         det.Result, // Domain model (single source of truth)
+			Note:           det.Note,   // Deprecated: kept temporarily
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
 			DetectionCtx:   detectionCtx, // Share context from DatabaseAction
@@ -1358,7 +1360,8 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 				MqttClient:     mqttClient,
 				EventTracker:   p.GetEventTracker(),
 				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
-				Note:           det.Note,
+				Result:         det.Result,   // Domain model (single source of truth)
+				Note:           det.Note,     // Deprecated: kept temporarily
 				BirdImageCache: p.BirdImageCache,
 				RetryConfig:    mqttRetryConfig,
 				CorrelationID:  det.CorrelationID,
@@ -1425,7 +1428,8 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 				Settings:      p.Settings,
 				EventTracker:  p.GetEventTracker(),
 				BwClient:      bwClient,
-				Note:          det.Note,
+				Result:        det.Result, // Domain model (single source of truth)
+				Note:          det.Note,   // Deprecated: kept temporarily
 				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
 				CorrelationID: det.CorrelationID,
