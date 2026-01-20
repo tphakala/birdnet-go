@@ -36,10 +36,15 @@ func (r *detectionRepository) Save(ctx context.Context, result *detection.Result
 	note := r.resultToNote(result)
 
 	// Convert additional results to legacy Results
+	// Format: ScientificName_CommonName or ScientificName_CommonName_Code
 	results := make([]Results, 0, len(additionalResults))
 	for _, ar := range additionalResults {
+		speciesStr := ar.Species.ScientificName + "_" + ar.Species.CommonName
+		if ar.Species.Code != "" {
+			speciesStr += "_" + ar.Species.Code
+		}
 		results = append(results, Results{
-			Species:    ar.Species.ScientificName + "_" + ar.Species.CommonName,
+			Species:    speciesStr,
 			Confidence: float32(ar.Confidence),
 		})
 	}

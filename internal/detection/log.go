@@ -21,6 +21,9 @@ func LogToFile(settings *conf.Settings, result *Result) error {
 	}
 	// Separate the directory and file name from the log path
 	dir, fileName := filepath.Split(settings.Realtime.Log.Path)
+	if fileName == "" {
+		return fmt.Errorf("log path must include a filename, not just a directory: %s", settings.Realtime.Log.Path)
+	}
 
 	// Expand the directory path to an absolute path
 	basePath := conf.GetBasePath(dir)

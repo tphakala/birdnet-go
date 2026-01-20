@@ -742,6 +742,7 @@ func (p *Processor) createDetectionResult(
 }
 
 // resolveAudioSource resolves the audio source details from the registry.
+// Mirrors NewWithSpeciesInfo lookup order: connection string first, then ID.
 func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.AudioSource {
 	// Default to using the source directly, including type determination
 	audioSource := detection.AudioSource{
@@ -752,9 +753,15 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 	}
 
 	// Try to get additional details from registry
+	// Use same lookup order as NewWithSpeciesInfo: connection string first, then ID
 	registry := myaudio.GetRegistry()
 	if registry != nil {
-		if existingSource, exists := registry.GetSourceByID(source.ID); exists {
+		if existingSource, exists := registry.GetSourceByConnection(source.ID); exists {
+			audioSource.ID = existingSource.ID
+			audioSource.SafeString = existingSource.SafeString
+			audioSource.DisplayName = existingSource.DisplayName
+			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
+		} else if existingSource, exists := registry.GetSourceByID(source.ID); exists {
 			audioSource.ID = existingSource.ID
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
