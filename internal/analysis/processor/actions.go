@@ -603,7 +603,7 @@ func (a *DatabaseAction) Execute(data any) error {
 	defer a.mu.Unlock()
 
 	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Note.CommonName, a.Note.ScientificName, DatabaseSave) {
+	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, DatabaseSave) {
 		return nil
 	}
 
@@ -613,29 +613,36 @@ func (a *DatabaseAction) Execute(data any) error {
 	if a.NewSpeciesTracker != nil {
 		// Use atomic check-and-update to prevent duplicate "new species" notifications
 		// when multiple detections of the same species arrive concurrently
-		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, a.Note.BeginTime)
+		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Result.Species.ScientificName, a.Result.BeginTime)
 	}
 
+	// Convert Result to Note for GORM persistence
+	note := datastore.NoteFromResult(&a.Result)
+	note.Results = a.Results // Add secondary predictions
+
 	// Save note to database
-	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
+	if err := a.Ds.Save(&note, a.Results); err != nil {
 		// Add structured logging
 		GetLogger().Error("Failed to save note and results to database",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.Error(err),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
-			logger.Float64("confidence", a.Note.Confidence),
-			logger.String("clip_name", a.Note.ClipName),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
+			logger.Float64("confidence", a.Result.Confidence),
+			logger.String("clip_name", a.Result.ClipName),
 			logger.String("operation", "database_save"))
 		return err
 	}
+
+	// Sync database-assigned ID back to Result
+	a.Result.ID = note.ID
 
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
 	// This must happen before audio export so downstream actions get the ID
 	// even if audio export fails.
 	if a.DetectionCtx != nil {
-		a.DetectionCtx.NoteID.Store(uint64(a.Note.ID))
+		a.DetectionCtx.NoteID.Store(uint64(note.ID))
 	}
 
 	// After successful save, publish detection event for new species
@@ -653,8 +660,8 @@ func (a *DatabaseAction) Execute(data any) error {
 		GetLogger().Debug("Saving detection audio clip",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.Time("begin_time", a.Note.BeginTime),
-			logger.Time("end_time", a.Note.EndTime),
+			logger.Time("begin_time", a.Result.BeginTime),
+			logger.Time("end_time", a.Result.EndTime),
 			logger.Int("capture_length", captureLength),
 			logger.String("operation", "note_begin_end_capture_length"))
 
@@ -665,7 +672,7 @@ func (a *DatabaseAction) Execute(data any) error {
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
+				logger.String("species", a.Result.Species.CommonName),
 				logger.String("operation", "audio_export_non_fatal"),
 			}
 			fields = append(fields, extraFields...)
@@ -679,34 +686,34 @@ func (a *DatabaseAction) Execute(data any) error {
 		}
 
 		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, captureLength)
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Result.AudioSource.ID, a.Result.BeginTime, captureLength)
 		if err != nil {
 			handleAudioExportError(err,
-				logger.String("source", a.Note.Source.SafeString),
-				logger.Time("begin_time", a.Note.BeginTime),
+				logger.String("source", a.Result.AudioSource.SafeString),
+				logger.Time("begin_time", a.Result.BeginTime),
 				logger.Int("duration_seconds", captureLength))
 		} else {
 			// Create a SaveAudioAction and execute it
 			saveAudioAction := &SaveAudioAction{
 				Settings:      a.Settings,
-				ClipName:      a.Note.ClipName,
+				ClipName:      a.Result.ClipName,
 				pcmData:       pcmData,
-				NoteID:        a.Note.ID,
+				NoteID:        a.Result.ID,
 				PreRenderer:   a.PreRenderer,
 				CorrelationID: a.CorrelationID,
 			}
 
 			if err := saveAudioAction.Execute(nil); err != nil {
-				handleAudioExportError(err, logger.String("clip_name", a.Note.ClipName))
+				handleAudioExportError(err, logger.String("clip_name", a.Result.ClipName))
 			} else if a.Settings.Debug {
 				// Add structured logging
 				GetLogger().Debug("Saved audio clip successfully",
 					logger.String("component", "analysis.processor.actions"),
 					logger.String("detection_id", a.CorrelationID),
-					logger.String("species", a.Note.CommonName),
-					logger.String("clip_name", a.Note.ClipName),
-					logger.String("detection_time", a.Note.Time),
-					logger.Time("begin_time", a.Note.BeginTime),
+					logger.String("species", a.Result.Species.CommonName),
+					logger.String("clip_name", a.Result.ClipName),
+					logger.String("detection_time", a.Result.Time()),
+					logger.Time("begin_time", a.Result.BeginTime),
 					logger.Time("end_time", time.Now()),
 					logger.String("operation", "save_audio_clip_debug"))
 			}
@@ -741,16 +748,16 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 	// Check notification suppression if tracker is available
 	if a.NewSpeciesTracker != nil {
-		notificationTime = a.Note.BeginTime
+		notificationTime = a.Result.BeginTime
 
 		// Check if notification should be suppressed for this species
-		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, notificationTime) {
+		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Result.Species.ScientificName, notificationTime) {
 			if a.Settings.Debug {
 				GetLogger().Debug("Suppressing duplicate new species notification",
 					logger.String("component", "analysis.processor.actions"),
 					logger.String("detection_id", a.CorrelationID),
-					logger.String("species", a.Note.CommonName),
-					logger.String("scientific_name", a.Note.ScientificName),
+					logger.String("species", a.Result.Species.CommonName),
+					logger.String("scientific_name", a.Result.Species.ScientificName),
 					logger.String("operation", "suppress_notification"))
 			}
 			return
@@ -763,12 +770,12 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	}
 
 	// Use display name directly from the AudioSource struct for user-facing notifications
-	displayLocation := a.Note.Source.DisplayName
+	displayLocation := a.Result.AudioSource.DisplayName
 
 	detectionEvent, err := events.NewDetectionEvent(
-		a.Note.CommonName,
-		a.Note.ScientificName,
-		float64(a.Note.Confidence),
+		a.Result.Species.CommonName,
+		a.Result.Species.ScientificName,
+		a.Result.Confidence,
 		displayLocation,
 		isNewSpecies,
 		daysSinceFirstSeen,
@@ -780,8 +787,8 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.Error(err),
-				logger.String("species", a.Note.CommonName),
-				logger.String("scientific_name", a.Note.ScientificName),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
 				logger.Bool("is_new_species", isNewSpecies),
 				logger.Int("days_since_first_seen", daysSinceFirstSeen),
 				logger.String("operation", "create_detection_event"))
@@ -793,14 +800,14 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	// Only add metadata if the map is non-nil to prevent panic
 	metadata := detectionEvent.GetMetadata()
 	if metadata != nil {
-		metadata["note_id"] = a.Note.ID
-		metadata["latitude"] = a.Note.Latitude
-		metadata["longitude"] = a.Note.Longitude
-		metadata["begin_time"] = a.Note.BeginTime
+		metadata["note_id"] = a.Result.ID
+		metadata["latitude"] = a.Result.Latitude
+		metadata["longitude"] = a.Result.Longitude
+		metadata["begin_time"] = a.Result.BeginTime
 
 		// Get bird image URL from cache and add to metadata
 		if a.processor != nil && a.processor.BirdImageCache != nil {
-			birdImage, err := a.processor.BirdImageCache.Get(a.Note.ScientificName)
+			birdImage, err := a.processor.BirdImageCache.Get(a.Result.Species.ScientificName)
 			if err == nil && birdImage.URL != "" {
 				metadata["image_url"] = birdImage.URL
 			}
@@ -810,8 +817,8 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		GetLogger().Error("Detection event metadata is nil",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.String("species", a.Note.CommonName),
-			logger.String("scientific_name", a.Note.ScientificName),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.String("operation", "publish_detection_event"))
 	}
 
@@ -819,7 +826,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		// Only record notification as sent if publishing succeeded
 		if a.NewSpeciesTracker != nil && !notificationTime.IsZero() {
-			a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, notificationTime)
+			a.NewSpeciesTracker.RecordNotificationSent(a.Result.Species.ScientificName, notificationTime)
 		}
 
 		if a.Settings.Debug {
@@ -827,9 +834,9 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 			GetLogger().Debug("Published new species detection event",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", a.Note.CommonName),
-				logger.String("scientific_name", a.Note.ScientificName),
-				logger.Float64("confidence", a.Note.Confidence),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.Float64("confidence", a.Result.Confidence),
 				logger.Bool("is_new_species", isNewSpecies),
 				logger.Int("days_since_first_seen", daysSinceFirstSeen),
 				logger.String("operation", "publish_detection_event"))
