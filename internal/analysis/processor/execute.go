@@ -43,8 +43,9 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	log.Info("Executing command", logger.String("command", a.Command), logger.Any("params", a.Params))
 
 	// Type assertion to check if data is of type Detections
-	det, ok := data.(Detections)
-	if !ok {
+	// The actual detection data is not used here since buildSafeArguments uses
+	// pre-resolved values from a.Params (populated by parseCommandParams)
+	if _, ok := data.(Detections); !ok {
 		return errors.Newf("ExecuteCommandAction requires Detections type, got %T", data).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
@@ -66,7 +67,8 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	}
 
 	// Building the command line arguments with validation
-	args, err := buildSafeArgumentsFromResult(a.Params, &det.Result)
+	// The params already contain resolved values from parseCommandParams (including normalized Confidence)
+	args, err := buildSafeArguments(a.Params)
 	if err != nil {
 		// Extract parameter keys for better error context
 		var paramKeys []string
@@ -205,13 +207,10 @@ func validateCommandPath(command string) (string, error) {
 	return command, nil
 }
 
-// valueGetter is a function type that retrieves a value by parameter name.
-// Returns nil if the parameter is not found.
-type valueGetter func(key string) any
-
-// buildSafeArgumentsWithGetter creates a sanitized list of command arguments using a value getter function.
-// This is the common implementation used by both Note-based and Result-based argument builders.
-func buildSafeArgumentsWithGetter(params map[string]any, getValue valueGetter) ([]string, error) {
+// buildSafeArguments creates a sanitized list of command arguments from the params map.
+// The params map should contain already-resolved values (e.g., from parseCommandParams).
+// This function validates parameter names, sanitizes values, and handles quoting.
+func buildSafeArguments(params map[string]any) ([]string, error) {
 	// Pre-allocate slice with capacity for all parameters
 	args := make([]string, 0, len(params))
 
@@ -239,21 +238,15 @@ func buildSafeArgumentsWithGetter(params map[string]any, getValue valueGetter) (
 				Build()
 		}
 
-		// Get value from source or use default
-		sourceValue := getValue(key)
-		if sourceValue == nil {
-			sourceValue = value
-		}
-
-		// Convert and validate the value
-		strValue, err := sanitizeValue(sourceValue)
+		// Convert and validate the value (already resolved from params)
+		strValue, err := sanitizeValue(value)
 		if err != nil {
 			return nil, errors.New(err).
 				Component("analysis.processor").
 				Category(errors.CategoryValidation).
 				Context("operation", "build_command_arguments").
 				Context("security_check", "value_sanitization").
-				Context("value_type", fmt.Sprintf("%T", sourceValue)).
+				Context("value_type", fmt.Sprintf("%T", value)).
 				Context("param_name", key).
 				Context("retryable", false). // Value sanitization failure is permanent
 				Build()
@@ -273,22 +266,6 @@ func buildSafeArgumentsWithGetter(params map[string]any, getValue valueGetter) (
 	}
 
 	return args, nil
-}
-
-// buildSafeArguments creates a sanitized list of command arguments from a Note.
-//
-// Deprecated: Use buildSafeArgumentsFromResult for new code.
-func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, error) {
-	return buildSafeArgumentsWithGetter(params, func(key string) any {
-		return getNoteValueByName(note, key)
-	})
-}
-
-// buildSafeArgumentsFromResult creates a sanitized list of command arguments from a Result.
-func buildSafeArgumentsFromResult(params map[string]any, result *detection.Result) ([]string, error) {
-	return buildSafeArgumentsWithGetter(params, func(key string) any {
-		return getResultValueByName(result, key)
-	})
 }
 
 // isValidParamName checks if a parameter name contains only safe characters

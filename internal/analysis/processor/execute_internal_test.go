@@ -345,34 +345,36 @@ func TestBuildSafeArguments_StaticValue(t *testing.T) {
 	t.Parallel()
 
 	params := map[string]any{"mode": "test"}
-	note := &datastore.Note{}
 
-	args, err := buildSafeArguments(params, note)
+	args, err := buildSafeArguments(params)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"--mode=test"}, args)
 }
 
-func TestBuildSafeArguments_DynamicValueFromNote(t *testing.T) {
+func TestBuildSafeArguments_UsesParamsDirectly(t *testing.T) {
 	t.Parallel()
 
-	// When the Note has a value for the field, it takes precedence over the param default
-	params := map[string]any{"CommonName": "default"}
-	note := &datastore.Note{CommonName: "American Robin"}
+	// Params contain pre-resolved values (as parseCommandParams would provide)
+	params := map[string]any{
+		"CommonName": "American Robin",
+		"Confidence": 95.0, // Already normalized (0-100)
+	}
 
-	args, err := buildSafeArguments(params, note)
+	args, err := buildSafeArguments(params)
 	require.NoError(t, err)
-	require.Len(t, args, 1)
-	// The Note's CommonName value is used
-	assert.Contains(t, args[0], "American Robin")
+	require.Len(t, args, 2)
+
+	// Values from params are used directly
+	assert.Contains(t, args, "--CommonName=\"American Robin\"")
+	assert.Contains(t, args, "--Confidence=95")
 }
 
 func TestBuildSafeArguments_ValueWithSpace(t *testing.T) {
 	t.Parallel()
 
 	params := map[string]any{"msg": "hello world"}
-	note := &datastore.Note{}
 
-	args, err := buildSafeArguments(params, note)
+	args, err := buildSafeArguments(params)
 	require.NoError(t, err)
 	require.Len(t, args, 1)
 	// Value should be quoted
@@ -383,9 +385,8 @@ func TestBuildSafeArguments_EmptyParams(t *testing.T) {
 	t.Parallel()
 
 	params := map[string]any{}
-	note := &datastore.Note{}
 
-	args, err := buildSafeArguments(params, note)
+	args, err := buildSafeArguments(params)
 	require.NoError(t, err)
 	assert.Empty(t, args)
 }
@@ -393,9 +394,7 @@ func TestBuildSafeArguments_EmptyParams(t *testing.T) {
 func TestBuildSafeArguments_NilParams(t *testing.T) {
 	t.Parallel()
 
-	note := &datastore.Note{}
-
-	args, err := buildSafeArguments(nil, note)
+	args, err := buildSafeArguments(nil)
 	require.NoError(t, err)
 	assert.Empty(t, args)
 }
@@ -404,9 +403,8 @@ func TestBuildSafeArguments_InvalidKey(t *testing.T) {
 	t.Parallel()
 
 	params := map[string]any{"bad key": "val"} // space in key
-	note := &datastore.Note{}
 
-	_, err := buildSafeArguments(params, note)
+	_, err := buildSafeArguments(params)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid parameter name")
 }
@@ -414,19 +412,16 @@ func TestBuildSafeArguments_InvalidKey(t *testing.T) {
 func TestBuildSafeArguments_DeterministicOrdering(t *testing.T) {
 	t.Parallel()
 
-	// Multiple params should be sorted alphabetically
-	// Using param names that are NOT Note fields to test default values
 	params := map[string]any{
 		"zebra":  "z",
 		"apple":  "a",
 		"middle": "m",
 		"banana": "b",
 	}
-	note := &datastore.Note{}
 
 	// Run multiple times to ensure consistent ordering
 	for range 10 {
-		args, err := buildSafeArguments(params, note)
+		args, err := buildSafeArguments(params)
 		require.NoError(t, err)
 		require.Len(t, args, 4)
 
@@ -438,40 +433,29 @@ func TestBuildSafeArguments_DeterministicOrdering(t *testing.T) {
 	}
 }
 
-func TestBuildSafeArguments_AllNoteFields(t *testing.T) {
+func TestBuildSafeArguments_AllFields(t *testing.T) {
 	t.Parallel()
 
-	note := &datastore.Note{
-		CommonName:     "American Robin",
-		ScientificName: "Turdus migratorius",
-		Confidence:     0.95,
-		Date:           "2024-01-15",
-		Time:           "14:30:00",
-		Latitude:       42.3601,
-		Longitude:      -71.0589,
-		ClipName:       "robin_clip.wav",
-	}
-
-	// Params with default values - but Note values will be used instead
+	// Params with pre-resolved values (simulating parseCommandParams output)
 	params := map[string]any{
-		"CommonName":     "",
-		"ScientificName": "",
-		"Confidence":     "",
-		"Date":           "",
-		"Time":           "",
-		"Latitude":       "",
-		"Longitude":      "",
-		"ClipName":       "",
+		"CommonName":     "American Robin",
+		"ScientificName": "Turdus migratorius",
+		"Confidence":     95.0, // Already normalized (0-100)
+		"Date":           "2024-01-15",
+		"Time":           "14:30:00",
+		"Latitude":       42.3601,
+		"Longitude":      -71.0589,
+		"ClipName":       "robin_clip.wav",
 	}
 
-	args, err := buildSafeArguments(params, note)
+	args, err := buildSafeArguments(params)
 	require.NoError(t, err)
 	assert.Len(t, args, 8)
 
-	// Convert to string for easier checking (values contain Note data)
+	// Convert to string for easier checking
 	argsStr := strings.Join(args, " ")
 
-	// Verify Note values are used
+	// Verify all values are used directly from params
 	assert.Contains(t, argsStr, "American Robin")
 	assert.Contains(t, argsStr, "Turdus migratorius")
 	assert.Contains(t, argsStr, "robin_clip.wav")
@@ -479,7 +463,7 @@ func TestBuildSafeArguments_AllNoteFields(t *testing.T) {
 	assert.Contains(t, argsStr, "14:30:00")
 	assert.Contains(t, argsStr, "42.3601")  // Latitude
 	assert.Contains(t, argsStr, "-71.0589") // Longitude
-	assert.Contains(t, argsStr, "0.95")     // Confidence
+	assert.Contains(t, argsStr, "95")       // Confidence (normalized)
 }
 
 // =============================================================================
@@ -646,166 +630,6 @@ func TestGetResultValueByName_CaseSensitive(t *testing.T) {
 
 	got = getResultValueByName(result, "COMMONNAME")
 	assert.Nil(t, got)
-}
-
-// =============================================================================
-// buildSafeArgumentsFromResult tests
-// =============================================================================
-
-func TestBuildSafeArgumentsFromResult_StaticValue(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{}
-	params := map[string]any{"key": "value"}
-
-	args, err := buildSafeArgumentsFromResult(params, result)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"--key=value"}, args)
-}
-
-func TestBuildSafeArgumentsFromResult_DynamicValueFromResult(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{
-		Species: detection.Species{
-			CommonName:     "American Robin",
-			ScientificName: "Turdus migratorius",
-		},
-		Confidence: 0.95,
-	}
-	params := map[string]any{
-		"CommonName": "default",
-		"Confidence": 0.5,
-	}
-
-	args, err := buildSafeArgumentsFromResult(params, result)
-	require.NoError(t, err)
-
-	// Result values should override defaults
-	// Note: Values with spaces get quoted
-	assert.Contains(t, args, "--CommonName=\"American Robin\"")
-	assert.Contains(t, args, "--Confidence=0.95")
-}
-
-func TestBuildSafeArgumentsFromResult_ValueWithSpace(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{
-		Species: detection.Species{CommonName: "American Robin"},
-	}
-	params := map[string]any{"CommonName": "default"}
-
-	args, err := buildSafeArgumentsFromResult(params, result)
-	require.NoError(t, err)
-
-	// Values with spaces should be quoted
-	assert.Equal(t, []string{"--CommonName=\"American Robin\""}, args)
-}
-
-func TestBuildSafeArgumentsFromResult_EmptyParams(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{}
-	params := map[string]any{}
-
-	args, err := buildSafeArgumentsFromResult(params, result)
-	require.NoError(t, err)
-	assert.Empty(t, args)
-}
-
-func TestBuildSafeArgumentsFromResult_NilParams(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{}
-
-	args, err := buildSafeArgumentsFromResult(nil, result)
-	require.NoError(t, err)
-	assert.Empty(t, args)
-}
-
-func TestBuildSafeArgumentsFromResult_InvalidKey(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{}
-	params := map[string]any{"invalid;key": "value"}
-
-	_, err := buildSafeArgumentsFromResult(params, result)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid parameter name")
-}
-
-func TestBuildSafeArgumentsFromResult_DeterministicOrdering(t *testing.T) {
-	t.Parallel()
-
-	result := &detection.Result{}
-	params := map[string]any{
-		"zebra": "z",
-		"alpha": "a",
-		"beta":  "b",
-	}
-
-	// Run multiple times to verify ordering is deterministic
-	for range 10 {
-		args, err := buildSafeArgumentsFromResult(params, result)
-		require.NoError(t, err)
-		// Should be sorted alphabetically
-		assert.Equal(t, []string{"--alpha=a", "--beta=b", "--zebra=z"}, args)
-	}
-}
-
-func TestBuildSafeArgumentsFromResult_AllResultFields(t *testing.T) {
-	t.Parallel()
-
-	testTime := time.Date(2024, 1, 15, 14, 30, 0, 0, time.UTC)
-	result := &detection.Result{
-		ID: 42,
-		Species: detection.Species{
-			CommonName:     "Test Bird",
-			ScientificName: "Testus birdus",
-			Code:           "testbi",
-		},
-		Confidence:     0.95,
-		Latitude:       42.0,
-		Longitude:      -71.0,
-		ClipName:       "test.wav",
-		Timestamp:      testTime,
-		ProcessingTime: 100 * time.Millisecond,
-		Occurrence:     0.75,
-		AudioSource: detection.AudioSource{
-			ID: "test-source",
-		},
-	}
-
-	// Test all field mappings
-	params := map[string]any{
-		"CommonName":     "default",
-		"ScientificName": "default",
-		"SpeciesCode":    "default",
-		"Confidence":     0.0,
-		"Latitude":       0.0,
-		"Longitude":      0.0,
-		"ClipName":       "default",
-		"Source":         "default",
-		"ProcessingTime": time.Duration(0),
-		"Occurrence":     0.0,
-		"ID":             uint(0),
-	}
-
-	args, err := buildSafeArgumentsFromResult(params, result)
-	require.NoError(t, err)
-
-	// All fields should be populated from result
-	assert.Contains(t, args, "--ClipName=test.wav")
-	assert.Contains(t, args, "--CommonName=\"Test Bird\"")
-	assert.Contains(t, args, "--Confidence=0.95")
-	assert.Contains(t, args, "--ID=42")
-	assert.Contains(t, args, "--Latitude=42")
-	assert.Contains(t, args, "--Longitude=-71")
-	assert.Contains(t, args, "--Occurrence=0.75")
-	assert.Contains(t, args, "--ProcessingTime=100ms")
-	assert.Contains(t, args, "--ScientificName=\"Testus birdus\"")
-	assert.Contains(t, args, "--Source=test-source")
-	assert.Contains(t, args, "--SpeciesCode=testbi")
 }
 
 // =============================================================================
@@ -1171,9 +995,8 @@ func TestBuildSafeArguments_ArgumentInjectionPrevention(t *testing.T) {
 	params := map[string]any{
 		"input": "--other-flag=true",
 	}
-	note := &datastore.Note{}
 
-	args, err := buildSafeArguments(params, note)
+	args, err := buildSafeArguments(params)
 	require.NoError(t, err)
 	require.Len(t, args, 1)
 
