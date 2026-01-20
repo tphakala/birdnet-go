@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -42,8 +43,9 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	log.Info("Executing command", logger.String("command", a.Command), logger.Any("params", a.Params))
 
 	// Type assertion to check if data is of type Detections
-	detection, ok := data.(Detections)
-	if !ok {
+	// The actual detection data is not used here since buildSafeArguments uses
+	// pre-resolved values from a.Params (populated by parseCommandParams)
+	if _, ok := data.(Detections); !ok {
 		return errors.Newf("ExecuteCommandAction requires Detections type, got %T", data).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
@@ -65,7 +67,8 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	}
 
 	// Building the command line arguments with validation
-	args, err := buildSafeArguments(a.Params, &detection.Note)
+	// The params already contain resolved values from parseCommandParams (including normalized Confidence)
+	args, err := buildSafeArguments(a.Params)
 	if err != nil {
 		// Extract parameter keys for better error context
 		var paramKeys []string
@@ -204,8 +207,10 @@ func validateCommandPath(command string) (string, error) {
 	return command, nil
 }
 
-// buildSafeArguments creates a sanitized list of command arguments
-func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, error) {
+// buildSafeArguments creates a sanitized list of command arguments from the params map.
+// The params map should contain already-resolved values (e.g., from parseCommandParams).
+// This function validates parameter names, sanitizes values, and handles quoting.
+func buildSafeArguments(params map[string]any) ([]string, error) {
 	// Pre-allocate slice with capacity for all parameters
 	args := make([]string, 0, len(params))
 
@@ -233,21 +238,15 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 				Build()
 		}
 
-		// Get value from Note or use default
-		noteValue := getNoteValueByName(note, key)
-		if noteValue == nil {
-			noteValue = value
-		}
-
-		// Convert and validate the value
-		strValue, err := sanitizeValue(noteValue)
+		// Convert and validate the value (already resolved from params)
+		strValue, err := sanitizeValue(value)
 		if err != nil {
 			return nil, errors.New(err).
 				Component("analysis.processor").
 				Category(errors.CategoryValidation).
 				Context("operation", "build_command_arguments").
 				Context("security_check", "value_sanitization").
-				Context("value_type", fmt.Sprintf("%T", noteValue)).
+				Context("value_type", fmt.Sprintf("%T", value)).
 				Context("param_name", key).
 				Context("retryable", false). // Value sanitization failure is permanent
 				Build()
@@ -330,4 +329,57 @@ func getNoteValueByName(note *datastore.Note, paramName string) any {
 
 	// Return nil or an appropriate zero value if the field does not exist
 	return nil
+}
+
+// getResultValueByName retrieves a value from a Result by parameter name using explicit mapping.
+// This maps external script parameter names to the appropriate Result fields.
+func getResultValueByName(result *detection.Result, paramName string) any {
+	switch paramName {
+	// Species-related fields (nested in Species struct)
+	case "CommonName":
+		return result.Species.CommonName
+	case "ScientificName":
+		return result.Species.ScientificName
+	case "SpeciesCode":
+		return result.Species.Code
+
+	// Direct Result fields
+	case "ID":
+		return result.ID
+	case "Confidence":
+		return result.Confidence
+	case "Latitude":
+		return result.Latitude
+	case "Longitude":
+		return result.Longitude
+	case "ClipName":
+		return result.ClipName
+	case "Threshold":
+		return result.Threshold
+	case "Sensitivity":
+		return result.Sensitivity
+	case "SourceNode":
+		return result.SourceNode
+	case "ProcessingTime":
+		return result.ProcessingTime
+	case "Occurrence":
+		return result.Occurrence
+
+	// Time-related fields
+	case "Date":
+		return result.Date()
+	case "Time":
+		return result.Time()
+	case "BeginTime":
+		return result.BeginTime
+	case "EndTime":
+		return result.EndTime
+
+	// AudioSource-related fields
+	case "Source":
+		return result.AudioSource.ID
+
+	default:
+		return nil
+	}
 }
