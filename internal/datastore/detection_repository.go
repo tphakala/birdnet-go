@@ -11,6 +11,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
+const (
+	// allHoursDuration indicates no hour-based filtering (all hours).
+	allHoursDuration = 1
+)
+
 // detectionRepository implements DetectionRepository using the existing Interface.
 // This is a bridge implementation that allows gradual migration to the new domain model
 // while preserving compatibility with existing database operations.
@@ -110,14 +115,14 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 	}
 
 	// SpeciesDetections params: species, date, hour, duration, sortAscending, limit, offset
-	// Empty date/hour means all dates/hours; duration=1 means no hour-based filtering
-	notes, err := r.store.SpeciesDetections(species, "", "", 1, false, limit, offset)
+	// Empty date/hour means all dates/hours; allHoursDuration means no hour-based filtering
+	notes, err := r.store.SpeciesDetections(species, "", "", allHoursDuration, false, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
 	}
 
 	// CountSpeciesDetections params: species, date, hour, duration
-	total, err := r.store.CountSpeciesDetections(species, "", "", 1)
+	total, err := r.store.CountSpeciesDetections(species, "", "", allHoursDuration)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
 	}
@@ -132,21 +137,14 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 
 // GetByDateRange retrieves detections within a date range.
 func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error) {
-	// Parse date strings to time.Time using repository timezone
-	start, err := time.ParseInLocation(mapper.DateFormat, startDate, r.tz)
-	if err != nil && startDate != "" {
-		return nil, 0, fmt.Errorf("invalid start date %q: %w", startDate, err)
+	start, err := r.parseDateWithDefault(startDate, false)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	var end time.Time
-	if endDate != "" {
-		end, err = time.ParseInLocation(mapper.DateFormat, endDate, r.tz)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid end date %q: %w", endDate, err)
-		}
-	}
-	if end.IsZero() {
-		end = time.Now().In(r.tz)
+	end, err := r.parseDateWithDefault(endDate, true)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	filters := &AdvancedSearchFilters{
@@ -285,25 +283,48 @@ func (r *detectionRepository) GetComments(ctx context.Context, id string) ([]det
 
 // UpdateComment updates a comment.
 func (r *detectionRepository) UpdateComment(ctx context.Context, commentID uint, entry string) error {
-	return r.store.UpdateNoteComment(strconv.FormatUint(uint64(commentID), 10), entry)
+	if err := r.store.UpdateNoteComment(strconv.FormatUint(uint64(commentID), 10), entry); err != nil {
+		return fmt.Errorf("failed to update comment %d: %w", commentID, err)
+	}
+	return nil
 }
 
 // DeleteComment deletes a comment.
 func (r *detectionRepository) DeleteComment(ctx context.Context, commentID uint) error {
-	return r.store.DeleteNoteComment(strconv.FormatUint(uint64(commentID), 10))
+	if err := r.store.DeleteNoteComment(strconv.FormatUint(uint64(commentID), 10)); err != nil {
+		return fmt.Errorf("failed to delete comment %d: %w", commentID, err)
+	}
+	return nil
 }
 
 // GetClipPath returns the audio clip path for a detection.
 func (r *detectionRepository) GetClipPath(ctx context.Context, id string) (string, error) {
-	return r.store.GetNoteClipPath(id)
+	path, err := r.store.GetNoteClipPath(id)
+	if err != nil {
+		return "", fmt.Errorf("failed to get clip path for detection %s: %w", id, err)
+	}
+	return path, nil
 }
 
 // GetAdditionalResults returns the secondary predictions for a detection.
 func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id string) ([]detection.AdditionalResult, error) {
-	// This requires access to the Results table which isn't directly exposed
-	// For now, this is a simplified implementation
-	// Full implementation would require extending the Interface or accessing DB directly
-	return nil, nil
+	results, err := r.store.GetNoteResults(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get additional results for detection %s: %w", id, err)
+	}
+
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	additional := make([]detection.AdditionalResult, len(results))
+	for i, res := range results {
+		additional[i] = detection.AdditionalResult{
+			Species:    detection.ParseSpeciesString(res.Species),
+			Confidence: float64(res.Confidence),
+		}
+	}
+	return additional, nil
 }
 
 // NoteFromResult converts a detection.Result to a datastore.Note.
@@ -456,36 +477,26 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 
 	// Convert date range - parse strings to time.Time using repository timezone
 	if filters.StartDate != "" || filters.EndDate != "" {
-		var start, end time.Time
-		var err error
-
-		if filters.StartDate != "" {
-			start, err = time.ParseInLocation(mapper.DateFormat, filters.StartDate, r.tz)
-			if err != nil {
-				return AdvancedSearchFilters{}, fmt.Errorf("invalid start date %q: %w", filters.StartDate, err)
-			}
+		start, err := r.parseDateWithDefault(filters.StartDate, false)
+		if err != nil {
+			return AdvancedSearchFilters{}, err
 		}
-		if filters.EndDate != "" {
-			end, err = time.ParseInLocation(mapper.DateFormat, filters.EndDate, r.tz)
-			if err != nil {
-				return AdvancedSearchFilters{}, fmt.Errorf("invalid end date %q: %w", filters.EndDate, err)
-			}
-		}
-		if end.IsZero() {
-			end = time.Now().In(r.tz)
+		end, err := r.parseDateWithDefault(filters.EndDate, true)
+		if err != nil {
+			return AdvancedSearchFilters{}, err
 		}
 		legacy.DateRange = &DateRange{
 			Start: start,
 			End:   end,
 		}
 	} else if filters.Date != "" {
-		date, err := time.ParseInLocation(mapper.DateFormat, filters.Date, r.tz)
+		date, err := r.parseDateWithDefault(filters.Date, false)
 		if err != nil {
-			return AdvancedSearchFilters{}, fmt.Errorf("invalid date %q: %w", filters.Date, err)
+			return AdvancedSearchFilters{}, err
 		}
 		legacy.DateRange = &DateRange{
 			Start: date,
-			End:   date.Add(24*time.Hour - time.Second), // End of day
+			End:   date.Add(24*time.Hour - time.Nanosecond), // End of day (23:59:59.999999999)
 		}
 	}
 
@@ -515,4 +526,20 @@ func (r *detectionRepository) parseID(id string) (uint, error) {
 		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
 	}
 	return uint(n), nil
+}
+
+// parseDateWithDefault parses a date string, returning a default if empty.
+// If defaultToNow is true and the string is empty, returns current time in the timezone.
+func (r *detectionRepository) parseDateWithDefault(dateStr string, defaultToNow bool) (time.Time, error) {
+	if dateStr == "" {
+		if defaultToNow {
+			return time.Now().In(r.tz), nil
+		}
+		return time.Time{}, nil
+	}
+	t, err := time.ParseInLocation(mapper.DateFormat, dateStr, r.tz)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date %q: %w", dateStr, err)
+	}
+	return t, nil
 }

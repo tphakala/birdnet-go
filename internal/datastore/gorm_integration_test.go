@@ -403,3 +403,64 @@ func TestSave_EmptyResults(t *testing.T) {
 		assert.Equal(t, 0, count, "No Results should be saved for empty slice")
 	})
 }
+
+// TestGetAdditionalResults verifies GetAdditionalResults returns saved Results.
+func TestGetAdditionalResults(t *testing.T) {
+	t.Parallel()
+
+	settings := createTestSettings(t)
+	store := createDatabase(t, settings)
+
+	// Create DetectionRepository wrapping the store
+	repo := NewDetectionRepository(store, time.UTC)
+
+	// Create a detection with additional results
+	now := time.Date(2024, 6, 15, 14, 30, 45, 0, time.UTC)
+	result := detection.Result{
+		Timestamp:  now,
+		SourceNode: "test-node",
+		Species: detection.Species{
+			ScientificName: "Parus major",
+			CommonName:     "Great Tit",
+			Code:           "gretit1",
+		},
+		Confidence: 0.95,
+		ClipName:   "test.wav",
+	}
+
+	additionalResults := []detection.AdditionalResult{
+		{
+			Species: detection.Species{
+				ScientificName: "Cyanistes caeruleus",
+				CommonName:     "Eurasian Blue Tit",
+				Code:           "eurblu1",
+			},
+			Confidence: 0.75,
+		},
+		{
+			Species: detection.Species{
+				ScientificName: "Periparus ater",
+				CommonName:     "Coal Tit",
+				Code:           "coatit1",
+			},
+			Confidence: 0.60,
+		},
+	}
+
+	ctx := context.Background()
+
+	// Save with additional results
+	err := repo.Save(ctx, &result, additionalResults)
+	require.NoError(t, err)
+	require.NotZero(t, result.ID)
+
+	// Get additional results back
+	loaded, err := repo.GetAdditionalResults(ctx, fmt.Sprintf("%d", result.ID))
+	require.NoError(t, err)
+	require.Len(t, loaded, 2, "Should return 2 additional results")
+
+	// Verify content (order may vary)
+	species := []string{loaded[0].Species.ScientificName, loaded[1].Species.ScientificName}
+	assert.Contains(t, species, "Cyanistes caeruleus")
+	assert.Contains(t, species, "Periparus ater")
+}
