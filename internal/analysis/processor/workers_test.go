@@ -312,16 +312,27 @@ func TestEnqueueTask(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				// Don't run in parallel since we're sharing the processor's queue
 				// Create a task with this action
+				now := time.Now()
 				task := &Task{
 					Type: TaskTypeAction,
 					Detection: Detections{
+						Result: detection.Result{
+							Species: detection.Species{
+								CommonName:     "Test Bird",
+								ScientificName: "Testus birdus",
+							},
+							Confidence:  0.95,
+							AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
+							BeginTime:   now,
+							EndTime:     now.Add(15 * time.Second),
+						},
 						Note: datastore.Note{
 							CommonName:     "Test Bird",
 							ScientificName: "Testus birdus",
 							Confidence:     0.95,
 							Source:         testAudioSource(),
-							BeginTime:      time.Now(),
-							EndTime:        time.Now().Add(15 * time.Second),
+							BeginTime:      now,
+							EndTime:        now.Add(15 * time.Second),
 						},
 					},
 					Action: tc.action,
@@ -351,16 +362,27 @@ func TestEnqueueTask(t *testing.T) {
 		}
 
 		// Create a task
+		now := time.Now()
 		task := &Task{
 			Type: TaskTypeAction,
 			Detection: Detections{
+				Result: detection.Result{
+					Species: detection.Species{
+						CommonName:     "Test Bird",
+						ScientificName: "Testus birdus",
+					},
+					Confidence:  0.95,
+					AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
+					BeginTime:   now,
+					EndTime:     now.Add(15 * time.Second),
+				},
 				Note: datastore.Note{
 					CommonName:     "Test Bird",
 					ScientificName: "Testus birdus",
 					Confidence:     0.95,
 					Source:         testAudioSource(),
-					BeginTime:      time.Now(),
-					EndTime:        time.Now().Add(15 * time.Second),
+					BeginTime:      now,
+					EndTime:        now.Add(15 * time.Second),
 				},
 			},
 			Action: &MockAction{},
@@ -392,16 +414,27 @@ func TestEnqueueTask(t *testing.T) {
 
 		// Create tasks to fill the queue
 		for i := range 5 {
+			now := time.Now()
 			task := &Task{
 				Type: TaskTypeAction,
 				Detection: Detections{
+					Result: detection.Result{
+						Species: detection.Species{
+							CommonName:     fmt.Sprintf("Test Bird %d", i),
+							ScientificName: "Testus birdus",
+						},
+						Confidence:  0.95,
+						AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
+						BeginTime:   now,
+						EndTime:     now.Add(15 * time.Second),
+					},
 					Note: datastore.Note{
 						CommonName:     fmt.Sprintf("Test Bird %d", i),
 						ScientificName: "Testus birdus",
 						Confidence:     0.95,
 						Source:         testAudioSource(),
-						BeginTime:      time.Now(),
-						EndTime:        time.Now().Add(15 * time.Second),
+						BeginTime:      now,
+						EndTime:        now.Add(15 * time.Second),
 					},
 				},
 				Action: &MockAction{
@@ -615,16 +648,27 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 			defer wg.Done()
 
 			// Create a task for this bird
+			now := time.Now()
 			task := &Task{
 				Type: TaskTypeAction,
 				Detection: Detections{
+					Result: detection.Result{
+						Species: detection.Species{
+							CommonName:     b.CommonName,
+							ScientificName: b.ScientificName,
+						},
+						Confidence:  b.Confidence,
+						AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
+						BeginTime:   now,
+						EndTime:     now.Add(15 * time.Second),
+					},
 					Note: datastore.Note{
 						CommonName:     b.CommonName,
 						ScientificName: b.ScientificName,
 						Confidence:     b.Confidence,
 						Source:         testAudioSource(),
-						BeginTime:      time.Now(),
-						EndTime:        time.Now().Add(15 * time.Second),
+						BeginTime:      now,
+						EndTime:        now.Add(15 * time.Second),
 					},
 				},
 				Action: &MockAction{},
@@ -705,16 +749,27 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	}
 
 	// Create a task with the mock action
+	now := time.Now()
 	task := &Task{
 		Type: TaskTypeAction,
 		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Test Bird",
+					ScientificName: "Testus birdus",
+				},
+				Confidence:  0.95,
+				AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "Test Source"},
+				BeginTime:   now,
+				EndTime:     now.Add(15 * time.Second),
+			},
 			Note: datastore.Note{
 				CommonName:     "Test Bird",
 				ScientificName: "Testus birdus",
 				Confidence:     0.95,
 				Source:         testAudioSource(),
-				BeginTime:      time.Now(),
-				EndTime:        time.Now().Add(15 * time.Second),
+				BeginTime:      now,
+				EndTime:        now.Add(15 * time.Second),
 			},
 		},
 		Action: mockAction,
@@ -754,16 +809,27 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	}
 
 	// Create a task with the failing action
+	failNow := time.Now()
 	failingTask := &Task{
 		Type: TaskTypeAction,
 		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Failing Bird",
+					ScientificName: "Failurus maximus",
+				},
+				Confidence:  0.90,
+				AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "Test Source"},
+				BeginTime:   failNow,
+				EndTime:     failNow.Add(15 * time.Second),
+			},
 			Note: datastore.Note{
 				CommonName:     "Failing Bird",
 				ScientificName: "Failurus maximus",
 				Confidence:     0.90,
 				Source:         testAudioSource(),
-				BeginTime:      time.Now(),
-				EndTime:        time.Now().Add(15 * time.Second),
+				BeginTime:      failNow,
+				EndTime:        failNow.Add(15 * time.Second),
 			},
 		},
 		Action: failingAction,
@@ -868,16 +934,27 @@ func TestRetryLogic(t *testing.T) {
 	}
 
 	// Create a task with the mock action
+	retryNow := time.Now()
 	task := &Task{
 		Type: TaskTypeAction,
 		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Retry Bird",
+					ScientificName: "Retryus maximus",
+				},
+				Confidence:  0.95,
+				AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "Test Source"},
+				BeginTime:   retryNow,
+				EndTime:     retryNow.Add(15 * time.Second),
+			},
 			Note: datastore.Note{
 				CommonName:     "Retry Bird",
 				ScientificName: "Retryus maximus",
 				Confidence:     0.95,
 				Source:         testAudioSource(),
-				BeginTime:      time.Now(),
-				EndTime:        time.Now().Add(15 * time.Second),
+				BeginTime:      retryNow,
+				EndTime:        retryNow.Add(15 * time.Second),
 			},
 		},
 		Action: mockAction,
@@ -967,16 +1044,27 @@ func TestRetryLogic(t *testing.T) {
 	}
 
 	// Create a task with the exhausting action
+	exhaustNow := time.Now()
 	exhaustingTask := &Task{
 		Type: TaskTypeAction,
 		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Exhausting Bird",
+					ScientificName: "Exhaustus maximus",
+				},
+				Confidence:  0.90,
+				AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "Test Source"},
+				BeginTime:   exhaustNow,
+				EndTime:     exhaustNow.Add(15 * time.Second),
+			},
 			Note: datastore.Note{
 				CommonName:     "Exhausting Bird",
 				ScientificName: "Exhaustus maximus",
 				Confidence:     0.90,
 				Source:         testAudioSource(),
-				BeginTime:      time.Now(),
-				EndTime:        time.Now().Add(15 * time.Second),
+				BeginTime:      exhaustNow,
+				EndTime:        exhaustNow.Add(15 * time.Second),
 			},
 		},
 		Action: exhaustingAction,

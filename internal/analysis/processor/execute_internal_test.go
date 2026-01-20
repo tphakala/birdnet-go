@@ -12,9 +12,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 const osWindows = "windows"
+
+// =============================================================================
+// Test helpers
+// =============================================================================
+
+// createTestScript creates a temporary executable shell script with the given content.
+// Returns the script path and a cleanup function. The cleanup function should be deferred.
+func createTestScript(t *testing.T, prefix, content string) (scriptPath string, cleanup func()) {
+	t.Helper()
+	tmpFile, err := os.CreateTemp("", prefix)
+	require.NoError(t, err)
+
+	_, err = tmpFile.WriteString(content)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+
+	return tmpFile.Name(), func() { _ = os.Remove(tmpFile.Name()) }
+}
+
+// createTestDetections creates a Detections struct with both Result and Note populated.
+func createTestDetections(commonName string) Detections {
+	return Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: commonName},
+		},
+		Note: datastore.Note{CommonName: commonName},
+	}
+}
 
 // =============================================================================
 // validateCommandPath tests
@@ -517,35 +547,310 @@ func TestGetNoteValueByName_CaseSensitive(t *testing.T) {
 }
 
 // =============================================================================
+// getResultValueByName tests
+// =============================================================================
+
+func TestGetResultValueByName_ValidFields(t *testing.T) {
+	t.Parallel()
+
+	testTime := time.Date(2024, 1, 15, 14, 30, 0, 0, time.UTC)
+	result := &detection.Result{
+		ID: 123,
+		Species: detection.Species{
+			CommonName:     "American Robin",
+			ScientificName: "Turdus migratorius",
+			Code:           "amerob",
+		},
+		Confidence:     0.95,
+		Latitude:       42.3601,
+		Longitude:      -71.0589,
+		ClipName:       "test_clip.wav",
+		Threshold:      0.7,
+		Sensitivity:    1.0,
+		SourceNode:     "node1",
+		Timestamp:      testTime,
+		BeginTime:      testTime,
+		EndTime:        testTime.Add(3 * time.Second),
+		ProcessingTime: 500 * time.Millisecond,
+		Occurrence:     0.85,
+		AudioSource: detection.AudioSource{
+			ID: "rtsp://camera1/stream",
+		},
+	}
+
+	tests := []struct {
+		name     string
+		param    string
+		expected any
+	}{
+		// Species fields
+		{"CommonName", "CommonName", "American Robin"},
+		{"ScientificName", "ScientificName", "Turdus migratorius"},
+		{"SpeciesCode", "SpeciesCode", "amerob"},
+
+		// Direct Result fields
+		{"ID", "ID", uint(123)},
+		{"Confidence", "Confidence", 0.95},
+		{"Latitude", "Latitude", 42.3601},
+		{"Longitude", "Longitude", -71.0589},
+		{"ClipName", "ClipName", "test_clip.wav"},
+		{"Threshold", "Threshold", 0.7},
+		{"Sensitivity", "Sensitivity", 1.0},
+		{"SourceNode", "SourceNode", "node1"},
+		{"ProcessingTime", "ProcessingTime", 500 * time.Millisecond},
+		{"Occurrence", "Occurrence", 0.85},
+
+		// Time fields
+		{"BeginTime", "BeginTime", testTime},
+		{"EndTime", "EndTime", testTime.Add(3 * time.Second)},
+		{"Date", "Date", "2024-01-15"},
+		{"Time", "Time", "14:30:00"},
+
+		// AudioSource field
+		{"Source", "Source", "rtsp://camera1/stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := getResultValueByName(result, tt.param)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestGetResultValueByName_NonExistentField(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{
+		Species: detection.Species{CommonName: "Test"},
+	}
+	got := getResultValueByName(result, "NonExistentField")
+	assert.Nil(t, got)
+}
+
+func TestGetResultValueByName_CaseSensitive(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{
+		Species: detection.Species{CommonName: "Test Bird"},
+	}
+
+	// Correct case
+	got := getResultValueByName(result, "CommonName")
+	assert.Equal(t, "Test Bird", got)
+
+	// Wrong case - should return nil
+	got = getResultValueByName(result, "commonname")
+	assert.Nil(t, got)
+
+	got = getResultValueByName(result, "COMMONNAME")
+	assert.Nil(t, got)
+}
+
+// =============================================================================
+// buildSafeArgumentsFromResult tests
+// =============================================================================
+
+func TestBuildSafeArgumentsFromResult_StaticValue(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{}
+	params := map[string]any{"key": "value"}
+
+	args, err := buildSafeArgumentsFromResult(params, result)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--key=value"}, args)
+}
+
+func TestBuildSafeArgumentsFromResult_DynamicValueFromResult(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{
+		Species: detection.Species{
+			CommonName:     "American Robin",
+			ScientificName: "Turdus migratorius",
+		},
+		Confidence: 0.95,
+	}
+	params := map[string]any{
+		"CommonName": "default",
+		"Confidence": 0.5,
+	}
+
+	args, err := buildSafeArgumentsFromResult(params, result)
+	require.NoError(t, err)
+
+	// Result values should override defaults
+	// Note: Values with spaces get quoted
+	assert.Contains(t, args, "--CommonName=\"American Robin\"")
+	assert.Contains(t, args, "--Confidence=0.95")
+}
+
+func TestBuildSafeArgumentsFromResult_ValueWithSpace(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{
+		Species: detection.Species{CommonName: "American Robin"},
+	}
+	params := map[string]any{"CommonName": "default"}
+
+	args, err := buildSafeArgumentsFromResult(params, result)
+	require.NoError(t, err)
+
+	// Values with spaces should be quoted
+	assert.Equal(t, []string{"--CommonName=\"American Robin\""}, args)
+}
+
+func TestBuildSafeArgumentsFromResult_EmptyParams(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{}
+	params := map[string]any{}
+
+	args, err := buildSafeArgumentsFromResult(params, result)
+	require.NoError(t, err)
+	assert.Empty(t, args)
+}
+
+func TestBuildSafeArgumentsFromResult_NilParams(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{}
+
+	args, err := buildSafeArgumentsFromResult(nil, result)
+	require.NoError(t, err)
+	assert.Empty(t, args)
+}
+
+func TestBuildSafeArgumentsFromResult_InvalidKey(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{}
+	params := map[string]any{"invalid;key": "value"}
+
+	_, err := buildSafeArgumentsFromResult(params, result)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parameter name")
+}
+
+func TestBuildSafeArgumentsFromResult_DeterministicOrdering(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{}
+	params := map[string]any{
+		"zebra": "z",
+		"alpha": "a",
+		"beta":  "b",
+	}
+
+	// Run multiple times to verify ordering is deterministic
+	for range 10 {
+		args, err := buildSafeArgumentsFromResult(params, result)
+		require.NoError(t, err)
+		// Should be sorted alphabetically
+		assert.Equal(t, []string{"--alpha=a", "--beta=b", "--zebra=z"}, args)
+	}
+}
+
+func TestBuildSafeArgumentsFromResult_AllResultFields(t *testing.T) {
+	t.Parallel()
+
+	testTime := time.Date(2024, 1, 15, 14, 30, 0, 0, time.UTC)
+	result := &detection.Result{
+		ID: 42,
+		Species: detection.Species{
+			CommonName:     "Test Bird",
+			ScientificName: "Testus birdus",
+			Code:           "testbi",
+		},
+		Confidence:     0.95,
+		Latitude:       42.0,
+		Longitude:      -71.0,
+		ClipName:       "test.wav",
+		Timestamp:      testTime,
+		ProcessingTime: 100 * time.Millisecond,
+		Occurrence:     0.75,
+		AudioSource: detection.AudioSource{
+			ID: "test-source",
+		},
+	}
+
+	// Test all field mappings
+	params := map[string]any{
+		"CommonName":     "default",
+		"ScientificName": "default",
+		"SpeciesCode":    "default",
+		"Confidence":     0.0,
+		"Latitude":       0.0,
+		"Longitude":      0.0,
+		"ClipName":       "default",
+		"Source":         "default",
+		"ProcessingTime": time.Duration(0),
+		"Occurrence":     0.0,
+		"ID":             uint(0),
+	}
+
+	args, err := buildSafeArgumentsFromResult(params, result)
+	require.NoError(t, err)
+
+	// All fields should be populated from result
+	assert.Contains(t, args, "--ClipName=test.wav")
+	assert.Contains(t, args, "--CommonName=\"Test Bird\"")
+	assert.Contains(t, args, "--Confidence=0.95")
+	assert.Contains(t, args, "--ID=42")
+	assert.Contains(t, args, "--Latitude=42")
+	assert.Contains(t, args, "--Longitude=-71")
+	assert.Contains(t, args, "--Occurrence=0.75")
+	assert.Contains(t, args, "--ProcessingTime=100ms")
+	assert.Contains(t, args, "--ScientificName=\"Testus birdus\"")
+	assert.Contains(t, args, "--Source=test-source")
+	assert.Contains(t, args, "--SpeciesCode=testbi")
+}
+
+// =============================================================================
 // parseCommandParams tests
 // =============================================================================
 
 func TestParseCommandParams_EmptyParams(t *testing.T) {
 	t.Parallel()
 
-	detection := &Detections{
+	det := &Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	result := parseCommandParams([]string{}, detection)
+	result := parseCommandParams([]string{}, det)
 	assert.Empty(t, result)
 }
 
 func TestParseCommandParams_NilParams(t *testing.T) {
 	t.Parallel()
 
-	detection := &Detections{
+	det := &Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	result := parseCommandParams(nil, detection)
+	result := parseCommandParams(nil, det)
 	assert.Empty(t, result)
 }
 
 func TestParseCommandParams_ExtractsNoteFields(t *testing.T) {
 	t.Parallel()
 
-	detection := &Detections{
+	det := &Detections{
+		Result: detection.Result{
+			Timestamp: time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
+			Species: detection.Species{
+				CommonName:     "American Robin",
+				ScientificName: "Turdus migratorius",
+			},
+		},
 		Note: datastore.Note{
 			CommonName:     "American Robin",
 			ScientificName: "Turdus migratorius",
@@ -554,7 +859,7 @@ func TestParseCommandParams_ExtractsNoteFields(t *testing.T) {
 	}
 
 	params := []string{"CommonName", "ScientificName", "Date"}
-	result := parseCommandParams(params, detection)
+	result := parseCommandParams(params, det)
 
 	assert.Equal(t, "American Robin", result["CommonName"])
 	assert.Equal(t, "Turdus migratorius", result["ScientificName"])
@@ -564,7 +869,11 @@ func TestParseCommandParams_ExtractsNoteFields(t *testing.T) {
 func TestParseCommandParams_ConfidenceNormalization(t *testing.T) {
 	t.Parallel()
 
-	detection := &Detections{
+	det := &Detections{
+		Result: detection.Result{
+			Species:    detection.Species{CommonName: "Test Bird"},
+			Confidence: 0.95, // Stored as 0-1
+		},
 		Note: datastore.Note{
 			CommonName: "Test Bird",
 			Confidence: 0.95, // Stored as 0-1
@@ -573,7 +882,7 @@ func TestParseCommandParams_ConfidenceNormalization(t *testing.T) {
 
 	// Confidence is normalized from 0-1 to 0-100 for display
 	params := []string{"Confidence"}
-	result := parseCommandParams(params, detection)
+	result := parseCommandParams(params, det)
 
 	// Confidence should be normalized: 0.95 * 100 = 95
 	confValue, ok := result["Confidence"].(float64)
@@ -584,12 +893,15 @@ func TestParseCommandParams_ConfidenceNormalization(t *testing.T) {
 func TestParseCommandParams_NonExistentField(t *testing.T) {
 	t.Parallel()
 
-	detection := &Detections{
+	det := &Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
 	params := []string{"NonExistentField"}
-	result := parseCommandParams(params, detection)
+	result := parseCommandParams(params, det)
 
 	// Non-existent fields return nil value
 	assert.Nil(t, result["NonExistentField"])
@@ -624,11 +936,14 @@ func TestExecuteCommandAction_InvalidCommand(t *testing.T) {
 		Params:  nil,
 	}
 
-	detection := Detections{
+	det := Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	err := action.Execute(detection)
+	err := action.Execute(det)
 	require.Error(t, err)
 }
 
@@ -638,27 +953,15 @@ func TestExecuteCommandAction_SuccessfulExecution(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create a temporary executable script
-	tmpFile, err := os.CreateTemp("", "test_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	// Write a simple script that exits successfully
-	_, err = tmpFile.WriteString("#!/bin/sh\nexit 0\n")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath, cleanup := createTestScript(t, "test_script_*.sh", "#!/bin/sh\nexit 0\n")
+	defer cleanup()
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params:  nil,
 	}
 
-	detection := Detections{
-		Note: datastore.Note{CommonName: "Test Bird"},
-	}
-
-	err = action.Execute(detection)
+	err := action.Execute(createTestDetections("Test Bird"))
 	assert.NoError(t, err)
 }
 
@@ -683,11 +986,14 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 		Params:  nil,
 	}
 
-	detection := Detections{
+	det := Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	err = action.Execute(detection)
+	err = action.Execute(det)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exit")
 }
@@ -725,7 +1031,10 @@ func TestExecuteCommandAction_Timeout(t *testing.T) {
 		Params:  nil,
 	}
 
-	detection := Detections{
+	det := Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
@@ -735,7 +1044,7 @@ func TestExecuteCommandAction_Timeout(t *testing.T) {
 	defer cancel()
 
 	startTime := time.Now()
-	err = action.ExecuteContext(ctx, detection)
+	err = action.ExecuteContext(ctx, det)
 	duration := time.Since(startTime)
 
 	require.Error(t, err)
@@ -777,11 +1086,14 @@ func TestExecuteCommandAction_WithParameters(t *testing.T) {
 		},
 	}
 
-	detection := Detections{
+	det := Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	err = action.Execute(detection)
+	err = action.Execute(det)
 	require.NoError(t, err)
 
 	// Verify output
@@ -836,11 +1148,14 @@ func TestExecuteCommandAction_CommandInjectionPrevention(t *testing.T) {
 				},
 			}
 
-			detection := Detections{
+			det := Detections{
+				Result: detection.Result{
+					Species: detection.Species{CommonName: "Test Bird"},
+				},
 				Note: datastore.Note{CommonName: "Test Bird"},
 			}
 
-			_ = action.Execute(detection)
+			_ = action.Execute(det)
 
 			// Verify the indicator file was NOT created
 			_, err := os.Stat(indicatorPath)
@@ -902,11 +1217,14 @@ func TestExecuteCommandAction_UnicodeInParameters(t *testing.T) {
 		},
 	}
 
-	detection := Detections{
+	det := Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	err = action.Execute(detection)
+	err = action.Execute(det)
 	require.NoError(t, err)
 
 	// Verify output contains unicode
@@ -922,28 +1240,18 @@ func TestExecuteCommandAction_LargeOutput(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create a script that outputs a lot of text
-	tmpFile, err := os.CreateTemp("", "large_output_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	// Generate 100KB of output
-	_, err = tmpFile.WriteString("#!/bin/sh\nfor i in $(seq 1 10000); do echo 'This is line number '$i' with some padding text to make it longer'; done\n")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	// Script that generates 100KB of output
+	scriptContent := "#!/bin/sh\nfor i in $(seq 1 10000); do echo 'This is line number '$i' with some padding text to make it longer'; done\n"
+	scriptPath, cleanup := createTestScript(t, "large_output_*.sh", scriptContent)
+	defer cleanup()
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params:  nil,
 	}
 
-	detection := Detections{
-		Note: datastore.Note{CommonName: "Test Bird"},
-	}
-
 	// Should handle large output without crashing
-	err = action.Execute(detection)
+	err := action.Execute(createTestDetections("Test Bird"))
 	assert.NoError(t, err)
 }
 
@@ -981,11 +1289,14 @@ func TestExecuteCommandAction_EnvironmentIsolation(t *testing.T) {
 		Params:  nil,
 	}
 
-	detection := Detections{
+	det := Detections{
+		Result: detection.Result{
+			Species: detection.Species{CommonName: "Test Bird"},
+		},
 		Note: datastore.Note{CommonName: "Test Bird"},
 	}
 
-	err = action.Execute(detection)
+	err = action.Execute(det)
 	require.NoError(t, err)
 
 	// Verify output does NOT contain our secret environment variable

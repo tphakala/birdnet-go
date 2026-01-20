@@ -447,8 +447,8 @@ func (p *Processor) processDetections(item birdnet.Results) {
 
 	for i := range detectionResults {
 		det := detectionResults[i]
-		commonName := strings.ToLower(det.Note.CommonName)
-		confidence := det.Note.Confidence
+		commonName := strings.ToLower(det.Result.Species.CommonName)
+		confidence := det.Result.Confidence
 
 		// Lock the mutex to ensure thread-safe access to shared resources
 		p.pendingMutex.Lock()
@@ -923,7 +923,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	if item.Count < minDetections {
 		// Add structured logging for minimum count filtering
 		GetLogger().Debug("Detection discarded due to insufficient count",
-			logger.String("species", item.Detection.Note.CommonName),
+			logger.String("species", item.Detection.Result.Species.CommonName),
 			logger.Int("count", item.Count),
 			logger.Int("minimum_required", minDetections),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -939,7 +939,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		if exists && lastHumanDetection.After(item.FirstDetected) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
-				logger.String("species", item.Detection.Note.CommonName),
+				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
 				logger.Time("last_human_detection", lastHumanDetection),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -960,11 +960,11 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		p.detectionMutex.RLock()
 		lastDogDetection := p.LastDogDetection[item.Source]
 		p.detectionMutex.RUnlock()
-		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, lastDogDetection) ||
-			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
+		if p.CheckDogBarkFilter(item.Detection.Result.Species.CommonName, lastDogDetection) ||
+			p.CheckDogBarkFilter(item.Detection.Result.Species.ScientificName, lastDogDetection) {
 			// Add structured logging for dog bark filter
 			GetLogger().Debug("Detection discarded by dog bark filter",
-				logger.String("species", item.Detection.Note.CommonName),
+				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
 				logger.Time("last_dog_detection", lastDogDetection),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -993,7 +993,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// This is the correct place for learning - only approved detections should affect thresholds,
 	// not pending detections that may later be discarded as false positives.
 	// Note: speciesName is already lowercase (from pendingDetections map key)
-	p.LearnFromApprovedDetection(speciesName, item.Detection.Note.ScientificName, confidence)
+	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
@@ -1019,7 +1019,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 
 	// Update BirdNET metrics detection counter if enabled
 	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
-		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
+		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Result.Species.CommonName)
 	}
 }
 
@@ -1205,11 +1205,11 @@ func (p *Processor) pendingDetectionsFlusher() {
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(det *Detections) []Action {
 	// Check if species has custom configuration using both common and scientific name lookup
-	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, det.Note.CommonName, det.Note.ScientificName); exists {
+	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, det.Result.Species.CommonName, det.Result.Species.ScientificName); exists {
 		if p.Settings.Debug {
 			GetLogger().Debug("species config exists for custom actions",
-				logger.String("commonName", det.Note.CommonName),
-				logger.String("scientificName", det.Note.ScientificName),
+				logger.String("commonName", det.Result.Species.CommonName),
+				logger.String("scientificName", det.Result.Species.ScientificName),
 				logger.String("operation", "custom_action_check"))
 		}
 
@@ -1250,7 +1250,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 	defaultActions := p.getDefaultActions(det)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
-		logger.String("species", strings.ToLower(det.Note.CommonName)),
+		logger.String("species", strings.ToLower(det.Result.Species.CommonName)),
 		logger.Int("actions_count", len(defaultActions)),
 		logger.String("operation", "get_default_actions"))
 	return defaultActions
@@ -1260,7 +1260,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 func parseCommandParams(params []string, det *Detections) map[string]any {
 	commandParams := make(map[string]any)
 	for _, param := range params {
-		value := getNoteValueByName(&det.Note, param)
+		value := getResultValueByName(&det.Result, param)
 		// Check if the parameter is Confidence and normalize it (0-1 to 0-100)
 		if param == "Confidence" {
 			if confidence, ok := value.(float64); ok {

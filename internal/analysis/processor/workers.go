@@ -186,8 +186,8 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 
 	// Get species name for enhanced context
 	speciesName := "unknown"
-	if task.Detection.Note.CommonName != "" {
-		speciesName = task.Detection.Note.CommonName
+	if task.Detection.Result.Species.CommonName != "" {
+		speciesName = task.Detection.Result.Species.CommonName
 	}
 
 	// Get retry configuration for the action

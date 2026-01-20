@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -42,7 +43,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	log.Info("Executing command", logger.String("command", a.Command), logger.Any("params", a.Params))
 
 	// Type assertion to check if data is of type Detections
-	detection, ok := data.(Detections)
+	det, ok := data.(Detections)
 	if !ok {
 		return errors.Newf("ExecuteCommandAction requires Detections type, got %T", data).
 			Component("analysis.processor").
@@ -65,7 +66,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	}
 
 	// Building the command line arguments with validation
-	args, err := buildSafeArguments(a.Params, &detection.Note)
+	args, err := buildSafeArgumentsFromResult(a.Params, &det.Result)
 	if err != nil {
 		// Extract parameter keys for better error context
 		var paramKeys []string
@@ -204,8 +205,13 @@ func validateCommandPath(command string) (string, error) {
 	return command, nil
 }
 
-// buildSafeArguments creates a sanitized list of command arguments
-func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, error) {
+// valueGetter is a function type that retrieves a value by parameter name.
+// Returns nil if the parameter is not found.
+type valueGetter func(key string) any
+
+// buildSafeArgumentsWithGetter creates a sanitized list of command arguments using a value getter function.
+// This is the common implementation used by both Note-based and Result-based argument builders.
+func buildSafeArgumentsWithGetter(params map[string]any, getValue valueGetter) ([]string, error) {
 	// Pre-allocate slice with capacity for all parameters
 	args := make([]string, 0, len(params))
 
@@ -233,21 +239,21 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 				Build()
 		}
 
-		// Get value from Note or use default
-		noteValue := getNoteValueByName(note, key)
-		if noteValue == nil {
-			noteValue = value
+		// Get value from source or use default
+		sourceValue := getValue(key)
+		if sourceValue == nil {
+			sourceValue = value
 		}
 
 		// Convert and validate the value
-		strValue, err := sanitizeValue(noteValue)
+		strValue, err := sanitizeValue(sourceValue)
 		if err != nil {
 			return nil, errors.New(err).
 				Component("analysis.processor").
 				Category(errors.CategoryValidation).
 				Context("operation", "build_command_arguments").
 				Context("security_check", "value_sanitization").
-				Context("value_type", fmt.Sprintf("%T", noteValue)).
+				Context("value_type", fmt.Sprintf("%T", sourceValue)).
 				Context("param_name", key).
 				Context("retryable", false). // Value sanitization failure is permanent
 				Build()
@@ -267,6 +273,22 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 	}
 
 	return args, nil
+}
+
+// buildSafeArguments creates a sanitized list of command arguments from a Note.
+//
+// Deprecated: Use buildSafeArgumentsFromResult for new code.
+func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, error) {
+	return buildSafeArgumentsWithGetter(params, func(key string) any {
+		return getNoteValueByName(note, key)
+	})
+}
+
+// buildSafeArgumentsFromResult creates a sanitized list of command arguments from a Result.
+func buildSafeArgumentsFromResult(params map[string]any, result *detection.Result) ([]string, error) {
+	return buildSafeArgumentsWithGetter(params, func(key string) any {
+		return getResultValueByName(result, key)
+	})
 }
 
 // isValidParamName checks if a parameter name contains only safe characters
@@ -330,4 +352,57 @@ func getNoteValueByName(note *datastore.Note, paramName string) any {
 
 	// Return nil or an appropriate zero value if the field does not exist
 	return nil
+}
+
+// getResultValueByName retrieves a value from a Result by parameter name using explicit mapping.
+// This maps external script parameter names to the appropriate Result fields.
+func getResultValueByName(result *detection.Result, paramName string) any {
+	switch paramName {
+	// Species-related fields (nested in Species struct)
+	case "CommonName":
+		return result.Species.CommonName
+	case "ScientificName":
+		return result.Species.ScientificName
+	case "SpeciesCode":
+		return result.Species.Code
+
+	// Direct Result fields
+	case "ID":
+		return result.ID
+	case "Confidence":
+		return result.Confidence
+	case "Latitude":
+		return result.Latitude
+	case "Longitude":
+		return result.Longitude
+	case "ClipName":
+		return result.ClipName
+	case "Threshold":
+		return result.Threshold
+	case "Sensitivity":
+		return result.Sensitivity
+	case "SourceNode":
+		return result.SourceNode
+	case "ProcessingTime":
+		return result.ProcessingTime
+	case "Occurrence":
+		return result.Occurrence
+
+	// Time-related fields
+	case "Date":
+		return result.Date()
+	case "Time":
+		return result.Time()
+	case "BeginTime":
+		return result.BeginTime
+	case "EndTime":
+		return result.EndTime
+
+	// AudioSource-related fields
+	case "Source":
+		return result.AudioSource.ID
+
+	default:
+		return nil
+	}
 }
