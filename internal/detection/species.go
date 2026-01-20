@@ -22,6 +22,10 @@ type Species struct {
 // For custom models with species not in the eBird taxonomy, the species code
 // might be empty or a placeholder.
 func ParseSpeciesString(species string) Species {
+	// Sanitize input - trim whitespace and remove carriage returns
+	species = strings.TrimSpace(species)
+	species = strings.ReplaceAll(species, "\r", "")
+
 	// Check if the string is empty or contains special characters that would break parsing
 	if species == "" || strings.Contains(species, "\t") || strings.Contains(species, "\n") {
 		return Species{

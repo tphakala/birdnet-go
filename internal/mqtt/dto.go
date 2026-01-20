@@ -2,6 +2,8 @@
 package mqtt
 
 import (
+	"time"
+
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -112,6 +114,6 @@ func (dto *MQTTEventDTO) SetBirdImage(img *imageprovider.BirdImage) {
 	}
 
 	if !img.CachedAt.IsZero() {
-		dto.BirdImage.CachedAt = img.CachedAt.Format("2006-01-02T15:04:05Z07:00")
+		dto.BirdImage.CachedAt = img.CachedAt.Format(time.RFC3339)
 	}
 }

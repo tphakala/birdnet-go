@@ -8,6 +8,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
+// defaultDetectionLimit is the default number of detections returned by queries.
+const defaultDetectionLimit = 100
+
 // DetectionRepository defines the interface for detection persistence operations.
 // This interface uses the domain model (detection.Result) and abstracts away
 // the database-specific implementation details.
@@ -113,7 +116,7 @@ type ConfidenceRange struct {
 // NewDetectionFilters creates default detection filters.
 func NewDetectionFilters() *DetectionFilters {
 	return &DetectionFilters{
-		Limit:         100,
+		Limit:         defaultDetectionLimit,
 		Offset:        0,
 		SortAscending: false,
 	}

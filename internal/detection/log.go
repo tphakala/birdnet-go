@@ -41,8 +41,12 @@ func LogToFile(settings *conf.Settings, result *Result) error {
 		timeFormat = "03:04:05 PM"
 	}
 
-	// Format the detection data for logging
-	logString := fmt.Sprintf("%s %s\n", result.Timestamp.Format(timeFormat), result.Species.CommonName)
+	// Format the detection data for logging - prefer CommonName, fallback to ScientificName
+	speciesName := result.Species.CommonName
+	if speciesName == "" {
+		speciesName = result.Species.ScientificName
+	}
+	logString := fmt.Sprintf("%s %s\n", result.Timestamp.Format(timeFormat), speciesName)
 
 	// Write the formatted log string to the file
 	if _, err := file.WriteString(logString); err != nil {

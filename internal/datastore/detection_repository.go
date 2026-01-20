@@ -103,7 +103,7 @@ func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilt
 
 // GetBySpecies retrieves detections for a specific species.
 func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, filters *DetectionFilters) ([]*detection.Result, int64, error) {
-	limit := 100
+	limit := defaultDetectionLimit
 	offset := 0
 	if filters != nil {
 		if filters.Limit > 0 {
@@ -132,15 +132,15 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 
 // GetByDateRange retrieves detections within a date range.
 func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error) {
-	// Parse date strings to time.Time
-	start, err := time.Parse(mapper.DateFormat, startDate)
+	// Parse date strings to time.Time using repository timezone
+	start, err := time.ParseInLocation(mapper.DateFormat, startDate, r.tz)
 	if err != nil && startDate != "" {
 		return nil, 0, fmt.Errorf("invalid start date %q: %w", startDate, err)
 	}
 
 	var end time.Time
 	if endDate != "" {
-		end, err = time.Parse(mapper.DateFormat, endDate)
+		end, err = time.ParseInLocation(mapper.DateFormat, endDate, r.tz)
 		if err != nil {
 			return nil, 0, fmt.Errorf("invalid end date %q: %w", endDate, err)
 		}
@@ -208,8 +208,12 @@ func (r *detectionRepository) IsLocked(ctx context.Context, id string) (bool, er
 
 // SetReview sets the review status of a detection.
 func (r *detectionRepository) SetReview(ctx context.Context, id, verified string) error {
+	noteID, err := r.parseID(id)
+	if err != nil {
+		return err
+	}
 	review := &NoteReview{
-		NoteID:    r.parseID(id),
+		NoteID:    noteID,
 		Verified:  verified,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -231,8 +235,12 @@ func (r *detectionRepository) GetReview(ctx context.Context, id string) (string,
 
 // AddComment adds a comment to a detection.
 func (r *detectionRepository) AddComment(ctx context.Context, id, comment string) error {
+	noteID, err := r.parseID(id)
+	if err != nil {
+		return err
+	}
 	noteComment := &NoteComment{
-		NoteID:    r.parseID(id),
+		NoteID:    noteID,
 		Entry:     comment,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -383,7 +391,7 @@ func (r *detectionRepository) notesToResults(notes []Note) ([]*detection.Result,
 func (r *detectionRepository) convertFilters(filters *DetectionFilters) (AdvancedSearchFilters, error) {
 	if filters == nil {
 		return AdvancedSearchFilters{
-			Limit:  100,
+			Limit:  defaultDetectionLimit,
 			Offset: 0,
 		}, nil
 	}
@@ -400,19 +408,19 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 		Locked:        filters.Locked,
 	}
 
-	// Convert date range - parse strings to time.Time
+	// Convert date range - parse strings to time.Time using repository timezone
 	if filters.StartDate != "" || filters.EndDate != "" {
 		var start, end time.Time
 		var err error
 
 		if filters.StartDate != "" {
-			start, err = time.Parse(mapper.DateFormat, filters.StartDate)
+			start, err = time.ParseInLocation(mapper.DateFormat, filters.StartDate, r.tz)
 			if err != nil {
 				return AdvancedSearchFilters{}, fmt.Errorf("invalid start date %q: %w", filters.StartDate, err)
 			}
 		}
 		if filters.EndDate != "" {
-			end, err = time.Parse(mapper.DateFormat, filters.EndDate)
+			end, err = time.ParseInLocation(mapper.DateFormat, filters.EndDate, r.tz)
 			if err != nil {
 				return AdvancedSearchFilters{}, fmt.Errorf("invalid end date %q: %w", filters.EndDate, err)
 			}
@@ -425,7 +433,7 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 			End:   end,
 		}
 	} else if filters.Date != "" {
-		date, err := time.Parse(mapper.DateFormat, filters.Date)
+		date, err := time.ParseInLocation(mapper.DateFormat, filters.Date, r.tz)
 		if err != nil {
 			return AdvancedSearchFilters{}, fmt.Errorf("invalid date %q: %w", filters.Date, err)
 		}
@@ -455,7 +463,10 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 }
 
 // parseID converts a string ID to uint.
-func (r *detectionRepository) parseID(id string) uint {
-	n, _ := strconv.ParseUint(id, 10, 64)
-	return uint(n)
+func (r *detectionRepository) parseID(id string) (uint, error) {
+	n, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
+	}
+	return uint(n), nil
 }

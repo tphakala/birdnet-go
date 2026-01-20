@@ -9,11 +9,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
-// Time format constants - match existing database format.
-const (
-	DateFormat = "2006-01-02"
-	TimeFormat = "15:04:05"
-)
+// DateFormat is the date layout used for database storage (YYYY-MM-DD).
+const DateFormat = "2006-01-02"
+
+// TimeFormat is the time layout used for database storage (HH:MM:SS).
+const TimeFormat = "15:04:05"
 
 // ResultToEntity converts a domain Result to a database NoteEntity.
 func ResultToEntity(r *detection.Result) *entities.NoteEntity {

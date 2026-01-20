@@ -1690,9 +1690,9 @@ func (p *Processor) NewWithSpeciesInfo(
 	occurrence float64) datastore.Note {
 
 	// Detection time is adjusted to account for the 3-second analysis chunk
-	now := time.Now()
-	date := now.Format("2006-01-02")
-	detectionTime := now.Add(-detection.DetectionTimeOffset)
+	// Both date and time must use detectionTime to avoid date mismatch around midnight
+	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
+	date := detectionTime.Format("2006-01-02")
 	timeStr := detectionTime.Format("15:04:05")
 
 	// Resolve audio source from registry
