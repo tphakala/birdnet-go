@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -326,14 +325,6 @@ func TestEnqueueTask(t *testing.T) {
 							BeginTime:   now,
 							EndTime:     now.Add(15 * time.Second),
 						},
-						Note: datastore.Note{
-							CommonName:     "Test Bird",
-							ScientificName: "Testus birdus",
-							Confidence:     0.95,
-							Source:         testAudioSource(),
-							BeginTime:      now,
-							EndTime:        now.Add(15 * time.Second),
-						},
 					},
 					Action: tc.action,
 				}
@@ -375,14 +366,6 @@ func TestEnqueueTask(t *testing.T) {
 					AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
 					BeginTime:   now,
 					EndTime:     now.Add(15 * time.Second),
-				},
-				Note: datastore.Note{
-					CommonName:     "Test Bird",
-					ScientificName: "Testus birdus",
-					Confidence:     0.95,
-					Source:         testAudioSource(),
-					BeginTime:      now,
-					EndTime:        now.Add(15 * time.Second),
 				},
 			},
 			Action: &MockAction{},
@@ -427,14 +410,6 @@ func TestEnqueueTask(t *testing.T) {
 						AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
 						BeginTime:   now,
 						EndTime:     now.Add(15 * time.Second),
-					},
-					Note: datastore.Note{
-						CommonName:     fmt.Sprintf("Test Bird %d", i),
-						ScientificName: "Testus birdus",
-						Confidence:     0.95,
-						Source:         testAudioSource(),
-						BeginTime:      now,
-						EndTime:        now.Add(15 * time.Second),
 					},
 				},
 				Action: &MockAction{
@@ -497,14 +472,6 @@ func TestEnqueueTask(t *testing.T) {
 				},
 				Confidence: 0.95,
 				Model:      detection.DefaultModelInfo(),
-			},
-			Note: datastore.Note{
-				CommonName:     "Test Bird",
-				ScientificName: "Testus birdus",
-				Confidence:     0.95,
-				Source:         testAudioSource(),
-				BeginTime:      now,
-				EndTime:        now.Add(15 * time.Second),
 			},
 		}
 
@@ -662,14 +629,6 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 						BeginTime:   now,
 						EndTime:     now.Add(15 * time.Second),
 					},
-					Note: datastore.Note{
-						CommonName:     b.CommonName,
-						ScientificName: b.ScientificName,
-						Confidence:     b.Confidence,
-						Source:         testAudioSource(),
-						BeginTime:      now,
-						EndTime:        now.Add(15 * time.Second),
-					},
 				},
 				Action: &MockAction{},
 			}
@@ -763,14 +722,6 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 				BeginTime:   now,
 				EndTime:     now.Add(15 * time.Second),
 			},
-			Note: datastore.Note{
-				CommonName:     "Test Bird",
-				ScientificName: "Testus birdus",
-				Confidence:     0.95,
-				Source:         testAudioSource(),
-				BeginTime:      now,
-				EndTime:        now.Add(15 * time.Second),
-			},
 		},
 		Action: mockAction,
 	}
@@ -822,14 +773,6 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 				AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "Test Source"},
 				BeginTime:   failNow,
 				EndTime:     failNow.Add(15 * time.Second),
-			},
-			Note: datastore.Note{
-				CommonName:     "Failing Bird",
-				ScientificName: "Failurus maximus",
-				Confidence:     0.90,
-				Source:         testAudioSource(),
-				BeginTime:      failNow,
-				EndTime:        failNow.Add(15 * time.Second),
 			},
 		},
 		Action: failingAction,
@@ -948,14 +891,6 @@ func TestRetryLogic(t *testing.T) {
 				BeginTime:   retryNow,
 				EndTime:     retryNow.Add(15 * time.Second),
 			},
-			Note: datastore.Note{
-				CommonName:     "Retry Bird",
-				ScientificName: "Retryus maximus",
-				Confidence:     0.95,
-				Source:         testAudioSource(),
-				BeginTime:      retryNow,
-				EndTime:        retryNow.Add(15 * time.Second),
-			},
 		},
 		Action: mockAction,
 	}
@@ -1057,14 +992,6 @@ func TestRetryLogic(t *testing.T) {
 				AudioSource: detection.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "Test Source"},
 				BeginTime:   exhaustNow,
 				EndTime:     exhaustNow.Add(15 * time.Second),
-			},
-			Note: datastore.Note{
-				CommonName:     "Exhausting Bird",
-				ScientificName: "Exhaustus maximus",
-				Confidence:     0.90,
-				Source:         testAudioSource(),
-				BeginTime:      exhaustNow,
-				EndTime:        exhaustNow.Add(15 * time.Second),
 			},
 		},
 		Action: exhaustingAction,

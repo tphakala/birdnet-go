@@ -33,12 +33,6 @@ import (
 
 // Timeout and interval constants
 const (
-	// SSEDatabaseIDTimeout is the maximum time to wait for database ID assignment
-	SSEDatabaseIDTimeout = 10 * time.Second
-
-	// SSEDatabaseCheckInterval is how often to check for database ID
-	SSEDatabaseCheckInterval = 200 * time.Millisecond
-
 	// SSEAudioFileTimeout is the maximum time to wait for audio file to be written
 	SSEAudioFileTimeout = 5 * time.Second
 
@@ -51,10 +45,6 @@ const (
 
 	// MQTTPublishTimeout is the timeout for MQTT publish operations
 	MQTTPublishTimeout = 10 * time.Second
-
-	// DatabaseSearchLimit is the maximum number of results when searching for notes
-	// Set high enough to handle high-activity periods (e.g., dawn chorus)
-	DatabaseSearchLimit = 50
 
 	// CompositeActionTimeout is the default timeout for each action in a composite action
 	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
@@ -96,20 +86,18 @@ type ContextAction interface {
 
 type LogAction struct {
 	Settings      *conf.Settings
-	Result        detection.Result // New domain model for logging
-	Note          datastore.Note   // Deprecated: kept for backward compat during transition
+	Result        detection.Result // Domain model (single source of truth)
 	EventTracker  *EventTracker
 	Description   string
 	CorrelationID string     // Detection correlation ID for log tracking
-	mu            sync.Mutex // Protect concurrent access to Note
+	mu            sync.Mutex // Protect concurrent access to Result
 }
 
 type DatabaseAction struct {
 	Settings          *conf.Settings
 	Ds                datastore.Interface
-	Result            detection.Result   // Domain model (single source of truth)
-	Note              datastore.Note     // Deprecated: kept temporarily for gradual migration
-	Results           []datastore.Results
+	Result            detection.Result             // Domain model (single source of truth)
+	Results           []detection.AdditionalResult // Secondary predictions (converted to legacy format at save time)
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
@@ -117,7 +105,7 @@ type DatabaseAction struct {
 	DetectionCtx      *DetectionContext       // Shared context for downstream actions (MQTT, SSE)
 	Description       string
 	CorrelationID     string     // Detection correlation ID for log tracking
-	mu                sync.Mutex // Protect concurrent access to Note and Results
+	mu                sync.Mutex // Protect concurrent access to Result and Results
 }
 
 type SaveAudioAction struct {
@@ -163,20 +151,18 @@ type PreRendererSubmit interface {
 type BirdWeatherAction struct {
 	Settings      *conf.Settings
 	Result        detection.Result // Domain model (single source of truth)
-	Note          datastore.Note   // Deprecated: kept temporarily for gradual migration
 	pcmData       []byte
 	BwClient      *birdweather.BwClient
 	EventTracker  *EventTracker
 	RetryConfig   jobqueue.RetryConfig // Configuration for retry behavior
 	Description   string
 	CorrelationID string     // Detection correlation ID for log tracking
-	mu            sync.Mutex // Protect concurrent access to Note and pcmData
+	mu            sync.Mutex // Protect concurrent access to Result and pcmData
 }
 
 type MqttAction struct {
 	Settings       *conf.Settings
 	Result         detection.Result // Domain model (single source of truth)
-	Note           datastore.Note   // Deprecated: kept temporarily for gradual migration
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
@@ -184,7 +170,7 @@ type MqttAction struct {
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
-	mu             sync.Mutex // Protect concurrent access to Note
+	mu             sync.Mutex // Protect concurrent access to Result
 }
 
 type UpdateRangeFilterAction struct {
@@ -197,14 +183,13 @@ type UpdateRangeFilterAction struct {
 type SSEAction struct {
 	Settings       *conf.Settings
 	Result         detection.Result // Domain model (single source of truth)
-	Note           datastore.Note   // Deprecated: kept temporarily for gradual migration
 	BirdImageCache *imageprovider.BirdImageCache
 	EventTracker   *EventTracker
 	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
-	mu             sync.Mutex // Protect concurrent access to Note
+	mu             sync.Mutex // Protect concurrent access to Result
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
 	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error
@@ -618,10 +603,14 @@ func (a *DatabaseAction) Execute(data any) error {
 
 	// Convert Result to Note for GORM persistence
 	note := datastore.NoteFromResult(&a.Result)
-	note.Results = a.Results // Add secondary predictions
+
+	// Convert domain AdditionalResults to legacy datastore.Results format for GORM.
+	// Results are passed separately to Save() - not assigned to note.Results because
+	// saveNoteInTransaction uses Omit("Results") to prevent GORM auto-save.
+	legacyResults := datastore.AdditionalResultsToDatastoreResults(a.Results)
 
 	// Save note to database
-	if err := a.Ds.Save(&note, a.Results); err != nil {
+	if err := a.Ds.Save(&note, legacyResults); err != nil {
 		// Add structured logging
 		GetLogger().Error("Failed to save note and results to database",
 			logger.String("component", "analysis.processor.actions"),
@@ -1276,29 +1265,12 @@ func (a *SSEAction) Execute(data any) error {
 	}
 
 	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence).
-	// This replaces the old polling-based waitForDatabaseID() approach with proper synchronization.
+	// DetectionContext provides the database ID without polling via atomic.Uint64.
 	var noteID uint
 	if a.DetectionCtx != nil {
 		noteID = uint(a.DetectionCtx.NoteID.Load())
 		if noteID > 0 {
 			a.Result.ID = noteID
-		}
-	}
-
-	// Fallback to polling if DetectionCtx wasn't set (legacy compatibility)
-	// This should only happen if SSEAction runs outside of CompositeAction
-	if a.Result.ID == 0 && a.DetectionCtx == nil {
-		if err := a.waitForDatabaseID(); err != nil {
-			// Cannot broadcast without database ID - frontend would fail to load audio/spectrogram
-			// Skip SSE broadcast gracefully - the detection is still saved and will appear on page refresh
-			GetLogger().Warn("Skipping SSE broadcast - database ID not available within timeout",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.Error(err),
-				logger.Duration("timeout", SSEDatabaseIDTimeout),
-				logger.String("operation", "sse_broadcast_skipped"))
-			return nil // Not an error - graceful degradation
 		}
 	}
 
@@ -1414,103 +1386,5 @@ func (a *SSEAction) waitForAudioFile() error {
 		Context("operation", "wait_for_audio_file").
 		Context("clip_name", a.Result.ClipName).
 		Context("timeout_seconds", SSEAudioFileTimeout.Seconds()).
-		Build()
-}
-
-// waitForDatabaseID waits for the Note to be saved to database and ID assigned.
-//
-// Deprecated: This polling-based approach is a legacy fallback. When SSEAction is
-// created via getDefaultActions(), it always receives a DetectionContext which
-// provides the database ID without polling via atomic.Uint64. This method is retained
-// for backward compatibility with custom action configurations that may create SSEAction
-// without a DetectionContext. Consider removing in a future major version.
-func (a *SSEAction) waitForDatabaseID() error {
-	// We need to query the database to find this note by unique characteristics
-	// Since we don't have the ID yet, we'll search by time, species, and confidence
-	deadline := time.Now().Add(SSEDatabaseIDTimeout)
-
-	for time.Now().Before(deadline) {
-		// Query database for a note matching our characteristics
-		// Use a small time window around the detection time to find the record
-		if updatedNote, err := a.findNoteInDatabase(); err == nil && updatedNote.ID > 0 {
-			// Found the note with an ID, update our copy
-			a.Result.ID = updatedNote.ID
-			if a.Settings.Debug {
-				GetLogger().Debug("Found database ID for SSE broadcast",
-					logger.String("component", "analysis.processor.actions"),
-					logger.String("detection_id", a.CorrelationID),
-					logger.Any("database_id", updatedNote.ID),
-					logger.String("species", a.Result.Species.CommonName),
-					logger.String("scientific_name", a.Result.Species.ScientificName),
-					logger.String("operation", "wait_database_id_success"))
-			}
-			return nil
-		}
-
-		time.Sleep(SSEDatabaseCheckInterval)
-	}
-
-	// Timeout reached - intentionally using fmt.Errorf instead of errors.Newf to avoid
-	// triggering user notifications. This is a transient timing issue, not a user-actionable
-	// problem. The structured error system converts errors to notifications, which we want
-	// to avoid for this non-critical timeout.
-	// Note: Species name is NOT included in error message to prevent log injection.
-	// The species is already captured in structured log fields by the caller.
-	return fmt.Errorf("database ID not found after %v", SSEDatabaseIDTimeout)
-}
-
-// findNoteInDatabase searches for the note in database by unique characteristics.
-//
-// Deprecated: This is a helper for the deprecated waitForDatabaseID() method.
-// See waitForDatabaseID() deprecation notice for details.
-func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
-	if a.Ds == nil {
-		return nil, errors.Newf("datastore not available").
-			Component("analysis.processor").
-			Category(errors.CategoryDatabase).
-			Context("operation", "find_note_in_database").
-			Context("retryable", false). // System configuration issue - not retryable
-			Build()
-	}
-
-	// Search for notes with matching characteristics
-	// The SearchNotes method expects a search query string that will match against
-	// common_name or scientific_name fields
-	query := a.Result.Species.ScientificName
-
-	// Search for notes, sorted by ID descending to get the most recent
-	notes, err := a.Ds.SearchNotes(query, false, DatabaseSearchLimit, 0) // false = sort descending, offset 0
-	if err != nil {
-		return nil, errors.New(err).
-			Component("analysis.processor").
-			Category(errors.CategoryDatabase).
-			Context("operation", "search_notes").
-			Context("query", query).
-			Build()
-	}
-
-	// Filter results to find the exact match based on BeginTime and source
-	// Using BeginTime (time.Time) is more robust than Date+Time strings as it's the
-	// actual detection timestamp and avoids string formatting/precision issues
-	for i := range notes {
-		note := &notes[i]
-		// Check if this note matches our expected characteristics
-		// Include SourceNode to prevent matching wrong detection in high-activity periods
-		// Only compare SourceNode if both have values (handles legacy data)
-		sourceMatches := a.Result.SourceNode == "" || note.SourceNode == "" || note.SourceNode == a.Result.SourceNode
-		// Truncate to millisecond precision for comparison to handle potential database precision loss
-		if note.ScientificName == a.Result.Species.ScientificName &&
-			note.BeginTime.Truncate(time.Millisecond).Equal(a.Result.BeginTime.Truncate(time.Millisecond)) &&
-			sourceMatches {
-			return note, nil
-		}
-	}
-
-	return nil, errors.Newf("note not found in database").
-		Component("analysis.processor").
-		Category(errors.CategoryNotFound).
-		Context("operation", "find_note_in_database").
-		Context("species", a.Result.Species.ScientificName).
-		Context("begin_time", a.Result.BeginTime.Format("2006-01-02 15:04:05.000")).
 		Build()
 }

@@ -95,10 +95,6 @@ type Detections struct {
 	pcmData3s     []byte                       // 3s PCM data containing the detection
 	Result        detection.Result             // Detection result containing highest match
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
-
-	// Deprecated: Use Result instead. Kept for backward compatibility during transition.
-	// Will be removed after all actions are migrated to use Result.
-	Note datastore.Note
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -658,20 +654,11 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
 
-	// Compute detection time once to ensure Note and Result have consistent timestamps
+	// Compute detection time once to ensure Result has consistent timestamp
 	// This prevents date mismatch around midnight when time.Now() would be called separately
 	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
 
-	// Create the legacy note (kept for backward compatibility)
-	note := p.NewWithSpeciesInfo(
-		detectionTime,
-		beginTime, endTime,
-		scientificName, commonName, speciesCode,
-		float64(result.Confidence),
-		item.Source.ID, clipName,
-		item.ElapsedTime, occurrence)
-
-	// Create the new detection.Result
+	// Create the detection.Result
 	detectionResult := p.createDetectionResult(
 		detectionTime,
 		beginTime, endTime,
@@ -700,7 +687,6 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 		pcmData3s:     item.PCMdata,
 		Result:        detectionResult,
 		Results:       additionalResults,
-		Note:          note, // Deprecated: kept for backward compatibility
 	}
 }
 
@@ -783,25 +769,6 @@ func (p *Processor) convertToAdditionalResults(results []datastore.Results) []de
 		})
 	}
 	return additional
-}
-
-// convertToLegacyResults converts detection.AdditionalResult back to datastore.Results.
-// This is used for backward compatibility during the transition period.
-//
-// Deprecated: Remove once all actions are migrated to use detection.Result.
-func convertToLegacyResults(results []detection.AdditionalResult) []datastore.Results {
-	legacy := make([]datastore.Results, 0, len(results))
-	for _, r := range results {
-		speciesStr := r.Species.ScientificName + "_" + r.Species.CommonName
-		if r.Species.Code != "" {
-			speciesStr += "_" + r.Species.Code
-		}
-		legacy = append(legacy, datastore.Results{
-			Species:    speciesStr,
-			Confidence: float32(r.Confidence),
-		})
-	}
-	return legacy
 }
 
 // syncSpeciesTrackerIfNeeded syncs the species tracker if conditions are met
@@ -995,7 +962,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Note: speciesName is already lowercase (from pendingDetections map key)
 	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
-	item.Detection.Note.BeginTime = item.FirstDetected
+	item.Detection.Result.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
@@ -1290,7 +1257,6 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			Settings:      p.Settings,
 			EventTracker:  p.GetEventTracker(),
 			Result:        det.Result,
-			Note:          det.Note, // Deprecated: kept for backward compat
 			CorrelationID: det.CorrelationID,
 		})
 	}
@@ -1309,8 +1275,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			PreRenderer:       p.preRenderer,
 			DetectionCtx:      detectionCtx, // Share context for downstream actions
 			Result:            det.Result,   // Domain model (single source of truth)
-			Note:              det.Note,     // Deprecated: kept temporarily
-			Results:           convertToLegacyResults(det.Results), // Convert back for backward compatibility
+			Results:           det.Results, // Domain model - converted to legacy format at save time
 			Ds:                p.Ds,
 			CorrelationID:     det.CorrelationID,
 		}
@@ -1330,7 +1295,6 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 		sseAction = &SSEAction{
 			Settings:       p.Settings,
 			Result:         det.Result, // Domain model (single source of truth)
-			Note:           det.Note,   // Deprecated: kept temporarily
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
 			DetectionCtx:   detectionCtx, // Share context from DatabaseAction
@@ -1361,7 +1325,6 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 				EventTracker:   p.GetEventTracker(),
 				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
 				Result:         det.Result,   // Domain model (single source of truth)
-				Note:           det.Note,     // Deprecated: kept temporarily
 				BirdImageCache: p.BirdImageCache,
 				RetryConfig:    mqttRetryConfig,
 				CorrelationID:  det.CorrelationID,
@@ -1429,7 +1392,6 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 				EventTracker:  p.GetEventTracker(),
 				BwClient:      bwClient,
 				Result:        det.Result, // Domain model (single source of truth)
-				Note:          det.Note,   // Deprecated: kept temporarily
 				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
 				CorrelationID: det.CorrelationID,
@@ -1681,81 +1643,6 @@ func (p *Processor) Shutdown() error {
 	GetLogger().Info("Processor shutdown complete",
 		logger.String("operation", "processor_shutdown"))
 	return nil
-}
-
-// NewWithSpeciesInfo creates a new observation note with pre-parsed species information.
-// This ensures that the species code from the taxonomy lookup is preserved.
-// detectionTime should be pre-computed by the caller to ensure timestamp consistency
-// with other detection artifacts (e.g., Result) created from the same analysis.
-func (p *Processor) NewWithSpeciesInfo(
-	detectionTime time.Time,
-	beginTime, endTime time.Time,
-	scientificName, commonName, speciesCode string,
-	confidence float64,
-	source, clipName string,
-	elapsedTime time.Duration,
-	occurrence float64) datastore.Note {
-
-	// Use the provided detection time for both date and time to ensure consistency
-	date := detectionTime.Format("2006-01-02")
-	timeStr := detectionTime.Format("15:04:05")
-
-	// Resolve audio source from registry
-	var sourceStruct datastore.AudioSource
-	foundInRegistry := false
-	registry := myaudio.GetRegistry()
-	if registry != nil {
-		// Try to get existing source by connection string
-		if existingSource, exists := registry.GetSourceByConnection(source); exists {
-			sourceStruct = datastore.AudioSource{
-				ID:          existingSource.ID,
-				SafeString:  existingSource.SafeString,
-				DisplayName: existingSource.DisplayName,
-			}
-			foundInRegistry = true
-		} else if registrySource, exists := registry.GetSourceByID(source); exists {
-			// Try to get by ID directly
-			sourceStruct = datastore.AudioSource{
-				ID:          registrySource.ID,
-				SafeString:  registrySource.SafeString,
-				DisplayName: registrySource.DisplayName,
-			}
-			foundInRegistry = true
-		}
-	}
-
-	if !foundInRegistry {
-		// Fallback when registry not available or source not found
-		sourceStruct = datastore.AudioSource{
-			ID:          source,
-			SafeString:  privacy.SanitizeRTSPUrl(source),
-			DisplayName: privacy.SanitizeRTSPUrl(source),
-		}
-	}
-
-	// Round confidence to two decimal places
-	roundedConfidence := math.Round(confidence*100) / 100
-
-	// Return a new Note struct populated with the provided parameters and the current date and time
-	return datastore.Note{
-		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
-		Date:           date,                           // Use ISO 8601 date format
-		Time:           timeStr,                        // Use 24-hour time format
-		Source:         sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName
-		BeginTime:      beginTime,                      // Start time of the observation
-		EndTime:        endTime,                        // End time of the observation
-		SpeciesCode:    speciesCode,                    // Species code from taxonomy lookup
-		ScientificName: scientificName,                 // Scientific name from taxonomy lookup
-		CommonName:     commonName,                     // Common name from taxonomy lookup
-		Confidence:     roundedConfidence,              // Confidence score of the observation
-		Latitude:       p.Settings.BirdNET.Latitude,    // Geographic latitude where the observation was made
-		Longitude:      p.Settings.BirdNET.Longitude,   // Geographic longitude where the observation was made
-		Threshold:      p.Settings.BirdNET.Threshold,   // Threshold setting from configuration
-		Sensitivity:    p.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration
-		ClipName:       clipName,                       // Name of the audio clip
-		ProcessingTime: elapsedTime,                    // Time taken to process the observation
-		Occurrence:     occurrence,                     // Runtime occurrence probability (not persisted to DB)
-	}
 }
 
 // logDetectionResults logs detection processing results using the LogDeduplicator

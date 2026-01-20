@@ -54,14 +54,14 @@ func TestNoteFromResult(t *testing.T) {
 	assert.Equal(t, "amerob", note.SpeciesCode)
 	assert.Equal(t, "Turdus migratorius", note.ScientificName)
 	assert.Equal(t, "American Robin", note.CommonName)
-	assert.Equal(t, 0.95, note.Confidence)
-	assert.Equal(t, 42.0, note.Latitude)
-	assert.Equal(t, -71.0, note.Longitude)
-	assert.Equal(t, 0.8, note.Threshold)
-	assert.Equal(t, 1.0, note.Sensitivity)
+	assert.InDelta(t, 0.95, note.Confidence, 0.001)
+	assert.InDelta(t, 42.0, note.Latitude, 0.001)
+	assert.InDelta(t, -71.0, note.Longitude, 0.001)
+	assert.InDelta(t, 0.8, note.Threshold, 0.001)
+	assert.InDelta(t, 1.0, note.Sensitivity, 0.001)
 	assert.Equal(t, "test.wav", note.ClipName)
 	assert.Equal(t, 100*time.Millisecond, note.ProcessingTime)
-	assert.Equal(t, 0.85, note.Occurrence)
+	assert.InDelta(t, 0.85, note.Occurrence, 0.001)
 	assert.Equal(t, "correct", note.Verified)
 	assert.True(t, note.Locked)
 }
@@ -74,11 +74,11 @@ func TestNoteFromResult_ZeroValues(t *testing.T) {
 	note := datastore.NoteFromResult(&result)
 
 	assert.Equal(t, uint(0), note.ID)
-	assert.Equal(t, "", note.SourceNode)
+	assert.Empty(t, note.SourceNode)
 	assert.Equal(t, "2024-01-01", note.Date)
 	assert.Equal(t, "00:00:00", note.Time)
-	assert.Equal(t, "", note.CommonName)
-	assert.Equal(t, 0.0, note.Confidence)
+	assert.Empty(t, note.CommonName)
+	assert.InDelta(t, 0.0, note.Confidence, 0.001)
 }
 
 func TestAdditionalResultsToDatastoreResults(t *testing.T) {
@@ -105,7 +105,7 @@ func TestAdditionalResultsToDatastoreResults(t *testing.T) {
 
 		require.Len(t, result, 1)
 		assert.Equal(t, "Turdus merula_Common Blackbird", result[0].Species)
-		assert.Equal(t, float32(0.85), result[0].Confidence)
+		assert.InDelta(t, float32(0.85), result[0].Confidence, 0.001)
 	})
 
 	t.Run("converts results with species code", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestAdditionalResultsToDatastoreResults(t *testing.T) {
 
 		require.Len(t, result, 1)
 		assert.Equal(t, "Turdus migratorius_American Robin_amerob", result[0].Species)
-		assert.Equal(t, float32(0.92), result[0].Confidence)
+		assert.InDelta(t, float32(0.92), result[0].Confidence, 0.001)
 	})
 
 	t.Run("converts multiple results", func(t *testing.T) {
@@ -150,8 +150,8 @@ func TestAdditionalResultsToDatastoreResults(t *testing.T) {
 
 		require.Len(t, result, 2)
 		assert.Equal(t, "Turdus merula_Common Blackbird", result[0].Species)
-		assert.Equal(t, float32(0.85), result[0].Confidence)
+		assert.InDelta(t, float32(0.85), result[0].Confidence, 0.001)
 		assert.Equal(t, "Turdus philomelos_Song Thrush_sonthr", result[1].Species)
-		assert.Equal(t, float32(0.75), result[1].Confidence)
+		assert.InDelta(t, float32(0.75), result[1].Confidence, 0.001)
 	})
 }

@@ -33,21 +33,10 @@ func NewDetectionRepository(store Interface, tz *time.Location) DetectionReposit
 // Save persists a detection result and its additional predictions.
 func (r *detectionRepository) Save(ctx context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) error {
 	// Convert domain model to legacy Note for existing Save method
-	note := r.resultToNote(result)
+	note := NoteFromResult(result)
 
 	// Convert additional results to legacy Results
-	// Format: ScientificName_CommonName or ScientificName_CommonName_Code
-	results := make([]Results, 0, len(additionalResults))
-	for _, ar := range additionalResults {
-		speciesStr := ar.Species.ScientificName + "_" + ar.Species.CommonName
-		if ar.Species.Code != "" {
-			speciesStr += "_" + ar.Species.Code
-		}
-		results = append(results, Results{
-			Species:    speciesStr,
-			Confidence: float32(ar.Confidence),
-		})
-	}
+	results := AdditionalResultsToDatastoreResults(additionalResults)
 
 	// Use existing Save method
 	if err := r.store.Save(&note, results); err != nil {
@@ -375,34 +364,6 @@ func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) [
 }
 
 // Helper methods
-
-// resultToNote converts a domain Result to a legacy Note.
-func (r *detectionRepository) resultToNote(result *detection.Result) Note {
-	return Note{
-		ID:             result.ID,
-		SourceNode:     result.SourceNode,
-		Date:           result.Timestamp.Format(mapper.DateFormat),
-		Time:           result.Timestamp.Format(mapper.TimeFormat),
-		BeginTime:      result.BeginTime,
-		EndTime:        result.EndTime,
-		SpeciesCode:    result.Species.Code,
-		ScientificName: result.Species.ScientificName,
-		CommonName:     result.Species.CommonName,
-		Confidence:     result.Confidence,
-		Latitude:       result.Latitude,
-		Longitude:      result.Longitude,
-		Threshold:      result.Threshold,
-		Sensitivity:    result.Sensitivity,
-		ClipName:       result.ClipName,
-		ProcessingTime: result.ProcessingTime,
-		Source: AudioSource{
-			ID:          result.AudioSource.ID,
-			SafeString:  result.AudioSource.SafeString,
-			DisplayName: result.AudioSource.DisplayName,
-		},
-		Occurrence: result.Occurrence,
-	}
-}
 
 // noteToResult converts a legacy Note to a domain Result.
 func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error) {

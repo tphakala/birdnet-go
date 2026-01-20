@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
@@ -80,18 +79,6 @@ func TestMqttAction_IncludesOccurrence(t *testing.T) {
 		},
 	}
 
-	// Legacy Note kept for backward compatibility during transition
-	testNote := datastore.Note{
-		CommonName:     "American Robin",
-		ScientificName: "Turdus migratorius",
-		Confidence:     0.95,
-		ClipName:       "test_clip.wav",
-		Date:           "2024-01-15",
-		Time:           "12:00:00",
-		Occurrence:     0.75,
-		Source:         testAudioSource(),
-	}
-
 	// Create mock MQTT client to capture published data
 	mockClient := &MockMqttClientWithCapture{
 		Connected: true,
@@ -124,7 +111,6 @@ func TestMqttAction_IncludesOccurrence(t *testing.T) {
 	action := &MqttAction{
 		Settings:       settings,
 		Result:         testResult, // Domain model (single source of truth)
-		Note:           testNote,   // Deprecated: kept temporarily
 		BirdImageCache: nil,        // No image cache for this test
 		MqttClient:     mockClient,
 		EventTracker:   eventTracker,
@@ -180,18 +166,6 @@ func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
 		},
 	}
 
-	// Legacy Note kept for backward compatibility during transition
-	testNote := datastore.Note{
-		CommonName:     "House Sparrow",
-		ScientificName: "Passer domesticus",
-		Confidence:     0.85,
-		ClipName:       "test_clip2.wav",
-		Date:           "2024-01-15",
-		Time:           "14:00:00",
-		Occurrence:     0.0,
-		Source:         testAudioSource(),
-	}
-
 	// Create mock MQTT client to capture published data
 	mockClient := &MockMqttClientWithCapture{
 		Connected: true,
@@ -224,7 +198,6 @@ func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
 	action := &MqttAction{
 		Settings:       settings,
 		Result:         testResult, // Domain model (single source of truth)
-		Note:           testNote,   // Deprecated: kept temporarily
 		BirdImageCache: nil,
 		MqttClient:     mockClient,
 		EventTracker:   eventTracker,

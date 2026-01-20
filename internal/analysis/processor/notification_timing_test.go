@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // setupMockDatastore creates a mock datastore with standard expectations for species tracker tests.
@@ -143,16 +144,19 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
-	// Create a note with BeginTime set to a specific time
+	// Create a Result with BeginTime set to a specific time
 	// This simulates the detection time being different from processing time
 	beginTime := time.Date(2025, 6, 15, 14, 30, 0, 0, time.UTC)
 
-	note := datastore.Note{
-		CommonName:     "Great Tit",
-		ScientificName: "Parus major",
-		Confidence:     0.85,
-		BeginTime:      beginTime,
-		Source: datastore.AudioSource{
+	testResult := detection.Result{
+		Timestamp: beginTime,
+		BeginTime: beginTime,
+		Species: detection.Species{
+			CommonName:     "Great Tit",
+			ScientificName: "Parus major",
+		},
+		Confidence: 0.85,
+		AudioSource: detection.AudioSource{
 			ID:          "test-source",
 			SafeString:  "test-source",
 			DisplayName: "Test Source",
@@ -174,8 +178,8 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 			},
 		},
 		Ds:                mockDS,
-		Note:              note,
-		Results:           []datastore.Results{},
+		Result:            testResult,
+		Results:           nil, // No secondary predictions needed for this test
 		EventTracker:      eventTracker,
 		NewSpeciesTracker: tracker,
 		Description:       "Test Database Action",

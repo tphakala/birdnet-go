@@ -54,17 +54,6 @@ func testDetection() Detections {
 		Results: []detection.AdditionalResult{
 			{Species: detection.Species{ScientificName: "Testus birdus", CommonName: "Test Bird"}, Confidence: 0.95},
 		},
-		// Legacy Note kept for backward compatibility during transition
-		Note: datastore.Note{
-			CommonName:     "Test Bird",
-			ScientificName: "Testus birdus",
-			Confidence:     0.95,
-			Source:         testAudioSource(),
-			Date:           now.Format("2006-01-02"),
-			Time:           now.Format("15:04:05"),
-			BeginTime:      now,
-			EndTime:        now.Add(15 * time.Second),
-		},
 	}
 }
 
@@ -96,17 +85,6 @@ func testDetectionWithSpecies(commonName, scientificName string, confidence floa
 		},
 		Results: []detection.AdditionalResult{
 			{Species: detection.Species{ScientificName: scientificName, CommonName: commonName}, Confidence: confidence},
-		},
-		// Legacy Note kept for backward compatibility during transition
-		Note: datastore.Note{
-			CommonName:     commonName,
-			ScientificName: scientificName,
-			Confidence:     confidence,
-			Source:         testAudioSource(),
-			Date:           now.Format("2006-01-02"),
-			Time:           now.Format("15:04:05"),
-			BeginTime:      now,
-			EndTime:        now.Add(15 * time.Second),
 		},
 	}
 }
