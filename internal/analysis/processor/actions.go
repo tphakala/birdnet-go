@@ -107,7 +107,8 @@ type LogAction struct {
 type DatabaseAction struct {
 	Settings          *conf.Settings
 	Ds                datastore.Interface
-	Note              datastore.Note
+	Result            detection.Result   // Domain model (single source of truth)
+	Note              datastore.Note     // Deprecated: kept temporarily for gradual migration
 	Results           []datastore.Results
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
@@ -161,7 +162,8 @@ type PreRendererSubmit interface {
 
 type BirdWeatherAction struct {
 	Settings      *conf.Settings
-	Note          datastore.Note
+	Result        detection.Result // Domain model (single source of truth)
+	Note          datastore.Note   // Deprecated: kept temporarily for gradual migration
 	pcmData       []byte
 	BwClient      *birdweather.BwClient
 	EventTracker  *EventTracker
@@ -173,7 +175,8 @@ type BirdWeatherAction struct {
 
 type MqttAction struct {
 	Settings       *conf.Settings
-	Note           datastore.Note
+	Result         detection.Result // Domain model (single source of truth)
+	Note           datastore.Note   // Deprecated: kept temporarily for gradual migration
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
@@ -193,7 +196,8 @@ type UpdateRangeFilterAction struct {
 
 type SSEAction struct {
 	Settings       *conf.Settings
-	Note           datastore.Note
+	Result         detection.Result // Domain model (single source of truth)
+	Note           datastore.Note   // Deprecated: kept temporarily for gradual migration
 	BirdImageCache *imageprovider.BirdImageCache
 	EventTracker   *EventTracker
 	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
