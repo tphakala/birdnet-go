@@ -341,7 +341,9 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		}
 
 		// Device audio capture - pass source ID for buffer operations
-		go captureAudioMalgo(settings, selectedSource, source.ID, wg, quitChan, restartChan, unifiedAudioChan)
+		wg.Go(func() {
+			captureAudioMalgo(settings, selectedSource, source.ID, quitChan, restartChan, unifiedAudioChan)
+		})
 	}
 }
 
@@ -730,9 +732,7 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 	}
 }
 
-func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID string, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	wg.Add(1)
-	defer wg.Done()
+func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID string, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 
 	log := GetLogger()
 
