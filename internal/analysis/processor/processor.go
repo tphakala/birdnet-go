@@ -446,9 +446,9 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
 
 	for i := range detectionResults {
-		detection := detectionResults[i]
-		commonName := strings.ToLower(detection.Note.CommonName)
-		confidence := detection.Note.Confidence
+		det := detectionResults[i]
+		commonName := strings.ToLower(det.Note.CommonName)
+		confidence := det.Note.Confidence
 
 		// Lock the mutex to ensure thread-safe access to shared resources
 		p.pendingMutex.Lock()
@@ -457,7 +457,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			// Update the existing detection if it's already in pendingDetections map
 			oldConfidence := existing.Confidence
 			if confidence > existing.Confidence {
-				existing.Detection = detection
+				existing.Detection = det
 				existing.Confidence = confidence
 				existing.Source = item.Source.ID
 				existing.LastUpdated = time.Now()
@@ -481,7 +481,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				logger.Time("flush_deadline", time.Now().Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
 			p.pendingDetections[commonName] = PendingDetection{
-				Detection:     detection,
+				Detection:     det,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
@@ -549,8 +549,8 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 		}
 
 		// Create the detection
-		detection := p.createDetection(item, result, scientificName, commonName, speciesCode)
-		detections = append(detections, detection)
+		det := p.createDetection(item, result, scientificName, commonName, speciesCode)
+		detections = append(detections, det)
 	}
 
 	return detections
@@ -748,7 +748,7 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 		ID:          source.ID,
 		SafeString:  source.SafeString,
 		DisplayName: source.DisplayName,
-		Type:        determineSourceType(source.SafeString),
+		Type:        detection.DetermineSourceType(source.SafeString),
 	}
 
 	// Try to get additional details from registry
@@ -758,25 +758,11 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 			audioSource.ID = existingSource.ID
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
-			audioSource.Type = determineSourceType(existingSource.SafeString)
+			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
 		}
 	}
 
 	return audioSource
-}
-
-// determineSourceType determines the audio source type from its connection string.
-func determineSourceType(safeString string) string {
-	switch {
-	case strings.HasPrefix(safeString, "rtsp://"):
-		return "rtsp"
-	case strings.HasPrefix(safeString, "hw:"):
-		return "alsa"
-	case strings.Contains(safeString, "pulse"):
-		return "pulseaudio"
-	default:
-		return "unknown"
-	}
 }
 
 // convertToAdditionalResults converts a slice of datastore.Results to detection.AdditionalResult.

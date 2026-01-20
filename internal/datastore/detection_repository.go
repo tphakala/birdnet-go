@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/mapper"
@@ -200,17 +199,27 @@ func (r *detectionRepository) GetHourly(ctx context.Context, date, hour string, 
 
 // Lock sets a lock on a detection.
 func (r *detectionRepository) Lock(ctx context.Context, id string) error {
-	return r.store.LockNote(id)
+	if err := r.store.LockNote(id); err != nil {
+		return fmt.Errorf("failed to lock detection %s: %w", id, err)
+	}
+	return nil
 }
 
 // Unlock removes a lock from a detection.
 func (r *detectionRepository) Unlock(ctx context.Context, id string) error {
-	return r.store.UnlockNote(id)
+	if err := r.store.UnlockNote(id); err != nil {
+		return fmt.Errorf("failed to unlock detection %s: %w", id, err)
+	}
+	return nil
 }
 
 // IsLocked checks if a detection is locked.
 func (r *detectionRepository) IsLocked(ctx context.Context, id string) (bool, error) {
-	return r.store.IsNoteLocked(id)
+	locked, err := r.store.IsNoteLocked(id)
+	if err != nil {
+		return false, fmt.Errorf("failed to check lock status for detection %s: %w", id, err)
+	}
+	return locked, nil
 }
 
 // SetReview sets the review status of a detection.
@@ -225,14 +234,17 @@ func (r *detectionRepository) SetReview(ctx context.Context, id, verified string
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	return r.store.SaveNoteReview(review)
+	if err := r.store.SaveNoteReview(review); err != nil {
+		return fmt.Errorf("failed to set review for detection %s: %w", id, err)
+	}
+	return nil
 }
 
 // GetReview retrieves the review status of a detection.
 func (r *detectionRepository) GetReview(ctx context.Context, id string) (string, error) {
 	review, err := r.store.GetNoteReview(id)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get review for detection %s: %w", id, err)
 	}
 	if review == nil {
 		return "", nil
@@ -252,14 +264,17 @@ func (r *detectionRepository) AddComment(ctx context.Context, id, comment string
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	return r.store.SaveNoteComment(noteComment)
+	if err := r.store.SaveNoteComment(noteComment); err != nil {
+		return fmt.Errorf("failed to add comment to detection %s: %w", id, err)
+	}
+	return nil
 }
 
 // GetComments retrieves comments for a detection.
 func (r *detectionRepository) GetComments(ctx context.Context, id string) ([]detection.Comment, error) {
 	noteComments, err := r.store.GetNoteComments(id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get comments for detection %s: %w", id, err)
 	}
 
 	comments := make([]detection.Comment, len(noteComments))
@@ -344,7 +359,7 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 			ID:          note.Source.ID,
 			DisplayName: note.Source.DisplayName,
 			SafeString:  note.Source.SafeString,
-			Type:        determineSourceType(note.Source.SafeString),
+			Type:        detection.DetermineSourceType(note.Source.SafeString),
 		},
 		BeginTime: note.BeginTime,
 		EndTime:   note.EndTime,
@@ -477,19 +492,4 @@ func (r *detectionRepository) parseID(id string) (uint, error) {
 		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
 	}
 	return uint(n), nil
-}
-
-// determineSourceType determines the audio source type from its identifier string.
-// Returns "rtsp", "alsa", "pulseaudio", or "unknown".
-func determineSourceType(safeString string) string {
-	switch {
-	case strings.HasPrefix(safeString, "rtsp://"):
-		return "rtsp"
-	case strings.HasPrefix(safeString, "hw:"):
-		return "alsa"
-	case strings.Contains(safeString, "pulse"):
-		return "pulseaudio"
-	default:
-		return "unknown"
-	}
 }

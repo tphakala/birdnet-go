@@ -1,5 +1,7 @@
 package detection
 
+import "strings"
+
 // AudioSource describes where the audio came from.
 // This allows safe separation of concerns: ID for buffer operations,
 // SafeString for logging, DisplayName for UI.
@@ -27,5 +29,20 @@ func NewAudioSourceWithDetails(id, sourceType, displayName, safeString string) A
 		Type:        sourceType,
 		DisplayName: displayName,
 		SafeString:  safeString,
+	}
+}
+
+// DetermineSourceType determines the audio source type from its identifier string.
+// Returns "rtsp", "alsa", "pulseaudio", or "unknown".
+func DetermineSourceType(safeString string) string {
+	switch {
+	case strings.HasPrefix(safeString, "rtsp://"):
+		return "rtsp"
+	case strings.HasPrefix(safeString, "hw:"):
+		return "alsa"
+	case strings.Contains(safeString, "pulse"):
+		return "pulseaudio"
+	default:
+		return "unknown"
 	}
 }

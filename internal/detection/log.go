@@ -29,7 +29,7 @@ func LogToFile(settings *conf.Settings, result *Result) error {
 	absoluteFilePath := filepath.Join(basePath, fileName)
 
 	// Open the log file for appending, creating it if it doesn't exist
-	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: absoluteFilePath is from settings
+	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, logger.LogFilePermissions) //nolint:gosec // G304: absoluteFilePath is from settings
 	if err != nil {
 		return fmt.Errorf("failed to open file '%s': %w", absoluteFilePath, err)
 	}
