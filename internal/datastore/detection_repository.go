@@ -317,6 +317,63 @@ func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id strin
 	return nil, nil
 }
 
+// NoteFromResult converts a detection.Result to a datastore.Note.
+// This is exported for use by action structs (DatabaseAction, MqttAction, SSEAction)
+// that need to convert the domain model to the legacy Note type for persistence
+// or JSON serialization.
+//
+// Note: The Results field is not populated. Callers should use
+// AdditionalResultsToDatastoreResults separately if needed.
+func NoteFromResult(result *detection.Result) Note {
+	return Note{
+		ID:             result.ID,
+		SourceNode:     result.SourceNode,
+		Date:           result.Timestamp.Format(mapper.DateFormat),
+		Time:           result.Timestamp.Format(mapper.TimeFormat),
+		BeginTime:      result.BeginTime,
+		EndTime:        result.EndTime,
+		SpeciesCode:    result.Species.Code,
+		ScientificName: result.Species.ScientificName,
+		CommonName:     result.Species.CommonName,
+		Confidence:     result.Confidence,
+		Latitude:       result.Latitude,
+		Longitude:      result.Longitude,
+		Threshold:      result.Threshold,
+		Sensitivity:    result.Sensitivity,
+		ClipName:       result.ClipName,
+		ProcessingTime: result.ProcessingTime,
+		Source: AudioSource{
+			ID:          result.AudioSource.ID,
+			SafeString:  result.AudioSource.SafeString,
+			DisplayName: result.AudioSource.DisplayName,
+		},
+		Occurrence: result.Occurrence,
+		Verified:   result.Verified,
+		Locked:     result.Locked,
+	}
+}
+
+// AdditionalResultsToDatastoreResults converts a slice of detection.AdditionalResult
+// to datastore.Results for database persistence or JSON serialization.
+func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) []Results {
+	if len(results) == 0 {
+		return nil
+	}
+
+	dsResults := make([]Results, len(results))
+	for i, r := range results {
+		speciesStr := r.Species.ScientificName + "_" + r.Species.CommonName
+		if r.Species.Code != "" {
+			speciesStr += "_" + r.Species.Code
+		}
+		dsResults[i] = Results{
+			Species:    speciesStr,
+			Confidence: float32(r.Confidence),
+		}
+	}
+	return dsResults
+}
+
 // Helper methods
 
 // resultToNote converts a domain Result to a legacy Note.
