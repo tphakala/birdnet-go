@@ -281,3 +281,140 @@ func TestDatabaseAction_Execute_EventTrackerLimiting(t *testing.T) {
 	// The important thing is that Execute doesn't error - the EventTracker
 	// handles rate limiting internally
 }
+
+// =============================================================================
+// Repository Path Tests (Phase 2 Migration)
+// =============================================================================
+
+// TestDatabaseAction_Execute_WithRepository verifies that DatabaseAction.Execute()
+// uses the repository path when Repo is provided (Phase 2 migration).
+func TestDatabaseAction_Execute_WithRepository(t *testing.T) {
+	t.Parallel()
+
+	// Setup with repository instead of legacy datastore
+	mockRepo := NewMockDetectionRepository()
+	settings := &conf.Settings{Debug: true}
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	det := testDetection()
+	require.Equal(t, uint(0), det.Result.ID, "Result should start with ID 0")
+
+	action := &DatabaseAction{
+		Settings:     settings,
+		Repo:         mockRepo, // Use repository path
+		Ds:           nil,      // No legacy datastore
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: eventTracker,
+	}
+
+	// Execute
+	err := action.Execute(nil)
+	require.NoError(t, err, "DatabaseAction.Execute() should not return error")
+
+	// Verify ID was assigned to Result via repository
+	assert.NotEqual(t, uint(0), action.Result.ID, "Result.ID should be assigned after save")
+	assert.Equal(t, uint(1), action.Result.ID, "First save should get ID 1")
+
+	// Verify repository was called
+	assert.Equal(t, 1, mockRepo.GetSavedCount(), "Repository Save should be called once")
+}
+
+// TestDatabaseAction_Execute_WithRepository_StoresIDInDetectionContext verifies that
+// the repository path also updates DetectionContext for downstream actions.
+func TestDatabaseAction_Execute_WithRepository_StoresIDInDetectionContext(t *testing.T) {
+	t.Parallel()
+
+	mockRepo := NewMockDetectionRepository()
+	settings := &conf.Settings{Debug: true}
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	detectionCtx := &DetectionContext{}
+
+	det := testDetection()
+
+	action := &DatabaseAction{
+		Settings:     settings,
+		Repo:         mockRepo,
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+	}
+
+	err := action.Execute(nil)
+	require.NoError(t, err)
+
+	// Verify DetectionContext has the ID from repository path
+	storedID := detectionCtx.NoteID.Load()
+	assert.Equal(t, uint64(action.Result.ID), storedID,
+		"DetectionContext.NoteID should contain the assigned ID")
+	assert.NotEqual(t, uint64(0), storedID,
+		"DetectionContext.NoteID should not be zero")
+}
+
+// TestDatabaseAction_Execute_WithRepository_ReturnsErrorOnSaveFailure verifies that
+// the repository path properly propagates errors.
+func TestDatabaseAction_Execute_WithRepository_ReturnsErrorOnSaveFailure(t *testing.T) {
+	t.Parallel()
+
+	mockRepo := NewMockDetectionRepository()
+	settings := &conf.Settings{Debug: true}
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	detectionCtx := &DetectionContext{}
+
+	det := testDetection()
+
+	// Configure mock to return error
+	mockRepo.SetSaveError(assert.AnError)
+
+	action := &DatabaseAction{
+		Settings:     settings,
+		Repo:         mockRepo,
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+	}
+
+	// Execute should return error
+	err := action.Execute(nil)
+	require.Error(t, err, "Execute should return error on save failure")
+
+	// Verify ID was not assigned
+	assert.Equal(t, uint(0), action.Result.ID, "Result.ID should not be assigned on error")
+
+	// Verify DetectionContext was not updated
+	assert.Equal(t, uint64(0), detectionCtx.NoteID.Load(),
+		"DetectionContext.NoteID should not be updated on error")
+}
+
+// TestDatabaseAction_Execute_PrefersRepositoryOverLegacy verifies that when both
+// Repo and Ds are provided, the repository path is preferred.
+func TestDatabaseAction_Execute_PrefersRepositoryOverLegacy(t *testing.T) {
+	t.Parallel()
+
+	mockRepo := NewMockDetectionRepository()
+	mockDs := NewActionMockDatastore()
+	settings := &conf.Settings{Debug: true}
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	det := testDetection()
+
+	action := &DatabaseAction{
+		Settings:     settings,
+		Repo:         mockRepo, // Both provided
+		Ds:           mockDs,   // Both provided
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: eventTracker,
+	}
+
+	err := action.Execute(nil)
+	require.NoError(t, err)
+
+	// Verify repository was used (has saved count)
+	assert.Equal(t, 1, mockRepo.GetSavedCount(), "Repository should be called")
+
+	// Verify legacy datastore was NOT used (no saved notes)
+	assert.Empty(t, mockDs.GetSavedNotes(), "Legacy datastore should not be called when Repo is available")
+}

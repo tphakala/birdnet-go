@@ -45,7 +45,8 @@ const (
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
 	Settings            *conf.Settings
-	Ds                  datastore.Interface
+	Ds                  datastore.Interface           // Legacy - to be removed after migration
+	Repo                datastore.DetectionRepository // New - preferred for detection operations
 	Bn                  *birdnet.BirdNET
 	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
 	BwClient            *birdweather.BwClient
@@ -241,6 +242,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,
+		Repo:           datastore.NewDetectionRepository(ds, nil), // Bridge to new domain model
 		Bn:             bn,
 		log:            procLog,
 		BirdImageCache: birdImageCache,
@@ -1275,8 +1277,9 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			PreRenderer:       p.preRenderer,
 			DetectionCtx:      detectionCtx, // Share context for downstream actions
 			Result:            det.Result,   // Domain model (single source of truth)
-			Results:           det.Results, // Domain model - converted to legacy format at save time
-			Ds:                p.Ds,
+			Results:           det.Results,  // Domain model - converted to legacy format at save time
+			Ds:                p.Ds,         // Legacy - kept for backward compatibility
+			Repo:              p.Repo,       // New - preferred path for database operations
 			CorrelationID:     det.CorrelationID,
 		}
 	}
@@ -1297,10 +1300,9 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			Result:         det.Result, // Domain model (single source of truth)
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
-			DetectionCtx:   detectionCtx, // Share context from DatabaseAction
+			DetectionCtx:   detectionCtx, // Share context from DatabaseAction (provides database ID)
 			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
-			Ds:             p.Ds,
 			CorrelationID:  det.CorrelationID,
 		}
 	}

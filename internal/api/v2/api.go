@@ -39,7 +39,8 @@ const tunnelProviderUnknown = "unknown"
 type Controller struct {
 	Echo                *echo.Echo
 	Group               *echo.Group
-	DS                  datastore.Interface
+	DS                  datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo                datastore.DetectionRepository // New: Preferred for detection CRUD operations
 	Settings            *conf.Settings
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
@@ -267,6 +268,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c := &Controller{
 		Echo:                 e,
 		DS:                   ds,
+		Repo:                 datastore.NewDetectionRepository(ds, nil), // Bridge to new domain model
 		Settings:             settings,
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,
