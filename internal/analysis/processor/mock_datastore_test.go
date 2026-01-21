@@ -346,11 +346,12 @@ var _ datastore.Interface = (*ActionMockDatastore)(nil)
 // MockDetectionRepository implements datastore.DetectionRepository for testing.
 // It simulates database ID assignment and captures saved detections for verification.
 type MockDetectionRepository struct {
-	mu          sync.Mutex
-	nextID      uint
-	savedCount  int
-	saveErr     error
-	savedResult *detection.Result
+	mu                     sync.Mutex
+	nextID                 uint
+	savedCount             int
+	saveErr                error
+	savedResult            *detection.Result
+	savedAdditionalResults []detection.AdditionalResult // Captures additional results for verification
 }
 
 // NewMockDetectionRepository creates a new mock repository starting with ID 1.
@@ -361,7 +362,7 @@ func NewMockDetectionRepository() *MockDetectionRepository {
 }
 
 // Save implements datastore.DetectionRepository.Save.
-func (m *MockDetectionRepository) Save(_ context.Context, result *detection.Result, _ []detection.AdditionalResult) error {
+func (m *MockDetectionRepository) Save(_ context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -374,6 +375,7 @@ func (m *MockDetectionRepository) Save(_ context.Context, result *detection.Resu
 	m.nextID++
 	m.savedCount++
 	m.savedResult = result
+	m.savedAdditionalResults = additionalResults // Capture for verification
 
 	return nil
 }
@@ -397,6 +399,13 @@ func (m *MockDetectionRepository) GetLastSavedResult() *detection.Result {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.savedResult
+}
+
+// GetLastSavedAdditionalResults returns the additional results from the last Save call.
+func (m *MockDetectionRepository) GetLastSavedAdditionalResults() []detection.AdditionalResult {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.savedAdditionalResults
 }
 
 // Stub implementations for remaining DetectionRepository methods

@@ -418,3 +418,37 @@ func TestDatabaseAction_Execute_PrefersRepositoryOverLegacy(t *testing.T) {
 	// Verify legacy datastore was NOT used (no saved notes)
 	assert.Empty(t, mockDs.GetSavedNotes(), "Legacy datastore should not be called when Repo is available")
 }
+
+// TestDatabaseAction_Execute_WithRepository_SavesAdditionalResults verifies that
+// additional results are correctly passed to the repository Save method.
+func TestDatabaseAction_Execute_WithRepository_SavesAdditionalResults(t *testing.T) {
+	t.Parallel()
+
+	mockRepo := NewMockDetectionRepository()
+	settings := &conf.Settings{Debug: true}
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	det := testDetection()
+	// Add extra results
+	det.Results = []detection.AdditionalResult{
+		{Species: detection.Species{ScientificName: "Parus major", CommonName: "Great Tit"}, Confidence: 0.85},
+		{Species: detection.Species{ScientificName: "Cyanistes caeruleus", CommonName: "Blue Tit"}, Confidence: 0.75},
+	}
+
+	action := &DatabaseAction{
+		Settings:     settings,
+		Repo:         mockRepo,
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: eventTracker,
+	}
+
+	err := action.Execute(nil)
+	require.NoError(t, err)
+
+	// Verify additional results were passed to repository
+	savedResults := mockRepo.GetLastSavedAdditionalResults()
+	require.Len(t, savedResults, 2, "Should save 2 additional results via repository")
+	assert.Equal(t, "Parus major", savedResults[0].Species.ScientificName)
+	assert.Equal(t, "Cyanistes caeruleus", savedResults[1].Species.ScientificName)
+}

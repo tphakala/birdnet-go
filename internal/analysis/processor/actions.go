@@ -581,8 +581,15 @@ func (a *LogAction) Execute(data any) error {
 	return nil
 }
 
-// Execute saves the note to the database
+// Execute saves the note to the database.
+// For context-aware execution with timeout/cancellation support, use ExecuteContext.
 func (a *DatabaseAction) Execute(data any) error {
+	return a.ExecuteContext(context.Background(), data)
+}
+
+// ExecuteContext implements the ContextAction interface for proper context propagation.
+// This allows CompositeAction to pass timeout and cancellation signals to the database save.
+func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -603,7 +610,7 @@ func (a *DatabaseAction) Execute(data any) error {
 	// Save detection to database using preferred path
 	if a.Repo != nil {
 		// New path: Use DetectionRepository (handles conversion internally)
-		if err := a.Repo.Save(context.Background(), &a.Result, a.Results); err != nil {
+		if err := a.Repo.Save(ctx, &a.Result, a.Results); err != nil {
 			GetLogger().Error("Failed to save detection to database",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),

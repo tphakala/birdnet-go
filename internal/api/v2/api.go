@@ -265,10 +265,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Create context for managing goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Only create DetectionRepository if datastore is available.
+	// This prevents nil pointer dereference when datastore is disabled.
+	var repo datastore.DetectionRepository
+	if ds != nil {
+		repo = datastore.NewDetectionRepository(ds, nil)
+	}
+
 	c := &Controller{
 		Echo:                 e,
 		DS:                   ds,
-		Repo:                 datastore.NewDetectionRepository(ds, nil), // Bridge to new domain model
+		Repo:                 repo, // Bridge to new domain model (nil if datastore disabled)
 		Settings:             settings,
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,
