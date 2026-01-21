@@ -75,7 +75,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v2.6
+          version: v2.7.2
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax)
