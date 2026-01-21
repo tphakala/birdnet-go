@@ -45,7 +45,6 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	}
 
 	startTime := time.Now() // Track cleanup duration
-	debug := retention.Debug
 	keepSpectrograms := retention.KeepSpectrograms
 	minClipsPerSpecies := retention.MinClips
 	usageThresholdSetting := retention.MaxUsage
@@ -74,7 +73,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	// Get initial detailed disk usage and check if cleanup is needed *now*
 	// Only proceed if current usage is above the threshold
-	initialUsagePercent, diskInfo, proceedAfterUsageCheck, err := checkInitialUsage(baseDir, usageThreshold, debug)
+	initialUsagePercent, diskInfo, proceedAfterUsageCheck, err := checkInitialUsage(baseDir, usageThreshold)
 	if !proceedAfterUsageCheck {
 		// If checkInitialUsage returned an error, use that. Otherwise, use the initial result's utilization.
 		finalUtilization := initialResult.DiskUtilization
@@ -103,7 +102,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	// Sort files using the dedicated usage policy sorting logic
 	// This sorts by age, species count in subdirectories, and confidence
-	sortFilesForUsage(files, speciesMonthCount, debug)
+	sortFilesForUsage(files, speciesMonthCount)
 
 	// --- Run the main processing loop ---
 	loopParams := &usageLoopParams{
@@ -111,17 +110,16 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		initialUsagePercent: initialUsagePercent,
 		usageThreshold:      usageThreshold,
 		minClipsPerSpecies:  minClipsPerSpecies,
-		maxDeletions:        1000, // Maximum number of files to delete in one run
-		refreshInterval:     50,   // Refresh actual disk usage every N deletions
+		maxDeletions:        maxDeletionsPerRun, // Use package-level constant
+		refreshInterval:     50,                 // Refresh actual disk usage every N deletions
 		keepSpectrograms:    keepSpectrograms,
-		debug:               debug,
 	}
 	deletedCount, lastKnownGoodUsagePercent, loopErr := processUsageDeletionLoop(files, speciesMonthCount,
 		loopParams, baseDir, // Pass the struct pointer and baseDir
 		quit)
 
 	// --- Calculate Final Usage & Return ---
-	finalUsagePercent := getFinalUsagePercent(baseDir, lastKnownGoodUsagePercent, debug)
+	finalUsagePercent := getFinalUsagePercent(baseDir, lastKnownGoodUsagePercent)
 
 	// Log completion with results
 	duration := time.Since(startTime)
@@ -154,7 +152,38 @@ type usageLoopParams struct {
 	maxDeletions        int           // Maximum number of files to delete in one run
 	refreshInterval     int           // How often to refresh actual disk usage (every N deletions)
 	keepSpectrograms    bool          // Whether to keep spectrograms when deleting audio files
-	debug               bool          // Enable verbose logging
+}
+
+// calculateUsagePercent computes the current estimated disk usage percentage.
+// Returns the calculated percentage and updates lastKnownGoodUsagePercent if valid.
+func calculateUsagePercent(estimatedUsedBytes, totalBytes uint64) int {
+	if totalBytes > 0 {
+		return int((estimatedUsedBytes * 100) / totalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
+	}
+	return 0
+}
+
+// updateUsageStateAfterDeletion updates tracking state after a successful file deletion.
+// Returns the updated estimatedUsedBytes value.
+func updateUsageStateAfterDeletion(file *FileInfo, speciesMonthCount map[string]map[string]int,
+	estimatedUsedBytes, totalBytes uint64) uint64 {
+	_ = totalBytes // unused but kept for API stability
+	// Track which directory the file is in (typically month-based)
+	subDir := filepath.Dir(file.Path)
+	// Decrement the count for this species in this subdirectory
+	speciesMonthCount[file.Species][subDir]--
+	if speciesMonthCount[file.Species][subDir] < 0 {
+		speciesMonthCount[file.Species][subDir] = 0
+	}
+	// Update our estimate of used bytes based on the deleted file's size
+	// Check before subtraction to prevent underflow
+	fileSize := uint64(file.Size) // #nosec G115 -- file size conversion safe
+	if fileSize > estimatedUsedBytes {
+		estimatedUsedBytes = 0
+	} else {
+		estimatedUsedBytes -= fileSize
+	}
+	return estimatedUsedBytes
 }
 
 // processUsageDeletionLoop contains the core logic for iterating through files and deleting based on usage.
@@ -164,13 +193,11 @@ type usageLoopParams struct {
 // 3. All eligible files have been processed
 // 4. A quit signal is received
 func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map[string]int,
-	params *usageLoopParams, baseDir string, // Add baseDir parameter
+	params *usageLoopParams, baseDir string,
 	quit <-chan struct{}) (deletedCount, lastKnownGoodUsagePercent int, loopErr error) {
 
 	deletedCount = 0
 	errorCount := 0
-	// Track estimated usage to avoid checking disk frequently
-	// This is updated after each deletion based on file size
 	estimatedUsedBytes := params.diskInfo.UsedBytes
 	lastKnownGoodUsagePercent = params.initialUsagePercent
 
@@ -182,66 +209,44 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			log.Info("Usage-based cleanup loop interrupted by quit signal",
 				logger.String("policy", "usage"),
 				logger.Int("files_deleted", deletedCount))
-			return deletedCount, lastKnownGoodUsagePercent, loopErr // Return current state on quit
+			return deletedCount, lastKnownGoodUsagePercent, loopErr
 		default:
-			// Refresh disk usage periodically using helper
-			// This ensures our usage estimates don't drift too far from reality
-			params.diskInfo, estimatedUsedBytes = refreshUsageDataIfNeeded(deletedCount, params.refreshInterval, baseDir, params.diskInfo, estimatedUsedBytes, params.debug)
+			params.diskInfo, estimatedUsedBytes = refreshUsageDataIfNeeded(deletedCount, params.refreshInterval, baseDir, params.diskInfo, estimatedUsedBytes)
 
-			// Calculate current estimated usage percentage
-			// We update this after each deletion to avoid checking disk usage too frequently
-			currentUsagePercent := 0
+			currentUsagePercent := calculateUsagePercent(estimatedUsedBytes, params.diskInfo.TotalBytes)
 			if params.diskInfo.TotalBytes > 0 {
-				currentUsagePercent = int((estimatedUsedBytes * 100) / params.diskInfo.TotalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
 				lastKnownGoodUsagePercent = currentUsagePercent
 			}
 
-			// Check if we should stop the loop using helper
-			// Stops if usage is below threshold or max deletions reached
-			if shouldStopUsageCleanup(currentUsagePercent, params.usageThreshold, deletedCount, params.maxDeletions, params.debug) {
-				return deletedCount, lastKnownGoodUsagePercent, loopErr // Stop deleting files
+			if shouldStopUsageCleanup(currentUsagePercent, params.usageThreshold, deletedCount, params.maxDeletions) {
+				return deletedCount, lastKnownGoodUsagePercent, loopErr
 			}
 
 			file := &files[i]
-
-			// Handle eligibility checks and deletion for this file
-			deleted, deletionErr := handleUsageDeletionIteration(file, speciesMonthCount, params.minClipsPerSpecies, params.keepSpectrograms, currentUsagePercent, params.usageThreshold, params.debug)
+			deleted, deletionErr := handleUsageDeletionIteration(file, speciesMonthCount, params.minClipsPerSpecies, params.keepSpectrograms, currentUsagePercent, params.usageThreshold)
 
 			if deletionErr != nil {
-				// Use the common error handler
 				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, deletionErr, &errorCount, 10, "usage")
 				if shouldStop {
-					loopErr = loopErrTmp                                    // Assign the final error
-					return deletedCount, lastKnownGoodUsagePercent, loopErr // Stop processing
+					return deletedCount, lastKnownGoodUsagePercent, loopErrTmp
 				}
-				continue // Continue with the next file
+				continue
 			}
 
-			// Update state *after* successful deletion (if deletion occurred)
 			if deleted {
-				// Track which directory the file is in (typically month-based)
-				subDir := filepath.Dir(file.Path)
-				// Decrement the count for this species in this subdirectory
-				speciesMonthCount[file.Species][subDir]--
+				estimatedUsedBytes = updateUsageStateAfterDeletion(file, speciesMonthCount, estimatedUsedBytes, params.diskInfo.TotalBytes)
 				deletedCount++
-				// Update our estimate of used bytes based on the deleted file's size
-				estimatedUsedBytes -= uint64(file.Size)              // #nosec G115 -- file size conversion safe
-				if estimatedUsedBytes > params.diskInfo.TotalBytes { // Prevent underflow/wrap-around (safety check)
-					estimatedUsedBytes = 0
-				}
 			}
 
-			// Yield to other goroutines to avoid monopolizing CPU
 			runtime.Gosched()
 		}
 	}
-	// Loop finished normally
 	return deletedCount, lastKnownGoodUsagePercent, loopErr
 }
 
 // getFinalUsagePercent calculates the final disk usage percentage, falling back if necessary.
 // This provides an accurate final measurement after cleanup has completed.
-func getFinalUsagePercent(baseDir string, lastKnownGoodUsagePercent int, debug bool) int {
+func getFinalUsagePercent(baseDir string, lastKnownGoodUsagePercent int) int {
 	log := GetLogger()
 
 	finalDiskInfo, finalDiskErr := GetDetailedDiskUsage(baseDir)
@@ -275,7 +280,7 @@ func getFinalUsagePercent(baseDir string, lastKnownGoodUsagePercent int, debug b
 // - diskInfo: detailed disk space information
 // - proceed: whether cleanup should proceed based on usage
 // - err: any error encountered getting disk info
-func checkInitialUsage(baseDir string, usageThreshold int, debug bool) (initialUsagePercent int, diskInfo DiskSpaceInfo, proceed bool, err error) {
+func checkInitialUsage(baseDir string, usageThreshold int) (initialUsagePercent int, diskInfo DiskSpaceInfo, proceed bool, err error) {
 	// Try to get detailed disk usage info first
 	diskInfo, err = GetDetailedDiskUsage(baseDir)
 	if err != nil {
@@ -320,16 +325,16 @@ func checkInitialUsage(baseDir string, usageThreshold int, debug bool) (initialU
 
 // handleUsageDeletionIteration processes a single file for potential deletion based on usage policy rules.
 // It returns whether the file was deleted and any critical error encountered during deletion.
-func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]map[string]int, minClipsPerSpecies int, keepSpectrograms bool, currentUsagePercent, usageThreshold int, debug bool) (deleted bool, deletionErr error) {
+func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]map[string]int, minClipsPerSpecies int, keepSpectrograms bool, currentUsagePercent, usageThreshold int) (deleted bool, deletionErr error) {
 	// Check if locked
-	if checkLocked(file, debug) {
+	if checkLocked(file) {
 		return false, nil
 	}
 
 	// Check minimum clips constraint (per species per month dir)
 	// This differs from age-based policy by preserving diversity within each time period (directory)
 	subDir := filepath.Dir(file.Path)
-	if !checkMinClips(file, subDir, speciesMonthCount, minClipsPerSpecies, debug, "usage") {
+	if !checkMinClips(file, subDir, speciesMonthCount, minClipsPerSpecies, "usage") {
 		return false, nil
 	}
 
@@ -337,7 +342,7 @@ func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]m
 	reason := fmt.Sprintf("usage %d%% >= threshold %d%%", currentUsagePercent, usageThreshold)
 
 	// Call the common deletion function
-	if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug, "usage"); delErr != nil {
+	if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "usage"); delErr != nil {
 		// Return the error to be handled by the main loop (e.g., increment error count)
 		return false, delErr
 	}
@@ -352,12 +357,12 @@ func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]m
 // 1. Oldest files first (to preserve recent recordings)
 // 2. Species with most occurrences in each subdirectory (to maintain diversity)
 // 3. Lower confidence recordings first (to keep higher quality recordings)
-func sortFilesForUsage(files []FileInfo, speciesMonthCount map[string]map[string]int, debug bool) {
+func sortFilesForUsage(files []FileInfo, speciesMonthCount map[string]map[string]int) {
 	GetLogger().Debug("Sorting files by usage cleanup priority",
 		logger.String("policy", "usage"),
 		logger.Int("file_count", len(files)))
 
-	sort.Slice(files, func(i, j int) bool {
+	sort.SliceStable(files, func(i, j int) bool {
 		// Priority 1: Oldest files first
 		if !files[i].Timestamp.Equal(files[j].Timestamp) { // Use !Equal for clarity
 			return files[i].Timestamp.Before(files[j].Timestamp)
@@ -400,7 +405,7 @@ func sortFilesForUsage(files []FileInfo, speciesMonthCount map[string]map[string
 
 // refreshUsageDataIfNeeded periodically refreshes the disk usage information.
 // It returns the potentially updated DiskSpaceInfo and estimatedUsedBytes.
-func refreshUsageDataIfNeeded(deletedCount, refreshInterval int, baseDir string, currentDiskInfo DiskSpaceInfo, currentEstimatedUsedBytes uint64, debug bool) (updatedDiskInfo DiskSpaceInfo, updatedEstimatedUsedBytes uint64) {
+func refreshUsageDataIfNeeded(deletedCount, refreshInterval int, baseDir string, currentDiskInfo DiskSpaceInfo, currentEstimatedUsedBytes uint64) (updatedDiskInfo DiskSpaceInfo, updatedEstimatedUsedBytes uint64) {
 	log := GetLogger()
 
 	// Only refresh every refreshInterval deletions to minimize I/O impact
@@ -428,7 +433,7 @@ func refreshUsageDataIfNeeded(deletedCount, refreshInterval int, baseDir string,
 
 // shouldStopUsageCleanup checks if the cleanup loop should terminate based on usage threshold or max deletions.
 // Returns true if cleanup should stop, false if it should continue.
-func shouldStopUsageCleanup(currentUsagePercent, usageThreshold, deletedCount, maxDeletions int, debug bool) bool {
+func shouldStopUsageCleanup(currentUsagePercent, usageThreshold, deletedCount, maxDeletions int) bool {
 	log := GetLogger()
 
 	// Check if usage is still above threshold
