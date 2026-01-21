@@ -1,3 +1,5 @@
+//go:build !noembed
+
 package frontend
 
 import (

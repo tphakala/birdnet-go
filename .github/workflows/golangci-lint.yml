@@ -51,18 +51,7 @@ jobs:
 
       - name: Install dependencies
         run: task check-tensorflow
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          
-      - name: Build Frontend
-        run: |
-          cd frontend
-          npm install
-          npm run build
-      
+
       - name: Set environment variables for CGO
         run: |
           echo "CGO_ENABLED=1" >> $GITHUB_ENV
@@ -79,7 +68,8 @@ jobs:
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax)
-          args: --output.checkstyle.path=golangci-lint-report.xml
+          # Use noembed tag to skip frontend embedding requirement
+          args: --build-tags=noembed --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()
