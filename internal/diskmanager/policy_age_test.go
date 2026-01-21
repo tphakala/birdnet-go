@@ -480,6 +480,46 @@ func TestAgeBasedCleanupShortRetention(t *testing.T) {
 	assert.FileExists(t, bPngOld, "Old anas PNG should be kept")
 }
 
+// isEligibleForTestDeletion checks if a file should be deleted in test simulation.
+// Returns true if eligible, false if file should be skipped.
+func isEligibleForTestDeletion(file *FileInfo, expirationTime time.Time, speciesTotalCount map[string]int, minClipsPerSpecies int) bool {
+	// Skip locked files
+	if file.Locked {
+		return false
+	}
+	// Skip files that are not old enough
+	if !file.Timestamp.Before(expirationTime) {
+		return false
+	}
+	// Skip if the total count for this species is at or below minimum
+	if count, exists := speciesTotalCount[file.Species]; exists && count <= minClipsPerSpecies {
+		return false
+	}
+	return true
+}
+
+// deleteTestFile handles file deletion in test simulation including PNG cleanup.
+// Updates speciesTotalCount and deletedFiles map.
+func deleteTestFile(file *FileInfo, deletedFiles map[string]bool, speciesTotalCount map[string]int, keepSpectrograms bool) {
+	deletedFiles[file.Path] = true
+	if err := os.Remove(file.Path); err != nil && !os.IsNotExist(err) {
+		GetLogger().Warn("Test helper: failed to remove simulated audio file",
+			logger.String("path", file.Path),
+			logger.Error(err))
+	}
+
+	if !keepSpectrograms {
+		pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
+		if err := os.Remove(pngPath); err != nil && !os.IsNotExist(err) {
+			GetLogger().Warn("Test helper: failed to remove simulated PNG",
+				logger.String("path", pngPath),
+				logger.Error(err))
+		}
+	}
+
+	speciesTotalCount[file.Species]--
+}
+
 // simulateAgeBasedCleanup is a test-specific helper that simulates the core logic
 // of AgeBasedCleanup using real files in a temporary directory.
 func simulateAgeBasedCleanup(
@@ -543,52 +583,15 @@ func simulateAgeBasedCleanup(
 
 	// Process files for deletion
 	deletedCount := 0
-
-	for _, file := range files {
-		// Skip locked files
-		if file.Locked {
+	for i := range files {
+		if !isEligibleForTestDeletion(&files[i], expirationTime, speciesTotalCount, minClipsPerSpecies) {
 			continue
 		}
 
-		// Skip files that are not old enough
-		// Note: Both file.Timestamp and expirationTime are in local time
-		if !file.Timestamp.Before(expirationTime) {
-			continue
-		}
-
-		// Skip if the total count for this species is already at or below the minimum
-		if count, exists := speciesTotalCount[file.Species]; exists && count <= minClipsPerSpecies {
-			continue
-		}
-
-		// "Delete" the file (mark it and actually remove the audio file)
-		deletedFiles[file.Path] = true
-		if err := os.Remove(file.Path); err != nil && !os.IsNotExist(err) {
-			// Log the error if it's something other than the file not existing
-			// This shouldn't fail the test, but indicates potential issues.
-			GetLogger().Warn("Test helper: failed to remove simulated audio file",
-				logger.String("path", file.Path),
-				logger.Error(err))
-		}
+		deleteTestFile(&files[i], deletedFiles, speciesTotalCount, keepSpectrograms)
 		deletedCount++
 
-		// Simulate PNG deletion if keepSpectrograms is false
-		if !keepSpectrograms {
-			pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
-			if err := os.Remove(pngPath); err != nil && !os.IsNotExist(err) {
-				// Log the error if it's something other than the file not existing
-				// This shouldn't fail the test, but indicates potential issues.
-				GetLogger().Warn("Test helper: failed to remove simulated PNG",
-					logger.String("path", pngPath),
-					logger.Error(err))
-			}
-		}
-
-		// Update the *total* species count
-		speciesTotalCount[file.Species]--
-
 		// Reduce disk utilization for each deleted file
-		// In a real system, this would be based on file size relative to total storage
 		currentDiskUtilization -= utilizationReductionPerFile
 		if currentDiskUtilization < 0 {
 			currentDiskUtilization = 0
@@ -598,19 +601,3 @@ func simulateAgeBasedCleanup(
 	// Return the results with dynamic disk utilization
 	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
 }
-
-// Mock implementation of os.FileInfo for testing
-type mockFileInfo struct {
-	name    string
-	size    int64
-	mode    os.FileMode
-	modTime time.Time
-	isDir   bool
-}
-
-func (m *mockFileInfo) Name() string       { return m.name }
-func (m *mockFileInfo) Size() int64        { return m.size }
-func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
-func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
-func (m *mockFileInfo) IsDir() bool        { return m.isDir }
-func (m *mockFileInfo) Sys() any           { return nil }

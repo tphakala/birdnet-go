@@ -705,7 +705,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 				baseDir := conf.Setting().Realtime.Audio.Export.Path
 
 				// Check if we can skip cleanup
-				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&retention, baseDir, retention.Debug)
+				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&retention, baseDir)
 
 				if err != nil {
 					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",

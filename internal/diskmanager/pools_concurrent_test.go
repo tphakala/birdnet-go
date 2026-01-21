@@ -8,6 +8,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// safeDecrement performs a safe decrement with underflow protection using CAS.
+func safeDecrement(counter *atomic.Uint64) bool {
+	for {
+		current := counter.Load()
+		if current == 0 {
+			return false
+		}
+		if counter.CompareAndSwap(current, current-1) {
+			return true
+		}
+	}
+}
+
+// poolWorker performs increment or decrement operations for testing.
+func poolWorker(counter *atomic.Uint64, shouldIncrement bool, ops int) {
+	for range ops {
+		if shouldIncrement {
+			counter.Add(1)
+		} else {
+			safeDecrement(counter)
+		}
+	}
+}
+
 // TestCurrentPoolSizeConcurrentDecrement verifies that the pool size counter
 // handles concurrent decrements correctly without underflow
 func TestCurrentPoolSizeConcurrentDecrement(t *testing.T) {
@@ -31,17 +55,8 @@ func TestCurrentPoolSizeConcurrentDecrement(t *testing.T) {
 			defer wg.Done()
 
 			for range opsPerGoroutine {
-				// Simulate the decrement logic from getPooledSlice
-				for {
-					current := poolMetrics.CurrentPoolSize.Load()
-					if current == 0 {
-						break // Already at zero, nothing to decrement
-					}
-					if poolMetrics.CurrentPoolSize.CompareAndSwap(current, current-1) {
-						successfulDecrements.Add(1)
-						break // Successfully decremented
-					}
-					// CAS failed, retry
+				if safeDecrement(&poolMetrics.CurrentPoolSize) {
+					successfulDecrements.Add(1)
 				}
 			}
 		}()
@@ -89,16 +104,7 @@ func TestCurrentPoolSizeUnderflowPrevention(t *testing.T) {
 
 			// Each tries to decrement multiple times
 			for range 10 {
-				// Use the actual logic from getPooledSlice
-				for {
-					current := poolMetrics.CurrentPoolSize.Load()
-					if current == 0 {
-						break
-					}
-					if poolMetrics.CurrentPoolSize.CompareAndSwap(current, current-1) {
-						break
-					}
-				}
+				safeDecrement(&poolMetrics.CurrentPoolSize)
 			}
 		}()
 	}
@@ -127,24 +133,7 @@ func TestPoolSizeIncrementDecrement(t *testing.T) {
 
 		go func(shouldIncrement bool) {
 			defer wg.Done()
-
-			for range opsPerGoroutine {
-				if shouldIncrement {
-					// Simulate Put operation (increment)
-					poolMetrics.CurrentPoolSize.Add(1)
-				} else {
-					// Simulate Get operation (decrement with underflow protection)
-					for {
-						current := poolMetrics.CurrentPoolSize.Load()
-						if current == 0 {
-							break
-						}
-						if poolMetrics.CurrentPoolSize.CompareAndSwap(current, current-1) {
-							break
-						}
-					}
-				}
-			}
+			poolWorker(&poolMetrics.CurrentPoolSize, shouldIncrement, opsPerGoroutine)
 		}(increment)
 	}
 
