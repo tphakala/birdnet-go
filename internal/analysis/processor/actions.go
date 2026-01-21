@@ -95,9 +95,10 @@ type LogAction struct {
 
 type DatabaseAction struct {
 	Settings          *conf.Settings
-	Ds                datastore.Interface
-	Result            detection.Result             // Domain model (single source of truth)
-	Results           []detection.AdditionalResult // Secondary predictions (converted to legacy format at save time)
+	Ds                datastore.Interface           // Legacy - to be removed after migration
+	Repo              datastore.DetectionRepository // New - preferred for database operations
+	Result            detection.Result              // Domain model (single source of truth)
+	Results           []detection.AdditionalResult  // Secondary predictions (converted to legacy format at save time)
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
@@ -185,7 +186,7 @@ type SSEAction struct {
 	Result         detection.Result // Domain model (single source of truth)
 	BirdImageCache *imageprovider.BirdImageCache
 	EventTracker   *EventTracker
-	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
+	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction (provides database ID)
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
@@ -193,8 +194,6 @@ type SSEAction struct {
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
 	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error
-	// Datastore interface for querying the database to get the assigned ID
-	Ds datastore.Interface
 }
 
 // CompositeAction executes multiple actions sequentially, ensuring proper dependency management.
@@ -582,8 +581,15 @@ func (a *LogAction) Execute(data any) error {
 	return nil
 }
 
-// Execute saves the note to the database
+// Execute saves the note to the database.
+// For context-aware execution with timeout/cancellation support, use ExecuteContext.
 func (a *DatabaseAction) Execute(data any) error {
+	return a.ExecuteContext(context.Background(), data)
+}
+
+// ExecuteContext implements the ContextAction interface for proper context propagation.
+// This allows CompositeAction to pass timeout and cancellation signals to the database save.
+func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -601,37 +607,55 @@ func (a *DatabaseAction) Execute(data any) error {
 		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Result.Species.ScientificName, a.Result.BeginTime)
 	}
 
-	// Convert Result to Note for GORM persistence
-	note := datastore.NoteFromResult(&a.Result)
+	// Save detection to database using preferred path
+	if a.Repo != nil {
+		// New path: Use DetectionRepository (handles conversion internally)
+		if err := a.Repo.Save(ctx, &a.Result, a.Results); err != nil {
+			GetLogger().Error("Failed to save detection to database",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.Error(err),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.Float64("confidence", a.Result.Confidence),
+				logger.String("clip_name", a.Result.ClipName),
+				logger.String("operation", "database_save_repository"))
+			return err
+		}
+		// Note: a.Result.ID is updated by Repo.Save()
+	} else {
+		// Legacy path: Use datastore.Interface directly
+		// Convert Result to Note for GORM persistence
+		note := datastore.NoteFromResult(&a.Result)
 
-	// Convert domain AdditionalResults to legacy datastore.Results format for GORM.
-	// Results are passed separately to Save() - not assigned to note.Results because
-	// saveNoteInTransaction uses Omit("Results") to prevent GORM auto-save.
-	legacyResults := datastore.AdditionalResultsToDatastoreResults(a.Results)
+		// Convert domain AdditionalResults to legacy datastore.Results format for GORM.
+		// Results are passed separately to Save() - not assigned to note.Results because
+		// saveNoteInTransaction uses Omit("Results") to prevent GORM auto-save.
+		legacyResults := datastore.AdditionalResultsToDatastoreResults(a.Results)
 
-	// Save note to database
-	if err := a.Ds.Save(&note, legacyResults); err != nil {
-		// Add structured logging
-		GetLogger().Error("Failed to save note and results to database",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.Error(err),
-			logger.String("species", a.Result.Species.CommonName),
-			logger.String("scientific_name", a.Result.Species.ScientificName),
-			logger.Float64("confidence", a.Result.Confidence),
-			logger.String("clip_name", a.Result.ClipName),
-			logger.String("operation", "database_save"))
-		return err
+		// Save note to database
+		if err := a.Ds.Save(&note, legacyResults); err != nil {
+			GetLogger().Error("Failed to save note and results to database",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.Error(err),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.Float64("confidence", a.Result.Confidence),
+				logger.String("clip_name", a.Result.ClipName),
+				logger.String("operation", "database_save"))
+			return err
+		}
+
+		// Sync database-assigned ID back to Result
+		a.Result.ID = note.ID
 	}
-
-	// Sync database-assigned ID back to Result
-	a.Result.ID = note.ID
 
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
 	// This must happen before audio export so downstream actions get the ID
 	// even if audio export fails.
 	if a.DetectionCtx != nil {
-		a.DetectionCtx.NoteID.Store(uint64(note.ID))
+		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
 	}
 
 	// After successful save, publish detection event for new species

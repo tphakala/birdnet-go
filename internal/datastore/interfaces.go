@@ -67,6 +67,12 @@ var (
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
+//
+// Migration Note: For detection-specific CRUD operations, prefer using DetectionRepository
+// (see repository.go) which works with domain models (detection.Result) instead of
+// persistence models (Note). The DetectionRepository wraps Interface and handles
+// conversion between domain and persistence layers.
+//
 // Optional methods:
 //   - CheckpointWAL() error - Implemented by stores that support Write-Ahead Logging (e.g., SQLite)
 //     Call via type assertion: if sqliteStore, ok := store.(*SQLiteStore); ok { sqliteStore.CheckpointWAL() }

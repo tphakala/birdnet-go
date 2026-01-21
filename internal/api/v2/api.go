@@ -39,7 +39,8 @@ const tunnelProviderUnknown = "unknown"
 type Controller struct {
 	Echo                *echo.Echo
 	Group               *echo.Group
-	DS                  datastore.Interface
+	DS                  datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo                datastore.DetectionRepository // New: Preferred for detection CRUD operations
 	Settings            *conf.Settings
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
@@ -264,9 +265,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Create context for managing goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Only create DetectionRepository if datastore is available.
+	// This prevents nil pointer dereference when datastore is disabled.
+	var repo datastore.DetectionRepository
+	if ds != nil {
+		repo = datastore.NewDetectionRepository(ds, nil)
+	}
+
 	c := &Controller{
 		Echo:                 e,
 		DS:                   ds,
+		Repo:                 repo, // Bridge to new domain model (nil if datastore disabled)
 		Settings:             settings,
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,

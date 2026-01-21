@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"gorm.io/gorm"
 )
 
@@ -341,3 +342,118 @@ func (m *ActionMockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, erro
 
 // Compile-time check that ActionMockDatastore implements datastore.Interface
 var _ datastore.Interface = (*ActionMockDatastore)(nil)
+
+// MockDetectionRepository implements datastore.DetectionRepository for testing.
+// It simulates database ID assignment and captures saved detections for verification.
+type MockDetectionRepository struct {
+	mu                     sync.Mutex
+	nextID                 uint
+	savedCount             int
+	saveErr                error
+	savedResult            *detection.Result
+	savedAdditionalResults []detection.AdditionalResult // Captures additional results for verification
+}
+
+// NewMockDetectionRepository creates a new mock repository starting with ID 1.
+func NewMockDetectionRepository() *MockDetectionRepository {
+	return &MockDetectionRepository{
+		nextID: 1,
+	}
+}
+
+// Save implements datastore.DetectionRepository.Save.
+func (m *MockDetectionRepository) Save(_ context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+
+	// Simulate database ID assignment
+	result.ID = m.nextID
+	m.nextID++
+	m.savedCount++
+	m.savedResult = result
+	m.savedAdditionalResults = additionalResults // Capture for verification
+
+	return nil
+}
+
+// SetSaveError sets an error to be returned on next Save call.
+func (m *MockDetectionRepository) SetSaveError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.saveErr = err
+}
+
+// GetSavedCount returns the number of times Save was called successfully.
+func (m *MockDetectionRepository) GetSavedCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.savedCount
+}
+
+// GetLastSavedResult returns the last saved detection result.
+func (m *MockDetectionRepository) GetLastSavedResult() *detection.Result {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.savedResult
+}
+
+// GetLastSavedAdditionalResults returns the additional results from the last Save call.
+func (m *MockDetectionRepository) GetLastSavedAdditionalResults() []detection.AdditionalResult {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.savedAdditionalResults
+}
+
+// Stub implementations for remaining DetectionRepository methods
+// These are intentionally stubbed to return nil - not used in tests
+//
+//nolint:nilnil // Stub method for mock
+func (m *MockDetectionRepository) Get(_ context.Context, _ string) (*detection.Result, error) {
+	return nil, nil
+}
+func (m *MockDetectionRepository) Delete(_ context.Context, _ string) error { return nil }
+func (m *MockDetectionRepository) GetRecent(_ context.Context, _ int) ([]*detection.Result, error) {
+	return nil, nil
+}
+func (m *MockDetectionRepository) Search(_ context.Context, _ *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockDetectionRepository) GetBySpecies(_ context.Context, _ string, _ *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockDetectionRepository) GetByDateRange(_ context.Context, _, _ string, _, _ int) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockDetectionRepository) GetHourly(_ context.Context, _, _ string, _, _, _ int) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockDetectionRepository) Lock(_ context.Context, _ string) error   { return nil }
+func (m *MockDetectionRepository) Unlock(_ context.Context, _ string) error { return nil }
+func (m *MockDetectionRepository) IsLocked(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (m *MockDetectionRepository) SetReview(_ context.Context, _, _ string) error { return nil }
+func (m *MockDetectionRepository) GetReview(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (m *MockDetectionRepository) AddComment(_ context.Context, _, _ string) error { return nil }
+func (m *MockDetectionRepository) GetComments(_ context.Context, _ string) ([]detection.Comment, error) {
+	return nil, nil
+}
+func (m *MockDetectionRepository) UpdateComment(_ context.Context, _ uint, _ string) error {
+	return nil
+}
+func (m *MockDetectionRepository) DeleteComment(_ context.Context, _ uint) error { return nil }
+func (m *MockDetectionRepository) GetClipPath(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (m *MockDetectionRepository) GetAdditionalResults(_ context.Context, _ string) ([]detection.AdditionalResult, error) {
+	return nil, nil
+}
+
+// Compile-time check that MockDetectionRepository implements datastore.DetectionRepository
+var _ datastore.DetectionRepository = (*MockDetectionRepository)(nil)
