@@ -5,20 +5,8 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.golangci.yml'
-  pull_request:
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.golangci.yml'
+  # Reusable workflow only - called by golangci-test.yml
+  # Do NOT add push/pull_request triggers here to avoid duplicate runs
   workflow_call:
 
 permissions:
