@@ -118,7 +118,7 @@ func TestMqttAction_IncludesOccurrence(t *testing.T) {
 	}
 
 	// Execute the action
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify the message was published
@@ -205,7 +205,7 @@ func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
 	}
 
 	// Execute the action
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify the message was published

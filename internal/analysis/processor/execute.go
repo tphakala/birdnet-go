@@ -29,11 +29,8 @@ func (a ExecuteCommandAction) GetDescription() string {
 	return fmt.Sprintf("Execute command: %s", a.Command)
 }
 
-// Execute implements the Action interface for backward compatibility
-func (a ExecuteCommandAction) Execute(data any) error {
-	// Use a default context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), ExecuteCommandTimeout)
-	defer cancel()
+// Execute implements the Action interface
+func (a ExecuteCommandAction) Execute(ctx context.Context, data any) error {
 	return a.ExecuteContext(ctx, data)
 }
 

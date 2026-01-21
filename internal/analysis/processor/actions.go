@@ -71,14 +71,15 @@ type DetectionContext struct {
 	AudioExportFailed atomic.Bool
 }
 
-// Action is the base interface for all actions that can be executed
+// Action is the base interface for all actions that can be executed.
+// The context parameter allows for cancellation and timeout propagation.
 type Action interface {
-	Execute(data any) error
+	Execute(ctx context.Context, data any) error
 	GetDescription() string
 }
 
-// ContextAction is an enhanced action interface that supports context-aware execution
-// This allows for proper cancellation and timeout propagation
+// ContextAction is deprecated but kept for backward compatibility.
+// Action now includes context directly.
 type ContextAction interface {
 	Action
 	ExecuteContext(ctx context.Context, data any) error
@@ -324,7 +325,7 @@ func (a *CompositeAction) GetDescription() string {
 
 // Execute runs all actions sequentially, stopping on first error
 // This method is designed to prevent deadlocks and handle timeouts properly
-func (a *CompositeAction) Execute(data any) error {
+func (a *CompositeAction) Execute(ctx context.Context, data any) error {
 	// Handle nil or empty actions gracefully
 	if a == nil || a.Actions == nil || len(a.Actions) == 0 {
 		return nil // Nothing to execute
@@ -461,7 +462,7 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data any, ste
 							Build()
 					}
 				}()
-				execErr = action.Execute(data)
+				execErr = action.Execute(ctx, data)
 			}()
 
 			// Wait for either completion or context cancellation
@@ -546,7 +547,7 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data any, ste
 }
 
 // Execute logs the note to the chag log file
-func (a *LogAction) Execute(data any) error {
+func (a *LogAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -582,9 +583,9 @@ func (a *LogAction) Execute(data any) error {
 }
 
 // Execute saves the note to the database.
-// For context-aware execution with timeout/cancellation support, use ExecuteContext.
-func (a *DatabaseAction) Execute(data any) error {
-	return a.ExecuteContext(context.Background(), data)
+// The context parameter allows for timeout/cancellation support.
+func (a *DatabaseAction) Execute(ctx context.Context, data any) error {
+	return a.ExecuteContext(ctx, data)
 }
 
 // ExecuteContext implements the ContextAction interface for proper context propagation.
@@ -716,7 +717,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 				CorrelationID: a.CorrelationID,
 			}
 
-			if err := saveAudioAction.Execute(nil); err != nil {
+			if err := saveAudioAction.Execute(ctx, nil); err != nil {
 				handleAudioExportError(err, logger.String("clip_name", a.Result.ClipName))
 			} else if a.Settings.Debug {
 				// Add structured logging
@@ -858,7 +859,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 }
 
 // Execute saves the audio clip to a file
-func (a *SaveAudioAction) Execute(data any) error {
+func (a *SaveAudioAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -957,7 +958,7 @@ func (a *SaveAudioAction) Execute(data any) error {
 }
 
 // Execute sends the note to the BirdWeather API
-func (a *BirdWeatherAction) Execute(data any) error {
+func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1083,7 +1084,7 @@ type NoteWithBirdImage struct {
 }
 
 // Execute sends the note to the MQTT broker
-func (a *MqttAction) Execute(data any) error {
+func (a *MqttAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1233,7 +1234,7 @@ func (a *MqttAction) Execute(data any) error {
 // Execute updates the range filter species list, this is run every day
 // Note: The ShouldUpdateRangeFilterToday() check in processor.go ensures this action
 // is only created once per day, preventing duplicate concurrent updates (GitHub issue #1357)
-func (a *UpdateRangeFilterAction) Execute(data any) error {
+func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1274,7 +1275,7 @@ func (a *UpdateRangeFilterAction) Execute(data any) error {
 }
 
 // Execute broadcasts the detection via Server-Sent Events
-func (a *SSEAction) Execute(data any) error {
+func (a *SSEAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

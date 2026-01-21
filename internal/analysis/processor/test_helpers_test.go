@@ -231,12 +231,12 @@ func (m *MockJobQueue) Reset() {
 // MockAction is a mock implementation of the Action interface for testing.
 type MockAction struct {
 	mu           sync.Mutex
-	ExecuteFunc  func(data any) error
+	ExecuteFunc  func(data any) error // Legacy callback without context
 	ExecuteCount int
 	ExecuteData  []any
 }
 
-func (m *MockAction) Execute(data any) error {
+func (m *MockAction) Execute(ctx context.Context, data any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ExecuteCount++
@@ -298,8 +298,8 @@ type SimpleAction struct {
 	onExecute    func() // Callback for additional behavior
 }
 
-func (a *SimpleAction) Execute(data any) error {
-	return a.ExecuteContext(context.Background(), data)
+func (a *SimpleAction) Execute(ctx context.Context, data any) error {
+	return a.ExecuteContext(ctx, data)
 }
 
 // ExecuteContext implements the ContextAction interface for proper context propagation.

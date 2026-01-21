@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -34,7 +35,6 @@ type JobQueue struct {
 	archivedJobs       []*Job // Store stale jobs here instead of discarding
 	mu                 sync.Mutex
 	stats              JobStats
-	jobCounter         int
 	stopCh             chan struct{}
 	runningJobs        sync.WaitGroup // Track running jobs for graceful shutdown
 	isRunning          bool
@@ -42,6 +42,7 @@ type JobQueue struct {
 	maxJobs            int  // Maximum number of pending jobs in the queue
 	droppedJobs        int  // Counter for jobs dropped due to queue full
 	logAllSuccesses    bool // Whether to log all successful jobs, not just retries
+	allowJobDropping   bool // Whether dropping oldest job is allowed when queue is full
 	processCancel      context.CancelFunc
 	processingInterval time.Duration // Interval for the processing ticker (for testing)
 	clock              Clock         // Clock interface for time-related operations
@@ -61,6 +62,7 @@ func NewJobQueueWithOptions(maxJobs, maxArchivedJobs int, logAllSuccesses bool) 
 		maxArchivedJobs:    maxArchivedJobs,
 		maxJobs:            maxJobs,
 		logAllSuccesses:    logAllSuccesses,
+		allowJobDropping:   true, // Default to allowing job dropping when queue is full
 		processingInterval: 1 * time.Second, // Default processing interval
 		clock:              &RealClock{},    // Use the real clock by default
 		stats: JobStats{
@@ -81,6 +83,14 @@ func (q *JobQueue) SetClock(clock Clock) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.clock = clock
+}
+
+// SetAllowJobDropping sets whether jobs can be dropped when queue is full.
+// Primarily used for testing scenarios.
+func (q *JobQueue) SetAllowJobDropping(allow bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.allowJobDropping = allow
 }
 
 // Start starts the job queue processing
@@ -185,21 +195,13 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 	// Check if queue is full and handle accordingly
 	if len(q.jobs) >= q.maxJobs {
 		// If DropOldestOnFull is enabled, try to make room
-		if !q._dropOldestPendingJob(ctx) {
+		if !q.dropOldestPendingJob(ctx) {
 			// Could not drop any job, queue is full
 			q.droppedJobs++
 			q.stats.DroppedJobs++
 
-			// Update action-specific stats
-			actionKey := getActionKey(action)
-			stats, exists := q.stats.ActionStats[actionKey]
-			if !exists {
-				// Initialize the stats for this action type
-				stats = ActionStats{
-					TypeName:    fmt.Sprintf("%T", action),
-					Description: action.GetDescription(),
-				}
-			}
+			// Update action-specific stats for dropped job
+			actionKey, stats := q.getOrInitActionStatsLocked(action, action.GetDescription())
 			stats.Dropped++
 			q.stats.ActionStats[actionKey] = stats
 
@@ -212,8 +214,6 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 		}
 	}
 
-	// Increment job counter (kept for backward compatibility and metrics, not used for ID generation)
-	q.jobCounter++
 	// Generate a UUID v4 for the job ID, truncated to 8 characters
 	uuidStr := uuid.New().String()
 	shortUUID := uuidStr[:8] // Take first 8 characters of the UUID
@@ -235,31 +235,24 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 	q.stats.TotalJobs++
 
 	// Update action-specific stats
-	actionKey := getActionKey(action)
-	stats, exists := q.stats.ActionStats[actionKey]
-	if !exists {
-		// Initialize the stats for this action type
-		stats = ActionStats{
-			TypeName:    fmt.Sprintf("%T", action),
-			Description: action.GetDescription(),
-		}
-	}
+	actionKey, stats := q.getOrInitActionStatsLocked(action, action.GetDescription())
 	stats.Attempted++
-	// Only increment Retried for actual retries
-	if job.Attempts > 1 {
-		stats.Retried++
-	}
 	q.stats.ActionStats[actionKey] = stats
 
 	return job, nil
 }
 
-// _dropOldestPendingJob removes the oldest pending job from the queue
+// dropOldestPendingJob removes the oldest pending job from the queue
 // to make room for a new job. Returns true if a job was dropped.
+//
+// Performance: O(N) scan through jobs. Acceptable for default maxJobs=1000.
+// If maxJobs is set significantly higher and queue-full scenarios are common,
+// consider using a min-heap ordered by CreatedAt for O(log N) removal.
+//
 // IMPORTANT: This method must be called with q.mu already locked.
-func (q *JobQueue) _dropOldestPendingJob(ctx context.Context) bool {
-	// For testing queue overflow, respect the global AllowJobDropping flag
-	if !AllowJobDropping {
+func (q *JobQueue) dropOldestPendingJob(ctx context.Context) bool {
+	// For testing queue overflow, respect the allowJobDropping setting
+	if !q.allowJobDropping {
 		return false
 	}
 
@@ -295,8 +288,7 @@ func (q *JobQueue) _dropOldestPendingJob(ctx context.Context) bool {
 	q.stats.DroppedJobs++
 
 	// Update action-specific stats
-	actionKey := getActionKey(oldestJob.Action)
-	stats := q.stats.ActionStats[actionKey]
+	actionKey, stats := q.getOrInitActionStatsLocked(oldestJob.Action, oldestJob.Action.GetDescription())
 	stats.Dropped++
 	q.stats.ActionStats[actionKey] = stats
 
@@ -404,50 +396,55 @@ func calculateBackoffDelay(config RetryConfig, attemptNum int, clock Clock) time
 	return time.Duration(backoff)
 }
 
+// revertRunningJobsToPending reverts all running jobs back to pending/retrying status.
+// Called when context is cancelled during job processing.
+func (q *JobQueue) revertRunningJobsToPending(jobs []*Job) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, j := range jobs {
+		if j.Status == JobStatusRunning {
+			if j.Attempts > 0 {
+				j.Status = JobStatusRetrying
+			} else {
+				j.Status = JobStatusPending
+			}
+		}
+	}
+}
+
 // processDueJobs processes jobs that are due for execution
 func (q *JobQueue) processDueJobs(ctx context.Context) {
-	// Quick check for context cancellation
 	if ctx.Err() != nil {
 		return
 	}
 
 	q.mu.Lock()
-
-	// Find jobs that are due for execution
 	var dueJobs []*Job
 	now := q.clock.Now()
 
 	for _, job := range q.jobs {
-		// Check for both pending and retrying jobs
 		if (job.Status == JobStatusPending || job.Status == JobStatusRetrying) && !job.NextRetryAt.After(now) {
 			dueJobs = append(dueJobs, job)
 			job.Status = JobStatusRunning
 		}
 	}
 
+	// Add to WaitGroup while holding lock to prevent shutdown race.
+	// This ensures StopWithTimeout sees the correct count before Wait().
+	if len(dueJobs) > 0 {
+		q.runningJobs.Add(len(dueJobs))
+	}
 	q.mu.Unlock()
 
-	// Execute due jobs
-	for _, job := range dueJobs {
-		// Check context again before starting each job
+	for i, job := range dueJobs {
 		if ctx.Err() != nil {
-			// Context was cancelled, revert job status and return
-			q.mu.Lock()
-			for _, j := range dueJobs {
-				if j.Status == JobStatusRunning {
-					// Revert to original status
-					if j.Attempts > 0 {
-						j.Status = JobStatusRetrying
-					} else {
-						j.Status = JobStatusPending
-					}
-				}
-			}
-			q.mu.Unlock()
+			// Revert unspawned jobs and adjust WaitGroup count
+			unspawnedCount := len(dueJobs) - i
+			q.revertRunningJobsToPending(dueJobs[i:])
+			q.runningJobs.Add(-unspawnedCount) // Decrement for jobs we won't spawn
 			return
 		}
 
-		q.runningJobs.Add(1)
 		go func(j *Job) {
 			defer q.runningJobs.Done()
 			q.executeJob(ctx, j)
@@ -471,10 +468,10 @@ func sanitizeErrorMessage(err error) string {
 	// This handles URLs with credentials, API tokens, emails, IPs, etc.
 	errMsg := privacy.ScrubMessage(err.Error())
 
-	// Bound message length to prevent memory bloat
-	if len(errMsg) > MaxMessageLength {
-		truncatedMsg := errMsg[:MaxMessageLength]
-		errMsg = truncatedMsg + "... [truncated]"
+	// Bound message length to prevent memory bloat (use rune count for UTF-8 safety)
+	if utf8.RuneCountInString(errMsg) > MaxMessageLength {
+		runes := []rune(errMsg)
+		errMsg = string(runes[:MaxMessageLength]) + "... [truncated]"
 	}
 
 	// Enhanced sanitization to handle control characters, escape sequences, and non-ASCII
@@ -505,61 +502,127 @@ func sanitizeErrorMessage(err error) string {
 	return errMsg
 }
 
+// getOrInitActionStatsLocked returns existing action stats or initializes new ones.
+// IMPORTANT: Caller must hold q.mu lock.
+// Takes description as argument to avoid redundant GetDescription() calls.
+func (q *JobQueue) getOrInitActionStatsLocked(action Action, description string) (string, ActionStats) {
+	actionKey := getActionKey(action)
+	stats, exists := q.stats.ActionStats[actionKey]
+	if !exists {
+		stats = ActionStats{
+			TypeName:    fmt.Sprintf("%T", action),
+			Description: description,
+		}
+	}
+	return actionKey, stats
+}
+
+// handleExecutionTimeout creates an appropriate error for timeout/cancellation.
+func handleExecutionTimeout(ctxErr error, job *Job) error {
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		return errors.New(ctxErr).
+			Component("analysis.jobqueue").
+			Category(errors.CategoryTimeout).
+			Context("operation", "execute_job").
+			Context("job_id", job.ID).
+			Context("action_type", fmt.Sprintf("%T", job.Action)).
+			Context("timeout", DefaultJobExecutionTimeout.String()).
+			Context("attempt", job.Attempts).
+			Build()
+	}
+	return errors.Newf("job execution cancelled: %w", ctxErr).
+		Component("analysis.jobqueue").
+		Category(errors.CategoryCancellation).
+		Context("operation", "execute_job").
+		Context("job_id", job.ID).
+		Context("action_type", fmt.Sprintf("%T", job.Action)).
+		Context("attempt", job.Attempts).
+		Build()
+}
+
+// updateDurationStats updates min/max/average duration statistics.
+func (stats *ActionStats) updateDurationStats(duration time.Duration) {
+	stats.TotalDuration += duration
+	if stats.MinDuration == 0 || duration < stats.MinDuration {
+		stats.MinDuration = duration
+	}
+	if duration > stats.MaxDuration {
+		stats.MaxDuration = duration
+	}
+	totalAttempts := stats.Successful + stats.Failed + stats.Retried
+	if totalAttempts > 0 {
+		stats.AverageDuration = time.Duration(int64(stats.TotalDuration) / int64(totalAttempts))
+	}
+}
+
 // executeJob executes a job and handles retries if needed
 func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
-	// Increment attempt counter
-	job.Attempts++
-
-	// Get action description for logging
+	// Get action description for logging (safe to call without lock)
 	actionDesc := job.Action.GetDescription()
 
-	// Update stats
+	// Update stats at start - increment attempt counter under lock
 	q.mu.Lock()
-	// Only increment RetryAttempts for actual retries
+	job.Attempts++ // Protected by mutex to avoid race with revertRunningJobsToPending
 	if job.Attempts > 1 {
 		q.stats.RetryAttempts++
 	}
-	actionKey := getActionKey(job.Action)
-	stats, exists := q.stats.ActionStats[actionKey]
-	if !exists {
-		// Initialize the stats for this action type
-		stats = ActionStats{
-			TypeName:    fmt.Sprintf("%T", job.Action),
-			Description: actionDesc,
-		}
-	}
+	actionKey, stats := q.getOrInitActionStatsLocked(job.Action, actionDesc)
 	stats.Attempted++
-	// Only increment Retried for actual retries
 	if job.Attempts > 1 {
 		stats.Retried++
 	}
-
-	// Update last execution time
 	executionStartTime := q.clock.Now()
 	stats.LastExecutionTime = executionStartTime
 	q.stats.ActionStats[actionKey] = stats
 	q.mu.Unlock()
 
-	// Log the attempt
 	if job.Attempts > 1 {
 		LogJobRetrying(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts)
 	}
 
-	// Create a timeout context for the job execution
+	// Execute with timeout
+	err := q.executeJobWithTimeout(ctx, job)
+
+	// Calculate execution duration
+	executionEndTime := q.clock.Now()
+	executionDuration := executionEndTime.Sub(executionStartTime)
+
+	// Handle the result
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if len(q.stats.ActionStats) >= MaxActionStatsEntries {
+		q.cleanupOldActionStats()
+	}
+
+	stats = q.stats.ActionStats[actionKey]
+	stats.updateDurationStats(executionDuration)
+
+	if err != nil {
+		q.handleJobFailure(ctx, job, &stats, actionKey, actionDesc, executionEndTime, err)
+	} else {
+		q.handleJobSuccess(ctx, job, &stats, actionKey, actionDesc, executionEndTime)
+	}
+}
+
+// executeJobWithTimeout runs the job action with timeout and panic recovery.
+//
+// IMPORTANT: Action implementations MUST respect context cancellation by checking
+// ctx.Done() periodically, especially in long-running operations. If an action
+// ignores context cancellation, the goroutine will leak when the timeout expires
+// because Go does not support forcibly terminating goroutines.
+func (q *JobQueue) executeJobWithTimeout(ctx context.Context, job *Job) error {
 	execCtx, cancel := context.WithTimeout(ctx, DefaultJobExecutionTimeout)
 	defer cancel()
 
-	// Execute the job with proper context handling and error capture
 	type result struct {
 		err error
 	}
 	resultChan := make(chan result, 1)
 
 	go func() {
-		// Add panic recovery to prevent goroutine crashes
 		defer func() {
 			if r := recover(); r != nil {
-				// Convert panic to error
 				panicErr := errors.Newf("job execution panicked: %v", r).
 					Component("analysis.jobqueue").
 					Category(errors.CategoryProcessing).
@@ -572,122 +635,153 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			}
 		}()
 
-		err := job.Action.Execute(job.Data)
+		err := job.Action.Execute(execCtx, job.Data)
 		resultChan <- result{err: err}
 	}()
 
-	// Wait for completion, timeout, or cancellation
-	var err error
 	select {
 	case res := <-resultChan:
-		// Normal completion
-		err = res.err
+		return res.err
 	case <-execCtx.Done():
-		// Context timeout or cancellation
-		ctxErr := execCtx.Err()
-		if ctxErr == context.DeadlineExceeded {
-			err = errors.New(ctxErr).
-				Component("analysis.jobqueue").
-				Category(errors.CategoryTimeout).
-				Context("operation", "execute_job").
-				Context("job_id", job.ID).
-				Context("action_type", fmt.Sprintf("%T", job.Action)).
-				Context("timeout", DefaultJobExecutionTimeout.String()).
-				Context("attempt", job.Attempts).
-				Build()
-		} else {
-			// Context cancelled - preserve "cancelled" text for test compatibility
-			err = errors.Newf("job execution cancelled: %w", ctxErr).
-				Component("analysis.jobqueue").
-				Category(errors.CategoryCancellation).
-				Context("operation", "execute_job").
-				Context("job_id", job.ID).
-				Context("action_type", fmt.Sprintf("%T", job.Action)).
-				Context("attempt", job.Attempts).
-				Build()
+		return handleExecutionTimeout(execCtx.Err(), job)
+	}
+}
+
+// handleJobFailure processes a failed job execution.
+// IMPORTANT: Caller must hold q.mu lock.
+func (q *JobQueue) handleJobFailure(ctx context.Context, job *Job, stats *ActionStats, actionKey, actionDesc string, endTime time.Time, err error) {
+	job.LastError = err
+	stats.LastErrorMessage = sanitizeErrorMessage(err)
+	stats.LastFailedTime = endTime
+
+	if job.Attempts >= job.MaxAttempts {
+		job.Status = JobStatusFailed
+		q.stats.FailedJobs++
+		stats.Failed++
+		q.stats.ActionStats[actionKey] = *stats
+		LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
+	} else {
+		job.Status = JobStatusRetrying
+		delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
+		job.NextRetryAt = q.clock.Now().Add(delay)
+		q.stats.ActionStats[actionKey] = *stats
+		LogJobRetryScheduled(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, delay, job.NextRetryAt, err)
+	}
+}
+
+// handleJobSuccess processes a successful job execution.
+// IMPORTANT: Caller must hold q.mu lock.
+func (q *JobQueue) handleJobSuccess(ctx context.Context, job *Job, stats *ActionStats, actionKey, actionDesc string, endTime time.Time) {
+	job.Status = JobStatusCompleted
+	stats.LastSuccessfulTime = endTime
+	q.stats.SuccessfulJobs++
+	stats.Successful++
+	q.stats.ActionStats[actionKey] = *stats
+
+	if job.Attempts > 1 || q.logAllSuccesses {
+		LogJobSuccess(ctx, job.ID, actionDesc, job.Attempts)
+	}
+}
+
+// extractTypeNameFromKey extracts the type name from an action key.
+// Key format is "TypeName:Description" where Description may contain escaped colons.
+func extractTypeNameFromKey(key string) string {
+	for i := 0; i < len(key); i++ {
+		if key[i] == ':' && (i == 0 || key[i-1] != '\\') {
+			return key[:i]
 		}
 	}
+	return key // Fallback if no unescaped colon found
+}
 
-	// Calculate execution duration
-	executionEndTime := q.clock.Now()
-	executionDuration := executionEndTime.Sub(executionStartTime)
-
-	// Handle the result
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	// Check if we need to clean up old action stats to prevent memory growth
-	if len(q.stats.ActionStats) >= MaxActionStatsEntries {
-		q.cleanupOldActionStats()
+// updateAggregatedDurations updates min/max durations during aggregation.
+func updateAggregatedDurations(aggregated, s *ActionStats) {
+	if s.MinDuration > 0 && (aggregated.MinDuration == 0 || s.MinDuration < aggregated.MinDuration) {
+		aggregated.MinDuration = s.MinDuration
 	}
-
-	// Update performance metrics
-	stats = q.stats.ActionStats[actionKey]
-	stats.TotalDuration += executionDuration
-
-	// Update min/max duration
-	if stats.MinDuration == 0 || executionDuration < stats.MinDuration {
-		stats.MinDuration = executionDuration
+	if s.MaxDuration > aggregated.MaxDuration {
+		aggregated.MaxDuration = s.MaxDuration
 	}
-	if executionDuration > stats.MaxDuration {
-		stats.MaxDuration = executionDuration
-	}
+}
 
-	// Calculate average duration
+// updateAggregatedTimestamps updates timestamps during aggregation.
+func updateAggregatedTimestamps(aggregated, s *ActionStats) {
+	if s.LastExecutionTime.After(aggregated.LastExecutionTime) {
+		aggregated.LastExecutionTime = s.LastExecutionTime
+	}
+	if s.LastSuccessfulTime.After(aggregated.LastSuccessfulTime) {
+		aggregated.LastSuccessfulTime = s.LastSuccessfulTime
+	}
+	if s.LastFailedTime.After(aggregated.LastFailedTime) {
+		aggregated.LastFailedTime = s.LastFailedTime
+		aggregated.LastErrorMessage = s.LastErrorMessage
+	}
+}
+
+// recalculateAverageDuration recalculates average from totals.
+func recalculateAverageDuration(stats *ActionStats) {
 	totalAttempts := stats.Successful + stats.Failed + stats.Retried
 	if totalAttempts > 0 {
 		stats.AverageDuration = time.Duration(int64(stats.TotalDuration) / int64(totalAttempts))
 	}
-
-	if err != nil {
-		// Job failed
-		job.LastError = err
-
-		// Store sanitized error message
-		sanitizedErr := sanitizeErrorMessage(err)
-		stats.LastErrorMessage = sanitizedErr
-		stats.LastFailedTime = executionEndTime
-
-		if job.Attempts >= job.MaxAttempts {
-			// No more retries
-			job.Status = JobStatusFailed
-
-			q.stats.FailedJobs++
-			stats.Failed++
-			q.stats.ActionStats[actionKey] = stats
-
-			LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
-		} else {
-			// Schedule for retry
-			job.Status = JobStatusRetrying
-
-			// Calculate backoff with exponential strategy
-			delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
-			job.NextRetryAt = q.clock.Now().Add(delay)
-
-			// Log detailed retry scheduling information
-			LogJobRetryScheduled(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, delay, job.NextRetryAt, err)
-		}
-	} else {
-		// Job succeeded
-		job.Status = JobStatusCompleted
-
-		// Update successful execution metrics
-		stats.LastSuccessfulTime = executionEndTime
-
-		q.stats.SuccessfulJobs++
-		stats.Successful++
-		q.stats.ActionStats[actionKey] = stats
-
-		// Log success based on configuration
-		if job.Attempts > 1 || q.logAllSuccesses {
-			LogJobSuccess(ctx, job.ID, actionDesc, job.Attempts)
-		}
-	}
 }
 
-// cleanupOldActionStats removes the oldest action stats entries to prevent unbounded memory growth
-// This method must be called with q.mu locked
+// aggregateActionStats combines multiple ActionStats into one.
+func aggregateActionStats(statsList []ActionStats) ActionStats {
+	if len(statsList) == 0 {
+		return ActionStats{}
+	}
+
+	aggregated := statsList[0]
+	for i := 1; i < len(statsList); i++ {
+		s := &statsList[i]
+		aggregated.Attempted += s.Attempted
+		aggregated.Successful += s.Successful
+		aggregated.Failed += s.Failed
+		aggregated.Retried += s.Retried
+		aggregated.Dropped += s.Dropped
+		aggregated.TotalDuration += s.TotalDuration
+
+		updateAggregatedDurations(&aggregated, s)
+		updateAggregatedTimestamps(&aggregated, s)
+	}
+
+	recalculateAverageDuration(&aggregated)
+	return aggregated
+}
+
+// buildStatsSnapshotMapsLocked builds both the action stats copy and the type grouping map.
+// Returns (actionStatsCopy, typeNameMap) to avoid iterating twice.
+// IMPORTANT: Caller must hold q.mu lock.
+func (q *JobQueue) buildStatsSnapshotMapsLocked() (actionStatsCopy map[string]ActionStats, typeNameMap map[string][]ActionStats) {
+	actionStatsCopy = make(map[string]ActionStats, len(q.stats.ActionStats))
+	typeNameMap = make(map[string][]ActionStats)
+
+	for k := range q.stats.ActionStats {
+		v := q.stats.ActionStats[k]
+		typeName := extractTypeNameFromKey(k)
+
+		// Update description from active jobs if available
+		for _, job := range q.jobs {
+			if getActionKey(job.Action) == k && job.Action != nil {
+				v.Description = job.Action.GetDescription()
+				break
+			}
+		}
+
+		actionStatsCopy[k] = v
+		typeNameMap[typeName] = append(typeNameMap[typeName], v)
+	}
+	return actionStatsCopy, typeNameMap
+}
+
+// cleanupOldActionStats removes the oldest action stats entries to prevent unbounded memory growth.
+//
+// Note: If a cleaned-up action type later retries, its stats will reinitialize from zero.
+// This is acceptable as it only affects long-inactive action types, and the alternative
+// (never cleaning up) risks unbounded memory growth.
+//
+// This method must be called with q.mu locked.
 func (q *JobQueue) cleanupOldActionStats() {
 	// Find the oldest entries by last execution time
 	type statEntry struct {
@@ -726,100 +820,14 @@ func (q *JobQueue) GetStats() JobStatsSnapshot {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	// Create a copy of the action stats map
-	actionStatsCopy := make(map[string]ActionStats, len(q.stats.ActionStats))
+	// Build both maps in a single pass
+	actionStatsCopy, typeNameMap := q.buildStatsSnapshotMapsLocked()
 
-	// Group stats by type name for backward compatibility with tests
-	typeNameMap := make(map[string][]ActionStats)
-
-	// First, collect all stats by type name
-	for k := range q.stats.ActionStats {
-		// Extract the type name from the key (format is "TypeName:Description")
-		// We need to look for unescaped colons to handle cases where description contains escaped colons
-		colonIndex := -1
-		for i := 0; i < len(k); i++ {
-			if k[i] == ':' && (i == 0 || k[i-1] != '\\') {
-				colonIndex = i
-				break
-			}
-		}
-
-		var typeName string
-		if colonIndex >= 0 {
-			typeName = k[:colonIndex]
-		} else {
-			// Fallback if no unescaped colon is found
-			typeName = k
-		}
-
-		// Get a copy of the value to avoid modifying the original
-		v := q.stats.ActionStats[k]
-
-		// Make sure description is up-to-date by checking if we have a reference to the action
-		for _, job := range q.jobs {
-			jobActionKey := getActionKey(job.Action)
-			if jobActionKey == k && job.Action != nil {
-				// Update description
-				v.Description = job.Action.GetDescription()
-				break
-			}
-		}
-
-		// Store in the type name map
-		typeNameMap[typeName] = append(typeNameMap[typeName], v)
-
-		// Also keep the original key-value pair
-		actionStatsCopy[k] = v
-	}
-
-	// Now add aggregated stats by type name for backward compatibility
+	// Add aggregated stats by type name for backward compatibility
 	for typeName, statsList := range typeNameMap {
-		if len(statsList) == 0 {
-			continue
+		if len(statsList) > 0 {
+			actionStatsCopy[typeName] = aggregateActionStats(statsList)
 		}
-
-		// Use the first entry as a base
-		aggregated := statsList[0]
-
-		// Aggregate stats from all actions of this type
-		for i := 1; i < len(statsList); i++ {
-			s := statsList[i]
-			aggregated.Attempted += s.Attempted
-			aggregated.Successful += s.Successful
-			aggregated.Failed += s.Failed
-			aggregated.Retried += s.Retried
-			aggregated.Dropped += s.Dropped
-			aggregated.TotalDuration += s.TotalDuration
-
-			// Update min/max durations
-			if s.MinDuration > 0 && (aggregated.MinDuration == 0 || s.MinDuration < aggregated.MinDuration) {
-				aggregated.MinDuration = s.MinDuration
-			}
-			if s.MaxDuration > aggregated.MaxDuration {
-				aggregated.MaxDuration = s.MaxDuration
-			}
-
-			// Use the most recent timestamps
-			if s.LastExecutionTime.After(aggregated.LastExecutionTime) {
-				aggregated.LastExecutionTime = s.LastExecutionTime
-			}
-			if s.LastSuccessfulTime.After(aggregated.LastSuccessfulTime) {
-				aggregated.LastSuccessfulTime = s.LastSuccessfulTime
-			}
-			if s.LastFailedTime.After(aggregated.LastFailedTime) {
-				aggregated.LastFailedTime = s.LastFailedTime
-				aggregated.LastErrorMessage = s.LastErrorMessage
-			}
-		}
-
-		// Calculate average duration
-		totalAttempts := aggregated.Successful + aggregated.Failed + aggregated.Retried
-		if totalAttempts > 0 {
-			aggregated.AverageDuration = time.Duration(int64(aggregated.TotalDuration) / int64(totalAttempts))
-		}
-
-		// Add the aggregated stats to the copy
-		actionStatsCopy[typeName] = aggregated
 	}
 
 	return JobStatsSnapshot{
@@ -864,13 +872,13 @@ func GetDefaultRetryConfig(enabled bool) RetryConfig {
 
 // TypedJobQueue is a generic version of JobQueue for type-safe operations
 type TypedJobQueue[T any] struct {
-	JobQueue // Embed the regular JobQueue for shared implementation
+	*JobQueue // Pointer embedding avoids copying sync primitives
 }
 
 // NewTypedJobQueue creates a new typed job queue
 func NewTypedJobQueue[T any]() *TypedJobQueue[T] {
 	return &TypedJobQueue[T]{
-		JobQueue: *NewJobQueue(),
+		JobQueue: NewJobQueue(),
 	}
 }
 
@@ -918,11 +926,11 @@ type typedActionAdapter[T any] struct {
 }
 
 // Execute implements the Action interface
-func (a *typedActionAdapter[T]) Execute(data any) error {
+func (a *typedActionAdapter[T]) Execute(ctx context.Context, data any) error {
 	// If data is provided, ensure it's the correct type and use it
 	if data != nil {
 		if typedData, ok := data.(T); ok {
-			return a.action.Execute(typedData)
+			return a.action.Execute(ctx, typedData)
 		}
 		return errors.Newf("invalid data type: expected %T, got %T", a.data, data).
 			Component("analysis.jobqueue").
@@ -932,7 +940,7 @@ func (a *typedActionAdapter[T]) Execute(data any) error {
 			Context("actual_type", fmt.Sprintf("%T", data)).
 			Build()
 	}
-	return a.action.Execute(a.data)
+	return a.action.Execute(ctx, a.data)
 }
 
 // GetDescription implements the Action interface

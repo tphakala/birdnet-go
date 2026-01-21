@@ -120,7 +120,7 @@ func (m *MockClock) Set(t time.Time) {
 
 // MockAction implements the Action interface for testing
 type MockAction struct {
-	ExecuteFunc    func(data any) error
+	ExecuteFunc    func(data any) error // Legacy callback without context
 	ExecuteCount   int
 	ExecuteDelay   time.Duration
 	ExecuteTimeout bool
@@ -129,7 +129,7 @@ type MockAction struct {
 }
 
 // Execute implements the Action interface
-func (m *MockAction) Execute(data any) error {
+func (m *MockAction) Execute(ctx context.Context, data any) error {
 	m.mu.Lock()
 	m.ExecuteCount++
 	m.mu.Unlock()
@@ -789,15 +789,6 @@ func TestArchiveLimit(t *testing.T) {
 
 // TestQueueOverflow tests that jobs are rejected when the queue is full
 func TestQueueOverflow(t *testing.T) {
-	// Save original value to restore later
-	originalAllowJobDropping := AllowJobDropping
-	// Disable job dropping for this test
-	AllowJobDropping = false
-	// Restore original value after test completes
-	defer func() {
-		AllowJobDropping = originalAllowJobDropping
-	}()
-
 	// Create a context for manual control
 	ctx := t.Context()
 
@@ -805,6 +796,9 @@ func TestQueueOverflow(t *testing.T) {
 	queueCapacity := 3
 	queue := setupTestQueue(t, queueCapacity, 5, false)
 	defer teardownTestQueue(t, queue)
+
+	// Disable job dropping for this test
+	queue.SetAllowJobDropping(false)
 
 	// Create a channel to signal when the blocking job has started
 	jobStarted := make(chan struct{})
@@ -927,11 +921,7 @@ func TestDropOldestJob(t *testing.T) {
 		assert.NoError(t, queue.Stop(), "Failed to stop queue")
 	}()
 
-	// Enable job dropping for this test
-	AllowJobDropping = true
-	defer func() {
-		AllowJobDropping = false
-	}()
+	// Job dropping is enabled by default (allowJobDropping = true)
 
 	// Create a context for the test
 	ctx := context.Background()
@@ -1453,18 +1443,12 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 
 // TestRateLimiting tests that the job queue properly limits the rate of job submissions
 func TestRateLimiting(t *testing.T) {
-	// Save original value to restore later
-	originalAllowJobDropping := AllowJobDropping
-	// Disable job dropping for this test to ensure rejections
-	AllowJobDropping = false
-	// Restore original value after test completes
-	defer func() {
-		AllowJobDropping = originalAllowJobDropping
-	}()
-
 	// Create a queue with a small size to test throttling
 	queue := setupTestQueue(t, 5, 10, false)
 	defer teardownTestQueue(t, queue)
+
+	// Disable job dropping for this test to ensure rejections
+	queue.SetAllowJobDropping(false)
 
 	var successCount, rejectionCount atomic.Int32
 

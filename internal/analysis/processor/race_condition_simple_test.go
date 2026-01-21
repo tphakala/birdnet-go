@@ -17,6 +17,7 @@
 package processor
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -337,7 +338,7 @@ func TestRaceCondition_CompositeActionSolution(t *testing.T) {
 	startTime := time.Now()
 
 	// Execute the composite action
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	totalDuration := time.Since(startTime)
 
 	require.NoError(t, err, "Composite action failed")
@@ -421,7 +422,7 @@ func TestCompositeAction_TimeoutProtection(t *testing.T) {
 	startTime := time.Now()
 
 	// Execute the composite action (should timeout on second action)
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	duration := time.Since(startTime)
 
 	// Verify that we got a timeout error
@@ -470,7 +471,7 @@ func TestCompositeAction_DefaultTimeout(t *testing.T) {
 	detection := createSimpleDetection()
 
 	// Execute the action
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	require.NoError(t, err, "Unexpected error")
 
 	// Verify the action executed successfully with default timeout
@@ -528,7 +529,7 @@ func TestCompositeAction_PanicRecovery(t *testing.T) {
 	detection := createSimpleDetection()
 
 	// Execute the composite action (should handle panic gracefully)
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 
 	// Verify that we got a panic error
 	require.Error(t, err, "Expected panic error")
@@ -556,7 +557,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 
 	t.Run("nil CompositeAction", func(t *testing.T) {
 		var compositeAction *CompositeAction
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected nil CompositeAction to return nil error")
 	})
 
@@ -565,7 +566,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Actions:     nil,
 			Description: "Test nil actions",
 		}
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected nil Actions slice to return nil error")
 	})
 
@@ -574,7 +575,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Actions:     []Action{},
 			Description: "Test empty actions",
 		}
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected empty Actions slice to return nil error")
 	})
 
@@ -583,7 +584,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Actions:     []Action{nil, nil, nil},
 			Description: "Test all nil actions",
 		}
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected all nil actions to return nil error")
 	})
 
@@ -616,7 +617,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test mixed nil and valid actions",
 		}
 
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		require.NoError(t, err, "Unexpected error")
 
 		executionMutex.Lock()
@@ -642,7 +643,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test single action",
 		}
 
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		require.NoError(t, err, "Unexpected error")
 		assert.True(t, executed, "Single action was not executed")
 	})
@@ -670,11 +671,11 @@ func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
 	startTime := time.Now()
 
 	// Step 1: Execute database action first
-	err1 := dbAction.Execute(detection)
+	err1 := dbAction.Execute(context.Background(), detection)
 	dbCompleteTime := time.Now()
 
 	// Step 2: Execute SSE action only after database completes
-	err2 := sseAction.Execute(detection)
+	err2 := sseAction.Execute(context.Background(), detection)
 	sseCompleteTime := time.Now()
 
 	require.NoError(t, err1, "Database action failed")
@@ -817,7 +818,7 @@ func TestCompositeAction_AudioExportFailedPropagation(t *testing.T) {
 	detection := createSimpleDetection()
 
 	// Execute
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	require.NoError(t, err, "CompositeAction should succeed")
 
 	// Verify SSEAction saw the values set by DatabaseAction

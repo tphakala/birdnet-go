@@ -150,7 +150,7 @@ func TestMqttAction_Execute_UsesDetectionContextID(t *testing.T) {
 	}
 
 	// Execute
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err, "MqttAction.Execute() should not return error")
 
 	// Parse the published payload
@@ -221,7 +221,7 @@ func TestMqttAction_Execute_PayloadContainsAllFields(t *testing.T) {
 		BirdImageCache: nil, // Not needed for this test
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Parse payload
@@ -275,7 +275,7 @@ func TestMqttAction_Execute_SourceID(t *testing.T) {
 		DetectionCtx: detectionCtx,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	var jsonMap map[string]any
@@ -313,7 +313,7 @@ func TestMqttAction_Execute_NotConnected(t *testing.T) {
 		DetectionCtx: detectionCtx,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.Error(t, err, "Should return error when not connected")
 	assert.Contains(t, err.Error(), "MQTT client not connected", "Error should indicate connection issue")
 }
@@ -343,7 +343,7 @@ func TestMqttAction_Execute_PublishesToConfiguredTopic(t *testing.T) {
 		DetectionCtx: detectionCtx,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "homeassistant/sensor/birdnet/state", mockClient.GetPublishedTopic(),
@@ -373,7 +373,7 @@ func TestMqttAction_Execute_WithoutDetectionContext(t *testing.T) {
 		DetectionCtx: nil, // No DetectionContext
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err, "Should succeed without DetectionContext")
 
 	var jsonMap map[string]any
@@ -412,7 +412,7 @@ func TestMqttAction_Execute_EmptyTopic(t *testing.T) {
 		DetectionCtx: detectionCtx,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.Error(t, err, "Should return error for empty topic")
 	assert.Contains(t, err.Error(), "MQTT topic is not specified", "Error should mention topic")
 }

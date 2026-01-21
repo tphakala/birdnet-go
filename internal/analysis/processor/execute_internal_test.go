@@ -731,7 +731,7 @@ func TestExecuteCommandAction_WrongDataType(t *testing.T) {
 	}
 
 	// Pass wrong type
-	err := action.Execute("not a Detections struct")
+	err := action.Execute(context.Background(), "not a Detections struct")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires Detections type")
 }
@@ -753,7 +753,7 @@ func TestExecuteCommandAction_InvalidCommand(t *testing.T) {
 		},
 	}
 
-	err := action.Execute(det)
+	err := action.Execute(context.Background(), det)
 	require.Error(t, err)
 }
 
@@ -771,7 +771,7 @@ func TestExecuteCommandAction_SuccessfulExecution(t *testing.T) {
 		Params:  nil,
 	}
 
-	err := action.Execute(createTestDetections("Test Bird"))
+	err := action.Execute(context.Background(), createTestDetections("Test Bird"))
 	assert.NoError(t, err)
 }
 
@@ -802,7 +802,7 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(det)
+	err = action.Execute(context.Background(), det)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exit")
 }
@@ -900,7 +900,7 @@ func TestExecuteCommandAction_WithParameters(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(det)
+	err = action.Execute(context.Background(), det)
 	require.NoError(t, err)
 
 	// Verify output
@@ -961,7 +961,7 @@ func TestExecuteCommandAction_CommandInjectionPrevention(t *testing.T) {
 				},
 			}
 
-			_ = action.Execute(det)
+			_ = action.Execute(context.Background(), det)
 
 			// Verify the indicator file was NOT created
 			_, err := os.Stat(indicatorPath)
@@ -1028,7 +1028,7 @@ func TestExecuteCommandAction_UnicodeInParameters(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(det)
+	err = action.Execute(context.Background(), det)
 	require.NoError(t, err)
 
 	// Verify output contains unicode
@@ -1055,7 +1055,7 @@ func TestExecuteCommandAction_LargeOutput(t *testing.T) {
 	}
 
 	// Should handle large output without crashing
-	err := action.Execute(createTestDetections("Test Bird"))
+	err := action.Execute(context.Background(), createTestDetections("Test Bird"))
 	assert.NoError(t, err)
 }
 
@@ -1099,7 +1099,7 @@ func TestExecuteCommandAction_EnvironmentIsolation(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(det)
+	err = action.Execute(context.Background(), det)
 	require.NoError(t, err)
 
 	// Verify output does NOT contain our secret environment variable

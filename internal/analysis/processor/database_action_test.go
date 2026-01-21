@@ -7,6 +7,7 @@
 package processor
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func TestDatabaseAction_Execute_AssignsID(t *testing.T) {
 	}
 
 	// Execute
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err, "DatabaseAction.Execute() should not return error")
 
 	// Verify ID was assigned to Result
@@ -84,7 +85,7 @@ func TestDatabaseAction_Execute_StoresIDInDetectionContext(t *testing.T) {
 	}
 
 	// Execute
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify DetectionContext has the ID
@@ -119,7 +120,7 @@ func TestDatabaseAction_Execute_SavesResults(t *testing.T) {
 		EventTracker: eventTracker,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify results were saved
@@ -148,7 +149,7 @@ func TestDatabaseAction_Execute_MultipleDetections(t *testing.T) {
 		EventTracker: eventTracker,
 	}
 
-	err := action1.Execute(nil)
+	err := action1.Execute(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, uint(1), action1.Result.ID, "First detection should get ID 1")
 
@@ -162,7 +163,7 @@ func TestDatabaseAction_Execute_MultipleDetections(t *testing.T) {
 		EventTracker: eventTracker,
 	}
 
-	err = action2.Execute(nil)
+	err = action2.Execute(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, uint(2), action2.Result.ID, "Second detection should get ID 2")
 
@@ -192,7 +193,7 @@ func TestDatabaseAction_Execute_WithoutDetectionContext(t *testing.T) {
 	}
 
 	// Execute should not panic or error
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err, "Execute should succeed without DetectionContext")
 
 	// Verify ID was still assigned
@@ -224,7 +225,7 @@ func TestDatabaseAction_Execute_ReturnsErrorOnSaveFailure(t *testing.T) {
 	}
 
 	// Execute should return error
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.Error(t, err, "Execute should return error on save failure")
 
 	// Verify ID was not assigned
@@ -255,7 +256,7 @@ func TestDatabaseAction_Execute_EventTrackerLimiting(t *testing.T) {
 	}
 
 	// First execute should save
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Len(t, mockDs.GetSavedNotes(), 1, "First execution should save")
 
@@ -276,7 +277,7 @@ func TestDatabaseAction_Execute_EventTrackerLimiting(t *testing.T) {
 	// 2. This test verifies integration, not specific rate limiting behavior
 	// 3. Either outcome (save or skip) is valid for this test
 	// TODO: Consider making this test deterministic by mocking time or EventTracker
-	_ = action2.Execute(nil)
+	_ = action2.Execute(context.Background(), nil)
 
 	// The important thing is that Execute doesn't error - the EventTracker
 	// handles rate limiting internally
@@ -309,7 +310,7 @@ func TestDatabaseAction_Execute_WithRepository(t *testing.T) {
 	}
 
 	// Execute
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err, "DatabaseAction.Execute() should not return error")
 
 	// Verify ID was assigned to Result via repository
@@ -341,7 +342,7 @@ func TestDatabaseAction_Execute_WithRepository_StoresIDInDetectionContext(t *tes
 		DetectionCtx: detectionCtx,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify DetectionContext has the ID from repository path
@@ -377,7 +378,7 @@ func TestDatabaseAction_Execute_WithRepository_ReturnsErrorOnSaveFailure(t *test
 	}
 
 	// Execute should return error
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.Error(t, err, "Execute should return error on save failure")
 
 	// Verify ID was not assigned
@@ -409,7 +410,7 @@ func TestDatabaseAction_Execute_PrefersRepositoryOverLegacy(t *testing.T) {
 		EventTracker: eventTracker,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify repository was used (has saved count)
@@ -443,7 +444,7 @@ func TestDatabaseAction_Execute_WithRepository_SavesAdditionalResults(t *testing
 		EventTracker: eventTracker,
 	}
 
-	err := action.Execute(nil)
+	err := action.Execute(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify additional results were passed to repository
