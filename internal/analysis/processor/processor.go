@@ -42,6 +42,9 @@ const (
 	speciesHuman = "human"
 )
 
+// DefaultFlushInterval is the interval for checking and flushing pending detections
+const DefaultFlushInterval = 1 * time.Second
+
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
 	Settings            *conf.Settings
@@ -76,6 +79,8 @@ type Processor struct {
 	workerCancel        context.CancelFunc // Function to cancel worker goroutines
 	thresholdsCtx       context.Context    // Context for threshold persistence/cleanup goroutines
 	thresholdsCancel    context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx          context.Context    // Context for pending detections flusher goroutine
+	flusherCancel       context.CancelFunc // Function to cancel flusher goroutine
 	preRenderer         PreRendererSubmit  // Spectrogram pre-renderer for background generation
 	preRendererOnce     sync.Once          // Ensures pre-renderer is initialized only once
 	// SSE related fields
@@ -226,6 +231,102 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	}
 }
 
+// initLogDeduplicator creates and configures the log deduplicator.
+func initLogDeduplicator(settings *conf.Settings) *LogDeduplicator {
+	healthCheckInterval := 60 * time.Second
+
+	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
+		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
+			healthCheckInterval = time.Hour
+			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
+				logger.Int("requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds),
+				logger.Int("capped_seconds", 3600),
+				logger.String("operation", "config_validation"))
+		} else {
+			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
+		}
+	}
+
+	return NewLogDeduplicator(DeduplicationConfig{
+		HealthCheckInterval: healthCheckInterval,
+		Enabled:             settings.Realtime.LogDeduplication.Enabled,
+	})
+}
+
+// initSpeciesTracker initializes the species tracker if enabled.
+// Returns nil if tracking is disabled or configuration is invalid.
+func initSpeciesTracker(settings *conf.Settings, ds datastore.Interface) *species.SpeciesTracker {
+	if !settings.Realtime.SpeciesTracking.Enabled {
+		return nil
+	}
+
+	if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
+		GetLogger().Error("Invalid species tracking configuration, disabling tracking",
+			logger.Error(err),
+			logger.String("operation", "species_tracking_validation"))
+		settings.Realtime.SpeciesTracking.Enabled = false
+		return nil
+	}
+
+	hemisphereAwareTracking := settings.Realtime.SpeciesTracking
+	if hemisphereAwareTracking.SeasonalTracking.Enabled {
+		hemisphereAwareTracking.SeasonalTracking = conf.GetSeasonalTrackingWithHemisphere(
+			hemisphereAwareTracking.SeasonalTracking,
+			settings.BirdNET.Latitude,
+		)
+	}
+
+	tracker := species.NewTrackerFromSettings(ds, &hemisphereAwareTracking)
+	if err := tracker.InitFromDatabase(); err != nil {
+		GetLogger().Error("Failed to initialize species tracker from database, continuing with new detections",
+			logger.Error(err),
+			logger.String("operation", "species_tracker_init"))
+	}
+
+	hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
+	GetLogger().Info("Species tracking enabled",
+		logger.Int("window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays),
+		logger.Int("sync_interval_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
+		logger.String("hemisphere", hemisphere),
+		logger.Float64("latitude", settings.BirdNET.Latitude),
+		logger.String("operation", "species_tracking_config"))
+
+	return tracker
+}
+
+// initBirdWeatherClient initializes the BirdWeather client if enabled.
+func (p *Processor) initBirdWeatherClient(settings *conf.Settings) {
+	if !settings.Realtime.Birdweather.Enabled {
+		return
+	}
+
+	bwClient, err := birdweather.New(settings)
+	if err != nil {
+		GetLogger().Error("Failed to create BirdWeather client",
+			logger.Error(err),
+			logger.String("operation", "birdweather_client_init"),
+			logger.String("integration", "birdweather"))
+		return
+	}
+	p.SetBwClient(bwClient)
+}
+
+// initDynamicThresholds loads and starts persistence for dynamic thresholds if enabled.
+func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
+	if !settings.Realtime.DynamicThreshold.Enabled {
+		return
+	}
+
+	if err := p.loadDynamicThresholdsFromDB(); err != nil {
+		GetLogger().Debug("Starting with fresh dynamic thresholds",
+			logger.String("reason", err.Error()),
+			logger.String("operation", "load_dynamic_thresholds"))
+	}
+
+	p.startThresholdPersistence()
+	p.startThresholdCleanup()
+}
+
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
@@ -261,29 +362,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	}
 
 	// Initialize log deduplicator with configuration from settings
-	// This addresses separation of concerns by extracting deduplication logic
-	healthCheckInterval := 60 * time.Second // default
-
-	// Validate and use settings if available
-	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
-		// Cap at reasonable maximum (1 hour) to prevent misconfiguration
-		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
-			healthCheckInterval = time.Hour
-			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
-				logger.Int("requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds),
-				logger.Int("capped_seconds", 3600),
-				logger.String("operation", "config_validation"))
-		} else {
-			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
-		}
-	}
-	enabled := settings.Realtime.LogDeduplication.Enabled
-
-	logConfig := DeduplicationConfig{
-		HealthCheckInterval: healthCheckInterval,
-		Enabled:             enabled,
-	}
-	p.logDedup = NewLogDeduplicator(logConfig)
+	p.logDedup = initLogDeduplicator(settings)
 
 	// Validate detection window configuration
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
@@ -304,44 +383,8 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Validate and log false positive filter configuration
 	validateAndLogFilterConfig(settings)
 
-	// Initialize new species tracker if enabled
-	if settings.Realtime.SpeciesTracking.Enabled {
-		// Validate species tracking configuration
-		if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
-			GetLogger().Error("Invalid species tracking configuration, disabling tracking",
-				logger.Error(err),
-				logger.String("operation", "species_tracking_validation"))
-			// Continue with defaults or disable tracking
-			settings.Realtime.SpeciesTracking.Enabled = false
-		} else {
-			// Adjust seasonal tracking for hemisphere based on BirdNET latitude
-			hemisphereAwareTracking := settings.Realtime.SpeciesTracking
-			if hemisphereAwareTracking.SeasonalTracking.Enabled {
-				hemisphereAwareTracking.SeasonalTracking = conf.GetSeasonalTrackingWithHemisphere(
-					hemisphereAwareTracking.SeasonalTracking,
-					settings.BirdNET.Latitude,
-				)
-			}
-
-			p.NewSpeciesTracker = species.NewTrackerFromSettings(ds, &hemisphereAwareTracking)
-
-			// Initialize species tracker from database
-			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
-				GetLogger().Error("Failed to initialize species tracker from database, continuing with new detections",
-					logger.Error(err),
-					logger.String("operation", "species_tracker_init"))
-				// Continue anyway - tracker will work for new detections
-			}
-
-			hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
-			GetLogger().Info("Species tracking enabled",
-				logger.Int("window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays),
-				logger.Int("sync_interval_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
-				logger.String("hemisphere", hemisphere),
-				logger.Float64("latitude", settings.BirdNET.Latitude),
-				logger.String("operation", "species_tracking_config"))
-		}
-	}
+	// Initialize species tracker if enabled
+	p.NewSpeciesTracker = initSpeciesTracker(settings, ds)
 
 	// Start the detection processor
 	p.startDetectionProcessor()
@@ -349,22 +392,14 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Start the worker pool for action processing
 	p.startWorkerPool()
 
+	// Create context for pending detections flusher
+	p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
+
 	// Start the held detection flusher
 	p.pendingDetectionsFlusher()
 
-	// Initialize BirdWeather client if enabled in settings
-	if settings.Realtime.Birdweather.Enabled {
-		var err error
-		bwClient, err := birdweather.New(settings)
-		if err != nil {
-			GetLogger().Error("Failed to create BirdWeather client",
-				logger.Error(err),
-				logger.String("operation", "birdweather_client_init"),
-				logger.String("integration", "birdweather"))
-		} else {
-			p.SetBwClient(bwClient) // Use setter for thread safety
-		}
-	}
+	// Initialize BirdWeather client if enabled
+	p.initBirdWeatherClient(settings)
 
 	// Initialize MQTT client if enabled in settings
 	p.initializeMQTT(settings)
@@ -372,22 +407,8 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Start the job queue
 	p.JobQueue.Start()
 
-	// Load persisted dynamic thresholds from database if enabled
-	if settings.Realtime.DynamicThreshold.Enabled {
-		if err := p.loadDynamicThresholdsFromDB(); err != nil {
-			GetLogger().Debug("Starting with fresh dynamic thresholds",
-				logger.String("reason", err.Error()),
-				logger.String("operation", "load_dynamic_thresholds"))
-			// This is normal on first run or if table doesn't exist yet
-			// System will start with fixed thresholds and learn from detections
-		}
-
-		// Start periodic persistence goroutine
-		p.startThresholdPersistence()
-
-		// Start periodic cleanup goroutine
-		p.startThresholdCleanup()
-	}
+	// Initialize dynamic thresholds if enabled
+	p.initDynamicThresholds(settings)
 
 	// Initialize spectrogram pre-renderer if mode is "prerender"
 	if settings.Realtime.Dashboard.Spectrogram.IsPreRenderEnabled() {
@@ -1095,78 +1116,94 @@ func (p *Processor) calculateMinDetections() int {
 	return calculateMinDetectionsFromSettings(p.Settings)
 }
 
+// flushPendingDetections processes one flush cycle, flushing eligible detections.
+// Returns the count of pending and flushed detections for logging.
+func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flushedCount int) {
+	now := time.Now()
+
+	p.pendingMutex.Lock()
+	defer p.pendingMutex.Unlock()
+
+	pendingCount = len(p.pendingDetections)
+
+	for species := range p.pendingDetections {
+		item := p.pendingDetections[species]
+		if !now.After(item.FlushDeadline) {
+			continue
+		}
+
+		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
+			GetLogger().Info("discarding detection",
+				logger.String("species", species),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("reason", reason),
+				logger.Int("count", item.Count),
+				logger.String("operation", "discard_detection"))
+			delete(p.pendingDetections, species)
+			continue
+		}
+
+		GetLogger().Debug("Flushing detection",
+			logger.String("species", species),
+			logger.String("source", p.getDisplayNameForSource(item.Source)),
+			logger.Bool("deadline_reached", true),
+			logger.Int("count", item.Count),
+			logger.Int("required", minDetections),
+			logger.String("operation", "flush_detection"))
+
+		p.processApprovedDetection(&item, species)
+		delete(p.pendingDetections, species)
+		flushedCount++
+	}
+
+	return pendingCount, flushedCount
+}
+
+// logMinDetectionsChange logs when minDetections changes due to config update.
+func logMinDetectionsChange(lastValue, newValue int) {
+	if lastValue != -1 && newValue != lastValue {
+		GetLogger().Info("minDetections updated due to config change",
+			logger.Int("old_value", lastValue),
+			logger.Int("new_value", newValue),
+			logger.String("operation", "pending_flusher_config_update"))
+	}
+}
+
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
-	// Add structured logging for pending detections flusher startup
 	GetLogger().Info("Starting pending detections flusher",
-		logger.Int("flush_interval_seconds", 1),
+		logger.Int("flush_interval_seconds", int(DefaultFlushInterval.Seconds())),
 		logger.String("operation", "pending_flusher_startup"))
 
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(DefaultFlushInterval)
 		defer ticker.Stop()
 
-		// Track last minDetections value to log changes
 		lastMinDetections := -1
 
 		for {
-			<-ticker.C
-			now := time.Now()
+			select {
+			case <-ticker.C:
+				minDetections := p.calculateMinDetections()
+				logMinDetectionsChange(lastMinDetections, minDetections)
+				lastMinDetections = minDetections
 
-			// Recalculate minDetections on each iteration to account for runtime config changes
-			minDetections := p.calculateMinDetections()
+				pendingCount, flushedCount := p.flushPendingDetections(minDetections)
 
-			// Log when minDetections changes due to config update
-			if lastMinDetections != -1 && minDetections != lastMinDetections {
-				GetLogger().Info("minDetections updated due to config change",
-					logger.Int("old_value", lastMinDetections),
-					logger.Int("new_value", minDetections),
-					logger.String("operation", "pending_flusher_config_update"))
-			}
-			lastMinDetections = minDetections
-
-			p.pendingMutex.Lock()
-			pendingCount := len(p.pendingDetections)
-			flushableCount := 0
-			for species := range p.pendingDetections {
-				item := p.pendingDetections[species]
-				if now.After(item.FlushDeadline) {
-					flushableCount++
-					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
-						GetLogger().Info("discarding detection",
-							logger.String("species", species),
-							logger.String("source", p.getDisplayNameForSource(item.Source)),
-							logger.String("reason", reason),
-							logger.Int("count", item.Count),
-							logger.String("operation", "discard_detection"))
-						delete(p.pendingDetections, species)
-						continue
-					}
-
-					// Log when detection is flushed to help debug future timing issues
-					GetLogger().Debug("Flushing detection",
-						logger.String("species", species),
-						logger.String("source", p.getDisplayNameForSource(item.Source)),
-						logger.Bool("deadline_reached", now.After(item.FlushDeadline)),
-						logger.Int("count", item.Count),
-						logger.Int("required", minDetections),
-						logger.String("operation", "flush_detection"))
-
-					p.processApprovedDetection(&item, species)
-					delete(p.pendingDetections, species)
+				if pendingCount > 0 || flushedCount > 0 {
+					GetLogger().Debug("Pending detections flusher cycle",
+						logger.Int("pending_count", pendingCount),
+						logger.Int("flushable_count", flushedCount),
+						logger.String("operation", "pending_flusher_cycle"))
 				}
-			}
-			// Add structured logging for flusher activity (only when there's activity)
-			if pendingCount > 0 || flushableCount > 0 {
-				GetLogger().Debug("Pending detections flusher cycle",
-					logger.Int("pending_count", pendingCount),
-					logger.Int("flushable_count", flushableCount),
-					logger.String("operation", "pending_flusher_cycle"))
-			}
-			p.pendingMutex.Unlock()
 
-			p.cleanUpDynamicThresholds()
+				p.cleanUpDynamicThresholds()
+			case <-p.flusherCtx.Done():
+				GetLogger().Info("Pending detections flusher stopped",
+					logger.String("operation", "pending_flusher_shutdown"))
+				return
+			}
 		}
 	}()
 }
@@ -1575,6 +1612,11 @@ func (p *Processor) Shutdown() error {
 	// Stop threshold persistence and cleanup goroutines first
 	if p.thresholdsCancel != nil {
 		p.thresholdsCancel()
+	}
+
+	// Cancel flusher goroutine
+	if p.flusherCancel != nil {
+		p.flusherCancel()
 	}
 
 	// Flush dynamic thresholds to database before shutting down with timeout
