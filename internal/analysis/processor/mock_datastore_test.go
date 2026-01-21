@@ -50,10 +50,14 @@ func (m *ActionMockDatastore) Save(note *datastore.Note, results []datastore.Res
 	note.ID = m.nextID
 	m.nextID++
 
-	// Store copies for verification
+	// Store copies for verification (prevent mutation of internal state)
 	noteCopy := *note
 	m.savedNotes = append(m.savedNotes, &noteCopy)
-	m.savedResults = append(m.savedResults, results)
+	var resultsCopy []datastore.Results
+	if results != nil {
+		resultsCopy = append([]datastore.Results(nil), results...)
+	}
+	m.savedResults = append(m.savedResults, resultsCopy)
 	m.notes[note.ID] = &noteCopy
 
 	return nil
@@ -81,34 +85,46 @@ func (m *ActionMockDatastore) Get(id string) (datastore.Note, error) {
 	return datastore.Note{}, fmt.Errorf("note not found: %s", id)
 }
 
-// GetSavedNotes returns a copy of all notes that were saved.
-// Returns a copy to prevent callers from mutating internal state.
+// GetSavedNotes returns deep copies of all notes that were saved.
+// Returns copies to prevent callers from mutating internal state.
 func (m *ActionMockDatastore) GetSavedNotes() []*datastore.Note {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	result := make([]*datastore.Note, len(m.savedNotes))
-	copy(result, m.savedNotes)
+	for i, n := range m.savedNotes {
+		if n == nil {
+			continue
+		}
+		noteCopy := *n
+		result[i] = &noteCopy
+	}
 	return result
 }
 
-// GetLastSavedNote returns the most recently saved note.
+// GetLastSavedNote returns a copy of the most recently saved note.
 func (m *ActionMockDatastore) GetLastSavedNote() *datastore.Note {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.savedNotes) == 0 {
 		return nil
 	}
-	return m.savedNotes[len(m.savedNotes)-1]
+	n := m.savedNotes[len(m.savedNotes)-1]
+	if n == nil {
+		return nil
+	}
+	noteCopy := *n
+	return &noteCopy
 }
 
-// GetLastSavedResults returns the most recently saved results.
+// GetLastSavedResults returns a copy of the most recently saved results.
 func (m *ActionMockDatastore) GetLastSavedResults() []datastore.Results {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.savedResults) == 0 {
 		return nil
 	}
-	return m.savedResults[len(m.savedResults)-1]
+	last := m.savedResults[len(m.savedResults)-1]
+	return append([]datastore.Results(nil), last...)
 }
 
 // SetSaveError sets an error to be returned on next Save call.
