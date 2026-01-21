@@ -135,11 +135,66 @@ func checkRateLimit() error {
 	return fmt.Errorf("rate limit exceeded: please wait before testing again|%d", expiryTime)
 }
 
-// resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
-// It uses shorter timeouts per DNS server to avoid long waits when multiple servers are unreachable
-// The provided context allows callers to control overall timeout and cancellation
-//
-//nolint:gocognit // Complexity justified: DNS fallback requires multiple resolver attempts with per-attempt timeout management
+// tryFallbackResolver attempts DNS resolution using a single fallback resolver.
+// Returns resolved IPs and nil error on success, or nil IPs and error on failure.
+// Returns nil, nil if no records found (not an error, just empty result).
+func tryFallbackResolver(ctx context.Context, hostname, resolver string) ([]net.IP, error) {
+	log := GetLogger()
+
+	r := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: dnsResolverTimeout}
+			return d.DialContext(ctx, network, resolver)
+		},
+	}
+
+	// Cap per-attempt timeout to remaining context budget
+	attemptTimeout := dnsLookupTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil, ctx.Err()
+		}
+		if remaining < attemptTimeout {
+			attemptTimeout = remaining
+		}
+	}
+
+	childCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+	fallbackIPs, err := r.LookupIPAddr(childCtx, hostname)
+	cancel()
+
+	if err != nil {
+		log.Debug("Fallback DNS resolution failed",
+			logger.String("resolver", resolver),
+			logger.String("hostname", hostname),
+			logger.Error(err))
+		return nil, err
+	}
+
+	if len(fallbackIPs) == 0 {
+		log.Debug("Fallback DNS returned no records",
+			logger.String("resolver", resolver),
+			logger.String("hostname", hostname))
+		return nil, nil
+	}
+
+	// Convert IPAddr to IP
+	result := make([]net.IP, len(fallbackIPs))
+	for i, addr := range fallbackIPs {
+		result[i] = addr.IP
+	}
+	log.Info("Successfully resolved using fallback DNS",
+		logger.String("hostname", hostname),
+		logger.String("resolver", resolver),
+		logger.Any("ips", result))
+	return result, nil
+}
+
+// resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails.
+// It uses shorter timeouts per DNS server to avoid long waits when multiple servers are unreachable.
+// The provided context allows callers to control overall timeout and cancellation.
 func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, error) {
 	log := GetLogger()
 
@@ -173,64 +228,24 @@ func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, err
 	// Try each fallback resolver with shorter, independent timeouts
 	var lastErr error
 	for _, resolver := range fallbackDNSResolvers {
-		r := &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{Timeout: dnsResolverTimeout}
-				// Honor the requested network (udp/tcp; including v4/v6 variants)
-				return d.DialContext(ctx, network, resolver)
-			},
+		// Check context before attempting
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
-		// Cap per-attempt timeout to remaining context budget to prevent overshooting stage deadline
-		attemptTimeout := dnsLookupTimeout
-		if deadline, ok := ctx.Deadline(); ok {
-			remaining := time.Until(deadline)
-			if remaining <= 0 {
-				// Context already expired
-				if lastErr != nil {
-					return nil, fmt.Errorf("failed to resolve %s: context deadline exceeded after trying %d fallback servers: %w", hostname, len(fallbackDNSResolvers), lastErr)
-				}
-				return nil, ctx.Err()
-			}
-			if remaining < attemptTimeout {
-				attemptTimeout = remaining
-			}
-		}
-
-		// Create a child context with timeout, preserving parent cancellation
-		childCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
-		fallbackIPs, err := r.LookupIPAddr(childCtx, hostname)
-		cancel()
-
+		ips, err := tryFallbackResolver(ctx, hostname, resolver)
 		if err != nil {
 			lastErr = err
+			continue
 		}
+		if ips != nil {
+			return ips, nil
+		}
+	}
 
-		if err == nil && len(fallbackIPs) > 0 {
-			// Convert IPAddr to IP
-			result := make([]net.IP, len(fallbackIPs))
-			for i, addr := range fallbackIPs {
-				result[i] = addr.IP
-			}
-			log.Info("Successfully resolved using fallback DNS",
-				logger.String("hostname", hostname),
-				logger.String("resolver", resolver),
-				logger.Any("ips", result))
-			return result, nil
-		}
-
-		// Log the failure reason
-		if err == nil {
-			log.Debug("Fallback DNS returned no records",
-				logger.String("resolver", resolver),
-				logger.String("hostname", hostname))
-		} else {
-			log.Debug("Fallback DNS resolution failed",
-				logger.String("resolver", resolver),
-				logger.String("hostname", hostname),
-				logger.Error(err))
-		}
+	// Preserve context error if that's why we failed
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	// Return with root cause if available for better diagnostics
@@ -831,69 +846,110 @@ func (b *BwClient) testDetectionPost(ctx context.Context, soundscapeID string) T
 	})
 }
 
-// TestConnection performs a multi-stage test of the BirdWeather connection and functionality
-//
-//nolint:gocognit // Complexity justified: orchestrates multiple test stages with state management and result coordination
+// testResultSender handles sending test results with proper state management.
+type testResultSender struct {
+	ctx        context.Context
+	resultChan chan<- TestResult
+	log        logger.Logger
+}
+
+// isProgressMessage checks if the message indicates a progress state.
+func isProgressMessage(message string) bool {
+	lower := strings.ToLower(message)
+	return strings.Contains(lower, "running") ||
+		strings.Contains(lower, "testing") ||
+		strings.Contains(lower, "establishing") ||
+		strings.Contains(lower, "initializing")
+}
+
+// determineState determines the appropriate state for a test result.
+func determineState(result *TestResult) {
+	switch {
+	case result.State != "":
+		// Keep existing state if explicitly set
+	case strings.Contains(strings.ToLower(result.Error), "timeout") ||
+		strings.Contains(strings.ToLower(result.Error), "deadline exceeded"):
+		result.State = "timeout"
+		result.Success = false
+		result.IsProgress = false
+	case result.Error != "":
+		result.State = "failed"
+		result.Success = false
+		result.IsProgress = false
+	case result.IsProgress:
+		result.State = "running"
+	case result.Success:
+		result.State = "completed"
+	default:
+		result.State = "failed"
+	}
+}
+
+// send sends a test result to the channel with proper state management.
+func (s *testResultSender) send(result *TestResult) {
+	result.IsProgress = isProgressMessage(result.Message)
+	determineState(result)
+	result.Timestamp = time.Now().Format(time.RFC3339)
+
+	// Log the result
+	if result.Success {
+		s.log.Info("Test stage completed",
+			logger.String("stage", result.Stage),
+			logger.String("message", result.Message))
+	} else {
+		s.log.Warn("Test stage failed",
+			logger.String("stage", result.Stage),
+			logger.String("message", result.Message),
+			logger.String("error", result.Error))
+	}
+
+	// Send result to channel
+	select {
+	case <-s.ctx.Done():
+		return
+	case s.resultChan <- *result:
+	}
+}
+
+// runStage executes a test stage and sends progress/result messages.
+func (s *testResultSender) runStage(stage TestStage, test func() TestResult) bool {
+	// Mark "Starting Test" stage as completed if we're on the first real test
+	if stage == APIConnectivity {
+		s.send(&TestResult{
+			Success:    true,
+			Stage:      "Starting Test",
+			Message:    "Initialization complete, starting tests",
+			State:      "completed",
+			IsProgress: false,
+		})
+	}
+
+	// Send progress message for current stage
+	s.send(&TestResult{
+		Success:    true,
+		Stage:      stage.String(),
+		Message:    fmt.Sprintf("Running %s test...", stage.String()),
+		State:      "running",
+		IsProgress: true,
+	})
+
+	// Execute the test
+	result := test()
+	s.send(&result)
+	return result.Success
+}
+
+// TestConnection performs a multi-stage test of the BirdWeather connection and functionality.
 func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
-	log := GetLogger()
-
-	// Helper function to send a result
-	sendResult := func(result TestResult) {
-		// Mark progress messages
-		result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
-			strings.Contains(strings.ToLower(result.Message), "testing") ||
-			strings.Contains(strings.ToLower(result.Message), "establishing") ||
-			strings.Contains(strings.ToLower(result.Message), "initializing")
-
-		// Set state based on result
-		switch {
-		case result.State != "":
-			// Keep existing state if explicitly set
-		case result.Error != "":
-			result.State = "failed"
-			result.Success = false
-			result.IsProgress = false
-		case result.IsProgress:
-			result.State = "running"
-		case result.Success:
-			result.State = "completed"
-		case strings.Contains(strings.ToLower(result.Error), "timeout") ||
-			strings.Contains(strings.ToLower(result.Error), "deadline exceeded"):
-			result.State = "timeout"
-		default:
-			result.State = "failed"
-		}
-
-		// Add timestamp
-		result.Timestamp = time.Now().Format(time.RFC3339)
-
-		// Log the result
-		if result.Success {
-			logMsg := result.Message
-			if !result.Success && result.Error != "" {
-				logMsg = fmt.Sprintf("%s: %s", result.Message, result.Error)
-			}
-			log.Info("Test stage completed",
-				logger.String("stage", result.Stage),
-				logger.String("message", logMsg))
-		} else {
-			log.Warn("Test stage failed",
-				logger.String("stage", result.Stage),
-				logger.String("message", result.Message),
-				logger.String("error", result.Error))
-		}
-
-		// Send result to channel
-		select {
-		case <-ctx.Done():
-			return
-		case resultChan <- result:
-		}
+	sender := &testResultSender{
+		ctx:        ctx,
+		resultChan: resultChan,
+		log:        GetLogger(),
 	}
 
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
-		sendResult(TestResult{
+		sender.send(&TestResult{
 			Success: false,
 			Stage:   "Test Setup",
 			Message: "Test cancelled",
@@ -904,7 +960,7 @@ func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestRes
 	}
 
 	// Start with the explicit "Starting Test" stage
-	sendResult(TestResult{
+	sender.send(&TestResult{
 		Success:    true,
 		Stage:      "Starting Test",
 		Message:    "Initializing BirdWeather Connection Test...",
@@ -914,7 +970,7 @@ func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestRes
 
 	// Check rate limiting
 	if err := checkRateLimit(); err != nil {
-		sendResult(TestResult{
+		sender.send(&TestResult{
 			Success: false,
 			Stage:   "Starting Test",
 			Message: "Rate limit check failed",
@@ -924,43 +980,15 @@ func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestRes
 		return
 	}
 
-	// Helper function to run a test stage
-	runStage := func(stage TestStage, test func() TestResult) bool {
-		// First, mark the "Starting Test" stage as completed if we're on the first real test
-		if stage == APIConnectivity {
-			sendResult(TestResult{
-				Success:    true,
-				Stage:      "Starting Test",
-				Message:    "Initialization complete, starting tests",
-				State:      "completed",
-				IsProgress: false,
-			})
-		}
-
-		// Send progress message for current stage
-		sendResult(TestResult{
-			Success:    true,
-			Stage:      stage.String(),
-			Message:    fmt.Sprintf("Running %s test...", stage.String()),
-			State:      "running",
-			IsProgress: true,
-		})
-
-		// Execute the test
-		result := test()
-		sendResult(result)
-		return result.Success
-	}
-
 	// Stage 1: API Connectivity
-	if !runStage(APIConnectivity, func() TestResult {
+	if !sender.runStage(APIConnectivity, func() TestResult {
 		return b.testAPIConnectivity(ctx)
 	}) {
 		return
 	}
 
 	// Stage 2: Authentication
-	if !runStage(Authentication, func() TestResult {
+	if !sender.runStage(Authentication, func() TestResult {
 		return b.testAuthentication(ctx)
 	}) {
 		return
@@ -968,22 +996,20 @@ func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestRes
 
 	// Stage 3: Soundscape Upload
 	var soundscapeID string
-	uploadResult := runStage(SoundscapeUpload, func() TestResult {
+	uploadResult := sender.runStage(SoundscapeUpload, func() TestResult {
 		result := b.testSoundscapeUpload(ctx)
 		if result.Success {
-			// Get the soundscape ID directly from the result
 			soundscapeID = result.ResultID
 		}
 		return result
 	})
 
 	if !uploadResult || soundscapeID == "" {
-		// If we couldn't get a soundscape ID, use a mock one for the detection test
 		soundscapeID = "test123"
 	}
 
 	// Stage 4: Detection Post
-	runStage(DetectionPost, func() TestResult {
+	sender.runStage(DetectionPost, func() TestResult {
 		return b.testDetectionPost(ctx, soundscapeID)
 	})
 }
