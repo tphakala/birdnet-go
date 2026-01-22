@@ -37,7 +37,8 @@
   // Initialize review form when detection changes
   $effect(() => {
     if (detection) {
-      const verified = detection.review?.verified;
+      // Use detection.verified directly (from API response), not detection.review?.verified
+      const verified = detection.verified;
       reviewStatus = verified === 'correct' || verified === 'false_positive' ? verified : 'correct';
       lockDetection = false;
       ignoreSpecies = false;
@@ -246,13 +247,13 @@
             <div class="flex justify-between">
               <span class="text-base-content/70">{t('common.review.form.reviewLabel')}:</span>
               <span>
-                {#if detection.review?.verified && detection.review.verified !== 'unverified'}
+                {#if detection.verified && detection.verified !== 'unverified'}
                   <span
                     class="badge badge-xs"
-                    class:badge-success={detection.review.verified === 'correct'}
-                    class:badge-error={detection.review.verified === 'false_positive'}
+                    class:badge-success={detection.verified === 'correct'}
+                    class:badge-error={detection.verified === 'false_positive'}
                   >
-                    {detection.review.verified === 'correct'
+                    {detection.verified === 'correct'
                       ? t('common.review.status.verifiedCorrect')
                       : t('common.review.status.falsePositive')}
                   </span>

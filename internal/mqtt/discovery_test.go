@@ -187,8 +187,12 @@ func TestPublishBridgeDiscovery(t *testing.T) {
 	assert.Equal(t, "birdnet/status", payload.StateTopic)
 	assert.Equal(t, "connectivity", payload.DeviceClass)
 	assert.Equal(t, "diagnostic", payload.EntityCategory)
-	assert.Equal(t, "online", payload.PayloadAvailable)
-	assert.Equal(t, "offline", payload.PayloadNotAvailable)
+	assert.Equal(t, StatusPayloadOnline, payload.PayloadOn)
+	assert.Equal(t, StatusPayloadOffline, payload.PayloadOff)
+	// PayloadAvailable/PayloadNotAvailable are intentionally not set
+	// since bridge has no AvailabilityTopic - these would be ignored by HA
+	assert.Empty(t, payload.PayloadAvailable)
+	assert.Empty(t, payload.PayloadNotAvailable)
 
 	// Verify device info
 	assert.Equal(t, "BirdNET-Go", payload.Device.Name)
@@ -233,8 +237,9 @@ func TestPublishSourceDiscovery(t *testing.T) {
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Expected topics for the source sensors
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	baseTopicPrefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID
 
 	expectedTopics := []string{
@@ -299,8 +304,9 @@ func TestPublishSourceDiscoveryWithoutSoundLevel(t *testing.T) {
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Sound level topic should NOT be present
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	soundLevelTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_sound_level/config"
 
 	assert.NotContains(t, mock.publishedMessages, soundLevelTopic, "Sound level topic should not be published when disabled")
@@ -340,9 +346,10 @@ func TestRemoveDiscovery(t *testing.T) {
 	assert.Empty(t, mock.publishedMessages[bridgeTopic], "Bridge removal should publish empty payload")
 
 	// Verify sensor removal for each source
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
 	for _, source := range sources {
-		sourceID := SanitizeID(source.ID)
+		sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 		for _, sensorType := range AllSensorTypes {
 			objectID := nodeID + "_" + sourceID + "_" + sensorType
 			topic := "homeassistant/sensor/" + nodeID + "/" + objectID + "/config"
@@ -443,11 +450,12 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 	assert.Len(t, mock.publishedMessages, 10, "Expected 10 discovery messages")
 
 	// Verify each source has its sensors
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
 	for _, source := range sources {
-		sourceID := SanitizeID(source.ID)
+		sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 		speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
-		assert.Contains(t, mock.publishedMessages, speciesTopic, "Species topic not found for source %s", source.ID)
+		assert.Contains(t, mock.publishedMessages, speciesTopic, "Species topic not found for source %s", source.DisplayName)
 	}
 }
 
@@ -505,8 +513,9 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 	require.NoError(t, err, "Failed to publish source discovery")
 
 	// Get the sound level discovery payload
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	soundLevelTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_sound_level/config"
 
 	require.Contains(t, mock.publishedMessages, soundLevelTopic, "Sound level topic not found")
@@ -672,15 +681,16 @@ func TestDeviceNaming_PreservesShortDisplayName(t *testing.T) {
 	err := publisher.publishSourceDiscovery(ctx, source, settings)
 	require.NoError(t, err, "Failed to publish source discovery")
 
+	// Note: When DisplayName is set, it's used for entity IDs instead of source.ID
 	nodeID := SanitizeID(config.NodeID)
-	sourceID := SanitizeID(source.ID)
+	sourceID := SanitizeID(source.DisplayName) // Use DisplayName since it's set
 	speciesTopic := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID + "_species/config"
 
 	var payload DiscoveryPayload
 	err = json.Unmarshal([]byte(mock.publishedMessages[speciesTopic]), &payload)
 	require.NoError(t, err, "Failed to parse discovery payload")
 
-	// DisplayName should be preserved exactly
+	// DisplayName should be preserved exactly in the device name
 	assert.Equal(t, "BirdNET-Go Backyard Camera", payload.Device.Name,
 		"Device name should use the provided DisplayName exactly")
 }
@@ -727,14 +737,30 @@ func TestShortenDisplayName(t *testing.T) {
 			input:    "",
 			expected: "",
 		},
+		{
+			name:     "UTF-8 multi-byte characters handled safely",
+			input:    "日本語カメラ_ストリーム_フロントヤードの庭_高画質ストリーミング配信", // 34 runes
+			expected: "日本語カメラ_ストリーム_フロントヤードの庭",                         // truncated at _ (22 runes)
+		},
+		{
+			name:     "Mixed ASCII and UTF-8 truncates correctly",
+			input:    "Café_Microphone_Stream_日本語_テスト_追加テキスト文字列", // 41 runes
+			expected: "Café_Microphone_Stream_日本語_テスト",                    // truncated at _ (30 runes)
+		},
+		{
+			name:     "Short UTF-8 string passes through unchanged",
+			input:    "Mikrofon_Gärten",
+			expected: "Mikrofon_Gärten",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := shortenDisplayName(tt.input)
 			assert.Equal(t, tt.expected, result)
-			assert.LessOrEqual(t, len(result), maxDisplayNameLength,
-				"Result should never exceed maxDisplayNameLength")
+			// Check rune length (not byte length) for UTF-8 safety
+			assert.LessOrEqual(t, len([]rune(result)), maxDisplayNameLength,
+				"Result rune count should never exceed maxDisplayNameLength")
 		})
 	}
 }

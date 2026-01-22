@@ -11,18 +11,36 @@
   - onFreezeEnd?: () => void - Callback when playback ends
   - gainValue?: number - Audio gain in dB (controlled by parent)
   - filterFreq?: number - High-pass filter frequency in Hz (controlled by parent)
+  - playbackSpeed?: number - Playback speed multiplier (controlled by parent)
   - onAudioContextAvailable?: (available: boolean) => void - Callback for audio context status
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { Play, Pause, Loader2 } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
+  import {
+    applyPlaybackRate,
+    dbToGain,
+    PLAY_END_DELAY_MS,
+    CANPLAY_TIMEOUT_MS,
+    PROGRESS_UPDATE_INTERVAL_MS,
+  } from '$lib/utils/audio';
+  import {
+    getAudioContext,
+    isAudioContextSupported,
+    releaseAudioContext,
+  } from '$lib/utils/audioContextManager';
+  import {
+    createAudioNodeChain,
+    disconnectAudioNodes,
+    type AudioNodeChain,
+  } from '$lib/utils/audioNodes';
 
   const logger = loggers.audio;
 
-  /* global AudioContext, MediaElementAudioSourceNode, GainNode, BiquadFilterNode */
+  /* global Audio, AudioContext */
 
   interface Props {
     detectionId: number;
@@ -30,6 +48,7 @@
     onFreezeEnd?: () => void;
     gainValue?: number;
     filterFreq?: number;
+    playbackSpeed?: number;
     onAudioContextAvailable?: (_isAvailable: boolean) => void;
   }
 
@@ -39,6 +58,7 @@
     onFreezeEnd,
     gainValue = 0,
     filterFreq = 20,
+    playbackSpeed = 1.0,
     onAudioContextAvailable,
   }: Props = $props();
 
@@ -51,23 +71,18 @@
   let duration = $state(0);
   let currentTime = $state(0);
   let isDragging = $state(false);
+  let hasEverPlayed = $state(false);
   let playEndTimeout: ReturnType<typeof setTimeout> | undefined;
+  let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let updateInterval: ReturnType<typeof setInterval> | undefined;
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
-  let audioNodes = $state<{
-    source: MediaElementAudioSourceNode;
-    gain: GainNode;
-    highPass: BiquadFilterNode;
-  } | null>(null);
+  let isInitializingContext = $state(false);
+  let audioNodes = $state<AudioNodeChain | null>(null);
+  // PLAY_END_DELAY_MS imported from $lib/utils/audio
 
-  const PLAY_END_DELAY_MS = 3000;
-
-  const audioUrl = $derived(`/api/v2/audio/${detectionId}`);
-
-  // Web Audio API helpers
-  const dbToGain = (db: number): number => Math.pow(10, db / 20);
+  const audioUrl = $derived(`/api/v2/audio/${encodeURIComponent(detectionId)}`);
 
   // Update audio nodes when gain/filter props change
   // Read values unconditionally to ensure they're tracked as dependencies
@@ -87,6 +102,32 @@
     }
   });
 
+  // Update playback speed when prop changes (during playback)
+  $effect(() => {
+    const speed = playbackSpeed;
+    if (audioElement && isPlaying) {
+      applyPlaybackRate(audioElement, speed);
+    }
+  });
+
+  // Sync audio source when URL changes (replaces template binding for iOS Safari compatibility)
+  $effect(() => {
+    if (audioElement && audioUrl) {
+      // Compare resolved URLs to avoid unnecessary reloads
+      const absoluteUrl = new URL(audioUrl, window.location.origin).href;
+      if (audioElement.src !== absoluteUrl) {
+        audioElement.src = audioUrl;
+        // Reset playback state for new audio
+        isPlaying = false;
+        currentTime = 0;
+        progress = 0;
+        duration = 0;
+        error = null;
+        hasEverPlayed = false;
+      }
+    }
+  });
+
   async function handlePlayPause(event: MouseEvent) {
     event.stopPropagation();
 
@@ -100,12 +141,24 @@
         audioElement.pause();
       } else {
         // Initialize audio context on first play (for gain/filter controls)
-        if (!audioContext) {
-          audioContext = await initializeAudioContext();
-          if (audioContext && !audioNodes) {
-            audioNodes = createAudioNodes(audioContext, audioElement);
+        // Guard against rapid clicks that could create multiple AudioContexts
+        if (!audioContext && !isInitializingContext) {
+          isInitializingContext = true;
+          try {
+            audioContext = await initializeAudioContextWrapper();
+            if (audioContext && !audioNodes) {
+              audioNodes = createAudioNodeChain(audioContext, audioElement, {
+                gainDb: gainValue,
+                highPassFreq: filterFreq,
+              });
+            }
+          } finally {
+            isInitializingContext = false;
           }
         }
+
+        // Safety check: component may have unmounted during async initialization
+        if (!audioElement) return;
 
         isLoading = true;
         await audioElement.play();
@@ -127,8 +180,15 @@
 
   function handlePlay() {
     isPlaying = true;
+    hasEverPlayed = true;
     startProgressInterval();
     clearPlayEndTimeout();
+
+    // Apply playback rate when starting
+    if (audioElement) {
+      applyPlaybackRate(audioElement, playbackSpeed);
+    }
+
     onFreezeStart?.();
   }
 
@@ -163,7 +223,7 @@
 
   function startProgressInterval() {
     if (updateInterval) clearInterval(updateInterval);
-    updateInterval = setInterval(updateProgress, 50); // 50ms for smooth updates
+    updateInterval = setInterval(updateProgress, PROGRESS_UPDATE_INTERVAL_MS);
   }
 
   function stopProgressInterval() {
@@ -194,13 +254,21 @@
     const newTime = clickPercent * duration;
 
     audioElement.currentTime = Math.max(0, Math.min(newTime, duration));
-    progress = clickPercent * 100;
+    progress = Math.max(0, Math.min(clickPercent * 100, 100));
   }
 
   // Handle mouse down for drag seeking
   function handleMouseDown(event: MouseEvent) {
     // Only handle left click
     if (event.button !== 0) return;
+
+    // On first interaction, treat any tap as play request instead of seek
+    // This prevents accidental repositioning when user is trying to start playback
+    // (especially important on iOS where first tap satisfies user gesture requirement)
+    if (!hasEverPlayed) {
+      handlePlayPause(event);
+      return;
+    }
 
     isDragging = true;
     handleSeek(event);
@@ -230,117 +298,113 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  async function initializeAudioContext(): Promise<AudioContext | null> {
+  async function initializeAudioContextWrapper(): Promise<AudioContext | null> {
+    if (!isAudioContextSupported()) {
+      logger.warn('Web Audio API not supported');
+      onAudioContextAvailable?.(false);
+      return null;
+    }
+
     try {
-      const AudioContextClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) {
-        throw new Error('AudioContext not supported');
-      }
-
-      const ctx = new AudioContextClass();
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
+      const ctx = await getAudioContext();
       onAudioContextAvailable?.(true);
       return ctx;
     } catch (err) {
-      logger.warn('Web Audio API not supported:', err);
+      logger.warn('Failed to initialize audio context:', err);
       onAudioContextAvailable?.(false);
       return null;
     }
   }
 
-  function createAudioNodes(ctx: AudioContext, audio: HTMLAudioElement) {
-    const source = ctx.createMediaElementSource(audio);
-    const gain = ctx.createGain();
-    gain.gain.value = dbToGain(gainValue);
-
-    const highPass = ctx.createBiquadFilter();
-    highPass.type = 'highpass';
-    highPass.frequency.value = filterFreq;
-    highPass.Q.value = 1;
-
-    // Connect: source -> highpass -> gain -> destination
-    source.connect(highPass).connect(gain).connect(ctx.destination);
-
-    return { source, gain, highPass };
-  }
-
   function handleLoadStart() {
-    // With preload="metadata", browser loads metadata only
     error = null;
+    // Clear any existing timeout
+    if (canplayTimeoutId) clearTimeout(canplayTimeoutId);
+    // Set safety timeout for iOS Safari canplay issue
+    canplayTimeoutId = setTimeout(() => {
+      if (isLoading) {
+        logger.warn('canplay timeout - assuming audio ready', { detectionId });
+        isLoading = false;
+      }
+    }, CANPLAY_TIMEOUT_MS);
   }
 
   function handleCanPlay() {
+    // Clear timeout since canplay fired normally
+    if (canplayTimeoutId) {
+      clearTimeout(canplayTimeoutId);
+      canplayTimeoutId = undefined;
+    }
     isLoading = false;
   }
 
   function handleError() {
+    // Clear timeout on error
+    if (canplayTimeoutId) {
+      clearTimeout(canplayTimeoutId);
+      canplayTimeoutId = undefined;
+    }
     error = t('media.audio.error');
     isLoading = false;
   }
 
   onMount(() => {
-    if (audioElement) {
-      audioElement.addEventListener('play', handlePlay);
-      audioElement.addEventListener('pause', handlePause);
-      audioElement.addEventListener('ended', handleEnded);
-      audioElement.addEventListener('timeupdate', handleTimeUpdate);
-      audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
-      audioElement.addEventListener('loadstart', handleLoadStart);
-      audioElement.addEventListener('canplay', handleCanPlay);
-      audioElement.addEventListener('error', handleError);
-    }
-  });
+    // Create audio element dynamically to avoid iOS Safari issues
+    // where DOM-bound audio elements don't fire canplay events
+    audioElement = new Audio();
+    audioElement.preload = 'metadata';
+    audioElement.src = audioUrl;
 
-  onDestroy(() => {
-    clearPlayEndTimeout();
-    stopProgressInterval();
-    // Clean up drag listeners if component unmounts while dragging
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
+    // Attach all event listeners
+    audioElement.addEventListener('play', handlePlay);
+    audioElement.addEventListener('pause', handlePause);
+    audioElement.addEventListener('ended', handleEnded);
+    audioElement.addEventListener('timeupdate', handleTimeUpdate);
+    audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audioElement.addEventListener('loadstart', handleLoadStart);
+    audioElement.addEventListener('canplay', handleCanPlay);
+    audioElement.addEventListener('error', handleError);
 
-    if (audioElement) {
-      audioElement.removeEventListener('play', handlePlay);
-      audioElement.removeEventListener('pause', handlePause);
-      audioElement.removeEventListener('ended', handleEnded);
-      audioElement.removeEventListener('timeupdate', handleTimeUpdate);
-      audioElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audioElement.removeEventListener('loadstart', handleLoadStart);
-      audioElement.removeEventListener('canplay', handleCanPlay);
-      audioElement.removeEventListener('error', handleError);
-    }
+    // Cleanup function (Svelte 5 pattern)
+    return () => {
+      clearPlayEndTimeout();
+      stopProgressInterval();
 
-    // Clean up Web Audio API
-    if (audioNodes) {
-      try {
-        audioNodes.source.disconnect();
-        audioNodes.gain.disconnect();
-        audioNodes.highPass.disconnect();
-      } catch {
-        // Nodes may already be disconnected
+      // Clear canplay safety timeout
+      if (canplayTimeoutId) {
+        clearTimeout(canplayTimeoutId);
+        canplayTimeoutId = undefined;
       }
+
+      // Clean up drag listeners if component unmounts while dragging
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+
+      if (audioElement) {
+        audioElement.removeEventListener('play', handlePlay);
+        audioElement.removeEventListener('pause', handlePause);
+        audioElement.removeEventListener('ended', handleEnded);
+        audioElement.removeEventListener('timeupdate', handleTimeUpdate);
+        audioElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audioElement.removeEventListener('loadstart', handleLoadStart);
+        audioElement.removeEventListener('canplay', handleCanPlay);
+        audioElement.removeEventListener('error', handleError);
+
+        // Stop audio playback to prevent resource leaks
+        audioElement.pause();
+        audioElement.src = '';
+      }
+
+      // Clean up Web Audio API using shared utilities
+      disconnectAudioNodes(audioNodes);
       audioNodes = null;
-    }
-
-    if (audioContext) {
-      try {
-        audioContext.close();
-      } catch {
-        // Context may already be closed
-      }
+      releaseAudioContext();
       audioContext = null;
-    }
+    };
   });
 </script>
 
-<!-- Audio element (hidden) -->
-<audio bind:this={audioElement} src={audioUrl} preload="metadata" class="hidden">
-  <track kind="captions" />
-</audio>
+<!-- Audio element is created dynamically in onMount for iOS Safari compatibility -->
 
 <!-- Seek area - covers the full card for click-to-seek -->
 <div

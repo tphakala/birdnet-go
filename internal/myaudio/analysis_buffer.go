@@ -615,13 +615,9 @@ func AnalysisBufferExists(sourceID string) bool {
 }
 
 // AnalysisBufferMonitor monitors the buffer and processes audio data when enough data is present.
-func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, sourceID string) {
+// Note: This function is called from within a wg.Go() goroutine, so WaitGroup tracking is handled by the caller.
+func AnalysisBufferMonitor(_ *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, sourceID string) {
 	log := GetLogger()
-
-	wg.Add(1)
-	defer func() {
-		wg.Done()
-	}()
 
 	// This is the offset to subtract from the begin time of the data to account for BirdNET prediction and
 	// processing delays, goal is to ensure that captured audio clip contains detection sound.

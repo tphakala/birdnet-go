@@ -126,8 +126,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 	monitorQuit = actual.(chan struct{})
 
 	// Start the monitor with error handling
-	m.wg.Add(1)
-	go func() {
+	m.wg.Go(func() {
 		defer func() {
 			// Panic recovery for the monitor goroutine
 			if r := recover(); r != nil {
@@ -137,7 +136,6 @@ func (m *BufferManager) AddMonitor(source string) error {
 					logger.String("component", "analysis.buffer"))
 			}
 
-			m.wg.Done()
 			// Clean up monitor from map if it exits unexpectedly
 			if quitChanIface, exists := m.monitors.Load(source); exists {
 				// Safe type assertion
@@ -156,7 +154,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 
 		// Run the monitor
 		myaudio.AnalysisBufferMonitor(m.wg, m.bn, monitorQuit, source)
-	}()
+	})
 
 	return nil
 }

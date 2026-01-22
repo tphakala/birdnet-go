@@ -710,3 +710,16 @@ func Unwrap(err error) error {
 func Join(errs ...error) error {
 	return stderrors.Join(errs...)
 }
+
+// IsCategory checks if an error is an EnhancedError with the specified category.
+// This is a convenience function to reduce boilerplate when checking error categories.
+func IsCategory(err error, category ErrorCategory) bool {
+	var enhancedErr *EnhancedError
+	return As(err, &enhancedErr) && enhancedErr.Category == category
+}
+
+// IsNotFound checks if an error is an EnhancedError with CategoryNotFound.
+// This is commonly used for expected conditions like unknown species or missing resources.
+func IsNotFound(err error) bool {
+	return IsCategory(err, CategoryNotFound)
+}

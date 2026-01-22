@@ -9,10 +9,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
 // RarityStatus represents the rarity classification of a species
@@ -149,10 +149,10 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	var commonName string
 
 	for _, label := range bn.Settings.BirdNET.Labels {
-		labelSci, labelCommon, _ := observation.ParseSpeciesString(label)
-		if strings.EqualFold(labelSci, scientificName) {
+		sp := detection.ParseSpeciesString(label)
+		if strings.EqualFold(sp.ScientificName, scientificName) {
 			matchedLabel = label
-			commonName = labelCommon
+			commonName = sp.CommonName
 			break
 		}
 	}

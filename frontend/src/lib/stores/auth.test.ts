@@ -37,7 +37,7 @@ describe('Auth Store', () => {
     originalHref = window.location.href;
     Object.defineProperty(window, 'location', {
       writable: true,
-      value: { href: '' },
+      value: { href: '', pathname: '/ui/dashboard' },
     });
   });
 

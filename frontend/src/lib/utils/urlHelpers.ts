@@ -2,6 +2,10 @@
  * URL manipulation utility functions
  */
 
+import { loggers } from './logger';
+
+const logger = loggers.ui;
+
 /**
  * Extracts a relative path from a full path by removing the base path prefix.
  * Ensures the resulting path always starts with '/'.
@@ -84,4 +88,81 @@ export function normalizePath(path: unknown, addTrailingSlash = false): string {
   }
 
   return normalized;
+}
+
+/**
+ * Gets the base path prefix for the app (everything before /ui/).
+ * Handles reverse proxy scenarios like Home Assistant Ingress.
+ *
+ * This is useful when the app is served behind a reverse proxy that adds
+ * a prefix to all URLs, such as Home Assistant Ingress which uses paths like:
+ * /api/hassio_ingress/TOKEN/ui/dashboard
+ *
+ * @returns The base path prefix (empty string if no prefix, or the prefix path)
+ *
+ * @example
+ * // Direct access
+ * // pathname: '/ui/dashboard'
+ * getAppBasePath() // returns ''
+ *
+ * @example
+ * // Home Assistant Ingress
+ * // pathname: '/api/hassio_ingress/TOKEN/ui/dashboard'
+ * getAppBasePath() // returns '/api/hassio_ingress/TOKEN'
+ *
+ * @example
+ * // Custom proxy
+ * // pathname: '/proxy/birdnet/ui/settings'
+ * getAppBasePath() // returns '/proxy/birdnet'
+ */
+export function getAppBasePath(): string {
+  if (typeof window === 'undefined') return '';
+
+  const pathname = window.location.pathname;
+
+  // Split pathname into segments and find the first exact 'ui' segment
+  // This avoids false matches on paths like '/ui-proxy/...' or '/my-ui-service/...'
+  // Using indexOf (first match) ensures we find the app boundary, not nested ui paths
+  const segments = pathname.split('/').filter(Boolean);
+  const uiIndex = segments.indexOf('ui');
+
+  // If 'ui' segment not found or is the first segment, there's no prefix
+  if (uiIndex <= 0) return '';
+
+  // Return everything before the 'ui' segment
+  return '/' + segments.slice(0, uiIndex).join('/');
+}
+
+/**
+ * Builds a full URL path that works with any proxy configuration.
+ * Automatically detects and prepends the app's base path (if behind a proxy).
+ *
+ * Use this function instead of hardcoded paths like `/ui/detections/123`
+ * to ensure URLs work correctly when accessed through reverse proxies.
+ *
+ * @param path - Path starting with /ui/ (e.g., '/ui/detections/123?tab=review')
+ * @returns Full path including any proxy prefix
+ *
+ * @example
+ * // Direct access (pathname: '/ui/dashboard')
+ * buildAppUrl('/ui/detections/123?tab=review')
+ * // returns '/ui/detections/123?tab=review'
+ *
+ * @example
+ * // Home Assistant Ingress (pathname: '/api/hassio_ingress/TOKEN/ui/dashboard')
+ * buildAppUrl('/ui/detections/123?tab=review')
+ * // returns '/api/hassio_ingress/TOKEN/ui/detections/123?tab=review'
+ */
+export function buildAppUrl(path: string): string {
+  const basePath = getAppBasePath();
+
+  // Validate input to prevent open redirect vulnerabilities
+  // Only allow relative paths (starting with / but not //)
+  if (!isRelativePath(path)) {
+    logger.error('buildAppUrl was called with a non-relative path:', path);
+    // Return safe fallback to prevent open redirect
+    return basePath + '/ui/dashboard';
+  }
+
+  return basePath + path;
 }

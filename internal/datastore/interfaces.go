@@ -67,6 +67,12 @@ var (
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
+//
+// Migration Note: For detection-specific CRUD operations, prefer using DetectionRepository
+// (see repository.go) which works with domain models (detection.Result) instead of
+// persistence models (Note). The DetectionRepository wraps Interface and handles
+// conversion between domain and persistence layers.
+//
 // Optional methods:
 //   - CheckpointWAL() error - Implemented by stores that support Write-Ahead Logging (e.g., SQLite)
 //     Call via type assertion: if sqliteStore, ok := store.(*SQLiteStore); ok { sqliteStore.CheckpointWAL() }
@@ -92,6 +98,8 @@ type Interface interface {
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
 	GetNoteComments(noteID string) ([]NoteComment, error)
+	// GetNoteResults returns the additional predictions for a note.
+	GetNoteResults(noteID string) ([]Results, error)
 	SaveNoteComment(comment *NoteComment) error
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
@@ -800,26 +808,54 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 }
 
 // GetHourlyWeather retrieves hourly weather data by date from the database.
+// The date parameter should be in local timezone format (YYYY-MM-DD).
+// This function converts UTC timestamps to local time before matching dates,
+// ensuring weather data is retrieved correctly across timezone boundaries.
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
-	var hourlyWeather []HourlyWeather
+	return ds.GetHourlyWeatherInLocation(date, time.Local)
+}
 
-	// Get database-specific date format
-	dateFormat := ds.GetDateFormat("time")
-	if dateFormat == "" {
-		// Safely get database type for error context
-		dialectName := DialectUnknown
-		if d := ds.Dialector(); d != nil {
-			dialectName = d.Name()
-		}
-		return nil, errors.Newf("unsupported database type for date formatting").
+// GetHourlyWeatherInLocation retrieves hourly weather data by date using a specific timezone.
+// This is primarily used for testing timezone behavior. In production, use GetHourlyWeather
+// which automatically uses the system's local timezone.
+func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location) ([]HourlyWeather, error) {
+	if loc == nil {
+		return nil, errors.Newf("location cannot be nil for GetHourlyWeatherInLocation").
 			Component("datastore").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "get_hourly_weather").
-			Context("database_type", dialectName).
+			Category(errors.CategoryValidation).
+			Context("operation", "get_hourly_weather_in_location").
 			Build()
 	}
 
-	err := ds.DB.Where(dateFormat+" = ?", date).
+	var hourlyWeather []HourlyWeather
+
+	// Parse the requested date to get the day boundaries in the specified timezone
+	localDate, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_hourly_weather_in_location").
+			Context("date", date).
+			Build()
+	}
+
+	// Calculate the start and end of the day in the specified timezone
+	// Use AddDate instead of Add(24*time.Hour) to correctly handle DST transitions
+	// where days can be 23 hours (spring forward) or 25 hours (fall back)
+	dayStart := localDate
+	dayEnd := localDate.AddDate(0, 0, 1)
+
+	// Convert local time boundaries to UTC for database query
+	// Weather records are stored in UTC, so we need to query the UTC range
+	// that corresponds to the local date
+	utcStart := dayStart.UTC()
+	utcEnd := dayEnd.UTC()
+
+	// Query using time range instead of date string extraction
+	// This ensures we get all weather records that fall within the local date,
+	// regardless of timezone differences between storage and display
+	err = ds.DB.Where("time >= ? AND time < ?", utcStart, utcEnd).
 		Order("time ASC").
 		Find(&hourlyWeather).Error
 
@@ -829,6 +865,8 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_hourly_weather").
 			Context("date", date).
+			Context("utc_start", utcStart.Format(time.RFC3339)).
+			Context("utc_end", utcEnd.Format(time.RFC3339)).
 			Build()
 	}
 
@@ -1063,6 +1101,31 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 	}
 
 	return comments, nil
+}
+
+// GetNoteResults returns the additional predictions for a note.
+func (ds *DataStore) GetNoteResults(noteID string) ([]Results, error) {
+	// Parse ID for consistency and MySQL compatibility
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_note_results").
+			Context("note_id", noteID).
+			Build()
+	}
+
+	var results []Results
+	if err := ds.DB.Where("note_id = ?", id).Find(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note_results").
+			Context("note_id", noteID).
+			Build()
+	}
+	return results, nil
 }
 
 // SaveNoteComment saves a new comment for a note
@@ -2141,7 +2204,9 @@ func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTim
 
 // saveNoteInTransaction saves a note within a transaction
 func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string, attempt int, txLogger logger.Logger) error {
-	if err := tx.Create(note).Error; err != nil {
+	// Omit Results to prevent GORM auto-save of associations.
+	// Results are saved separately in saveResultsInTransaction for explicit error handling.
+	if err := tx.Omit("Results").Create(note).Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).

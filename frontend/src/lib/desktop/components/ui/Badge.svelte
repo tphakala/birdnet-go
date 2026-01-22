@@ -36,30 +36,52 @@
     ...rest
   }: Props = $props();
 
+  // Base badge styles using native Tailwind
+  const baseClasses =
+    'inline-flex items-center justify-center font-medium rounded-full whitespace-nowrap';
+
+  // Variant classes using CSS custom properties for theme support
   const variantClasses = $derived<Record<BadgeVariant, string>>({
-    primary: outline ? 'badge-primary badge-outline' : 'badge-primary',
-    secondary: outline ? 'badge-secondary badge-outline' : 'badge-secondary',
-    accent: outline ? 'badge-accent badge-outline' : 'badge-accent',
-    neutral: outline ? 'badge-outline' : 'badge',
-    info: outline ? 'badge-info badge-outline' : 'badge-info',
-    success: outline ? 'badge-success badge-outline' : 'badge-success',
-    warning: outline ? 'badge-warning badge-outline' : 'badge-warning',
-    error: outline ? 'badge-error badge-outline' : 'badge-error',
-    ghost: 'badge-ghost',
+    primary: outline
+      ? 'bg-transparent border border-[var(--color-primary)] text-[var(--color-primary)]'
+      : 'bg-[var(--color-primary)] text-[var(--color-primary-content)]',
+    secondary: outline
+      ? 'bg-transparent border border-[var(--color-secondary)] text-[var(--color-secondary)]'
+      : 'bg-[var(--color-secondary)] text-[var(--color-secondary-content)]',
+    accent: outline
+      ? 'bg-transparent border border-[var(--color-accent)] text-[var(--color-accent)]'
+      : 'bg-[var(--color-accent)] text-[var(--color-accent-content)]',
+    neutral: outline
+      ? 'bg-transparent border border-current'
+      : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]',
+    info: outline
+      ? 'bg-transparent border border-[var(--color-info)] text-[var(--color-info)]'
+      : 'bg-[var(--color-info)] text-[var(--color-info-content)]',
+    success: outline
+      ? 'bg-transparent border border-[var(--color-success)] text-[var(--color-success)]'
+      : 'bg-[var(--color-success)] text-[var(--color-success-content)]',
+    warning: outline
+      ? 'bg-transparent border border-[var(--color-warning)] text-[var(--color-warning)]'
+      : 'bg-[var(--color-warning)] text-[var(--color-warning-content)]',
+    error: outline
+      ? 'bg-transparent border border-[var(--color-error)] text-[var(--color-error)]'
+      : 'bg-[var(--color-error)] text-[var(--color-error-content)]',
+    ghost: 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]',
   });
 
+  // Size classes using native Tailwind
   const sizeClasses: Record<BadgeSize, string> = {
-    xs: 'badge-xs',
-    sm: 'badge-sm',
-    md: '',
-    lg: 'badge-lg',
+    xs: 'px-1 text-[0.625rem] leading-[0.875rem]',
+    sm: 'px-1.5 py-px text-[0.6875rem] leading-[0.9375rem]',
+    md: 'px-2 py-0.5 text-xs leading-4',
+    lg: 'px-2.5 py-1 text-sm leading-[1.125rem]',
   };
 </script>
 
 <span
   class={cn(
-    'badge',
-    safeGet(variantClasses, variant, 'badge'),
+    baseClasses,
+    safeGet(variantClasses, variant, ''),
     safeGet(sizeClasses, size, ''),
     className
   )}

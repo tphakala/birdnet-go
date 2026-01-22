@@ -352,6 +352,25 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 
 		// Not HTML, return the raw response
 		err := fmt.Errorf("%s failed with status %d: %s", operation, resp.StatusCode, string(responseBody))
+		responseStr := string(responseBody)
+
+		// 422 Unprocessable Entity with species-related errors is expected for non-bird species
+		// and should not be logged at error level. Check for species/scientificName in response.
+		if resp.StatusCode == http.StatusUnprocessableEntity &&
+			(strings.Contains(responseStr, `"species"`) || strings.Contains(responseStr, `"scientificName"`)) {
+			log.Debug("Request failed with species validation error (expected for unknown species)",
+				logger.String("operation", operation),
+				logger.String("url", maskedURL),
+				logger.Int("status_code", resp.StatusCode),
+				logger.String("response_body", responseStr))
+			return nil, errors.New(err).
+				Component("birdweather").
+				Category(errors.CategoryNotFound).
+				Context("status_code", resp.StatusCode).
+				Context("operation", operation).
+				Build()
+		}
+
 		log.Error("Request failed with non-expected status",
 			logger.String("operation", operation),
 			logger.String("url", maskedURL),
@@ -820,11 +839,21 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 		logger.Any("note", note))
 	err = b.PostDetection(soundscapeID, timestamp, note.CommonName, note.ScientificName, note.Confidence)
 	if err != nil {
-		log.Error("Publish failed: Error during detection post",
-			logger.String("soundscape_id", soundscapeID),
-			logger.String("timestamp", timestamp),
-			logger.Any("note", note),
-			logger.Error(err))
+		// Check if error is CategoryNotFound (e.g., invalid species on Birdweather)
+		// Log at debug level for expected validation failures
+		if errors.IsNotFound(err) {
+			log.Debug("Publish skipped: species not recognized by Birdweather",
+				logger.String("soundscape_id", soundscapeID),
+				logger.String("common_name", note.CommonName),
+				logger.String("scientific_name", note.ScientificName),
+				logger.Error(err))
+		} else {
+			log.Error("Publish failed: Error during detection post",
+				logger.String("soundscape_id", soundscapeID),
+				logger.String("timestamp", timestamp),
+				logger.Any("note", note),
+				logger.Error(err))
+		}
 		return fmt.Errorf("failed to post detection to Birdweather: %w", err)
 	}
 	log.Debug("PostDetection completed", logger.String("soundscape_id", soundscapeID))

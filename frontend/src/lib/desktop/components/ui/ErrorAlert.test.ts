@@ -22,7 +22,8 @@ describe('ErrorAlert', () => {
 
     const alert = screen.getByRole('alert');
     expect(alert).toBeInTheDocument();
-    expect(alert).toHaveClass('alert', 'alert-error');
+    // Now uses native Tailwind classes with CSS variables
+    expect(alert.className).toContain('bg-[color-mix(in_srgb,var(--color-error)');
     expect(screen.getByText('An error occurred')).toBeInTheDocument();
   });
 
@@ -36,7 +37,8 @@ describe('ErrorAlert', () => {
       });
 
       const alert = screen.getByRole('alert');
-      expect(alert).toHaveClass(`alert-${type}`);
+      // Check for type-specific CSS variable class
+      expect(alert.className).toContain(`bg-[color-mix(in_srgb,var(--color-${type})`);
 
       unmount();
     });

@@ -7,3 +7,5 @@ package/
 *.min.js
 *.min.css
 src/lib/desktop/features/settings/pages/SecuritySettingsPage.svelte
+# Auto-generated files
+static/LICENSES.md

@@ -190,6 +190,7 @@ func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error) 
 }
 func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error              { return nil }
 func (m *mockStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
+func (m *mockStore) GetNoteResults(noteID string) ([]datastore.Results, error)      { return nil, nil }
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }
 func (m *mockStore) UpdateNoteComment(commentID, entry string) error                { return nil }
 func (m *mockStore) DeleteNoteComment(commentID string) error                       { return nil }

@@ -31,9 +31,6 @@ export interface Detection {
   daysThisYear?: number; // Days since first this year
   daysThisSeason?: number; // Days since first this season
   currentSeason?: string; // Current season name
-  review?: {
-    verified: 'correct' | 'false_positive' | 'unverified';
-  };
 }
 
 export interface PaginatedDetectionResponse {
