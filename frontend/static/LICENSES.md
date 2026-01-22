@@ -57,11 +57,6 @@ Source: MIT
 License: https://github.com/eclipse/paho.mqtt.golang/blob/v1.5.1/LICENSE
 Source: EPL-2.0
 
-### github.com/fatih/color
-
-License: https://github.com/fatih/color/blob/v1.18.0/LICENSE.md
-Source: MIT
-
 ### github.com/felixge/httpsnoop
 
 License: https://github.com/felixge/httpsnoop/blob/v1.0.4/LICENSE.txt
@@ -531,3 +526,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
 Source: MIT
+

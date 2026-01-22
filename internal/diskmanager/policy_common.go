@@ -15,6 +15,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
+// deletionThrottleDelay is the delay between file deletions to prevent I/O overload
+const deletionThrottleDelay = 100 * time.Millisecond
+
+// maxDeletionsPerRun limits the number of files deleted in a single cleanup run
+// to prevent excessive I/O impact and allow other processes to use the disk
+const maxDeletionsPerRun = 1000
+
 // Package-level metrics with explicit synchronization
 var (
 	// Thread-safe diskMetrics with explicit synchronization
@@ -89,9 +96,8 @@ func buildSpeciesTotalCountMap(files []FileInfo) map[string]int {
 }
 
 // checkLocked checks if a file should be skipped because it's locked.
-func checkLocked(file *FileInfo, debug bool) bool {
+func checkLocked(file *FileInfo) bool {
 	if file.Locked {
-		// Debug flag is now handled by log level configuration
 		log := GetLogger()
 		log.Debug("Skipping locked file",
 			logger.String("path", file.Path),
@@ -104,7 +110,7 @@ func checkLocked(file *FileInfo, debug bool) bool {
 // checkMinClips checks if a file can be deleted based on the minimum clips per species constraint.
 // Returns true if deletion is allowed, false otherwise.
 func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[string]int,
-	minClipsPerSpecies int, debug bool, policy string) bool {
+	minClipsPerSpecies int, policy string) bool {
 
 	log := GetLogger()
 
@@ -143,7 +149,7 @@ func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[st
 }
 
 // deleteAudioFile removes a file from the filesystem with enhanced error handling and metrics.
-func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
+func deleteAudioFile(file *FileInfo, policy string) error {
 	log := GetLogger()
 
 	log.Info("Deleting audio file",
@@ -199,16 +205,51 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 	return nil
 }
 
+// tryDeleteSpectrogram attempts to delete a spectrogram file at the given path.
+// Returns 1 if deleted successfully, 0 if file didn't exist or deletion failed.
+// Logs warnings and records metrics for actual deletion failures (not file-not-found).
+func tryDeleteSpectrogram(pngPath, variant, policy string, log logger.Logger) int {
+	if err := os.Remove(pngPath); err != nil {
+		if !os.IsNotExist(err) {
+			enhancedErr := errors.New(err).
+				Component("diskmanager").
+				Category(errors.CategoryFileIO).
+				Context("policy", policy).
+				Context("operation", "delete_spectrogram").
+				Context("variant", variant).
+				FileContext(pngPath, 0).
+				Build()
+
+			log.Warn("Failed to remove associated spectrogram",
+				logger.String("policy", policy),
+				logger.String("variant", variant),
+				logger.String("path", pngPath),
+				logger.Error(enhancedErr),
+				logger.String("error_category", enhancedErr.GetCategory()))
+
+			if m := getMetrics(); m != nil {
+				m.RecordCleanupError(policy, "spectrogram_deletion")
+			}
+		}
+		return 0
+	}
+	log.Info("Deleted associated spectrogram",
+		logger.String("policy", policy),
+		logger.String("variant", variant),
+		logger.String("path", pngPath))
+	return 1
+}
+
 // deleteFileAndOptionalSpectrogram handles the deletion of the audio file
 // and its associated spectrogram with enhanced error handling, metrics, and timing.
-func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms, debug bool, policy string) error {
+func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms bool, policy string) error {
 	log := GetLogger()
 
 	// Start timing the operation
 	startTime := time.Now()
 
 	// Throttle slightly before deletion
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(deletionThrottleDelay)
 
 	// Log intent before deleting
 	log.Info("Deleting file based on policy",
@@ -220,7 +261,7 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 		logger.Bool("keep_spectrograms", keepSpectrograms))
 
 	// Delete the audio file (reuse common helper)
-	if err := deleteAudioFile(file, debug, policy); err != nil {
+	if err := deleteAudioFile(file, policy); err != nil {
 		// Record timing for failed operations
 		if m := getMetrics(); m != nil {
 			duration := time.Since(startTime).Seconds()
@@ -243,77 +284,21 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 			logger.String("lower_case", pngPathLower),
 			logger.String("upper_case", pngPathUpper))
 
-		// Attempt to remove lowercase variant
-		if pngErrLower := os.Remove(pngPathLower); pngErrLower != nil {
-			// Handle non-existence errors gracefully
-			if !os.IsNotExist(pngErrLower) {
-				// Create enhanced error for actual deletion failures
-				enhancedErr := errors.New(pngErrLower).
-					Component("diskmanager").
-					Category(errors.CategoryFileIO).
-					Context("policy", policy).
-					Context("operation", "delete_spectrogram").
-					Context("variant", "lowercase").
-					FileContext(pngPathLower, 0).
-					Build()
+		spectrogramsDeleted = tryDeleteSpectrogram(pngPathLower, "lowercase", policy, log)
 
-				log.Warn("Failed to remove associated spectrogram (lowercase)",
-					logger.String("policy", policy),
-					logger.String("path", pngPathLower),
-					logger.Error(enhancedErr),
-					logger.String("error_category", enhancedErr.GetCategory()))
-
-				// Record spectrogram deletion error
-				if m := getMetrics(); m != nil {
-					m.RecordCleanupError(policy, "spectrogram_deletion")
-				}
-			}
+		// Only try uppercase if lowercase didn't delete (handles case-insensitive FS)
+		if spectrogramsDeleted == 0 {
+			spectrogramsDeleted += tryDeleteSpectrogram(pngPathUpper, "uppercase", policy, log)
 		} else {
-			spectrogramsDeleted++
-			log.Info("Deleted associated spectrogram (lowercase)",
-				logger.String("policy", policy),
-				logger.String("path", pngPathLower))
-		}
-
-		// Attempt to remove uppercase variant (handles cases like .WAV -> .PNG)
-		if pngErrUpper := os.Remove(pngPathUpper); pngErrUpper != nil {
-			// Handle non-existence errors gracefully
-			if !os.IsNotExist(pngErrUpper) {
-				// Create enhanced error for actual deletion failures
-				enhancedErr := errors.New(pngErrUpper).
-					Component("diskmanager").
-					Category(errors.CategoryFileIO).
-					Context("policy", policy).
-					Context("operation", "delete_spectrogram").
-					Context("variant", "uppercase").
-					FileContext(pngPathUpper, 0).
-					Build()
-
-				log.Warn("Failed to remove associated spectrogram (uppercase)",
-					logger.String("policy", policy),
-					logger.String("path", pngPathUpper),
-					logger.Error(enhancedErr),
-					logger.String("error_category", enhancedErr.GetCategory()))
-
-				// Record spectrogram deletion error
-				if m := getMetrics(); m != nil {
-					m.RecordCleanupError(policy, "spectrogram_deletion")
-				}
-			}
-		} else {
-			// Only count if lowercase didn't already delete the same file on case-insensitive FS
-			if _, statErr := os.Stat(pngPathLower); os.IsNotExist(statErr) {
-				spectrogramsDeleted++
-				log.Info("Deleted associated spectrogram (uppercase)",
-					logger.String("policy", policy),
-					logger.String("path", pngPathUpper))
+			// Check if uppercase is a different file that also exists
+			if _, statErr := os.Stat(pngPathUpper); statErr == nil {
+				spectrogramsDeleted += tryDeleteSpectrogram(pngPathUpper, "uppercase", policy, log)
 			}
 		}
 
 		// Record spectrogram deletion metrics
 		if m := getMetrics(); m != nil && spectrogramsDeleted > 0 {
 			m.RecordFilesDeleted(policy, float64(spectrogramsDeleted))
-			// Note: We don't know spectrogram file sizes, so bytes freed is only for audio files
 		}
 	}
 
@@ -400,9 +385,9 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 // categorizeFilePath anonymizes file paths for metrics while preserving structure info
 func categorizeFilePath(path string) string {
 	if strings.Contains(path, "/") || strings.Contains(path, "\\") {
-		return "absolute-path"
+		return "nested-path"
 	}
-	return "relative-path"
+	return "simple-filename"
 }
 
 // ShouldSkipUsageBasedCleanup checks if cleanup can be skipped based on current disk usage.
@@ -410,7 +395,7 @@ func categorizeFilePath(path string) string {
 //   - skip: true if cleanup should be skipped (usage below threshold)
 //   - utilization: current disk usage as integer percentage
 //   - err: error if check failed (nil on success)
-func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir string, debug bool) (skip bool, utilization int, err error) {
+func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error) {
 	// Parse the threshold percentage
 	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage)
 	if parseErr != nil {
@@ -464,7 +449,7 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 	// OPTIMIZATION: For usage-based policy, check disk usage BEFORE scanning all files
 	// This avoids wasting CPU/IO scanning thousands of files when cleanup isn't needed
 	if retention.Policy == "usage" {
-		skip, utilization, err := ShouldSkipUsageBasedCleanup(&retention, baseDir, debug)
+		skip, utilization, err := ShouldSkipUsageBasedCleanup(&retention, baseDir)
 		if err != nil {
 			GetLogger().Warn("Failed to check disk usage for early exit",
 				logger.String("policy", "usage"),
