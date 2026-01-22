@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd/authors"
 	"github.com/tphakala/birdnet-go/cmd/benchmark"
-	"github.com/tphakala/birdnet-go/cmd/directory"
-	"github.com/tphakala/birdnet-go/cmd/file"
 	"github.com/tphakala/birdnet-go/cmd/license"
 	"github.com/tphakala/birdnet-go/cmd/notify"
 	"github.com/tphakala/birdnet-go/cmd/rangefilter"
@@ -34,8 +32,6 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	}
 
 	// Add sub-commands to the root command.
-	fileCmd := file.Command(settings)
-	directoryCmd := directory.Command(settings)
 	realtimeCmd := realtime.Command(settings)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
@@ -45,8 +41,6 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	notifyCmd := notify.Command(settings)
 
 	subcommands := []*cobra.Command{
-		fileCmd,
-		directoryCmd,
 		realtimeCmd,
 		authorsCmd,
 		licenseCmd,

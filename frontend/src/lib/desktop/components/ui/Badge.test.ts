@@ -12,7 +12,8 @@ describe('Badge', () => {
 
     const badge = screen.getByText('Default Badge');
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveClass('badge');
+    // Badge now uses native Tailwind classes (inline-flex, items-center, etc.)
+    expect(badge).toHaveClass('inline-flex');
     expect(badge.tagName).toBe('SPAN');
   });
 
@@ -33,9 +34,16 @@ describe('Badge', () => {
       const { unmount } = badgeTest.render({ text: `${variant} badge`, variant });
 
       const badge = screen.getByText(`${variant} badge`);
-      // neutral variant has only 'badge' class, others have 'badge-{variant}'
-      const expectedClass = variant === 'neutral' ? 'badge' : `badge-${variant}`;
-      expect(badge).toHaveClass(expectedClass);
+      // All badges now use native Tailwind classes with CSS variables
+      expect(badge).toHaveClass('inline-flex');
+      // Check for variant-specific background class based on CSS variable pattern
+      const expectedBgPattern =
+        variant === 'neutral'
+          ? 'bg-[var(--color-base-300)]'
+          : variant === 'ghost'
+            ? 'bg-black/5'
+            : `bg-[var(--color-${variant})]`;
+      expect(badge.className).toContain(expectedBgPattern);
 
       unmount();
     });
@@ -48,17 +56,14 @@ describe('Badge', () => {
       const { unmount } = badgeTest.render({ text: `${size} size`, size });
 
       const badge = screen.getByText(`${size} size`);
-      // All sizes have 'badge' class
-      expect(badge).toHaveClass('badge');
-      // md size has no additional class, others have 'badge-{size}'
-      const hasSizeClass = size !== 'md';
-      expect(badge.classList.contains(`badge-${size}`)).toBe(hasSizeClass);
+      // All sizes have base inline-flex class
+      expect(badge).toHaveClass('inline-flex');
 
       unmount();
     });
   });
 
-  it('renders with outline-solid style', () => {
+  it('renders with outline style', () => {
     badgeTest.render({
       text: 'Outlined',
       variant: 'primary',
@@ -66,7 +71,9 @@ describe('Badge', () => {
     });
 
     const badge = screen.getByText('Outlined');
-    expect(badge).toHaveClass('badge-primary', 'badge-outline');
+    // Outline badges have border and transparent background
+    expect(badge.className).toContain('border');
+    expect(badge.className).toContain('bg-transparent');
   });
 
   it('renders with custom className', () => {
@@ -108,7 +115,11 @@ describe('Badge', () => {
     });
 
     const badge = screen.getByText('Combined');
-    expect(badge).toHaveClass('badge', 'badge-error', 'badge-outline', 'badge-lg', 'ml-2');
+    // Check for combined classes
+    expect(badge).toHaveClass('inline-flex', 'ml-2');
+    // Outline error badge should have border and transparent bg
+    expect(badge.className).toContain('border');
+    expect(badge.className).toContain('bg-transparent');
   });
 
   it('handles ghost variant correctly', () => {
@@ -118,7 +129,8 @@ describe('Badge', () => {
     });
 
     const badge = screen.getByText('Ghost');
-    expect(badge).toHaveClass('badge-ghost');
-    expect(badge).not.toHaveClass('badge-outline');
+    // Ghost variant uses black/5 or white/5 background
+    expect(badge.className).toContain('bg-black/5');
+    expect(badge.className).not.toContain('bg-transparent');
   });
 });

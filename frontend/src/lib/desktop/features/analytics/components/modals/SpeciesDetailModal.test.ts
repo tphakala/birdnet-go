@@ -15,6 +15,7 @@ vi.mock('$lib/i18n', () => ({
       'analytics.species.headers.firstDetected': 'First detected',
       'analytics.species.headers.lastDetected': 'Last detected',
     };
+    // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
     return translations[key] ?? key;
   }),
 }));

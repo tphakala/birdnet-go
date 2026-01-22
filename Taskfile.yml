@@ -36,7 +36,8 @@ tasks:
   test:
     desc: Run tests for the application
     cmds:
-      - go test ./... {{.TEST_FLAGS}}
+      # Use noembed tag to skip frontend embedding requirement for faster tests
+      - go test -tags noembed ./... {{.TEST_FLAGS}}
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
 
@@ -52,7 +53,8 @@ tasks:
     desc: Run tests with coverage report
     cmds:
       - mkdir -p coverage
-      - go test ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}
+      # Use noembed tag to skip frontend embedding requirement for faster tests
+      - go test -tags noembed ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}
       - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
@@ -72,8 +74,9 @@ tasks:
         else
           LIB_DIR="/usr/lib"
         fi
+        # Use noembed tag to skip frontend embedding requirement for faster linting
         {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
-        golangci-lint run {{.CLI_ARGS}}
+        golangci-lint run --build-tags=noembed {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "-v" .CLI_ARGS}}'
 

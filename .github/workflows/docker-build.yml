@@ -25,16 +25,13 @@ on:
       - main
 
 jobs:
-  golangci:
-    uses: ./.github/workflows/golangci-lint.yml
-
+  # Lint is handled by golangci-test.yml workflow - no need to duplicate here
   build-and-push-docker-image:
-    needs: golangci
     if: github.event_name == 'push' && github.ref_name == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout GitHub Action
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3

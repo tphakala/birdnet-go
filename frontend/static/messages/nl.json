@@ -2,6 +2,7 @@
   "common": {
     "loading": "Inlezen ...",
     "error": "Fout",
+    "unknown": "Onbekend",
     "retry": "Opnieuw proberen",
     "retrying": "Opnieuw aan het proberen",
     "save": "Bewaren",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Instellingen niet gevonden",
       "sectionNotFound": "Sectie \"{section}\" niet gevonden",
       "loadingMap": "Kaart laden...",
+      "mapZoomHelp": "Houd Ctrl (of Cmd op Mac) ingedrukt + scroll om te zoomen. Klik om locatie in te stellen.",
+      "mapSetLocationHelp": "Klik op de kaart of sleep de markering om de locatie in te stellen",
       "imageNotAvailable": "Afbeelding niet beschikbaar",
       "search": "Zoeken..."
     },
@@ -135,7 +138,8 @@
     },
     "values": {
       "yes": "Ja",
-      "no": "Nee"
+      "no": "Nee",
+      "unknown": "Onbekend"
     },
     "modal": {
       "confirmAction": "Aktie bevestigen",
@@ -146,7 +150,8 @@
       "status": {
         "verifiedCorrect": "Goedgekeurd",
         "falsePositive": "Afgekeurd",
-        "notReviewed": "Niet beoordeeld"
+        "notReviewed": "Niet beoordeeld",
+        "locked": "Vergrendeld"
       },
       "form": {
         "correctDetection": "Herkenning goedgekeurd",
@@ -583,8 +588,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Helder",
@@ -638,11 +646,21 @@
       "loading": "Herkenningsdetails laden...",
       "loaded": "Herkenningsdetails geladen voor {species}",
       "error": "Fout bij het laden van herkenning: {error}"
+    },
+    "errors": {
+      "notFound": "Detectie niet gevonden. Deze is mogelijk verwijderd of de ID is onjuist.",
+      "noPermission": "U heeft geen toestemming om deze detectie te bekijken.",
+      "loginRequired": "Log in om deze detectie te bekijken.",
+      "serverError": "Serverfout. Probeer het later opnieuw of neem contact op met de ondersteuning als het probleem aanhoudt.",
+      "loadFailed": "Kon detectie niet laden (Fout {status}). Ververs de pagina.",
+      "noIdProvided": "Geen detectie-ID opgegeven."
     }
   },
   "species": {
     "rarity": {
-      "title": "Soort zeldzaamheid"
+      "title": "Soort zeldzaamheid",
+      "score": "Score",
+      "basedOnLocation": "Gebaseerd op locatie: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taxonomische klassificatie",
@@ -963,7 +981,8 @@
             "label": "Filterniveau"
           },
           "hardwareNote": "De niveaus \"Strikt\" en \"Maximum\" vereisen hogere overlap-instellingen en meer CPU-bronnen. RPi 4 of betere hardware is vereist voor deze niveaus.",
-          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen"
+          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen",
+          "overlapReduced": "Overlap-instelling verlaagd naar {overlap}s om overeen te komen met het filterniveau"
         },
         "rangeFilter": {
           "title": "Bereik Filter",
@@ -2114,6 +2133,31 @@
           "urlRequired": "Stream-URL is verplicht",
           "invalidUrl": "Ongeldig stream-URL-formaat",
           "duplicate": "Deze stream-URL bestaat al"
+        },
+        "timeline": {
+          "error": "Fout",
+          "noHistory": "Geen status- of foutgeschiedenis beschikbaar.",
+          "stateChange": "Statuswijziging",
+          "host": "Host",
+          "troubleshooting": "Probleemoplossing",
+          "from": "Van",
+          "to": "Naar",
+          "reason": "Reden",
+          "eventAt": "Gebeurtenis om {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Diagnose tonen/verbergen",
+          "processState": "Processtatus",
+          "lastData": "Laatste data",
+          "restartCount": "Herstarts",
+          "connection": "Verbinding",
+          "stateErrorHistory": "Status- en foutgeschiedenis"
+        },
+        "connectionStatus": {
+          "stable": "Stabiel",
+          "degraded": "Verslechterd",
+          "failed": "Mislukt",
+          "unknown": "Onbekend"
         }
       }
     },
@@ -2715,7 +2759,9 @@
       "volumeGain": "Volume versterking: {value} dB",
       "filterControl": "Filter bediening",
       "highPassFilter": "Hoog-doorlaat filter: {freq} Hz",
-      "seekProgress": "Voortgang verder spoelen: {current} / {total} seconds"
+      "seekProgress": "Voortgang verder spoelen: {current} / {total} seconden",
+      "playbackSpeed": "Afspeelsnelheid",
+      "speed": "Snelheid"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram nog niet beschikbaar",
@@ -2729,8 +2775,13 @@
   "components": {
     "audio": {
       "spectrogramUnavailable": "Spectrogram niet beschikbaar",
+      "spectrogramLoading": "Spectrogram laden...",
+      "spectrogramLoaded": "Spectrogram geladen",
+      "spectrogramLoadingAria": "Spectrogram laden",
+      "spectrogramGeneratingAria": "Spectrogram genereren",
       "generating": "Genereren...",
-      "queuePosition": "Wachtrij: {position}"
+      "queuePosition": "Wachtrij: {position}",
+      "loadError": "Kan audio niet laden"
     },
     "forms": {
       "numberField": {

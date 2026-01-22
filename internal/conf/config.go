@@ -464,7 +464,7 @@ type MQTTSettings struct {
 	Retain        bool                  `json:"retain"`        // true to retain messages
 	RetrySettings RetrySettings         `json:"retrySettings"` // settings for retry mechanism
 	TLS           MQTTTLSSettings       `json:"tls"`           // TLS/SSL configuration
-	HomeAssistant HomeAssistantSettings `json:"homeAssistant"` // Home Assistant auto-discovery settings
+	HomeAssistant HomeAssistantSettings `yaml:"homeassistant" mapstructure:"homeassistant" json:"homeAssistant"` // Home Assistant auto-discovery settings
 }
 
 // MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections
@@ -478,9 +478,9 @@ type MQTTTLSSettings struct {
 
 // HomeAssistantSettings contains settings for Home Assistant MQTT auto-discovery.
 type HomeAssistantSettings struct {
-	Enabled         bool   `yaml:"enabled" json:"enabled"`                   // true to enable HA auto-discovery
-	DiscoveryPrefix string `yaml:"discovery_prefix" json:"discoveryPrefix"`  // HA discovery topic prefix (default: homeassistant)
-	DeviceName      string `yaml:"device_name" json:"deviceName"`            // base name for devices (default: BirdNET-Go)
+	Enabled         bool   `yaml:"enabled" mapstructure:"enabled" json:"enabled"`                                    // true to enable HA auto-discovery
+	DiscoveryPrefix string `yaml:"discovery_prefix" mapstructure:"discovery_prefix" json:"discoveryPrefix"`          // HA discovery topic prefix (default: homeassistant)
+	DeviceName      string `yaml:"device_name" mapstructure:"device_name" json:"deviceName"`                         // base name for devices (default: BirdNET-Go)
 }
 
 // TelemetrySettings contains settings for telemetry.

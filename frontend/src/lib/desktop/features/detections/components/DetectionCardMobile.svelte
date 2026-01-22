@@ -5,6 +5,7 @@
   import { Volume2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   interface Props {
     detection: Detection;
@@ -35,7 +36,7 @@
     if (onDetailsClick) {
       onDetailsClick(detection.id);
     } else {
-      window.location.href = `/ui/detections/${detection.id}`;
+      navigation.navigate(`/ui/detections/${detection.id}`);
     }
   }
 </script>

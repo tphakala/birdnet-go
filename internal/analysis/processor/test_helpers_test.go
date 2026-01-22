@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
@@ -33,18 +34,25 @@ func testAudioSource() datastore.AudioSource {
 func testDetection() Detections {
 	now := time.Now()
 	return Detections{
-		Note: datastore.Note{
-			CommonName:     "Test Bird",
-			ScientificName: "Testus birdus",
-			Confidence:     0.95,
-			Source:         testAudioSource(),
-			Date:           now.Format("2006-01-02"),
-			Time:           now.Format("15:04:05"),
-			BeginTime:      now,
-			EndTime:        now.Add(15 * time.Second),
+		Result: detection.Result{
+			Timestamp:  now,
+			SourceNode: "test-node",
+			AudioSource: detection.AudioSource{
+				ID:          "test-source",
+				SafeString:  "test-source",
+				DisplayName: "test-source",
+			},
+			BeginTime: now,
+			EndTime:   now.Add(15 * time.Second),
+			Species: detection.Species{
+				ScientificName: "Testus birdus",
+				CommonName:     "Test Bird",
+			},
+			Confidence: 0.95,
+			Model:      detection.DefaultModelInfo(),
 		},
-		Results: []datastore.Results{
-			{Species: "Testus birdus", Confidence: 0.95},
+		Results: []detection.AdditionalResult{
+			{Species: detection.Species{ScientificName: "Testus birdus", CommonName: "Test Bird"}, Confidence: 0.95},
 		},
 	}
 }
@@ -58,18 +66,25 @@ func createSimpleDetection() Detections {
 func testDetectionWithSpecies(commonName, scientificName string, confidence float64) Detections {
 	now := time.Now()
 	return Detections{
-		Note: datastore.Note{
-			CommonName:     commonName,
-			ScientificName: scientificName,
-			Confidence:     confidence,
-			Source:         testAudioSource(),
-			Date:           now.Format("2006-01-02"),
-			Time:           now.Format("15:04:05"),
-			BeginTime:      now,
-			EndTime:        now.Add(15 * time.Second),
+		Result: detection.Result{
+			Timestamp:  now,
+			SourceNode: "test-node",
+			AudioSource: detection.AudioSource{
+				ID:          "test-source",
+				SafeString:  "test-source",
+				DisplayName: "test-source",
+			},
+			BeginTime: now,
+			EndTime:   now.Add(15 * time.Second),
+			Species: detection.Species{
+				ScientificName: scientificName,
+				CommonName:     commonName,
+			},
+			Confidence: confidence,
+			Model:      detection.DefaultModelInfo(),
 		},
-		Results: []datastore.Results{
-			{Species: scientificName, Confidence: float32(confidence)},
+		Results: []detection.AdditionalResult{
+			{Species: detection.Species{ScientificName: scientificName, CommonName: commonName}, Confidence: confidence},
 		},
 	}
 }
@@ -216,12 +231,12 @@ func (m *MockJobQueue) Reset() {
 // MockAction is a mock implementation of the Action interface for testing.
 type MockAction struct {
 	mu           sync.Mutex
-	ExecuteFunc  func(data any) error
+	ExecuteFunc  func(data any) error // Legacy callback without context
 	ExecuteCount int
 	ExecuteData  []any
 }
 
-func (m *MockAction) Execute(data any) error {
+func (m *MockAction) Execute(ctx context.Context, data any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ExecuteCount++
@@ -283,8 +298,8 @@ type SimpleAction struct {
 	onExecute    func() // Callback for additional behavior
 }
 
-func (a *SimpleAction) Execute(data any) error {
-	return a.ExecuteContext(context.Background(), data)
+func (a *SimpleAction) Execute(ctx context.Context, data any) error {
+	return a.ExecuteContext(ctx, data)
 }
 
 // ExecuteContext implements the ContextAction interface for proper context propagation.

@@ -180,3 +180,85 @@ func TestResourceEventMessage(t *testing.T) {
 func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
+
+func TestNewResourceEventWithPaths(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{"/", "/home", "/var"}
+	event := NewResourceEventWithPaths("disk", 87.5, 85.0, SeverityWarning, "/", paths)
+
+	assert.Equal(t, "disk", event.GetResourceType())
+	assert.InDelta(t, 87.5, event.GetCurrentValue(), 0.001)
+	assert.InDelta(t, 85.0, event.GetThreshold(), 0.001)
+	assert.Equal(t, SeverityWarning, event.GetSeverity())
+	assert.Equal(t, "/", event.GetPath())
+
+	// Check paths in metadata
+	metadata := event.GetMetadata()
+	require.Contains(t, metadata, "paths")
+	assert.Equal(t, paths, metadata["paths"])
+	assert.Equal(t, "/", metadata["path"])
+}
+
+func TestResourceEventMessageWithMultiplePaths(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{"/", "/home/user", "/var/data"}
+	event := NewResourceEventWithPaths("disk", 87.5, 85.0, SeverityWarning, "/", paths)
+
+	msg := event.GetMessage()
+	assert.Contains(t, msg, "Disk (/)")
+	assert.Contains(t, msg, "87.5%")
+	assert.Contains(t, msg, "85.0%")
+	assert.Contains(t, msg, "Affected paths:")
+	assert.Contains(t, msg, "/home/user")
+	assert.Contains(t, msg, "/var/data")
+}
+
+func TestResourceEventMessageSinglePath(t *testing.T) {
+	t.Parallel()
+
+	// Single path should not show "Affected paths"
+	event := NewResourceEventWithPath("disk", 87.5, 85.0, SeverityWarning, "/")
+
+	msg := event.GetMessage()
+	assert.Contains(t, msg, "Disk (/)")
+	assert.NotContains(t, msg, "Affected paths:")
+}
+
+func TestResourceEventMessageSinglePathInArray(t *testing.T) {
+	t.Parallel()
+
+	// Single path in array should also not show "Affected paths"
+	paths := []string{"/"}
+	event := NewResourceEventWithPaths("disk", 87.5, 85.0, SeverityWarning, "/", paths)
+
+	msg := event.GetMessage()
+	assert.Contains(t, msg, "Disk (/)")
+	assert.NotContains(t, msg, "Affected paths:")
+}
+
+func TestResourceEventWithPathsRecovery(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{"/", "/home", "/var"}
+	event := NewResourceEventWithPaths("disk", 75.0, 0, SeverityRecovery, "/", paths)
+
+	msg := event.GetMessage()
+	assert.Contains(t, msg, "Disk (/) usage has returned to normal")
+	assert.Contains(t, msg, "75.0%")
+	assert.Contains(t, msg, "Affected paths:")
+}
+
+func TestResourceEventWithPathsCritical(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{"/", "/home"}
+	event := NewResourceEventWithPaths("disk", 95.0, 90.0, SeverityCritical, "/", paths)
+
+	msg := event.GetMessage()
+	assert.Contains(t, msg, "Disk (/) usage critical:")
+	assert.Contains(t, msg, "95.0%")
+	assert.Contains(t, msg, "90.0%")
+	assert.Contains(t, msg, "Affected paths:")
+}

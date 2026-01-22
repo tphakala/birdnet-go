@@ -74,11 +74,12 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 
 		// Convert database model to in-memory representation
 		p.DynamicThresholds[dbThreshold.SpeciesName] = &DynamicThreshold{
-			Level:         dbThreshold.Level,
-			CurrentValue:  dbThreshold.CurrentValue,
-			Timer:         dbThreshold.ExpiresAt,
-			HighConfCount: dbThreshold.HighConfCount,
-			ValidHours:    dbThreshold.ValidHours,
+			Level:          dbThreshold.Level,
+			CurrentValue:   dbThreshold.CurrentValue,
+			Timer:          dbThreshold.ExpiresAt,
+			HighConfCount:  dbThreshold.HighConfCount,
+			ValidHours:     dbThreshold.ValidHours,
+			ScientificName: dbThreshold.ScientificName,
 		}
 		loadedCount++
 
@@ -101,26 +102,21 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 	return nil
 }
 
-// persistDynamicThresholds saves all current dynamic thresholds to the database
-// This is called periodically by the persistence goroutine
-func (p *Processor) persistDynamicThresholds() error {
+// convertThresholdsForPersistence converts in-memory thresholds to database format.
+// Returns the database thresholds and a list of expired species to clean up.
+func (p *Processor) convertThresholdsForPersistence() (dbThresholds []datastore.DynamicThreshold, expiredSpecies []string) {
 	p.thresholdsMutex.RLock()
-	thresholdsCount := len(p.DynamicThresholds)
+	defer p.thresholdsMutex.RUnlock()
 
-	// Early return if no thresholds to persist
-	if thresholdsCount == 0 {
-		p.thresholdsMutex.RUnlock()
-		return nil
+	if len(p.DynamicThresholds) == 0 {
+		return nil, nil
 	}
 
-	// Create a slice to hold database representations
-	dbThresholds := make([]datastore.DynamicThreshold, 0, thresholdsCount)
-	expiredSpecies := make([]string, 0) // Track expired species for cleanup
 	now := time.Now()
+	dbThresholds = make([]datastore.DynamicThreshold, 0, len(p.DynamicThresholds))
+	expiredSpecies = make([]string, 0)
 
-	// Convert in-memory thresholds to database models
 	for speciesName, threshold := range p.DynamicThresholds {
-		// Track expired thresholds for cleanup
 		if now.After(threshold.Timer) {
 			expiredSpecies = append(expiredSpecies, speciesName)
 			if p.Settings.Realtime.DynamicThreshold.Debug {
@@ -132,63 +128,56 @@ func (p *Processor) persistDynamicThresholds() error {
 			continue
 		}
 
-		// Reconstruct base threshold for reference
-		// Note: scientific name not available here, but common name lookup is sufficient
 		baseThreshold := p.getBaseConfidenceThreshold(speciesName, "")
-
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
-			SpeciesName:   speciesName,
-			Level:         threshold.Level,
-			CurrentValue:  threshold.CurrentValue,
-			BaseThreshold: float64(baseThreshold),
-			HighConfCount: threshold.HighConfCount,
-			ValidHours:    threshold.ValidHours,
-			ExpiresAt:     threshold.Timer,
-			LastTriggered: now, // Track when we last saw activity
-			FirstCreated:  now, // Will be preserved by upsert if record exists
-			UpdatedAt:     now,
-			TriggerCount:  threshold.HighConfCount, // Use HighConfCount as trigger count
+			SpeciesName:    speciesName,
+			ScientificName: threshold.ScientificName,
+			Level:          threshold.Level,
+			CurrentValue:   threshold.CurrentValue,
+			BaseThreshold:  float64(baseThreshold),
+			HighConfCount:  threshold.HighConfCount,
+			ValidHours:     threshold.ValidHours,
+			ExpiresAt:      threshold.Timer,
+			LastTriggered:  now,
+			FirstCreated:   now,
+			UpdatedAt:      now,
+			TriggerCount:   threshold.HighConfCount,
 		})
 	}
-	p.thresholdsMutex.RUnlock()
 
-	// Clean up expired thresholds from memory
-	if len(expiredSpecies) > 0 {
-		p.thresholdsMutex.Lock()
-		for _, speciesName := range expiredSpecies {
-			delete(p.DynamicThresholds, speciesName)
-		}
-		p.thresholdsMutex.Unlock()
+	return dbThresholds, expiredSpecies
+}
 
-		GetLogger().Info("Cleaned expired thresholds from memory",
-			logger.Int("count", len(expiredSpecies)),
-			logger.String("operation", "persist_dynamic_thresholds"))
+// cleanupExpiredThresholds removes expired thresholds from memory.
+func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
+	if len(expiredSpecies) == 0 {
+		return
 	}
 
-	// Nothing to persist after filtering expired thresholds
-	if len(dbThresholds) == 0 {
-		return nil
+	p.thresholdsMutex.Lock()
+	for _, speciesName := range expiredSpecies {
+		delete(p.DynamicThresholds, speciesName)
 	}
+	p.thresholdsMutex.Unlock()
 
-	// Use batch save for efficiency with retry logic for transient lock errors
-	// Keep at 3 retries with fast backoff - we have 30s busy_timeout doing heavy lifting
-	maxRetries := 3
+	GetLogger().Info("Cleaned expired thresholds from memory",
+		logger.Int("count", len(expiredSpecies)),
+		logger.String("operation", "persist_dynamic_thresholds"))
+}
+
+// saveThresholdsWithRetry attempts to save thresholds with exponential backoff.
+func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThreshold) error {
+	const maxRetries = 3
 	baseDelay := 100 * time.Millisecond
 
 	var err error
 	for attempt := range maxRetries {
 		err = p.Ds.BatchSaveDynamicThresholds(dbThresholds)
 		if err == nil {
-			break // Success
+			return nil
 		}
 
-		// Check if error is a database locked error (transient)
-		errStr := err.Error()
-		isLockError := strings.Contains(errStr, "database is locked") ||
-			strings.Contains(errStr, "SQLITE_BUSY")
-
-		if !isLockError || attempt == maxRetries-1 {
-			// Not a lock error or exhausted retries
+		if !isDBLockError(err) || attempt == maxRetries-1 {
 			GetLogger().Error("Failed to persist dynamic thresholds",
 				logger.Error(err),
 				logger.Int("threshold_count", len(dbThresholds)),
@@ -198,7 +187,6 @@ func (p *Processor) persistDynamicThresholds() error {
 			return err
 		}
 
-		// Exponential backoff: 100ms, 200ms, 400ms
 		backoffDuration := baseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt is bounded by maxRetries (3), no overflow risk
 		GetLogger().Warn("Database locked, retrying after backoff",
 			logger.Int("attempt", attempt+1),
@@ -206,15 +194,37 @@ func (p *Processor) persistDynamicThresholds() error {
 			logger.Int64("backoff_ms", backoffDuration.Milliseconds()),
 			logger.String("operation", "persist_dynamic_thresholds"))
 
-		// Context-aware sleep - allows early exit on shutdown
 		select {
 		case <-time.After(backoffDuration):
-			// Continue to retry
 		case <-p.thresholdsCtx.Done():
 			GetLogger().Info("Retry aborted due to shutdown",
 				logger.String("operation", "persist_dynamic_thresholds"))
 			return p.thresholdsCtx.Err()
 		}
+	}
+	return err
+}
+
+// isDBLockError checks if an error is a database lock error.
+func isDBLockError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "database is locked") ||
+		strings.Contains(errStr, "SQLITE_BUSY")
+}
+
+// persistDynamicThresholds saves all current dynamic thresholds to the database
+// This is called periodically by the persistence goroutine
+func (p *Processor) persistDynamicThresholds() error {
+	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence()
+
+	p.cleanupExpiredThresholds(expiredSpecies)
+
+	if len(dbThresholds) == 0 {
+		return nil
+	}
+
+	if err := p.saveThresholdsWithRetry(dbThresholds); err != nil {
+		return err
 	}
 
 	if p.Settings.Realtime.DynamicThreshold.Debug {

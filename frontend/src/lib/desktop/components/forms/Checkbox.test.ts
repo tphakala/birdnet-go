@@ -95,7 +95,7 @@ describe('Checkbox', () => {
   });
 
   it('applies size classes correctly', () => {
-    render(Checkbox, {
+    const { container } = render(Checkbox, {
       props: {
         checked: false,
         label: 'Test checkbox',
@@ -103,25 +103,27 @@ describe('Checkbox', () => {
       },
     });
 
-    const checkbox = screen.getByRole('checkbox');
-    expect(checkbox).toHaveClass('checkbox-lg');
+    // The custom checkbox visual span has size classes (w-6 h-6 for lg)
+    const visualCheckbox = container.querySelector('span.relative');
+    expect(visualCheckbox).toHaveClass('w-6', 'h-6');
   });
 
-  it('applies variant classes correctly', () => {
-    render(Checkbox, {
+  it('applies variant classes correctly when checked', () => {
+    const { container } = render(Checkbox, {
       props: {
-        checked: false,
+        checked: true,
         label: 'Test checkbox',
         variant: 'secondary',
       },
     });
 
-    const checkbox = screen.getByRole('checkbox');
-    expect(checkbox).toHaveClass('checkbox-secondary');
+    // When checked, the visual checkbox span should have the secondary background class
+    const visualCheckbox = container.querySelector('span.relative');
+    expect(visualCheckbox?.className).toContain('bg-[var(--color-secondary)]');
   });
 
   it('renders with custom className', () => {
-    render(Checkbox, {
+    const { container } = render(Checkbox, {
       props: {
         checked: false,
         label: 'Test checkbox',
@@ -129,8 +131,9 @@ describe('Checkbox', () => {
       },
     });
 
-    const container = screen.getByRole('checkbox').closest('.form-control');
-    expect(container).toHaveClass('custom-class');
+    // The wrapper div has the custom class
+    const wrapper = container.querySelector('.relative.min-w-0');
+    expect(wrapper).toHaveClass('custom-class');
   });
 
   it('renders with children snippet instead of label', () => {

@@ -2,6 +2,7 @@
   "common": {
     "loading": "Ladataan...",
     "error": "Virhe",
+    "unknown": "Tuntematon",
     "retry": "Yritä uudelleen",
     "retrying": "Yritetään uudelleen",
     "save": "Tallenna",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Asetuksia ei löydy",
       "sectionNotFound": "Osaa \"{section}\" ei löydy",
       "loadingMap": "Ladataan karttaa...",
+      "mapZoomHelp": "Pidä Ctrl (tai Cmd Macissa) + vieritä lähentääksesi. Napsauta asettaaksesi sijainnin.",
+      "mapSetLocationHelp": "Napsauta karttaa tai vedä merkkiä asettaaksesi sijainnin",
       "imageNotAvailable": "Kuva ei saatavilla",
       "search": "Hae..."
     },
@@ -135,7 +138,8 @@
     },
     "values": {
       "yes": "Kyllä",
-      "no": "Ei"
+      "no": "Ei",
+      "unknown": "Tuntematon"
     },
     "modal": {
       "confirmAction": "Vahvista toiminto",
@@ -146,7 +150,8 @@
       "status": {
         "verifiedCorrect": "Todennettu oikeaksi",
         "falsePositive": "Virheellinen havainto",
-        "notReviewed": "Ei tarkistettu"
+        "notReviewed": "Ei tarkistettu",
+        "locked": "Lukittu"
       },
       "form": {
         "correctDetection": "Oikea havainto",
@@ -568,6 +573,14 @@
     "pagination": {
       "showing": "Näytetään {from}-{to} / {total} tuloksesta"
     },
+    "errors": {
+      "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
+      "noPermission": "Sinulla ei ole oikeutta tarkastella tätä havaintoa.",
+      "loginRequired": "Kirjaudu sisään tarkastellaksesi tätä havaintoa.",
+      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen tai ota yhteyttä tukeen, jos ongelma jatkuu.",
+      "loadFailed": "Havainnon lataaminen epäonnistui (Virhe {status}). Päivitä sivu.",
+      "noIdProvided": "Havainnon tunnistetta ei annettu."
+    },
     "weather": {
       "title": "Weather Information",
       "noData": "No weather data",
@@ -583,8 +596,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Selkeä taivas",
@@ -642,7 +658,9 @@
   },
   "species": {
     "rarity": {
-      "title": "Lajin harvinaisuus"
+      "title": "Lajin harvinaisuus",
+      "score": "Pisteet",
+      "basedOnLocation": "Sijainnin perusteella: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",
@@ -963,7 +981,8 @@
             "label": "Suodatustaso"
           },
           "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
-          "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi"
+          "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
+          "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa"
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
@@ -1947,6 +1966,31 @@
           "urlRequired": "Striimin URL on pakollinen",
           "invalidUrl": "Virheellinen striimin URL-muoto",
           "duplicate": "Tämä striimin URL on jo olemassa"
+        },
+        "timeline": {
+          "error": "Virhe",
+          "noHistory": "Ei tila- tai virhehistoriaa saatavilla.",
+          "stateChange": "Tilamuutos",
+          "host": "Isäntä",
+          "troubleshooting": "Vianmääritys",
+          "from": "Mistä",
+          "to": "Mihin",
+          "reason": "Syy",
+          "eventAt": "Tapahtuma {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Näytä/piilota diagnostiikka",
+          "processState": "Prosessin tila",
+          "lastData": "Viimeisin data",
+          "restartCount": "Uudelleenkäynnistykset",
+          "connection": "Yhteys",
+          "stateErrorHistory": "Tila- ja virhehistoria"
+        },
+        "connectionStatus": {
+          "stable": "Vakaa",
+          "degraded": "Heikentynyt",
+          "failed": "Epäonnistunut",
+          "unknown": "Tuntematon"
         }
       }
     },
@@ -2715,7 +2759,9 @@
       "volumeGain": "Äänenvoimakkuuden vahvistus: {value} dB",
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
-      "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia"
+      "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
+      "playbackSpeed": "Toistonopeus",
+      "speed": "Nopeus"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
@@ -2729,8 +2775,13 @@
   "components": {
     "audio": {
       "spectrogramUnavailable": "Spektrogrammi ei saatavilla",
+      "spectrogramLoading": "Ladataan spektrogrammia...",
+      "spectrogramLoaded": "Spektrogrammi ladattu",
+      "spectrogramLoadingAria": "Ladataan spektrogrammia",
+      "spectrogramGeneratingAria": "Luodaan spektrogrammia",
       "generating": "Luodaan...",
-      "queuePosition": "Jono: {position}"
+      "queuePosition": "Jono: {position}",
+      "loadError": "Äänitiedoston lataaminen epäonnistui"
     },
     "forms": {
       "numberField": {

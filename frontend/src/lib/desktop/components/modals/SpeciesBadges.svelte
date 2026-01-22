@@ -87,13 +87,13 @@
 
 <div class={`flex items-center gap-2 flex-wrap ${className}`}>
   <!-- Verification Status Badge -->
-  <span class={`badge ${badgeSize} ${gapSize} ${getStatusBadgeClass(detection.review?.verified)}`}>
-    {#if detection.review?.verified === 'correct'}
+  <span class={`badge ${badgeSize} ${gapSize} ${getStatusBadgeClass(detection.verified)}`}>
+    {#if detection.verified === 'correct'}
       <CircleCheck class={iconSize} />
-    {:else if detection.review?.verified === 'false_positive'}
+    {:else if detection.verified === 'false_positive'}
       <X class={iconSize} />
     {/if}
-    {getStatusText(detection.review?.verified)}
+    {getStatusText(detection.verified)}
   </span>
 
   <!-- Lock Status Badge -->

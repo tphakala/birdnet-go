@@ -74,8 +74,8 @@ defer queue.Stop()
 // Define an action
 type MyAction struct{}
 
-func (a *MyAction) Execute(data interface{}) error {
-    // Process the data
+func (a *MyAction) Execute(ctx context.Context, data interface{}) error {
+    // Process the data (check ctx.Done() for cancellation in long operations)
     myData := data.(MyDataType)
     // Do something with myData
     return nil
@@ -109,8 +109,8 @@ defer queue.Stop()
 // Define a typed action
 type MyTypedAction struct{}
 
-func (a *MyTypedAction) Execute(data MyDataType) error {
-    // Process the data
+func (a *MyTypedAction) Execute(ctx context.Context, data MyDataType) error {
+    // Process the data (check ctx.Done() for cancellation in long operations)
     // No type assertion needed
     return nil
 }
@@ -236,8 +236,8 @@ type MyCustomAction struct {
     // Custom fields
 }
 
-func (a *MyCustomAction) Execute(data interface{}) error {
-    // Custom implementation
+func (a *MyCustomAction) Execute(ctx context.Context, data interface{}) error {
+    // Custom implementation (check ctx.Done() for cancellation in long operations)
     return nil
 }
 

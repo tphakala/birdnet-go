@@ -9,7 +9,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/observation"
 	tflite "github.com/tphakala/go-tflite"
 )
 
@@ -167,83 +166,6 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 
 	// Return the top 10 results
 	return topResults, nil
-}
-
-// AnalyzeAudio processes audio data in chunks and predicts species using the BirdNET model.
-// It returns a slice of observations with the identified species and their confidence levels.
-/*func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
-	var observations []datastore.Note
-	startTime := time.Now()
-	predStart := 0.0
-
-	for idx, chunk := range chunks {
-		fmt.Printf("\r\033[KAnalyzing chunk [%d/%d] %s", idx+1, len(chunks), EstimateTimeRemaining(startTime, idx, len(chunks)))
-
-		chunkResults, err := bn.ProcessChunk(chunk, predStart)
-		if err != nil {
-			return nil, err
-		}
-
-		observations = append(observations, chunkResults...)
-		predStart += 3.0 - bn.Settings.BirdNET.Overlap // Adjust for overlap.
-	}
-
-	fmt.Printf("\r\033[KAnalysis completed in %s\n", FormatDuration(time.Since(startTime)))
-	return observations, nil
-}*/
-
-// processChunk handles the prediction for a single chunk of audio data.
-func (bn *BirdNET) ProcessChunk(chunk []float32, predStart time.Time) ([]datastore.Note, error) {
-	return bn.ProcessChunkWithContext(context.Background(), chunk, predStart)
-}
-
-// ProcessChunkWithContext handles prediction for a single chunk with tracing
-func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32, predStart time.Time) ([]datastore.Note, error) {
-	span, ctx := StartSpan(ctx, "birdnet.process_chunk", "Process audio chunk")
-	defer span.Finish()
-
-	start := time.Now()
-	span.SetTag("model", "birdnet") // Default model name for chunk processing
-	span.SetData("chunk_size", len(chunk))
-	span.SetData("pred_start", predStart.Format(time.RFC3339))
-
-	results, err := bn.PredictWithContext(ctx, [][]float32{chunk})
-	if err != nil {
-		return nil, errors.New(err).
-			Category(errors.CategoryAudio).
-			Context("chunk_start_time", predStart.Format(time.RFC3339)).
-			Context("chunk_size", len(chunk)).
-			Timing("chunk-prediction", time.Since(start)).
-			Build()
-	}
-
-	predEnd := predStart.Add(time.Duration(3.0 * float64(time.Second)))
-
-	var source = ""
-	var clipName = ""
-
-	// Get species occurrence scores once for all results (optimization)
-	var speciesOccurrences map[string]float64
-	if bn.Settings.BirdNET.Latitude != 0 && bn.Settings.BirdNET.Longitude != 0 {
-		cachedScores, err := bn.getCachedSpeciesScores(predStart)
-		if err == nil && len(cachedScores) > 0 {
-			speciesOccurrences = cachedScores
-		}
-	}
-
-	// Pre-allocate slice with capacity for all results
-	notes := make([]datastore.Note, 0, len(results))
-	for _, result := range results {
-		// Look up occurrence score for this species (nil map reads are safe)
-		occurrence := speciesOccurrences[result.Species]
-
-		// Compute actual processing time
-		processingTime := time.Since(start)
-
-		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, processingTime, occurrence)
-		notes = append(notes, note)
-	}
-	return notes, nil
 }
 
 // customSigmoid applies a sigmoid function with sensitivity adjustment to a value.

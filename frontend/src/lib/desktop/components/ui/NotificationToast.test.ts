@@ -41,8 +41,11 @@ describe('NotificationToast', () => {
         },
       });
 
-      const alert = container.querySelector('.alert');
-      expect(alert).toHaveClass(`alert-${type}`);
+      // The component now uses role="alert" and CSS variable-based type classes
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert).toBeInTheDocument();
+      // Verify it has the appropriate type-based background class
+      expect(alert?.className).toContain(`bg-[var(--color-${type})]`);
     }
   );
 
@@ -150,7 +153,7 @@ describe('NotificationToast', () => {
       // 2. Individual toasts only handle their content, styling, and animations
       // 3. This separation of concerns allows ToastContainer to manage stacking and grouping
       // Therefore, we verify the toast renders without position-specific classes
-      const alert = container.querySelector('.alert');
+      const alert = container.querySelector('[role="alert"]');
       expect(alert).toBeInTheDocument();
 
       // Verify no position-specific classes are applied to individual toasts
@@ -204,7 +207,8 @@ describe('NotificationToast', () => {
       },
     });
 
-    const alert = container.querySelector('.alert');
+    // The inner div with role="alert" should have the custom class
+    const alert = container.querySelector('[role="alert"]');
     expect(alert).toHaveClass('custom-toast');
   });
 

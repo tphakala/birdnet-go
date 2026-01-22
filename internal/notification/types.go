@@ -5,7 +5,7 @@ package notification
 
 import (
 	"fmt"
-	"maps"
+	"reflect"
 	"slices"
 	"sort"
 	"sync"
@@ -181,13 +181,78 @@ func (n *Notification) Clone() *Notification {
 		clone.ExpiresAt = &expiresAt
 	}
 
-	// Deep copy Metadata map
+	// Deep copy Metadata map to handle nested structures safely
 	if n.Metadata != nil {
-		clone.Metadata = make(map[string]any, len(n.Metadata))
-		maps.Copy(clone.Metadata, n.Metadata)
+		clone.Metadata = deepCopyMetadata(n.Metadata)
 	}
 
 	return clone
+}
+
+// deepCopyMetadata creates a deep copy of the metadata map that preserves Go types.
+// This ensures nested maps/slices are fully copied, preventing concurrent access issues
+// when the original metadata is modified while being serialized.
+func deepCopyMetadata(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	return deepCopyValue(src).(map[string]any)
+}
+
+// deepCopyValue recursively deep copies a value using reflection to handle any
+// map or slice type generically. This ensures all nested collections are properly
+// deep-copied, preventing concurrent access issues regardless of the specific type.
+// Pointer types and custom structs are copied by reference (not dereferenced).
+func deepCopyValue(v any) any {
+	if v == nil {
+		return nil
+	}
+
+	original := reflect.ValueOf(v)
+
+	// We only need to handle maps and slices, as they are reference types
+	// that can cause concurrent access issues. Primitives are copied by value,
+	// and pointers/structs typically don't need deep copying for our SSE use case.
+	switch original.Kind() {
+	case reflect.Map:
+		// Create a new map of the same type
+		newMap := reflect.MakeMap(original.Type())
+		iter := original.MapRange()
+		for iter.Next() {
+			// Recursively copy the value
+			copiedValue := deepCopyValue(iter.Value().Interface())
+
+			// If copiedValue is nil, we need a zero value of the correct type
+			if copiedValue == nil {
+				newMap.SetMapIndex(iter.Key(), reflect.Zero(iter.Value().Type()))
+			} else {
+				newMap.SetMapIndex(iter.Key(), reflect.ValueOf(copiedValue))
+			}
+		}
+		return newMap.Interface()
+
+	case reflect.Slice:
+		// Create a new slice of the same type, length, and capacity
+		newSlice := reflect.MakeSlice(original.Type(), original.Len(), original.Cap())
+		for i := 0; i < original.Len(); i++ {
+			elem := original.Index(i)
+			// Recursively copy the element
+			copiedElem := deepCopyValue(elem.Interface())
+
+			if copiedElem == nil {
+				newSlice.Index(i).Set(reflect.Zero(elem.Type()))
+			} else {
+				newSlice.Index(i).Set(reflect.ValueOf(copiedElem))
+			}
+		}
+		return newSlice.Interface()
+
+	default:
+		// For primitive types, pointers, structs, etc., return the value as-is.
+		// Primitives are value types, and pointers/structs typically don't need
+		// deep copying for our SSE serialization use case.
+		return v
+	}
 }
 
 // NotificationStore interface defines methods for persisting notifications

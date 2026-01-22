@@ -14,8 +14,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
 // Range filter constants (file-local)
@@ -197,12 +197,12 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	// Pre-allocate slice with capacity for all included species
 	speciesList := make([]RangeFilterSpecies, 0, len(includedSpecies))
 	for _, label := range includedSpecies {
-		scientificName, commonName, _ := observation.ParseSpeciesString(label)
+		sp := detection.ParseSpeciesString(label)
 
 		species := RangeFilterSpecies{
 			Label:          label,
-			ScientificName: scientificName,
-			CommonName:     commonName,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
 			Score:          nil, // No individual scores available for current range filter species
 		}
 
@@ -281,14 +281,14 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	// Pre-allocate slice with capacity for all species scores
 	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
 	for _, speciesScore := range speciesScores {
-		scientificName, commonName, _ := observation.ParseSpeciesString(speciesScore.Label)
+		sp := detection.ParseSpeciesString(speciesScore.Label)
 
 		// Create score pointer for non-nil value
 		score := speciesScore.Score
 		species := RangeFilterSpecies{
 			Label:          speciesScore.Label,
-			ScientificName: scientificName,
-			CommonName:     commonName,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
 			Score:          &score, // Individual scores are available from GetProbableSpecies
 		}
 
@@ -397,12 +397,12 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// Convert to species list format
 		speciesList = make([]RangeFilterSpecies, 0, len(includedSpecies))
 		for _, label := range includedSpecies {
-			scientificName, commonName, _ := observation.ParseSpeciesString(label)
+			sp := detection.ParseSpeciesString(label)
 
 			species := RangeFilterSpecies{
 				Label:          label,
-				ScientificName: scientificName,
-				CommonName:     commonName,
+				ScientificName: sp.ScientificName,
+				CommonName:     sp.CommonName,
 				Score:          nil,
 			}
 
@@ -466,14 +466,14 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 	// Convert to response format
 	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
 	for _, speciesScore := range speciesScores {
-		scientificName, commonName, _ := observation.ParseSpeciesString(speciesScore.Label)
+		sp := detection.ParseSpeciesString(speciesScore.Label)
 
 		// Create score pointer for non-nil value
 		score := speciesScore.Score
 		species := RangeFilterSpecies{
 			Label:          speciesScore.Label,
-			ScientificName: scientificName,
-			CommonName:     commonName,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
 			Score:          &score,
 		}
 

@@ -153,6 +153,7 @@
 
   // Convert backend process state to UI status
   function getStreamStatus(url: string): StreamStatus {
+    // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = streamHealth[url];
     if (!health) return 'unknown';
 
@@ -196,6 +197,7 @@
 
       // Clear existing entries first (mutate, don't reassign)
       for (const key of Object.keys(streamHealth)) {
+        // eslint-disable-next-line security/detect-object-injection -- Key from Object.keys on internal state object
         delete streamHealth[key];
       }
 
@@ -468,10 +470,10 @@
 <div class="space-y-4">
   <!-- Status Summary Bar -->
   {#if streams.length > 0}
-    <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+    <div class="flex items-center justify-between p-3 bg-[var(--color-base-200)] rounded-lg">
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <Radio class="size-4 text-base-content opacity-70" />
+          <Radio class="size-4 text-[var(--color-base-content)]/70" />
           <span class="text-sm font-medium">
             {t('settings.audio.streams.summary', { count: streams.length })}
           </span>
@@ -506,7 +508,7 @@
 
       <button
         type="button"
-        class="btn btn-ghost btn-sm gap-1.5"
+        class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={loadHealthStatus}
         disabled={healthLoading || disabled}
       >
@@ -550,12 +552,14 @@
 
     <!-- Add Stream Section -->
     {#if showAddForm}
-      <div class="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4">
+      <div
+        class="rounded-lg border-2 border-dashed border-[var(--color-primary)]/30 bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)] p-4"
+      >
         <div class="space-y-4">
           <!-- Name Input -->
-          <div class="form-control">
-            <label class="label py-1" for="new-stream-name">
-              <span class="label-text text-sm font-medium">
+          <div>
+            <label class="block py-1" for="new-stream-name">
+              <span class="text-sm font-medium text-[var(--color-base-content)]">
                 {t('settings.audio.streams.nameLabel')}
               </span>
             </label>
@@ -564,23 +568,26 @@
               type="text"
               bind:value={newName}
               onkeydown={handleAddKeydown}
-              class={cn('input input-sm w-full', nameError && 'input-error')}
+              class={cn(
+                'w-full h-9 px-3 text-sm rounded-lg border bg-[var(--color-base-100)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors',
+                nameError ? 'border-[var(--color-error)]' : 'border-[var(--border-200)]'
+              )}
               placeholder={t('settings.audio.streams.namePlaceholder')}
               {disabled}
             />
             {#if nameError}
-              <span class="text-xs text-error mt-1">{nameError}</span>
+              <span class="text-xs text-[var(--color-error)] mt-1">{nameError}</span>
             {:else}
-              <span class="text-xs text-base-content opacity-60 mt-1">
+              <span class="text-xs text-[var(--color-base-content)]/60 mt-1">
                 {t('settings.audio.streams.nameHelp')}
               </span>
             {/if}
           </div>
 
           <!-- URL Input -->
-          <div class="form-control">
-            <label class="label py-1" for="new-stream-url">
-              <span class="label-text text-sm font-medium">
+          <div>
+            <label class="block py-1" for="new-stream-url">
+              <span class="text-sm font-medium text-[var(--color-base-content)]">
                 {t('settings.audio.streams.urlLabel')}
               </span>
             </label>
@@ -590,14 +597,17 @@
               value={newUrl}
               oninput={handleUrlInput}
               onkeydown={handleAddKeydown}
-              class={cn('input input-sm w-full font-mono', urlError && 'input-error')}
+              class={cn(
+                'w-full h-9 px-3 text-sm font-mono rounded-lg border bg-[var(--color-base-100)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors',
+                urlError ? 'border-[var(--color-error)]' : 'border-[var(--border-200)]'
+              )}
               placeholder="rtsp://user:password@192.168.1.100:554/stream"
               {disabled}
             />
             {#if urlError}
-              <span class="text-xs text-error mt-1">{urlError}</span>
+              <span class="text-xs text-[var(--color-error)] mt-1">{urlError}</span>
             {:else}
-              <span class="text-xs text-base-content opacity-60 mt-1">
+              <span class="text-xs text-[var(--color-base-content)]/60 mt-1">
                 {t('settings.audio.streams.urlHelp')}
               </span>
             {/if}
@@ -636,7 +646,7 @@
           <div class="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              class="btn btn-sm btn-ghost"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors"
               onclick={() => {
                 showAddForm = false;
                 newName = '';
@@ -648,7 +658,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-sm btn-primary gap-1.5"
+              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/80 text-[var(--color-primary-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={addStream}
               disabled={!newName.trim() || !newUrl.trim() || disabled}
             >
@@ -662,7 +672,7 @@
       <!-- Add Stream Button -->
       <button
         type="button"
-        class="w-full btn btn-outline btn-sm gap-2 border-dashed"
+        class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={() => (showAddForm = true)}
         {disabled}
       >

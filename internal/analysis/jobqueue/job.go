@@ -1,8 +1,10 @@
 package jobqueue
 
 import (
+	"context"
 	"encoding/json"
 	"time"
+	"unicode/utf8"
 )
 
 // Job represents a unit of work in the job queue
@@ -93,7 +95,7 @@ type TypedJob[T any] struct {
 
 // TypedAction is a generic version of Action for type-safe operations
 type TypedAction[T any] interface {
-	Execute(data T) error
+	Execute(ctx context.Context, data T) error
 	GetDescription() string // Returns a human-readable description of the action
 }
 
@@ -140,10 +142,11 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 		// Get a reference to the stats to avoid copying the large struct
 		stats := s.ActionStats[typeName]
 
-		// Bound description length to prevent bloat in JSON output
+		// Bound description length to prevent bloat in JSON output (use rune count for UTF-8 safety)
 		description := stats.Description
-		if len(description) > MaxMessageLength {
-			description = description[:MaxMessageLength] + "... [truncated]"
+		if utf8.RuneCountInString(description) > MaxMessageLength {
+			runes := []rune(description)
+			description = string(runes[:MaxMessageLength]) + "... [truncated]"
 		}
 
 		// Create action stats map with metrics and performance data

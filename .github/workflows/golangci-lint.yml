@@ -5,20 +5,8 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.golangci.yml'
-  pull_request:
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.golangci.yml'
+  # Reusable workflow only - called by golangci-test.yml
+  # Do NOT add push/pull_request triggers here to avoid duplicate runs
   workflow_call:
 
 permissions:
@@ -30,8 +18,8 @@ jobs:
     name: lint
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25'
           cache: true
@@ -44,25 +32,14 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache TensorFlow headers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/src/tensorflow
           key: ${{ runner.os }}-tensorflow-v2.17.1
 
       - name: Install dependencies
         run: task check-tensorflow
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          
-      - name: Build Frontend
-        run: |
-          cd frontend
-          npm install
-          npm run build
-      
+
       - name: Set environment variables for CGO
         run: |
           echo "CGO_ENABLED=1" >> $GITHUB_ENV
@@ -70,16 +47,17 @@ jobs:
 
       - name: golangci-lint
         id: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v2.6
+          version: v2.7.2
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax)
-          args: --output.checkstyle.path=golangci-lint-report.xml
+          # Use noembed tag to skip frontend embedding requirement
+          args: --build-tags=noembed --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()
@@ -125,7 +103,7 @@ jobs:
           fi
 
       - name: Upload lint report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: golangci-lint-report

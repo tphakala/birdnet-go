@@ -33,10 +33,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.25'
           check-latest: true
@@ -54,7 +54,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -113,7 +113,7 @@ jobs:
           tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
           path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
@@ -121,21 +121,12 @@ jobs:
       # Optional: Create a GitHub release for tagged builds
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           tag_name: ${{ steps.get_build_version.outputs.build_version }}
           name: "Nightly Build ${{ steps.get_build_version.outputs.build_version }}"
           prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Delete old releases
-        uses: dev-drprasad/delete-older-releases@v0.3.2
-        with:
-          keep_latest: 14
-          delete_tags: true
-          delete_tag_pattern: ^nightly-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -145,7 +136,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -171,3 +162,21 @@ jobs:
       cleanup-old-images: true
       keep-images-count: 14
     secrets: inherit
+
+  cleanup:
+    name: Cleanup old nightly releases
+    needs: nightly
+    runs-on: ubuntu-latest
+    # Run cleanup even if some builds failed, but not if cancelled
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Delete old releases
+        # Non-critical cleanup - don't fail the workflow if this errors
+        continue-on-error: true
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 14
+          delete_tags: true
+          delete_tag_pattern: ^nightly-
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

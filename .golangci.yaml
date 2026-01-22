@@ -51,6 +51,9 @@ linters:
         - style
         - diagnostic
         - performance
+      settings:
+        ruleguard:
+          rules: "rules/waitgroup.go"
     revive:
       rules:
         - name: unused-parameter

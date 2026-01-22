@@ -775,13 +775,10 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 }
 
 // Delete releases resources used by the TensorFlow Lite interpreters.
+// Note: With go-tflite v0.2.0+, interpreter cleanup is handled automatically by GC.
 func (bn *BirdNET) Delete() {
-	if bn.AnalysisInterpreter != nil {
-		bn.AnalysisInterpreter.Delete()
-	}
-	if bn.RangeInterpreter != nil {
-		bn.RangeInterpreter.Delete()
-	}
+	bn.AnalysisInterpreter = nil
+	bn.RangeInterpreter = nil
 	bn.clearSpeciesCache()
 }
 
@@ -1061,11 +1058,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Initialize new meta model
 	if err := bn.initializeMetaModel(); err != nil {
-		// Clean up the newly created analysis interpreter if meta model fails
-		if bn.AnalysisInterpreter != nil {
-			bn.AnalysisInterpreter.Delete()
-		}
-		// Restore the old interpreters
+		// Restore the old interpreters (new ones will be GC'd)
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
 		return fmt.Errorf("\033[31m❌ failed to reload meta model: %w\033[0m", err)
@@ -1074,14 +1067,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Reload labels
 	if err := bn.loadLabels(); err != nil {
-		// Clean up the newly created interpreters if label loading fails
-		if bn.AnalysisInterpreter != nil {
-			bn.AnalysisInterpreter.Delete()
-		}
-		if bn.RangeInterpreter != nil {
-			bn.RangeInterpreter.Delete()
-		}
-		// Restore the old interpreters
+		// Restore the old interpreters (new ones will be GC'd)
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
 		return fmt.Errorf("\033[31m❌ failed to reload labels: %w\033[0m", err)
@@ -1090,26 +1076,13 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
-		// Clean up the newly created interpreters if validation fails
-		if bn.AnalysisInterpreter != nil {
-			bn.AnalysisInterpreter.Delete()
-		}
-		if bn.RangeInterpreter != nil {
-			bn.RangeInterpreter.Delete()
-		}
-		// Restore the old interpreters
+		// Restore the old interpreters (new ones will be GC'd)
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
 		return fmt.Errorf("\033[31m❌ model validation failed: %w\033[0m", err)
 	}
 
-	// Clean up old interpreters after successful reload
-	if oldAnalysisInterpreter != nil {
-		oldAnalysisInterpreter.Delete()
-	}
-	if oldRangeInterpreter != nil {
-		oldRangeInterpreter.Delete()
-	}
+	// Old interpreters will be cleaned up by GC now that they're unreferenced
 
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()

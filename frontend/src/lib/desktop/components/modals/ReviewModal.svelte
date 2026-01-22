@@ -37,7 +37,8 @@
   // Reset form when detection changes
   $effect(() => {
     if (detection) {
-      const verified = detection.review?.verified;
+      // Use detection.verified directly (from API response)
+      const verified = detection.verified;
       reviewStatus = verified === 'correct' || verified === 'false_positive' ? verified : 'correct';
       // Initialize lockDetection to false - user intent to lock, not current status
       lockDetection = false;
