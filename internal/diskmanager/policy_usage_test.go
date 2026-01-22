@@ -277,7 +277,7 @@ func TestSortFiles(t *testing.T) {
 
 	// Sort the files
 	speciesCount := buildSpeciesSubDirCountMap(files)
-	sortFilesForUsage(files, speciesCount, true)
+	sortFilesForUsage(files, speciesCount)
 
 	// Verify sorting order (oldest first)
 	assert.Equal(t, "anas_platyrhynchos", files[0].Species, "Anas platyrhynchos should be first (oldest)")
@@ -327,13 +327,46 @@ func (h *UsageBasedTestHelper) Execute(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// isEligibleForUsageDeletion checks if a file should be deleted in usage-based test.
+func isEligibleForUsageDeletion(file *FileInfo, speciesCount map[string]map[string]int, minClipsPerSpecies int) bool {
+	if file.Locked {
+		return false
+	}
+	subDir := filepath.Dir(file.Path)
+	return speciesCount[file.Species][subDir] > minClipsPerSpecies
+}
+
+// processFileForUsageCleanup handles a single file in usage-based cleanup test.
+// Returns true if file was deleted, false otherwise.
+func processFileForUsageCleanup(file *FileInfo, speciesCount map[string]map[string]int, minClipsPerSpecies int, keepSpectrograms bool, deletedFiles, deletedPngFiles *[]string) bool {
+	if file.Locked {
+		return false
+	}
+
+	subDir := filepath.Dir(file.Path)
+	if speciesCount[file.Species][subDir] <= minClipsPerSpecies {
+		return false
+	}
+
+	*deletedFiles = append(*deletedFiles, file.Path)
+
+	if !keepSpectrograms {
+		pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
+		_ = osRemove(pngPath)
+		*deletedPngFiles = append(*deletedPngFiles, pngPath)
+	}
+
+	speciesCount[file.Species][subDir]--
+	return true
+}
+
 // UsageBasedCleanupForTests is a test-friendly implementation of the cleanup system
 type UsageBasedCleanupForTests struct {
 	helper *UsageBasedTestHelper
 }
 
 // Cleanup implements the cleanup function for tests
-func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface) error {
+func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, _ Interface) error {
 	h := c.helper
 
 	// Parse "80%" to 80.0
@@ -348,51 +381,22 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 
 		// Sort files by priority
 		speciesCount := buildSpeciesSubDirCountMap(h.audioFiles)
-		sortFilesForUsage(h.audioFiles, speciesCount, h.debug)
+		sortFilesForUsage(h.audioFiles, speciesCount)
 
 		// Process the files for cleanup
 		for i := range h.audioFiles {
-			// Check for quit signal
 			select {
 			case <-quitChan:
 				return nil
 			default:
-				file := h.audioFiles[i]
+			}
 
-				// Skip locked files
-				if file.Locked {
-					continue
-				}
+			if h.diskUsage < maxUsage {
+				break
+			}
 
-				// Get the subdirectory name
-				subDir := filepath.Dir(file.Path)
-
-				// Check if disk usage is below threshold
-				if h.diskUsage < maxUsage {
-					break
-				}
-
-				// Check if we need to preserve this file for minClipsPerSpecies
-				if speciesCount[file.Species][subDir] <= h.minClipsPerSpecies {
-					continue
-				}
-
-				// "Delete" the file
-				h.deletedFiles = append(h.deletedFiles, file.Path)
-
-				// Simulate PNG deletion if keepSpectrograms is false
-				if !h.keepSpectrograms {
-					pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
-					// Actually remove the PNG file from the filesystem
-					_ = osRemove(pngPath) // Ignore error, test assertions will catch if file still exists
-					h.deletedPngFiles = append(h.deletedPngFiles, pngPath)
-				}
-
-				// Reduce disk usage after each delete to simulate cleanup progress
-				h.diskUsage -= 2.0 // Simple reduction for testing
-
-				// Decrement the species count for the subdirectory
-				speciesCount[file.Species][subDir]--
+			if processFileForUsageCleanup(&h.audioFiles[i], speciesCount, h.minClipsPerSpecies, h.keepSpectrograms, &h.deletedFiles, &h.deletedPngFiles) {
+				h.diskUsage -= 2.0
 			}
 		}
 	}
@@ -869,40 +873,23 @@ func testUsageBasedCleanupWithRealFiles(
 	// Sort files by timestamp (oldest first) using the same sortFiles function
 	// used elsewhere in the codebase for consistency
 	speciesCount := buildSpeciesSubDirCountMap(files)
-	sortFilesForUsage(files, speciesCount, false)
+	sortFilesForUsage(files, speciesCount)
 
 	// Process files for deletion if disk usage is above threshold
 	deletedCount := 0
 	minClipsPerSpecies := 0 // Set to 0 to allow all files to be deleted
 
 	if currentDiskUsage > threshold {
-		// Process files for deletion
-		for _, file := range files {
-			// Skip locked files
-			if file.Locked {
+		for i := range files {
+			if !isEligibleForUsageDeletion(&files[i], speciesCount, minClipsPerSpecies) {
 				continue
 			}
 
-			// Get the subdirectory
-			subDir := filepath.Dir(file.Path)
-
-			// Skip if we're at the minimum clips per species
-			if speciesCount[file.Species][subDir] <= minClipsPerSpecies {
-				continue
-			}
-
-			// "Delete" the file (just mark it in our map)
-			deletedFiles[file.Path] = true
+			deletedFiles[files[i].Path] = true
 			deletedCount++
-
-			// Update the species count
-			speciesCount[file.Species][subDir]--
-
-			// Reduce disk usage after each delete (simulating cleanup progress)
-			// In a real system, this would be based on file size relative to total storage
+			speciesCount[files[i].Species][filepath.Dir(files[i].Path)]--
 			currentDiskUsage -= diskUsageReductionPerFile
 
-			// Stop if we've reached the threshold
 			if currentDiskUsage <= threshold {
 				break
 			}

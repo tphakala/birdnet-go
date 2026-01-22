@@ -25,11 +25,8 @@ on:
       - main
 
 jobs:
-  golangci:
-    uses: ./.github/workflows/golangci-lint.yml
-
+  # Lint is handled by golangci-test.yml workflow - no need to duplicate here
   build-and-push-docker-image:
-    needs: golangci
     if: github.event_name == 'push' && github.ref_name == 'main'
     runs-on: ubuntu-latest
     steps:

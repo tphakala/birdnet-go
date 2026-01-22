@@ -96,7 +96,6 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	}
 
 	startTime := time.Now() // Track cleanup duration
-	debug := retention.Debug
 	keepSpectrograms := retention.KeepSpectrograms
 	minClipsPerSpecies := retention.MinClips
 	retentionPeriodSetting := retention.MaxAge
@@ -135,9 +134,9 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	// Sort files: Oldest first, then lowest confidence first as a tie-breaker
 	// This ensures we delete the oldest, least confident files first
 	sort.SliceStable(files, func(i, j int) bool {
-		// Use Unix timestamps for consistent comparison
-		if files[i].Timestamp.Unix() != files[j].Timestamp.Unix() {
-			return files[i].Timestamp.Unix() < files[j].Timestamp.Unix() // Oldest first
+		// Use time.Time methods for consistent comparison
+		if !files[i].Timestamp.Equal(files[j].Timestamp) {
+			return files[i].Timestamp.Before(files[j].Timestamp) // Oldest first
 		}
 		return files[i].Confidence < files[j].Confidence // Lowest confidence first
 	})
@@ -156,12 +155,12 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		logger.String("system_time", time.Now().Format("2006-01-02 15:04:05 MST")),
 		logger.String("timezone", time.Now().Format("MST")))
 
-	// Max deletions per run to prevent excessive I/O impact in a single run
-	maxDeletions := 1000
+	// Use package-level constant for max deletions per run
+	maxDeletions := maxDeletionsPerRun
 
 	// Call the helper function to process files
 	deletedCount, loopErr := processAgeBasedDeletionLoop(files, speciesTotalCount,
-		minClipsPerSpecies, maxDeletions, debug, keepSpectrograms,
+		minClipsPerSpecies, maxDeletions, keepSpectrograms,
 		quit, retentionCutoffUnix)
 
 	// Get final disk utilization
@@ -196,6 +195,31 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	return CleanupResult{Err: loopErr, ClipsRemoved: deletedCount, DiskUtilization: int(diskUsage)}
 }
 
+// processSingleAgeFile handles eligibility check and deletion for a single file in age-based cleanup.
+// Returns: deleted (bool), error (if deletion failed)
+func processSingleAgeFile(file *FileInfo, retentionCutoffUnix int64, speciesTotalCount map[string]int,
+	minClipsPerSpecies int, keepSpectrograms bool) (deleted bool, err error) {
+	// Check eligibility
+	eligible, reason := isEligibleForAgeDeletion(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies)
+	if !eligible {
+		log := GetLogger()
+		if reason != "locked" && reason != "not old enough" {
+			log.Debug("Skipping file",
+				logger.String("policy", "age"),
+				logger.String("path", file.Path),
+				logger.String("reason", reason))
+		}
+		return false, nil
+	}
+
+	// Perform deletion
+	if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "age"); delErr != nil {
+		return false, delErr
+	}
+
+	return true, nil
+}
+
 // processAgeBasedDeletionLoop handles the core logic of iterating through files,
 // checking age and minimum species counts, and deleting files.
 // The loop continues until one of these conditions is met:
@@ -203,7 +227,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 // 2. Maximum deletion count is reached
 // 3. A quit signal is received
 func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]int,
-	minClipsPerSpecies int, maxDeletions int, debug bool, keepSpectrograms bool,
+	minClipsPerSpecies int, maxDeletions int, keepSpectrograms bool,
 	quit <-chan struct{}, retentionCutoffUnix int64) (deletedCount int, loopErr error) {
 
 	deletedCount = 0
@@ -219,53 +243,32 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 				logger.Int("files_deleted", deletedCount))
 			return deletedCount, nil // Indicate interruption, but not necessarily an error from the loop itself
 		default:
-			// Check if max deletions reached
 			if deletedCount >= maxDeletions {
 				log.Debug("Reached maximum number of deletions for age-based cleanup",
 					logger.String("policy", "age"),
 					logger.Int("max_deletions", maxDeletions))
-				return deletedCount, nil // Max deletions reached is not an error
+				return deletedCount, nil
 			}
 
-			file := &files[i] // Use pointer
+			file := &files[i]
+			deleted, delErr := processSingleAgeFile(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, keepSpectrograms)
 
-			// 1. Check eligibility using the helper function
-			eligible, reason := isEligibleForAgeDeletion(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, debug)
-			if !eligible {
-				// Log reason if not simply locked or not old enough (those are common)
-				if reason != "locked" && reason != "not old enough" {
-					log.Debug("Skipping file",
-						logger.String("policy", "age"),
-						logger.String("path", file.Path),
-						logger.String("reason", reason))
+			if delErr != nil {
+				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10, "age")
+				if shouldStop {
+					return deletedCount, loopErrTmp
 				}
 				continue
 			}
 
-			// 2. Perform deletion using the common helper
-			if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug, "age"); delErr != nil {
-				// Use the common error handler
-				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10, "age")
-				if shouldStop {
-					loopErr = loopErrTmp         // Assign the final error
-					return deletedCount, loopErr // Stop processing
+			if deleted {
+				speciesTotalCount[file.Species]--
+				if speciesTotalCount[file.Species] < 0 {
+					speciesTotalCount[file.Species] = 0
 				}
-				continue // Continue with the next file
+				deletedCount++
 			}
 
-			// 3. Update state *after* successful deletion
-			// Important: We must update counts after deletion to maintain accurate
-			// constraints for minimum clips per species
-			speciesTotalCount[file.Species]-- // Decrement total count for the species
-			// Prevent count from going negative (safety check)
-			// This should never happen with proper bookkeeping, but serves as a safeguard
-			if speciesTotalCount[file.Species] < 0 {
-				speciesTotalCount[file.Species] = 0
-			}
-			deletedCount++
-
-			// 4. Yield to other goroutines
-			// This prevents the cleanup process from monopolizing CPU resources
 			runtime.Gosched()
 		}
 	}
@@ -280,10 +283,10 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 // 2. File is older than the retention cutoff time (using Unix timestamps in local timezone)
 // 3. There are more than minClipsPerSpecies files for this species
 func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, speciesTotalCount map[string]int,
-	minClipsPerSpecies int, debug bool) (eligible bool, reason string) {
+	minClipsPerSpecies int) (eligible bool, reason string) {
 
 	// 1. Check if locked (reuse common helper)
-	if checkLocked(file, debug) {
+	if checkLocked(file) {
 		return false, "locked"
 	}
 
