@@ -42,6 +42,7 @@ Performance Optimizations:
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
   import { sidebar } from '$lib/stores/sidebar';
+  import { navigation } from '$lib/stores/navigation.svelte';
   import type { AuthConfig } from '../../../app.d';
   import {
     LayoutDashboard,
@@ -224,7 +225,8 @@ Performance Optimizations:
     if (onNavigate) {
       onNavigate(url);
     } else {
-      window.location.href = url;
+      // Fallback to navigation store for proxy-aware navigation
+      navigation.navigate(url);
     }
   }
 

@@ -21,6 +21,7 @@
     Volume2,
     XCircle,
   } from '@lucide/svelte';
+  import { navigation } from '$lib/stores/navigation.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -788,7 +789,7 @@
                       </button>
                       <button
                         class="btn btn-xs btn-square"
-                        onclick={() => (window.location.href = `/ui/detections/${result.id}`)}
+                        onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
                         aria-label={t('search.detailsPanel.viewDetails', {
                           species: result.commonName || t('search.detailsPanel.unknownSpecies'),
                         })}
@@ -989,7 +990,7 @@
                     </button>
                     <button
                       class="btn btn-outline btn-sm"
-                      onclick={() => (window.location.href = `/ui/detections/${result.id}`)}
+                      onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
                       aria-label={t('search.detailsPanel.viewDetails', {
                         species: result.commonName || t('search.detailsPanel.unknownSpecies'),
                       })}

@@ -747,8 +747,11 @@
       <div class="space-y-4">
         <!-- FFmpeg Warning -->
         {#if !ffmpegAvailable}
-          <div class="alert alert-warning" role="alert">
-            <TriangleAlert class="size-5" />
+          <div
+            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-amber-800 dark:text-[var(--color-warning)]"
+            role="alert"
+          >
+            <TriangleAlert class="size-5 shrink-0" />
             <div>
               <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
               <p class="text-sm">
@@ -819,7 +822,7 @@
                 >
                   {t('settings.integration.birdweather.test.button')}
                 </SettingsButton>
-                <span class="text-sm text-base-content opacity-70">
+                <span class="text-sm text-[var(--color-base-content)] opacity-70">
                   {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
                     {t('settings.integration.birdweather.test.enabledRequired')}
                   {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
@@ -907,8 +910,10 @@
                   onchange={updateMQTTTLSSkipVerify}
                 />
 
-                <div class="alert alert-info">
-                  <Info class="size-5" />
+                <div
+                  class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
+                >
+                  <Info class="size-5 shrink-0" />
                   <div>
                     <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
                   </div>
@@ -926,7 +931,7 @@
             />
 
             <!-- Authentication Section -->
-            <div class="border-t border-base-300 pt-4 mt-2">
+            <div class="border-t border-[var(--border-200)] pt-4 mt-2">
               <h3 class="text-sm font-medium mb-3">
                 {t('settings.integration.mqtt.authentication.title')}
               </h3>
@@ -954,7 +959,7 @@
             </div>
 
             <!-- Home Assistant Integration Section -->
-            <div class="border-t border-base-300 pt-4 mt-2">
+            <div class="border-t border-[var(--border-200)] pt-4 mt-2">
               <h3 class="text-sm font-medium mb-3">
                 {t('settings.integration.mqtt.homeAssistant.title')}
               </h3>
@@ -1006,8 +1011,10 @@
                   />
                 </div>
 
-                <div class="alert alert-info mt-4">
-                  <Info class="size-5" />
+                <div
+                  class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
+                >
+                  <Info class="size-5 shrink-0" />
                   <div>
                     <span>{@html t('settings.integration.mqtt.homeAssistant.sensorsNote')}</span>
                   </div>
@@ -1015,7 +1022,7 @@
 
                 <div class="flex items-center gap-4 mt-4">
                   <button
-                    class="btn btn-outline btn-sm"
+                    class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={!settings.mqtt?.enabled ||
                       store.isLoading ||
                       store.isSaving ||
@@ -1024,7 +1031,9 @@
                     onclick={handleSendDiscovery}
                   >
                     {#if isSendingDiscovery}
-                      <span class="loading loading-spinner loading-xs"></span>
+                      <span
+                        class="inline-block w-3 h-3 border-2 border-[var(--color-base-300)] border-t-current rounded-full animate-spin"
+                      ></span>
                     {:else}
                       <Send class="size-4" />
                     {/if}
@@ -1032,7 +1041,7 @@
                   </button>
 
                   {#if mqttHasChanges}
-                    <span class="text-sm text-warning">
+                    <span class="text-sm text-[var(--color-warning)]">
                       {t('settings.integration.mqtt.homeAssistant.discovery.saveFirst')}
                     </span>
                   {/if}
@@ -1041,7 +1050,7 @@
             </div>
 
             <!-- Test Connection -->
-            <div class="border-t border-base-300 pt-4 mt-2 space-y-4">
+            <div class="border-t border-[var(--border-200)] pt-4 mt-2 space-y-4">
               <div class="flex items-center gap-3">
                 <SettingsButton
                   onclick={testMQTT}
@@ -1053,7 +1062,7 @@
                 >
                   {t('settings.integration.mqtt.test.button')}
                 </SettingsButton>
-                <span class="text-sm text-base-content opacity-70">
+                <span class="text-sm text-[var(--color-base-content)] opacity-70">
                   {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
                     {t('settings.integration.mqtt.test.enabledRequired')}
                   {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}

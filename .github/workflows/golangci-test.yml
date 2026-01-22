@@ -28,10 +28,10 @@ jobs:
         ports:
           - 1883:1883
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.1'
+          go-version: '1.25'
           cache: true
       - run: go version
 
@@ -42,7 +42,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache TensorFlow headers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/src/tensorflow
           key: ${{ runner.os }}-tensorflow-v2.17.1
@@ -57,7 +57,7 @@ jobs:
 
       - name: Cache TensorFlow Lite library
         id: cache-tflite
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/lib/libtensorflowlite_c.so*
           key: ${{ runner.os }}-tflite-v2.17.1
@@ -72,7 +72,7 @@ jobs:
           rm -f tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           
@@ -88,7 +88,7 @@ jobs:
           echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
 
       - name: Cache Go tools
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-go-tools-gotestfmt-v2
@@ -198,7 +198,7 @@ jobs:
           echo "📥 Download the full test log artifact for complete details" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: test-log

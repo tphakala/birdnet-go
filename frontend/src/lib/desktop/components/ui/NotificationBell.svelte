@@ -1,5 +1,6 @@
 <script lang="ts">
   import { sseNotifications } from '$lib/stores/sseNotifications';
+  import { navigation } from '$lib/stores/navigation.svelte';
   import { cn } from '$lib/utils/cn';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
@@ -27,7 +28,7 @@
   const NOTIFICATION_VOLUME = 0.5;
   const NOTIFICATION_SOUND_PATH = '/ui/assets/sounds/notification.mp3';
   const NOTIFICATION_ICON_PATH = '/ui/assets/favicon-32x32.png';
-  const NOTIFICATIONS_PAGE_URL = '/notifications';
+  const NOTIFICATIONS_PAGE_URL = '/ui/notifications';
   const SOUND_ENABLED_KEY = 'notificationSound';
   const NOTIFICATIONS_LIMIT = 20;
   const BADGE_MAX_COUNT = 99;
@@ -244,7 +245,7 @@
     if (onNavigateToNotifications) {
       onNavigateToNotifications();
     } else {
-      globalThis.window.location.href = NOTIFICATIONS_PAGE_URL;
+      navigation.navigate(NOTIFICATIONS_PAGE_URL);
     }
   }
 

@@ -2,6 +2,7 @@
   "common": {
     "loading": "Loading...",
     "error": "Error",
+    "unknown": "Unknown",
     "retry": "Retry",
     "retrying": "Retrying",
     "save": "Save",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Settings Not Found",
       "sectionNotFound": "The requested settings section \"{section}\" could not be found.",
       "loadingMap": "Loading map...",
+      "mapZoomHelp": "Hold Ctrl (or Cmd on Mac) + scroll to zoom. Click to set location.",
+      "mapSetLocationHelp": "Click on the map or drag the marker to set location",
       "imageNotAvailable": "Image not available",
       "search": "Search..."
     },
@@ -135,7 +138,8 @@
     },
     "values": {
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "unknown": "Unknown"
     },
     "modal": {
       "confirmAction": "Confirm Action",
@@ -146,7 +150,8 @@
       "status": {
         "verifiedCorrect": "Verified Correct",
         "falsePositive": "False Positive",
-        "notReviewed": "Not Reviewed"
+        "notReviewed": "Not Reviewed",
+        "locked": "Locked"
       },
       "form": {
         "correctDetection": "Correct Detection",
@@ -641,11 +646,21 @@
       "loading": "Loading detection details...",
       "loaded": "Detection details loaded for {species}",
       "error": "Error loading detection: {error}"
+    },
+    "errors": {
+      "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
+      "noPermission": "You don't have permission to view this detection.",
+      "loginRequired": "Please log in to view this detection.",
+      "serverError": "Server error. Please try again later or contact support if the problem persists.",
+      "loadFailed": "Failed to load detection (Error {status}). Please try refreshing the page.",
+      "noIdProvided": "No detection ID provided."
     }
   },
   "species": {
     "rarity": {
-      "title": "Species Rarity"
+      "title": "Species Rarity",
+      "score": "Score",
+      "basedOnLocation": "Based on location: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Taxonomic Classification",
@@ -978,7 +993,8 @@
             "label": "Filter Level"
           },
           "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
-          "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements"
+          "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
         },
         "rangeFilter": {
           "title": "Range Filter",
@@ -1979,6 +1995,20 @@
           "to": "To",
           "reason": "Reason",
           "eventAt": "Event at {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Toggle diagnostics",
+          "processState": "Process State",
+          "lastData": "Last Data",
+          "restartCount": "Restart Count",
+          "connection": "Connection",
+          "stateErrorHistory": "State & Error History"
+        },
+        "connectionStatus": {
+          "stable": "Stable",
+          "degraded": "Degraded",
+          "failed": "Failed",
+          "unknown": "Unknown"
         }
       },
       "audioFilters": {
@@ -2719,7 +2749,9 @@
       "volumeGain": "Volume gain control: {value} dB",
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",
-      "seekProgress": "Seek audio progress: {current} / {total} seconds"
+      "seekProgress": "Seek audio progress: {current} / {total} seconds",
+      "playbackSpeed": "Playback speed",
+      "speed": "Speed"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",
@@ -2733,8 +2765,13 @@
   "components": {
     "audio": {
       "spectrogramUnavailable": "Spectrogram unavailable",
+      "spectrogramLoading": "Loading spectrogram...",
+      "spectrogramLoaded": "Spectrogram loaded",
+      "spectrogramLoadingAria": "Loading spectrogram",
+      "spectrogramGeneratingAria": "Generating spectrogram",
       "generating": "Generating...",
-      "queuePosition": "Queue: {position}"
+      "queuePosition": "Queue: {position}",
+      "loadError": "Failed to load audio"
     },
     "forms": {
       "numberField": {

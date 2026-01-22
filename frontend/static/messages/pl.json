@@ -2,6 +2,7 @@
   "common": {
     "loading": "Ładowanie...",
     "error": "Błąd",
+    "unknown": "Nieznany",
     "retry": "Ponów próbę",
     "retrying": "Ponawianie próby",
     "save": "Zapisz",
@@ -76,6 +77,8 @@
       "settingsNotFound": "Nie znaleziono ustawień",
       "sectionNotFound": "Nie znaleziono sekcji \"{section}\"",
       "loadingMap": "Ładowanie mapy...",
+      "mapZoomHelp": "Przytrzymaj Ctrl (lub Cmd na Macu) + przewiń aby powiększyć. Kliknij aby ustawić lokalizację.",
+      "mapSetLocationHelp": "Kliknij na mapę lub przeciągnij znacznik aby ustawić lokalizację",
       "imageNotAvailable": "Obraz niedostępny",
       "search": "Szukaj..."
     },
@@ -135,7 +138,8 @@
     },
     "values": {
       "yes": "Tak",
-      "no": "Nie"
+      "no": "Nie",
+      "unknown": "Nieznany"
     },
     "modal": {
       "confirmAction": "Potwierdź Akcję",
@@ -146,7 +150,8 @@
       "status": {
         "verifiedCorrect": "Zweryfikowane Poprawnie",
         "falsePositive": "Fałszywie Pozytywne",
-        "notReviewed": "Nieprzejrzane"
+        "notReviewed": "Nieprzejrzane",
+        "locked": "Zablokowane"
       },
       "form": {
         "correctDetection": "Poprawna Detekcja",
@@ -583,8 +588,11 @@
       },
       "units": {
         "temperature": "°C",
+        "temperatureFahrenheit": "°F",
         "windSpeed": "m/s",
-        "humidity": "%"
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
       },
       "conditions": {
         "clearsky_day": "Czyste Niebo",
@@ -638,11 +646,21 @@
       "loading": "Ładowanie szczegółów detekcji...",
       "loaded": "Szczegóły detekcji załadowane dla {species}",
       "error": "Błąd ładowania detekcji: {error}"
+    },
+    "errors": {
+      "notFound": "Nie znaleziono detekcji. Mogła zostać usunięta lub identyfikator jest nieprawidłowy.",
+      "noPermission": "Nie masz uprawnień do wyświetlenia tej detekcji.",
+      "loginRequired": "Zaloguj się, aby wyświetlić tę detekcję.",
+      "serverError": "Błąd serwera. Spróbuj ponownie później lub skontaktuj się z pomocą techniczną, jeśli problem będzie się powtarzał.",
+      "loadFailed": "Nie udało się załadować detekcji (Błąd {status}). Odśwież stronę.",
+      "noIdProvided": "Nie podano identyfikatora detekcji."
     }
   },
   "species": {
     "rarity": {
-      "title": "Rzadkość Gatunku"
+      "title": "Rzadkość Gatunku",
+      "score": "Wynik",
+      "basedOnLocation": "Na podstawie lokalizacji: {latitude}, {longitude}"
     },
     "taxonomy": {
       "hierarchy": "Klasyfikacja Taksonomiczna",
@@ -975,7 +993,8 @@
             "label": "Poziom Filtra"
           },
           "hardwareNote": "Poziomy Ścisły i Maksymalny wymagają wyższych ustawień nakładania i większych zasobów CPU. Dla tych poziomów wymagany jest RPi 4 lub lepszy sprzęt.",
-          "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra"
+          "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra",
+          "overlapReduced": "Ustawienie nakładania zmniejszono do {overlap}s, aby dopasować do poziomu filtra"
         },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
@@ -2120,6 +2139,31 @@
           "urlRequired": "URL strumienia jest wymagany",
           "invalidUrl": "Nieprawidłowy format URL strumienia",
           "duplicate": "Ten URL strumienia już istnieje"
+        },
+        "timeline": {
+          "error": "Błąd",
+          "noHistory": "Brak dostępnej historii stanu lub błędów.",
+          "stateChange": "Zmiana stanu",
+          "host": "Host",
+          "troubleshooting": "Rozwiązywanie problemów",
+          "from": "Od",
+          "to": "Do",
+          "reason": "Powód",
+          "eventAt": "Zdarzenie o {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Przełącz diagnostykę",
+          "processState": "Stan procesu",
+          "lastData": "Ostatnie dane",
+          "restartCount": "Restarty",
+          "connection": "Połączenie",
+          "stateErrorHistory": "Historia stanów i błędów"
+        },
+        "connectionStatus": {
+          "stable": "Stabilne",
+          "degraded": "Pogorszone",
+          "failed": "Nieudane",
+          "unknown": "Nieznany"
         }
       }
     },
@@ -2715,7 +2759,9 @@
       "volumeGain": "Kontrola wzmocnienia głośności: {value} dB",
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",
-      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund"
+      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund",
+      "playbackSpeed": "Prędkość odtwarzania",
+      "speed": "Prędkość"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",
@@ -2729,8 +2775,13 @@
   "components": {
     "audio": {
       "spectrogramUnavailable": "Spektrogram niedostępny",
+      "spectrogramLoading": "Ładowanie spektrogramu...",
+      "spectrogramLoaded": "Spektrogram załadowany",
+      "spectrogramLoadingAria": "Ładowanie spektrogramu",
+      "spectrogramGeneratingAria": "Generowanie spektrogramu",
       "generating": "Generowanie...",
-      "queuePosition": "Kolejka: {position}"
+      "queuePosition": "Kolejka: {position}",
+      "loadError": "Nie udało się załadować audio"
     },
     "forms": {
       "numberField": {

@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -44,7 +45,8 @@ const (
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
 	Settings            *conf.Settings
-	Ds                  datastore.Interface
+	Ds                  datastore.Interface           // Legacy - to be removed after migration
+	Repo                datastore.DetectionRepository // New - preferred for detection operations
 	Bn                  *birdnet.BirdNET
 	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
 	BwClient            *birdweather.BwClient
@@ -89,21 +91,11 @@ type Processor struct {
 	logDedup *LogDeduplicator // Handles log deduplication logic
 }
 
-// DynamicThreshold represents the dynamic threshold configuration for a species.
-type DynamicThreshold struct {
-	Level          int
-	CurrentValue   float64
-	Timer          time.Time
-	HighConfCount  int
-	ValidHours     int
-	ScientificName string
-}
-
 type Detections struct {
-	CorrelationID string              // Unique detection identifier for log correlation
-	pcmData3s     []byte              // 3s PCM data containing the detection
-	Note          datastore.Note      // Note containing highest match
-	Results       []datastore.Results // Full BirdNET prediction results
+	CorrelationID string                       // Unique detection identifier for log correlation
+	pcmData3s     []byte                       // 3s PCM data containing the detection
+	Result        detection.Result             // Detection result containing highest match
+	Results       []detection.AdditionalResult // Additional BirdNET prediction results
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -117,10 +109,6 @@ type PendingDetection struct {
 	FlushDeadline time.Time  // Deadline by which the detection must be processed
 	Count         int        // Number of times this detection has been updated
 }
-
-// mutex is used to synchronize access to the PendingDetections map,
-// ensuring thread safety when the map is accessed or modified by concurrent goroutines.
-var mutex sync.Mutex
 
 // suggestLevelForDisabledFilter provides smart recommendations for filter levels
 // when filtering is disabled (level 0). It analyzes current overlap settings
@@ -254,6 +242,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,
+		Repo:           datastore.NewDetectionRepository(ds, nil), // Bridge to new domain model
 		Bn:             bn,
 		log:            procLog,
 		BirdImageCache: birdImageCache,
@@ -455,9 +444,9 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
 
 	for i := range detectionResults {
-		detection := detectionResults[i]
-		commonName := strings.ToLower(detection.Note.CommonName)
-		confidence := detection.Note.Confidence
+		det := detectionResults[i]
+		commonName := strings.ToLower(det.Result.Species.CommonName)
+		confidence := det.Result.Confidence
 
 		// Lock the mutex to ensure thread-safe access to shared resources
 		p.pendingMutex.Lock()
@@ -466,7 +455,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			// Update the existing detection if it's already in pendingDetections map
 			oldConfidence := existing.Confidence
 			if confidence > existing.Confidence {
-				existing.Detection = detection
+				existing.Detection = det
 				existing.Confidence = confidence
 				existing.Source = item.Source.ID
 				existing.LastUpdated = time.Now()
@@ -490,7 +479,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				logger.Time("flush_deadline", time.Now().Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
 			p.pendingDetections[commonName] = PendingDetection{
-				Detection:     detection,
+				Detection:     det,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
@@ -557,14 +546,9 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 			continue
 		}
 
-		// Add species to dynamic thresholds if enabled and passed filters
-		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			p.addSpeciesToDynamicThresholds(speciesLowercase, scientificName, baseThreshold)
-		}
-
 		// Create the detection
-		detection := p.createDetection(item, result, scientificName, commonName, speciesCode)
-		detections = append(detections, detection)
+		det := p.createDetection(item, result, scientificName, commonName, speciesCode)
+		detections = append(detections, det)
 	}
 
 	return detections
@@ -622,7 +606,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 		// Use lookupSpeciesConfig to support both common name and scientific name lookups
 		config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
-		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold, isCustomThreshold)
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
 	}
@@ -672,13 +656,21 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
 
-	// Create the note
-	note := p.NewWithSpeciesInfo(
+	// Compute detection time once to ensure Result has consistent timestamp
+	// This prevents date mismatch around midnight when time.Now() would be called separately
+	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
+
+	// Create the detection.Result
+	detectionResult := p.createDetectionResult(
+		detectionTime,
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
-		item.Source.ID, clipName,
+		item.Source, clipName,
 		item.ElapsedTime, occurrence)
+
+	// Convert additional results from datastore.Results to detection.AdditionalResult
+	additionalResults := p.convertToAdditionalResults(item.Results)
 
 	// Update species tracker if enabled
 	p.speciesTrackerMu.RLock()
@@ -695,9 +687,90 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	return Detections{
 		CorrelationID: correlationID,
 		pcmData3s:     item.PCMdata,
-		Note:          note,
-		Results:       item.Results,
+		Result:        detectionResult,
+		Results:       additionalResults,
 	}
+}
+
+// createDetectionResult creates a detection.Result from the given parameters.
+// detectionTime should be pre-computed by the caller to ensure timestamp consistency
+// with other detection artifacts (e.g., Note) created from the same analysis.
+func (p *Processor) createDetectionResult(
+	detectionTime time.Time,
+	beginTime, endTime time.Time,
+	scientificName, commonName, speciesCode string,
+	confidence float64,
+	source datastore.AudioSource, clipName string,
+	elapsedTime time.Duration, occurrence float64) detection.Result {
+
+	// Resolve audio source info from registry
+	audioSource := p.resolveAudioSource(source)
+
+	return detection.Result{
+		Timestamp:      detectionTime,
+		SourceNode:     p.Settings.Main.Name,
+		AudioSource:    audioSource,
+		BeginTime:      beginTime,
+		EndTime:        endTime,
+		Species: detection.Species{
+			ScientificName: scientificName,
+			CommonName:     commonName,
+			Code:           speciesCode,
+		},
+		Confidence:     math.Round(confidence*100) / 100,
+		Latitude:       p.Settings.BirdNET.Latitude,
+		Longitude:      p.Settings.BirdNET.Longitude,
+		Threshold:      p.Settings.BirdNET.Threshold,
+		Sensitivity:    p.Settings.BirdNET.Sensitivity,
+		ClipName:       clipName,
+		ProcessingTime: elapsedTime,
+		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)),
+		Model:          detection.DefaultModelInfo(),
+	}
+}
+
+// resolveAudioSource resolves the audio source details from the registry.
+// Mirrors NewWithSpeciesInfo lookup order: connection string first, then ID.
+func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.AudioSource {
+	// Default to using the source directly, including type determination
+	audioSource := detection.AudioSource{
+		ID:          source.ID,
+		SafeString:  source.SafeString,
+		DisplayName: source.DisplayName,
+		Type:        detection.DetermineSourceType(source.SafeString),
+	}
+
+	// Try to get additional details from registry
+	// Use same lookup order as NewWithSpeciesInfo: connection string first, then ID
+	registry := myaudio.GetRegistry()
+	if registry != nil {
+		if existingSource, exists := registry.GetSourceByConnection(source.ID); exists {
+			audioSource.ID = existingSource.ID
+			audioSource.SafeString = existingSource.SafeString
+			audioSource.DisplayName = existingSource.DisplayName
+			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
+		} else if existingSource, exists := registry.GetSourceByID(source.ID); exists {
+			audioSource.ID = existingSource.ID
+			audioSource.SafeString = existingSource.SafeString
+			audioSource.DisplayName = existingSource.DisplayName
+			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
+		}
+	}
+
+	return audioSource
+}
+
+// convertToAdditionalResults converts a slice of datastore.Results to detection.AdditionalResult.
+func (p *Processor) convertToAdditionalResults(results []datastore.Results) []detection.AdditionalResult {
+	additional := make([]detection.AdditionalResult, 0, len(results))
+	for _, r := range results {
+		sp := detection.ParseSpeciesString(r.Species)
+		additional = append(additional, detection.AdditionalResult{
+			Species:    sp,
+			Confidence: float64(r.Confidence),
+		})
+	}
+	return additional
 }
 
 // syncSpeciesTrackerIfNeeded syncs the species tracker if conditions are met
@@ -819,7 +892,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	if item.Count < minDetections {
 		// Add structured logging for minimum count filtering
 		GetLogger().Debug("Detection discarded due to insufficient count",
-			logger.String("species", item.Detection.Note.CommonName),
+			logger.String("species", item.Detection.Result.Species.CommonName),
 			logger.Int("count", item.Count),
 			logger.Int("minimum_required", minDetections),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -835,7 +908,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		if exists && lastHumanDetection.After(item.FirstDetected) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
-				logger.String("species", item.Detection.Note.CommonName),
+				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
 				logger.Time("last_human_detection", lastHumanDetection),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -856,11 +929,11 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		p.detectionMutex.RLock()
 		lastDogDetection := p.LastDogDetection[item.Source]
 		p.detectionMutex.RUnlock()
-		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, lastDogDetection) ||
-			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
+		if p.CheckDogBarkFilter(item.Detection.Result.Species.CommonName, lastDogDetection) ||
+			p.CheckDogBarkFilter(item.Detection.Result.Species.ScientificName, lastDogDetection) {
 			// Add structured logging for dog bark filter
 			GetLogger().Debug("Detection discarded by dog bark filter",
-				logger.String("species", item.Detection.Note.CommonName),
+				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
 				logger.Time("last_dog_detection", lastDogDetection),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -874,21 +947,24 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
-	// Safely get confidence value
-	var confidence float64
-	if len(item.Detection.Results) > 0 {
-		confidence = float64(item.Detection.Results[0].Confidence)
-	}
+	// Use item.Confidence directly - it's the correct confidence for THIS species,
+	// not Results[0].Confidence which could be a different (higher confidence) species
+	confidence := float32(item.Confidence)
 
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
 		logger.Int("match_count", item.Count),
-		logger.Float64("confidence", confidence),
-		logger.Bool("has_results", len(item.Detection.Results) > 0),
+		logger.Float64("confidence", item.Confidence),
 		logger.String("operation", "approve_detection"))
 
-	item.Detection.Note.BeginTime = item.FirstDetected
+	// Learn from this approved high-confidence detection for dynamic threshold adjustment.
+	// This is the correct place for learning - only approved detections should affect thresholds,
+	// not pending detections that may later be discarded as false positives.
+	// Note: speciesName is already lowercase (from pendingDetections map key)
+	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
+
+	item.Detection.Result.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
@@ -912,7 +988,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 
 	// Update BirdNET metrics detection counter if enabled
 	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
-		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
+		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Result.Species.CommonName)
 	}
 }
 
@@ -1096,13 +1172,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 }
 
 // getActionsForItem determines the actions to be taken for a given detection.
-func (p *Processor) getActionsForItem(detection *Detections) []Action {
+func (p *Processor) getActionsForItem(det *Detections) []Action {
 	// Check if species has custom configuration using both common and scientific name lookup
-	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, detection.Note.CommonName, detection.Note.ScientificName); exists {
+	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, det.Result.Species.CommonName, det.Result.Species.ScientificName); exists {
 		if p.Settings.Debug {
 			GetLogger().Debug("species config exists for custom actions",
-				logger.String("commonName", detection.Note.CommonName),
-				logger.String("scientificName", detection.Note.ScientificName),
+				logger.String("commonName", det.Result.Species.CommonName),
+				logger.String("scientificName", det.Result.Species.ScientificName),
 				logger.String("operation", "custom_action_check"))
 		}
 
@@ -1115,7 +1191,7 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 			case "ExecuteCommand":
 				actions = append(actions, &ExecuteCommandAction{
 					Command: actionConfig.Command,
-					Params:  parseCommandParams(actionConfig.Parameters, detection),
+					Params:  parseCommandParams(actionConfig.Parameters, det),
 				})
 			case "SendNotification":
 				// Add notification action handling
@@ -1134,26 +1210,26 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 
 		// If executeDefaults is true, combine custom and default actions
 		if len(actions) > 0 && executeDefaults {
-			defaultActions := p.getDefaultActions(detection)
+			defaultActions := p.getDefaultActions(det)
 			return append(actions, defaultActions...)
 		}
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
-	defaultActions := p.getDefaultActions(detection)
+	defaultActions := p.getDefaultActions(det)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
-		logger.String("species", strings.ToLower(detection.Note.CommonName)),
+		logger.String("species", strings.ToLower(det.Result.Species.CommonName)),
 		logger.Int("actions_count", len(defaultActions)),
 		logger.String("operation", "get_default_actions"))
 	return defaultActions
 }
 
 // Helper function to parse command parameters
-func parseCommandParams(params []string, detection *Detections) map[string]any {
+func parseCommandParams(params []string, det *Detections) map[string]any {
 	commandParams := make(map[string]any)
 	for _, param := range params {
-		value := getNoteValueByName(&detection.Note, param)
+		value := getResultValueByName(&det.Result, param)
 		// Check if the parameter is Confidence and normalize it (0-1 to 0-100)
 		if param == "Confidence" {
 			if confidence, ok := value.(float64); ok {
@@ -1166,18 +1242,24 @@ func parseCommandParams(params []string, detection *Detections) map[string]any {
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
-func (p *Processor) getDefaultActions(detection *Detections) []Action {
+func (p *Processor) getDefaultActions(det *Detections) []Action {
 	var actions []Action
 	var databaseAction *DatabaseAction
 	var sseAction *SSEAction
+	var mqttAction *MqttAction
+
+	// Create shared context for actions that need database ID.
+	// This enables downstream actions (SSE, MQTT) to access the database-assigned
+	// detection ID without polling, when combined with CompositeAction for sequential execution.
+	detectionCtx := &DetectionContext{}
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
 		actions = append(actions, &LogAction{
 			Settings:      p.Settings,
 			EventTracker:  p.GetEventTracker(),
-			Note:          detection.Note,
-			CorrelationID: detection.CorrelationID,
+			Result:        det.Result,
+			CorrelationID: det.CorrelationID,
 		})
 	}
 
@@ -1193,10 +1275,12 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			NewSpeciesTracker: tracker,
 			processor:         p, // Add processor reference for source name resolution
 			PreRenderer:       p.preRenderer,
-			Note:              detection.Note,
-			Results:           detection.Results,
-			Ds:                p.Ds,
-			CorrelationID:     detection.CorrelationID,
+			DetectionCtx:      detectionCtx, // Share context for downstream actions
+			Result:            det.Result,   // Domain model (single source of truth)
+			Results:           det.Results,  // Domain model - converted to legacy format at save time
+			Ds:                p.Ds,         // Legacy - kept for backward compatibility
+			Repo:              p.Repo,       // New - preferred path for database operations
+			CorrelationID:     det.CorrelationID,
 		}
 	}
 
@@ -1213,49 +1297,86 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 		sseAction = &SSEAction{
 			Settings:       p.Settings,
-			Note:           detection.Note,
+			Result:         det.Result, // Domain model (single source of truth)
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
+			DetectionCtx:   detectionCtx, // Share context from DatabaseAction (provides database ID)
 			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
-			Ds:             p.Ds,
-			CorrelationID:  detection.CorrelationID,
+			CorrelationID:  det.CorrelationID,
 		}
 	}
 
-	// CRITICAL FIX for GitHub issue #1158: Race condition between DatabaseAction and SSEAction
+	// Create MQTT action if enabled and client is available
+	// NOTE: MqttAction must be created before the CompositeAction to be included in the sequence
+	if p.Settings.Realtime.MQTT.Enabled {
+		mqttClient := p.GetMQTTClient()
+		if mqttClient != nil && mqttClient.IsConnected() {
+			// Create MQTT retry config from settings
+			mqttRetryConfig := jobqueue.RetryConfig{
+				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,
+				MaxRetries:   p.Settings.Realtime.MQTT.RetrySettings.MaxRetries,
+				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
+				Multiplier:   p.Settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
+			}
+
+			mqttAction = &MqttAction{
+				Settings:       p.Settings,
+				MqttClient:     mqttClient,
+				EventTracker:   p.GetEventTracker(),
+				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
+				Result:         det.Result,   // Domain model (single source of truth)
+				BirdImageCache: p.BirdImageCache,
+				RetryConfig:    mqttRetryConfig,
+				CorrelationID:  det.CorrelationID,
+			}
+		}
+	}
+
+	// CRITICAL FIX for GitHub issue #1158 and #1748: Race condition and data visibility
 	//
-	// Problem: When both database and SSE are enabled, they execute concurrently via the job queue.
-	// SSEAction polls for database records that haven't been saved yet, causing timeout errors:
-	//   - "database ID not assigned for Eastern Wood-Pewee after 10s timeout"
-	//   - "note not found in database"
-	//   - "audio file ... not ready after 5s timeout"
+	// Problem: When database, SSE, and MQTT are enabled, they execute concurrently via the job queue.
+	// SSE and MQTT need the database-assigned Note.ID, but each action holds a VALUE COPY of Note.
+	// CompositeAction ensures sequential execution (timing), but doesn't share data between copies.
 	//
-	// Solution: Combine DatabaseAction and SSEAction into a CompositeAction that executes them
-	// sequentially. This ensures the database save completes before SSE attempts to broadcast,
-	// eliminating the race condition while maintaining all other actions' concurrent execution.
+	// Solution: Combine DatabaseAction, SSEAction, and MqttAction into a CompositeAction that:
+	// 1. Executes them sequentially (Database → SSE → MQTT)
+	// 2. Uses DetectionContext to share the database ID atomically between actions
 	//
-	// This is particularly important on resource-constrained hardware (e.g., Raspberry Pi with
-	// SD cards) where database writes can take several seconds to complete.
-	if databaseAction != nil && sseAction != nil {
-		// Create composite action for sequential execution
+	// This ensures:
+	// - Database save completes before downstream actions
+	// - SSE/MQTT receive the correct detection ID for URL construction
+	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
+	//
+	// See: https://github.com/tphakala/birdnet-go/issues/1158 (race condition)
+	// See: https://github.com/tphakala/birdnet-go/issues/1748 (detection ID in MQTT)
+	var sequentialActions []Action
+	if databaseAction != nil {
+		sequentialActions = append(sequentialActions, databaseAction)
+	}
+	if sseAction != nil {
+		sequentialActions = append(sequentialActions, sseAction)
+	}
+	if mqttAction != nil {
+		sequentialActions = append(sequentialActions, mqttAction)
+	}
+
+	if len(sequentialActions) > 1 {
+		// Create composite action for sequential execution with shared context
 		compositeAction := &CompositeAction{
-			Actions:       []Action{databaseAction, sseAction},
-			Description:   "Database save and SSE broadcast (sequential)",
-			CorrelationID: detection.CorrelationID,
+			Actions:       sequentialActions,
+			Description:   "Database save, SSE broadcast, and MQTT publish (sequential)",
+			CorrelationID: det.CorrelationID,
 		}
 		actions = append(actions, compositeAction)
-	} else {
-		// Add them individually if only one is enabled
-		if databaseAction != nil {
-			actions = append(actions, databaseAction)
-		}
-		if sseAction != nil {
-			actions = append(actions, sseAction)
-		}
+	} else if len(sequentialActions) == 1 {
+		// Only one action enabled, add it directly
+		actions = append(actions, sequentialActions[0])
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
+	// NOTE: BirdWeather runs independently (doesn't need detection ID from database)
 	if p.Settings.Realtime.Birdweather.Enabled {
 		bwClient := p.GetBwClient() // Use getter for thread safety
 		if bwClient != nil {
@@ -1272,35 +1393,10 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 				Settings:      p.Settings,
 				EventTracker:  p.GetEventTracker(),
 				BwClient:      bwClient,
-				Note:          detection.Note,
-				pcmData:       detection.pcmData3s,
+				Result:        det.Result, // Domain model (single source of truth)
+				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
-				CorrelationID: detection.CorrelationID,
-			})
-		}
-	}
-
-	// Add MQTT action if enabled and client is available
-	if p.Settings.Realtime.MQTT.Enabled {
-		mqttClient := p.GetMQTTClient()
-		if mqttClient != nil && mqttClient.IsConnected() {
-			// Create MQTT retry config from settings
-			mqttRetryConfig := jobqueue.RetryConfig{
-				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,
-				MaxRetries:   p.Settings.Realtime.MQTT.RetrySettings.MaxRetries,
-				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
-				Multiplier:   p.Settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
-			}
-
-			actions = append(actions, &MqttAction{
-				Settings:       p.Settings,
-				MqttClient:     mqttClient,
-				EventTracker:   p.GetEventTracker(),
-				Note:           detection.Note,
-				BirdImageCache: p.BirdImageCache,
-				RetryConfig:    mqttRetryConfig,
-				CorrelationID:  detection.CorrelationID,
+				CorrelationID: det.CorrelationID,
 			})
 		}
 	}
@@ -1549,93 +1645,6 @@ func (p *Processor) Shutdown() error {
 	GetLogger().Info("Processor shutdown complete",
 		logger.String("operation", "processor_shutdown"))
 	return nil
-}
-
-// NewWithSpeciesInfo creates a new observation note with pre-parsed species information
-// This ensures that the species code from the taxonomy lookup is preserved
-func (p *Processor) NewWithSpeciesInfo(
-	beginTime, endTime time.Time,
-	scientificName, commonName, speciesCode string,
-	confidence float64,
-	source, clipName string,
-	elapsedTime time.Duration,
-	occurrence float64) datastore.Note {
-
-	// detectionTime is time now minus 3 seconds to account for the delay in the detection
-	now := time.Now()
-	date := now.Format("2006-01-02")
-	detectionTime := now.Add(-2 * time.Second)
-	timeStr := detectionTime.Format("15:04:05")
-
-	var sourceStruct datastore.AudioSource
-	if p.Settings.Input.Path != "" {
-		// For file input, create simple source struct
-		sourceStruct = datastore.AudioSource{
-			ID:          source, // Use original source as ID for file operations
-			SafeString:  p.Settings.Input.Path,
-			DisplayName: filepath.Base(p.Settings.Input.Path),
-		}
-	} else {
-		// Use registry to get proper AudioSource struct with ID, SafeString, and DisplayName
-		registry := myaudio.GetRegistry()
-		if registry != nil {
-			// Try to get existing source by connection string
-			if existingSource, exists := registry.GetSourceByConnection(source); exists {
-				sourceStruct = datastore.AudioSource{
-					ID:          existingSource.ID,          // Use source ID for buffer operations
-					SafeString:  existingSource.SafeString,  // Use sanitized string for logging
-					DisplayName: existingSource.DisplayName, // Use display name for UI
-				}
-			} else {
-				// Try to get by ID directly
-				if registrySource, exists := registry.GetSourceByID(source); exists {
-					sourceStruct = datastore.AudioSource{
-						ID:          registrySource.ID,
-						SafeString:  registrySource.SafeString,
-						DisplayName: registrySource.DisplayName,
-					}
-				} else {
-					// Last resort: create struct with manual sanitization for safety
-					sourceStruct = datastore.AudioSource{
-						ID:          source,                          // Use original as ID
-						SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
-						DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
-					}
-				}
-			}
-		} else {
-			// Fallback when registry not available
-			sourceStruct = datastore.AudioSource{
-				ID:          source,                          // Use original as ID
-				SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
-				DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
-			}
-		}
-	}
-
-	// Round confidence to two decimal places
-	roundedConfidence := math.Round(confidence*100) / 100
-
-	// Return a new Note struct populated with the provided parameters and the current date and time
-	return datastore.Note{
-		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
-		Date:           date,                           // Use ISO 8601 date format
-		Time:           timeStr,                        // Use 24-hour time format
-		Source:         sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName
-		BeginTime:      beginTime,                      // Start time of the observation
-		EndTime:        endTime,                        // End time of the observation
-		SpeciesCode:    speciesCode,                    // Species code from taxonomy lookup
-		ScientificName: scientificName,                 // Scientific name from taxonomy lookup
-		CommonName:     commonName,                     // Common name from taxonomy lookup
-		Confidence:     roundedConfidence,              // Confidence score of the observation
-		Latitude:       p.Settings.BirdNET.Latitude,    // Geographic latitude where the observation was made
-		Longitude:      p.Settings.BirdNET.Longitude,   // Geographic longitude where the observation was made
-		Threshold:      p.Settings.BirdNET.Threshold,   // Threshold setting from configuration
-		Sensitivity:    p.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration
-		ClipName:       clipName,                       // Name of the audio clip
-		ProcessingTime: elapsedTime,                    // Time taken to process the observation
-		Occurrence:     occurrence,                     // Runtime occurrence probability (not persisted to DB)
-	}
 }
 
 // logDetectionResults logs detection processing results using the LogDeduplicator

@@ -14,12 +14,11 @@
 
   /**
    * Client-side navigation function.
-   * Updates URL via History API and triggers route handling.
-   * Page title translation is automatic via $derived(t(pageTitleKey)).
+   * Updates URL via History API. Route handling is triggered reactively
+   * by the $effect watching navigation.currentPath.
    */
   function navigate(url: string): void {
     navigation.navigate(url);
-    handleRouting(navigation.currentPath);
   }
 
   // Dynamic imports for heavy pages - properly typed component references
@@ -41,6 +40,9 @@
   let currentPage = $state<string>('');
   let pageTitleKey = $state<string>('navigation.dashboard');
   let loadingComponent = $state<boolean>(false);
+
+  // Track the last path we routed to, to avoid duplicate routing
+  let lastRoutedPath = $state<string | null>(null);
 
   // Derived translated title - automatically updates when language changes
   let pageTitle = $derived(t(pageTitleKey));
@@ -366,15 +368,31 @@
       logger.debug('SSE notifications manager initialized');
     }
 
-    // Determine current route from URL path (use store which has normalized path)
-    handleRouting(navigation.currentPath);
+    // Initial routing is handled by the reactive $effect below when appInitialized becomes true
+  });
+
+  // Reactive routing: automatically handle route changes when navigation.currentPath updates.
+  // This handles both initial routing (when appInitialized becomes true) and subsequent
+  // navigation from any component calling navigation.navigate().
+  $effect(() => {
+    const currentPath = navigation.currentPath;
+
+    // Skip if app isn't initialized yet
+    if (!appInitialized) return;
+
+    // Skip if we already routed to this path (prevents duplicate routing)
+    if (currentPath === lastRoutedPath) return;
+
+    lastRoutedPath = currentPath;
+    handleRouting(currentPath);
   });
 
   // Use $effect for browser back/forward navigation with automatic cleanup
   $effect(() => {
     const handlePopState = () => {
       navigation.handlePopState();
-      handleRouting(navigation.currentPath);
+      // The reactive routing effect above will handle the actual routing
+      // when navigation.currentPath updates
     };
 
     window.addEventListener('popstate', handlePopState);

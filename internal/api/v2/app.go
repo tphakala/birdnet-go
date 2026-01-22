@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -50,10 +51,18 @@ func (c *Controller) initAppRoutes() {
 // 2. The security.accessAllowed field tells the frontend if auth is needed
 // 3. CSRF token is needed for any subsequent authenticated requests
 func (c *Controller) GetAppConfig(ctx echo.Context) error {
-	// Get CSRF token from context (set by CSRF middleware)
-	csrfToken := ""
-	if token, ok := ctx.Get("csrf").(string); ok {
-		csrfToken = token
+	// Prevent caching of this response (contains user-specific CSRF token)
+	ctx.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	ctx.Response().Header().Set("Pragma", "no-cache")
+	ctx.Response().Header().Set("Expires", "0")
+
+	// Ensure CSRF token is available, generating one if the middleware didn't.
+	// Echo v4.15.0's Sec-Fetch-Site optimization may skip token generation for
+	// same-origin requests, but this endpoint must always provide a token.
+	csrfToken, err := middleware.EnsureCSRFToken(ctx)
+	if err != nil {
+		c.logWarnIfEnabled("Failed to generate CSRF token", logger.Error(err))
+		return c.HandleError(ctx, err, "Failed to generate CSRF token", http.StatusInternalServerError)
 	}
 
 	// Get enabled OAuth providers from the new array-based config

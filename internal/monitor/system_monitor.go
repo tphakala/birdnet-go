@@ -31,6 +31,20 @@ const (
 	ResourceDisk   ResourceType = "disk"
 )
 
+// AlertLevel constants for recovery notifications
+const (
+	alertLevelCritical = "critical"
+	alertLevelWarning  = "warning"
+)
+
+// Default configuration values
+const (
+	defaultCriticalResendInterval = 30 * time.Minute
+	defaultHysteresisPercent      = 5.0
+	stateKeySeparator             = "|"
+	bytesPerGB                    = 1024 * 1024 * 1024
+)
+
 // AlertState tracks the current alert state for a resource
 type AlertState struct {
 	InWarning            bool
@@ -236,7 +250,7 @@ func (m *SystemMonitor) checkMemory() {
 		m.config.Realtime.Monitoring.Memory.Critical)
 }
 
-// checkDisk monitors disk usage for all configured paths
+// checkDisk monitors disk usage for all configured paths, grouped by mount point
 func (m *SystemMonitor) checkDisk() {
 	// Get configured paths or default to root
 	paths := m.config.Realtime.Monitoring.Disk.Paths
@@ -246,10 +260,80 @@ func (m *SystemMonitor) checkDisk() {
 
 	m.log.Debug("Starting disk usage checks", logger.Any("paths", paths))
 
-	// Check each configured path
-	for _, path := range paths {
-		m.checkDiskPath(path)
+	// Group paths by mount point to avoid duplicate notifications
+	groups, err := groupPathsByMountPoint(paths)
+	if err != nil {
+		m.log.Error("Failed to group paths by mount point", logger.Error(err))
+		// Fall back to checking each path individually
+		for _, path := range paths {
+			m.checkDiskPath(path)
+		}
+		return
 	}
+
+	m.log.Debug("Grouped paths by mount point",
+		logger.Int("original_paths", len(paths)),
+		logger.Int("mount_groups", len(groups)),
+	)
+
+	// Check each mount group
+	for _, group := range groups {
+		m.checkDiskGroup(group)
+	}
+}
+
+// checkDiskGroup monitors disk usage for a group of paths sharing a mount point
+func (m *SystemMonitor) checkDiskGroup(group MountGroup) {
+	m.log.Debug("Checking disk group",
+		logger.String("mount_point", group.MountPoint),
+		logger.Any("paths", group.Paths),
+	)
+
+	// Validate mount point exists
+	m.mu.RLock()
+	validated, exists := m.validatedPaths[group.MountPoint]
+	m.mu.RUnlock()
+
+	if !exists || !validated {
+		if _, err := os.Stat(group.MountPoint); err != nil {
+			m.log.Error("Mount point does not exist or is not accessible",
+				logger.String("mount_point", group.MountPoint),
+				logger.Error(err),
+			)
+			m.mu.Lock()
+			m.validatedPaths[group.MountPoint] = false
+			m.mu.Unlock()
+			return
+		}
+		m.mu.Lock()
+		m.validatedPaths[group.MountPoint] = true
+		m.mu.Unlock()
+	}
+
+	usage, err := disk.Usage(group.MountPoint)
+	if err != nil {
+		m.log.Error("Failed to get disk usage",
+			logger.Error(err),
+			logger.String("mount_point", group.MountPoint),
+		)
+		return
+	}
+
+	m.log.Debug("Disk usage check completed",
+		logger.String("mount_point", group.MountPoint),
+		logger.Any("affected_paths", group.Paths),
+		logger.String("total_gb", fmt.Sprintf("%.2f", float64(usage.Total)/bytesPerGB)),
+		logger.String("used_gb", fmt.Sprintf("%.2f", float64(usage.Used)/bytesPerGB)),
+		logger.String("free_gb", fmt.Sprintf("%.2f", float64(usage.Free)/bytesPerGB)),
+		logger.String("used_percent", fmt.Sprintf("%.2f%%", usage.UsedPercent)),
+		logger.String("filesystem", usage.Fstype),
+		logger.String("warning_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Warning)),
+		logger.String("critical_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Critical)),
+	)
+
+	m.checkThresholdsWithGroup(ResourceDisk, usage.UsedPercent,
+		m.config.Realtime.Monitoring.Disk.Warning,
+		m.config.Realtime.Monitoring.Disk.Critical, group)
 }
 
 // checkDiskPath monitors disk usage for a single path
@@ -278,9 +362,6 @@ func (m *SystemMonitor) checkDiskPath(path string) {
 		m.mu.Lock()
 		m.validatedPaths[path] = true
 		m.mu.Unlock()
-	} else if !validated {
-		// Path was previously checked and found invalid
-		return
 	}
 
 	usage, err := disk.Usage(path)
@@ -289,12 +370,12 @@ func (m *SystemMonitor) checkDiskPath(path string) {
 		return
 	}
 
-	// Log detailed disk information - use Info level for visibility
-	m.log.Info("Disk usage check completed",
+	// Log detailed disk information
+	m.log.Debug("Disk usage check completed",
 		logger.String("path", path),
-		logger.String("total_gb", fmt.Sprintf("%.2f", float64(usage.Total)/(1024*1024*1024))),
-		logger.String("used_gb", fmt.Sprintf("%.2f", float64(usage.Used)/(1024*1024*1024))),
-		logger.String("free_gb", fmt.Sprintf("%.2f", float64(usage.Free)/(1024*1024*1024))),
+		logger.String("total_gb", fmt.Sprintf("%.2f", float64(usage.Total)/bytesPerGB)),
+		logger.String("used_gb", fmt.Sprintf("%.2f", float64(usage.Used)/bytesPerGB)),
+		logger.String("free_gb", fmt.Sprintf("%.2f", float64(usage.Free)/bytesPerGB)),
 		logger.String("used_percent", fmt.Sprintf("%.2f%%", usage.UsedPercent)),
 		logger.String("filesystem", usage.Fstype),
 		logger.String("warning_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Warning)),
@@ -314,10 +395,9 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 // checkThresholdsWithPath evaluates resource usage against configured thresholds with optional path
 func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, warningThreshold, criticalThreshold float64, path string) {
 	// Create state key that includes path for disk resources
-	// Use "|" as separator since it cannot appear in file paths
 	stateKey := string(resource)
 	if resource == ResourceDisk && path != "" {
-		stateKey = fmt.Sprintf("%s|%s", resource, path)
+		stateKey = fmt.Sprintf("%s"+stateKeySeparator+"%s", resource, path)
 	}
 
 	m.mu.Lock()
@@ -351,7 +431,7 @@ func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, 
 			// Still in critical state - check if we need to resend notification
 			resendInterval := time.Duration(m.config.Realtime.Monitoring.CriticalResendInterval) * time.Minute
 			if resendInterval == 0 {
-				resendInterval = 30 * time.Minute // Default fallback
+				resendInterval = defaultCriticalResendInterval // Default fallback
 			}
 			if resource == ResourceDisk && time.Since(state.LastNotificationTime) > resendInterval {
 				m.log.Info("Resending critical disk notification after expiry",
@@ -386,10 +466,10 @@ func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, 
 		// Clear critical if we're below critical threshold (with hysteresis)
 		hysteresis := m.config.Realtime.Monitoring.HysteresisPercent
 		if hysteresis == 0 {
-			hysteresis = 5.0 // Default fallback
+			hysteresis = defaultHysteresisPercent
 		}
 		if state.InCritical && current < (criticalThreshold-hysteresis) {
-			m.sendRecoveryNotificationWithPath(resource, current, "critical", state, path)
+			m.sendRecoveryNotificationWithPath(resource, current, alertLevelCritical, state, path)
 			state.InCritical = false
 			state.CriticalStartTime = time.Time{} // Reset
 		}
@@ -397,10 +477,10 @@ func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, 
 		// Below all thresholds - send recovery notifications if needed
 		hysteresis := m.config.Realtime.Monitoring.HysteresisPercent
 		if hysteresis == 0 {
-			hysteresis = 5.0 // Default fallback
+			hysteresis = defaultHysteresisPercent
 		}
 		if state.InWarning && current < (warningThreshold-hysteresis) {
-			m.sendRecoveryNotificationWithPath(resource, current, "warning", state, path)
+			m.sendRecoveryNotificationWithPath(resource, current, alertLevelWarning, state, path)
 			state.InWarning = false
 			state.InCritical = false
 			state.CriticalStartTime = time.Time{} // Reset
@@ -492,7 +572,7 @@ func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current 
 func (m *SystemMonitor) sendRecoveryNotificationWithPath(resource ResourceType, current float64, level string, state *AlertState, path string) {
 	// Calculate duration if recovering from critical
 	var duration time.Duration
-	if level == "critical" && !state.CriticalStartTime.IsZero() {
+	if level == alertLevelCritical && !state.CriticalStartTime.IsZero() {
 		duration = time.Since(state.CriticalStartTime)
 	}
 
@@ -554,7 +634,7 @@ func (m *SystemMonitor) sendRecoveryNotificationWithPath(resource ResourceType, 
 	}
 
 	// Use higher priority for recovery from critical state
-	if level == "critical" {
+	if level == alertLevelCritical {
 		notification.NotifyWarning("system", title, message)
 	} else {
 		notification.NotifyInfo(title, message)
@@ -565,6 +645,175 @@ func (m *SystemMonitor) sendRecoveryNotificationWithPath(resource ResourceType, 
 		logger.String("current", fmt.Sprintf("%.1f%%", current)),
 		logger.String("recovered_from", level),
 	)
+}
+
+// checkThresholdsWithGroup evaluates resource usage against thresholds for a mount group
+func (m *SystemMonitor) checkThresholdsWithGroup(resource ResourceType, current, warningThreshold, criticalThreshold float64, group MountGroup) {
+	// Use mount point as state key
+	stateKey := fmt.Sprintf("%s"+stateKeySeparator+"%s", resource, group.MountPoint)
+
+	m.mu.Lock()
+	state, exists := m.alertStates[stateKey]
+	if !exists {
+		state = &AlertState{}
+		m.alertStates[stateKey] = state
+	}
+	m.mu.Unlock()
+
+	state.LastValue = current
+	state.LastCheck = time.Now()
+
+	switch {
+	case current >= criticalThreshold:
+		if !state.InCritical {
+			m.log.Warn("Critical threshold exceeded",
+				logger.String("resource", string(resource)),
+				logger.String("mount_point", group.MountPoint),
+				logger.Any("affected_paths", group.Paths),
+				logger.String("current", fmt.Sprintf("%.2f%%", current)),
+				logger.String("threshold", fmt.Sprintf("%.2f%%", criticalThreshold)),
+			)
+			m.sendNotificationWithGroup(resource, current, criticalThreshold, notification.PriorityCritical, state, group)
+			state.InCritical = true
+			state.InWarning = true
+			state.CriticalStartTime = time.Now()
+		} else {
+			resendInterval := time.Duration(m.config.Realtime.Monitoring.CriticalResendInterval) * time.Minute
+			if resendInterval == 0 {
+				resendInterval = defaultCriticalResendInterval
+			}
+			if resource == ResourceDisk && time.Since(state.LastNotificationTime) > resendInterval {
+				m.log.Info("Resending critical disk notification after expiry",
+					logger.String("resource", string(resource)),
+					logger.String("mount_point", group.MountPoint),
+					logger.String("current", fmt.Sprintf("%.2f%%", current)),
+					logger.String("last_notification", state.LastNotificationTime.Format(time.RFC3339)),
+				)
+				m.sendNotificationWithGroup(resource, current, criticalThreshold, notification.PriorityCritical, state, group)
+			}
+		}
+	case current >= warningThreshold:
+		if !state.InWarning {
+			m.log.Warn("Warning threshold exceeded",
+				logger.String("resource", string(resource)),
+				logger.String("mount_point", group.MountPoint),
+				logger.Any("affected_paths", group.Paths),
+				logger.String("current", fmt.Sprintf("%.2f%%", current)),
+				logger.String("threshold", fmt.Sprintf("%.2f%%", warningThreshold)),
+			)
+			m.sendNotificationWithGroup(resource, current, warningThreshold, notification.PriorityHigh, state, group)
+			state.InWarning = true
+		}
+		hysteresis := m.config.Realtime.Monitoring.HysteresisPercent
+		if hysteresis == 0 {
+			hysteresis = defaultHysteresisPercent
+		}
+		if state.InCritical && current < (criticalThreshold-hysteresis) {
+			m.sendRecoveryNotificationWithGroup(resource, current, alertLevelCritical, state, group)
+			state.InCritical = false
+			state.CriticalStartTime = time.Time{}
+		}
+	default:
+		hysteresis := m.config.Realtime.Monitoring.HysteresisPercent
+		if hysteresis == 0 {
+			hysteresis = defaultHysteresisPercent
+		}
+		if state.InWarning && current < (warningThreshold-hysteresis) {
+			m.sendRecoveryNotificationWithGroup(resource, current, alertLevelWarning, state, group)
+			state.InWarning = false
+			state.InCritical = false
+			state.CriticalStartTime = time.Time{}
+		}
+	}
+
+	m.log.Debug("Resource check completed",
+		logger.String("resource", string(resource)),
+		logger.String("mount_point", group.MountPoint),
+		logger.String("current", fmt.Sprintf("%.1f%%", current)),
+		logger.Bool("in_warning", state.InWarning),
+		logger.Bool("in_critical", state.InCritical),
+	)
+}
+
+// sendNotificationWithGroup sends a threshold exceeded notification for a mount group
+func (m *SystemMonitor) sendNotificationWithGroup(resource ResourceType, current, threshold float64, priority notification.Priority, state *AlertState, group MountGroup) {
+	var severity string
+	if priority == notification.PriorityCritical {
+		severity = events.SeverityCritical
+	} else {
+		severity = events.SeverityWarning
+	}
+
+	if eventBus := events.GetEventBus(); eventBus != nil {
+		event := events.NewResourceEventWithPaths(string(resource), current, threshold, severity, group.MountPoint, group.Paths)
+		if eventBus.TryPublishResource(event) {
+			m.log.Info("Resource event published to event bus",
+				logger.String("resource", string(resource)),
+				logger.String("mount_point", group.MountPoint),
+				logger.Any("affected_paths", group.Paths),
+				logger.String("current", fmt.Sprintf("%.1f%%", current)),
+				logger.String("threshold", fmt.Sprintf("%.1f%%", threshold)),
+				logger.String("severity", severity),
+			)
+			state.LastNotificationTime = time.Now()
+			return
+		}
+	}
+
+	// Fallback to direct notification
+	if !notification.IsInitialized() {
+		return
+	}
+
+	notification.NotifyResourceAlert(string(resource), current, threshold, "%")
+	state.LastNotificationTime = time.Now()
+}
+
+// sendRecoveryNotificationWithGroup sends a recovery notification for a mount group
+func (m *SystemMonitor) sendRecoveryNotificationWithGroup(resource ResourceType, current float64, level string, state *AlertState, group MountGroup) {
+	var duration time.Duration
+	if level == alertLevelCritical && !state.CriticalStartTime.IsZero() {
+		duration = time.Since(state.CriticalStartTime)
+	}
+
+	if eventBus := events.GetEventBus(); eventBus != nil {
+		event := events.NewResourceEventWithPaths(string(resource), current, 0, events.SeverityRecovery, group.MountPoint, group.Paths)
+		if duration > 0 {
+			if metadata := event.GetMetadata(); metadata != nil {
+				metadata["duration"] = duration.String()
+				metadata["duration_minutes"] = int(duration.Minutes())
+			}
+		}
+		if eventBus.TryPublishResource(event) {
+			m.log.Info("Resource recovery event published to event bus",
+				logger.String("resource", string(resource)),
+				logger.String("mount_point", group.MountPoint),
+				logger.Any("affected_paths", group.Paths),
+				logger.String("current", fmt.Sprintf("%.1f%%", current)),
+				logger.String("recovered_from", level),
+			)
+			state.LastNotificationID = ""
+			state.LastNotificationTime = time.Time{}
+			return
+		}
+	}
+
+	// Fallback
+	if !notification.IsInitialized() {
+		return
+	}
+
+	title := fmt.Sprintf("Disk (%s) Usage Recovered", group.MountPoint)
+	message := fmt.Sprintf("Disk usage has returned to normal (%.1f%%)", current)
+	if len(group.Paths) > 1 {
+		message += fmt.Sprintf(" - Paths: %v", group.Paths)
+	}
+
+	if level == alertLevelCritical {
+		notification.NotifyWarning("system", title, message)
+	} else {
+		notification.NotifyInfo(title, message)
+	}
 }
 
 // GetResourceStatus returns the current status of all monitored resources

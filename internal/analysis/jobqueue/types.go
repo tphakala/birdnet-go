@@ -3,6 +3,7 @@
 package jobqueue
 
 import (
+	"context"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -54,8 +55,12 @@ type RetryConfig struct {
 
 // Action defines the interface that must be implemented by any action
 // that can be executed by the job queue.
+//
+// Implementations MUST respect context cancellation by checking ctx.Done()
+// periodically during Execute(). Failure to do so will cause goroutine leaks
+// when jobs time out.
 type Action interface {
-	Execute(data any) error
+	Execute(ctx context.Context, data any) error
 	GetDescription() string // Returns a human-readable description of the action
 }
 
@@ -121,6 +126,3 @@ func (s JobStatus) String() string {
 		return "Unknown"
 	}
 }
-
-// AllowJobDropping controls whether dropping jobs is allowed in tests
-var AllowJobDropping = true

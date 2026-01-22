@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -513,8 +514,8 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 
 // sendSSEMessage sends a Server-Sent Event message
 func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) error {
-	// Convert data to JSON
-	jsonData, err := json.Marshal(data)
+	// Convert data to JSON with panic recovery
+	jsonData, err := c.safeMarshalJSON(event, data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal SSE data: %w", err)
 	}
@@ -542,6 +543,22 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 	}
 
 	return nil
+}
+
+// safeMarshalJSON marshals data to JSON with panic recovery.
+// This protects against panics from concurrent map access or unmarshalable data.
+func (c *Controller) safeMarshalJSON(event string, data any) (jsonData []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("JSON marshal panic: %v", r)
+			c.logErrorIfEnabled("SSE marshal panic recovered",
+				logger.String("event", event),
+				logger.Any("panic", r),
+				logger.String("stack", string(debug.Stack())),
+			)
+		}
+	}()
+	return json.Marshal(data)
 }
 
 // GetSSEStatus returns information about SSE connections

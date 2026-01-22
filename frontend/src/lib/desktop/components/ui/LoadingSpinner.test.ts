@@ -16,23 +16,29 @@ describe('LoadingSpinner', () => {
     expect(spinner).toBeInTheDocument();
     expect(spinner).toHaveAttribute('aria-label', 'Loading...');
 
-    const spinnerElement = spinner.querySelector('.loading');
-    expect(spinnerElement).toHaveClass('loading-spinner', 'loading-lg', 'text-primary');
+    // Now uses native Tailwind classes instead of daisyUI loading classes
+    const spinnerElement = spinner.querySelector('span.animate-spin');
+    expect(spinnerElement).toBeInTheDocument();
+    // Default size is lg (w-10 h-10 border-2)
+    expect(spinnerElement).toHaveClass('w-10', 'h-10', 'border-2');
+    // Default color uses CSS variable
+    expect(spinnerElement?.className).toContain('text-[var(--color-primary)]');
   });
 
   it('renders with custom size', () => {
     renderLoadingSpinner({ size: 'sm' });
 
     const spinner = screen.getByRole('status');
-    const spinnerElement = spinner.querySelector('.loading');
-    expect(spinnerElement).toHaveClass('loading-sm');
+    const spinnerElement = spinner.querySelector('span.animate-spin');
+    // sm size uses w-4 h-4 border
+    expect(spinnerElement).toHaveClass('w-4', 'h-4', 'border');
   });
 
   it('renders with custom color', () => {
     renderLoadingSpinner({ color: 'text-secondary' });
 
     const spinner = screen.getByRole('status');
-    const spinnerElement = spinner.querySelector('.loading');
+    const spinnerElement = spinner.querySelector('span.animate-spin');
     expect(spinnerElement).toHaveClass('text-secondary');
   });
 
@@ -54,7 +60,8 @@ describe('LoadingSpinner', () => {
     const spinner = screen.getByRole('status');
     expect(spinner).toHaveAttribute('aria-label', 'Please wait');
 
-    const spinnerElement = spinner.querySelector('.loading');
-    expect(spinnerElement).toHaveClass('loading-xl', 'text-error');
+    const spinnerElement = spinner.querySelector('span.animate-spin');
+    // xl size uses w-14 h-14 border-[3px]
+    expect(spinnerElement).toHaveClass('w-14', 'h-14', 'text-error');
   });
 });

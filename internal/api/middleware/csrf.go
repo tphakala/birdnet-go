@@ -9,9 +9,37 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// CSRFContextKey is the key used to store CSRF token in the context.
-// This must match what spa.go expects when retrieving the token.
-const CSRFContextKey = "csrf"
+// CSRF configuration constants used by both csrf.go and csrf_token.go.
+// These are unexported since they're only used within the middleware package.
+const (
+	// CSRFContextKey is the key used to store CSRF token in the context.
+	// This must match what spa.go expects when retrieving the token.
+	CSRFContextKey = "csrf"
+
+	// csrfCookieName is the name of the CSRF cookie.
+	csrfCookieName = "csrf"
+
+	// csrfCookieMaxAge is the max age of the CSRF cookie in seconds (30 minutes).
+	csrfCookieMaxAge = 1800
+
+	// csrfTokenLength is the length of the generated CSRF token in bytes.
+	csrfTokenLength = 32
+)
+
+// IsSecureRequest determines if the request is over HTTPS.
+// Checks direct TLS connection and X-Forwarded-Proto header (standard proxy header).
+// This is used to set the Secure flag on cookies appropriately.
+func IsSecureRequest(r *http.Request) bool {
+	// Direct TLS connection
+	if r.TLS != nil {
+		return true
+	}
+	// Standard proxy header (used by Cloudflare, nginx, etc.)
+	if r.Header.Get("X-Forwarded-Proto") == "https" {
+		return true
+	}
+	return false
+}
 
 // CSRFConfig holds configuration for the CSRF middleware.
 type CSRFConfig struct {
@@ -91,7 +119,7 @@ func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
 
 	tokenLength := config.TokenLength
 	if tokenLength == 0 {
-		tokenLength = 32
+		tokenLength = csrfTokenLength
 	}
 
 	tokenLookup := config.TokenLookup
@@ -101,12 +129,12 @@ func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
 
 	cookieName := config.CookieName
 	if cookieName == "" {
-		cookieName = "csrf"
+		cookieName = csrfCookieName
 	}
 
 	cookieMaxAge := config.CookieMaxAge
 	if cookieMaxAge == 0 {
-		cookieMaxAge = 1800 // 30 minutes
+		cookieMaxAge = csrfCookieMaxAge
 	}
 
 	return middleware.CSRFWithConfig(middleware.CSRFConfig{
@@ -117,7 +145,10 @@ func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
 		CookieName:     cookieName,
 		CookiePath:     "/",
 		CookieHTTPOnly: false, // Allow JavaScript to read the cookie for hobby/LAN use
-		CookieSecure:   false, // Allow cookies over HTTP for non-HTTPS deployments
+		// Note: CookieSecure is false because Echo's CSRF middleware uses static config.
+		// For dynamic Secure flag handling (HTTPS detection), EnsureCSRFToken uses
+		// IsSecureRequest() when generating tokens for endpoints like /api/v2/app/config.
+		CookieSecure: false, // Static false for HTTP deployments; dynamic handling elsewhere
 		CookieSameSite: http.SameSiteLaxMode,
 		CookieMaxAge:   cookieMaxAge,
 		ErrorHandler: func(err error, c echo.Context) error {

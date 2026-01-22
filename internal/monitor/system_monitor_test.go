@@ -20,27 +20,24 @@ func TestDiskMonitoring(t *testing.T) {
 		skipCheckDisk bool // Some tests need custom threshold checks
 	}{
 		{
-			name:  "multiple paths",
+			name:  "multiple paths aggregated by mount",
 			paths: []string{"/", "/tmp"},
 			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
 				t.Helper()
-				// Verify that validated paths include both configured paths
+				// With mount-point aggregation, / and /tmp (on same filesystem)
+				// are grouped together. Only the mount point is validated.
 				monitor.mu.RLock()
-				_, rootValidated := monitor.validatedPaths["/"]
-				_, tmpValidated := monitor.validatedPaths["/tmp"]
+				rootValidated, rootExists := monitor.validatedPaths["/"]
 				monitor.mu.RUnlock()
 
-				assert.True(t, rootValidated, "Root path should be validated")
-				assert.True(t, tmpValidated, "/tmp path should be validated")
+				assert.True(t, rootExists && rootValidated, "Root mount point should be validated")
 
-				// Verify alert states are created for both paths
+				// Alert state uses mount point as key (not individual paths)
 				monitor.mu.RLock()
 				_, rootState := monitor.alertStates["disk|/"]
-				_, tmpState := monitor.alertStates["disk|/tmp"]
 				monitor.mu.RUnlock()
 
-				assert.True(t, rootState, "Alert state should exist for root path")
-				assert.True(t, tmpState, "Alert state should exist for /tmp path")
+				assert.True(t, rootState, "Alert state should exist for root mount point")
 			},
 		},
 		{
@@ -57,18 +54,20 @@ func TestDiskMonitoring(t *testing.T) {
 			},
 		},
 		{
-			name:  "invalid path handling",
+			name:  "invalid path filtered during grouping",
 			paths: []string{"/", "/this/path/does/not/exist"},
 			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
 				t.Helper()
-				// Verify that valid path is marked as validated
+				// Invalid paths are filtered during mount grouping, not tracked
+				// Only the valid root mount point should be validated
 				monitor.mu.RLock()
 				rootValidated, rootExists := monitor.validatedPaths["/"]
-				invalidValidated, invalidExists := monitor.validatedPaths["/this/path/does/not/exist"]
+				// Invalid path should not be in validatedPaths at all (filtered during grouping)
+				_, invalidExists := monitor.validatedPaths["/this/path/does/not/exist"]
 				monitor.mu.RUnlock()
 
 				assert.True(t, rootExists && rootValidated, "Root path should be validated")
-				assert.True(t, invalidExists && !invalidValidated, "Invalid path should be marked as not validated")
+				assert.False(t, invalidExists, "Invalid path should be filtered during grouping, not tracked")
 			},
 		},
 	}
@@ -157,6 +156,49 @@ func TestDiskMonitoringPathSpecificStates(t *testing.T) {
 	assert.False(t, rootState.InCritical, "Root should not be in critical state (85% < 90%)")
 	assert.False(t, tmpState.InWarning, "Tmp should not be in warning state (50% < 80%)")
 	assert.False(t, tmpState.InCritical, "Tmp should not be in critical state (50% < 90%)")
+}
+
+func TestDiskMonitoringAggregation(t *testing.T) {
+	t.Parallel()
+
+	// Create config with paths that likely share the same mount point
+	config := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Monitoring: conf.MonitoringSettings{
+				Enabled:       true,
+				CheckInterval: 1,
+				Disk: conf.DiskThresholdSettings{
+					Enabled:  true,
+					Warning:  80.0,
+					Critical: 90.0,
+					Paths:    []string{"/", "/tmp", "/var"},
+				},
+			},
+		},
+	}
+
+	monitor := NewSystemMonitor(config)
+	require.NotNil(t, monitor)
+
+	// Run disk check
+	monitor.checkDisk()
+
+	// Verify that alert states are keyed by mount point, not individual paths
+	monitor.mu.RLock()
+	defer monitor.mu.RUnlock()
+
+	// Count unique mount-based alert states
+	mountStates := 0
+	for key := range monitor.alertStates {
+		if len(key) > 5 && key[:5] == "disk|" {
+			mountStates++
+		}
+	}
+
+	// Should have fewer or equal states than paths (aggregation)
+	// On most systems, /, /tmp, /var are on same mount, so expect 1-2 states
+	assert.LessOrEqual(t, mountStates, 3, "Should aggregate paths by mount point")
+	assert.GreaterOrEqual(t, mountStates, 1, "Should have at least one mount point state")
 }
 
 func TestDiskMonitoringRecoveryPerPath(t *testing.T) {

@@ -365,27 +365,29 @@
             </div>
 
             <!-- Dog Bark Species List -->
-            <div class="form-control mt-6">
-              <div class="label justify-start">
-                <span class="label-text">{t('settings.filters.dogBarkSpeciesList')}</span>
+            <div class="mt-6">
+              <div class="flex justify-start mb-1">
+                <span class="text-sm text-[var(--color-base-content)]"
+                  >{t('settings.filters.dogBarkSpeciesList')}</span
+                >
               </div>
 
               <!-- Species List -->
               {#if settings.dogBark.species.length > 0}
                 <div class="space-y-2 mb-4">
                   {#each settings.dogBark.species as species, index (species)}
-                    <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
+                    <div class="flex items-center gap-2 p-3 bg-[var(--color-base-200)] rounded-lg">
                       {#if editIndex === index}
                         <input
                           type="text"
                           bind:value={editSpecies}
-                          class="input input-sm flex-1"
+                          class="flex-1 h-8 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
                           onkeydown={handleEditKeydown}
                           placeholder={t('settings.filters.speciesNamePlaceholder')}
                         />
                         <button
                           type="button"
-                          class="btn btn-sm btn-success"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-success)] text-[var(--color-success-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-success)] focus-visible:ring-offset-2 transition-colors"
                           onclick={saveEdit}
                           aria-label={t('common.aria.saveChanges')}
                         >
@@ -393,7 +395,7 @@
                         </button>
                         <button
                           type="button"
-                          class="btn btn-sm btn-ghost"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
                           onclick={cancelEdit}
                           aria-label={t('common.aria.cancelEdit')}
                         >
@@ -403,7 +405,7 @@
                         <span class="flex-1 text-sm">{species}</span>
                         <button
                           type="button"
-                          class="btn btn-sm btn-ghost"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           onclick={() => startEdit(index)}
                           disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
                           aria-label={t('common.aria.editSpecies')}
@@ -412,7 +414,7 @@
                         </button>
                         <button
                           type="button"
-                          class="btn btn-sm btn-error"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-error)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           onclick={() => removeSpecies(index)}
                           disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
                           aria-label={t('common.aria.removeSpecies')}
@@ -445,7 +447,7 @@
 
               <!-- Unsaved Changes Indicator -->
               {#if dogBarkFilterHasChanges}
-                <div class="mt-2 text-xs text-info flex items-center gap-1">
+                <div class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
                   <Info class="size-4" />
                   <span>{t('settings.actions.unsavedChanges')}</span>
                 </div>

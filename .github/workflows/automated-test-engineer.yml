@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Download test artifacts
         id: download-logs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: test-log
           path: /tmp/

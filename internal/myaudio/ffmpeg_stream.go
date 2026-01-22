@@ -1254,6 +1254,27 @@ func (s *FFmpegStream) processAudio() error {
 
 // handleAudioData processes a chunk of audio data
 func (s *FFmpegStream) handleAudioData(data []byte) error {
+	// Apply audio EQ filters if enabled
+	// This must happen BEFORE writing to buffers so filtered audio is used for analysis
+	if conf.Setting().Realtime.Audio.Equalizer.Enabled {
+		// Ensure data length is even (required for 16-bit PCM samples)
+		// io.Reader doesn't guarantee aligned reads, so handle odd lengths defensively
+		filterLen := len(data)
+		if filterLen%2 != 0 {
+			filterLen-- // Truncate to even length; trailing byte remains unfiltered
+		}
+		if filterLen > 0 {
+			if eqErr := ApplyFilters(data[:filterLen]); eqErr != nil {
+				getStreamLogger().Warn("error applying audio EQ filters",
+					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
+					logger.Error(eqErr),
+					logger.String("component", "ffmpeg-stream"),
+					logger.String("operation", "apply_filters"))
+				// Non-fatal: continue processing with unfiltered audio
+			}
+		}
+	}
+
 	// Write to analysis buffer using source ID
 	if err := WriteToAnalysisBuffer(s.source.ID, data); err != nil {
 		return errors.New(fmt.Errorf("failed to write to analysis buffer: %w", err)).

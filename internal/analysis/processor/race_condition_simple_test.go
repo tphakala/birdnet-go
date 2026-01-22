@@ -17,6 +17,7 @@
 package processor
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -337,7 +338,7 @@ func TestRaceCondition_CompositeActionSolution(t *testing.T) {
 	startTime := time.Now()
 
 	// Execute the composite action
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	totalDuration := time.Since(startTime)
 
 	require.NoError(t, err, "Composite action failed")
@@ -421,7 +422,7 @@ func TestCompositeAction_TimeoutProtection(t *testing.T) {
 	startTime := time.Now()
 
 	// Execute the composite action (should timeout on second action)
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	duration := time.Since(startTime)
 
 	// Verify that we got a timeout error
@@ -470,7 +471,7 @@ func TestCompositeAction_DefaultTimeout(t *testing.T) {
 	detection := createSimpleDetection()
 
 	// Execute the action
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 	require.NoError(t, err, "Unexpected error")
 
 	// Verify the action executed successfully with default timeout
@@ -528,7 +529,7 @@ func TestCompositeAction_PanicRecovery(t *testing.T) {
 	detection := createSimpleDetection()
 
 	// Execute the composite action (should handle panic gracefully)
-	err := compositeAction.Execute(detection)
+	err := compositeAction.Execute(context.Background(), detection)
 
 	// Verify that we got a panic error
 	require.Error(t, err, "Expected panic error")
@@ -556,7 +557,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 
 	t.Run("nil CompositeAction", func(t *testing.T) {
 		var compositeAction *CompositeAction
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected nil CompositeAction to return nil error")
 	})
 
@@ -565,7 +566,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Actions:     nil,
 			Description: "Test nil actions",
 		}
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected nil Actions slice to return nil error")
 	})
 
@@ -574,7 +575,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Actions:     []Action{},
 			Description: "Test empty actions",
 		}
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected empty Actions slice to return nil error")
 	})
 
@@ -583,7 +584,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Actions:     []Action{nil, nil, nil},
 			Description: "Test all nil actions",
 		}
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		assert.NoError(t, err, "Expected all nil actions to return nil error")
 	})
 
@@ -616,7 +617,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test mixed nil and valid actions",
 		}
 
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		require.NoError(t, err, "Unexpected error")
 
 		executionMutex.Lock()
@@ -642,7 +643,7 @@ func TestCompositeAction_EdgeCases(t *testing.T) {
 			Description: "Test single action",
 		}
 
-		err := compositeAction.Execute(detection)
+		err := compositeAction.Execute(context.Background(), detection)
 		require.NoError(t, err, "Unexpected error")
 		assert.True(t, executed, "Single action was not executed")
 	})
@@ -670,11 +671,11 @@ func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
 	startTime := time.Now()
 
 	// Step 1: Execute database action first
-	err1 := dbAction.Execute(detection)
+	err1 := dbAction.Execute(context.Background(), detection)
 	dbCompleteTime := time.Now()
 
 	// Step 2: Execute SSE action only after database completes
-	err2 := sseAction.Execute(detection)
+	err2 := sseAction.Execute(context.Background(), detection)
 	sseCompleteTime := time.Now()
 
 	require.NoError(t, err1, "Database action failed")
@@ -697,4 +698,133 @@ func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {
 	t.Logf("✓ Sequential execution prevents race condition")
 	t.Logf("✓ SSE action executes quickly when database operation is complete")
 	t.Logf("✓ No timeouts or 'note not found' errors would occur")
+}
+
+// TestDetectionContext_AudioExportFailed tests the AudioExportFailed flag behavior
+func TestDetectionContext_AudioExportFailed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("initial state is false", func(t *testing.T) {
+		t.Parallel()
+		ctx := &DetectionContext{}
+		assert.False(t, ctx.AudioExportFailed.Load(), "AudioExportFailed should be false initially")
+	})
+
+	t.Run("can be set to true", func(t *testing.T) {
+		t.Parallel()
+		ctx := &DetectionContext{}
+		ctx.AudioExportFailed.Store(true)
+		assert.True(t, ctx.AudioExportFailed.Load(), "AudioExportFailed should be true after setting")
+	})
+
+	t.Run("multiple reads return consistent value", func(t *testing.T) {
+		t.Parallel()
+		ctx := &DetectionContext{}
+		ctx.AudioExportFailed.Store(true)
+
+		// Read multiple times to ensure consistency
+		for range 10 {
+			assert.True(t, ctx.AudioExportFailed.Load(), "AudioExportFailed should be consistently true")
+		}
+	})
+
+	t.Run("concurrent access is safe", func(t *testing.T) {
+		t.Parallel()
+		ctx := &DetectionContext{}
+		var wg sync.WaitGroup
+
+		// Simulate concurrent reads and writes
+		for range 100 {
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				ctx.AudioExportFailed.Store(true)
+			}()
+			go func() {
+				defer wg.Done()
+				_ = ctx.AudioExportFailed.Load()
+			}()
+		}
+
+		wg.Wait()
+		// Final state should be true (all writes set true)
+		assert.True(t, ctx.AudioExportFailed.Load(), "AudioExportFailed should be true after concurrent writes")
+	})
+}
+
+// TestDetectionContext_NoteIDAndAudioExportFailed tests both fields work together
+func TestDetectionContext_NoteIDAndAudioExportFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx := &DetectionContext{}
+
+	// Simulate DatabaseAction setting both fields
+	ctx.NoteID.Store(12345)
+	ctx.AudioExportFailed.Store(true)
+
+	// Verify both fields are set correctly
+	assert.Equal(t, uint64(12345), ctx.NoteID.Load(), "NoteID should be set")
+	assert.True(t, ctx.AudioExportFailed.Load(), "AudioExportFailed should be set")
+
+	// Simulate another context where audio export succeeded
+	ctx2 := &DetectionContext{}
+	ctx2.NoteID.Store(67890)
+	// AudioExportFailed stays false (default)
+
+	assert.Equal(t, uint64(67890), ctx2.NoteID.Load(), "NoteID should be set")
+	assert.False(t, ctx2.AudioExportFailed.Load(), "AudioExportFailed should be false when not set")
+}
+
+// TestCompositeAction_AudioExportFailedPropagation tests that AudioExportFailed
+// is properly propagated through the CompositeAction chain
+func TestCompositeAction_AudioExportFailedPropagation(t *testing.T) {
+	t.Parallel()
+
+	// Create shared context
+	ctx := &DetectionContext{}
+
+	var audioExportFailedInSSE bool
+	var noteIDInSSE uint64
+
+	// Simulate DatabaseAction that sets both NoteID and AudioExportFailed
+	dbAction := &SimpleAction{
+		name:         "Database Action",
+		executeDelay: 50 * time.Millisecond,
+		onExecute: func() {
+			// Simulate successful save
+			ctx.NoteID.Store(12345)
+			// Simulate audio export failure
+			ctx.AudioExportFailed.Store(true)
+		},
+	}
+
+	// Simulate SSEAction that reads from context
+	sseAction := &SimpleAction{
+		name:         "SSE Action",
+		executeDelay: 10 * time.Millisecond,
+		onExecute: func() {
+			// Read values from context (like real SSEAction would)
+			audioExportFailedInSSE = ctx.AudioExportFailed.Load()
+			noteIDInSSE = ctx.NoteID.Load()
+		},
+	}
+
+	// Create CompositeAction
+	compositeAction := &CompositeAction{
+		Actions:     []Action{dbAction, sseAction},
+		Description: "Database save and SSE broadcast (sequential)",
+	}
+
+	detection := createSimpleDetection()
+
+	// Execute
+	err := compositeAction.Execute(context.Background(), detection)
+	require.NoError(t, err, "CompositeAction should succeed")
+
+	// Verify SSEAction saw the values set by DatabaseAction
+	assert.True(t, audioExportFailedInSSE, "SSE should see AudioExportFailed=true set by Database")
+	assert.Equal(t, uint64(12345), noteIDInSSE, "SSE should see NoteID set by Database")
+
+	t.Log("✓ AudioExportFailed properly propagates through CompositeAction chain")
+	t.Log("✓ SSE action can see values set by Database action")
 }
