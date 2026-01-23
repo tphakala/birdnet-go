@@ -169,6 +169,8 @@ func (c *Controller) SetupNotificationRoutes() {
 	notificationsGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
 }
 
+//todo:mdk another SSE reference to learn from
+
 // StreamNotifications handles the SSE connection for real-time notification streaming
 func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Check if notification service is initialized

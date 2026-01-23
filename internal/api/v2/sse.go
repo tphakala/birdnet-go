@@ -30,10 +30,12 @@ const (
 
 	// Endpoints
 	detectionStreamEndpoint  = "/api/v2/detections/stream"
+	merlinStreamEndpoint  = "/api/v2/merlin/stream"
 	soundLevelStreamEndpoint = "/api/v2/soundlevels/stream"
 
 	// Buffer sizes
 	sseDetectionBufferSize  = 100 // Buffer size for detection channels (high volume)
+	sseMerlinBufferSize     = 100 // Buffer size for merlin channels (high volume)
 	sseSoundLevelBufferSize = 100 // Buffer size for sound level channels
 	sseMinimalBufferSize    = 1   // Minimal buffer for unused channels
 	sseDoneChannelBuffer    = 1   // Buffer for Done channels to prevent blocking
@@ -49,6 +51,7 @@ const (
 	// Note: StreamType="all" shares a single consecutiveDrops counter across both streams,
 	// meaning drops on one stream affect health tracking for both
 	streamTypeDetections  = "detections"
+	streamTypeMerlin      = "merlin"
 	streamTypeSoundLevels = "soundlevels"
 	streamTypeAll         = "all"
 )
@@ -68,6 +71,15 @@ type SSEDetectionData struct {
 	DaysSinceFirstSeen int                     `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 }
 
+//todo:mdk setup data model for merlin detections
+// SSEMerlinData represents the merlin data sent via SSE
+type SSEMerlinData struct {
+	CommonName         string                  `json:"commonName"`
+	Confidence         float64                 `json:"confidence"`
+	Timestamp          time.Time               `json:"timestamp"`
+	EventType          string                  `json:"eventType"`
+}
+
 // SSESoundLevelData represents sound level data sent via SSE
 type SSESoundLevelData struct {
 	myaudio.SoundLevelData
@@ -85,11 +97,12 @@ type SSEEvent struct {
 type SSEClient struct {
 	ID             string
 	Channel        chan SSEDetectionData
+	MerlinChan     chan SSEMerlinData
 	SoundLevelChan chan SSESoundLevelData
 	Request        *http.Request
 	Response       http.ResponseWriter
 	Done           chan struct{} // Signal-only buffered channel to prevent blocking
-	StreamType     string        // streamTypeDetections, streamTypeSoundLevels, or streamTypeAll
+	StreamType     string        // streamTypeDetections, streamTypeMerlin, streamTypeSoundLevels, or streamTypeAll
 
 	// Health tracking for auto-disconnect of slow/blocked clients
 	// Uses atomic operations for thread-safe access during concurrent broadcasts
@@ -155,6 +168,51 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	for clientID, client := range m.clients {
 		select {
 		case client.Channel <- *detection:
+			// Successfully sent to client - reset health counter atomically
+			client.consecutiveDrops.Store(0)
+
+		default:
+			// Channel full - drop this update, increment counter atomically
+			drops := client.consecutiveDrops.Add(1)
+
+			// Only log when reaching disconnect threshold to avoid log spam
+			if drops >= maxConsecutiveDrops {
+				GetLogger().Info("SSE client disconnected after consecutive drops",
+					logger.String("client_id", clientID),
+					logger.Int("consecutive_drops", int(drops)),
+				)
+				blockedClients = append(blockedClients, clientID)
+			}
+		}
+	}
+
+	// Release the read lock before removing clients
+	m.mutex.RUnlock()
+
+	// Remove blocked clients synchronously (we're outside the lock and RemoveClient is fast)
+	// Note: Low probability race if client reconnects with same ID between unlock and removal
+	for _, clientID := range blockedClients {
+		m.RemoveClient(clientID)
+	}
+}
+
+// BroadcastMerlin sends merlin data to all connected clients
+// Uses non-blocking send to prevent slow clients from blocking fast clients.
+// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
+func (m *SSEManager) BroadcastMerlin(merlin *SSEMerlinData) {
+	m.mutex.RLock()
+
+	if len(m.clients) == 0 {
+		m.mutex.RUnlock()
+		return // No clients to broadcast to
+	}
+
+	// Collect blocked client IDs to remove them after releasing the lock
+	var blockedClients []string
+
+	for clientID, client := range m.clients {
+		select {
+		case client.MerlinChan <- *merlin:
 			// Successfully sent to client - reset health counter atomically
 			client.consecutiveDrops.Store(0)
 
@@ -271,6 +329,9 @@ func (c *Controller) initSSERoutes() {
 	// SSE endpoint for detection stream with rate limiting
 	c.Group.GET("/detections/stream", c.StreamDetections, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
+	// SSE endpoint for merlin detection stream with rate limiting
+	c.Group.GET("/merlin/stream", c.StreamMerlin, middleware.RateLimiterWithConfig(rateLimiterConfig))
+
 	// SSE endpoint for sound level stream with rate limiting
 	c.Group.GET("/soundlevels/stream", c.StreamSoundLevels, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
@@ -354,6 +415,8 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	switch streamType {
 	case streamTypeDetections:
 		endpoint = detectionStreamEndpoint
+	case streamTypeMerlin:
+		endpoint = merlinStreamEndpoint
 	case streamTypeSoundLevels:
 		endpoint = soundLevelStreamEndpoint
 	}
@@ -434,6 +497,31 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 					}
 				},
 				"detection",
+				"",
+			)
+		})
+}
+
+// StreamMerlin handles the SSE connection for real-time merlin streaming
+func (c *Controller) StreamMerlin(ctx echo.Context) error {
+	return c.handleSSEStream(ctx, streamTypeMerlin, "Connected to merlin stream", "merlin",
+		func(client *SSEClient) {
+			client.MerlinChan = make(chan SSEMerlinData, sseMerlinBufferSize) // Buffer for high merlin periods
+		},
+		func(ctx echo.Context, client *SSEClient, clientID string) error {
+			return c.runSSEEventLoop(ctx, client, clientID, merlinStreamEndpoint,
+				func() (any, bool) {
+					select {
+					case merlin, ok := <-client.MerlinChan:
+						if !ok {
+							return nil, false // Channel closed, no more data
+						}
+						return merlin, true
+					default:
+						return nil, false
+					}
+				},
+				"merlin",
 				"",
 			)
 		})
@@ -607,6 +695,29 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 	}
 
 	c.sseManager.BroadcastDetection(&detection)
+	return nil
+}
+
+// BroadcastMerlin is a helper method to broadcast merlin data from the controller
+func (c *Controller) BroadcastMerlin(commonName string, confidence float64) error {
+	if c.sseManager == nil {
+		return fmt.Errorf("SSE manager not initialized")
+	}
+
+	// Add nil checks to prevent panic
+	if commonName == "" {
+		c.logErrorIfEnabled("SSE broadcast skipped: commonName is empty")
+		return fmt.Errorf("commonName is empty")
+	}
+
+	merlin := SSEMerlinData{
+		CommonName: commonName,
+		Confidence: confidence,
+		Timestamp: time.Now(),
+		EventType: "new_merlin",
+	}
+
+	c.sseManager.BroadcastMerlin(&merlin)
 	return nil
 }
 

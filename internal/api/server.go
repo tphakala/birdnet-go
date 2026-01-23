@@ -282,6 +282,7 @@ func (s *Server) setupRoutes() error {
 		s.apiController.Processor = s.processor
 		// Connect SSE broadcaster for real-time detection streaming
 		s.processor.SetSSEBroadcaster(s.apiController.BroadcastDetection)
+		s.processor.SetMerlinSSEBroadcaster(s.apiController.BroadcastMerlin)
 		s.slogger.Debug("SSE broadcaster connected to processor")
 	}
 

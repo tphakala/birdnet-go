@@ -335,6 +335,8 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 	return nil
 }
 
+//todo:mdk need something similar for merlin ui
+
 // Execute broadcasts the detection via Server-Sent Events
 func (a *SSEAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()

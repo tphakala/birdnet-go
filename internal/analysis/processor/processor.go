@@ -85,6 +85,7 @@ type Processor struct {
 	preRendererOnce     sync.Once          // Ensures pre-renderer is initialized only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
+	merlinSSEBroadcaster func(commonName string, confidence float64) error // Function to broadcast Merlin via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
 
 	// Backup system fields (optional)
@@ -447,7 +448,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		logger.Int("results_count", len(item.Results)),
 		logger.Int64("elapsed_time_ms", item.ElapsedTime.Milliseconds()),
 		logger.String("operation", "process_detections_entry"))
-
+		
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
 	// allowing overlapping analyses to accumulate confirmations for false positive filtering.
@@ -460,6 +461,20 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	detectionResults := p.processResults(item)
+	
+	// todo:mdk broadcast detection via SSE here for merlin ui
+	if merlinSSEBroadcaster := p.GetMerlinSSEBroadcaster(); merlinSSEBroadcaster != nil {
+
+		if len(detectionResults) > 0 {
+			det := detectionResults[0]
+			if err := merlinSSEBroadcaster(det.Result.Species.CommonName, det.Result.Confidence); err != nil {
+				GetLogger().Error("Failed to broadcast via SSE",
+					logger.String("component", "analysis.processor.actions"),
+					logger.Error(err),
+					logger.String("operation", "sse_broadcast"))
+			}
+		}
+	}
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
@@ -1539,6 +1554,21 @@ func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *im
 	p.sseBroadcasterMutex.RLock()
 	defer p.sseBroadcasterMutex.RUnlock()
 	return p.SSEBroadcaster
+}
+
+//todo:mdk reusing mutex for now
+// SetMerlinSSEBroadcaster safely sets the SSE broadcaster function
+func (p *Processor) SetMerlinSSEBroadcaster(broadcaster func(commonName string, confidence float64) error) {
+	p.sseBroadcasterMutex.Lock()
+	defer p.sseBroadcasterMutex.Unlock()
+	p.merlinSSEBroadcaster = broadcaster
+}
+
+// GetMerlinSSEBroadcaster safely returns the current Merlin SSE broadcaster function
+func (p *Processor) GetMerlinSSEBroadcaster() func(commonName string, confidence float64) error {
+	p.sseBroadcasterMutex.RLock()
+	defer p.sseBroadcasterMutex.RUnlock()
+	return p.merlinSSEBroadcaster
 }
 
 // SetBackupManager safely sets the backup manager

@@ -118,6 +118,8 @@ func (c *Controller) initDetectionRoutes() {
 	c.Group.GET("/detections/:id", c.GetDetection)
 	c.Group.GET("/detections/recent", c.GetRecentDetections)
 	c.Group.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
+	
+	//todo:mdk add SSE endpoint for detection updates
 
 	// Protected detection management endpoints
 	detectionGroup := c.Group.Group("/detections", c.authMiddleware)
