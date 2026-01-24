@@ -7,7 +7,12 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// migrationStateID is the ID of the singleton migration state record.
+// The migration state table always contains exactly one row with this ID.
+const migrationStateID = 1
 
 // StateManager manages the migration state machine and tracks progress.
 // It provides thread-safe access to the migration state.
@@ -54,7 +59,7 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = 1 AND state = ?", entities.MigrationStatusIdle).
+		Where("id = ? AND state = ?", migrationStateID, entities.MigrationStatusIdle).
 		Updates(updates)
 
 	if result.Error != nil {
@@ -89,7 +94,7 @@ func (m *StateManager) Pause() error {
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = 1 AND state IN ?", pausableStates).
+		Where("id = ? AND state IN ?", migrationStateID, pausableStates).
 		Update("state", entities.MigrationStatusPaused)
 
 	if result.Error != nil {
@@ -143,7 +148,7 @@ func (m *StateManager) Complete() error {
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = 1 AND state = ?", entities.MigrationStatusCutover).
+		Where("id = ? AND state = ?", migrationStateID, entities.MigrationStatusCutover).
 		Updates(updates)
 
 	if result.Error != nil {
@@ -187,7 +192,7 @@ func (m *StateManager) Cancel() error {
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = 1 AND state IN ?", cancellableStates).
+		Where("id = ? AND state IN ?", migrationStateID, cancellableStates).
 		Updates(updates)
 
 	if result.Error != nil {
@@ -222,7 +227,7 @@ func (m *StateManager) Rollback() error {
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = 1 AND state = ?", entities.MigrationStatusCompleted).
+		Where("id = ? AND state = ?", migrationStateID, entities.MigrationStatusCompleted).
 		Updates(updates)
 
 	if result.Error != nil {
@@ -250,7 +255,7 @@ func (m *StateManager) UpdateProgress(lastMigratedID uint, migratedRecords int64
 		"migrated_records": migratedRecords,
 	}
 
-	return m.db.Model(&entities.MigrationState{}).Where("id = 1").Updates(updates).Error
+	return m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Updates(updates).Error
 }
 
 // IncrementProgress increments the migrated records count by delta.
@@ -259,7 +264,7 @@ func (m *StateManager) IncrementProgress(lastMigratedID uint, delta int64) error
 	defer m.mu.Unlock()
 
 	return m.db.Model(&entities.MigrationState{}).
-		Where("id = 1").
+		Where("id = ?", migrationStateID).
 		Updates(map[string]any{
 			"last_migrated_id": lastMigratedID,
 			"migrated_records": gorm.Expr("migrated_records + ?", delta),
@@ -271,7 +276,7 @@ func (m *StateManager) SetError(errMsg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.db.Model(&entities.MigrationState{}).Where("id = 1").Update("error_message", errMsg).Error
+	return m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Update("error_message", errMsg).Error
 }
 
 // ClearError clears any error message.
@@ -286,7 +291,7 @@ func (m *StateManager) transitionState(from, to entities.MigrationStatus) error 
 	defer m.mu.Unlock()
 
 	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = 1 AND state = ?", from).
+		Where("id = ? AND state = ?", migrationStateID, from).
 		Update("state", to)
 
 	if result.Error != nil {
@@ -346,4 +351,64 @@ func (m *StateManager) GetProgress() (migratedRecords, totalRecords int64, lastM
 		return 0, 0, 0, err
 	}
 	return state.MigratedRecords, state.TotalRecords, state.LastMigratedID, nil
+}
+
+// ============================================================================
+// Dirty ID Tracking
+// ============================================================================
+// These methods track detection IDs that failed to write to V2 during dual-write.
+// Unlike in-memory tracking, these persist across restarts.
+
+// AddDirtyID records a detection ID that failed to write to V2.
+// This is called when saveToV2 fails during dual-write.
+func (m *StateManager) AddDirtyID(detectionID uint) error {
+	dirty := entities.MigrationDirtyID{DetectionID: detectionID}
+	// Use ON CONFLICT IGNORE semantics - if already dirty, that's fine
+	return m.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&dirty).Error
+}
+
+// RemoveDirtyID removes a detection ID from the dirty list after successful re-sync.
+func (m *StateManager) RemoveDirtyID(detectionID uint) error {
+	return m.db.Delete(&entities.MigrationDirtyID{}, detectionID).Error
+}
+
+// GetDirtyIDs returns detection IDs that need re-sync with pagination.
+// Pass limit=0 to get all IDs (use with caution - may cause OOM with large datasets).
+// The offset parameter allows cursor-based pagination for processing large numbers of dirty IDs.
+func (m *StateManager) GetDirtyIDs(limit, offset int) ([]uint, error) {
+	var dirtyRecords []entities.MigrationDirtyID
+	query := m.db.Order("detection_id ASC")
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+	if err := query.Find(&dirtyRecords).Error; err != nil {
+		return nil, fmt.Errorf("failed to get dirty IDs: %w", err)
+	}
+
+	ids := make([]uint, len(dirtyRecords))
+	for i, r := range dirtyRecords {
+		ids[i] = r.DetectionID
+	}
+	return ids, nil
+}
+
+// GetDirtyIDsBatch returns a batch of dirty IDs for processing.
+// This is the recommended method for reconciliation to avoid memory issues.
+// Returns IDs ordered by detection_id for consistent iteration.
+func (m *StateManager) GetDirtyIDsBatch(batchSize int) ([]uint, error) {
+	return m.GetDirtyIDs(batchSize, 0)
+}
+
+// GetDirtyIDCount returns the count of dirty IDs awaiting re-sync.
+func (m *StateManager) GetDirtyIDCount() (int64, error) {
+	var count int64
+	if err := m.db.Model(&entities.MigrationDirtyID{}).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("failed to count dirty IDs: %w", err)
+	}
+	return count, nil
+}
+
+// ClearDirtyIDs removes all dirty IDs (used after successful full reconciliation).
+func (m *StateManager) ClearDirtyIDs() error {
+	return m.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&entities.MigrationDirtyID{}).Error
 }

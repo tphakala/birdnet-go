@@ -24,6 +24,8 @@ type AdvancedSearchFilters struct {
 	SortAscending bool
 	Limit         int
 	Offset        int
+	// MinID filters to records with ID > MinID (cursor-based pagination for migration)
+	MinID uint
 }
 
 // ConfidenceFilter represents a confidence level filter
@@ -88,9 +90,9 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 		query = query.Where("species_code IN ? OR scientific_name IN ?", filters.Species, filters.Species)
 	}
 
-	// Apply location/source filter
+	// Apply location/source filter (source_node column in notes table)
 	if len(filters.Location) > 0 {
-		query = query.Where("source IN ?", filters.Location)
+		query = query.Where("source_node IN ?", filters.Location)
 	}
 
 	// Apply verified filter
@@ -98,6 +100,11 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 
 	// Apply locked filter
 	query = applyLockedFilter(query, filters.Locked)
+
+	// Apply MinID filter for cursor-based pagination (used by migration worker)
+	if filters.MinID > 0 {
+		query = query.Where("id > ?", filters.MinID)
+	}
 
 	// Count total results before pagination
 	var totalCount int64

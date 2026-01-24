@@ -16,8 +16,13 @@ const (
 // Label represents a classification label (species or non-species).
 // Non-species labels include noise, background sounds, environmental sounds, etc.
 type Label struct {
-	ID             uint      `gorm:"primaryKey"`
-	ScientificName *string   `gorm:"uniqueIndex;size:200"` // NULL for non-species
+	ID uint `gorm:"primaryKey"`
+	// ScientificName stores the unique identifier for this label.
+	// For species: the scientific name (e.g., "Turdus merula")
+	// For non-species: the label identifier (e.g., "noise", "wind", "siren")
+	// This field is unique across all labels, with non-species labels differentiated
+	// by LabelType to allow the same identifier in different categories.
+	ScientificName *string   `gorm:"uniqueIndex;size:200"`
 	LabelType      LabelType `gorm:"type:varchar(20);not null;default:'species';index"`
 	TaxonomicClass *string   `gorm:"size:50"` // 'Aves', 'Chiroptera', NULL for non-species
 	CreatedAt      time.Time `gorm:"autoCreateTime"`
