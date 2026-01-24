@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -71,11 +72,9 @@ type SSEDetectionData struct {
 	DaysSinceFirstSeen int                     `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 }
 
-//todo:mdk setup data model for merlin detections
 // SSEMerlinData represents the merlin data sent via SSE
 type SSEMerlinData struct {
-	CommonName         string                  `json:"commonName"`
-	Confidence         float64                 `json:"confidence"`
+	Predictions        []birdnet.MerlinPrediction   `json:"predictions"`
 	Timestamp          time.Time               `json:"timestamp"`
 }
 
@@ -710,20 +709,19 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 }
 
 // BroadcastMerlin is a helper method to broadcast merlin data from the controller
-func (c *Controller) BroadcastMerlin(commonName string, confidence float64) error {
+func (c *Controller) BroadcastMerlin(predictions []birdnet.MerlinPrediction) error {
 	if c.sseManager == nil {
 		return fmt.Errorf("SSE manager not initialized")
 	}
 
 	// Add nil checks to prevent panic
-	if commonName == "" {
-		c.logErrorIfEnabled("SSE broadcast skipped: commonName is empty")
-		return fmt.Errorf("commonName is empty")
+	if predictions == nil {
+		c.logErrorIfEnabled("SSE broadcast skipped: predictions is nil")
+		return fmt.Errorf("predictions is nil")
 	}
 
 	merlin := SSEMerlinData{
-		CommonName: commonName,
-		Confidence: confidence,
+		Predictions: predictions,
 		Timestamp: time.Now(),
 	}
 

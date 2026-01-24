@@ -38,6 +38,11 @@ type speciesCacheEntry struct {
 	scores map[string]float64 // Species occurrence scores keyed by label
 }
 
+type MerlinPrediction struct {
+	CommonName         string                  `json:"commonName"`
+	Confidence         float64                 `json:"confidence"`
+}
+
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
 	AnalysisInterpreter    *tflite.Interpreter

@@ -85,7 +85,7 @@ type Processor struct {
 	preRendererOnce     sync.Once          // Ensures pre-renderer is initialized only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
-	merlinSSEBroadcaster func(commonName string, confidence float64) error // Function to broadcast Merlin via SSE
+	merlinSSEBroadcaster func([]birdnet.MerlinPrediction) error // Function to broadcast Merlin via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
 
 	// Backup system fields (optional)
@@ -464,14 +464,19 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	
 	// todo:mdk broadcast detection via SSE here for merlin ui
 	if merlinSSEBroadcaster := p.GetMerlinSSEBroadcaster(); merlinSSEBroadcaster != nil {
+		predictions := make([]birdnet.MerlinPrediction, len(detectionResults))
 		for i := range detectionResults {
 			det := detectionResults[i]
-			if err := merlinSSEBroadcaster(det.Result.Species.CommonName, det.Result.Confidence); err != nil {
-				GetLogger().Error("Failed to broadcast via SSE",
-					logger.String("component", "analysis.processor.actions"),
-					logger.Error(err),
-					logger.String("operation", "sse_broadcast"))
+			predictions[i] = birdnet.MerlinPrediction{
+				CommonName: det.Result.Species.CommonName,
+				Confidence: det.Result.Confidence,
 			}
+		}
+		if err := merlinSSEBroadcaster(predictions); err != nil {
+			GetLogger().Error("Failed to broadcast via SSE",
+				logger.String("component", "analysis.processor.actions"),
+				logger.Error(err),
+				logger.String("operation", "sse_broadcast"))
 		}
 	}
 
@@ -1557,14 +1562,14 @@ func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *im
 
 //todo:mdk reusing mutex for now
 // SetMerlinSSEBroadcaster safely sets the SSE broadcaster function
-func (p *Processor) SetMerlinSSEBroadcaster(broadcaster func(commonName string, confidence float64) error) {
+func (p *Processor) SetMerlinSSEBroadcaster(broadcaster func(predictions []birdnet.MerlinPrediction) error) {
 	p.sseBroadcasterMutex.Lock()
 	defer p.sseBroadcasterMutex.Unlock()
 	p.merlinSSEBroadcaster = broadcaster
 }
 
 // GetMerlinSSEBroadcaster safely returns the current Merlin SSE broadcaster function
-func (p *Processor) GetMerlinSSEBroadcaster() func(commonName string, confidence float64) error {
+func (p *Processor) GetMerlinSSEBroadcaster() func(predictions []birdnet.MerlinPrediction) error {
 	p.sseBroadcasterMutex.RLock()
 	defer p.sseBroadcasterMutex.RUnlock()
 	return p.merlinSSEBroadcaster
