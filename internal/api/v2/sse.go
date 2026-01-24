@@ -53,7 +53,7 @@ const (
 	streamTypeDetections  = "detections"
 	streamTypeMerlin      = "merlin"
 	streamTypeSoundLevels = "soundlevels"
-	streamTypeAll         = "all"
+	//streamTypeAll         = "all"
 )
 
 // WriteDeadlineSetter interface for response writers that support write deadlines
@@ -166,22 +166,25 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	var blockedClients []string
 
 	for clientID, client := range m.clients {
-		select {
-		case client.Channel <- *detection:
-			// Successfully sent to client - reset health counter atomically
-			client.consecutiveDrops.Store(0)
+		if client.StreamType == streamTypeDetections {
+			select {
+			case client.Channel <- *detection:
+				// Successfully sent to client - reset health counter atomically
+				client.consecutiveDrops.Store(0)
 
-		default:
-			// Channel full - drop this update, increment counter atomically
-			drops := client.consecutiveDrops.Add(1)
+			default:
+				// Channel full - drop this update, increment counter atomically
+				drops := client.consecutiveDrops.Add(1)
 
-			// Only log when reaching disconnect threshold to avoid log spam
-			if drops >= maxConsecutiveDrops {
-				GetLogger().Info("SSE client disconnected after consecutive drops",
-					logger.String("client_id", clientID),
-					logger.Int("consecutive_drops", int(drops)),
-				)
-				blockedClients = append(blockedClients, clientID)
+				// Only log when reaching disconnect threshold to avoid log spam
+				if drops >= maxConsecutiveDrops {
+					GetLogger().Info("SSE client disconnected after consecutive drops",
+						logger.String("client_id", clientID),
+						logger.String("channel", "detection"),
+						logger.Int("consecutive_drops", int(drops)),
+					)
+					blockedClients = append(blockedClients, clientID)
+				}
 			}
 		}
 	}
@@ -211,22 +214,25 @@ func (m *SSEManager) BroadcastMerlin(merlin *SSEMerlinData) {
 	var blockedClients []string
 
 	for clientID, client := range m.clients {
-		select {
-		case client.MerlinChan <- *merlin:
-			// Successfully sent to client - reset health counter atomically
-			client.consecutiveDrops.Store(0)
+		if client.StreamType == streamTypeMerlin {
+			select {
+			case client.MerlinChan <- *merlin:
+				// Successfully sent to client - reset health counter atomically
+				client.consecutiveDrops.Store(0)
 
-		default:
-			// Channel full - drop this update, increment counter atomically
-			drops := client.consecutiveDrops.Add(1)
+			default:
+				// Channel full - drop this update, increment counter atomically
+				drops := client.consecutiveDrops.Add(1)
 
-			// Only log when reaching disconnect threshold to avoid log spam
-			if drops >= maxConsecutiveDrops {
-				GetLogger().Info("SSE client disconnected after consecutive drops",
-					logger.String("client_id", clientID),
-					logger.Int("consecutive_drops", int(drops)),
-				)
-				blockedClients = append(blockedClients, clientID)
+				// Only log when reaching disconnect threshold to avoid log spam
+				if drops >= maxConsecutiveDrops {
+					GetLogger().Info("SSE client disconnected after consecutive drops",
+						logger.String("client_id", clientID),
+						logger.String("channel", "merlin"),
+						logger.Int("consecutive_drops", int(drops)),
+					)
+					blockedClients = append(blockedClients, clientID)
+				}
 			}
 		}
 	}
@@ -257,7 +263,7 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 
 	for clientID, client := range m.clients {
 		// Only send to clients that want sound level data
-		if client.StreamType == streamTypeSoundLevels || client.StreamType == streamTypeAll {
+		if client.StreamType == streamTypeSoundLevels {
 			if client.SoundLevelChan != nil {
 				select {
 				case client.SoundLevelChan <- *soundLevel:
@@ -272,6 +278,7 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 					if drops >= maxConsecutiveDrops {
 						GetLogger().Info("SSE client disconnected after consecutive drops",
 							logger.String("client_id", clientID),
+							logger.String("channel", "soundlevel"),
 							logger.Int("consecutive_drops", int(drops)),
 						)
 						blockedClients = append(blockedClients, clientID)
@@ -329,8 +336,8 @@ func (c *Controller) initSSERoutes() {
 	// SSE endpoint for detection stream with rate limiting
 	c.Group.GET("/detections/stream", c.StreamDetections, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
-	// SSE endpoint for merlin detection stream with rate limiting
-	c.Group.GET("/merlin/stream", c.StreamMerlin, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	// SSE endpoint for merlin detection stream
+	c.Group.GET("/merlin/stream", c.StreamMerlin) //, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// SSE endpoint for sound level stream with rate limiting
 	c.Group.GET("/soundlevels/stream", c.StreamSoundLevels, middleware.RateLimiterWithConfig(rateLimiterConfig))
