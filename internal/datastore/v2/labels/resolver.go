@@ -71,9 +71,11 @@ func (r *Resolver) Resolve(model *entities.AIModel, rawLabel string) (*entities.
 	}
 	if err := r.db.Create(&modelLabel).Error; err != nil {
 		// Handle race condition - another goroutine may have created it
+		createErr := err
 		if err := r.db.Where("model_id = ? AND raw_label = ?", model.ID, rawLabel).
 			First(&modelLabel).Error; err != nil {
-			return nil, fmt.Errorf("failed to create model label mapping: %w", err)
+			// Re-fetch failed; return the original create error for better context
+			return nil, fmt.Errorf("failed to create model label mapping: %w", createErr)
 		}
 	} else {
 		// Update model's label count (best-effort, non-critical).
@@ -129,16 +131,19 @@ func (r *Resolver) findOrCreateLabel(parsed ParsedLabel) (*entities.Label, error
 
 	if err := r.db.Create(&label).Error; err != nil {
 		// Handle race condition - another goroutine may have created the label
+		createErr := err
 		if parsed.LabelType == entities.LabelTypeSpecies {
 			if err := r.db.Where("scientific_name = ?", parsed.ScientificName).
 				First(&label).Error; err != nil {
-				return nil, fmt.Errorf("failed to create label: %w", err)
+				// Re-fetch failed; return the original create error for better context
+				return nil, fmt.Errorf("failed to create label: %w", createErr)
 			}
 		} else {
 			// For non-species, also handle race condition by fetching existing
 			if err := r.db.Where("scientific_name = ? AND label_type = ?",
 				parsed.ScientificName, parsed.LabelType).First(&label).Error; err != nil {
-				return nil, fmt.Errorf("failed to create non-species label: %w", err)
+				// Re-fetch failed; return the original create error for better context
+				return nil, fmt.Errorf("failed to create non-species label: %w", createErr)
 			}
 		}
 	}

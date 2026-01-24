@@ -12,7 +12,7 @@ type DetectionComment struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 
 	// Relationship
-	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE"`
+	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 }
 
 // TableName returns the table name for GORM.

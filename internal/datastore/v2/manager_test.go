@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 func TestNewSQLiteManager(t *testing.T) {
@@ -51,7 +52,7 @@ func TestSQLiteManager_Initialize(t *testing.T) {
 	}
 }
 
-func TestSQLiteManager_Initialize_SeedsBirdNETModel(t *testing.T) {
+func TestSQLiteManager_Initialize_SeedsDefaultModel(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
@@ -61,12 +62,12 @@ func TestSQLiteManager_Initialize_SeedsBirdNETModel(t *testing.T) {
 	err = mgr.Initialize()
 	require.NoError(t, err)
 
-	// Verify BirdNET model was seeded
+	// Verify default model was seeded using the detection package constants
 	var model entities.AIModel
-	err = mgr.DB().Where("name = ? AND version = ?", "BirdNET", "2.4").First(&model).Error
+	err = mgr.DB().Where("name = ? AND version = ?", detection.DefaultModelName, detection.DefaultModelVersion).First(&model).Error
 	require.NoError(t, err)
-	assert.Equal(t, "BirdNET", model.Name)
-	assert.Equal(t, "2.4", model.Version)
+	assert.Equal(t, detection.DefaultModelName, model.Name)
+	assert.Equal(t, detection.DefaultModelVersion, model.Version)
 	assert.Equal(t, entities.ModelTypeBird, model.ModelType)
 }
 
@@ -102,9 +103,9 @@ func TestSQLiteManager_Initialize_Idempotent(t *testing.T) {
 	err = mgr.Initialize()
 	require.NoError(t, err)
 
-	// Verify only one BirdNET model exists
+	// Verify only one default model exists
 	var count int64
-	err = mgr.DB().Model(&entities.AIModel{}).Where("name = ?", "BirdNET").Count(&count).Error
+	err = mgr.DB().Model(&entities.AIModel{}).Where("name = ?", detection.DefaultModelName).Count(&count).Error
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
 
@@ -213,14 +214,14 @@ func TestSQLiteManager_ForeignKeyConstraints(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to create a detection with invalid foreign keys - should fail
-	detection := entities.Detection{
+	det := entities.Detection{
 		ModelID:    999, // Non-existent
 		LabelID:    999, // Non-existent
 		DetectedAt: 1234567890,
 		Confidence: 0.95,
 	}
 
-	err = mgr.DB().Create(&detection).Error
+	err = mgr.DB().Create(&det).Error
 	require.Error(t, err, "foreign key constraint should prevent invalid references")
 }
 
@@ -248,25 +249,25 @@ func TestSQLiteManager_CascadeDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a detection referencing the label
-	detection := entities.Detection{
+	det := entities.Detection{
 		ModelID:    model.ID,
 		LabelID:    label.ID,
 		DetectedAt: 1234567890,
 		Confidence: 0.95,
 	}
-	err = mgr.DB().Create(&detection).Error
+	err = mgr.DB().Create(&det).Error
 	require.NoError(t, err)
 
 	// Create a review for the detection
 	review := entities.DetectionReview{
-		DetectionID: detection.ID,
+		DetectionID: det.ID,
 		Verified:    "correct",
 	}
 	err = mgr.DB().Create(&review).Error
 	require.NoError(t, err)
 
 	// Delete the detection - review should cascade
-	err = mgr.DB().Delete(&detection).Error
+	err = mgr.DB().Delete(&det).Error
 	require.NoError(t, err)
 
 	// Review should be deleted
@@ -309,32 +310,32 @@ func TestSQLiteManager_SourceDeleteSetsNull(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a detection referencing the source
-	detection := entities.Detection{
+	det := entities.Detection{
 		ModelID:    model.ID,
 		LabelID:    label.ID,
 		SourceID:   &source.ID,
 		DetectedAt: 1234567890,
 		Confidence: 0.95,
 	}
-	err = mgr.DB().Create(&detection).Error
+	err = mgr.DB().Create(&det).Error
 	require.NoError(t, err)
 
 	// Verify source ID is set
-	assert.NotNil(t, detection.SourceID)
+	assert.NotNil(t, det.SourceID)
 
 	// Delete the audio source - detection should survive with NULL source
 	err = mgr.DB().Delete(&source).Error
 	require.NoError(t, err)
 
 	// Reload the detection
-	var reloadedDetection entities.Detection
-	err = mgr.DB().First(&reloadedDetection, detection.ID).Error
+	var reloadedDet entities.Detection
+	err = mgr.DB().First(&reloadedDet, det.ID).Error
 	require.NoError(t, err)
 
 	// Detection should still exist but SourceID should be NULL
-	assert.Nil(t, reloadedDetection.SourceID, "SourceID should be NULL after source deletion")
-	assert.Equal(t, detection.ID, reloadedDetection.ID)
-	assert.InDelta(t, detection.Confidence, reloadedDetection.Confidence, 0.0001)
+	assert.Nil(t, reloadedDet.SourceID, "SourceID should be NULL after source deletion")
+	assert.Equal(t, det.ID, reloadedDet.ID)
+	assert.InDelta(t, det.Confidence, reloadedDet.Confidence, 0.0001)
 }
 
 // stringPtr is a helper to create string pointers for testing.
@@ -371,6 +372,7 @@ func TestSQLiteManager_NoReverseForeignKey(t *testing.T) {
 		assert.NotEqual(t, "detections", table,
 			"audio_sources should not have FK to detections (GORM field name collision bug)")
 	}
+	require.NoError(t, rows.Err(), "error during foreign key iteration")
 
 	// Verify audio_sources.source_uri is a varchar, not an integer
 	var tableSQL string

@@ -7,10 +7,10 @@ type DetectionPrediction struct {
 	DetectionID uint    `gorm:"not null;index;uniqueIndex:idx_pred_detection_label"`
 	LabelID     uint    `gorm:"not null;uniqueIndex:idx_pred_detection_label"`
 	Confidence  float64 `gorm:"not null"`
-	Rank        int     `gorm:"not null;default:1"` // 1 = second best, 2 = third best, etc.
+	Rank        int     `gorm:"not null;default:1"` // 1 = second best, 2 = third best, etc. (rank 0 / primary is stored in Detection.LabelID)
 
 	// Relationships
-	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE"`
+	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 	Label     *Label     `gorm:"foreignKey:LabelID"`
 }
 

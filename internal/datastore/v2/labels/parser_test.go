@@ -115,7 +115,6 @@ func TestIsValidScientificName(t *testing.T) {
 		{"empty string", "", false},
 		{"single word", "singleword", false},
 		{"lowercase genus", "turdus merula", false},
-		{"all lowercase", "turdus merula", false},
 	}
 
 	for _, tt := range tests {
