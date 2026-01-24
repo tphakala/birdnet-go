@@ -38,7 +38,7 @@ type SearchFilters struct {
 	// IsLocked filters by lock status (optional).
 	IsLocked *bool
 
-	// SortBy specifies sort field: "detected_at", "confidence", "species".
+	// SortBy specifies sort field: "detected_at" or "confidence".
 	SortBy string
 
 	// SortDesc specifies descending sort order when true.

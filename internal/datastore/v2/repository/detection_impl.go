@@ -113,8 +113,8 @@ func (r *detectionRepository) Save(ctx context.Context, det *entities.Detection)
 }
 
 // SaveWithID persists a detection with a specific ID (for migration).
+// GORM's Create() respects pre-set IDs, so no special handling is needed.
 func (r *detectionRepository) SaveWithID(ctx context.Context, det *entities.Detection) error {
-	// Use raw SQL to insert with specific ID (bypasses GORM's ID handling)
 	return r.db.WithContext(ctx).Table(r.tableName()).Create(det).Error
 }
 
@@ -143,20 +143,32 @@ func (r *detectionRepository) GetWithRelations(ctx context.Context, id uint) (*e
 		return nil, err
 	}
 
-	// Manually load relations
+	// Manually load relations - errors other than not-found are returned
 	var label entities.Label
-	if err := r.db.WithContext(ctx).Table(r.labelsTable()).First(&label, det.LabelID).Error; err == nil {
+	if err := r.db.WithContext(ctx).Table(r.labelsTable()).First(&label, det.LabelID).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("failed to load label: %w", err)
+		}
+	} else {
 		det.Label = &label
 	}
 
 	var model entities.AIModel
-	if err := r.db.WithContext(ctx).Table(r.modelsTable()).First(&model, det.ModelID).Error; err == nil {
+	if err := r.db.WithContext(ctx).Table(r.modelsTable()).First(&model, det.ModelID).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("failed to load model: %w", err)
+		}
+	} else {
 		det.Model = &model
 	}
 
 	if det.SourceID != nil {
 		var source entities.AudioSource
-		if err := r.db.WithContext(ctx).Table(r.sourcesTable()).First(&source, *det.SourceID).Error; err == nil {
+		if err := r.db.WithContext(ctx).Table(r.sourcesTable()).First(&source, *det.SourceID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("failed to load source: %w", err)
+			}
+		} else {
 			det.Source = &source
 		}
 	}
@@ -1117,29 +1129,32 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 }
 
 // GetSpeciesFirstDetectionInPeriod returns the first detection of each species within a date range.
+// Uses ROW_NUMBER() window function to correctly identify the detection with the earliest timestamp
+// per label, with id as tie-breaker for deterministic results.
 func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	// Find the first detection of each species within the date range
-	subquery := r.db.WithContext(ctx).Table(r.tableName()).
-		Select("label_id, MIN(detected_at) as first_detected, MIN(id) as detection_id").
-		Where("detected_at >= ? AND detected_at <= ?", start, end).
-		Group("label_id")
+	// Use window function to rank detections per label by timestamp (with id as tie-breaker)
+	// This ensures we get the actual detection_id that corresponds to the first_detected time
+	rawSQL := fmt.Sprintf(`
+		SELECT label_id, scientific_name, first_detected, detection_id
+		FROM (
+			SELECT
+				d.label_id,
+				l.scientific_name,
+				d.detected_at as first_detected,
+				d.id as detection_id,
+				ROW_NUMBER() OVER (PARTITION BY d.label_id ORDER BY d.detected_at ASC, d.id ASC) as rn
+			FROM %s d
+			JOIN %s l ON l.id = d.label_id
+			WHERE d.detected_at >= ? AND d.detected_at <= ?
+		) ranked
+		WHERE rn = 1
+		ORDER BY first_detected ASC
+		LIMIT ? OFFSET ?
+	`, r.tableName(), r.labelsTable())
 
-	err := r.db.WithContext(ctx).Table("(?) as period_firsts", subquery).
-		Select(fmt.Sprintf(`
-			period_firsts.label_id,
-			%s.scientific_name,
-			period_firsts.first_detected,
-			period_firsts.detection_id
-		`, r.labelsTable())).
-		Joins(fmt.Sprintf("JOIN %s ON %s.id = period_firsts.label_id",
-			r.labelsTable(), r.labelsTable())).
-		Order("period_firsts.first_detected ASC").
-		Limit(limit).
-		Offset(offset).
-		Scan(&results).Error
-
+	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
 	return results, err
 }
 

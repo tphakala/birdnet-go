@@ -19,7 +19,7 @@ type AdvancedSearchFilters struct {
 	DateRange     *DateRange
 	Verified      *bool
 	Species       []string
-	Location      []string // Maps to source field
+	Location      []string // Maps to source_node column
 	Locked        *bool
 	SortAscending bool
 	Limit         int

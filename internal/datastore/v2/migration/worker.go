@@ -23,6 +23,9 @@ const DefaultBatchSize = 100
 // to reduce database load and allow other operations.
 const DefaultSleepBetweenBatches = 100 * time.Millisecond
 
+// DefaultErrorBackoff is the sleep duration after encountering errors.
+const DefaultErrorBackoff = 5 * time.Second
+
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.New("migration paused")
 
@@ -225,7 +228,7 @@ func (w *Worker) run(ctx context.Context) {
 		if err != nil {
 			w.setError(err)
 			w.logger.Error("failed to get migration state", "error", err)
-			time.Sleep(5 * time.Second) // Back off on errors
+			time.Sleep(DefaultErrorBackoff)
 			continue
 		}
 
@@ -250,7 +253,7 @@ func (w *Worker) run(ctx context.Context) {
 			}
 			w.setError(err)
 			w.logger.Error("batch processing failed", "error", err)
-			time.Sleep(5 * time.Second) // Back off on errors
+			time.Sleep(DefaultErrorBackoff)
 			continue
 		}
 

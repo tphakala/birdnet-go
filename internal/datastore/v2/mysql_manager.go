@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -100,17 +101,19 @@ func (m *MySQLManager) Initialize() error {
 	return m.seedDefaultModel()
 }
 
-// seedDefaultModel ensures the BirdNET model exists in the registry.
+// seedDefaultModel ensures the default BirdNET model exists in the registry.
+// Uses detection.DefaultModelName and detection.DefaultModelVersion to ensure
+// consistency with the conversion layer's fallback logic.
 func (m *MySQLManager) seedDefaultModel() error {
 	model := entities.AIModel{
-		Name:      "BirdNET",
-		Version:   "2.4",
+		Name:      detection.DefaultModelName,
+		Version:   detection.DefaultModelVersion,
 		ModelType: entities.ModelTypeBird,
 	}
 	// Use FirstOrCreate to avoid duplicates
 	result := m.db.Where("name = ? AND version = ?", model.Name, model.Version).FirstOrCreate(&model)
 	if result.Error != nil {
-		return fmt.Errorf("failed to seed BirdNET model: %w", result.Error)
+		return fmt.Errorf("failed to seed default model: %w", result.Error)
 	}
 	return nil
 }

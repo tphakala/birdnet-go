@@ -372,12 +372,12 @@ func (dw *DualWriteRepository) GetByDateRange(ctx context.Context, startDate, en
 	}
 
 	if readFromV2 {
-		// Parse date strings to Unix timestamps
-		start, err := time.Parse("2006-01-02", startDate)
+		// Parse date strings to Unix timestamps using local timezone for consistency with GetHourly
+		start, err := time.ParseInLocation("2006-01-02", startDate, time.Local)
 		if err != nil {
 			return dw.legacy.GetByDateRange(ctx, startDate, endDate, limit, offset)
 		}
-		end, err := time.Parse("2006-01-02", endDate)
+		end, err := time.ParseInLocation("2006-01-02", endDate, time.Local)
 		if err != nil {
 			return dw.legacy.GetByDateRange(ctx, startDate, endDate, limit, offset)
 		}

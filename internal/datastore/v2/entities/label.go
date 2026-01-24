@@ -20,10 +20,10 @@ type Label struct {
 	// ScientificName stores the unique identifier for this label.
 	// For species: the scientific name (e.g., "Turdus merula")
 	// For non-species: the label identifier (e.g., "noise", "wind", "siren")
-	// This field is unique across all labels, with non-species labels differentiated
-	// by LabelType to allow the same identifier in different categories.
-	ScientificName *string   `gorm:"uniqueIndex;size:200"`
-	LabelType      LabelType `gorm:"type:varchar(20);not null;default:'species';index"`
+	// Combined with LabelType forms a composite unique constraint, allowing the same
+	// identifier in different categories (e.g., "noise" as LabelTypeNoise and LabelTypeEnvironment).
+	ScientificName *string   `gorm:"uniqueIndex:idx_label_name_type;size:200"`
+	LabelType      LabelType `gorm:"type:varchar(20);not null;default:'species';uniqueIndex:idx_label_name_type;index"`
 	TaxonomicClass *string   `gorm:"size:50"` // 'Aves', 'Chiroptera', NULL for non-species
 	CreatedAt      time.Time `gorm:"autoCreateTime"`
 }
