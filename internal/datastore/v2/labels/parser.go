@@ -5,6 +5,7 @@ package labels
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -97,5 +98,5 @@ func IsValidScientificName(name string) bool {
 	}
 	// First letter should be uppercase (genus)
 	firstRune, _ := utf8.DecodeRuneInString(parts[0])
-	return firstRune >= 'A' && firstRune <= 'Z'
+	return unicode.IsUpper(firstRune)
 }
