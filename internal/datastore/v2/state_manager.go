@@ -36,14 +36,6 @@ func (m *StateManager) GetState() (*entities.MigrationState, error) {
 	return &state, nil
 }
 
-// SetState updates the migration state.
-func (m *StateManager) SetState(newState entities.MigrationStatus) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	return m.db.Model(&entities.MigrationState{}).Where("id = 1").Update("state", newState).Error
-}
-
 // StartMigration transitions from IDLE to INITIALIZING.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) StartMigration(totalRecords int64) error {

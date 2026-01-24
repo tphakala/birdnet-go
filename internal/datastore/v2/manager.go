@@ -170,13 +170,12 @@ func (m *SQLiteManager) Delete() error {
 		return fmt.Errorf("failed to delete database file: %w", err)
 	}
 
-	// Also remove WAL and SHM files if they exist
+	// Also remove WAL and SHM files if they exist.
+	// Errors are ignored since these files may not exist and cleanup
+	// failures for auxiliary files shouldn't block database deletion.
 	for _, suffix := range []string{"-wal", "-shm"} {
 		walPath := m.dbPath + suffix
-		if err := os.Remove(walPath); err != nil && !os.IsNotExist(err) {
-			// Log but don't fail - these files may not exist
-			continue
-		}
+		_ = os.Remove(walPath)
 	}
 
 	return nil
