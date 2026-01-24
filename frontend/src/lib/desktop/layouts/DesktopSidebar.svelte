@@ -49,6 +49,7 @@ Performance Optimizations:
     BarChart3,
     Search,
     Info,
+    Bird,
     Cpu,
     Settings,
     LogOut,
@@ -167,6 +168,7 @@ Performance Optimizations:
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
+    merlin: actualRoute.startsWith('/ui/merlin'),
     system: actualRoute.startsWith('/ui/system'),
     settings: actualRoute.startsWith('/ui/settings'),
     settingsMain: actualRoute === '/ui/settings/main',
@@ -204,6 +206,7 @@ Performance Optimizations:
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
+    merlin: onNavigate ? '/merlin' : '/ui/merlin',
     system: onNavigate ? '/system' : '/ui/system',
     settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
     settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
@@ -346,6 +349,26 @@ Performance Optimizations:
           </button>
         </div>
 
+        <!-- Merlin -->
+        <div class="relative">
+          <button
+            onclick={() => navigate(navigationUrls.merlin)}
+            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.merlin'))}
+            onmouseleave={hideTooltip}
+            class={cn(
+              menuItemBase,
+              menuItemCollapsed,
+              routeCache.merlin ? menuItemActive : menuItemDefault
+            )}
+            role="menuitem"
+          >
+            <Bird class="size-5 shrink-0" />
+            {#if !isCollapsed}
+              <span>{t('navigation.merlin')}</span>
+            {/if}
+          </button>
+        </div>
+
         <!-- Analytics (Collapsible) -->
         <div class="flex flex-col relative flyout-container">
           {#if isCollapsed}
@@ -474,26 +497,6 @@ Performance Optimizations:
             <Search class="size-5 shrink-0" />
             {#if !isCollapsed}
               <span>{t('navigation.search')}</span>
-            {/if}
-          </button>
-        </div>
-
-        <!-- About -->
-        <div class="relative">
-          <button
-            onclick={() => navigate(navigationUrls.about)}
-            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.about'))}
-            onmouseleave={hideTooltip}
-            class={cn(
-              menuItemBase,
-              menuItemCollapsed,
-              routeCache.about ? menuItemActive : menuItemDefault
-            )}
-            role="menuitem"
-          >
-            <Info class="size-5 shrink-0" />
-            {#if !isCollapsed}
-              <span>{t('navigation.about')}</span>
             {/if}
           </button>
         </div>

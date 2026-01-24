@@ -27,6 +27,7 @@
   let Species = $state<Component | null>(null);
   let Search = $state<Component | null>(null);
   let About = $state<Component | null>(null);
+  let Merlin = $state<Component | null>(null);
   let System = $state<Component | null>(null);
   let Settings = $state<Component | null>(null);
   let Notifications = $state<Component | null>(null);
@@ -108,6 +109,7 @@
       component: 'detection-detail',
     },
     { route: 'about', page: 'about', titleKey: 'navigation.about', component: 'about' },
+    { route: 'merlin', page: 'merlin', titleKey: 'navigation.merlin', component: 'merlin' },
     { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
     { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
   ];
@@ -161,6 +163,12 @@
           if (!About) {
             const module = await import('./lib/desktop/views/About.svelte');
             About = module.default;
+          }
+          break;
+        case 'merlin':
+          if (!Merlin) {
+            const module = await import('./lib/desktop/views/Merlin.svelte');
+            Merlin = module.default;
           }
           break;
         case 'system':
@@ -258,6 +266,7 @@
     '/ui/search': findRouteConfig('search'),
     '/ui/detections': findRouteConfig('detections'),
     '/ui/about': findRouteConfig('about'),
+    '/ui/merlin': findRouteConfig('merlin'),
     '/ui/system': findRouteConfig('system'),
     '/ui/settings': findRouteConfig('settings'),
   });
@@ -467,6 +476,8 @@
       {@render renderRoute(Search)}
     {:else if currentRoute === 'about'}
       {@render renderRoute(About)}
+    {:else if currentRoute === 'merlin'}
+      {@render renderRoute(Merlin)}
     {:else if currentRoute === 'system'}
       {@render renderRoute(System)}
     {:else if currentRoute === 'settings'}

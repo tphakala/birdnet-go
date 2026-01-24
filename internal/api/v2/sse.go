@@ -75,7 +75,7 @@ type SSEDetectionData struct {
 // SSEMerlinData represents the merlin data sent via SSE
 type SSEMerlinData struct {
 	Predictions        []birdnet.MerlinPrediction   `json:"predictions"`
-	Timestamp          time.Time               `json:"timestamp"`
+	Timestamp          time.Time               		`json:"timestamp"`
 }
 
 // SSESoundLevelData represents sound level data sent via SSE
