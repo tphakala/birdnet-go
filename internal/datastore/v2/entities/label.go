@@ -1,4 +1,3 @@
-// Package entities defines the GORM entity models for the v2 normalized database schema.
 package entities
 
 import "time"
