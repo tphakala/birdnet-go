@@ -77,7 +77,6 @@ type SSEMerlinData struct {
 	CommonName         string                  `json:"commonName"`
 	Confidence         float64                 `json:"confidence"`
 	Timestamp          time.Time               `json:"timestamp"`
-	EventType          string                  `json:"eventType"`
 }
 
 // SSESoundLevelData represents sound level data sent via SSE
@@ -138,9 +137,14 @@ func (m *SSEManager) RemoveClient(clientID string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if client, exists := m.clients[clientID]; exists {
-		close(client.Channel)
+		if client.Channel != nil {
+			close(client.Channel)
+		}
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
+		}
+		if client.MerlinChan != nil {
+			close(client.MerlinChan)
 		}
 		close(client.Done)
 		delete(m.clients, clientID)
@@ -721,7 +725,6 @@ func (c *Controller) BroadcastMerlin(commonName string, confidence float64) erro
 		CommonName: commonName,
 		Confidence: confidence,
 		Timestamp: time.Now(),
-		EventType: "new_merlin",
 	}
 
 	c.sseManager.BroadcastMerlin(&merlin)

@@ -247,6 +247,13 @@ func extractPredictions(tensor *tflite.Tensor) []float32 {
 	predSize := tensor.Dim(tensor.NumDims() - 1)
 	predictions := make([]float32, predSize)
 	copy(predictions, tensor.Float32s())
+	
+	// Fake predictions for testing
+	//predictions[0] = 0.95 // Bird
+	//predictions[1674] = 0.90 // American Robin
+	//predictions[1582] = 0.85 // Carolina Wren
+	//predictions[1844] = 0.88 // White-throated Sparrow
+	
 	return predictions
 }
 

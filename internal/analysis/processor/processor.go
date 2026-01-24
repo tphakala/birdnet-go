@@ -464,9 +464,8 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	
 	// todo:mdk broadcast detection via SSE here for merlin ui
 	if merlinSSEBroadcaster := p.GetMerlinSSEBroadcaster(); merlinSSEBroadcaster != nil {
-
-		if len(detectionResults) > 0 {
-			det := detectionResults[0]
+		for i := range detectionResults {
+			det := detectionResults[i]
 			if err := merlinSSEBroadcaster(det.Result.Species.CommonName, det.Result.Confidence); err != nil {
 				GetLogger().Error("Failed to broadcast via SSE",
 					logger.String("component", "analysis.processor.actions"),
