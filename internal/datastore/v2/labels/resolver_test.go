@@ -262,6 +262,11 @@ func TestResolver_Resolve_Concurrent(t *testing.T) {
 	var count int64
 	db.Model(&entities.Label{}).Count(&count)
 	assert.Equal(t, int64(1), count)
+
+	// Verify model's label count was incremented exactly once
+	var updatedModel entities.AIModel
+	require.NoError(t, db.First(&updatedModel, model.ID).Error)
+	assert.Equal(t, 1, updatedModel.LabelCount)
 }
 
 func TestResolver_Resolve_NonSpecies_Concurrent(t *testing.T) {
@@ -322,6 +327,11 @@ func TestResolver_Resolve_NonSpecies_Concurrent(t *testing.T) {
 	var count int64
 	db.Model(&entities.Label{}).Count(&count)
 	assert.Equal(t, int64(1), count)
+
+	// Verify model's label count was incremented exactly once
+	var updatedModel entities.AIModel
+	require.NoError(t, db.First(&updatedModel, model.ID).Error)
+	assert.Equal(t, 1, updatedModel.LabelCount)
 
 	// Verify the label is of type noise
 	var label entities.Label

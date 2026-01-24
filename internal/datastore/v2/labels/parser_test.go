@@ -128,27 +128,12 @@ func TestIsValidScientificName(t *testing.T) {
 
 func TestNonSpeciesLabels_Coverage(t *testing.T) {
 	// Verify all known non-species labels are properly categorized
-	noiseLabels := []string{"noise", "silence", "background"}
-	for _, label := range noiseLabels {
-		result := ParseRawLabel(label, entities.ModelTypeBird)
-		assert.Equal(t, entities.LabelTypeNoise, result.LabelType, "Expected %s to be noise", label)
-	}
-
-	envLabels := []string{"engine", "train", "wind", "rain", "thunder", "water", "fireworks", "siren"}
-	for _, label := range envLabels {
-		result := ParseRawLabel(label, entities.ModelTypeBird)
-		assert.Equal(t, entities.LabelTypeEnvironment, result.LabelType, "Expected %s to be environment", label)
-	}
-
-	deviceLabels := []string{"audiomoth"}
-	for _, label := range deviceLabels {
-		result := ParseRawLabel(label, entities.ModelTypeBird)
-		assert.Equal(t, entities.LabelTypeDevice, result.LabelType, "Expected %s to be device", label)
-	}
-
-	unknownLabels := []string{"other"}
-	for _, label := range unknownLabels {
-		result := ParseRawLabel(label, entities.ModelTypeBird)
-		assert.Equal(t, entities.LabelTypeUnknown, result.LabelType, "Expected %s to be unknown", label)
+	// Iterate directly over NonSpeciesLabels map to ensure test stays in sync
+	for label, expectedType := range NonSpeciesLabels {
+		t.Run(label, func(t *testing.T) {
+			result := ParseRawLabel(label, entities.ModelTypeBird)
+			assert.Equal(t, expectedType, result.LabelType, "Expected %s to be %s", label, expectedType)
+			assert.Equal(t, label, result.ScientificName)
+		})
 	}
 }

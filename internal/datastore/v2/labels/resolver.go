@@ -75,12 +75,13 @@ func (r *Resolver) Resolve(model *entities.AIModel, rawLabel string) (*entities.
 			First(&modelLabel).Error; err != nil {
 			return nil, fmt.Errorf("failed to create model label mapping: %w", err)
 		}
+	} else {
+		// Update model's label count (best-effort, non-critical).
+		// This is a denormalized counter for performance; the true count can be
+		// derived from the model_labels table. Errors are intentionally ignored.
+		// Only increment when we successfully created a new mapping (not on race condition).
+		_ = r.db.Model(model).Update("label_count", gorm.Expr("label_count + 1")).Error
 	}
-
-	// Update model's label count (best-effort, non-critical).
-	// This is a denormalized counter for performance; the true count can be
-	// derived from the model_labels table. Errors are intentionally ignored.
-	_ = r.db.Model(model).Update("label_count", gorm.Expr("label_count + 1")).Error
 
 	r.cache.Store(key, label)
 	return label, nil
