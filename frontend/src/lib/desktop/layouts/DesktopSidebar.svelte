@@ -391,6 +391,7 @@ Performance Optimizations:
                   'hover:text-base-content hover:menu-hover'
                 )}
                 aria-expanded={analyticsFlyoutOpen}
+                aria-label={t('navigation.analyticsSubmenu')}
               >
                 <BarChart3 class="size-5 shrink-0" />
               </button>
@@ -546,6 +547,7 @@ Performance Optimizations:
                     'hover:text-base-content hover:menu-hover'
                   )}
                   aria-expanded={systemFlyoutOpen}
+                  aria-label={t('navigation.systemSubmenu')}
                 >
                   <Cpu class="size-5 shrink-0" />
                 </button>
@@ -658,6 +660,7 @@ Performance Optimizations:
                     'hover:text-base-content hover:menu-hover'
                   )}
                   aria-expanded={settingsFlyoutOpen}
+                  aria-label={t('navigation.settingsSubmenu')}
                 >
                   <Settings class="size-5 shrink-0" />
                 </button>
