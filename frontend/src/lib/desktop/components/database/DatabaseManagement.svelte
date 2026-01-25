@@ -78,7 +78,8 @@
       legacyStats.data = await api.get<DatabaseStats>('/api/v2/system/database/stats');
       legacyStats.error = null;
     } catch (e) {
-      legacyStats.error = e instanceof ApiError ? e.message : 'Failed to fetch stats';
+      legacyStats.error =
+        e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
     } finally {
       legacyStats.loading = false;
     }
@@ -94,7 +95,7 @@
         v2Stats.data = null;
         v2Stats.error = null;
       } else {
-        v2Stats.error = e instanceof ApiError ? e.message : 'Failed to fetch stats';
+        v2Stats.error = e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
       }
     } finally {
       v2Stats.loading = false;
@@ -108,7 +109,8 @@
       );
       migrationStatus.error = null;
     } catch (e) {
-      migrationStatus.error = e instanceof ApiError ? e.message : 'Failed to fetch status';
+      migrationStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.migration.errors.fetchFailed');
     } finally {
       migrationStatus.loading = false;
     }
@@ -135,7 +137,8 @@
       }
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error = e instanceof ApiError ? e.message : 'Failed to start migration';
+      migrationStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed');
     } finally {
       startLoading = false;
     }
@@ -146,7 +149,8 @@
       await api.post('/api/v2/system/database/migration/pause');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error = e instanceof ApiError ? e.message : 'Failed to pause';
+      migrationStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.migration.errors.pauseFailed');
     }
   }
 
@@ -155,7 +159,8 @@
       await api.post('/api/v2/system/database/migration/resume');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error = e instanceof ApiError ? e.message : 'Failed to resume';
+      migrationStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.migration.errors.resumeFailed');
     }
   }
 
@@ -164,7 +169,8 @@
       await api.post('/api/v2/system/database/migration/cancel');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error = e instanceof ApiError ? e.message : 'Failed to cancel';
+      migrationStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.migration.errors.cancelFailed');
     }
   }
 
