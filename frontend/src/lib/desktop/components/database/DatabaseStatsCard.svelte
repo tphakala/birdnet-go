@@ -5,7 +5,7 @@
   Shows type, location, size, detections count, and connection status.
 
   Props:
-  - title: Card title (e.g., "Legacy Database" or "V2 Database")
+  - title: Card title (e.g., "Legacy Database" or "Enhanced Database")
   - dbType: 'legacy' | 'v2' - For API calls
   - stats: Database stats from API or null
   - isLoading: Whether stats are being loaded

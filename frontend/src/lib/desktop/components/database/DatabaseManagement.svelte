@@ -237,7 +237,7 @@
         </div>
 
         <!-- Animated data packets flowing left to right -->
-        <div class="absolute inset-y-0 inset-x-4 overflow-hidden">
+        <div class="data-packet-container absolute inset-y-0 inset-x-0 overflow-hidden">
           {#each { length: 4 } as _, i (i)}
             <div
               class="data-packet absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5
@@ -272,6 +272,11 @@
 />
 
 <style>
+  /* Gradient mask to fade particles at both ends */
+  .data-packet-container {
+    mask-image: linear-gradient(to right, transparent, black 25%, black 75%, transparent);
+  }
+
   /* Data packet animation - flows from left to right */
   .data-packet {
     animation: flow-packet 2s ease-in-out infinite;
@@ -287,14 +292,17 @@
       opacity: 0;
       transform: translateY(-50%) scale(0.5);
     }
+
     15% {
       opacity: 1;
       transform: translateY(-50%) scale(1);
     }
+
     85% {
       opacity: 1;
       transform: translateY(-50%) scale(1);
     }
+
     100% {
       left: 110%;
       opacity: 0;
