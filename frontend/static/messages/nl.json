@@ -839,7 +839,8 @@
         "type": "Type",
         "location": "Locatie",
         "size": "Grootte",
-        "detections": "Detecties"
+        "detections": "Detecties",
+        "fetchFailed": "Ophalen van databasestatistieken mislukt"
       },
       "backup": {
         "download": "Back-up downloaden",

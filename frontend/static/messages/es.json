@@ -839,7 +839,8 @@
         "type": "Tipo",
         "location": "Ubicación",
         "size": "Tamaño",
-        "detections": "Detecciones"
+        "detections": "Detecciones",
+        "fetchFailed": "Error al obtener las estadísticas de la base de datos"
       },
       "backup": {
         "download": "Descargar copia de seguridad",

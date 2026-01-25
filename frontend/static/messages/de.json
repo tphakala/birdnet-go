@@ -839,7 +839,8 @@
         "type": "Typ",
         "location": "Speicherort",
         "size": "Größe",
-        "detections": "Erkennungen"
+        "detections": "Erkennungen",
+        "fetchFailed": "Fehler beim Abrufen der Datenbankstatistiken"
       },
       "backup": {
         "download": "Backup herunterladen",

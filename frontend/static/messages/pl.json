@@ -839,7 +839,8 @@
         "type": "Typ",
         "location": "Lokalizacja",
         "size": "Rozmiar",
-        "detections": "Wykrycia"
+        "detections": "Wykrycia",
+        "fetchFailed": "Nie udało się pobrać statystyk bazy danych"
       },
       "backup": {
         "download": "Pobierz kopię zapasową",

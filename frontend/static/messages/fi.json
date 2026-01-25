@@ -839,7 +839,8 @@
         "type": "Tyyppi",
         "location": "Sijainti",
         "size": "Koko",
-        "detections": "Havainnot"
+        "detections": "Havainnot",
+        "fetchFailed": "Tietokantatilastojen haku epäonnistui"
       },
       "backup": {
         "download": "Lataa varmuuskopio",

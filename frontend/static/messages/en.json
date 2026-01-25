@@ -765,7 +765,8 @@
         "type": "Type",
         "location": "Location",
         "size": "Size",
-        "detections": "Detections"
+        "detections": "Detections",
+        "fetchFailed": "Failed to fetch database stats"
       },
       "backup": {
         "download": "Download Backup",
