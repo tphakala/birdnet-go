@@ -756,6 +756,8 @@
       "migration": {
         "title": "Schema Migration",
         "description": "Migrate from legacy schema to normalized v2 schema",
+        "completedTitle": "Migração concluída",
+        "completedNote": "Seu banco de dados foi migrado com sucesso para o novo esquema. Seu sistema está agora pronto para os próximos recursos que requerem o banco de dados normalizado. Nota: O novo banco de dados é menor porque armazena dados de forma mais eficiente - isso é normal e todos os seus dados estão preservados.",
         "status": {
           "idle": "Ready to Start",
           "initializing": "Initializing",
@@ -772,7 +774,15 @@
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "remaining": "Est. remaining: {time}",
+          "eta": "Tempo restante estimado",
           "dirtyIds": "{count} records pending re-sync"
+        },
+        "notes": {
+          "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
+          "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
+          "validating": "Verificando se todos os registros foram copiados corretamente. Quase pronto!",
+          "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
+          "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
         },
         "actions": {
           "start": "Start Migration",
@@ -783,7 +793,7 @@
         },
         "confirmCancel": {
           "title": "Cancel Migration?",
-          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registros não serão duplicados.",
           "confirm": "Yes, Cancel",
           "dismiss": "No, Keep Running"
         },

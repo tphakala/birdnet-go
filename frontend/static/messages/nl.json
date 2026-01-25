@@ -756,6 +756,8 @@
       "migration": {
         "title": "Schema Migration",
         "description": "Migrate from legacy schema to normalized v2 schema",
+        "completedTitle": "Migratie voltooid",
+        "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Uw systeem is nu klaar voor toekomstige functies die de genormaliseerde database vereisen. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
         "status": {
           "idle": "Ready to Start",
           "initializing": "Initializing",
@@ -772,7 +774,15 @@
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "remaining": "Est. remaining: {time}",
+          "eta": "Geschatte resterende tijd",
           "dirtyIds": "{count} records pending re-sync"
+        },
+        "notes": {
+          "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
+          "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
+          "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",
+          "cutover": "Overschakelen naar de nieuwe database. Dit duurt slechts een moment.",
+          "paused": "Migratie is gepauzeerd. Uw gegevens zijn veilig. Hervat wanneer u klaar bent."
         },
         "actions": {
           "start": "Start Migration",
@@ -783,7 +793,7 @@
         },
         "confirmCancel": {
           "title": "Cancel Migration?",
-          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "message": "Dit stopt de migratie en keert terug naar de inactieve status. U kunt de migratie later veilig opnieuw starten - records worden niet gedupliceerd.",
           "confirm": "Yes, Cancel",
           "dismiss": "No, Keep Running"
         },

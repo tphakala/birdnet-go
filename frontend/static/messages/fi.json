@@ -756,6 +756,8 @@
       "migration": {
         "title": "Schema Migration",
         "description": "Migrate from legacy schema to normalized v2 schema",
+        "completedTitle": "Migraatio valmis",
+        "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Järjestelmäsi on nyt valmis tulevia ominaisuuksia varten, jotka vaativat normalisoidun tietokannan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
         "status": {
           "idle": "Ready to Start",
           "initializing": "Initializing",
@@ -772,7 +774,15 @@
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "remaining": "Est. remaining: {time}",
+          "eta": "Arvioitu jäljellä oleva aika",
           "dirtyIds": "{count} records pending re-sync"
+        },
+        "notes": {
+          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
+          "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
+          "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
+          "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
+          "paused": "Migraatio on keskeytetty. Tietosi ovat turvassa. Jatka kun olet valmis."
         },
         "actions": {
           "start": "Start Migration",
@@ -783,7 +793,7 @@
         },
         "confirmCancel": {
           "title": "Cancel Migration?",
-          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "message": "Tämä pysäyttää migraation ja palauttaa lepotilaan. Voit käynnistää migraation turvallisesti uudelleen myöhemmin - tietueita ei kopioida.",
           "confirm": "Yes, Cancel",
           "dismiss": "No, Keep Running"
         },

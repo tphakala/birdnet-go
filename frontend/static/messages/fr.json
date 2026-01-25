@@ -756,6 +756,8 @@
       "migration": {
         "title": "Schema Migration",
         "description": "Migrate from legacy schema to normalized v2 schema",
+        "completedTitle": "Migration terminée",
+        "completedNote": "Votre base de données a été migrée avec succès vers le nouveau schéma. Votre système est maintenant prêt pour les futures fonctionnalités qui nécessitent la base de données normalisée. Note : La nouvelle base de données est plus petite car elle stocke les données plus efficacement - c'est normal et toutes vos données sont préservées.",
         "status": {
           "idle": "Ready to Start",
           "initializing": "Initializing",
@@ -772,7 +774,15 @@
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "remaining": "Est. remaining: {time}",
+          "eta": "Temps restant estimé",
           "dirtyIds": "{count} records pending re-sync"
+        },
+        "notes": {
+          "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
+          "migrating": "Copie de vos détections existantes vers la nouvelle base de données. Cela peut prendre un certain temps selon le nombre de détections. Vous pouvez mettre en pause et reprendre à tout moment.",
+          "validating": "Vérification que tous les enregistrements ont été copiés correctement. Presque terminé !",
+          "cutover": "Passage à la nouvelle base de données. Cela ne prend qu'un instant.",
+          "paused": "La migration est en pause. Vos données sont en sécurité. Reprenez quand vous êtes prêt."
         },
         "actions": {
           "start": "Start Migration",
@@ -783,7 +793,7 @@
         },
         "confirmCancel": {
           "title": "Cancel Migration?",
-          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "message": "Cela arrêtera la migration et reviendra à l'état inactif. Vous pouvez redémarrer la migration en toute sécurité plus tard - les enregistrements ne seront pas dupliqués.",
           "confirm": "Yes, Cancel",
           "dismiss": "No, Keep Running"
         },

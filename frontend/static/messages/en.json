@@ -753,13 +753,37 @@
     "database": {
       "title": "Database Management",
       "description": "Manage database schema migration",
+      "legacy": {
+        "title": "Legacy Database"
+      },
+      "v2": {
+        "title": "V2 Database"
+      },
+      "stats": {
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "type": "Type",
+        "location": "Location",
+        "size": "Size",
+        "detections": "Detections"
+      },
+      "backup": {
+        "download": "Download Backup",
+        "downloading": "Creating Backup...",
+        "mysqlNote": "MySQL backup requires external tools (mysqldump)"
+      },
+      "notInitialized": "Not initialized",
       "migration": {
-        "title": "Schema Migration",
+        "title": "Database Migration",
         "description": "Migrate from legacy schema to normalized v2 schema",
+        "requiredNote": "Database migration is required for upcoming BirdNET-Go features that rely on the new normalized database schema. New features will not be available until migration is complete.",
+        "completedTitle": "Migration Complete",
+        "completedNote": "Your database has been successfully migrated to the new schema. Your system is now ready for upcoming features that require the normalized database. Note: The new database is smaller because it stores data more efficiently - this is expected and all your data is preserved.",
+        "starting": "Starting migration...",
         "status": {
           "idle": "Ready to Start",
           "initializing": "Initializing",
-          "dualWrite": "Dual-Write Active",
+          "dual_write": "Dual-Write Active",
           "migrating": "Migrating Records",
           "paused": "Paused",
           "validating": "Validating",
@@ -768,11 +792,20 @@
         },
         "progress": {
           "title": "Migration Progress",
-          "records": "{migrated} of {total} records",
+          "records": "records",
+          "paused": "Migration Paused",
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "remaining": "Est. remaining: {time}",
+          "eta": "Estimated time remaining",
           "dirtyIds": "{count} records pending re-sync"
+        },
+        "notes": {
+          "dual_write": "Migration in progress. Your data is safe - all new detections are being saved to both databases. You can continue using BirdNET-Go normally.",
+          "migrating": "Copying your existing detections to the new database. This may take a while depending on how many detections you have. You can pause and resume at any time.",
+          "validating": "Verifying all records were copied correctly. Almost done!",
+          "cutover": "Switching to the new database. This only takes a moment.",
+          "paused": "Migration is paused. Your data is safe. Resume when you're ready to continue."
         },
         "actions": {
           "start": "Start Migration",
@@ -781,9 +814,15 @@
           "cancel": "Cancel",
           "rollback": "Rollback"
         },
+        "confirmDialog": {
+          "title": "Start Database Migration",
+          "message": "The migration will copy your detection data from the current database to a new normalized database. Your original database remains unchanged. However, creating a backup is recommended in case of unexpected issues.",
+          "checkbox": "I confirm that I have backed up my database or understand the risks of proceeding without a backup.",
+          "note": "You can download a backup using the \"Download Backup\" button above."
+        },
         "confirmCancel": {
           "title": "Cancel Migration?",
-          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "message": "This will stop the migration and return to idle state. You can safely restart the migration later - records will not be duplicated.",
           "confirm": "Yes, Cancel",
           "dismiss": "No, Keep Running"
         },

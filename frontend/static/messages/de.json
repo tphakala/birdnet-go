@@ -756,6 +756,8 @@
       "migration": {
         "title": "Schema Migration",
         "description": "Migrate from legacy schema to normalized v2 schema",
+        "completedTitle": "Migration abgeschlossen",
+        "completedNote": "Ihre Datenbank wurde erfolgreich auf das neue Schema migriert. Ihr System ist jetzt bereit für zukünftige Funktionen, die die normalisierte Datenbank erfordern. Hinweis: Die neue Datenbank ist kleiner, weil sie Daten effizienter speichert - das ist normal und alle Ihre Daten sind erhalten.",
         "status": {
           "idle": "Ready to Start",
           "initializing": "Initializing",
@@ -772,7 +774,15 @@
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "remaining": "Est. remaining: {time}",
+          "eta": "Geschätzte Restzeit",
           "dirtyIds": "{count} records pending re-sync"
+        },
+        "notes": {
+          "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
+          "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
+          "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
+          "cutover": "Wechsle zur neuen Datenbank. Das dauert nur einen Moment.",
+          "paused": "Migration ist pausiert. Ihre Daten sind sicher. Setzen Sie fort, wenn Sie bereit sind."
         },
         "actions": {
           "start": "Start Migration",
@@ -783,7 +793,7 @@
         },
         "confirmCancel": {
           "title": "Cancel Migration?",
-          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "message": "Dies stoppt die Migration und setzt den Status auf Leerlauf zurück. Sie können die Migration später sicher neu starten - Datensätze werden nicht dupliziert.",
           "confirm": "Yes, Cancel",
           "dismiss": "No, Keep Running"
         },
