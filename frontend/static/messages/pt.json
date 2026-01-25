@@ -209,7 +209,8 @@
     "mainNavigation": "Navegação principal",
     "closeSidebar": "Fechar barra lateral",
     "analyticsSubmenu": "Submenu de análises",
-    "settingsSubmenu": "Submenu de configurações"
+    "settingsSubmenu": "Submenu de configurações",
+    "systemSubmenu": "Submenu do sistema"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -744,6 +745,109 @@
         "overallProgress": "Progresso geral",
         "progress": "Progresso"
       }
+    },
+    "sections": {
+      "overview": "Visão geral",
+      "database": "Base de dados"
+    },
+    "database": {
+      "title": "Gestão da base de dados",
+      "description": "Gerir migração de esquema",
+      "migration": {
+        "title": "Migração da base de dados",
+        "description": "Migrar do esquema antigo para o esquema v2 normalizado",
+        "completedTitle": "Migração concluída",
+        "completedNote": "Seu banco de dados foi migrado com sucesso para o novo esquema. Seu sistema está agora pronto para os próximos recursos que requerem o banco de dados normalizado. Nota: O novo banco de dados é menor porque armazena dados de forma mais eficiente - isso é normal e todos os seus dados estão preservados.",
+        "status": {
+          "idle": "Pronto para iniciar",
+          "initializing": "A inicializar",
+          "dual_write": "Escrita dupla ativa",
+          "migrating": "A migrar registos",
+          "paused": "Pausado",
+          "validating": "A validar",
+          "cutover": "Transição em curso",
+          "completed": "Migração concluída"
+        },
+        "progress": {
+          "title": "Progresso da migração",
+          "records": "registos",
+          "percent": "{percent}%",
+          "rate": "{rate} registos/seg",
+          "rateValue": "{rate} reg/s",
+          "remaining": "Restante: {time}",
+          "eta": "Tempo restante estimado",
+          "dirtyIds": "{count} registos pendentes",
+          "paused": "Migração em pausa"
+        },
+        "notes": {
+          "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
+          "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
+          "validating": "Verificando se todos os registros foram copiados corretamente. Quase pronto!",
+          "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
+          "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
+        },
+        "actions": {
+          "start": "Iniciar migração",
+          "pause": "Pausar",
+          "resume": "Retomar",
+          "cancel": "Cancelar",
+          "rollback": "Reverter"
+        },
+        "confirmCancel": {
+          "title": "Cancelar migração?",
+          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registros não serão duplicados.",
+          "confirm": "Sim, cancelar",
+          "dismiss": "Não, continuar"
+        },
+        "confirmRollback": {
+          "title": "Reverter migração?",
+          "message": "Isto reverterá para a base de dados antiga. Novas deteções registadas desde a migração serão preservadas na base de dados melhorada mas não ficarão visíveis até a migração ser executada novamente.",
+          "confirm": "Sim, reverter",
+          "dismiss": "Não, manter melhorada"
+        },
+        "errors": {
+          "startFailed": "Falha ao iniciar a migração",
+          "pauseFailed": "Falha ao pausar a migração",
+          "resumeFailed": "Falha ao retomar a migração",
+          "cancelFailed": "Falha ao cancelar a migração",
+          "rollbackFailed": "Falha ao reverter a migração",
+          "fetchFailed": "Falha ao obter o estado da migração"
+        },
+        "worker": {
+          "running": "Worker em execução",
+          "paused": "Worker pausado",
+          "stopped": "Worker parado"
+        },
+        "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
+        "starting": "A iniciar migração...",
+        "confirmDialog": {
+          "title": "Iniciar migração da base de dados",
+          "message": "A migração irá copiar os seus dados de deteção da base de dados atual para uma nova base de dados normalizada. A sua base de dados original permanece inalterada. No entanto, é recomendado criar uma cópia de segurança caso ocorram problemas inesperados.",
+          "checkbox": "Confirmo que fiz uma cópia de segurança da minha base de dados ou compreendo os riscos de continuar sem cópia de segurança.",
+          "note": "Pode transferir uma cópia de segurança usando o botão \"Transferir cópia de segurança\" acima."
+        }
+      },
+      "legacy": {
+        "title": "Base de dados legada"
+      },
+      "v2": {
+        "title": "Base de dados melhorada"
+      },
+      "stats": {
+        "connected": "Conectado",
+        "disconnected": "Desconectado",
+        "type": "Tipo",
+        "location": "Localização",
+        "size": "Tamanho",
+        "detections": "Deteções",
+        "fetchFailed": "Falha ao obter estatísticas da base de dados"
+      },
+      "backup": {
+        "download": "Transferir cópia de segurança",
+        "downloading": "A criar cópia de segurança...",
+        "mysqlNote": "A cópia de segurança MySQL requer ferramentas externas (mysqldump)"
+      },
+      "notInitialized": "Não inicializado"
     }
   },
   "analytics": {

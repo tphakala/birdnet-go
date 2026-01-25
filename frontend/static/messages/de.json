@@ -209,7 +209,8 @@
     "mainNavigation": "Hauptnavigation",
     "closeSidebar": "Seitenleiste schließen",
     "analyticsSubmenu": "Analysen-Untermenü",
-    "settingsSubmenu": "Einstellungen-Untermenü"
+    "settingsSubmenu": "Einstellungen-Untermenü",
+    "systemSubmenu": "System-Untermenü"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -744,6 +745,109 @@
         "overallProgress": "Gesamtfortschritt",
         "progress": "Fortschritt"
       }
+    },
+    "sections": {
+      "overview": "Übersicht",
+      "database": "Datenbank"
+    },
+    "database": {
+      "title": "Datenbankverwaltung",
+      "description": "Schema-Migration verwalten",
+      "migration": {
+        "title": "Datenbankmigration",
+        "description": "Von Legacy-Schema zu normalisiertem v2-Schema migrieren",
+        "completedTitle": "Migration abgeschlossen",
+        "completedNote": "Ihre Datenbank wurde erfolgreich auf das neue Schema migriert. Ihr System ist jetzt bereit für zukünftige Funktionen, die die normalisierte Datenbank erfordern. Hinweis: Die neue Datenbank ist kleiner, weil sie Daten effizienter speichert - das ist normal und alle Ihre Daten sind erhalten.",
+        "status": {
+          "idle": "Bereit zum Starten",
+          "initializing": "Initialisierung",
+          "dual_write": "Dual-Write aktiv",
+          "migrating": "Migriere Datensätze",
+          "paused": "Pausiert",
+          "validating": "Validierung",
+          "cutover": "Umstellung läuft",
+          "completed": "Migration abgeschlossen"
+        },
+        "progress": {
+          "title": "Migrationsfortschritt",
+          "records": "Datensätze",
+          "percent": "{percent}%",
+          "rate": "{rate} Datensätze/Sek",
+          "rateValue": "{rate} Dat/s",
+          "remaining": "Verbleibend: {time}",
+          "eta": "Geschätzte Restzeit",
+          "dirtyIds": "{count} Datensätze ausstehend",
+          "paused": "Migration pausiert"
+        },
+        "notes": {
+          "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
+          "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
+          "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
+          "cutover": "Wechsle zur neuen Datenbank. Das dauert nur einen Moment.",
+          "paused": "Migration ist pausiert. Ihre Daten sind sicher. Setzen Sie fort, wenn Sie bereit sind."
+        },
+        "actions": {
+          "start": "Migration starten",
+          "pause": "Pausieren",
+          "resume": "Fortsetzen",
+          "cancel": "Abbrechen",
+          "rollback": "Zurücksetzen"
+        },
+        "confirmCancel": {
+          "title": "Migration abbrechen?",
+          "message": "Dies stoppt die Migration und setzt den Status auf Leerlauf zurück. Sie können die Migration später sicher neu starten - Datensätze werden nicht dupliziert.",
+          "confirm": "Ja, abbrechen",
+          "dismiss": "Nein, weiterlaufen lassen"
+        },
+        "confirmRollback": {
+          "title": "Migration zurücksetzen?",
+          "message": "Dies setzt auf die Legacy-Datenbank zurück. Neue Erkennungen seit der Migration bleiben in der erweiterten Datenbank erhalten, sind aber nicht sichtbar, bis die Migration erneut ausgeführt wird.",
+          "confirm": "Ja, zurücksetzen",
+          "dismiss": "Nein, beibehalten"
+        },
+        "errors": {
+          "startFailed": "Fehler beim Starten der Migration",
+          "pauseFailed": "Fehler beim Pausieren der Migration",
+          "resumeFailed": "Fehler beim Fortsetzen der Migration",
+          "cancelFailed": "Fehler beim Abbrechen der Migration",
+          "rollbackFailed": "Fehler beim Zurücksetzen der Migration",
+          "fetchFailed": "Fehler beim Abrufen des Migrationsstatus"
+        },
+        "worker": {
+          "running": "Worker läuft",
+          "paused": "Worker pausiert",
+          "stopped": "Worker gestoppt"
+        },
+        "requiredNote": "Die Datenbankmigration ist für kommende BirdNET-Go-Funktionen erforderlich, die das neue normalisierte Datenbankschema nutzen. Neue Funktionen sind erst nach Abschluss der Migration verfügbar.",
+        "starting": "Migration wird gestartet...",
+        "confirmDialog": {
+          "title": "Datenbankmigration starten",
+          "message": "Die Migration kopiert Ihre Erkennungsdaten von der aktuellen Datenbank in eine neue normalisierte Datenbank. Ihre ursprüngliche Datenbank bleibt unverändert. Es wird jedoch empfohlen, ein Backup zu erstellen, falls unerwartete Probleme auftreten.",
+          "checkbox": "Ich bestätige, dass ich meine Datenbank gesichert habe oder die Risiken verstehe, ohne Backup fortzufahren.",
+          "note": "Sie können ein Backup über die Schaltfläche \"Backup herunterladen\" oben herunterladen."
+        }
+      },
+      "legacy": {
+        "title": "Legacy-Datenbank"
+      },
+      "v2": {
+        "title": "Erweiterte Datenbank"
+      },
+      "stats": {
+        "connected": "Verbunden",
+        "disconnected": "Getrennt",
+        "type": "Typ",
+        "location": "Speicherort",
+        "size": "Größe",
+        "detections": "Erkennungen",
+        "fetchFailed": "Fehler beim Abrufen der Datenbankstatistiken"
+      },
+      "backup": {
+        "download": "Backup herunterladen",
+        "downloading": "Backup wird erstellt...",
+        "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)"
+      },
+      "notInitialized": "Nicht initialisiert"
     }
   },
   "analytics": {

@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -80,6 +81,9 @@ type Controller struct {
 	// TODO: Consider moving to a dedicated audio manager
 	audioLevelChan chan myaudio.AudioLevelData
 
+	// V2Manager provides access to the v2 normalized database for stats and backup
+	V2Manager datastoreV2.Manager
+
 	// Test synchronization fields (only populated when initializeRoutes is true)
 	// goroutinesStarted signals when all background goroutines have successfully started.
 	// This is primarily used in testing to ensure proper setup before assertions.
@@ -101,6 +105,14 @@ func WithAuthMiddleware(mw echo.MiddlewareFunc) Option {
 func WithAuthService(svc auth.Service) Option {
 	return func(c *Controller) {
 		c.authService = svc
+	}
+}
+
+// WithV2Manager sets the v2 database manager for the controller.
+// This enables v2 database stats and backup endpoints.
+func WithV2Manager(mgr datastoreV2.Manager) Option {
+	return func(c *Controller) {
+		c.V2Manager = mgr
 	}
 }
 

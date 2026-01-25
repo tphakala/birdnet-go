@@ -544,3 +544,13 @@ func (r *detectionRepository) parseDateWithDefault(dateStr string, defaultToNow 
 	}
 	return t, nil
 }
+
+// CountAll returns the total count of all detections.
+// This is a lightweight count operation that doesn't load any data.
+func (r *detectionRepository) CountAll(ctx context.Context) (int64, error) {
+	stats, err := r.store.GetDatabaseStats()
+	if err != nil {
+		return 0, fmt.Errorf("failed to count detections: %w", err)
+	}
+	return stats.TotalDetections, nil
+}

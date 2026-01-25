@@ -4,11 +4,11 @@ package repository
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // ConversionDeps contains dependencies needed for detection conversion.
@@ -16,7 +16,7 @@ type ConversionDeps struct {
 	LabelRepo  LabelRepository
 	ModelRepo  ModelRepository
 	SourceRepo AudioSourceRepository
-	Logger     *slog.Logger
+	Logger     logger.Logger
 }
 
 // ConvertToV2Detection converts a domain Result to a v2 Detection entity.
@@ -54,7 +54,7 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 			entities.SourceType(result.AudioSource.Type))
 		if err != nil {
 			if deps.Logger != nil {
-				deps.Logger.Warn("audio source resolution failed", "error", err)
+				deps.Logger.Warn("audio source resolution failed", logger.Error(err))
 			}
 			// Continue without source - not fatal
 		} else {

@@ -454,6 +454,11 @@ func (m *MockDetectionRepository) GetClipPath(_ context.Context, _ string) (stri
 func (m *MockDetectionRepository) GetAdditionalResults(_ context.Context, _ string) ([]detection.AdditionalResult, error) {
 	return nil, nil
 }
+func (m *MockDetectionRepository) CountAll(_ context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return int64(m.savedCount), nil
+}
 
 // Compile-time check that MockDetectionRepository implements datastore.DetectionRepository
 var _ datastore.DetectionRepository = (*MockDetectionRepository)(nil)

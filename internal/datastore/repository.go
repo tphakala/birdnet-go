@@ -63,6 +63,10 @@ type DetectionRepository interface {
 
 	// GetAdditionalResults returns the secondary predictions for a detection.
 	GetAdditionalResults(ctx context.Context, id string) ([]detection.AdditionalResult, error)
+
+	// CountAll returns the total count of all detections.
+	// This is a lightweight count operation that doesn't load any data.
+	CountAll(ctx context.Context) (int64, error)
 }
 
 // DetectionFilters defines the filter parameters for detection queries.
