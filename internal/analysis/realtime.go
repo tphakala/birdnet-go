@@ -247,6 +247,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			logger.Error(err),
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
+	// Ensure v2 database is closed on shutdown (handles nil case gracefully)
+	defer closeV2Database()
 
 	// Initialize and start the HTTP server
 	GetLogger().Info("starting HTTP server")
@@ -1621,11 +1623,6 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		return fmt.Errorf("failed to initialize v2 database: %w", err)
 	}
 
-	// Store manager for shutdown cleanup
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = v2Manager
-	v2DatabaseManagerMu.Unlock()
-
 	// Create the state manager
 	stateManager := datastoreV2.NewStateManager(v2Manager.DB())
 
@@ -1654,8 +1651,20 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		Timezone:     time.Local,
 	})
 	if err != nil {
+		// Close the manager on worker creation failure to avoid resource leak
+		if closeErr := v2Manager.Close(); closeErr != nil {
+			log.Warn("failed to close v2 manager after worker creation failure",
+				logger.Error(closeErr),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
 		return fmt.Errorf("failed to create migration worker: %w", err)
 	}
+
+	// Store manager for shutdown cleanup - only after successful worker creation
+	// to prevent GetV2DatabaseManager() from returning a partially initialized manager
+	v2DatabaseManagerMu.Lock()
+	v2DatabaseManager = v2Manager
+	v2DatabaseManagerMu.Unlock()
 
 	// Inject dependencies into the API layer
 	apiv2.SetMigrationDependencies(stateManager, worker)

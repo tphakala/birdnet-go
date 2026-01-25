@@ -1439,6 +1439,9 @@ func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
 		var count int64
 		if err := db.Table("detections").Count(&count).Error; err == nil {
 			response.TotalDetections = count
+		} else {
+			c.logWarnIfEnabled("Failed to count v2 detections",
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		}
 	}
 
@@ -1546,21 +1549,13 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
 	if dbType == dbTypeLegacy {
 		// Use the legacy datastore's DB
-		sqlStore, ok := c.DS.(interface{ GetDB() interface{ Exec(string, ...any) error } })
+		sqliteStore, ok := c.DS.(*datastore.SQLiteStore)
 		if !ok {
-			// Try to access DB directly through the SQLiteStore
-			if sqliteStore, ok := c.DS.(*datastore.SQLiteStore); ok {
-				if err := sqliteStore.DB.Exec(vacuumSQL).Error; err != nil {
-					return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
-				}
-			} else {
-				return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
-					"Cannot perform backup on this datastore type", http.StatusInternalServerError)
-			}
-		} else {
-			if err := sqlStore.GetDB().Exec(vacuumSQL); err != nil {
-				return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
-			}
+			return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
+				"Cannot perform backup on this datastore type", http.StatusInternalServerError)
+		}
+		if err := sqliteStore.DB.Exec(vacuumSQL).Error; err != nil {
+			return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
 		}
 	} else {
 		// Use V2Manager's DB

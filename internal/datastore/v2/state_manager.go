@@ -114,6 +114,16 @@ func (m *StateManager) Pause() error {
 }
 
 // Resume transitions from PAUSED to DUAL_WRITE.
+//
+// Resume always transitions to DUAL_WRITE regardless of which state was active when paused
+// (DUAL_WRITE, MIGRATING, or VALIDATING). This apparent state "regression" (e.g., from
+// VALIDATING back to DUAL_WRITE) is safe because the migration worker uses LastMigratedID
+// to track progress. When processing resumes, the worker queries for records with IDs greater
+// than LastMigratedID, so no records are re-processed or duplicated.
+//
+// For example, if the migration was paused during VALIDATING at ID 50000, resuming to
+// DUAL_WRITE simply restarts the state machine loop. The worker will see LastMigratedID=50000
+// and continue from ID 50001, eventually transitioning back through MIGRATING → VALIDATING.
 func (m *StateManager) Resume() error {
 	return m.transitionState(entities.MigrationStatusPaused, entities.MigrationStatusDualWrite)
 }

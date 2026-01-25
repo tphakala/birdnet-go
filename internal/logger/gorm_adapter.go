@@ -2,9 +2,10 @@ package logger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"

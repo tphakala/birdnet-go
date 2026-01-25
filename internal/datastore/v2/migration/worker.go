@@ -344,6 +344,8 @@ func (w *Worker) checkStopSignal(ctx context.Context) bool {
 func (w *Worker) handlePausedState(ctx context.Context) runAction {
 	w.mu.RLock()
 	paused := w.paused
+	resumeCh := w.resumeCh // Capture under lock to avoid race with Resume()
+	stopCh := w.stopCh     // Capture under lock to avoid race with Stop()
 	w.mu.RUnlock()
 
 	if !paused {
@@ -354,9 +356,9 @@ func (w *Worker) handlePausedState(ctx context.Context) runAction {
 	select {
 	case <-ctx.Done():
 		return runActionReturn
-	case <-w.stopCh:
+	case <-stopCh: // Use captured channel
 		return runActionReturn
-	case <-w.resumeCh:
+	case <-resumeCh: // Use captured channel
 		w.logger.Info("migration worker resumed")
 		w.resetConsecutiveErrors()
 		return runActionContinue

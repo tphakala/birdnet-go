@@ -226,9 +226,16 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	// to avoid this slower fallback
 	totalRecords := req.TotalRecords
 	if totalRecords <= 0 {
-		c.logWarnIfEnabled("No record count provided, migration will start with 0 total",
+		c.logWarnIfEnabled("Total records not provided, counting from database",
 			logger.String("path", path), logger.String("ip", ip))
-		totalRecords = 0
+
+		count, err := c.Repo.CountAll(ctx.Request().Context())
+		if err != nil {
+			c.logErrorIfEnabled("Failed to count legacy records",
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+			return c.HandleError(ctx, err, "Failed to determine total records", http.StatusInternalServerError)
+		}
+		totalRecords = count
 	}
 
 	// Start migration
@@ -340,10 +347,17 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 	c.logInfoIfEnabled("Migration resumed successfully",
 		logger.String("path", path), logger.String("ip", ip))
 
+	// Get the actual state after resume
+	currentState, _ := stateManager.GetState()
+	actualState := entities.MigrationStatusDualWrite
+	if currentState != nil {
+		actualState = currentState.State
+	}
+
 	return ctx.JSON(http.StatusOK, MigrationActionResponse{
 		Success: true,
 		Message: "Migration resumed",
-		State:   string(entities.MigrationStatusDualWrite),
+		State:   string(actualState),
 	})
 }
 

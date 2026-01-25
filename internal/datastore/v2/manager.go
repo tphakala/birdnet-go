@@ -16,6 +16,9 @@ import (
 	gorm_logger "gorm.io/gorm/logger"
 )
 
+// defaultGormSlowThreshold is the duration above which GORM queries are logged as slow.
+const defaultGormSlowThreshold = 200 * time.Millisecond
+
 // Manager defines the interface for v2 database operations.
 type Manager interface {
 	// Initialize creates the schema and seeds initial data.
@@ -61,7 +64,7 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	// Create GORM logger using the adapter if a logger is provided
 	var gormLogger gorm_logger.Interface
 	if cfg.Logger != nil {
-		gormLogger = logger.NewGormLoggerAdapter(cfg.Logger, 200*time.Millisecond)
+		gormLogger = logger.NewGormLoggerAdapter(cfg.Logger, defaultGormSlowThreshold)
 	} else {
 		gormLogger = gorm_logger.Default.LogMode(gorm_logger.Silent)
 	}
