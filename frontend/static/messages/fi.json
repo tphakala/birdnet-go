@@ -770,13 +770,14 @@
         },
         "progress": {
           "title": "Migraation edistyminen",
-          "records": "{migrated}/{total} tietuetta",
+          "records": "tietuetta",
           "percent": "{percent}%",
           "rate": "{rate} tietuetta/sek",
           "rateValue": "{rate} tiet/s",
           "remaining": "Jäljellä: {time}",
           "eta": "Arvioitu jäljellä oleva aika",
-          "dirtyIds": "{count} tietuetta odottaa"
+          "dirtyIds": "{count} tietuetta odottaa",
+          "paused": "Migraatio keskeytetty"
         },
         "notes": {
           "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
@@ -816,8 +817,36 @@
           "running": "Worker käynnissä",
           "paused": "Worker keskeytetty",
           "stopped": "Worker pysäytetty"
+        },
+        "requiredNote": "Tietokannan migraatio vaaditaan tulevien BirdNET-Go-ominaisuuksien vuoksi, jotka hyödyntävät uutta normalisoitua tietokantaskeemaa. Uudet ominaisuudet eivät ole käytettävissä ennen migraation valmistumista.",
+        "starting": "Käynnistetään migraatiota...",
+        "confirmDialog": {
+          "title": "Aloita tietokannan migraatio",
+          "message": "Migraatio kopioi havaintotietosi nykyisestä tietokannasta uuteen normalisoituun tietokantaan. Alkuperäinen tietokantasi säilyy muuttumattomana. Varmuuskopion luominen on kuitenkin suositeltavaa odottamattomien ongelmien varalta.",
+          "checkbox": "Vahvistan, että olen varmuuskopioinut tietokantani tai ymmärrän riskit jatkamisesta ilman varmuuskopiota.",
+          "note": "Voit ladata varmuuskopion käyttämällä yllä olevaa \"Lataa varmuuskopio\" -painiketta."
         }
-      }
+      },
+      "legacy": {
+        "title": "Vanha tietokanta"
+      },
+      "v2": {
+        "title": "Parannettu tietokanta"
+      },
+      "stats": {
+        "connected": "Yhdistetty",
+        "disconnected": "Ei yhdistetty",
+        "type": "Tyyppi",
+        "location": "Sijainti",
+        "size": "Koko",
+        "detections": "Havainnot"
+      },
+      "backup": {
+        "download": "Lataa varmuuskopio",
+        "downloading": "Luodaan varmuuskopiota...",
+        "mysqlNote": "MySQL-varmuuskopiointi vaatii ulkoisia työkaluja (mysqldump)"
+      },
+      "notInitialized": "Ei alustettu"
     }
   },
   "analytics": {

@@ -770,13 +770,14 @@
         },
         "progress": {
           "title": "Postęp migracji",
-          "records": "{migrated} z {total} rekordów",
+          "records": "rekordów",
           "percent": "{percent}%",
           "rate": "{rate} rekordów/sek",
           "rateValue": "{rate} rek/s",
           "remaining": "Pozostało: {time}",
           "eta": "Szacowany pozostały czas",
-          "dirtyIds": "{count} rekordów oczekuje"
+          "dirtyIds": "{count} rekordów oczekuje",
+          "paused": "Migracja wstrzymana"
         },
         "notes": {
           "dual_write": "Migracja w toku. Twoje dane są bezpieczne - wszystkie nowe wykrycia są zapisywane w obu bazach danych. Możesz nadal normalnie korzystać z BirdNET-Go.",
@@ -816,8 +817,36 @@
           "running": "Worker działa",
           "paused": "Worker wstrzymany",
           "stopped": "Worker zatrzymany"
+        },
+        "requiredNote": "Migracja bazy danych jest wymagana dla nadchodzących funkcji BirdNET-Go, które opierają się na nowym znormalizowanym schemacie bazy danych. Nowe funkcje nie będą dostępne do czasu zakończenia migracji.",
+        "starting": "Rozpoczynanie migracji...",
+        "confirmDialog": {
+          "title": "Rozpocznij migrację bazy danych",
+          "message": "Migracja skopiuje dane wykrywania z bieżącej bazy danych do nowej znormalizowanej bazy danych. Oryginalna baza danych pozostaje niezmieniona. Zaleca się jednak utworzenie kopii zapasowej na wypadek nieoczekiwanych problemów.",
+          "checkbox": "Potwierdzam, że wykonałem kopię zapasową bazy danych lub rozumiem ryzyko kontynuowania bez kopii zapasowej.",
+          "note": "Możesz pobrać kopię zapasową, używając przycisku \"Pobierz kopię zapasową\" powyżej."
         }
-      }
+      },
+      "legacy": {
+        "title": "Stara baza danych"
+      },
+      "v2": {
+        "title": "Ulepszona baza danych"
+      },
+      "stats": {
+        "connected": "Połączono",
+        "disconnected": "Rozłączono",
+        "type": "Typ",
+        "location": "Lokalizacja",
+        "size": "Rozmiar",
+        "detections": "Wykrycia"
+      },
+      "backup": {
+        "download": "Pobierz kopię zapasową",
+        "downloading": "Tworzenie kopii zapasowej...",
+        "mysqlNote": "Kopia zapasowa MySQL wymaga zewnętrznych narzędzi (mysqldump)"
+      },
+      "notInitialized": "Nie zainicjalizowano"
     }
   },
   "analytics": {

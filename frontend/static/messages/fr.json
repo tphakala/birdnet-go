@@ -770,13 +770,14 @@
         },
         "progress": {
           "title": "Progression de la migration",
-          "records": "{migrated} sur {total} enregistrements",
+          "records": "enregistrements",
           "percent": "{percent}%",
           "rate": "{rate} enregistrements/sec",
           "rateValue": "{rate} enr/s",
           "remaining": "Restant : {time}",
           "eta": "Temps restant estimé",
-          "dirtyIds": "{count} enregistrements en attente"
+          "dirtyIds": "{count} enregistrements en attente",
+          "paused": "Migration en pause"
         },
         "notes": {
           "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
@@ -816,8 +817,36 @@
           "running": "Worker en cours",
           "paused": "Worker en pause",
           "stopped": "Worker arrêté"
+        },
+        "requiredNote": "La migration de la base de données est requise pour les prochaines fonctionnalités de BirdNET-Go qui reposent sur le nouveau schéma de base de données normalisé. Les nouvelles fonctionnalités ne seront pas disponibles tant que la migration ne sera pas terminée.",
+        "starting": "Démarrage de la migration...",
+        "confirmDialog": {
+          "title": "Démarrer la migration de la base de données",
+          "message": "La migration copiera vos données de détection de la base de données actuelle vers une nouvelle base de données normalisée. Votre base de données d'origine reste inchangée. Cependant, il est recommandé de créer une sauvegarde en cas de problèmes inattendus.",
+          "checkbox": "Je confirme avoir sauvegardé ma base de données ou comprendre les risques de continuer sans sauvegarde.",
+          "note": "Vous pouvez télécharger une sauvegarde en utilisant le bouton \"Télécharger la sauvegarde\" ci-dessus."
         }
-      }
+      },
+      "legacy": {
+        "title": "Base de données héritée"
+      },
+      "v2": {
+        "title": "Base de données améliorée"
+      },
+      "stats": {
+        "connected": "Connecté",
+        "disconnected": "Déconnecté",
+        "type": "Type",
+        "location": "Emplacement",
+        "size": "Taille",
+        "detections": "Détections"
+      },
+      "backup": {
+        "download": "Télécharger la sauvegarde",
+        "downloading": "Création de la sauvegarde...",
+        "mysqlNote": "La sauvegarde MySQL nécessite des outils externes (mysqldump)"
+      },
+      "notInitialized": "Non initialisé"
     }
   },
   "analytics": {

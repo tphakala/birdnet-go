@@ -770,13 +770,14 @@
         },
         "progress": {
           "title": "Migratievoortgang",
-          "records": "{migrated} van {total} records",
+          "records": "records",
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
           "rateValue": "{rate} rec/s",
           "remaining": "Resterend: {time}",
           "eta": "Geschatte resterende tijd",
-          "dirtyIds": "{count} records wachtend"
+          "dirtyIds": "{count} records wachtend",
+          "paused": "Migratie gepauzeerd"
         },
         "notes": {
           "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
@@ -816,8 +817,36 @@
           "running": "Worker actief",
           "paused": "Worker gepauzeerd",
           "stopped": "Worker gestopt"
+        },
+        "requiredNote": "Databasemigratie is vereist voor aankomende BirdNET-Go-functies die afhankelijk zijn van het nieuwe genormaliseerde databaseschema. Nieuwe functies zijn pas beschikbaar na voltooiing van de migratie.",
+        "starting": "Migratie wordt gestart...",
+        "confirmDialog": {
+          "title": "Databasemigratie starten",
+          "message": "De migratie kopieert uw detectiegegevens van de huidige database naar een nieuwe genormaliseerde database. Uw originele database blijft ongewijzigd. Het wordt echter aanbevolen om een back-up te maken voor het geval er onverwachte problemen optreden.",
+          "checkbox": "Ik bevestig dat ik een back-up van mijn database heb gemaakt of de risico's begrijp van doorgaan zonder back-up.",
+          "note": "U kunt een back-up downloaden met de knop \"Back-up downloaden\" hierboven."
         }
-      }
+      },
+      "legacy": {
+        "title": "Legacy database"
+      },
+      "v2": {
+        "title": "Verbeterde database"
+      },
+      "stats": {
+        "connected": "Verbonden",
+        "disconnected": "Niet verbonden",
+        "type": "Type",
+        "location": "Locatie",
+        "size": "Grootte",
+        "detections": "Detecties"
+      },
+      "backup": {
+        "download": "Back-up downloaden",
+        "downloading": "Back-up maken...",
+        "mysqlNote": "MySQL-back-up vereist externe tools (mysqldump)"
+      },
+      "notInitialized": "Niet geïnitialiseerd"
     }
   },
   "analytics": {

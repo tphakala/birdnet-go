@@ -770,13 +770,14 @@
         },
         "progress": {
           "title": "Progresso da migração",
-          "records": "{migrated} de {total} registos",
+          "records": "registos",
           "percent": "{percent}%",
           "rate": "{rate} registos/seg",
           "rateValue": "{rate} reg/s",
           "remaining": "Restante: {time}",
           "eta": "Tempo restante estimado",
-          "dirtyIds": "{count} registos pendentes"
+          "dirtyIds": "{count} registos pendentes",
+          "paused": "Migração em pausa"
         },
         "notes": {
           "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
@@ -816,8 +817,36 @@
           "running": "Worker em execução",
           "paused": "Worker pausado",
           "stopped": "Worker parado"
+        },
+        "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
+        "starting": "A iniciar migração...",
+        "confirmDialog": {
+          "title": "Iniciar migração da base de dados",
+          "message": "A migração irá copiar os seus dados de deteção da base de dados atual para uma nova base de dados normalizada. A sua base de dados original permanece inalterada. No entanto, é recomendado criar uma cópia de segurança caso ocorram problemas inesperados.",
+          "checkbox": "Confirmo que fiz uma cópia de segurança da minha base de dados ou compreendo os riscos de continuar sem cópia de segurança.",
+          "note": "Pode transferir uma cópia de segurança usando o botão \"Transferir cópia de segurança\" acima."
         }
-      }
+      },
+      "legacy": {
+        "title": "Base de dados legada"
+      },
+      "v2": {
+        "title": "Base de dados melhorada"
+      },
+      "stats": {
+        "connected": "Conectado",
+        "disconnected": "Desconectado",
+        "type": "Tipo",
+        "location": "Localização",
+        "size": "Tamanho",
+        "detections": "Deteções"
+      },
+      "backup": {
+        "download": "Transferir cópia de segurança",
+        "downloading": "A criar cópia de segurança...",
+        "mysqlNote": "A cópia de segurança MySQL requer ferramentas externas (mysqldump)"
+      },
+      "notInitialized": "Não inicializado"
     }
   },
   "analytics": {

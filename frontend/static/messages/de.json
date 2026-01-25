@@ -770,13 +770,14 @@
         },
         "progress": {
           "title": "Migrationsfortschritt",
-          "records": "{migrated} von {total} Datensätzen",
+          "records": "Datensätze",
           "percent": "{percent}%",
           "rate": "{rate} Datensätze/Sek",
           "rateValue": "{rate} Dat/s",
           "remaining": "Verbleibend: {time}",
           "eta": "Geschätzte Restzeit",
-          "dirtyIds": "{count} Datensätze ausstehend"
+          "dirtyIds": "{count} Datensätze ausstehend",
+          "paused": "Migration pausiert"
         },
         "notes": {
           "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
@@ -816,8 +817,36 @@
           "running": "Worker läuft",
           "paused": "Worker pausiert",
           "stopped": "Worker gestoppt"
+        },
+        "requiredNote": "Die Datenbankmigration ist für kommende BirdNET-Go-Funktionen erforderlich, die das neue normalisierte Datenbankschema nutzen. Neue Funktionen sind erst nach Abschluss der Migration verfügbar.",
+        "starting": "Migration wird gestartet...",
+        "confirmDialog": {
+          "title": "Datenbankmigration starten",
+          "message": "Die Migration kopiert Ihre Erkennungsdaten von der aktuellen Datenbank in eine neue normalisierte Datenbank. Ihre ursprüngliche Datenbank bleibt unverändert. Es wird jedoch empfohlen, ein Backup zu erstellen, falls unerwartete Probleme auftreten.",
+          "checkbox": "Ich bestätige, dass ich meine Datenbank gesichert habe oder die Risiken verstehe, ohne Backup fortzufahren.",
+          "note": "Sie können ein Backup über die Schaltfläche \"Backup herunterladen\" oben herunterladen."
         }
-      }
+      },
+      "legacy": {
+        "title": "Legacy-Datenbank"
+      },
+      "v2": {
+        "title": "Erweiterte Datenbank"
+      },
+      "stats": {
+        "connected": "Verbunden",
+        "disconnected": "Getrennt",
+        "type": "Typ",
+        "location": "Speicherort",
+        "size": "Größe",
+        "detections": "Erkennungen"
+      },
+      "backup": {
+        "download": "Backup herunterladen",
+        "downloading": "Backup wird erstellt...",
+        "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)"
+      },
+      "notInitialized": "Nicht initialisiert"
     }
   },
   "analytics": {
