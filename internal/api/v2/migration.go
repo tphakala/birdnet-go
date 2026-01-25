@@ -67,6 +67,14 @@ func SetMigrationDependencies(sm *datastoreV2.StateManager, worker *migration.Wo
 	migrationWorker = worker
 }
 
+// StopMigrationWorker stops the migration worker if it's running.
+// This should be called during graceful shutdown before closing the v2 database.
+func StopMigrationWorker() {
+	if migrationWorker != nil && migrationWorker.IsRunning() {
+		migrationWorker.Stop()
+	}
+}
+
 // initMigrationRoutes registers the migration API routes.
 func (c *Controller) initMigrationRoutes() {
 	c.logInfoIfEnabled("Initializing migration routes")

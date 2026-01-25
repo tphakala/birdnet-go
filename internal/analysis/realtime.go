@@ -93,6 +93,11 @@ func (m *AudioDemuxManager) Done() {
 // Global audio demux manager instance
 var audioDemuxManager = NewAudioDemuxManager()
 
+// v2DatabaseManager holds the v2 database manager for shutdown cleanup.
+// This is set by initializeMigrationInfrastructure and cleared on shutdown.
+var v2DatabaseManager datastoreV2.Manager
+var v2DatabaseManagerMu sync.Mutex
+
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
@@ -477,6 +482,18 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					logger.String("operation", "shutdown_birdnet_cleanup"))
 				bn.Delete()
 
+				// Step 10: Stop migration worker (before closing databases)
+				log.Info("shutdown step 10: stopping migration worker",
+					logger.Int("step", 10),
+					logger.String("operation", "shutdown_migration_worker"))
+				apiv2.StopMigrationWorker()
+
+				// Step 11: Close v2 database (before legacy database closes via deferred closeDataStore)
+				log.Info("shutdown step 11: closing v2 database",
+					logger.Int("step", 11),
+					logger.String("operation", "shutdown_v2_database"))
+				closeV2Database()
+
 				log.Info("graceful shutdown completed",
 					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
 					logger.String("operation", "shutdown_complete"))
@@ -637,6 +654,44 @@ func closeDataStore(store datastore.Interface) {
 	} else {
 		log.Info("successfully closed database",
 			logger.String("operation", "close_database"))
+	}
+}
+
+// closeV2Database closes the v2 database with proper WAL checkpoint.
+func closeV2Database() {
+	v2DatabaseManagerMu.Lock()
+	manager := v2DatabaseManager
+	v2DatabaseManager = nil
+	v2DatabaseManagerMu.Unlock()
+
+	if manager == nil {
+		return
+	}
+
+	log := GetLogger()
+
+	// Perform WAL checkpoint before closing
+	log.Info("performing v2 SQLite WAL checkpoint",
+		logger.String("operation", "v2_wal_checkpoint_before_shutdown"))
+
+	if err := manager.CheckpointWAL(); err != nil {
+		log.Warn("v2 WAL checkpoint failed",
+			logger.Error(err),
+			logger.String("operation", "v2_wal_checkpoint"))
+	}
+
+	// Close the database
+	log.Info("closing v2 SQLite database",
+		logger.String("path", manager.Path()),
+		logger.String("operation", "v2_database_close"))
+
+	if err := manager.Close(); err != nil {
+		log.Error("failed to close v2 database",
+			logger.Error(err),
+			logger.String("operation", "v2_database_close"))
+	} else {
+		log.Info("v2 SQLite database closed successfully",
+			logger.String("path", manager.Path()))
 	}
 }
 
@@ -1540,6 +1595,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	v2Manager, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
 		DataDir: dataDir,
 		Debug:   settings.Debug,
+		Logger:  log,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create v2 database manager: %w", err)
@@ -1555,6 +1611,11 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		}
 		return fmt.Errorf("failed to initialize v2 database: %w", err)
 	}
+
+	// Store manager for shutdown cleanup
+	v2DatabaseManagerMu.Lock()
+	v2DatabaseManager = v2Manager
+	v2DatabaseManagerMu.Unlock()
 
 	// Create the state manager
 	stateManager := datastoreV2.NewStateManager(v2Manager.DB())

@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gorm_logger "gorm.io/gorm/logger"
 )
 
 // Manager defines the interface for v2 database operations.
@@ -24,6 +26,9 @@ type Manager interface {
 	Path() string
 	// Close closes the database connection.
 	Close() error
+	// CheckpointWAL forces a WAL checkpoint to ensure all changes are written to the main database file.
+	// This should be called before Close() for graceful shutdown.
+	CheckpointWAL() error
 	// Delete removes the v2 database (file for SQLite, tables for MySQL).
 	Delete() error
 	// Exists checks if the v2 database exists.
@@ -38,6 +43,8 @@ type Config struct {
 	DataDir string
 	// Debug enables verbose logging.
 	Debug bool
+	// Logger is the project logger for GORM to use.
+	Logger logger.Logger
 }
 
 // SQLiteManager handles the v2 normalized database for SQLite.
@@ -51,16 +58,19 @@ type SQLiteManager struct {
 func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	dbPath := filepath.Join(cfg.DataDir, "birdnet_v2.db")
 
-	logLevel := logger.Silent
-	if cfg.Debug {
-		logLevel = logger.Info
+	// Create GORM logger using the adapter if a logger is provided
+	var gormLogger gorm_logger.Interface
+	if cfg.Logger != nil {
+		gormLogger = logger.NewGormLoggerAdapter(cfg.Logger, 200*time.Millisecond)
+	} else {
+		gormLogger = gorm_logger.Default.LogMode(gorm_logger.Silent)
 	}
 
 	// Build DSN with recommended SQLite pragmas
 	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON", dbPath)
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
+		Logger: gormLogger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open v2 database: %w", err)
@@ -159,6 +169,25 @@ func (m *SQLiteManager) Close() error {
 		return fmt.Errorf("failed to get underlying database: %w", err)
 	}
 	return sqlDB.Close()
+}
+
+// CheckpointWAL forces a checkpoint of the Write-Ahead Log to ensure all changes
+// are written to the main database file. This is important for graceful shutdown
+// to prevent data loss and clean up WAL/SHM files.
+func (m *SQLiteManager) CheckpointWAL() error {
+	if m.db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+
+	// PRAGMA wal_checkpoint(TRUNCATE) will:
+	// 1. Copy all frames from WAL to the database file
+	// 2. Truncate the WAL file to zero bytes
+	// 3. Ensure all changes are persisted
+	if err := m.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+		return fmt.Errorf("WAL checkpoint failed: %w", err)
+	}
+
+	return nil
 }
 
 // Delete removes the v2 database file.

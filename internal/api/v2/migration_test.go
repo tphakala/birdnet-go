@@ -48,11 +48,17 @@ func setupMigrationTestDB(t *testing.T) *gorm.DB {
 
 // setupMigrationTestEnvironment creates a test environment for migration API tests.
 // Note: Tests using this function must NOT be run in parallel due to global state.
-func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *datastoreV2.StateManager, func()) {
+func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *datastoreV2.StateManager) {
 	t.Helper()
 
 	// Lock to prevent parallel tests from interfering
 	migrationTestMu.Lock()
+
+	// Register mutex unlock with t.Cleanup FIRST to ensure it runs even if setup fails.
+	// This prevents deadlock if setupMigrationTestDB fails via require.NoError.
+	t.Cleanup(func() {
+		migrationTestMu.Unlock()
+	})
 
 	e := echo.New()
 	db := setupMigrationTestDB(t)
@@ -67,6 +73,20 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 	stateManager = sm
 	migrationWorker = nil // No worker for basic tests
 
+	// Register state restoration cleanup
+	t.Cleanup(func() {
+		stateManager = prevSM
+		migrationWorker = prevWorker
+	})
+
+	// Register DB close cleanup
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
 	mockDS := mocks.NewMockInterface(t)
 	controller := &Controller{
 		Echo:     e,
@@ -75,22 +95,7 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 		DS:       mockDS,
 	}
 
-	cleanup := func() {
-		// Restore previous state
-		stateManager = prevSM
-		migrationWorker = prevWorker
-
-		// Get underlying SQL DB and close it
-		sqlDB, err := db.DB()
-		if err == nil {
-			_ = sqlDB.Close()
-		}
-
-		// Unlock the mutex
-		migrationTestMu.Unlock()
-	}
-
-	return e, controller, sm, cleanup
+	return e, controller, sm
 }
 
 // TestGetMigrationStatus_Idle tests getting migration status when idle.
@@ -100,8 +105,7 @@ func TestGetMigrationStatus_Idle(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "status")
 
-	e, controller, _, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, _ := setupMigrationTestEnvironment(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -131,8 +135,7 @@ func TestStartMigration_Success(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "start")
 
-	e, controller, sm, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, sm := setupMigrationTestEnvironment(t)
 
 	body := `{"total_records": 1000}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(body))
@@ -166,8 +169,7 @@ func TestStartMigration_AlreadyRunning(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "start")
 
-	e, controller, sm, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, sm := setupMigrationTestEnvironment(t)
 
 	// Start migration first
 	err := sm.StartMigration(100)
@@ -197,8 +199,7 @@ func TestPauseMigration_Success(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "pause")
 
-	e, controller, sm, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, sm := setupMigrationTestEnvironment(t)
 
 	// Start migration first
 	err := sm.StartMigration(100)
@@ -234,8 +235,7 @@ func TestPauseMigration_NotRunning(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "pause")
 
-	e, controller, _, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, _ := setupMigrationTestEnvironment(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/pause", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -253,8 +253,7 @@ func TestResumeMigration_Success(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "resume")
 
-	e, controller, sm, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, sm := setupMigrationTestEnvironment(t)
 
 	// Start and pause migration first
 	err := sm.StartMigration(100)
@@ -292,8 +291,7 @@ func TestResumeMigration_NotPaused(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "resume")
 
-	e, controller, _, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, _ := setupMigrationTestEnvironment(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/resume", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -313,8 +311,7 @@ func TestCancelMigration_Success(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "cancel")
 
-	e, controller, sm, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, sm := setupMigrationTestEnvironment(t)
 
 	// Start migration first
 	err := sm.StartMigration(100)
@@ -350,8 +347,7 @@ func TestCancelMigration_NotRunning(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "cancel")
 
-	e, controller, _, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, _ := setupMigrationTestEnvironment(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/cancel", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -412,8 +408,7 @@ func TestMigrationStatusResponse_Progress(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "progress")
 
-	e, controller, sm, cleanup := setupMigrationTestEnvironment(t)
-	defer cleanup()
+	e, controller, sm := setupMigrationTestEnvironment(t)
 
 	// Start migration
 	err := sm.StartMigration(1000)
