@@ -395,5 +395,18 @@ func (m *AuxiliaryMigrator) ValidateAuxiliaryTables(ctx context.Context) error {
 			logger.Int("v2_count", len(v2Thresholds)))
 	}
 
+	// Validate weather data
+	if m.weatherRepo != nil {
+		legacyDailyEvents, _ := m.legacyStore.GetAllDailyEvents()
+		v2DailyEvents, _ := m.weatherRepo.GetAllDailyEvents(ctx)
+		m.logger.Info("daily events validation",
+			logger.Int("legacy_count", len(legacyDailyEvents)),
+			logger.Int("v2_count", len(v2DailyEvents)))
+
+		legacyHourlyWeather, _ := m.legacyStore.GetAllHourlyWeather()
+		m.logger.Info("hourly weather validation",
+			logger.Int("legacy_count", len(legacyHourlyWeather)))
+	}
+
 	return nil
 }
