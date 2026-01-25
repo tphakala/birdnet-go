@@ -17,7 +17,7 @@ import (
 )
 
 // defaultGormSlowThreshold is the duration above which GORM queries are logged as slow.
-const defaultGormSlowThreshold = 200 * time.Millisecond
+const defaultGormSlowThreshold = 500 * time.Millisecond
 
 // Manager defines the interface for v2 database operations.
 type Manager interface {

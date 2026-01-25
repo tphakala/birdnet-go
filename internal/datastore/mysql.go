@@ -62,10 +62,10 @@ func (store *MySQLStore) Open() error {
 	var gormLogger gormlogger.Interface
 	if store.Settings.Debug {
 		// Use debug log level with lower slow threshold
-		gormLogger = NewGormLogger(100*time.Millisecond, gormlogger.Info, store.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Info, store.metrics)
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(200*time.Millisecond, gormlogger.Warn, store.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, store.metrics)
 	}
 
 	// Open the MySQL database
