@@ -2,7 +2,7 @@
   import SystemInfoCard from '$lib/desktop/components/ui/SystemInfoCard.svelte';
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
-  import MigrationCard from '$lib/desktop/components/ui/MigrationCard.svelte';
+  import { DatabaseManagement } from '$lib/desktop/components/database';
   import { t } from '$lib/i18n';
   import { RefreshCw } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
@@ -280,8 +280,8 @@
 {#if currentSubpage === 'database'}
   <!-- Database Management Page -->
   <div class="col-span-12 space-y-4" role="region" aria-label={t('system.database.title')}>
-    <div class="max-w-3xl mx-auto">
-      <MigrationCard />
+    <div class="max-w-5xl mx-auto">
+      <DatabaseManagement />
     </div>
   </div>
 {:else}
