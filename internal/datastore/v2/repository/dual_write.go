@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // parseDetectionID converts a string ID to uint.
@@ -43,7 +43,7 @@ type DualWriteRepository struct {
 	labelRepo    LabelRepository
 	modelRepo    ModelRepository
 	sourceRepo   AudioSourceRepository
-	logger       *slog.Logger
+	logger       logger.Logger
 	semaphore    chan struct{}   // Limits concurrent V2 writes
 	writeTimeout time.Duration   // Timeout for V2 write operations
 	shutdownCh   chan struct{}   // Signals shutdown to in-flight goroutines
@@ -58,16 +58,12 @@ type DualWriteConfig struct {
 	LabelRepo    LabelRepository
 	ModelRepo    ModelRepository
 	SourceRepo   AudioSourceRepository
-	Logger       *slog.Logger
+	Logger       logger.Logger
 }
 
 // NewDualWriteRepository creates a new dual-write repository.
+// Logger is required - caller must provide a valid logger.Logger instance.
 func NewDualWriteRepository(cfg *DualWriteConfig) *DualWriteRepository {
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	return &DualWriteRepository{
 		legacy:       cfg.Legacy,
 		v2:           cfg.V2,
@@ -75,7 +71,7 @@ func NewDualWriteRepository(cfg *DualWriteConfig) *DualWriteRepository {
 		labelRepo:    cfg.LabelRepo,
 		modelRepo:    cfg.ModelRepo,
 		sourceRepo:   cfg.SourceRepo,
-		logger:       logger,
+		logger:       cfg.Logger,
 		semaphore:    make(chan struct{}, defaultMaxConcurrentWrites),
 		writeTimeout: defaultWriteTimeout,
 		shutdownCh:   make(chan struct{}),
@@ -110,7 +106,7 @@ func (dw *DualWriteRepository) Save(ctx context.Context, result *detection.Resul
 	// 2. If dual-write enabled, save to v2 with same ID
 	dualWrite, err := dw.stateManager.IsInDualWriteMode()
 	if err != nil {
-		dw.logger.Warn("failed to check dual-write mode", "error", err)
+		dw.logger.Warn("failed to check dual-write mode", logger.Error(err))
 		return nil // Don't fail the save
 	}
 
@@ -122,7 +118,7 @@ func (dw *DualWriteRepository) Save(ctx context.Context, result *detection.Resul
 		case <-dw.shutdownCh:
 			// Shutdown in progress - mark as dirty for later reconciliation
 			if err := dw.stateManager.AddDirtyID(result.ID); err != nil {
-				dw.logger.Warn("failed to persist dirty ID during shutdown", "id", result.ID, "error", err)
+				dw.logger.Warn("failed to persist dirty ID during shutdown", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 			}
 			return nil
 		default:
@@ -139,7 +135,7 @@ func (dw *DualWriteRepository) Save(ctx context.Context, result *detection.Resul
 				case <-dw.shutdownCh:
 					// Shutdown signaled after we acquired - mark dirty and exit
 					if err := dw.stateManager.AddDirtyID(result.ID); err != nil {
-						dw.logger.Warn("failed to persist dirty ID during shutdown", "id", result.ID, "error", err)
+						dw.logger.Warn("failed to persist dirty ID during shutdown", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 					}
 					return
 				default:
@@ -151,7 +147,7 @@ func (dw *DualWriteRepository) Save(ctx context.Context, result *detection.Resul
 		default:
 			// Semaphore full - persist to dirty table for later processing
 			if err := dw.stateManager.AddDirtyID(result.ID); err != nil {
-				dw.logger.Warn("failed to persist dirty ID", "id", result.ID, "error", err)
+				dw.logger.Warn("failed to persist dirty ID", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 			}
 		}
 	}
@@ -164,7 +160,7 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 	// Convert domain model to v2 entity
 	det, err := dw.convertToV2Detection(ctx, result)
 	if err != nil {
-		dw.logger.Warn("v2 conversion failed", "id", result.ID, "error", err)
+		dw.logger.Warn("v2 conversion failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 		dw.markDirty(result.ID)
 		return
 	}
@@ -172,7 +168,7 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 	// Check if detection already exists (upsert pattern)
 	exists, err := dw.v2.Exists(ctx, det.ID)
 	if err != nil {
-		dw.logger.Warn("v2 existence check failed", "id", result.ID, "error", err)
+		dw.logger.Warn("v2 existence check failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 		dw.markDirty(result.ID)
 		return
 	}
@@ -194,14 +190,14 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 		if err := dw.v2.Update(ctx, det.ID, updates); err != nil {
 			// ErrDetectionLocked is acceptable - record is protected
 			if !errors.Is(err, ErrDetectionLocked) {
-				dw.logger.Warn("v2 update failed", "id", result.ID, "error", err)
+				dw.logger.Warn("v2 update failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 				dw.markDirty(result.ID)
 			}
 		}
 	} else {
 		// Save new record with preserved ID
 		if err := dw.v2.SaveWithID(ctx, det); err != nil {
-			dw.logger.Warn("v2 save failed", "id", result.ID, "error", err)
+			dw.logger.Warn("v2 save failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 			dw.markDirty(result.ID)
 			return
 		}
@@ -211,11 +207,11 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 	if len(additionalResults) > 0 {
 		preds, err := dw.convertToPredictions(ctx, det.ID, additionalResults)
 		if err != nil {
-			dw.logger.Warn("v2 prediction conversion failed", "id", result.ID, "error", err)
+			dw.logger.Warn("v2 prediction conversion failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 			return
 		}
 		if err := dw.v2.SavePredictions(ctx, det.ID, preds); err != nil {
-			dw.logger.Warn("v2 predictions save failed", "id", result.ID, "error", err)
+			dw.logger.Warn("v2 predictions save failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 		}
 	}
 }
@@ -223,7 +219,7 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 // markDirty persists a detection ID to the dirty table for later reconciliation.
 func (dw *DualWriteRepository) markDirty(id uint) {
 	if err := dw.stateManager.AddDirtyID(id); err != nil {
-		dw.logger.Warn("failed to persist dirty ID", "id", id, "error", err)
+		dw.logger.Warn("failed to persist dirty ID", logger.Uint64("id", uint64(id)), logger.Error(err))
 	}
 }
 
@@ -232,7 +228,7 @@ func (dw *DualWriteRepository) Get(ctx context.Context, id string) (*detection.R
 	// Check if we should read from v2
 	readFromV2, err := dw.stateManager.ShouldReadFromV2()
 	if err != nil {
-		dw.logger.Warn("failed to check read source", "error", err)
+		dw.logger.Warn("failed to check read source", logger.Error(err))
 		readFromV2 = false
 	}
 
@@ -273,7 +269,7 @@ func (dw *DualWriteRepository) Delete(ctx context.Context, id string) error {
 	// 2. If dual-write enabled, delete from v2
 	dualWrite, err := dw.stateManager.IsInDualWriteMode()
 	if err != nil {
-		dw.logger.Warn("failed to check dual-write mode", "error", err)
+		dw.logger.Warn("failed to check dual-write mode", logger.Error(err))
 		return nil
 	}
 
@@ -282,7 +278,7 @@ func (dw *DualWriteRepository) Delete(ctx context.Context, id string) error {
 		if err == nil {
 			if err := dw.v2.Delete(ctx, uid); err != nil {
 				if !errors.Is(err, ErrDetectionNotFound) {
-					dw.logger.Warn("v2 delete failed", "id", id, "error", err)
+					dw.logger.Warn("v2 delete failed", logger.String("id", id), logger.Error(err))
 				}
 			}
 		}
@@ -437,7 +433,7 @@ func (dw *DualWriteRepository) Lock(ctx context.Context, id string) error {
 		uid, err := parseDetectionID(id)
 		if err == nil {
 			if err := dw.v2.Lock(ctx, uid); err != nil {
-				dw.logger.Warn("v2 lock failed", "id", id, "error", err)
+				dw.logger.Warn("v2 lock failed", logger.String("id", id), logger.Error(err))
 			}
 		}
 	}
@@ -456,7 +452,7 @@ func (dw *DualWriteRepository) Unlock(ctx context.Context, id string) error {
 		uid, err := parseDetectionID(id)
 		if err == nil {
 			if err := dw.v2.Unlock(ctx, uid); err != nil && !errors.Is(err, ErrLockNotFound) {
-				dw.logger.Warn("v2 unlock failed", "id", id, "error", err)
+				dw.logger.Warn("v2 unlock failed", logger.String("id", id), logger.Error(err))
 			}
 		}
 	}
@@ -484,7 +480,7 @@ func (dw *DualWriteRepository) SetReview(ctx context.Context, id, verified strin
 				Verified:    entities.VerificationStatus(verified),
 			}
 			if err := dw.v2.SaveReview(ctx, review); err != nil {
-				dw.logger.Warn("v2 review save failed", "id", id, "error", err)
+				dw.logger.Warn("v2 review save failed", logger.String("id", id), logger.Error(err))
 			}
 		}
 	}
@@ -512,7 +508,7 @@ func (dw *DualWriteRepository) AddComment(ctx context.Context, id, comment strin
 				Entry:       comment,
 			}
 			if err := dw.v2.SaveComment(ctx, c); err != nil {
-				dw.logger.Warn("v2 comment save failed", "id", id, "error", err)
+				dw.logger.Warn("v2 comment save failed", logger.String("id", id), logger.Error(err))
 			}
 		}
 	}
@@ -534,7 +530,7 @@ func (dw *DualWriteRepository) UpdateComment(ctx context.Context, commentID uint
 	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
 	if dualWrite {
 		if err := dw.v2.UpdateComment(ctx, commentID, entry); err != nil && !errors.Is(err, ErrCommentNotFound) {
-			dw.logger.Warn("v2 comment update failed", "commentID", commentID, "error", err)
+			dw.logger.Warn("v2 comment update failed", logger.Uint64("commentID", uint64(commentID)), logger.Error(err))
 		}
 	}
 
@@ -550,7 +546,7 @@ func (dw *DualWriteRepository) DeleteComment(ctx context.Context, commentID uint
 	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
 	if dualWrite {
 		if err := dw.v2.DeleteComment(ctx, commentID); err != nil && !errors.Is(err, ErrCommentNotFound) {
-			dw.logger.Warn("v2 comment delete failed", "commentID", commentID, "error", err)
+			dw.logger.Warn("v2 comment delete failed", logger.Uint64("commentID", uint64(commentID)), logger.Error(err))
 		}
 	}
 
@@ -652,7 +648,7 @@ func (dw *DualWriteRepository) GetDirtyIDs(batchSize int) []uint {
 	}
 	ids, err := dw.stateManager.GetDirtyIDs(batchSize, 0)
 	if err != nil {
-		dw.logger.Warn("failed to get dirty IDs", "error", err)
+		dw.logger.Warn("failed to get dirty IDs", logger.Error(err))
 		return nil
 	}
 	return ids
@@ -661,6 +657,6 @@ func (dw *DualWriteRepository) GetDirtyIDs(batchSize int) []uint {
 // ClearDirtyID removes an ID from the dirty set after successful re-sync.
 func (dw *DualWriteRepository) ClearDirtyID(id uint) {
 	if err := dw.stateManager.RemoveDirtyID(id); err != nil {
-		dw.logger.Warn("failed to remove dirty ID", "id", id, "error", err)
+		dw.logger.Warn("failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(err))
 	}
 }

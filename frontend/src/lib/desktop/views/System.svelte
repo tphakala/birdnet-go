@@ -2,9 +2,18 @@
   import SystemInfoCard from '$lib/desktop/components/ui/SystemInfoCard.svelte';
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
+  import MigrationCard from '$lib/desktop/components/ui/MigrationCard.svelte';
   import { t } from '$lib/i18n';
   import { RefreshCw } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
+  import { navigation } from '$lib/stores/navigation.svelte';
+
+  // Determine which subpage to show
+  let currentSubpage = $derived.by(() => {
+    const path = navigation.currentPath;
+    if (path === '/ui/system/database') return 'database';
+    return 'overview';
+  });
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -268,71 +277,81 @@
   });
 </script>
 
-<div class="col-span-12 space-y-4" role="region" aria-label={t('system.aria.dashboard')}>
-  <div class="system-cards-grid">
-    <!-- System Information Card -->
-    <SystemInfoCard
-      title={t('system.systemInfo.title')}
-      systemInfo={systemInfo.data}
-      temperatureInfo={systemTemperature.data}
-      isLoading={systemInfo.loading}
-      error={systemInfo.error}
-      temperatureLoading={systemTemperature.loading}
-      temperatureError={systemTemperature.error}
-    />
-
-    <!-- Disk Usage Card -->
-    <ProgressCard
-      title={t('system.diskUsage.title')}
-      items={diskProgressItems}
-      isLoading={diskUsage.loading}
-      error={diskUsage.error}
-      emptyMessage={t('system.diskUsage.emptyMessage')}
-    />
-
-    <!-- Memory Usage Card -->
-    <ProgressCard
-      title={t('system.memoryUsage.title')}
-      items={memoryProgressItems}
-      isLoading={memoryUsage.loading}
-      error={memoryUsage.error}
-      showDetails={true}
-    />
+{#if currentSubpage === 'database'}
+  <!-- Database Management Page -->
+  <div class="col-span-12 space-y-4" role="region" aria-label={t('system.database.title')}>
+    <div class="max-w-3xl mx-auto">
+      <MigrationCard />
+    </div>
   </div>
+{:else}
+  <!-- System Overview Page -->
+  <div class="col-span-12 space-y-4" role="region" aria-label={t('system.aria.dashboard')}>
+    <div class="system-cards-grid">
+      <!-- System Information Card -->
+      <SystemInfoCard
+        title={t('system.systemInfo.title')}
+        systemInfo={systemInfo.data}
+        temperatureInfo={systemTemperature.data}
+        isLoading={systemInfo.loading}
+        error={systemInfo.error}
+        temperatureLoading={systemTemperature.loading}
+        temperatureError={systemTemperature.error}
+      />
 
-  <!-- Process Information Card -->
-  <ProcessTable
-    title={t('system.processInfo.title')}
-    processes={processes.data}
-    {showAllProcesses}
-    isLoading={processes.loading}
-    error={processes.error}
-    onToggleShowAll={() => {
-      showAllProcesses = !showAllProcesses;
-      loadProcesses();
-    }}
-    className="mt-6"
-  />
+      <!-- Disk Usage Card -->
+      <ProgressCard
+        title={t('system.diskUsage.title')}
+        items={diskProgressItems}
+        isLoading={diskUsage.loading}
+        error={diskUsage.error}
+        emptyMessage={t('system.diskUsage.emptyMessage')}
+      />
 
-  <!-- Refresh button -->
-  <div class="flex justify-center mt-6">
-    <button
-      class="btn btn-primary"
-      onclick={loadAllData}
-      disabled={isAnyLoading}
-      aria-label={t('system.aria.refreshData')}
-    >
-      {#if ENABLE_LOADING_SPINNERS && isAnyLoading}
-        <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
-      {:else}
-        <span class="mr-2" aria-hidden="true">
-          <RefreshCw class="size-5" />
-        </span>
-      {/if}
-      {t('system.refreshData')}
-    </button>
+      <!-- Memory Usage Card -->
+      <ProgressCard
+        title={t('system.memoryUsage.title')}
+        items={memoryProgressItems}
+        isLoading={memoryUsage.loading}
+        error={memoryUsage.error}
+        showDetails={true}
+      />
+    </div>
+
+    <!-- Process Information Card -->
+    <ProcessTable
+      title={t('system.processInfo.title')}
+      processes={processes.data}
+      {showAllProcesses}
+      isLoading={processes.loading}
+      error={processes.error}
+      onToggleShowAll={() => {
+        showAllProcesses = !showAllProcesses;
+        loadProcesses();
+      }}
+      className="mt-6"
+    />
+
+    <!-- Refresh button -->
+    <div class="flex justify-center mt-6">
+      <button
+        class="btn btn-primary"
+        onclick={loadAllData}
+        disabled={isAnyLoading}
+        aria-label={t('system.aria.refreshData')}
+      >
+        {#if ENABLE_LOADING_SPINNERS && isAnyLoading}
+          <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
+        {:else}
+          <span class="mr-2" aria-hidden="true">
+            <RefreshCw class="size-5" />
+          </span>
+        {/if}
+        {t('system.refreshData')}
+      </button>
+    </div>
   </div>
-</div>
+{/if}
 
 <style>
   .system-cards-grid {

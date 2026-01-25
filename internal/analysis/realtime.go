@@ -20,6 +20,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -221,6 +225,15 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
+
+	// Initialize v2 migration infrastructure
+	// This sets up the StateManager and Worker for the database migration API
+	if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
+		// Migration infrastructure is optional - log warning but continue
+		GetLogger().Warn("migration infrastructure initialization failed",
+			logger.Error(err),
+			logger.String("operation", "initialize_migration_infrastructure"))
+	}
 
 	// Initialize and start the HTTP server
 	GetLogger().Info("starting HTTP server")
@@ -1491,4 +1504,119 @@ func printSystemDetails(settings *conf.Settings) {
 		logger.Float64("overlap", settings.BirdNET.Overlap),
 		logger.Float64("sensitivity", settings.BirdNET.Sensitivity),
 		logger.Int("interval", settings.Realtime.Interval))
+}
+
+// initializeMigrationInfrastructure sets up the v2 database migration infrastructure.
+// This creates the StateManager and Worker instances needed for the migration API.
+// The function handles state recovery on restart and resumes migration if it was in progress.
+func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface) error {
+	log := GetLogger()
+
+	// Get the database directory from the legacy database path
+	var dataDir string
+	switch {
+	case settings.Output.SQLite.Enabled:
+		dataDir = datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
+	case settings.Output.MySQL.Enabled:
+		// MySQL v2 tables are in the same database, no separate directory needed
+		// For now, we only support SQLite for migration
+		log.Info("migration infrastructure not yet supported for MySQL",
+			logger.String("operation", "initialize_migration_infrastructure"))
+		return nil
+	default:
+		log.Debug("no database configured, skipping migration infrastructure",
+			logger.String("operation", "initialize_migration_infrastructure"))
+		return nil
+	}
+
+	// Check if dataDir is empty (in-memory database)
+	if dataDir == "" {
+		log.Debug("in-memory database detected, skipping migration infrastructure",
+			logger.String("operation", "initialize_migration_infrastructure"))
+		return nil
+	}
+
+	// Create v2 database manager
+	v2Manager, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
+		DataDir: dataDir,
+		Debug:   settings.Debug,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create v2 database manager: %w", err)
+	}
+
+	// Initialize the v2 database schema
+	if err := v2Manager.Initialize(); err != nil {
+		// Close the manager on initialization failure
+		if closeErr := v2Manager.Close(); closeErr != nil {
+			log.Warn("failed to close v2 manager after initialization failure",
+				logger.Error(closeErr),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
+		return fmt.Errorf("failed to initialize v2 database: %w", err)
+	}
+
+	// Create the state manager
+	stateManager := datastoreV2.NewStateManager(v2Manager.DB())
+
+	// Create repositories for the migration worker
+	v2DB := v2Manager.DB()
+	useV2Prefix := false // SQLite uses separate file, not prefixed tables
+
+	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix)
+	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix)
+	v2DetectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix)
+
+	// Create the legacy detection repository
+	legacyRepo := datastore.NewDetectionRepository(ds, time.Local)
+
+	// Create the migration worker
+	worker, err := migration.NewWorker(&migration.WorkerConfig{
+		Legacy:       legacyRepo,
+		V2Detection:  v2DetectionRepo,
+		LabelRepo:    labelRepo,
+		ModelRepo:    modelRepo,
+		SourceRepo:   sourceRepo,
+		StateManager: stateManager,
+		Logger:       log,
+		BatchSize:    migration.DefaultBatchSize,
+		Timezone:     time.Local,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create migration worker: %w", err)
+	}
+
+	// Inject dependencies into the API layer
+	apiv2.SetMigrationDependencies(stateManager, worker)
+
+	// Check for state recovery - resume migration if it was in progress
+	state, err := stateManager.GetState()
+	if err != nil {
+		log.Warn("failed to get migration state for recovery",
+			logger.Error(err),
+			logger.String("operation", "initialize_migration_infrastructure"))
+	} else {
+		log.Info("migration infrastructure initialized",
+			logger.String("state", string(state.State)),
+			logger.Int64("migrated_records", state.MigratedRecords),
+			logger.Int64("total_records", state.TotalRecords),
+			logger.String("operation", "initialize_migration_infrastructure"))
+
+		// Resume worker if migration was in progress
+		if state.State == entities.MigrationStatusDualWrite ||
+			state.State == entities.MigrationStatusMigrating {
+			log.Info("resuming migration worker after restart",
+				logger.String("state", string(state.State)),
+				logger.String("operation", "initialize_migration_infrastructure"))
+			// Start worker with background context
+			if startErr := worker.Start(context.Background()); startErr != nil {
+				log.Warn("failed to resume migration worker",
+					logger.Error(startErr),
+					logger.String("operation", "initialize_migration_infrastructure"))
+			}
+		}
+	}
+
+	return nil
 }
