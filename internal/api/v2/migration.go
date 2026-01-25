@@ -59,6 +59,7 @@ type MigrationActionResponse struct {
 var (
 	stateManager     *datastoreV2.StateManager
 	migrationWorker  *migration.Worker
+	isV2OnlyMode     bool
 )
 
 // SetMigrationDependencies sets the migration-related dependencies.
@@ -66,6 +67,12 @@ var (
 func SetMigrationDependencies(sm *datastoreV2.StateManager, worker *migration.Worker) {
 	stateManager = sm
 	migrationWorker = worker
+}
+
+// SetV2OnlyMode indicates that the system is running in v2-only mode.
+// In this mode, migration is complete and the legacy database is not available.
+func SetV2OnlyMode() {
+	isV2OnlyMode = true
 }
 
 // StopMigrationWorker stops the migration worker if it's running.
@@ -107,6 +114,24 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 
 	// Check if state manager is available
 	if stateManager == nil {
+		// In v2-only mode, migration is complete and state manager is not needed
+		if isV2OnlyMode {
+			c.logInfoIfEnabled("Running in v2-only mode, migration is complete",
+				logger.String("path", path), logger.String("ip", ip))
+			return ctx.JSON(http.StatusOK, MigrationStatusResponse{
+				State:             string(entities.MigrationStatusCompleted),
+				ProgressPercent:   100.0,
+				WorkerRunning:     false,
+				WorkerPaused:      false,
+				CanStart:          false,
+				CanPause:          false,
+				CanResume:         false,
+				CanCancel:         false,
+				CanRollback:       true, // Allow rollback from v2-only mode
+				IsDualWriteActive: false,
+				ShouldReadFromV2:  true,
+			})
+		}
 		c.logWarnIfEnabled("Migration state manager not available",
 			logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, fmt.Errorf("migration not configured"),

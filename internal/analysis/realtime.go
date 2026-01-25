@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -142,8 +143,47 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Print system details and configuration
 	printSystemDetails(settings)
 
-	// Initialize database access.
-	dataStore := datastore.New(settings)
+	// Check migration state before initializing database
+	// This allows us to skip the legacy database when migration is complete
+	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
+	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
+
+	if v2OnlyMode {
+		GetLogger().Info("migration completed, starting in v2-only mode",
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.String("operation", "startup_mode_check"))
+	} else {
+		GetLogger().Debug("migration state check completed",
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.Bool("v2_available", startupState.V2Available),
+			logger.Bool("legacy_required", startupState.LegacyRequired),
+			logger.String("operation", "startup_mode_check"))
+	}
+
+	// Initialize database access based on migration state
+	var dataStore datastore.Interface
+	var v2OnlyDatastore *v2only.Datastore
+
+	if v2OnlyMode {
+		// V2-only mode: use V2OnlyDatastore
+		var err error
+		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
+		if err != nil {
+			// V2-only mode failed, fall back to legacy startup
+			GetLogger().Warn("v2-only mode initialization failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_v2_only_mode"))
+			dataStore = datastore.New(settings)
+			v2OnlyMode = false
+		} else {
+			dataStore = v2OnlyDatastore
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+		}
+	} else {
+		// Normal mode: use legacy datastore
+		dataStore = datastore.New(settings)
+	}
 
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
@@ -186,16 +226,19 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	dataStore.SetMetrics(metrics.Datastore)
 	dataStore.SetSunCalcMetrics(metrics.SunCalc)
 
-	// Validate disk space before attempting to open the database
-	// This prevents startup failures due to insufficient disk space
-	// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
-	if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
-		return err
-	}
+	// Only validate disk space and open for legacy mode (v2-only mode already opened)
+	if !v2OnlyMode {
+		// Validate disk space before attempting to open the database
+		// This prevents startup failures due to insufficient disk space
+		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
+		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+			return err
+		}
 
-	// Open a connection to the database and handle possible errors.
-	if err := dataStore.Open(); err != nil {
-		return err // Return error to stop execution if database connection fails.
+		// Open a connection to the database and handle possible errors.
+		if err := dataStore.Open(); err != nil {
+			return err // Return error to stop execution if database connection fails.
+		}
 	}
 	// Ensure the database connection is closed when the function returns.
 	defer closeDataStore(dataStore)
@@ -239,12 +282,18 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
 
-	// Initialize v2 migration infrastructure
-	// This sets up the StateManager and Worker for the database migration API
-	if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
-		// Migration infrastructure is optional - log warning but continue
-		GetLogger().Warn("migration infrastructure initialization failed",
-			logger.Error(err),
+	// Initialize v2 migration infrastructure only if not in v2-only mode
+	// In v2-only mode, migration is already complete - no need for migration infrastructure
+	if !v2OnlyMode {
+		// This sets up the StateManager and Worker for the database migration API
+		if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
+			// Migration infrastructure is optional - log warning but continue
+			GetLogger().Warn("migration infrastructure initialization failed",
+				logger.Error(err),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
+	} else {
+		GetLogger().Debug("skipping migration infrastructure in v2-only mode",
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
 	// Ensure v2 database is closed on shutdown (handles nil case gracefully)
@@ -1698,4 +1747,92 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	}
 
 	return nil
+}
+
+// initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.
+// This allows the application to run without opening the legacy database.
+func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
+	log := GetLogger()
+	log.Info("initializing v2-only mode",
+		logger.String("operation", "initialize_v2_only_mode"))
+
+	// Determine configuration based on database type
+	var v2Manager datastoreV2.Manager
+	var useV2Prefix bool
+	var err error
+
+	switch {
+	case settings.Output.SQLite.Enabled:
+		dataDir := datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
+		v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+			DataDir: dataDir,
+			Debug:   settings.Debug,
+			Logger:  log,
+		})
+		useV2Prefix = false
+
+	case settings.Output.MySQL.Enabled:
+		v2Manager, err = datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
+			Host:     settings.Output.MySQL.Host,
+			Port:     settings.Output.MySQL.Port,
+			Username: settings.Output.MySQL.Username,
+			Password: settings.Output.MySQL.Password,
+			Database: settings.Output.MySQL.Database,
+			Debug:    settings.Debug,
+		})
+		useV2Prefix = true
+
+	default:
+		return nil, fmt.Errorf("no database configured")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create v2 database manager: %w", err)
+	}
+
+	// Initialize the v2 database schema (ensures auxiliary tables exist)
+	if err := v2Manager.Initialize(); err != nil {
+		_ = v2Manager.Close()
+		return nil, fmt.Errorf("failed to initialize v2 database: %w", err)
+	}
+
+	// Create repositories
+	v2DB := v2Manager.DB()
+	detectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix)
+	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix)
+	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix)
+	weatherRepo := repository.NewWeatherRepository(v2DB, useV2Prefix)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, useV2Prefix)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, useV2Prefix)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, useV2Prefix)
+
+	// Create V2OnlyDatastore
+	ds, err := v2only.New(&v2only.Config{
+		Manager:      v2Manager,
+		Detection:    detectionRepo,
+		Label:        labelRepo,
+		Model:        modelRepo,
+		Source:       sourceRepo,
+		Weather:      weatherRepo,
+		ImageCache:   imageCacheRepo,
+		Threshold:    thresholdRepo,
+		Notification: notificationRepo,
+		Logger:       log,
+		Timezone:     time.Local,
+	})
+	if err != nil {
+		_ = v2Manager.Close()
+		return nil, fmt.Errorf("failed to create v2-only datastore: %w", err)
+	}
+
+	// Store manager for shutdown cleanup
+	v2DatabaseManagerMu.Lock()
+	v2DatabaseManager = v2Manager
+	v2DatabaseManagerMu.Unlock()
+
+	log.Info("v2-only mode initialized successfully",
+		logger.String("operation", "initialize_v2_only_mode"))
+
+	return ds, nil
 }

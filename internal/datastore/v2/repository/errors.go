@@ -43,4 +43,22 @@ var (
 
 	// ErrNoClipPath indicates the detection exists but has no associated clip path.
 	ErrNoClipPath = errors.New("detection has no clip path")
+
+	// ErrDailyEventsNotFound indicates no daily events exist for the date.
+	ErrDailyEventsNotFound = errors.New("daily events not found")
+
+	// ErrHourlyWeatherNotFound indicates no hourly weather data exists.
+	ErrHourlyWeatherNotFound = errors.New("hourly weather not found")
+
+	// ErrImageCacheNotFound indicates the image cache entry was not found.
+	ErrImageCacheNotFound = errors.New("image cache not found")
+
+	// ErrDynamicThresholdNotFound indicates no dynamic threshold exists for the species.
+	ErrDynamicThresholdNotFound = errors.New("dynamic threshold not found")
+
+	// ErrThresholdEventNotFound indicates no threshold event exists.
+	ErrThresholdEventNotFound = errors.New("threshold event not found")
+
+	// ErrNotificationHistoryNotFound indicates no notification history exists.
+	ErrNotificationHistoryNotFound = errors.New("notification history not found")
 )

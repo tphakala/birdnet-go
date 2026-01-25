@@ -76,6 +76,7 @@ func (m *MySQLManager) Initialize() error {
 	// Run GORM auto-migrations for all entities
 	// Tables will be created with v2_ prefix due to NamingStrategy
 	err := m.db.AutoMigrate(
+		// Core detection entities
 		&entities.Label{},
 		&entities.AIModel{},
 		&entities.ModelLabel{},
@@ -87,6 +88,13 @@ func (m *MySQLManager) Initialize() error {
 		&entities.DetectionLock{},
 		&entities.MigrationState{},
 		&entities.MigrationDirtyID{},
+		// Auxiliary tables
+		&entities.DailyEvents{},
+		&entities.HourlyWeather{},
+		&entities.ImageCache{},
+		&entities.DynamicThreshold{},
+		&entities.ThresholdEvent{},
+		&entities.NotificationHistory{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
@@ -143,6 +151,7 @@ func (m *MySQLManager) Close() error {
 func (m *MySQLManager) Delete() error {
 	// Drop tables in reverse dependency order
 	tables := []string{
+		// Core detection tables
 		v2TablePrefix + "detection_locks",
 		v2TablePrefix + "detection_comments",
 		v2TablePrefix + "detection_reviews",
@@ -153,6 +162,14 @@ func (m *MySQLManager) Delete() error {
 		v2TablePrefix + "ai_models",
 		v2TablePrefix + "labels",
 		v2TablePrefix + "migration_state",
+		v2TablePrefix + "migration_dirty_ids",
+		// Auxiliary tables
+		v2TablePrefix + "hourly_weathers",
+		v2TablePrefix + "daily_events",
+		v2TablePrefix + "image_caches",
+		v2TablePrefix + "threshold_events",
+		v2TablePrefix + "dynamic_thresholds",
+		v2TablePrefix + "notification_histories",
 	}
 
 	for _, table := range tables {
@@ -174,6 +191,12 @@ func (m *MySQLManager) Exists() bool {
 // IsMySQL returns true for MySQL manager.
 func (m *MySQLManager) IsMySQL() bool {
 	return true
+}
+
+// CheckpointWAL is a no-op for MySQL as it doesn't use Write-Ahead Logging.
+// This method exists to satisfy the Manager interface.
+func (m *MySQLManager) CheckpointWAL() error {
+	return nil
 }
 
 // TablePrefix returns the table prefix for v2 tables.

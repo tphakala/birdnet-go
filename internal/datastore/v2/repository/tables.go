@@ -11,6 +11,13 @@ const (
 	tableDetectionReviews     = "detection_reviews"
 	tableDetectionComments    = "detection_comments"
 	tableDetectionLocks       = "detection_locks"
+	// Auxiliary tables
+	tableDailyEvents          = "daily_events"
+	tableHourlyWeathers       = "hourly_weathers"
+	tableImageCaches          = "image_caches"
+	tableDynamicThresholds    = "dynamic_thresholds"
+	tableThresholdEvents      = "threshold_events"
+	tableNotificationHistory  = "notification_histories"
 )
 
 // Table name constants for v2 prefixed schema (MySQL).
@@ -24,4 +31,11 @@ const (
 	tableV2DetectionReviews     = "v2_detection_reviews"
 	tableV2DetectionComments    = "v2_detection_comments"
 	tableV2DetectionLocks       = "v2_detection_locks"
+	// Auxiliary tables
+	tableV2DailyEvents          = "v2_daily_events"
+	tableV2HourlyWeathers       = "v2_hourly_weathers"
+	tableV2ImageCaches          = "v2_image_caches"
+	tableV2DynamicThresholds    = "v2_dynamic_thresholds"
+	tableV2ThresholdEvents      = "v2_threshold_events"
+	tableV2NotificationHistory  = "v2_notification_histories"
 )
