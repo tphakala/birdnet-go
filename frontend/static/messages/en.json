@@ -757,7 +757,7 @@
         "title": "Legacy Database"
       },
       "v2": {
-        "title": "V2 Database"
+        "title": "Enhanced Database"
       },
       "stats": {
         "connected": "Connected",
@@ -828,9 +828,9 @@
         },
         "confirmRollback": {
           "title": "Rollback Migration?",
-          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the v2 schema but will not be visible until migration is run again.",
+          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the enhanced database but will not be visible until migration is run again.",
           "confirm": "Yes, Rollback",
-          "dismiss": "No, Keep V2"
+          "dismiss": "No, Keep Enhanced"
         },
         "errors": {
           "startFailed": "Failed to start migration",
