@@ -209,7 +209,8 @@
     "mainNavigation": "Główna nawigacja",
     "closeSidebar": "Zamknij menu boczne",
     "analyticsSubmenu": "Podmenu analityki",
-    "settingsSubmenu": "Podmenu ustawień"
+    "settingsSubmenu": "Podmenu ustawień",
+    "systemSubmenu": "System submenu"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -743,6 +744,68 @@
       "labels": {
         "overallProgress": "Ogólny postęp",
         "progress": "Postęp"
+      }
+    },
+    "sections": {
+      "overview": "Overview",
+      "database": "Database"
+    },
+    "database": {
+      "title": "Database Management",
+      "description": "Manage database schema migration",
+      "migration": {
+        "title": "Schema Migration",
+        "description": "Migrate from legacy schema to normalized v2 schema",
+        "status": {
+          "idle": "Ready to Start",
+          "initializing": "Initializing",
+          "dualWrite": "Dual-Write Active",
+          "migrating": "Migrating Records",
+          "paused": "Paused",
+          "validating": "Validating",
+          "cutover": "Cutover in Progress",
+          "completed": "Migration Complete"
+        },
+        "progress": {
+          "title": "Migration Progress",
+          "records": "{migrated} of {total} records",
+          "percent": "{percent}%",
+          "rate": "{rate} records/sec",
+          "remaining": "Est. remaining: {time}",
+          "dirtyIds": "{count} records pending re-sync"
+        },
+        "actions": {
+          "start": "Start Migration",
+          "pause": "Pause",
+          "resume": "Resume",
+          "cancel": "Cancel",
+          "rollback": "Rollback"
+        },
+        "confirmCancel": {
+          "title": "Cancel Migration?",
+          "message": "This will stop the migration and return to idle state. Progress will be lost.",
+          "confirm": "Yes, Cancel",
+          "dismiss": "No, Keep Running"
+        },
+        "confirmRollback": {
+          "title": "Rollback Migration?",
+          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the v2 schema but will not be visible until migration is run again.",
+          "confirm": "Yes, Rollback",
+          "dismiss": "No, Keep V2"
+        },
+        "errors": {
+          "startFailed": "Failed to start migration",
+          "pauseFailed": "Failed to pause migration",
+          "resumeFailed": "Failed to resume migration",
+          "cancelFailed": "Failed to cancel migration",
+          "rollbackFailed": "Failed to rollback migration",
+          "fetchFailed": "Failed to fetch migration status"
+        },
+        "worker": {
+          "running": "Worker Running",
+          "paused": "Worker Paused",
+          "stopped": "Worker Stopped"
+        }
       }
     }
   },
