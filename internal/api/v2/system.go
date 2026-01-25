@@ -1518,8 +1518,9 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	}
 	dbSize := fileInfo.Size()
 
-	// Check disk space (need dbSize + buffer for VACUUM INTO)
-	usage, err := disk.Usage(filepath.Dir(dbPath))
+	// Check disk space on temp directory where VACUUM INTO will write
+	tempDir := os.TempDir()
+	usage, err := disk.Usage(tempDir)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to check disk space", http.StatusInternalServerError)
 	}
