@@ -113,7 +113,11 @@
         <div class="h-4 bg-[var(--color-base-200)] rounded animate-pulse w-2/3"></div>
       </div>
     {:else if error}
-      <div class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm">
+      <div
+        class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
+        role="alert"
+        aria-live="assertive"
+      >
         {error}
       </div>
     {:else if stats}
@@ -157,7 +161,11 @@
   <!-- Footer -->
   <div class="px-6 py-4 border-t border-[var(--color-base-200)]">
     {#if downloadError}
-      <div class="mb-3 p-2 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]">
+      <div
+        class="mb-3 p-2 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]"
+        role="alert"
+        aria-live="assertive"
+      >
         {downloadError}
       </div>
     {/if}

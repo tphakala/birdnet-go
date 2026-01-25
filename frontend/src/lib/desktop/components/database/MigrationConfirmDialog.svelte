@@ -44,7 +44,11 @@
 {#if open}
   <div class="fixed inset-0 z-50 flex items-center justify-center">
     <!-- Backdrop -->
-    <button type="button" class="fixed inset-0 bg-black/50" onclick={onCancel} aria-label="Close"
+    <button
+      type="button"
+      class="fixed inset-0 bg-black/50"
+      onclick={onCancel}
+      aria-label={t('common.aria.closeModal')}
     ></button>
 
     <!-- Dialog -->

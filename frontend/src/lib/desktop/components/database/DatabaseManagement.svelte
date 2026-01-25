@@ -125,9 +125,14 @@
     startLoading = true;
 
     try {
-      // Pass total_detections from already-fetched stats to avoid slow recount
-      const totalRecords = legacyStats.data?.total_detections ?? 0;
-      await api.post('/api/v2/system/database/migration/start', { total_records: totalRecords });
+      // Only include total_records when data is available
+      if (legacyStats.data?.total_detections != null) {
+        await api.post('/api/v2/system/database/migration/start', {
+          total_records: legacyStats.data.total_detections,
+        });
+      } else {
+        await api.post('/api/v2/system/database/migration/start');
+      }
       await fetchMigrationStatus();
     } catch (e) {
       migrationStatus.error = e instanceof ApiError ? e.message : 'Failed to start migration';

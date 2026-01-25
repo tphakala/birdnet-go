@@ -141,6 +141,8 @@
     {:else if error}
       <div
         class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-center gap-3"
+        role="alert"
+        aria-live="assertive"
       >
         <AlertCircle class="size-5 shrink-0" />
         <span>{error}</span>
@@ -243,7 +245,7 @@
         </div>
       </div>
     {:else if status}
-      <!-- Active State (migrating, dual_write, etc.) -->
+      <!-- Active State (migrating, dualWrite, etc.) -->
       <div class="space-y-4">
         <!-- Friendly status note -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
@@ -272,7 +274,11 @@
         <!-- Rate and ETA -->
         {#if status.records_per_second && status.records_per_second > 0}
           <div class="flex justify-between text-sm text-[var(--color-base-content)]/70">
-            <span>{status.records_per_second.toFixed(1)} rec/s</span>
+            <span
+              >{t('system.database.migration.progress.rateValue', {
+                rate: status.records_per_second.toFixed(1),
+              })}</span
+            >
             {#if status.estimated_remaining}
               <span
                 >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
@@ -290,7 +296,11 @@
 
         <!-- Error message -->
         {#if status.error_message}
-          <div class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm">
+          <div
+            class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
+            role="alert"
+            aria-live="assertive"
+          >
             {status.error_message}
           </div>
         {/if}
@@ -339,7 +349,7 @@
       type="button"
       class="fixed inset-0 bg-black/50"
       onclick={() => (showCancelConfirm = false)}
-      aria-label="Close"
+      aria-label={t('common.aria.closeModal')}
     ></button>
     <div
       class="relative bg-[var(--color-base-100)] rounded-xl shadow-xl p-6 max-w-md w-full mx-4 z-10"
