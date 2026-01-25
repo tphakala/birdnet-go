@@ -858,6 +858,63 @@ func (_c *MockInterface_GetActiveNotificationHistory_Call) RunAndReturn(run func
 	return _c
 }
 
+// GetAllDailyEvents provides a mock function with no fields
+func (_m *MockInterface) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAllDailyEvents")
+	}
+
+	var r0 []datastore.DailyEvents
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]datastore.DailyEvents, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []datastore.DailyEvents); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.DailyEvents)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAllDailyEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAllDailyEvents'
+type MockInterface_GetAllDailyEvents_Call struct {
+	*mock.Call
+}
+
+// GetAllDailyEvents is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetAllDailyEvents() *MockInterface_GetAllDailyEvents_Call {
+	return &MockInterface_GetAllDailyEvents_Call{Call: _e.mock.On("GetAllDailyEvents")}
+}
+
+func (_c *MockInterface_GetAllDailyEvents_Call) Run(run func()) *MockInterface_GetAllDailyEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAllDailyEvents_Call) Return(_a0 []datastore.DailyEvents, _a1 error) *MockInterface_GetAllDailyEvents_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAllDailyEvents_Call) RunAndReturn(run func() ([]datastore.DailyEvents, error)) *MockInterface_GetAllDailyEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetAllDetectedSpecies provides a mock function with no fields
 func (_m *MockInterface) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	ret := _m.Called()
@@ -2180,64 +2237,6 @@ func (_c *MockInterface_GetNoteComments_Call) RunAndReturn(run func(string) ([]d
 	return _c
 }
 
-// GetNoteResults provides a mock function with given fields: noteID
-func (_m *MockInterface) GetNoteResults(noteID string) ([]datastore.Results, error) {
-	ret := _m.Called(noteID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetNoteResults")
-	}
-
-	var r0 []datastore.Results
-	var r1 error
-	if rf, ok := ret.Get(0).(func(string) ([]datastore.Results, error)); ok {
-		return rf(noteID)
-	}
-	if rf, ok := ret.Get(0).(func(string) []datastore.Results); ok {
-		r0 = rf(noteID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]datastore.Results)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(string) error); ok {
-		r1 = rf(noteID)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockInterface_GetNoteResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNoteResults'
-type MockInterface_GetNoteResults_Call struct {
-	*mock.Call
-}
-
-// GetNoteResults is a helper method to define mock.On call
-//   - noteID string
-func (_e *MockInterface_Expecter) GetNoteResults(noteID interface{}) *MockInterface_GetNoteResults_Call {
-	return &MockInterface_GetNoteResults_Call{Call: _e.mock.On("GetNoteResults", noteID)}
-}
-
-func (_c *MockInterface_GetNoteResults_Call) Run(run func(noteID string)) *MockInterface_GetNoteResults_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
-	})
-	return _c
-}
-
-func (_c *MockInterface_GetNoteResults_Call) Return(_a0 []datastore.Results, _a1 error) *MockInterface_GetNoteResults_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockInterface_GetNoteResults_Call) RunAndReturn(run func(string) ([]datastore.Results, error)) *MockInterface_GetNoteResults_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetNoteLock provides a mock function with given fields: noteID
 func (_m *MockInterface) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 	ret := _m.Called(noteID)
@@ -2292,6 +2291,64 @@ func (_c *MockInterface_GetNoteLock_Call) Return(_a0 *datastore.NoteLock, _a1 er
 }
 
 func (_c *MockInterface_GetNoteLock_Call) RunAndReturn(run func(string) (*datastore.NoteLock, error)) *MockInterface_GetNoteLock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetNoteResults provides a mock function with given fields: noteID
+func (_m *MockInterface) GetNoteResults(noteID string) ([]datastore.Results, error) {
+	ret := _m.Called(noteID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNoteResults")
+	}
+
+	var r0 []datastore.Results
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) ([]datastore.Results, error)); ok {
+		return rf(noteID)
+	}
+	if rf, ok := ret.Get(0).(func(string) []datastore.Results); ok {
+		r0 = rf(noteID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.Results)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(noteID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetNoteResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNoteResults'
+type MockInterface_GetNoteResults_Call struct {
+	*mock.Call
+}
+
+// GetNoteResults is a helper method to define mock.On call
+//   - noteID string
+func (_e *MockInterface_Expecter) GetNoteResults(noteID interface{}) *MockInterface_GetNoteResults_Call {
+	return &MockInterface_GetNoteResults_Call{Call: _e.mock.On("GetNoteResults", noteID)}
+}
+
+func (_c *MockInterface_GetNoteResults_Call) Run(run func(noteID string)) *MockInterface_GetNoteResults_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetNoteResults_Call) Return(_a0 []datastore.Results, _a1 error) *MockInterface_GetNoteResults_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetNoteResults_Call) RunAndReturn(run func(string) ([]datastore.Results, error)) *MockInterface_GetNoteResults_Call {
 	_c.Call.Return(run)
 	return _c
 }

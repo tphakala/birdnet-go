@@ -105,6 +105,7 @@ type Interface interface {
 	DeleteNoteComment(commentID string) error
 	SaveDailyEvents(dailyEvents *DailyEvents) error
 	GetDailyEvents(date string) (DailyEvents, error)
+	GetAllDailyEvents() ([]DailyEvents, error)
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
@@ -775,6 +776,20 @@ func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_daily_events").
 			Context("date", date).
+			Build()
+	}
+	return dailyEvents, nil
+}
+
+// GetAllDailyEvents retrieves all daily events from the database.
+// Used for migration purposes.
+func (ds *DataStore) GetAllDailyEvents() ([]DailyEvents, error) {
+	var dailyEvents []DailyEvents
+	if err := ds.DB.Order("date ASC").Find(&dailyEvents).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_daily_events").
 			Build()
 	}
 	return dailyEvents, nil
