@@ -206,6 +206,9 @@ func (m *ActionMockDatastore) GetDailyEvents(_ string) (datastore.DailyEvents, e
 func (m *ActionMockDatastore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
+	return nil, nil
+}
 func (m *ActionMockDatastore) SaveHourlyWeather(_ *datastore.HourlyWeather) error {
 	return nil
 }

@@ -675,6 +675,11 @@ func (ds *Datastore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	return nil, fmt.Errorf("GetAllDailyEvents not supported in v2-only mode")
 }
 
+// GetAllHourlyWeather returns all hourly weather (used for migration, not needed in v2-only mode).
+func (ds *Datastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
+	return nil, fmt.Errorf("GetAllHourlyWeather not supported in v2-only mode")
+}
+
 // SaveHourlyWeather saves hourly weather data.
 func (ds *Datastore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error {
 	if ds.weather == nil {

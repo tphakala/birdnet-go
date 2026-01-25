@@ -87,6 +87,9 @@ func (m *MockDatastore) GetDailyEvents(string) (datastore.DailyEvents, error) {
 func (m *MockDatastore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	return nil, nil
 }
+func (m *MockDatastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
+	return nil, nil
+}
 func (m *MockDatastore) SaveHourlyWeather(*datastore.HourlyWeather) error { return nil }
 func (m *MockDatastore) GetHourlyWeather(string) ([]datastore.HourlyWeather, error) {
 	return make([]datastore.HourlyWeather, 0), nil
