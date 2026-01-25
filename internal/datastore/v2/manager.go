@@ -96,6 +96,7 @@ func (m *SQLiteManager) Initialize() error {
 		&entities.DetectionComment{},
 		&entities.DetectionLock{},
 		&entities.MigrationState{},
+		&entities.MigrationDirtyID{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)

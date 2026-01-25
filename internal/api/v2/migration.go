@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // MigrationStatusResponse represents the migration status for the API.
@@ -221,18 +222,13 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	}
 
 	// Count records if not provided
+	// Note: Frontend should pass total_records from the already-fetched stats
+	// to avoid this slower fallback
 	totalRecords := req.TotalRecords
-	if totalRecords <= 0 && c.DS != nil {
-		// Use the legacy interface to count all detections
-		// CountSearchResults with empty query returns total count
-		count, err := c.DS.CountSearchResults("")
-		if err != nil {
-			c.logWarnIfEnabled("Failed to count records, using 0",
-				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-			totalRecords = 0
-		} else {
-			totalRecords = count
-		}
+	if totalRecords <= 0 {
+		c.logWarnIfEnabled("No record count provided, migration will start with 0 total",
+			logger.String("path", path), logger.String("ip", ip))
+		totalRecords = 0
 	}
 
 	// Start migration
@@ -269,6 +265,20 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 		logger.Int64("total_records", totalRecords),
 		logger.String("path", path), logger.String("ip", ip))
 
+	// Send notification that migration has started
+	if notifService := notification.GetService(); notifService != nil {
+		if _, err := notifService.CreateWithComponent(
+			notification.TypeSystem,
+			notification.PriorityMedium,
+			"Database Migration Started",
+			"Database migration has started. This process may take some time depending on the number of detections.",
+			"database",
+		); err != nil {
+			c.logWarnIfEnabled("Failed to send migration start notification",
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		}
+	}
+
 	return ctx.JSON(http.StatusOK, MigrationActionResponse{
 		Success: true,
 		Message: fmt.Sprintf("Migration started with %d records", totalRecords),
@@ -279,13 +289,15 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 // PauseMigration handles POST /api/v2/system/database/migration/pause
 func (c *Controller) PauseMigration(ctx echo.Context) error {
 	return c.executeMigrationAction(ctx, &migrationActionParams{
-		logStart:        "Pausing migration",
-		workerAction:    func() { migrationWorker.Pause() },
-		stateAction:     func() error { return stateManager.Pause() },
-		logFailure:      "Failed to pause migration",
-		logSuccess:      "Migration paused successfully",
-		responseMessage: "Migration paused",
-		responseState:   entities.MigrationStatusPaused,
+		logStart:          "Pausing migration",
+		workerAction:      func() { migrationWorker.Pause() },
+		stateAction:       func() error { return stateManager.Pause() },
+		logFailure:        "Failed to pause migration",
+		logSuccess:        "Migration paused successfully",
+		responseMessage:   "Migration paused",
+		responseState:     entities.MigrationStatusPaused,
+		notificationTitle: "Database Migration Paused",
+		notificationBody:  "Database migration has been paused. You can resume it at any time from the Database settings.",
 	})
 }
 
@@ -366,6 +378,20 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 	c.logInfoIfEnabled("Migration cancelled successfully",
 		logger.String("path", path), logger.String("ip", ip))
 
+	// Send notification that migration was cancelled
+	if notifService := notification.GetService(); notifService != nil {
+		if _, err := notifService.CreateWithComponent(
+			notification.TypeSystem,
+			notification.PriorityMedium,
+			"Database Migration Cancelled",
+			"Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
+			"database",
+		); err != nil {
+			c.logWarnIfEnabled("Failed to send migration cancel notification",
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		}
+	}
+
 	return ctx.JSON(http.StatusOK, MigrationActionResponse{
 		Success: true,
 		Message: "Migration cancelled",
@@ -439,13 +465,15 @@ func (c *Controller) getDatabaseDirectory() string {
 
 // migrationActionParams defines parameters for a migration action.
 type migrationActionParams struct {
-	logStart        string
-	workerAction    func()
-	stateAction     func() error
-	logFailure      string
-	logSuccess      string
-	responseMessage string
-	responseState   entities.MigrationStatus
+	logStart          string
+	workerAction      func()
+	stateAction       func() error
+	logFailure        string
+	logSuccess        string
+	responseMessage   string
+	responseState     entities.MigrationStatus
+	notificationTitle string // Optional: if set, sends a notification
+	notificationBody  string
 }
 
 // executeMigrationAction handles common migration action logic.
@@ -472,6 +500,22 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 
 	c.logInfoIfEnabled(params.logSuccess,
 		logger.String("path", path), logger.String("ip", ip))
+
+	// Send notification if configured
+	if params.notificationTitle != "" {
+		if notifService := notification.GetService(); notifService != nil {
+			if _, err := notifService.CreateWithComponent(
+				notification.TypeSystem,
+				notification.PriorityMedium,
+				params.notificationTitle,
+				params.notificationBody,
+				"database",
+			); err != nil {
+				c.logWarnIfEnabled("Failed to send migration notification",
+					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+			}
+		}
+	}
 
 	return ctx.JSON(http.StatusOK, MigrationActionResponse{
 		Success: true,

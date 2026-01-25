@@ -98,6 +98,14 @@ var audioDemuxManager = NewAudioDemuxManager()
 var v2DatabaseManager datastoreV2.Manager
 var v2DatabaseManagerMu sync.Mutex
 
+// GetV2DatabaseManager returns the v2 database manager.
+// Returns nil if the migration infrastructure is not initialized.
+func GetV2DatabaseManager() datastoreV2.Manager {
+	v2DatabaseManagerMu.Lock()
+	defer v2DatabaseManagerMu.Unlock()
+	return v2DatabaseManager
+}
+
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
@@ -254,6 +262,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		api.WithAudioLevelChannel(audioLevelChan),
 		api.WithOAuth2Server(oauth2Server),
 		api.WithSunCalc(sunCalc),
+		api.WithV2Manager(GetV2DatabaseManager()),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP server: %w", err)

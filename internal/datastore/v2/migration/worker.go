@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // DefaultBatchSize is the default number of records processed per batch.
@@ -31,6 +32,12 @@ const DefaultMaxConsecutiveErrors = 10
 
 // DefaultRateWindowSize is the number of samples for rate calculation.
 const DefaultRateWindowSize = 10
+
+// ProgressLogInterval is the minimum time between progress log entries.
+const ProgressLogInterval = 10 * time.Second
+
+// ProgressLogRecordThreshold is the minimum records between progress log entries.
+const ProgressLogRecordThreshold = 1000
 
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.New("migration paused")
@@ -76,6 +83,10 @@ type Worker struct {
 	// Rate tracking for time estimates
 	rateSamples []rateSample
 	rateIndex   int
+
+	// Progress logging tracking
+	lastProgressLog      time.Time
+	recordsSinceLastLog  int64
 }
 
 // WorkerConfig configures the migration worker.
@@ -166,6 +177,19 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.running = true
 	w.paused = false
 	w.lastError = nil
+	w.consecutiveErrors = 0
+
+	// Reinitialize control channels in case they were closed by a previous Stop()
+	w.stopCh = make(chan struct{})
+	w.pauseCh = make(chan struct{})
+	w.resumeCh = make(chan struct{})
+
+	// Reset rate samples for fresh estimates
+	w.rateSamples = make([]rateSample, DefaultRateWindowSize)
+	w.rateIndex = 0
+	w.lastProgressLog = time.Time{}
+	w.recordsSinceLastLog = 0
+
 	w.mu.Unlock()
 
 	go w.run(ctx)
@@ -362,6 +386,20 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 		return runActionContinue
 	}
 	w.logger.Info("migration completed successfully")
+
+	// Send notification that migration has completed
+	if notifService := notification.GetService(); notifService != nil {
+		if _, err := notifService.CreateWithComponent(
+			notification.TypeSystem,
+			notification.PriorityMedium,
+			"Database Migration Completed",
+			"Database migration has completed successfully. Your system is now ready for upcoming features.",
+			"database",
+		); err != nil {
+			w.logger.Warn("failed to send migration completion notification", logger.Error(err))
+		}
+	}
+
 	return runActionReturn
 }
 
@@ -384,6 +422,20 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 	}
 
 	w.logger.Info("migration completed successfully from cutover state")
+
+	// Send notification that migration has completed
+	if notifService := notification.GetService(); notifService != nil {
+		if _, err := notifService.CreateWithComponent(
+			notification.TypeSystem,
+			notification.PriorityMedium,
+			"Database Migration Completed",
+			"Database migration has completed successfully. Your system is now ready for upcoming features.",
+			"database",
+		); err != nil {
+			w.logger.Warn("failed to send migration completion notification", logger.Error(err))
+		}
+	}
+
 	return runActionReturn
 }
 
@@ -444,8 +496,27 @@ func (w *Worker) pauseOnValidationFailure() {
 }
 
 // transitionToValidation transitions to the validating state.
+// Handles the case where we're still in dual_write by transitioning through migrating first.
 func (w *Worker) transitionToValidation() {
 	w.logger.Info("migration complete, starting validation")
+
+	// Get current state to handle dual_write → migrating → validating transition
+	state, err := w.stateManager.GetState()
+	if err != nil {
+		w.logger.Error("failed to get state for validation transition", logger.Error(err))
+		return
+	}
+
+	// If still in dual_write, transition to migrating first
+	if state.State == entities.MigrationStatusDualWrite {
+		if err := w.stateManager.TransitionToMigrating(); err != nil {
+			w.logger.Error("failed to transition to migrating", logger.Error(err))
+			return
+		}
+		w.logger.Info("transitioned from dual_write to migrating")
+	}
+
+	// Now transition to validating
 	if err := w.stateManager.TransitionToValidating(); err != nil {
 		w.logger.Error("failed to transition to validating", logger.Error(err))
 	}
@@ -460,6 +531,31 @@ func (w *Worker) updateBatchProgress(batch batchResult, duration time.Duration) 
 		if err := w.stateManager.IncrementProgress(batch.lastID, int64(batch.migrated)); err != nil {
 			w.logger.Warn("failed to update progress", logger.Error(err))
 		}
+	}
+
+	// Track records for periodic progress logging
+	w.recordsSinceLastLog += int64(batch.migrated)
+
+	// Log progress periodically (every 10 seconds or 1000 records)
+	shouldLog := time.Since(w.lastProgressLog) >= ProgressLogInterval ||
+		w.recordsSinceLastLog >= ProgressLogRecordThreshold
+
+	if shouldLog && batch.migrated > 0 {
+		state, err := w.stateManager.GetState()
+		if err == nil {
+			percent := float64(0)
+			if state.TotalRecords > 0 {
+				percent = float64(state.MigratedRecords) / float64(state.TotalRecords) * 100
+			}
+			rate := w.GetMigrationRate()
+			w.logger.Info("migration progress",
+				logger.Int64("migrated_records", state.MigratedRecords),
+				logger.Int64("total_records", state.TotalRecords),
+				logger.Float64("percent", percent),
+				logger.Float64("records_per_second", rate))
+		}
+		w.lastProgressLog = time.Now()
+		w.recordsSinceLastLog = 0
 	}
 }
 
@@ -488,6 +584,19 @@ func (w *Worker) handleError(err error, msg string) bool {
 		// Pause via state manager
 		if pauseErr := w.stateManager.Pause(); pauseErr != nil {
 			w.logger.Warn("failed to pause via state manager", logger.Error(pauseErr))
+		}
+
+		// Send notification about the error
+		if notifService := notification.GetService(); notifService != nil {
+			if _, notifErr := notifService.CreateWithComponent(
+				notification.TypeWarning,
+				notification.PriorityHigh,
+				"Database Migration Error",
+				fmt.Sprintf("Migration paused due to repeated errors. Please check the logs and try resuming. Error: %v", err),
+				"database",
+			); notifErr != nil {
+				w.logger.Warn("failed to send migration error notification", logger.Error(notifErr))
+			}
 		}
 
 		// Set local paused state
@@ -554,13 +663,8 @@ func (w *Worker) validate(ctx context.Context) error {
 
 // countLegacyRecords returns the total number of records in the legacy database.
 func (w *Worker) countLegacyRecords(ctx context.Context) (int64, error) {
-	// Use search with no filters and limit 0 to get total count
-	filters := datastore.NewDetectionFilters().WithLimit(0)
-	_, total, err := w.legacy.Search(ctx, filters)
-	if err != nil {
-		return 0, err
-	}
-	return total, nil
+	// Use CountAll for a lightweight count that doesn't trigger preloads
+	return w.legacy.CountAll(ctx)
 }
 
 // recordRateSample records a batch timing for rate calculation.

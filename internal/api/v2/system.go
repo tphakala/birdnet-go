@@ -300,6 +300,8 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/processes", c.GetProcessInfo)
 	protectedGroup.GET("/temperature/cpu", c.GetSystemCPUTemperature)
 	protectedGroup.GET("/database/stats", c.GetDatabaseStats)
+	protectedGroup.GET("/database/v2/stats", c.GetV2DatabaseStats)
+	protectedGroup.POST("/database/backup", c.DownloadDatabaseBackup)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
@@ -1379,4 +1381,218 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, stats)
+}
+
+// V2DatabaseStatsResponse represents v2 database statistics.
+type V2DatabaseStatsResponse struct {
+	Type            string `json:"type"`
+	Location        string `json:"location"`
+	SizeBytes       int64  `json:"size_bytes"`
+	TotalDetections int64  `json:"total_detections"`
+	Connected       bool   `json:"connected"`
+}
+
+// GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
+func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
+	c.logInfoIfEnabled("Getting v2 database statistics",
+		logger.String("path", path), logger.String("ip", ip))
+
+	// Check if V2Manager is available
+	if c.V2Manager == nil {
+		c.logInfoIfEnabled("V2 database not initialized",
+			logger.String("path", path), logger.String("ip", ip))
+		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
+			"V2 database not initialized", http.StatusNotFound)
+	}
+
+	// Check if database exists
+	if !c.V2Manager.Exists() {
+		c.logInfoIfEnabled("V2 database does not exist yet",
+			logger.String("path", path), logger.String("ip", ip))
+		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
+			"V2 database not initialized", http.StatusNotFound)
+	}
+
+	// Build response
+	response := V2DatabaseStatsResponse{
+		Type:      "sqlite",
+		Location:  c.V2Manager.Path(),
+		Connected: true,
+	}
+
+	// Adjust type for MySQL
+	if c.V2Manager.IsMySQL() {
+		response.Type = "mysql"
+	}
+
+	// Get database file size for SQLite
+	if !c.V2Manager.IsMySQL() {
+		if fi, err := os.Stat(c.V2Manager.Path()); err == nil {
+			response.SizeBytes = fi.Size()
+		}
+	}
+
+	// Count total detections from v2 database
+	db := c.V2Manager.DB()
+	if db != nil {
+		var count int64
+		if err := db.Table("detections").Count(&count).Error; err == nil {
+			response.TotalDetections = count
+		}
+	}
+
+	c.logInfoIfEnabled("V2 database statistics retrieved successfully",
+		logger.String("type", response.Type),
+		logger.Any("size_bytes", response.SizeBytes),
+		logger.Any("total_detections", response.TotalDetections),
+		logger.Bool("connected", response.Connected),
+		logger.String("path", path), logger.String("ip", ip))
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// Backup constants
+const (
+	// backupDiskSpaceBuffer is the additional disk space required beyond the database size for backup.
+	backupDiskSpaceBuffer = 100 * 1024 * 1024 // 100 MB
+	// Database type constants for backup API
+	dbTypeLegacy = "legacy"
+	dbTypeV2     = "v2"
+)
+
+// DownloadDatabaseBackup handles POST /api/v2/system/database/backup
+// Creates a safe backup using SQLite's VACUUM INTO command.
+func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
+	dbType := ctx.QueryParam("type")
+
+	c.logInfoIfEnabled("Database backup requested",
+		logger.String("db_type", dbType),
+		logger.String("path", path), logger.String("ip", ip))
+
+	// Validate dbType parameter
+	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
+		return c.HandleError(ctx, fmt.Errorf("invalid type"),
+			"Type must be 'legacy' or 'v2'", http.StatusBadRequest)
+	}
+
+	// Get database path based on type
+	var dbPath string
+
+	if dbType == dbTypeLegacy {
+		// Check if it's SQLite
+		if c.Settings.Output.SQLite.Path == "" {
+			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
+				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
+				http.StatusBadRequest)
+		}
+		dbPath = c.Settings.Output.SQLite.Path
+
+		// Get the underlying GORM DB from the datastore
+		if c.DS == nil {
+			return c.HandleError(ctx, fmt.Errorf("datastore not available"),
+				"Database not configured", http.StatusServiceUnavailable)
+		}
+	} else {
+		// V2 database
+		if c.V2Manager == nil {
+			return c.HandleError(ctx, fmt.Errorf("v2 not available"),
+				"V2 database not initialized", http.StatusNotFound)
+		}
+		if c.V2Manager.IsMySQL() {
+			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
+				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
+				http.StatusBadRequest)
+		}
+		dbPath = c.V2Manager.Path()
+	}
+
+	// Get source database size for disk space check
+	fileInfo, err := os.Stat(dbPath)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get database info", http.StatusInternalServerError)
+	}
+	dbSize := fileInfo.Size()
+
+	// Check disk space (need dbSize + buffer for VACUUM INTO)
+	usage, err := disk.Usage(filepath.Dir(dbPath))
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to check disk space", http.StatusInternalServerError)
+	}
+	// Calculate required space. dbSize is always non-negative from FileInfo.Size()
+	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
+	requiredSpace := uint64(dbSize) + backupDiskSpaceBuffer
+	if usage.Free < requiredSpace {
+		return c.HandleError(ctx, fmt.Errorf("insufficient space"),
+			fmt.Sprintf("Not enough disk space for backup. Need %s free, have %s available.",
+				formatBytesUint64(requiredSpace), formatBytesUint64(usage.Free)),
+			http.StatusInsufficientStorage) // HTTP 507
+	}
+
+	// Create temp file path for VACUUM INTO
+	timestamp := time.Now().Format("20060102-150405")
+	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp))
+
+	// Ensure cleanup of temp file after response is sent
+	defer func() {
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			c.logWarnIfEnabled("Failed to cleanup backup temp file",
+				logger.String("path", tempPath), logger.Error(err))
+		}
+	}()
+
+	// Execute VACUUM INTO for safe, consistent backup
+	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
+	if dbType == dbTypeLegacy {
+		// Use the legacy datastore's DB
+		sqlStore, ok := c.DS.(interface{ GetDB() interface{ Exec(string, ...any) error } })
+		if !ok {
+			// Try to access DB directly through the SQLiteStore
+			if sqliteStore, ok := c.DS.(*datastore.SQLiteStore); ok {
+				if err := sqliteStore.DB.Exec(vacuumSQL).Error; err != nil {
+					return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
+				}
+			} else {
+				return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
+					"Cannot perform backup on this datastore type", http.StatusInternalServerError)
+			}
+		} else {
+			if err := sqlStore.GetDB().Exec(vacuumSQL); err != nil {
+				return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
+			}
+		}
+	} else {
+		// Use V2Manager's DB
+		if err := c.V2Manager.DB().Exec(vacuumSQL).Error; err != nil {
+			return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
+		}
+	}
+
+	// Set response headers and stream file
+	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
+	ctx.Response().Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%q", filename))
+	ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+
+	c.logInfoIfEnabled("Database backup created successfully",
+		logger.String("db_type", dbType),
+		logger.String("backup_file", filename),
+		logger.String("path", path), logger.String("ip", ip))
+
+	return ctx.File(tempPath)
+}
+
+// formatBytesUint64 formats bytes into human-readable format (for uint64 values).
+func formatBytesUint64(bytes uint64) string {
+	const unit uint64 = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := unit, 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

@@ -82,7 +82,7 @@ func (m *StateManager) TransitionToDualWrite() error {
 	return m.transitionState(entities.MigrationStatusInitializing, entities.MigrationStatusDualWrite)
 }
 
-// Pause transitions from DUAL_WRITE or MIGRATING to PAUSED.
+// Pause transitions from DUAL_WRITE, MIGRATING, or VALIDATING to PAUSED.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) Pause() error {
 	m.mu.Lock()
@@ -91,6 +91,7 @@ func (m *StateManager) Pause() error {
 	pausableStates := []entities.MigrationStatus{
 		entities.MigrationStatusDualWrite,
 		entities.MigrationStatusMigrating,
+		entities.MigrationStatusValidating,
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).

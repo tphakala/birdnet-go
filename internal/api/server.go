@@ -20,6 +20,7 @@ import (
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -48,6 +49,7 @@ type Server struct {
 
 	// Dependencies
 	dataStore      datastore.Interface
+	v2Manager      datastoreV2.Manager
 	birdImageCache *imageprovider.BirdImageCache
 	sunCalc        *suncalc.SunCalc
 	processor      *processor.Processor
@@ -129,6 +131,13 @@ func WithControlChannel(ch chan string) ServerOption {
 func WithAudioLevelChannel(ch chan myaudio.AudioLevelData) ServerOption {
 	return func(s *Server) {
 		s.audioLevelChan = ch
+	}
+}
+
+// WithV2Manager sets the v2 database manager for the server.
+func WithV2Manager(mgr datastoreV2.Manager) ServerOption {
+	return func(s *Server) {
+		s.v2Manager = mgr
 	}
 }
 
@@ -271,6 +280,7 @@ func (s *Server) setupRoutes() error {
 		s.metrics,
 		apiv2.WithAuthMiddleware(s.authMiddleware),
 		apiv2.WithAuthService(s.authService),
+		apiv2.WithV2Manager(s.v2Manager),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize API v2: %w", err)
