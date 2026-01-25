@@ -210,7 +210,7 @@
     "closeSidebar": "Seitenleiste schließen",
     "analyticsSubmenu": "Analysen-Untermenü",
     "settingsSubmenu": "Einstellungen-Untermenü",
-    "systemSubmenu": "System submenu"
+    "systemSubmenu": "System-Untermenü"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -747,35 +747,36 @@
       }
     },
     "sections": {
-      "overview": "Overview",
-      "database": "Database"
+      "overview": "Übersicht",
+      "database": "Datenbank"
     },
     "database": {
-      "title": "Database Management",
-      "description": "Manage database schema migration",
+      "title": "Datenbankverwaltung",
+      "description": "Schema-Migration verwalten",
       "migration": {
-        "title": "Schema Migration",
-        "description": "Migrate from legacy schema to normalized v2 schema",
+        "title": "Datenbankmigration",
+        "description": "Von Legacy-Schema zu normalisiertem v2-Schema migrieren",
         "completedTitle": "Migration abgeschlossen",
         "completedNote": "Ihre Datenbank wurde erfolgreich auf das neue Schema migriert. Ihr System ist jetzt bereit für zukünftige Funktionen, die die normalisierte Datenbank erfordern. Hinweis: Die neue Datenbank ist kleiner, weil sie Daten effizienter speichert - das ist normal und alle Ihre Daten sind erhalten.",
         "status": {
-          "idle": "Ready to Start",
-          "initializing": "Initializing",
-          "dualWrite": "Dual-Write Active",
-          "migrating": "Migrating Records",
-          "paused": "Paused",
-          "validating": "Validating",
-          "cutover": "Cutover in Progress",
-          "completed": "Migration Complete"
+          "idle": "Bereit zum Starten",
+          "initializing": "Initialisierung",
+          "dual_write": "Dual-Write aktiv",
+          "migrating": "Migriere Datensätze",
+          "paused": "Pausiert",
+          "validating": "Validierung",
+          "cutover": "Umstellung läuft",
+          "completed": "Migration abgeschlossen"
         },
         "progress": {
-          "title": "Migration Progress",
-          "records": "{migrated} of {total} records",
+          "title": "Migrationsfortschritt",
+          "records": "{migrated} von {total} Datensätzen",
           "percent": "{percent}%",
-          "rate": "{rate} records/sec",
-          "remaining": "Est. remaining: {time}",
+          "rate": "{rate} Datensätze/Sek",
+          "rateValue": "{rate} Dat/s",
+          "remaining": "Verbleibend: {time}",
           "eta": "Geschätzte Restzeit",
-          "dirtyIds": "{count} records pending re-sync"
+          "dirtyIds": "{count} Datensätze ausstehend"
         },
         "notes": {
           "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
@@ -785,36 +786,36 @@
           "paused": "Migration ist pausiert. Ihre Daten sind sicher. Setzen Sie fort, wenn Sie bereit sind."
         },
         "actions": {
-          "start": "Start Migration",
-          "pause": "Pause",
-          "resume": "Resume",
-          "cancel": "Cancel",
-          "rollback": "Rollback"
+          "start": "Migration starten",
+          "pause": "Pausieren",
+          "resume": "Fortsetzen",
+          "cancel": "Abbrechen",
+          "rollback": "Zurücksetzen"
         },
         "confirmCancel": {
-          "title": "Cancel Migration?",
+          "title": "Migration abbrechen?",
           "message": "Dies stoppt die Migration und setzt den Status auf Leerlauf zurück. Sie können die Migration später sicher neu starten - Datensätze werden nicht dupliziert.",
-          "confirm": "Yes, Cancel",
-          "dismiss": "No, Keep Running"
+          "confirm": "Ja, abbrechen",
+          "dismiss": "Nein, weiterlaufen lassen"
         },
         "confirmRollback": {
-          "title": "Rollback Migration?",
-          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the enhanced database but will not be visible until migration is run again.",
-          "confirm": "Yes, Rollback",
-          "dismiss": "No, Keep Enhanced"
+          "title": "Migration zurücksetzen?",
+          "message": "Dies setzt auf die Legacy-Datenbank zurück. Neue Erkennungen seit der Migration bleiben in der erweiterten Datenbank erhalten, sind aber nicht sichtbar, bis die Migration erneut ausgeführt wird.",
+          "confirm": "Ja, zurücksetzen",
+          "dismiss": "Nein, beibehalten"
         },
         "errors": {
-          "startFailed": "Failed to start migration",
-          "pauseFailed": "Failed to pause migration",
-          "resumeFailed": "Failed to resume migration",
-          "cancelFailed": "Failed to cancel migration",
-          "rollbackFailed": "Failed to rollback migration",
-          "fetchFailed": "Failed to fetch migration status"
+          "startFailed": "Fehler beim Starten der Migration",
+          "pauseFailed": "Fehler beim Pausieren der Migration",
+          "resumeFailed": "Fehler beim Fortsetzen der Migration",
+          "cancelFailed": "Fehler beim Abbrechen der Migration",
+          "rollbackFailed": "Fehler beim Zurücksetzen der Migration",
+          "fetchFailed": "Fehler beim Abrufen des Migrationsstatus"
         },
         "worker": {
-          "running": "Worker Running",
-          "paused": "Worker Paused",
-          "stopped": "Worker Stopped"
+          "running": "Worker läuft",
+          "paused": "Worker pausiert",
+          "stopped": "Worker gestoppt"
         }
       }
     }

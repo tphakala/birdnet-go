@@ -200,7 +200,7 @@
     "closeSidebar": "Sulje sivupalkki",
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
-    "systemSubmenu": "System submenu"
+    "systemSubmenu": "Järjestelmän alavalikko"
   },
   "pageTitle": {
     "settings": "Asetukset - BirdNET-Go",
@@ -747,35 +747,36 @@
       }
     },
     "sections": {
-      "overview": "Overview",
-      "database": "Database"
+      "overview": "Yleiskatsaus",
+      "database": "Tietokanta"
     },
     "database": {
-      "title": "Database Management",
-      "description": "Manage database schema migration",
+      "title": "Tietokannan hallinta",
+      "description": "Hallitse skeemamigraatiota",
       "migration": {
-        "title": "Schema Migration",
-        "description": "Migrate from legacy schema to normalized v2 schema",
+        "title": "Tietokantamigraatio",
+        "description": "Migroi vanhasta skeemasta normalisoituun v2-skeemaan",
         "completedTitle": "Migraatio valmis",
         "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Järjestelmäsi on nyt valmis tulevia ominaisuuksia varten, jotka vaativat normalisoidun tietokannan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
         "status": {
-          "idle": "Ready to Start",
-          "initializing": "Initializing",
-          "dualWrite": "Dual-Write Active",
-          "migrating": "Migrating Records",
-          "paused": "Paused",
-          "validating": "Validating",
-          "cutover": "Cutover in Progress",
-          "completed": "Migration Complete"
+          "idle": "Valmis aloitettavaksi",
+          "initializing": "Alustus",
+          "dual_write": "Kaksoiskirjoitus aktiivinen",
+          "migrating": "Migroidaan tietueita",
+          "paused": "Keskeytetty",
+          "validating": "Vahvistetaan",
+          "cutover": "Vaihto käynnissä",
+          "completed": "Migraatio valmis"
         },
         "progress": {
-          "title": "Migration Progress",
-          "records": "{migrated} of {total} records",
+          "title": "Migraation edistyminen",
+          "records": "{migrated}/{total} tietuetta",
           "percent": "{percent}%",
-          "rate": "{rate} records/sec",
-          "remaining": "Est. remaining: {time}",
+          "rate": "{rate} tietuetta/sek",
+          "rateValue": "{rate} tiet/s",
+          "remaining": "Jäljellä: {time}",
           "eta": "Arvioitu jäljellä oleva aika",
-          "dirtyIds": "{count} records pending re-sync"
+          "dirtyIds": "{count} tietuetta odottaa"
         },
         "notes": {
           "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
@@ -785,36 +786,36 @@
           "paused": "Migraatio on keskeytetty. Tietosi ovat turvassa. Jatka kun olet valmis."
         },
         "actions": {
-          "start": "Start Migration",
-          "pause": "Pause",
-          "resume": "Resume",
-          "cancel": "Cancel",
-          "rollback": "Rollback"
+          "start": "Aloita migraatio",
+          "pause": "Keskeytä",
+          "resume": "Jatka",
+          "cancel": "Peruuta",
+          "rollback": "Palauta"
         },
         "confirmCancel": {
-          "title": "Cancel Migration?",
+          "title": "Peruuta migraatio?",
           "message": "Tämä pysäyttää migraation ja palauttaa lepotilaan. Voit käynnistää migraation turvallisesti uudelleen myöhemmin - tietueita ei kopioida.",
-          "confirm": "Yes, Cancel",
-          "dismiss": "No, Keep Running"
+          "confirm": "Kyllä, peruuta",
+          "dismiss": "Ei, jatka"
         },
         "confirmRollback": {
-          "title": "Rollback Migration?",
-          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the enhanced database but will not be visible until migration is run again.",
-          "confirm": "Yes, Rollback",
-          "dismiss": "No, Keep Enhanced"
+          "title": "Palauta migraatio?",
+          "message": "Tämä palauttaa vanhaan tietokantaan. Migraation jälkeen tallennetut uudet havainnot säilyvät parannetussa tietokannassa, mutta eivät näy ennen uutta migraatiota.",
+          "confirm": "Kyllä, palauta",
+          "dismiss": "Ei, säilytä parannettu"
         },
         "errors": {
-          "startFailed": "Failed to start migration",
-          "pauseFailed": "Failed to pause migration",
-          "resumeFailed": "Failed to resume migration",
-          "cancelFailed": "Failed to cancel migration",
-          "rollbackFailed": "Failed to rollback migration",
-          "fetchFailed": "Failed to fetch migration status"
+          "startFailed": "Migraation käynnistys epäonnistui",
+          "pauseFailed": "Migraation keskeytys epäonnistui",
+          "resumeFailed": "Migraation jatkaminen epäonnistui",
+          "cancelFailed": "Migraation peruutus epäonnistui",
+          "rollbackFailed": "Migraation palautus epäonnistui",
+          "fetchFailed": "Migraation tilan haku epäonnistui"
         },
         "worker": {
-          "running": "Worker Running",
-          "paused": "Worker Paused",
-          "stopped": "Worker Stopped"
+          "running": "Worker käynnissä",
+          "paused": "Worker keskeytetty",
+          "stopped": "Worker pysäytetty"
         }
       }
     }

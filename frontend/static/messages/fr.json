@@ -210,7 +210,7 @@
     "closeSidebar": "Fermer la barre latérale",
     "analyticsSubmenu": "Sous-menu analyses",
     "settingsSubmenu": "Sous-menu paramètres",
-    "systemSubmenu": "System submenu"
+    "systemSubmenu": "Sous-menu système"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -747,35 +747,36 @@
       }
     },
     "sections": {
-      "overview": "Overview",
-      "database": "Database"
+      "overview": "Vue d'ensemble",
+      "database": "Base de données"
     },
     "database": {
-      "title": "Database Management",
-      "description": "Manage database schema migration",
+      "title": "Gestion de la base de données",
+      "description": "Gérer la migration du schéma",
       "migration": {
-        "title": "Schema Migration",
-        "description": "Migrate from legacy schema to normalized v2 schema",
+        "title": "Migration de la base de données",
+        "description": "Migrer de l'ancien schéma vers le schéma v2 normalisé",
         "completedTitle": "Migration terminée",
         "completedNote": "Votre base de données a été migrée avec succès vers le nouveau schéma. Votre système est maintenant prêt pour les futures fonctionnalités qui nécessitent la base de données normalisée. Note : La nouvelle base de données est plus petite car elle stocke les données plus efficacement - c'est normal et toutes vos données sont préservées.",
         "status": {
-          "idle": "Ready to Start",
-          "initializing": "Initializing",
-          "dualWrite": "Dual-Write Active",
-          "migrating": "Migrating Records",
-          "paused": "Paused",
-          "validating": "Validating",
-          "cutover": "Cutover in Progress",
-          "completed": "Migration Complete"
+          "idle": "Prêt à démarrer",
+          "initializing": "Initialisation",
+          "dual_write": "Double écriture active",
+          "migrating": "Migration des enregistrements",
+          "paused": "En pause",
+          "validating": "Validation",
+          "cutover": "Basculement en cours",
+          "completed": "Migration terminée"
         },
         "progress": {
-          "title": "Migration Progress",
-          "records": "{migrated} of {total} records",
+          "title": "Progression de la migration",
+          "records": "{migrated} sur {total} enregistrements",
           "percent": "{percent}%",
-          "rate": "{rate} records/sec",
-          "remaining": "Est. remaining: {time}",
+          "rate": "{rate} enregistrements/sec",
+          "rateValue": "{rate} enr/s",
+          "remaining": "Restant : {time}",
           "eta": "Temps restant estimé",
-          "dirtyIds": "{count} records pending re-sync"
+          "dirtyIds": "{count} enregistrements en attente"
         },
         "notes": {
           "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
@@ -785,36 +786,36 @@
           "paused": "La migration est en pause. Vos données sont en sécurité. Reprenez quand vous êtes prêt."
         },
         "actions": {
-          "start": "Start Migration",
+          "start": "Démarrer la migration",
           "pause": "Pause",
-          "resume": "Resume",
-          "cancel": "Cancel",
-          "rollback": "Rollback"
+          "resume": "Reprendre",
+          "cancel": "Annuler",
+          "rollback": "Restaurer"
         },
         "confirmCancel": {
-          "title": "Cancel Migration?",
+          "title": "Annuler la migration ?",
           "message": "Cela arrêtera la migration et reviendra à l'état inactif. Vous pouvez redémarrer la migration en toute sécurité plus tard - les enregistrements ne seront pas dupliqués.",
-          "confirm": "Yes, Cancel",
-          "dismiss": "No, Keep Running"
+          "confirm": "Oui, annuler",
+          "dismiss": "Non, continuer"
         },
         "confirmRollback": {
-          "title": "Rollback Migration?",
-          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the enhanced database but will not be visible until migration is run again.",
-          "confirm": "Yes, Rollback",
-          "dismiss": "No, Keep Enhanced"
+          "title": "Restaurer la migration ?",
+          "message": "Cela reviendra à l'ancienne base de données. Les nouvelles détections enregistrées depuis la migration seront préservées dans la base de données améliorée mais ne seront pas visibles jusqu'à ce que la migration soit relancée.",
+          "confirm": "Oui, restaurer",
+          "dismiss": "Non, garder l'améliorée"
         },
         "errors": {
-          "startFailed": "Failed to start migration",
-          "pauseFailed": "Failed to pause migration",
-          "resumeFailed": "Failed to resume migration",
-          "cancelFailed": "Failed to cancel migration",
-          "rollbackFailed": "Failed to rollback migration",
-          "fetchFailed": "Failed to fetch migration status"
+          "startFailed": "Échec du démarrage de la migration",
+          "pauseFailed": "Échec de la mise en pause de la migration",
+          "resumeFailed": "Échec de la reprise de la migration",
+          "cancelFailed": "Échec de l'annulation de la migration",
+          "rollbackFailed": "Échec de la restauration de la migration",
+          "fetchFailed": "Échec de la récupération du statut de migration"
         },
         "worker": {
-          "running": "Worker Running",
-          "paused": "Worker Paused",
-          "stopped": "Worker Stopped"
+          "running": "Worker en cours",
+          "paused": "Worker en pause",
+          "stopped": "Worker arrêté"
         }
       }
     }

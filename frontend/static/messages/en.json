@@ -796,6 +796,7 @@
           "paused": "Migration Paused",
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
+          "rateValue": "{rate} rec/s",
           "remaining": "Est. remaining: {time}",
           "eta": "Estimated time remaining",
           "dirtyIds": "{count} records pending re-sync"

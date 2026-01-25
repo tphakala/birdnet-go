@@ -210,7 +210,7 @@
     "closeSidebar": "Sluit zijbalk",
     "analyticsSubmenu": "Statistiek submenu",
     "settingsSubmenu": "Instellingen submenu",
-    "systemSubmenu": "System submenu"
+    "systemSubmenu": "Systeemmenu"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -747,35 +747,36 @@
       }
     },
     "sections": {
-      "overview": "Overview",
+      "overview": "Overzicht",
       "database": "Database"
     },
     "database": {
-      "title": "Database Management",
-      "description": "Manage database schema migration",
+      "title": "Databasebeheer",
+      "description": "Beheer schema-migratie",
       "migration": {
-        "title": "Schema Migration",
-        "description": "Migrate from legacy schema to normalized v2 schema",
+        "title": "Databasemigratie",
+        "description": "Migreer van oud schema naar genormaliseerd v2 schema",
         "completedTitle": "Migratie voltooid",
         "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Uw systeem is nu klaar voor toekomstige functies die de genormaliseerde database vereisen. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
         "status": {
-          "idle": "Ready to Start",
-          "initializing": "Initializing",
-          "dualWrite": "Dual-Write Active",
-          "migrating": "Migrating Records",
-          "paused": "Paused",
-          "validating": "Validating",
-          "cutover": "Cutover in Progress",
-          "completed": "Migration Complete"
+          "idle": "Klaar om te starten",
+          "initializing": "Initialiseren",
+          "dual_write": "Dubbel schrijven actief",
+          "migrating": "Records migreren",
+          "paused": "Gepauzeerd",
+          "validating": "Valideren",
+          "cutover": "Overschakeling bezig",
+          "completed": "Migratie voltooid"
         },
         "progress": {
-          "title": "Migration Progress",
-          "records": "{migrated} of {total} records",
+          "title": "Migratievoortgang",
+          "records": "{migrated} van {total} records",
           "percent": "{percent}%",
           "rate": "{rate} records/sec",
-          "remaining": "Est. remaining: {time}",
+          "rateValue": "{rate} rec/s",
+          "remaining": "Resterend: {time}",
           "eta": "Geschatte resterende tijd",
-          "dirtyIds": "{count} records pending re-sync"
+          "dirtyIds": "{count} records wachtend"
         },
         "notes": {
           "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
@@ -785,36 +786,36 @@
           "paused": "Migratie is gepauzeerd. Uw gegevens zijn veilig. Hervat wanneer u klaar bent."
         },
         "actions": {
-          "start": "Start Migration",
-          "pause": "Pause",
-          "resume": "Resume",
-          "cancel": "Cancel",
-          "rollback": "Rollback"
+          "start": "Start migratie",
+          "pause": "Pauzeren",
+          "resume": "Hervatten",
+          "cancel": "Annuleren",
+          "rollback": "Terugdraaien"
         },
         "confirmCancel": {
-          "title": "Cancel Migration?",
+          "title": "Migratie annuleren?",
           "message": "Dit stopt de migratie en keert terug naar de inactieve status. U kunt de migratie later veilig opnieuw starten - records worden niet gedupliceerd.",
-          "confirm": "Yes, Cancel",
-          "dismiss": "No, Keep Running"
+          "confirm": "Ja, annuleren",
+          "dismiss": "Nee, doorgaan"
         },
         "confirmRollback": {
-          "title": "Rollback Migration?",
-          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the enhanced database but will not be visible until migration is run again.",
-          "confirm": "Yes, Rollback",
-          "dismiss": "No, Keep Enhanced"
+          "title": "Migratie terugdraaien?",
+          "message": "Dit keert terug naar de oude database. Nieuwe detecties sinds de migratie blijven bewaard in de verbeterde database maar zijn niet zichtbaar totdat de migratie opnieuw wordt uitgevoerd.",
+          "confirm": "Ja, terugdraaien",
+          "dismiss": "Nee, verbeterde behouden"
         },
         "errors": {
-          "startFailed": "Failed to start migration",
-          "pauseFailed": "Failed to pause migration",
-          "resumeFailed": "Failed to resume migration",
-          "cancelFailed": "Failed to cancel migration",
-          "rollbackFailed": "Failed to rollback migration",
-          "fetchFailed": "Failed to fetch migration status"
+          "startFailed": "Kan migratie niet starten",
+          "pauseFailed": "Kan migratie niet pauzeren",
+          "resumeFailed": "Kan migratie niet hervatten",
+          "cancelFailed": "Kan migratie niet annuleren",
+          "rollbackFailed": "Kan migratie niet terugdraaien",
+          "fetchFailed": "Kan migratiestatus niet ophalen"
         },
         "worker": {
-          "running": "Worker Running",
-          "paused": "Worker Paused",
-          "stopped": "Worker Stopped"
+          "running": "Worker actief",
+          "paused": "Worker gepauzeerd",
+          "stopped": "Worker gestopt"
         }
       }
     }
