@@ -34,6 +34,8 @@ type StartupState struct {
 	V2Available bool
 	// LegacyRequired indicates whether the legacy database is still needed.
 	LegacyRequired bool
+	// FreshInstall indicates no database exists (new installation).
+	FreshInstall bool
 	// Error contains any error that occurred during state checking.
 	Error error
 }
@@ -54,21 +56,47 @@ func CheckMigrationStateBeforeStartup(settings *conf.Settings) StartupState {
 
 // checkSQLiteMigrationState checks migration state for SQLite deployments.
 func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
-	dataDir := filepath.Dir(settings.Output.SQLite.Path)
-	v2Path := filepath.Join(dataDir, "birdnet_v2.db")
+	configuredPath := settings.Output.SQLite.Path
+	dataDir := filepath.Dir(configuredPath)
+	v2MigrationPath := filepath.Join(dataDir, "birdnet_v2.db")
 
-	// Check if v2 database file exists
-	if _, err := os.Stat(v2Path); os.IsNotExist(err) {
+	// Check if configured database exists (could be legacy OR fresh v2)
+	configuredExists := true
+	if _, err := os.Stat(configuredPath); os.IsNotExist(err) {
+		configuredExists = false
+	}
+
+	// Check if migration-era v2 database exists
+	v2MigrationExists := true
+	if _, err := os.Stat(v2MigrationPath); os.IsNotExist(err) {
+		v2MigrationExists = false
+	}
+
+	// Fresh install: neither database exists
+	if !configuredExists && !v2MigrationExists {
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     false,
+			LegacyRequired:  false,
+			FreshInstall:    true,
+			Error:           nil,
+		}
+	}
+
+	// Check if v2 migration database file exists
+	if !v2MigrationExists {
+		// Configured path exists but no v2 migration DB = legacy mode
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
+			FreshInstall:    false,
 			Error:           nil,
 		}
 	}
 
 	// Open v2 database in read-only mode to check state
-	dsn := v2Path + "?mode=ro"
+	dsn := v2MigrationPath + "?mode=ro"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -158,11 +186,25 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check if v2_migration_state table exists
-	var count int64
+	// Check if legacy 'notes' table exists
+	var legacyCount int64
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
+		settings.Output.MySQL.Database).Scan(&legacyCount).Error
+	if err != nil {
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     false,
+			LegacyRequired:  true,
+			Error:           fmt.Errorf("failed to check legacy tables: %w", err),
+		}
+	}
+	legacyExists := legacyCount > 0
+
+	// Check if v2_migration_state table exists (migration-era v2 tables)
+	var v2MigrationCount int64
 	tableName := v2TablePrefix + "migration_state"
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-		settings.Output.MySQL.Database, tableName).Scan(&count).Error
+		settings.Output.MySQL.Database, tableName).Scan(&v2MigrationCount).Error
 	if err != nil {
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -171,11 +213,35 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 			Error:           ErrV2DatabaseNotFound,
 		}
 	}
-	if count == 0 {
+	v2MigrationExists := v2MigrationCount > 0
+
+	// Check if fresh v2 schema exists (no prefix - detections table)
+	var freshV2Count int64
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'detections'",
+		settings.Output.MySQL.Database).Scan(&freshV2Count).Error
+	if err != nil {
+		freshV2Count = 0 // Ignore error, just means no fresh v2 tables
+	}
+	freshV2Exists := freshV2Count > 0
+
+	// Fresh install: no tables exist at all
+	if !legacyExists && !v2MigrationExists && !freshV2Exists {
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     false,
+			LegacyRequired:  false,
+			FreshInstall:    true,
+			Error:           nil,
+		}
+	}
+
+	// No v2 migration tables exist but legacy does = legacy mode
+	if !v2MigrationExists {
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
+			FreshInstall:    false,
 			Error:           nil,
 		}
 	}
