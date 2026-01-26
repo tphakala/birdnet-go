@@ -12,8 +12,10 @@ import (
 
 // Sort field constants for Search queries.
 const (
-	sortFieldDetectedAt = "detected_at"
-	sortFieldConfidence = "confidence"
+	// SortFieldDetectedAt is the default sort field for detections (by timestamp).
+	SortFieldDetectedAt = "detected_at"
+	// SortFieldConfidence allows sorting by confidence score.
+	SortFieldConfidence = "confidence"
 )
 
 // defaultDBBatchSize is the batch size for bulk database operations.
@@ -436,9 +438,9 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	}
 	if len(filters.IncludedHours) > 0 {
 		// Extract local hour from Unix timestamp using timezone offset.
-		// Formula: ((detected_at + offset) / 3600) % 24
-		// This works in both SQLite and MySQL (integer division).
-		hourExpr := fmt.Sprintf("((detected_at + %d) / 3600) %% 24", filters.TimezoneOffset)
+		// Formula: FLOOR((detected_at + offset) / 3600) % 24
+		// FLOOR() ensures integer results on both SQLite and MySQL (MySQL returns floats for division).
+		hourExpr := fmt.Sprintf("FLOOR((detected_at + %d) / 3600) %% 24", filters.TimezoneOffset)
 		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
 	}
 	if filters.MinConfidence != nil {
@@ -498,13 +500,13 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	}
 
 	// Sorting
-	sortField := sortFieldDetectedAt
+	sortField := SortFieldDetectedAt
 	if filters.SortBy != "" {
 		switch filters.SortBy {
-		case sortFieldConfidence:
-			sortField = sortFieldConfidence
-		case sortFieldDetectedAt:
-			sortField = sortFieldDetectedAt
+		case SortFieldConfidence:
+			sortField = SortFieldConfidence
+		case SortFieldDetectedAt:
+			sortField = SortFieldDetectedAt
 		}
 	}
 	order := sortField

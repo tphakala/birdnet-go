@@ -172,6 +172,13 @@ func MergeHourFilters(timeOfDay []string, hour *datastore.HourFilter) []int {
 
 // GetTimezoneOffset returns the timezone offset in seconds for the given location.
 // Uses the current time to determine the offset (handles DST).
+//
+// LIMITATION: This applies the current DST state to all data. When filtering
+// historical data that spans DST transitions, hour boundaries may be off by
+// up to 1 hour for data recorded in a different DST state than the current one.
+// For most use cases (recent data, non-DST timezones), this is acceptable.
+// For precise historical hour filtering across DST boundaries, consider using
+// database-native timezone conversion functions.
 func GetTimezoneOffset(tz *time.Location) int {
 	if tz == nil {
 		tz = time.Local
@@ -192,22 +199,26 @@ func ConfidenceFilterToMinMax(cf *datastore.ConfidenceFilter) (minConf, maxConf 
 		return nil, nil
 	}
 
+	// Always return pointer to local copy to prevent unintended mutation of the original struct.
 	switch cf.Operator {
 	case ">":
 		// Strictly greater than
 		v := cf.Value
 		return &v, nil
 	case ">=":
-		return &cf.Value, nil
+		v := cf.Value
+		return &v, nil
 	case "<":
 		// Strictly less than
 		v := cf.Value
 		return nil, &v
 	case "<=":
-		return nil, &cf.Value
+		v := cf.Value
+		return nil, &v
 	case "=", ":":
 		// Exact match - set both min and max
-		return &cf.Value, &cf.Value
+		v := cf.Value
+		return &v, &v
 	}
 
 	return nil, nil
@@ -321,7 +332,7 @@ func ConvertAdvancedFilters(
 		MinID:    filters.MinID,
 
 		// Sort
-		SortBy:   "detected_at",
+		SortBy:   SortFieldDetectedAt,
 		SortDesc: !filters.SortAscending,
 
 		// Timezone for hour calculations
