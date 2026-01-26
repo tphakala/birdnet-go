@@ -39,7 +39,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 		dbPath := settings.Output.SQLite.Path
 
 		// Ensure directory exists
-		if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
 			return nil, fmt.Errorf("failed to create database directory: %w", err)
 		}
 

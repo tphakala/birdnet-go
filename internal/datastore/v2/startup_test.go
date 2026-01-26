@@ -4,10 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
 func TestCheckMigrationState_FreshInstall_SQLite(t *testing.T) {
@@ -43,9 +45,9 @@ func TestCheckMigrationState_ExistingLegacy_SQLite(t *testing.T) {
 	legacyPath := filepath.Join(tmpDir, "birdnet.db")
 
 	// Create empty legacy database file
-	f, err := os.Create(legacyPath)
+	f, err := os.Create(legacyPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	settings := &conf.Settings{}
 	settings.Output.SQLite.Enabled = true
@@ -63,9 +65,9 @@ func TestCheckMigrationState_V2MigrationDBExists_SQLite(t *testing.T) {
 
 	// Create the v2 migration database file (empty, will fail to read state)
 	v2Path := filepath.Join(tmpDir, "birdnet_v2.db")
-	f, err := os.Create(v2Path)
+	f, err := os.Create(v2Path) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	settings := &conf.Settings{}
 	settings.Output.SQLite.Enabled = true
@@ -86,13 +88,13 @@ func TestCheckMigrationState_BothDBsExist_SQLite(t *testing.T) {
 	legacyPath := filepath.Join(tmpDir, "birdnet.db")
 	v2Path := filepath.Join(tmpDir, "birdnet_v2.db")
 
-	f1, err := os.Create(legacyPath)
+	f1, err := os.Create(legacyPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
-	f1.Close()
+	require.NoError(t, f1.Close())
 
-	f2, err := os.Create(v2Path)
+	f2, err := os.Create(v2Path) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
-	f2.Close()
+	require.NoError(t, f2.Close())
 
 	settings := &conf.Settings{}
 	settings.Output.SQLite.Enabled = true
@@ -127,6 +129,17 @@ func TestCheckMigrationState_FreshV2Restart_SQLite(t *testing.T) {
 	require.NoError(t, err)
 	err = manager.Initialize()
 	require.NoError(t, err)
+
+	// Set migration state to COMPLETED (simulates a successful fresh install)
+	now := time.Now()
+	state := entities.MigrationState{
+		ID:          1,
+		State:       entities.MigrationStatusCompleted,
+		StartedAt:   &now,
+		CompletedAt: &now,
+	}
+	err = manager.DB().Save(&state).Error
+	require.NoError(t, err)
 	require.NoError(t, manager.Close())
 
 	// Now check migration state - should detect this as v2-ready
@@ -134,12 +147,12 @@ func TestCheckMigrationState_FreshV2Restart_SQLite(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = configuredPath
 
-	state := CheckMigrationStateBeforeStartup(settings)
+	startupState := CheckMigrationStateBeforeStartup(settings)
 
-	assert.False(t, state.FreshInstall, "should NOT be fresh install on restart")
-	assert.True(t, state.V2Available, "v2 should be available")
-	assert.False(t, state.LegacyRequired, "should not require legacy")
-	assert.NoError(t, state.Error)
+	assert.False(t, startupState.FreshInstall, "should NOT be fresh install on restart")
+	assert.True(t, startupState.V2Available, "v2 should be available")
+	assert.False(t, startupState.LegacyRequired, "should not require legacy")
+	assert.NoError(t, startupState.Error)
 }
 
 // TestCheckSQLiteHasV2Schema tests the helper function that distinguishes v2 from legacy databases.
@@ -152,6 +165,17 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		manager, err := NewSQLiteManager(Config{DirectPath: dbPath})
 		require.NoError(t, err)
 		err = manager.Initialize()
+		require.NoError(t, err)
+
+		// Set migration state to COMPLETED (checkSQLiteHasV2Schema requires this)
+		now := time.Now()
+		state := entities.MigrationState{
+			ID:          1,
+			State:       entities.MigrationStatusCompleted,
+			StartedAt:   &now,
+			CompletedAt: &now,
+		}
+		err = manager.DB().Save(&state).Error
 		require.NoError(t, err)
 		require.NoError(t, manager.Close())
 
@@ -169,9 +193,9 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		tmpDir := t.TempDir()
 		dbPath := filepath.Join(tmpDir, "empty.db")
 
-		f, err := os.Create(dbPath)
+		f, err := os.Create(dbPath) //nolint:gosec // Test file path is safe
 		require.NoError(t, err)
-		f.Close()
+		require.NoError(t, f.Close())
 
 		assert.False(t, checkSQLiteHasV2Schema(dbPath), "should return false for empty file")
 	})

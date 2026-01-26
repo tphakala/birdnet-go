@@ -358,7 +358,7 @@ func TestSQLiteManager_DirectPath(t *testing.T) {
 
 	// Verify database was created at exact path
 	_, err = os.Stat(customPath)
-	assert.NoError(t, err, "database should exist at direct path")
+	require.NoError(t, err, "database should exist at direct path")
 
 	// Verify no _v2 database was created
 	_, err = os.Stat(filepath.Join(tmpDir, "birdnet_v2.db"))
@@ -373,7 +373,7 @@ func TestSQLiteManager_DirectPath_DeepNested(t *testing.T) {
 	customPath := filepath.Join(tmpDir, "data", "birds", "detections.db")
 
 	// Ensure parent directories exist (this is caller's responsibility)
-	err := os.MkdirAll(filepath.Dir(customPath), 0755)
+	err := os.MkdirAll(filepath.Dir(customPath), 0o750)
 	require.NoError(t, err)
 
 	manager, err := NewSQLiteManager(Config{
@@ -407,7 +407,7 @@ func TestSQLiteManager_DirectPath_TakesPrecedence(t *testing.T) {
 
 	// Verify custom path was used, not DataDir/birdnet_v2.db
 	_, err = os.Stat(customPath)
-	assert.NoError(t, err, "should use DirectPath")
+	require.NoError(t, err, "should use DirectPath")
 
 	_, err = os.Stat(filepath.Join(tmpDir, "birdnet_v2.db"))
 	assert.True(t, os.IsNotExist(err), "should NOT use DataDir")

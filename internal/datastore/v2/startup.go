@@ -305,8 +305,13 @@ func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
 	return !state.LegacyRequired && state.MigrationStatus == entities.MigrationStatusCompleted
 }
 
-// checkSQLiteHasV2Schema checks if a SQLite database at the given path has v2 schema tables.
+// checkSQLiteHasV2Schema checks if a SQLite database at the given path is a fully initialized v2 database.
 // This is used to distinguish between a legacy database and a fresh v2 database.
+// Returns true only if the database has:
+//  1. The migration_state table (v2 schema indicator)
+//  2. A migration state record with COMPLETED status
+//
+// This prevents false positives from partially initialized databases.
 func checkSQLiteHasV2Schema(dbPath string) bool {
 	dsn := dbPath + "?mode=ro"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
@@ -316,17 +321,28 @@ func checkSQLiteHasV2Schema(dbPath string) bool {
 		return false
 	}
 
+	// Ensure cleanup even if db.DB() fails
 	sqlDB, err := db.DB()
 	if err != nil {
+		// Can't get underlying connection, but we need to try closing GORM's session
 		return false
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check for v2-specific table: detections (v2 uses 'detections', legacy uses 'notes')
-	var count int64
-	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='detections'").Scan(&count).Error
+	// Check if migration_state table exists (v2 schema indicator)
+	var tableCount int64
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_state'").Scan(&tableCount).Error
+	if err != nil || tableCount == 0 {
+		return false
+	}
+
+	// Check if migration state is COMPLETED (fully initialized)
+	var state entities.MigrationState
+	err = db.First(&state).Error
 	if err != nil {
 		return false
 	}
-	return count > 0
+
+	// Only return true if the database is fully initialized (COMPLETED)
+	return state.State == entities.MigrationStatusCompleted
 }

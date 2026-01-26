@@ -27,11 +27,11 @@ func TestInitializeFreshInstall_SQLite(t *testing.T) {
 
 	ds, err := InitializeFreshInstall(settings, nil)
 	require.NoError(t, err)
-	defer ds.Close()
+	defer func() { _ = ds.Close() }()
 
 	// Verify database was created at configured path (NOT birdnet_v2.db)
 	_, err = os.Stat(dbPath)
-	assert.NoError(t, err, "database should exist at configured path")
+	require.NoError(t, err, "database should exist at configured path")
 
 	// Verify no _v2 database was created
 	v2Path := filepath.Join(tmpDir, "birdnet_v2.db")
@@ -55,11 +55,11 @@ func TestInitializeFreshInstall_SQLite_CustomPath(t *testing.T) {
 
 	ds, err := InitializeFreshInstall(settings, nil)
 	require.NoError(t, err)
-	defer ds.Close()
+	defer func() { _ = ds.Close() }()
 
 	// Verify database was created at custom path
 	_, err = os.Stat(customPath)
-	assert.NoError(t, err, "database should exist at custom path")
+	require.NoError(t, err, "database should exist at custom path")
 
 	// Verify parent directories were created
 	dirInfo, err := os.Stat(filepath.Dir(customPath))
@@ -80,7 +80,7 @@ func TestInitializeFreshInstall_MigrationStateCompleted(t *testing.T) {
 
 	ds, err := InitializeFreshInstall(settings, nil)
 	require.NoError(t, err)
-	defer ds.Close()
+	defer func() { _ = ds.Close() }()
 
 	// Check the migration state by re-checking startup state
 	// The state should be COMPLETED
@@ -105,7 +105,7 @@ func TestInitializeFreshInstall_CanSaveAndRetrieve(t *testing.T) {
 
 	ds, err := InitializeFreshInstall(settings, nil)
 	require.NoError(t, err)
-	defer ds.Close()
+	defer func() { _ = ds.Close() }()
 
 	// Save a detection
 	note := &datastore.Note{
