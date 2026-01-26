@@ -6,12 +6,14 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
@@ -162,7 +164,8 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		return fmt.Errorf("failed to get/create label: %w", err)
 	}
 
-	model, err := ds.model.GetOrCreate(ctx, "BirdNET", "v2.4", entities.ModelTypeBird)
+	modelInfo := detection.DefaultModelInfo()
+	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, entities.ModelTypeBird)
 	if err != nil {
 		return fmt.Errorf("failed to get/create model: %w", err)
 	}
@@ -250,11 +253,13 @@ func (ds *Datastore) Get(id string) (datastore.Note, error) {
 		return datastore.Note{}, err
 	}
 
-	return ds.detectionToNote(det), nil
+	return ds.detectionToNote(det, nil), nil
 }
 
 // detectionToNote converts a v2 Detection to a legacy Note.
-func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
+// If rawLabelsMap is provided, it will be used to look up the common name
+// instead of making a database query (for batch efficiency).
+func (ds *Datastore) detectionToNote(det *entities.Detection, rawLabelsMap map[string]string) datastore.Note {
 	scientificName := ""
 	// Try to get scientific name from preloaded Label first
 	if det.Label != nil && det.Label.ScientificName != nil {
@@ -264,6 +269,29 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		ctx := context.Background()
 		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil && label.ScientificName != nil {
 			scientificName = *label.ScientificName
+		}
+	}
+
+	// Resolve common name from raw_label
+	commonName := scientificName // Default to scientific name
+	if det.ModelID > 0 && det.LabelID > 0 {
+		// Try to get from preloaded map first (batch mode)
+		key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
+		if rawLabelsMap != nil {
+			if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
+				if extracted := extractCommonName(rawLabel); extracted != "" {
+					commonName = extracted
+				}
+			}
+		} else if ds.label != nil {
+			// Fallback to single query (for single detection lookups)
+			ctx := context.Background()
+			rawLabel, err := ds.label.GetRawLabelForLabel(ctx, det.ModelID, det.LabelID)
+			if err == nil && rawLabel != "" {
+				if extracted := extractCommonName(rawLabel); extracted != "" {
+					commonName = extracted
+				}
+			}
 		}
 	}
 
@@ -291,7 +319,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Date:           dateStr,
 		Time:           timeStr,
 		ScientificName: scientificName,
-		CommonName:     scientificName, // TODO: resolve common name
+		CommonName:     commonName,
 		Confidence:     det.Confidence,
 		Latitude:       lat,
 		Longitude:      lon,
@@ -299,11 +327,64 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	}
 }
 
+// extractCommonName extracts the common name from a raw label string.
+// The raw_label format is typically "ScientificName_CommonName" where
+// the common name may contain underscores that should be preserved.
+func extractCommonName(rawLabel string) string {
+	// Split on underscore, but common name is everything after the first underscore
+	// (since scientific names are always two words: "Genus species")
+	parts := strings.SplitN(rawLabel, "_", 2)
+	if len(parts) >= 2 {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
+}
+
 // detectionsToNotes converts multiple detections to notes.
+// Uses batch fetching of raw_labels to avoid N+1 query problem.
 func (ds *Datastore) detectionsToNotes(dets []*entities.Detection) []datastore.Note {
+	if len(dets) == 0 {
+		return []datastore.Note{}
+	}
+
+	// Collect unique (modelID, labelID) pairs for batch fetching
+	pairSet := make(map[string]repository.ModelLabelPair)
+	for _, det := range dets {
+		if det.ModelID > 0 && det.LabelID > 0 {
+			key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
+			if _, exists := pairSet[key]; !exists {
+				pairSet[key] = repository.ModelLabelPair{
+					ModelID: det.ModelID,
+					LabelID: det.LabelID,
+				}
+			}
+		}
+	}
+
+	// Batch fetch raw_labels
+	var rawLabelsMap map[string]string
+	if len(pairSet) > 0 && ds.label != nil {
+		pairs := make([]repository.ModelLabelPair, 0, len(pairSet))
+		for _, pair := range pairSet {
+			pairs = append(pairs, pair)
+		}
+		ctx := context.Background()
+		var err error
+		rawLabelsMap, err = ds.label.GetRawLabelsForLabels(ctx, pairs)
+		if err != nil {
+			// Log error but continue - common names will fall back to scientific names
+			if ds.log != nil {
+				ds.log.Debug("failed to batch fetch raw_labels for common names",
+					logger.Error(err))
+			}
+			rawLabelsMap = make(map[string]string)
+		}
+	}
+
+	// Convert detections to notes using the preloaded map
 	notes := make([]datastore.Note, 0, len(dets))
 	for _, det := range dets {
-		notes = append(notes, ds.detectionToNote(det))
+		notes = append(notes, ds.detectionToNote(det, rawLabelsMap))
 	}
 	return notes
 }
@@ -360,14 +441,15 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 
 	label, err := ds.label.GetByScientificName(ctx, commonName)
 	if err != nil {
-		// Species not found is not an error - return empty counts
-		return hourly, nil //nolint:nilerr // species not found returns zero counts
+		if errors.Is(err, repository.ErrLabelNotFound) {
+			return hourly, nil
+		}
+		return hourly, err
 	}
 
 	t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
 	if err != nil {
-		// Invalid date format returns zero counts without error
-		return hourly, nil //nolint:nilerr // invalid date format returns zero counts
+		return hourly, fmt.Errorf("invalid date format: %w", err)
 	}
 
 	startTime := t.Unix()
@@ -406,9 +488,14 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 	var labelIDs []uint
 	if species != "" {
 		label, err := ds.label.GetByScientificName(ctx, species)
-		if err == nil {
-			labelIDs = []uint{label.ID}
+		if err != nil {
+			// Species not found - return empty results instead of all detections
+			if errors.Is(err, repository.ErrLabelNotFound) {
+				return []datastore.Note{}, nil
+			}
+			return nil, err
 		}
+		labelIDs = []uint{label.ID}
 	}
 
 	filters := &repository.SearchFilters{
@@ -840,9 +927,14 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 	var labelIDs []uint
 	if species != "" {
 		label, err := ds.label.GetByScientificName(ctx, species)
-		if err == nil {
-			labelIDs = []uint{label.ID}
+		if err != nil {
+			// Species not found - return zero count instead of all detections count
+			if errors.Is(err, repository.ErrLabelNotFound) {
+				return 0, nil
+			}
+			return 0, err
 		}
+		labelIDs = []uint{label.ID}
 	}
 
 	filters := &repository.SearchFilters{
@@ -1064,40 +1156,300 @@ func (ds *Datastore) GetAllImageCaches(providerName string) ([]datastore.ImageCa
 // Analytics Methods
 // ============================================================
 
-// GetSpeciesSummaryData retrieves species summary data.
-func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	// Analytics require aggregation queries - return empty for now
-	return []datastore.SpeciesSummaryData{}, nil
+// parseDateRange parses start and end date strings to Unix timestamps.
+// Returns (0, 0) if no dates provided, meaning no date filtering.
+func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64, err error) {
+	if startDate != "" {
+		t, parseErr := time.ParseInLocation("2006-01-02", startDate, ds.timezone)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid start date format: %w", parseErr)
+		}
+		start = t.Unix()
+	}
+	if endDate != "" {
+		t, parseErr := time.ParseInLocation("2006-01-02", endDate, ds.timezone)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid end date format: %w", parseErr)
+		}
+		// End of day for end date
+		end = t.Add(24*time.Hour - time.Second).Unix()
+	}
+	return start, end, nil
 }
 
-// GetHourlyAnalyticsData retrieves hourly analytics data.
+// getDefaultModelID retrieves the ID of the default BirdNET model.
+// Returns 0 if not found (common name resolution will gracefully degrade).
+func (ds *Datastore) getDefaultModelID(ctx context.Context) uint {
+	modelInfo := detection.DefaultModelInfo()
+	model, err := ds.model.GetByNameVersion(ctx, modelInfo.Name, modelInfo.Version)
+	if err != nil || model == nil {
+		return 0
+	}
+	return model.ID
+}
+
+// GetSpeciesSummaryData retrieves species summary data.
+func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Batch fetch raw_labels for common names using the default model
+	modelID := ds.getDefaultModelID(ctx)
+	pairs := make([]repository.ModelLabelPair, 0, len(v2Data))
+	for _, d := range v2Data {
+		pairs = append(pairs, repository.ModelLabelPair{ModelID: modelID, LabelID: d.LabelID})
+	}
+	rawLabelsMap, _ := ds.label.GetRawLabelsForLabels(ctx, pairs)
+
+	result := make([]datastore.SpeciesSummaryData, 0, len(v2Data))
+	for _, d := range v2Data {
+		commonName := d.ScientificName
+		key := fmt.Sprintf("%d:%d", modelID, d.LabelID)
+		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
+			if extracted := extractCommonName(rawLabel); extracted != "" {
+				commonName = extracted
+			}
+		}
+
+		result = append(result, datastore.SpeciesSummaryData{
+			ScientificName: d.ScientificName,
+			CommonName:     commonName,
+			SpeciesCode:    "", // Not available in v2 schema
+			Count:          int(d.TotalDetections),
+			FirstSeen:      time.Unix(d.FirstDetection, 0).In(ds.timezone),
+			LastSeen:       time.Unix(d.LastDetection, 0).In(ds.timezone),
+			AvgConfidence:  d.AvgConfidence,
+			MaxConfidence:  d.MaxConfidence,
+		})
+	}
+	return result, nil
+}
+
+// GetHourlyAnalyticsData retrieves hourly analytics data for a specific date and species.
 func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	return []datastore.HourlyAnalyticsData{}, nil
+	start, end, err := ds.parseDateRange(date, date)
+	if err != nil {
+		return nil, err
+	}
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return []datastore.HourlyAnalyticsData{}, nil
+		}
+		return nil, err
+	}
+
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]datastore.HourlyAnalyticsData, 0, len(v2Data))
+	for _, d := range v2Data {
+		result = append(result, datastore.HourlyAnalyticsData{
+			Hour:  d.Hour,
+			Count: int(d.Count),
+		})
+	}
+	return result, nil
+}
+
+// resolveLabelID looks up a label ID for a species name.
+// Returns (nil, nil) if species is empty (no filter).
+// Returns (nil, errNotFound) if species not found.
+// Returns (&id, nil) if found.
+// Returns (nil, err) for other errors.
+var errNotFound = errors.NewStd("species not found")
+
+func (ds *Datastore) resolveLabelID(ctx context.Context, species string) (*uint, error) {
+	if species == "" {
+		return nil, nil //nolint:nilnil // nil means no filter, which is valid
+	}
+	label, err := ds.label.GetByScientificName(ctx, species)
+	if err != nil {
+		if errors.Is(err, repository.ErrLabelNotFound) {
+			return nil, errNotFound
+		}
+		return nil, err
+	}
+	return &label.ID, nil
 }
 
 // GetDailyAnalyticsData retrieves daily analytics data.
 func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	return []datastore.DailyAnalyticsData{}, nil
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return []datastore.DailyAnalyticsData{}, nil
+		}
+		return nil, err
+	}
+
+	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, labelID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]datastore.DailyAnalyticsData, 0, len(v2Data))
+	for _, d := range v2Data {
+		result = append(result, datastore.DailyAnalyticsData{
+			Date:  d.Date,
+			Count: int(d.TotalDetections),
+		})
+	}
+	return result, nil
 }
 
 // GetDetectionTrends retrieves detection trends.
 func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	return []datastore.DailyAnalyticsData{}, nil
+	v2Data, err := ds.detection.GetDetectionTrends(ctx, period, limit, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]datastore.DailyAnalyticsData, 0, len(v2Data))
+	for _, d := range v2Data {
+		result = append(result, datastore.DailyAnalyticsData{
+			Date:  d.Date,
+			Count: int(d.TotalDetections),
+		})
+	}
+	return result, nil
 }
 
 // GetHourlyDistribution retrieves hourly distribution data.
 func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
-	return []datastore.HourlyDistributionData{}, nil
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	labelID, err := ds.resolveLabelID(ctx, species)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return []datastore.HourlyDistributionData{}, nil
+		}
+		return nil, err
+	}
+
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]datastore.HourlyDistributionData, 0, len(v2Data))
+	for _, d := range v2Data {
+		result = append(result, datastore.HourlyDistributionData{
+			Hour:  d.Hour,
+			Count: int(d.Count),
+		})
+	}
+	return result, nil
 }
 
-// GetNewSpeciesDetections retrieves new species detections.
+// speciesFirstSeenInfo holds the common fields for species first detection data.
+type speciesFirstSeenInfo struct {
+	LabelID        uint
+	ScientificName string
+	FirstDetected  int64
+}
+
+// convertToNewSpeciesData converts species first-seen data to NewSpeciesData with common name resolution.
+func (ds *Datastore) convertToNewSpeciesData(ctx context.Context, data []speciesFirstSeenInfo) []datastore.NewSpeciesData {
+	if len(data) == 0 {
+		return []datastore.NewSpeciesData{}
+	}
+
+	// Batch fetch raw_labels for common names using the default model
+	modelID := ds.getDefaultModelID(ctx)
+	pairs := make([]repository.ModelLabelPair, 0, len(data))
+	for _, d := range data {
+		pairs = append(pairs, repository.ModelLabelPair{ModelID: modelID, LabelID: d.LabelID})
+	}
+	rawLabelsMap, _ := ds.label.GetRawLabelsForLabels(ctx, pairs)
+
+	result := make([]datastore.NewSpeciesData, 0, len(data))
+	for _, d := range data {
+		commonName := d.ScientificName
+		key := fmt.Sprintf("%d:%d", modelID, d.LabelID)
+		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
+			if extracted := extractCommonName(rawLabel); extracted != "" {
+				commonName = extracted
+			}
+		}
+
+		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format("2006-01-02")
+		result = append(result, datastore.NewSpeciesData{
+			ScientificName: d.ScientificName,
+			CommonName:     commonName,
+			FirstSeenDate:  firstSeenDate,
+			CountInPeriod:  0,
+		})
+	}
+	return result
+}
+
+// GetNewSpeciesDetections retrieves new species detections (lifetime firsts).
 func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	return []datastore.NewSpeciesData{}, nil
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	v2Data, err := ds.detection.GetNewSpecies(ctx, start, end, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to common format
+	data := make([]speciesFirstSeenInfo, len(v2Data))
+	for i, d := range v2Data {
+		data[i] = speciesFirstSeenInfo{
+			LabelID:        d.LabelID,
+			ScientificName: d.ScientificName,
+			FirstDetected:  d.FirstDetected,
+		}
+	}
+
+	return ds.convertToNewSpeciesData(ctx, data), nil
 }
 
 // GetSpeciesFirstDetectionInPeriod retrieves first detection of species in a period.
 func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	return []datastore.NewSpeciesData{}, nil
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	v2Data, err := ds.detection.GetSpeciesFirstDetectionInPeriod(ctx, start, end, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to common format
+	data := make([]speciesFirstSeenInfo, len(v2Data))
+	for i, d := range v2Data {
+		data[i] = speciesFirstSeenInfo{
+			LabelID:        d.LabelID,
+			ScientificName: d.ScientificName,
+			FirstDetected:  d.FirstDetected,
+		}
+	}
+
+	return ds.convertToNewSpeciesData(ctx, data), nil
 }
 
 // ============================================================

@@ -44,4 +44,21 @@ type LabelRepository interface {
 
 	// Exists checks if a label with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
+
+	// GetRawLabelForLabel retrieves the raw_label string from model_labels
+	// for a given model and label combination. This is useful for extracting
+	// common names which are stored in the raw_label format "ScientificName_CommonName".
+	// Returns empty string if no mapping exists.
+	GetRawLabelForLabel(ctx context.Context, modelID, labelID uint) (string, error)
+
+	// GetRawLabelsForLabels batch retrieves raw_labels from model_labels for multiple
+	// model/label combinations. Returns a map keyed by "modelID:labelID" string.
+	// This is more efficient than calling GetRawLabelForLabel in a loop.
+	GetRawLabelsForLabels(ctx context.Context, pairs []ModelLabelPair) (map[string]string, error)
+}
+
+// ModelLabelPair represents a model_id and label_id combination for batch queries.
+type ModelLabelPair struct {
+	ModelID uint
+	LabelID uint
 }
