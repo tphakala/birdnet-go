@@ -189,6 +189,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			datastoreV2.SetEnhancedDatabaseMode()
 			// Notify the API layer that we're in v2-only mode
 			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager for API access
+			v2DatabaseManagerMu.Lock()
+			v2DatabaseManager = v2OnlyDatastore.Manager()
+			v2DatabaseManagerMu.Unlock()
 		}
 
 	case freshInstall:
@@ -203,10 +207,16 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			dataStore = datastore.New(settings)
 		} else {
 			dataStore = v2OnlyDatastore
+			// Fresh install is now effectively v2-only mode
+			v2OnlyMode = true
 			// Set global enhanced database flag
 			datastoreV2.SetEnhancedDatabaseMode()
 			// Notify the API layer that we're in v2-only mode
 			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager for API access
+			v2DatabaseManagerMu.Lock()
+			v2DatabaseManager = v2OnlyDatastore.Manager()
+			v2DatabaseManagerMu.Unlock()
 		}
 
 	default:

@@ -44,6 +44,7 @@
     can_cancel: boolean;
     dirty_id_count: number;
     error_message?: string;
+    is_v2_only_mode?: boolean;
   }
 
   interface ApiState<T> {
@@ -71,6 +72,10 @@
       migrationStatus.data?.state === 'validating' ||
       migrationStatus.data?.state === 'cutover'
   );
+
+  // Computed: Is v2-only mode (fresh install or post-migration complete)
+  // In this mode, we only show the primary database card and hide migration controls
+  let isV2OnlyMode = $derived(migrationStatus.data?.is_v2_only_mode === true);
 
   // Fetch functions
   async function fetchLegacyStats(): Promise<void> {
@@ -200,78 +205,95 @@
 <div class="space-y-6">
   <!-- Database Stats Grid with Data Flow Animation -->
   <div class="relative">
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <DatabaseStatsCard
-        title={t('system.database.legacy.title')}
-        dbType="legacy"
-        stats={legacyStats.data}
-        isLoading={legacyStats.loading}
-        error={legacyStats.error}
-        migrationActive={isActive}
-      />
-      <DatabaseStatsCard
-        title={t('system.database.v2.title')}
-        dbType="v2"
-        stats={v2Stats.data}
-        isLoading={v2Stats.loading}
-        error={v2Stats.error}
-        migrationActive={isActive}
-      />
-    </div>
-
-    <!-- Data Flow Animation (visible during active migration on desktop) -->
-    {#if isActive}
-      <div
-        class="hidden lg:flex absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-               w-28 h-10 items-center justify-center pointer-events-none z-10"
-      >
-        <!-- Data stream track/bridge with faded ends -->
-        <div class="absolute inset-y-3 inset-x-0 flex items-center">
-          <div
-            class="h-1 flex-1 bg-gradient-to-r from-transparent via-[var(--color-primary)]/25 to-[var(--color-primary)]/25"
-          ></div>
-          <div class="h-1 flex-[2] bg-[var(--color-primary)]/25"></div>
-          <div
-            class="h-1 flex-1 bg-gradient-to-l from-transparent via-[var(--color-primary)]/25 to-[var(--color-primary)]/25"
-          ></div>
-        </div>
-
-        <!-- Subtle glow along the bridge with faded ends -->
-        <div class="absolute inset-y-2 inset-x-0 flex items-center">
-          <div
-            class="h-2 flex-1 bg-gradient-to-r from-transparent to-[var(--color-primary)]/10 blur-sm"
-          ></div>
-          <div class="h-2 flex-[2] bg-[var(--color-primary)]/10 blur-sm animate-pulse"></div>
-          <div
-            class="h-2 flex-1 bg-gradient-to-l from-transparent to-[var(--color-primary)]/10 blur-sm"
-          ></div>
-        </div>
-
-        <!-- Animated data packets flowing left to right -->
-        <div class="data-packet-container absolute inset-y-0 inset-x-0 overflow-hidden">
-          {#each { length: 4 } as _, i (i)}
-            <div
-              class="data-packet absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5
-                     rounded-full bg-[var(--color-primary)]"
-              style:animation-delay="{i * 0.5}s"
-            ></div>
-          {/each}
-        </div>
+    {#if isV2OnlyMode}
+      <!-- V2-only mode: Show single database card -->
+      <div class="max-w-md mx-auto">
+        <DatabaseStatsCard
+          title={t('system.database.v2.title')}
+          dbType="v2"
+          stats={legacyStats.data}
+          isLoading={legacyStats.loading}
+          error={legacyStats.error}
+          migrationActive={false}
+        />
       </div>
+    {:else}
+      <!-- Normal mode: Show both legacy and v2 database cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DatabaseStatsCard
+          title={t('system.database.legacy.title')}
+          dbType="legacy"
+          stats={legacyStats.data}
+          isLoading={legacyStats.loading}
+          error={legacyStats.error}
+          migrationActive={isActive}
+        />
+        <DatabaseStatsCard
+          title={t('system.database.v2.title')}
+          dbType="v2"
+          stats={v2Stats.data}
+          isLoading={v2Stats.loading}
+          error={v2Stats.error}
+          migrationActive={isActive}
+        />
+      </div>
+
+      <!-- Data Flow Animation (visible during active migration on desktop) -->
+      {#if isActive}
+        <div
+          class="hidden lg:flex absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                 w-28 h-10 items-center justify-center pointer-events-none z-10"
+        >
+          <!-- Data stream track/bridge with faded ends -->
+          <div class="absolute inset-y-3 inset-x-0 flex items-center">
+            <div
+              class="h-1 flex-1 bg-gradient-to-r from-transparent via-[var(--color-primary)]/25 to-[var(--color-primary)]/25"
+            ></div>
+            <div class="h-1 flex-[2] bg-[var(--color-primary)]/25"></div>
+            <div
+              class="h-1 flex-1 bg-gradient-to-l from-transparent via-[var(--color-primary)]/25 to-[var(--color-primary)]/25"
+            ></div>
+          </div>
+
+          <!-- Subtle glow along the bridge with faded ends -->
+          <div class="absolute inset-y-2 inset-x-0 flex items-center">
+            <div
+              class="h-2 flex-1 bg-gradient-to-r from-transparent to-[var(--color-primary)]/10 blur-sm"
+            ></div>
+            <div class="h-2 flex-[2] bg-[var(--color-primary)]/10 blur-sm animate-pulse"></div>
+            <div
+              class="h-2 flex-1 bg-gradient-to-l from-transparent to-[var(--color-primary)]/10 blur-sm"
+            ></div>
+          </div>
+
+          <!-- Animated data packets flowing left to right -->
+          <div class="data-packet-container absolute inset-y-0 inset-x-0 overflow-hidden">
+            {#each { length: 4 } as _, i (i)}
+              <div
+                class="data-packet absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5
+                       rounded-full bg-[var(--color-primary)]"
+                style:animation-delay="{i * 0.5}s"
+              ></div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     {/if}
   </div>
 
-  <!-- Migration Control -->
-  <MigrationControlCard
-    status={migrationStatus.data}
-    isLoading={migrationStatus.loading && !migrationStatus.data}
-    isStarting={startLoading}
-    error={migrationStatus.error}
-    onStart={() => (showConfirmDialog = true)}
-    onPause={pauseMigration}
-    onResume={resumeMigration}
-    onCancel={cancelMigration}
-  />
+  <!-- Migration Control (hidden in v2-only mode) -->
+  {#if !isV2OnlyMode}
+    <MigrationControlCard
+      status={migrationStatus.data}
+      isLoading={migrationStatus.loading && !migrationStatus.data}
+      isStarting={startLoading}
+      error={migrationStatus.error}
+      onStart={() => (showConfirmDialog = true)}
+      onPause={pauseMigration}
+      onResume={resumeMigration}
+      onCancel={cancelMigration}
+    />
+  {/if}
 </div>
 
 <!-- Confirmation Dialog -->
