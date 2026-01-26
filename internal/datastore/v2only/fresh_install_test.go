@@ -135,3 +135,16 @@ func TestInitializeFreshInstall_NoDatabase(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no database configured")
 }
+
+func TestInitializeFreshInstall_EmptySQLitePath(t *testing.T) {
+	v2.ResetDatabaseMode()
+	defer v2.ResetDatabaseMode()
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = "" // Empty path
+
+	_, err := InitializeFreshInstall(settings, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sqlite path is empty")
+}

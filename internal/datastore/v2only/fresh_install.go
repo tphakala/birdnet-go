@@ -37,6 +37,9 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 	case settings.Output.SQLite.Enabled:
 		// Fresh install: use configured path directly, NO _v2 suffix
 		dbPath := settings.Output.SQLite.Path
+		if dbPath == "" {
+			return nil, fmt.Errorf("sqlite path is empty")
+		}
 
 		// Ensure directory exists
 		if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
