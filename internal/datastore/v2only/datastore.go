@@ -441,14 +441,15 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 
 	label, err := ds.label.GetByScientificName(ctx, commonName)
 	if err != nil {
-		// Species not found is not an error - return empty counts
-		return hourly, nil //nolint:nilerr // species not found returns zero counts
+		if errors.Is(err, repository.ErrLabelNotFound) {
+			return hourly, nil
+		}
+		return hourly, err
 	}
 
 	t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
 	if err != nil {
-		// Invalid date format returns zero counts without error
-		return hourly, nil //nolint:nilerr // invalid date format returns zero counts
+		return hourly, fmt.Errorf("invalid date format: %w", err)
 	}
 
 	startTime := t.Unix()
@@ -1157,19 +1158,23 @@ func (ds *Datastore) GetAllImageCaches(providerName string) ([]datastore.ImageCa
 
 // parseDateRange parses start and end date strings to Unix timestamps.
 // Returns (0, 0) if no dates provided, meaning no date filtering.
-func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64) {
+func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64, err error) {
 	if startDate != "" {
-		if t, err := time.ParseInLocation("2006-01-02", startDate, ds.timezone); err == nil {
-			start = t.Unix()
+		t, parseErr := time.ParseInLocation("2006-01-02", startDate, ds.timezone)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid start date format: %w", parseErr)
 		}
+		start = t.Unix()
 	}
 	if endDate != "" {
-		// End of day for end date
-		if t, err := time.ParseInLocation("2006-01-02", endDate, ds.timezone); err == nil {
-			end = t.Add(24*time.Hour - time.Second).Unix()
+		t, parseErr := time.ParseInLocation("2006-01-02", endDate, ds.timezone)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid end date format: %w", parseErr)
 		}
+		// End of day for end date
+		end = t.Add(24*time.Hour - time.Second).Unix()
 	}
-	return start, end
+	return start, end, nil
 }
 
 // getDefaultModelID retrieves the ID of the default BirdNET model.
@@ -1185,7 +1190,10 @@ func (ds *Datastore) getDefaultModelID(ctx context.Context) uint {
 
 // GetSpeciesSummaryData retrieves species summary data.
 func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	start, end := ds.parseDateRange(startDate, endDate)
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
 
 	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil)
 	if err != nil {
@@ -1226,7 +1234,10 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 
 // GetHourlyAnalyticsData retrieves hourly analytics data for a specific date and species.
 func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	start, end := ds.parseDateRange(date, date)
+	start, end, err := ds.parseDateRange(date, date)
+	if err != nil {
+		return nil, err
+	}
 
 	labelID, err := ds.resolveLabelID(ctx, species)
 	if err != nil {
@@ -1274,7 +1285,10 @@ func (ds *Datastore) resolveLabelID(ctx context.Context, species string) (*uint,
 
 // GetDailyAnalyticsData retrieves daily analytics data.
 func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	start, end := ds.parseDateRange(startDate, endDate)
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
 
 	labelID, err := ds.resolveLabelID(ctx, species)
 	if err != nil {
@@ -1318,7 +1332,10 @@ func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limi
 
 // GetHourlyDistribution retrieves hourly distribution data.
 func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
-	start, end := ds.parseDateRange(startDate, endDate)
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
 
 	labelID, err := ds.resolveLabelID(ctx, species)
 	if err != nil {
@@ -1387,7 +1404,10 @@ func (ds *Datastore) convertToNewSpeciesData(ctx context.Context, data []species
 
 // GetNewSpeciesDetections retrieves new species detections (lifetime firsts).
 func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	start, end := ds.parseDateRange(startDate, endDate)
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
 
 	v2Data, err := ds.detection.GetNewSpecies(ctx, start, end, limit, offset)
 	if err != nil {
@@ -1409,7 +1429,10 @@ func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 
 // GetSpeciesFirstDetectionInPeriod retrieves first detection of species in a period.
 func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	start, end := ds.parseDateRange(startDate, endDate)
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
 
 	v2Data, err := ds.detection.GetSpeciesFirstDetectionInPeriod(ctx, start, end, limit, offset)
 	if err != nil {
