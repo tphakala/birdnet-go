@@ -201,10 +201,9 @@ func ConfidenceFilterToMinMax(cf *datastore.ConfidenceFilter) (minConf, maxConf 
 
 	// Always return pointer to local copy to prevent unintended mutation of the original struct.
 	switch cf.Operator {
-	case ">":
-		// Strictly greater than
+case ">":
+		// Greater than or equal to
 		v := cf.Value
-		return &v, nil
 	case ">=":
 		v := cf.Value
 		return &v, nil
