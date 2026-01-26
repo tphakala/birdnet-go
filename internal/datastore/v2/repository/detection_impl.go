@@ -12,8 +12,10 @@ import (
 
 // Sort field constants for Search queries.
 const (
-	sortFieldDetectedAt = "detected_at"
-	sortFieldConfidence = "confidence"
+	// SortFieldDetectedAt is the default sort field for detections (by timestamp).
+	SortFieldDetectedAt = "detected_at"
+	// SortFieldConfidence allows sorting by confidence score.
+	SortFieldConfidence = "confidence"
 )
 
 // defaultDBBatchSize is the batch size for bulk database operations.
@@ -425,8 +427,8 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	if filters.ModelID != nil {
 		query = query.Where("model_id = ?", *filters.ModelID)
 	}
-	if filters.AudioSourceID != nil {
-		query = query.Where("source_id = ?", *filters.AudioSourceID)
+	if len(filters.AudioSourceIDs) > 0 {
+		query = query.Where("source_id IN ?", filters.AudioSourceIDs)
 	}
 	if filters.StartTime != nil {
 		query = query.Where("detected_at >= ?", *filters.StartTime)
@@ -434,11 +436,21 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	if filters.EndTime != nil {
 		query = query.Where("detected_at <= ?", *filters.EndTime)
 	}
+	if len(filters.IncludedHours) > 0 {
+		// Extract local hour from Unix timestamp using timezone offset.
+		// Formula: FLOOR((detected_at + offset) / 3600) % 24
+		// FLOOR() ensures integer results on both SQLite and MySQL (MySQL returns floats for division).
+		hourExpr := fmt.Sprintf("FLOOR((detected_at + %d) / 3600) %% 24", filters.TimezoneOffset)
+		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
+	}
 	if filters.MinConfidence != nil {
 		query = query.Where("confidence >= ?", *filters.MinConfidence)
 	}
 	if filters.MaxConfidence != nil {
 		query = query.Where("confidence <= ?", *filters.MaxConfidence)
+	}
+	if filters.MinID > 0 {
+		query = query.Where("id > ?", filters.MinID)
 	}
 
 	// Text search on scientific name (requires join)
@@ -448,11 +460,26 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 			Where(fmt.Sprintf("%s.scientific_name LIKE ?", r.labelsTable()), "%"+filters.Query+"%")
 	}
 
-	// Verified filter (requires join with reviews)
+	// Verified filter (requires join with reviews for specific status)
 	if filters.Verified != nil {
 		query = query.Joins(fmt.Sprintf("JOIN %s ON %s.detection_id = %s.id",
 			r.reviewsTable(), r.reviewsTable(), r.tableName())).
 			Where(fmt.Sprintf("%s.verified = ?", r.reviewsTable()), string(*filters.Verified))
+	}
+
+	// IsReviewed filter (has review with verdict vs no review)
+	if filters.IsReviewed != nil {
+		if *filters.IsReviewed {
+			// Has a review with verdict (verified != '')
+			query = query.Where(fmt.Sprintf(
+				"EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id AND %s.verified != '')",
+				r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()))
+		} else {
+			// No review or no verdict
+			query = query.Where(fmt.Sprintf(
+				"NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id AND %s.verified != '')",
+				r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()))
+		}
 	}
 
 	// Locked filter (requires join with locks)
@@ -473,13 +500,13 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	}
 
 	// Sorting
-	sortField := sortFieldDetectedAt
+	sortField := SortFieldDetectedAt
 	if filters.SortBy != "" {
 		switch filters.SortBy {
-		case sortFieldConfidence:
-			sortField = sortFieldConfidence
-		case sortFieldDetectedAt:
-			sortField = sortFieldDetectedAt
+		case SortFieldConfidence:
+			sortField = SortFieldConfidence
+		case SortFieldDetectedAt:
+			sortField = SortFieldDetectedAt
 		}
 	}
 	order := sortField

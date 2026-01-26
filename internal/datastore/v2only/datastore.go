@@ -571,16 +571,23 @@ func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset
 }
 
 // SearchNotesAdvanced performs advanced search with filters.
+// Converts all AdvancedSearchFilters fields to repository SearchFilters.
 func (ds *Datastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	ctx := context.Background()
 
-	repoFilters := &repository.SearchFilters{
-		Limit:    filters.Limit,
-		Offset:   filters.Offset,
-		SortBy:   "detected_at",
-		SortDesc: !filters.SortAscending,
+	// Set up dependencies for entity lookups
+	deps := &repository.FilterLookupDeps{
+		LabelRepo:  ds.label,
+		SourceRepo: ds.source,
 	}
 
+	// Convert API-level filters to repository filters
+	repoFilters, err := repository.ConvertAdvancedFilters(ctx, filters, deps, ds.timezone)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Execute search
 	dets, total, err := ds.detection.Search(ctx, repoFilters)
 	if err != nil {
 		return nil, 0, err
