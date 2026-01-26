@@ -83,9 +83,22 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 		}
 	}
 
-	// Check if v2 migration database file exists
+	// If v2 migration database doesn't exist, check if configured path is a v2 DB
 	if !v2MigrationExists {
-		// Configured path exists but no v2 migration DB = legacy mode
+		if configuredExists {
+			// Check if the configured database is a fresh v2 database
+			if isV2Database := checkSQLiteHasV2Schema(configuredPath); isV2Database {
+				// This is a fresh v2 install (restart after initial fresh install)
+				return StartupState{
+					MigrationStatus: entities.MigrationStatusCompleted,
+					V2Available:     true,
+					LegacyRequired:  false,
+					FreshInstall:    false,
+					Error:           nil,
+				}
+			}
+		}
+		// Configured path exists but is not v2 = legacy mode
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -235,8 +248,19 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 		}
 	}
 
-	// No v2 migration tables exist but legacy does = legacy mode
-	if !v2MigrationExists {
+	// Fresh v2 exists (restart after fresh install) - no migration tables needed
+	if freshV2Exists && !v2MigrationExists {
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusCompleted,
+			V2Available:     true,
+			LegacyRequired:  false,
+			FreshInstall:    false,
+			Error:           nil,
+		}
+	}
+
+	// No v2 tables at all but legacy exists = legacy mode
+	if !v2MigrationExists && !freshV2Exists {
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -279,4 +303,30 @@ func IsV2OnlyModeAvailable(settings *conf.Settings) bool {
 func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
 	state := CheckMigrationStateBeforeStartup(settings)
 	return !state.LegacyRequired && state.MigrationStatus == entities.MigrationStatusCompleted
+}
+
+// checkSQLiteHasV2Schema checks if a SQLite database at the given path has v2 schema tables.
+// This is used to distinguish between a legacy database and a fresh v2 database.
+func checkSQLiteHasV2Schema(dbPath string) bool {
+	dsn := dbPath + "?mode=ro"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		return false
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = sqlDB.Close() }()
+
+	// Check for v2-specific table: detections (v2 uses 'detections', legacy uses 'notes')
+	var count int64
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='detections'").Scan(&count).Error
+	if err != nil {
+		return false
+	}
+	return count > 0
 }
