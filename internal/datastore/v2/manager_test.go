@@ -343,6 +343,76 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+func TestSQLiteManager_DirectPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	customPath := filepath.Join(tmpDir, "mydb.db")
+
+	manager, err := NewSQLiteManager(Config{
+		DirectPath: customPath, // Use exact path
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = manager.Close() })
+
+	err = manager.Initialize()
+	require.NoError(t, err)
+
+	// Verify database was created at exact path
+	_, err = os.Stat(customPath)
+	require.NoError(t, err, "database should exist at direct path")
+
+	// Verify no _v2 database was created
+	_, err = os.Stat(filepath.Join(tmpDir, "birdnet_v2.db"))
+	assert.True(t, os.IsNotExist(err), "should NOT create _v2 database")
+
+	// Verify the Path() method returns the direct path
+	assert.Equal(t, customPath, manager.Path())
+}
+
+func TestSQLiteManager_DirectPath_DeepNested(t *testing.T) {
+	tmpDir := t.TempDir()
+	customPath := filepath.Join(tmpDir, "data", "birds", "detections.db")
+
+	// Ensure parent directories exist (this is caller's responsibility)
+	err := os.MkdirAll(filepath.Dir(customPath), 0o750)
+	require.NoError(t, err)
+
+	manager, err := NewSQLiteManager(Config{
+		DirectPath: customPath,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = manager.Close() })
+
+	err = manager.Initialize()
+	require.NoError(t, err)
+
+	// Verify database at custom path
+	_, err = os.Stat(customPath)
+	assert.NoError(t, err, "database should exist at deep nested path")
+}
+
+func TestSQLiteManager_DirectPath_TakesPrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+	customPath := filepath.Join(tmpDir, "custom.db")
+
+	// Even if DataDir is set, DirectPath should take precedence
+	manager, err := NewSQLiteManager(Config{
+		DataDir:    tmpDir,
+		DirectPath: customPath,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = manager.Close() })
+
+	err = manager.Initialize()
+	require.NoError(t, err)
+
+	// Verify custom path was used, not DataDir/birdnet_v2.db
+	_, err = os.Stat(customPath)
+	require.NoError(t, err, "should use DirectPath")
+
+	_, err = os.Stat(filepath.Join(tmpDir, "birdnet_v2.db"))
+	assert.True(t, os.IsNotExist(err), "should NOT use DataDir")
+}
+
 // TestSQLiteManager_NoReverseForeignKey verifies that GORM doesn't create
 // spurious foreign keys due to field name collisions. This was a real bug where
 // AudioSource.SourceID (a string business identifier) caused GORM to create

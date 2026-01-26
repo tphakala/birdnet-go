@@ -147,12 +147,19 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// This allows us to skip the legacy database when migration is complete
 	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
 	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
+	freshInstall := startupState.FreshInstall
 
-	if v2OnlyMode {
+	// Log startup mode detection
+	switch {
+	case v2OnlyMode:
 		GetLogger().Info("migration completed, starting in v2-only mode",
 			logger.String("migration_status", string(startupState.MigrationStatus)),
 			logger.String("operation", "startup_mode_check"))
-	} else {
+	case freshInstall:
+		GetLogger().Info("fresh installation detected, initializing v2 schema",
+			logger.String("database_path", settings.Output.SQLite.Path),
+			logger.String("operation", "startup_mode_check"))
+	default:
 		GetLogger().Debug("migration state check completed",
 			logger.String("migration_status", string(startupState.MigrationStatus)),
 			logger.Bool("v2_available", startupState.V2Available),
@@ -160,12 +167,13 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			logger.String("operation", "startup_mode_check"))
 	}
 
-	// Initialize database access based on migration state
+	// Initialize database access based on startup state
 	var dataStore datastore.Interface
 	var v2OnlyDatastore *v2only.Datastore
 
-	if v2OnlyMode {
-		// V2-only mode: use V2OnlyDatastore
+	switch {
+	case v2OnlyMode:
+		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
 		var err error
 		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
 		if err != nil {
@@ -177,11 +185,42 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			v2OnlyMode = false
 		} else {
 			dataStore = v2OnlyDatastore
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
 			// Notify the API layer that we're in v2-only mode
 			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager for API access
+			v2DatabaseManagerMu.Lock()
+			v2DatabaseManager = v2OnlyDatastore.Manager()
+			v2DatabaseManagerMu.Unlock()
 		}
-	} else {
-		// Normal mode: use legacy datastore
+
+	case freshInstall:
+		// Fresh install: create at configured path with v2 schema
+		var err error
+		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger())
+		if err != nil {
+			// Fresh install failed, fall back to legacy mode
+			GetLogger().Warn("fresh install failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_fresh_install"))
+			dataStore = datastore.New(settings)
+		} else {
+			dataStore = v2OnlyDatastore
+			// Fresh install is now effectively v2-only mode
+			v2OnlyMode = true
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager for API access
+			v2DatabaseManagerMu.Lock()
+			v2DatabaseManager = v2OnlyDatastore.Manager()
+			v2DatabaseManagerMu.Unlock()
+		}
+
+	default:
+		// Legacy mode: use legacy datastore
 		dataStore = datastore.New(settings)
 	}
 
@@ -1751,6 +1790,9 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 
 // initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.
 // This allows the application to run without opening the legacy database.
+// It handles both:
+//   - Fresh installs: v2 schema at configured path (no _v2 suffix, no v2_ prefix)
+//   - Post-migration: v2 schema at migration path (_v2 suffix, v2_ prefix)
 func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	log := GetLogger()
 	log.Info("initializing v2-only mode",
@@ -1763,24 +1805,51 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 
 	switch {
 	case settings.Output.SQLite.Enabled:
-		dataDir := datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
-		v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
-			DataDir: dataDir,
-			Debug:   settings.Debug,
-			Logger:  log,
-		})
-		useV2Prefix = false
+		configuredPath := settings.Output.SQLite.Path
+		dataDir := datastoreV2.GetDataDirFromLegacyPath(configuredPath)
+		migrationPath := filepath.Join(dataDir, "birdnet_v2.db")
+
+		// Determine if v2 schema is at configured path (fresh) or migration path
+		if datastoreV2.CheckSQLiteHasV2Schema(configuredPath) {
+			// Fresh install restart: use configured path directly
+			log.Debug("v2 schema found at configured path (fresh install)",
+				logger.String("path", configuredPath))
+			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+				DirectPath: configuredPath,
+				Debug:      settings.Debug,
+				Logger:     log,
+			})
+			useV2Prefix = false
+		} else {
+			// Post-migration: use migration path
+			log.Debug("using migration v2 database path",
+				logger.String("path", migrationPath))
+			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+				DataDir: dataDir,
+				Debug:   settings.Debug,
+				Logger:  log,
+			})
+			useV2Prefix = false
+		}
 
 	case settings.Output.MySQL.Enabled:
+		// Check if fresh v2 tables exist (no prefix) or migration tables (v2_ prefix)
+		isFreshV2 := datastoreV2.CheckMySQLHasFreshV2Schema(settings)
+		useV2Prefix = !isFreshV2
+
+		log.Debug("MySQL v2 mode configuration",
+			logger.Bool("use_v2_prefix", useV2Prefix),
+			logger.Bool("is_fresh_v2", isFreshV2))
+
 		v2Manager, err = datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
-			Host:     settings.Output.MySQL.Host,
-			Port:     settings.Output.MySQL.Port,
-			Username: settings.Output.MySQL.Username,
-			Password: settings.Output.MySQL.Password,
-			Database: settings.Output.MySQL.Database,
-			Debug:    settings.Debug,
+			Host:        settings.Output.MySQL.Host,
+			Port:        settings.Output.MySQL.Port,
+			Username:    settings.Output.MySQL.Username,
+			Password:    settings.Output.MySQL.Password,
+			Database:    settings.Output.MySQL.Database,
+			UseV2Prefix: useV2Prefix,
+			Debug:       settings.Debug,
 		})
-		useV2Prefix = true
 
 	default:
 		return nil, fmt.Errorf("no database configured")

@@ -114,6 +114,12 @@ func (ds *Datastore) SetMetrics(metrics *datastore.Metrics) {
 	ds.metrics = metrics
 }
 
+// Manager returns the underlying database manager.
+// This allows access to the manager for API endpoints that need it.
+func (ds *Datastore) Manager() v2.Manager {
+	return ds.manager
+}
+
 // SetSunCalcMetrics sets the SunCalc metrics instance.
 func (ds *Datastore) SetSunCalcMetrics(_ any) {}
 

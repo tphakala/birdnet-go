@@ -1312,21 +1312,39 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 }
 
 // GetDatabaseStats handles GET /api/v2/system/database/stats
-// This endpoint returns statistics for the legacy database.
-// In v2-only mode, it returns 200 OK with Type "none" indicating no legacy database.
+// This endpoint returns statistics for the primary database.
+// In v2-only mode (fresh install or post-migration), it returns v2 database stats.
+// In legacy mode, it returns legacy database stats.
 func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Getting database statistics",
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("ip", ctx.RealIP()),
+		logger.String("path", path),
+		logger.String("ip", ip),
 	)
 
-	// In v2-only mode, there is no legacy database
+	// In v2-only mode, return v2 database stats as the primary database
 	if isV2OnlyMode {
-		c.logInfoIfEnabled("Running in v2-only mode, no legacy database available",
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+		c.logInfoIfEnabled("Running in v2-only mode, returning v2 database as primary",
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
-		// Return a special response indicating no legacy database
+		// Get v2 database stats
+		v2Stats, ok := c.getV2Stats(path, ip)
+		if ok {
+			// Return v2 stats as the primary database stats
+			return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
+				Type:            v2Stats.Type,
+				Location:        v2Stats.Location,
+				SizeBytes:       v2Stats.SizeBytes,
+				TotalDetections: v2Stats.TotalDetections,
+				Connected:       v2Stats.Connected,
+			})
+		}
+		// V2 database not available, return disconnected state
+		c.logWarnIfEnabled("V2-only mode but v2 database not available",
+			logger.String("path", path),
+			logger.String("ip", ip),
+		)
 		return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
 			Type:      "none",
 			Connected: false,
@@ -1337,8 +1355,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	// Check if datastore is available
 	if c.DS == nil {
 		c.logErrorIfEnabled("Datastore not available",
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 		return c.HandleError(ctx, fmt.Errorf("datastore not available"), "Database not configured", http.StatusServiceUnavailable)
 	}
@@ -1353,16 +1371,16 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		if errors.Is(err, datastore.ErrDBNotConnected) {
 			c.logWarnIfEnabled("Database not connected, returning partial stats",
 				logger.Error(err),
-				logger.String("path", ctx.Request().URL.Path),
-				logger.String("ip", ctx.RealIP()),
+				logger.String("path", path),
+				logger.String("ip", ip),
 			)
 			isPartialStats = true
 			// Continue to return partial stats below
 		} else {
 			c.logErrorIfEnabled("Failed to get database stats",
 				logger.Error(err),
-				logger.String("path", ctx.Request().URL.Path),
-				logger.String("ip", ctx.RealIP()),
+				logger.String("path", path),
+				logger.String("ip", ip),
 			)
 			return c.HandleError(ctx, err, "Failed to retrieve database statistics", http.StatusInternalServerError)
 		}
@@ -1371,8 +1389,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	// Guard against nil stats (defensive - future implementations might return nil)
 	if stats == nil {
 		c.logErrorIfEnabled("GetDatabaseStats returned nil stats",
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 		return c.HandleError(ctx, fmt.Errorf("database stats unavailable"), "Failed to retrieve database statistics", http.StatusInternalServerError)
 	}
@@ -1382,8 +1400,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		c.logInfoIfEnabled("Database statistics retrieved (partial)",
 			logger.String("type", stats.Type),
 			logger.Bool("connected", stats.Connected),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 	} else {
 		c.logInfoIfEnabled("Database statistics retrieved successfully",
@@ -1391,8 +1409,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 			logger.Any("size_bytes", stats.SizeBytes),
 			logger.Any("total_detections", stats.TotalDetections),
 			logger.Bool("connected", stats.Connected),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 	}
 
@@ -1408,30 +1426,26 @@ type V2DatabaseStatsResponse struct {
 	Connected       bool   `json:"connected"`
 }
 
-// GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
-func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
-	ip, path := ctx.RealIP(), ctx.Request().URL.Path
-	c.logInfoIfEnabled("Getting v2 database statistics",
-		logger.String("path", path), logger.String("ip", ip))
-
+// getV2Stats is a helper method that retrieves v2 database statistics.
+// It returns the stats and a boolean indicating if stats were successfully retrieved.
+// If the v2 database is not available, it returns nil and false.
+func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse, bool) {
 	// Check if V2Manager is available
 	if c.V2Manager == nil {
 		c.logInfoIfEnabled("V2 database not initialized",
-			logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
-			"V2 database not initialized", http.StatusNotFound)
+			logger.String("path", logPath), logger.String("ip", logIP))
+		return nil, false
 	}
 
 	// Check if database exists
 	if !c.V2Manager.Exists() {
 		c.logInfoIfEnabled("V2 database does not exist yet",
-			logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
-			"V2 database not initialized", http.StatusNotFound)
+			logger.String("path", logPath), logger.String("ip", logIP))
+		return nil, false
 	}
 
 	// Build response
-	response := V2DatabaseStatsResponse{
+	response := &V2DatabaseStatsResponse{
 		Type:      "sqlite",
 		Location:  c.V2Manager.Path(),
 		Connected: true,
@@ -1457,7 +1471,7 @@ func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
 			response.TotalDetections = count
 		} else {
 			c.logWarnIfEnabled("Failed to count v2 detections",
-				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+				logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
 		}
 	}
 
@@ -1466,9 +1480,24 @@ func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
 		logger.Any("size_bytes", response.SizeBytes),
 		logger.Any("total_detections", response.TotalDetections),
 		logger.Bool("connected", response.Connected),
+		logger.String("path", logPath), logger.String("ip", logIP))
+
+	return response, true
+}
+
+// GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
+func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
+	c.logInfoIfEnabled("Getting v2 database statistics",
 		logger.String("path", path), logger.String("ip", ip))
 
-	return ctx.JSON(http.StatusOK, response)
+	stats, ok := c.getV2Stats(path, ip)
+	if !ok {
+		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
+			"V2 database not initialized", http.StatusNotFound)
+	}
+
+	return ctx.JSON(http.StatusOK, stats)
 }
 
 // Backup constants

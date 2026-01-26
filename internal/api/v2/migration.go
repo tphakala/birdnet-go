@@ -41,6 +41,7 @@ type MigrationStatusResponse struct {
 	CanRollback         bool       `json:"can_rollback"`
 	IsDualWriteActive   bool       `json:"is_dual_write_active"`
 	ShouldReadFromV2    bool       `json:"should_read_from_v2"`
+	IsV2OnlyMode        bool       `json:"is_v2_only_mode"`
 }
 
 // MigrationStartRequest represents the request to start migration.
@@ -127,9 +128,10 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 				CanPause:          false,
 				CanResume:         false,
 				CanCancel:         false,
-				CanRollback:       true, // Allow rollback from v2-only mode
+				CanRollback:       false, // No rollback for fresh v2 installs
 				IsDualWriteActive: false,
 				ShouldReadFromV2:  true,
+				IsV2OnlyMode:      true,
 			})
 		}
 		c.logWarnIfEnabled("Migration state manager not available",

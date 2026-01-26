@@ -20,22 +20,29 @@ type MySQLConfig struct {
 	Password string
 	Database string
 	Debug    bool
+	// UseV2Prefix controls whether tables use the "v2_" prefix.
+	// Set to true for migration mode (tables coexist with legacy).
+	// Set to false for fresh installs (clean table names).
+	// Default (false) means no prefix for fresh installs.
+	UseV2Prefix bool
 }
 
 // MySQLManager handles the v2 normalized database for MySQL.
 // Unlike SQLite which uses a separate file, MySQL uses table prefixes
 // to coexist with legacy tables in the same database.
 type MySQLManager struct {
-	db       *gorm.DB
-	config   MySQLConfig
-	location string // host:port/database for display
+	db          *gorm.DB
+	config      MySQLConfig
+	location    string // host:port/database for display
+	tablePrefix string // "" for fresh installs, "v2_" for migration
 }
 
 // v2TablePrefix is the prefix used for all v2 tables in MySQL.
 const v2TablePrefix = "v2_"
 
 // NewMySQLManager creates a new v2 MySQL database manager.
-// V2 tables will be created with the "v2_" prefix in the same database as legacy tables.
+// If UseV2Prefix is true, tables will be created with the "v2_" prefix (migration mode).
+// If UseV2Prefix is false, tables use clean names (fresh install mode).
 func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
@@ -45,10 +52,16 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 		logLevel = logger.Info
 	}
 
+	// Determine table prefix based on configuration
+	tablePrefix := ""
+	if cfg.UseV2Prefix {
+		tablePrefix = v2TablePrefix
+	}
+
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logLevel),
 		NamingStrategy: schema.NamingStrategy{
-			TablePrefix: v2TablePrefix, // Add prefix to all v2 tables
+			TablePrefix: tablePrefix, // "" for fresh install, "v2_" for migration
 		},
 	})
 	if err != nil {
@@ -65,9 +78,10 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	return &MySQLManager{
-		db:       db,
-		config:   *cfg,
-		location: fmt.Sprintf("%s:%s/%s", cfg.Host, cfg.Port, cfg.Database),
+		db:          db,
+		config:      *cfg,
+		location:    fmt.Sprintf("%s:%s/%s", cfg.Host, cfg.Port, cfg.Database),
+		tablePrefix: tablePrefix,
 	}, nil
 }
 
@@ -150,26 +164,28 @@ func (m *MySQLManager) Close() error {
 // This should only be called during rollback or cleanup.
 func (m *MySQLManager) Delete() error {
 	// Drop tables in reverse dependency order
+	// Use the stored prefix (could be "" for fresh install or "v2_" for migration)
+	prefix := m.tablePrefix
 	tables := []string{
 		// Core detection tables
-		v2TablePrefix + "detection_locks",
-		v2TablePrefix + "detection_comments",
-		v2TablePrefix + "detection_reviews",
-		v2TablePrefix + "detection_predictions",
-		v2TablePrefix + "detections",
-		v2TablePrefix + "audio_sources",
-		v2TablePrefix + "model_labels",
-		v2TablePrefix + "ai_models",
-		v2TablePrefix + "labels",
-		v2TablePrefix + "migration_state",
-		v2TablePrefix + "migration_dirty_ids",
+		prefix + "detection_locks",
+		prefix + "detection_comments",
+		prefix + "detection_reviews",
+		prefix + "detection_predictions",
+		prefix + "detections",
+		prefix + "audio_sources",
+		prefix + "model_labels",
+		prefix + "ai_models",
+		prefix + "labels",
+		prefix + "migration_state",
+		prefix + "migration_dirty_ids",
 		// Auxiliary tables
-		v2TablePrefix + "hourly_weathers",
-		v2TablePrefix + "daily_events",
-		v2TablePrefix + "image_caches",
-		v2TablePrefix + "threshold_events",
-		v2TablePrefix + "dynamic_thresholds",
-		v2TablePrefix + "notification_histories",
+		prefix + "hourly_weathers",
+		prefix + "daily_events",
+		prefix + "image_caches",
+		prefix + "threshold_events",
+		prefix + "dynamic_thresholds",
+		prefix + "notification_histories",
 	}
 
 	for _, table := range tables {
@@ -184,8 +200,9 @@ func (m *MySQLManager) Delete() error {
 
 // Exists checks if v2 tables exist in the MySQL database.
 func (m *MySQLManager) Exists() bool {
-	// Check if the v2_migration_state table exists as an indicator
-	return m.db.Migrator().HasTable(v2TablePrefix + "migration_state")
+	// Check if the migration_state table exists as an indicator
+	// Use the stored prefix (could be "" for fresh install or "v2_" for migration)
+	return m.db.Migrator().HasTable(m.tablePrefix + "migration_state")
 }
 
 // IsMySQL returns true for MySQL manager.
@@ -200,8 +217,9 @@ func (m *MySQLManager) CheckpointWAL() error {
 }
 
 // TablePrefix returns the table prefix for v2 tables.
+// Returns "" for fresh installs, "v2_" for migration mode.
 func (m *MySQLManager) TablePrefix() string {
-	return v2TablePrefix
+	return m.tablePrefix
 }
 
 // V2TableName returns the full table name with v2 prefix for explicit queries.
