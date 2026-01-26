@@ -43,7 +43,12 @@ type Manager interface {
 // Config holds database configuration for the v2 manager.
 type Config struct {
 	// DataDir is the directory containing database files (SQLite).
+	// Used for migration mode where database is at DataDir/birdnet_v2.db.
 	DataDir string
+	// DirectPath specifies the exact database path to use (for fresh installs).
+	// If set, this path is used directly instead of DataDir/birdnet_v2.db.
+	// This allows fresh installations to use the configured path without _v2 suffix.
+	DirectPath string
 	// Debug enables verbose logging.
 	Debug bool
 	// Logger is the project logger for GORM to use.
@@ -57,9 +62,17 @@ type SQLiteManager struct {
 }
 
 // NewSQLiteManager creates a new v2 SQLite database manager.
-// The database file will be created at DataDir/birdnet_v2.db.
+// If DirectPath is set, uses that exact path (for fresh installs).
+// Otherwise, uses DataDir/birdnet_v2.db (for migration mode).
 func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
-	dbPath := filepath.Join(cfg.DataDir, "birdnet_v2.db")
+	var dbPath string
+	if cfg.DirectPath != "" {
+		// Fresh install: use exact path provided
+		dbPath = cfg.DirectPath
+	} else {
+		// Migration mode: use _v2 suffix
+		dbPath = filepath.Join(cfg.DataDir, "birdnet_v2.db")
+	}
 
 	// Create GORM logger using the adapter if a logger is provided
 	var gormLogger gorm_logger.Interface
