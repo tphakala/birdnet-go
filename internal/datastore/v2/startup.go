@@ -1,7 +1,6 @@
 package v2
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -21,9 +21,9 @@ const dbStartupTimeout = "5s"
 // Startup state checking errors.
 var (
 	// ErrV2DatabaseNotFound indicates the v2 database does not exist.
-	ErrV2DatabaseNotFound = errors.New("v2 database not found")
+	ErrV2DatabaseNotFound = errors.NewStd("v2 database not found")
 	// ErrV2DatabaseCorrupted indicates the v2 database is corrupted or unreadable.
-	ErrV2DatabaseCorrupted = errors.New("v2 database corrupted or unreadable")
+	ErrV2DatabaseCorrupted = errors.NewStd("v2 database corrupted or unreadable")
 )
 
 // StartupState represents the result of checking migration state at startup.

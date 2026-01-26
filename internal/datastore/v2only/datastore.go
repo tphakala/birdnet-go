@@ -4,7 +4,6 @@ package v2only
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -13,6 +12,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 )
@@ -20,9 +20,9 @@ import (
 // Sentinel errors for operations not supported in v2-only mode.
 var (
 	// ErrOperationNotSupported indicates an operation is not available in v2-only mode.
-	ErrOperationNotSupported = errors.New("operation not supported in v2-only mode")
+	ErrOperationNotSupported = errors.NewStd("operation not supported in v2-only mode")
 	// ErrNotImplemented indicates a feature requires implementation.
-	ErrNotImplemented = errors.New("not implemented in v2-only datastore")
+	ErrNotImplemented = errors.NewStd("not implemented in v2-only datastore")
 )
 
 // Datastore implements datastore.Interface using only v2 repositories.
