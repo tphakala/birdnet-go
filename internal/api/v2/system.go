@@ -1312,11 +1312,27 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 }
 
 // GetDatabaseStats handles GET /api/v2/system/database/stats
+// This endpoint returns statistics for the legacy database.
+// In v2-only mode, it returns 200 OK with Type "none" indicating no legacy database.
 func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	c.logInfoIfEnabled("Getting database statistics",
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
+
+	// In v2-only mode, there is no legacy database
+	if isV2OnlyMode {
+		c.logInfoIfEnabled("Running in v2-only mode, no legacy database available",
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
+		)
+		// Return a special response indicating no legacy database
+		return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
+			Type:      "none",
+			Connected: false,
+			Location:  "",
+		})
+	}
 
 	// Check if datastore is available
 	if c.DS == nil {

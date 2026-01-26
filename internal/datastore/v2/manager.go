@@ -89,6 +89,7 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 func (m *SQLiteManager) Initialize() error {
 	// Run GORM auto-migrations for all entities
 	err := m.db.AutoMigrate(
+		// Core detection entities
 		&entities.Label{},
 		&entities.AIModel{},
 		&entities.ModelLabel{},
@@ -100,6 +101,13 @@ func (m *SQLiteManager) Initialize() error {
 		&entities.DetectionLock{},
 		&entities.MigrationState{},
 		&entities.MigrationDirtyID{},
+		// Auxiliary tables
+		&entities.DailyEvents{},
+		&entities.HourlyWeather{},
+		&entities.ImageCache{},
+		&entities.DynamicThreshold{},
+		&entities.ThresholdEvent{},
+		&entities.NotificationHistory{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)

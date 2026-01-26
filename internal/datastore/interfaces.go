@@ -105,6 +105,8 @@ type Interface interface {
 	DeleteNoteComment(commentID string) error
 	SaveDailyEvents(dailyEvents *DailyEvents) error
 	GetDailyEvents(date string) (DailyEvents, error)
+	GetAllDailyEvents() ([]DailyEvents, error)
+	GetAllHourlyWeather() ([]HourlyWeather, error)
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
@@ -778,6 +780,34 @@ func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 			Build()
 	}
 	return dailyEvents, nil
+}
+
+// GetAllDailyEvents retrieves all daily events from the database.
+// Used for migration purposes.
+func (ds *DataStore) GetAllDailyEvents() ([]DailyEvents, error) {
+	var dailyEvents []DailyEvents
+	if err := ds.DB.Order("date ASC").Find(&dailyEvents).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_daily_events").
+			Build()
+	}
+	return dailyEvents, nil
+}
+
+// GetAllHourlyWeather retrieves all hourly weather records from the database.
+// Used for migration purposes.
+func (ds *DataStore) GetAllHourlyWeather() ([]HourlyWeather, error) {
+	var hourlyWeather []HourlyWeather
+	if err := ds.DB.Order("time ASC").Find(&hourlyWeather).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_hourly_weather").
+			Build()
+	}
+	return hourlyWeather, nil
 }
 
 // SaveHourlyWeather saves hourly weather data to the database.

@@ -309,6 +309,14 @@ func (m *mockStore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	}, nil
 }
 
+func (m *mockStore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
+	return nil, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore

@@ -1166,26 +1166,24 @@ func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Conte
 // Returns ErrDetectionNotFound if the detection doesn't exist.
 // Returns ErrNoClipPath if the detection exists but has no clip.
 func (r *detectionRepository) GetClipPath(ctx context.Context, id uint) (string, error) {
-	var clipName *string
+	// Use a struct to properly handle the query result
+	var result struct {
+		ClipName *string `gorm:"column:clip_name"`
+	}
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Select("clip_name").
 		Where("id = ?", id).
-		Pluck("clip_name", &clipName).Error
+		Take(&result).Error
 	if err != nil {
-		return "", err
-	}
-	if clipName == nil {
-		// Check if detection exists at all
-		exists, err := r.Exists(ctx, id)
-		if err != nil {
-			return "", err
-		}
-		if !exists {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", ErrDetectionNotFound
 		}
+		return "", err
+	}
+	if result.ClipName == nil {
 		return "", ErrNoClipPath
 	}
-	return *clipName, nil
+	return *result.ClipName, nil
 }
 
 // Exists checks if a detection with the given ID exists.
