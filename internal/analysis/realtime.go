@@ -147,12 +147,19 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// This allows us to skip the legacy database when migration is complete
 	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
 	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
+	freshInstall := startupState.FreshInstall
 
-	if v2OnlyMode {
+	// Log startup mode detection
+	switch {
+	case v2OnlyMode:
 		GetLogger().Info("migration completed, starting in v2-only mode",
 			logger.String("migration_status", string(startupState.MigrationStatus)),
 			logger.String("operation", "startup_mode_check"))
-	} else {
+	case freshInstall:
+		GetLogger().Info("fresh installation detected, initializing v2 schema",
+			logger.String("database_path", settings.Output.SQLite.Path),
+			logger.String("operation", "startup_mode_check"))
+	default:
 		GetLogger().Debug("migration state check completed",
 			logger.String("migration_status", string(startupState.MigrationStatus)),
 			logger.Bool("v2_available", startupState.V2Available),
@@ -160,12 +167,13 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			logger.String("operation", "startup_mode_check"))
 	}
 
-	// Initialize database access based on migration state
+	// Initialize database access based on startup state
 	var dataStore datastore.Interface
 	var v2OnlyDatastore *v2only.Datastore
 
-	if v2OnlyMode {
-		// V2-only mode: use V2OnlyDatastore
+	switch {
+	case v2OnlyMode:
+		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
 		var err error
 		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
 		if err != nil {
@@ -177,11 +185,32 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			v2OnlyMode = false
 		} else {
 			dataStore = v2OnlyDatastore
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
 			// Notify the API layer that we're in v2-only mode
 			apiv2.SetV2OnlyMode()
 		}
-	} else {
-		// Normal mode: use legacy datastore
+
+	case freshInstall:
+		// Fresh install: create at configured path with v2 schema
+		var err error
+		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger())
+		if err != nil {
+			// Fresh install failed, fall back to legacy mode
+			GetLogger().Warn("fresh install failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_fresh_install"))
+			dataStore = datastore.New(settings)
+		} else {
+			dataStore = v2OnlyDatastore
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+		}
+
+	default:
+		// Legacy mode: use legacy datastore
 		dataStore = datastore.New(settings)
 	}
 
