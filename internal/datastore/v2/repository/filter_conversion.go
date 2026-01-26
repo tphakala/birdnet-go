@@ -207,10 +207,9 @@ case ">":
 	case ">=":
 		v := cf.Value
 		return &v, nil
-	case "<":
-		// Strictly less than
+case "<":
+		// Less than or equal to
 		v := cf.Value
-		return nil, &v
 	case "<=":
 		v := cf.Value
 		return nil, &v
