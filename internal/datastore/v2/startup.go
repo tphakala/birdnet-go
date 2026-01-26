@@ -5,13 +5,17 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"gorm.io/driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
+
+// dbStartupTimeout is the timeout for database startup operations.
+const dbStartupTimeout = "5s"
 
 // Startup state checking errors.
 var (
@@ -112,16 +116,25 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 
 // checkMySQLMigrationState checks migration state for MySQL deployments.
 func checkMySQLMigrationState(settings *conf.Settings) StartupState {
-	// Build MySQL DSN
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		settings.Output.MySQL.Username,
-		settings.Output.MySQL.Password,
-		settings.Output.MySQL.Host,
-		settings.Output.MySQL.Port,
-		settings.Output.MySQL.Database,
-	)
+	// Build MySQL DSN using mysql.Config for proper credential escaping and timeouts
+	cfg := mysql.Config{
+		User:   settings.Output.MySQL.Username,
+		Passwd: settings.Output.MySQL.Password,
+		Net:    "tcp",
+		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName: settings.Output.MySQL.Database,
+		Params: map[string]string{
+			"charset":      "utf8mb4",
+			"parseTime":    "True",
+			"loc":          "Local",
+			"timeout":      dbStartupTimeout,
+			"readTimeout":  dbStartupTimeout,
+			"writeTimeout": dbStartupTimeout,
+		},
+	}
+	dsn := cfg.FormatDSN()
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {

@@ -58,6 +58,9 @@ func New(cfg *Config) (*Datastore, error) {
 	if cfg.Label == nil {
 		return nil, fmt.Errorf("label repository is required")
 	}
+	if cfg.Model == nil {
+		return nil, fmt.Errorf("model repository is required")
+	}
 
 	tz := cfg.Timezone
 	if tz == nil {
@@ -150,12 +153,9 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		return fmt.Errorf("failed to get/create label: %w", err)
 	}
 
-	var modelID uint = 1
-	if ds.model != nil {
-		model, err := ds.model.GetOrCreate(ctx, "BirdNET", "v1.0", entities.ModelTypeBird)
-		if err == nil {
-			modelID = model.ID
-		}
+	model, err := ds.model.GetOrCreate(ctx, "BirdNET", "v2.4", entities.ModelTypeBird)
+	if err != nil {
+		return fmt.Errorf("failed to get/create model: %w", err)
 	}
 
 	// Parse the date string and time string to get Unix timestamp
@@ -176,7 +176,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 
 	det := &entities.Detection{
 		LabelID:    label.ID,
-		ModelID:    modelID,
+		ModelID:    model.ID,
 		DetectedAt: detectedAt,
 		Confidence: note.Confidence,
 	}
@@ -209,7 +209,9 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 			})
 		}
 		if len(preds) > 0 {
-			_ = ds.detection.SavePredictions(ctx, det.ID, preds)
+			if err := ds.detection.SavePredictions(ctx, det.ID, preds); err != nil {
+				return fmt.Errorf("failed to save predictions: %w", err)
+			}
 		}
 	}
 
@@ -873,9 +875,8 @@ func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int
 
 // SearchDetections performs a detection search with filters.
 func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
-	// This method requires more complex conversion logic
-	// For now, return empty results as a placeholder
-	return []datastore.DetectionRecord{}, 0, nil
+	// This method requires complex conversion logic not yet implemented
+	return nil, 0, fmt.Errorf("SearchDetections not implemented in v2-only datastore")
 }
 
 // ============================================================
