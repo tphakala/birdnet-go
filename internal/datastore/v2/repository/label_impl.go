@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
@@ -182,4 +184,89 @@ func (r *labelRepository) Exists(ctx context.Context, id uint) (bool, error) {
 		Where("id = ?", id).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// modelLabelsTable returns the appropriate model_labels table name.
+func (r *labelRepository) modelLabelsTable() string {
+	if r.useV2Prefix {
+		return tableV2ModelLabels
+	}
+	return tableModelLabels
+}
+
+// GetRawLabelForLabel retrieves the raw_label from model_labels for a given model/label pair.
+func (r *labelRepository) GetRawLabelForLabel(ctx context.Context, modelID, labelID uint) (string, error) {
+	var rawLabel string
+	err := r.db.WithContext(ctx).Table(r.modelLabelsTable()).
+		Select("raw_label").
+		Where("model_id = ? AND label_id = ?", modelID, labelID).
+		Limit(1).
+		Scan(&rawLabel).Error
+	if err != nil {
+		return "", err
+	}
+	return rawLabel, nil
+}
+
+// rawLabelBatchSize limits the number of pairs per query to stay under SQL parameter limits.
+// Each pair uses 2 parameters, so 400 pairs = 800 parameters (safely under SQLite's 999 limit).
+const rawLabelBatchSize = 400
+
+// GetRawLabelsForLabels batch retrieves raw_labels from model_labels for multiple model/label pairs.
+// Returns a map keyed by "modelID:labelID" string for efficient lookup.
+// Automatically chunks large requests to avoid SQL parameter limits.
+func (r *labelRepository) GetRawLabelsForLabels(ctx context.Context, pairs []ModelLabelPair) (map[string]string, error) {
+	result := make(map[string]string)
+	if len(pairs) == 0 {
+		return result, nil
+	}
+
+	// Process in chunks to avoid SQL parameter limits
+	for start := 0; start < len(pairs); start += rawLabelBatchSize {
+		end := min(start+rawLabelBatchSize, len(pairs))
+		chunk := pairs[start:end]
+
+		if err := r.fetchRawLabelsChunk(ctx, chunk, result); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+// fetchRawLabelsChunk fetches raw_labels for a single chunk of pairs.
+func (r *labelRepository) fetchRawLabelsChunk(ctx context.Context, pairs []ModelLabelPair, result map[string]string) error {
+	type modelLabelRaw struct {
+		ModelID  uint
+		LabelID  uint
+		RawLabel string
+	}
+	var rows []modelLabelRaw
+
+	// Build WHERE clause: (model_id = ? AND label_id = ?) OR ...
+	args := make([]any, 0, len(pairs)*2)
+	var whereBuilder strings.Builder
+	for i, pair := range pairs {
+		if i > 0 {
+			whereBuilder.WriteString(" OR ")
+		}
+		whereBuilder.WriteString("(model_id = ? AND label_id = ?)")
+		args = append(args, pair.ModelID, pair.LabelID)
+	}
+
+	err := r.db.WithContext(ctx).Table(r.modelLabelsTable()).
+		Select("model_id, label_id, raw_label").
+		Where(whereBuilder.String(), args...).
+		Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+
+	// Add to result map
+	for _, row := range rows {
+		key := fmt.Sprintf("%d:%d", row.ModelID, row.LabelID)
+		result[key] = row.RawLabel
+	}
+
+	return nil
 }
