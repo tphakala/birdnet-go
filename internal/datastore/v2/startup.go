@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,9 +21,9 @@ const dbStartupTimeout = "5s"
 // Startup state checking errors.
 var (
 	// ErrV2DatabaseNotFound indicates the v2 database does not exist.
-	ErrV2DatabaseNotFound = fmt.Errorf("v2 database not found")
+	ErrV2DatabaseNotFound = errors.New("v2 database not found")
 	// ErrV2DatabaseCorrupted indicates the v2 database is corrupted or unreadable.
-	ErrV2DatabaseCorrupted = fmt.Errorf("v2 database corrupted or unreadable")
+	ErrV2DatabaseCorrupted = errors.New("v2 database corrupted or unreadable")
 )
 
 // StartupState represents the result of checking migration state at startup.
@@ -76,7 +77,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
-			Error:           fmt.Errorf("%w: %s", ErrV2DatabaseCorrupted, err.Error()),
+			Error:           fmt.Errorf("%w: %w", ErrV2DatabaseCorrupted, err),
 		}
 	}
 
@@ -87,7 +88,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
-			Error:           fmt.Errorf("%w: failed to get underlying DB: %s", ErrV2DatabaseCorrupted, err.Error()),
+			Error:           fmt.Errorf("%w: failed to get underlying DB: %w", ErrV2DatabaseCorrupted, err),
 		}
 	}
 	defer func() { _ = sqlDB.Close() }()
@@ -99,7 +100,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
 			LegacyRequired:  true,
-			Error:           fmt.Errorf("%w: %s", ErrV2DatabaseCorrupted, err.Error()),
+			Error:           fmt.Errorf("%w: %w", ErrV2DatabaseCorrupted, err),
 		}
 	}
 
@@ -142,7 +143,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
-			Error:           fmt.Errorf("%w: %s", ErrV2DatabaseCorrupted, err.Error()),
+			Error:           fmt.Errorf("%w: %w", ErrV2DatabaseCorrupted, err),
 		}
 	}
 
@@ -152,7 +153,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
 			LegacyRequired:  true,
-			Error:           fmt.Errorf("%w: failed to get underlying DB: %s", ErrV2DatabaseCorrupted, err.Error()),
+			Error:           fmt.Errorf("%w: failed to get underlying DB: %w", ErrV2DatabaseCorrupted, err),
 		}
 	}
 	defer func() { _ = sqlDB.Close() }()
@@ -186,7 +187,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
 			LegacyRequired:  true,
-			Error:           fmt.Errorf("%w: %s", ErrV2DatabaseCorrupted, err.Error()),
+			Error:           fmt.Errorf("%w: %w", ErrV2DatabaseCorrupted, err),
 		}
 	}
 

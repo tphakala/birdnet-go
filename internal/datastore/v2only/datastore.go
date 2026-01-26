@@ -4,6 +4,7 @@ package v2only
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -14,6 +15,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
+)
+
+// Sentinel errors for operations not supported in v2-only mode.
+var (
+	// ErrOperationNotSupported indicates an operation is not available in v2-only mode.
+	ErrOperationNotSupported = errors.New("operation not supported in v2-only mode")
+	// ErrNotImplemented indicates a feature requires implementation.
+	ErrNotImplemented = errors.New("not implemented in v2-only datastore")
 )
 
 // Datastore implements datastore.Interface using only v2 repositories.
@@ -200,7 +209,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		for _, r := range results {
 			predLabel, err := ds.label.GetOrCreate(ctx, r.Species, entities.LabelTypeSpecies)
 			if err != nil {
-				continue
+				return fmt.Errorf("failed to get/create prediction label for %s: %w", r.Species, err)
 			}
 			preds = append(preds, &entities.DetectionPrediction{
 				DetectionID: det.ID,
@@ -674,12 +683,12 @@ func (ds *Datastore) GetDailyEvents(date string) (datastore.DailyEvents, error) 
 
 // GetAllDailyEvents returns all daily events (used for migration, not needed in v2-only mode).
 func (ds *Datastore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
-	return nil, fmt.Errorf("GetAllDailyEvents not supported in v2-only mode")
+	return nil, fmt.Errorf("GetAllDailyEvents: %w", ErrOperationNotSupported)
 }
 
 // GetAllHourlyWeather returns all hourly weather (used for migration, not needed in v2-only mode).
 func (ds *Datastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
-	return nil, fmt.Errorf("GetAllHourlyWeather not supported in v2-only mode")
+	return nil, fmt.Errorf("GetAllHourlyWeather: %w", ErrOperationNotSupported)
 }
 
 // SaveHourlyWeather saves hourly weather data.
@@ -876,7 +885,7 @@ func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int
 // SearchDetections performs a detection search with filters.
 func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	// This method requires complex conversion logic not yet implemented
-	return nil, 0, fmt.Errorf("SearchDetections not implemented in v2-only datastore")
+	return nil, 0, fmt.Errorf("SearchDetections: %w", ErrNotImplemented)
 }
 
 // ============================================================
@@ -911,21 +920,15 @@ func (ds *Datastore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 		return nil, err
 	}
 
-	// Check if locked first
-	locked, err := ds.detection.IsLocked(ctx, uint(id))
-	if err != nil {
-		return nil, err
-	}
-	if !locked {
-		return nil, datastore.ErrNoteLockNotFound
-	}
-
-	// Query the lock directly from the database
+	// Single query to get the lock - check ErrRecordNotFound for missing lock
 	var lock entities.DetectionLock
 	err = ds.manager.DB().WithContext(ctx).
 		Where("detection_id = ?", id).
 		First(&lock).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, datastore.ErrNoteLockNotFound
+		}
 		return nil, err
 	}
 
