@@ -1780,6 +1780,9 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 
 // initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.
 // This allows the application to run without opening the legacy database.
+// It handles both:
+//   - Fresh installs: v2 schema at configured path (no _v2 suffix, no v2_ prefix)
+//   - Post-migration: v2 schema at migration path (_v2 suffix, v2_ prefix)
 func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	log := GetLogger()
 	log.Info("initializing v2-only mode",
@@ -1792,24 +1795,51 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 
 	switch {
 	case settings.Output.SQLite.Enabled:
-		dataDir := datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
-		v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
-			DataDir: dataDir,
-			Debug:   settings.Debug,
-			Logger:  log,
-		})
-		useV2Prefix = false
+		configuredPath := settings.Output.SQLite.Path
+		dataDir := datastoreV2.GetDataDirFromLegacyPath(configuredPath)
+		migrationPath := filepath.Join(dataDir, "birdnet_v2.db")
+
+		// Determine if v2 schema is at configured path (fresh) or migration path
+		if datastoreV2.CheckSQLiteHasV2Schema(configuredPath) {
+			// Fresh install restart: use configured path directly
+			log.Debug("v2 schema found at configured path (fresh install)",
+				logger.String("path", configuredPath))
+			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+				DirectPath: configuredPath,
+				Debug:      settings.Debug,
+				Logger:     log,
+			})
+			useV2Prefix = false
+		} else {
+			// Post-migration: use migration path
+			log.Debug("using migration v2 database path",
+				logger.String("path", migrationPath))
+			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+				DataDir: dataDir,
+				Debug:   settings.Debug,
+				Logger:  log,
+			})
+			useV2Prefix = false
+		}
 
 	case settings.Output.MySQL.Enabled:
+		// Check if fresh v2 tables exist (no prefix) or migration tables (v2_ prefix)
+		isFreshV2 := datastoreV2.CheckMySQLHasFreshV2Schema(settings)
+		useV2Prefix = !isFreshV2
+
+		log.Debug("MySQL v2 mode configuration",
+			logger.Bool("use_v2_prefix", useV2Prefix),
+			logger.Bool("is_fresh_v2", isFreshV2))
+
 		v2Manager, err = datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
-			Host:     settings.Output.MySQL.Host,
-			Port:     settings.Output.MySQL.Port,
-			Username: settings.Output.MySQL.Username,
-			Password: settings.Output.MySQL.Password,
-			Database: settings.Output.MySQL.Database,
-			Debug:    settings.Debug,
+			Host:        settings.Output.MySQL.Host,
+			Port:        settings.Output.MySQL.Port,
+			Username:    settings.Output.MySQL.Username,
+			Password:    settings.Output.MySQL.Password,
+			Database:    settings.Output.MySQL.Database,
+			UseV2Prefix: useV2Prefix,
+			Debug:       settings.Debug,
 		})
-		useV2Prefix = true
 
 	default:
 		return nil, fmt.Errorf("no database configured")

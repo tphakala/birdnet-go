@@ -87,7 +87,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	if !v2MigrationExists {
 		if configuredExists {
 			// Check if the configured database is a fresh v2 database
-			if isV2Database := checkSQLiteHasV2Schema(configuredPath); isV2Database {
+			if isV2Database := CheckSQLiteHasV2Schema(configuredPath); isV2Database {
 				// This is a fresh v2 install (restart after initial fresh install)
 				return StartupState{
 					MigrationStatus: entities.MigrationStatusCompleted,
@@ -305,14 +305,14 @@ func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
 	return !state.LegacyRequired && state.MigrationStatus == entities.MigrationStatusCompleted
 }
 
-// checkSQLiteHasV2Schema checks if a SQLite database at the given path is a fully initialized v2 database.
+// CheckSQLiteHasV2Schema checks if a SQLite database at the given path is a fully initialized v2 database.
 // This is used to distinguish between a legacy database and a fresh v2 database.
 // Returns true only if the database has:
 //  1. The migration_state table (v2 schema indicator)
 //  2. A migration state record with COMPLETED status
 //
 // This prevents false positives from partially initialized databases.
-func checkSQLiteHasV2Schema(dbPath string) bool {
+func CheckSQLiteHasV2Schema(dbPath string) bool {
 	dsn := dbPath + "?mode=ro"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
@@ -344,5 +344,57 @@ func checkSQLiteHasV2Schema(dbPath string) bool {
 	}
 
 	// Only return true if the database is fully initialized (COMPLETED)
+	return state.State == entities.MigrationStatusCompleted
+}
+
+// CheckMySQLHasFreshV2Schema checks if a MySQL database has fresh v2 tables (without v2_ prefix).
+// This is used to determine whether to use v2_ prefix for migration mode or no prefix for fresh installs.
+// Returns true if the fresh v2 schema exists (migration_state table without prefix).
+func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
+	// Build MySQL DSN
+	cfg := mysql.Config{
+		User:   settings.Output.MySQL.Username,
+		Passwd: settings.Output.MySQL.Password,
+		Net:    "tcp",
+		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName: settings.Output.MySQL.Database,
+		Params: map[string]string{
+			"charset":      "utf8mb4",
+			"parseTime":    "True",
+			"loc":          "Local",
+			"timeout":      dbStartupTimeout,
+			"readTimeout":  dbStartupTimeout,
+			"writeTimeout": dbStartupTimeout,
+		},
+	}
+	dsn := cfg.FormatDSN()
+
+	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		return false
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = sqlDB.Close() }()
+
+	// Check if fresh v2 migration_state table exists (no prefix)
+	var tableCount int64
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'migration_state'",
+		settings.Output.MySQL.Database).Scan(&tableCount).Error
+	if err != nil || tableCount == 0 {
+		return false
+	}
+
+	// Check if migration state is COMPLETED
+	var state entities.MigrationState
+	if err := db.Table("migration_state").First(&state).Error; err != nil {
+		return false
+	}
+
 	return state.State == entities.MigrationStatusCompleted
 }

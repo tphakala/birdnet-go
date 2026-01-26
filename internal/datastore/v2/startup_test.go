@@ -167,7 +167,7 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		err = manager.Initialize()
 		require.NoError(t, err)
 
-		// Set migration state to COMPLETED (checkSQLiteHasV2Schema requires this)
+		// Set migration state to COMPLETED (CheckSQLiteHasV2Schema requires this)
 		now := time.Now()
 		state := entities.MigrationState{
 			ID:          1,
@@ -179,14 +179,14 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, manager.Close())
 
-		assert.True(t, checkSQLiteHasV2Schema(dbPath), "should detect v2 schema")
+		assert.True(t, CheckSQLiteHasV2Schema(dbPath), "should detect v2 schema")
 	})
 
 	t.Run("non-existent database", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		dbPath := filepath.Join(tmpDir, "nonexistent.db")
 
-		assert.False(t, checkSQLiteHasV2Schema(dbPath), "should return false for non-existent")
+		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for non-existent")
 	})
 
 	t.Run("empty file", func(t *testing.T) {
@@ -197,6 +197,6 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 
-		assert.False(t, checkSQLiteHasV2Schema(dbPath), "should return false for empty file")
+		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for empty file")
 	})
 }
