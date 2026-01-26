@@ -17,8 +17,9 @@ type SearchFilters struct {
 	// ModelID filters by AI model (optional).
 	ModelID *uint
 
-	// AudioSourceID filters by audio source (optional).
-	AudioSourceID *uint
+	// AudioSourceIDs filters by audio sources (optional).
+	// Supports multiple sources for location filtering.
+	AudioSourceIDs []uint
 
 	// StartTime filters detections on or after this Unix timestamp (optional).
 	StartTime *int64
@@ -26,14 +27,26 @@ type SearchFilters struct {
 	// EndTime filters detections on or before this Unix timestamp (optional).
 	EndTime *int64
 
+	// IncludedHours filters by hour of day (0-23).
+	// Supports non-contiguous ranges (e.g., dawn + night = [5,6,20,21,22,23,0,1,2,3,4]).
+	IncludedHours []int
+
+	// TimezoneOffset is the timezone offset in seconds for hour calculation.
+	// Used with IncludedHours to extract local hour from Unix timestamp.
+	TimezoneOffset int
+
 	// MinConfidence filters detections with confidence >= this value (optional).
 	MinConfidence *float64
 
 	// MaxConfidence filters detections with confidence <= this value (optional).
 	MaxConfidence *float64
 
-	// Verified filters by verification status (optional).
+	// Verified filters by specific verification status (optional).
 	Verified *VerificationFilter
+
+	// IsReviewed filters by review existence (optional).
+	// true = has review with verdict, false = no review or no verdict.
+	IsReviewed *bool
 
 	// IsLocked filters by lock status (optional).
 	IsLocked *bool
@@ -49,6 +62,9 @@ type SearchFilters struct {
 
 	// Offset specifies number of results to skip.
 	Offset int
+
+	// MinID filters to records with ID > MinID (cursor-based pagination).
+	MinID uint
 }
 
 // ModelStats contains statistics for a specific AI model.
