@@ -317,6 +317,26 @@ func (m *mockStore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
 	return nil, nil
 }
 
+// Related data migration methods (Phase 6)
+func (m *mockStore) GetAllReviews() ([]datastore.NoteReview, error)   { return nil, nil }
+func (m *mockStore) GetAllComments() ([]datastore.NoteComment, error) { return nil, nil }
+func (m *mockStore) GetAllLocks() ([]datastore.NoteLock, error)       { return nil, nil }
+func (m *mockStore) GetAllResults() ([]datastore.Results, error)      { return nil, nil }
+
+// Batched migration methods (Phase 6)
+func (m *mockStore) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+func (m *mockStore) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+func (m *mockStore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+func (m *mockStore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+	return nil, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore

@@ -155,6 +155,9 @@ type DetectionRepository interface {
 	// Returns ErrReviewNotFound if no review exists.
 	DeleteReview(ctx context.Context, detectionID uint) error
 
+	// SaveReviewsBatch saves multiple reviews efficiently.
+	SaveReviewsBatch(ctx context.Context, reviews []*entities.DetectionReview) error
+
 	// === Comments ===
 
 	// SaveComment adds a comment to a detection.
@@ -171,6 +174,9 @@ type DetectionRepository interface {
 	// Returns ErrCommentNotFound if not found.
 	DeleteComment(ctx context.Context, commentID uint) error
 
+	// SaveCommentsBatch saves multiple comments efficiently.
+	SaveCommentsBatch(ctx context.Context, comments []*entities.DetectionComment) error
+
 	// === Locks ===
 
 	// Lock prevents modification/deletion of a detection.
@@ -186,6 +192,9 @@ type DetectionRepository interface {
 
 	// GetLockedClipPaths returns clip paths for all locked detections.
 	GetLockedClipPaths(ctx context.Context) ([]string, error)
+
+	// SaveLocksBatch saves multiple locks efficiently.
+	SaveLocksBatch(ctx context.Context, locks []*entities.DetectionLock) error
 
 	// === Analytics (model-aware) ===
 

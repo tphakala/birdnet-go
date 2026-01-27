@@ -49,13 +49,14 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 
 	now := time.Now()
 	updates := map[string]any{
-		"state":            entities.MigrationStatusInitializing,
-		"started_at":       &now,
-		"total_records":    totalRecords,
-		"migrated_records": 0,
-		"last_migrated_id": 0,
-		"error_message":    "",
-		"completed_at":     nil,
+		"state":              entities.MigrationStatusInitializing,
+		"started_at":         &now,
+		"total_records":      totalRecords,
+		"migrated_records":   0,
+		"last_migrated_id":   0,
+		"error_message":      "",
+		"related_data_error": "",
+		"completed_at":       nil,
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -193,13 +194,14 @@ func (m *StateManager) Cancel() error {
 	}
 
 	updates := map[string]any{
-		"state":            entities.MigrationStatusIdle,
-		"started_at":       nil,
-		"completed_at":     nil,
-		"total_records":    0,
-		"migrated_records": 0,
-		"last_migrated_id": 0,
-		"error_message":    "",
+		"state":              entities.MigrationStatusIdle,
+		"started_at":         nil,
+		"completed_at":       nil,
+		"total_records":      0,
+		"migrated_records":   0,
+		"last_migrated_id":   0,
+		"error_message":      "",
+		"related_data_error": "",
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -228,13 +230,14 @@ func (m *StateManager) Rollback() error {
 	defer m.mu.Unlock()
 
 	updates := map[string]any{
-		"state":            entities.MigrationStatusIdle,
-		"started_at":       nil,
-		"completed_at":     nil,
-		"total_records":    0,
-		"migrated_records": 0,
-		"last_migrated_id": 0,
-		"error_message":    "",
+		"state":              entities.MigrationStatusIdle,
+		"started_at":         nil,
+		"completed_at":       nil,
+		"total_records":      0,
+		"migrated_records":   0,
+		"last_migrated_id":   0,
+		"error_message":      "",
+		"related_data_error": "",
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -293,6 +296,15 @@ func (m *StateManager) SetError(errMsg string) error {
 // ClearError clears any error message.
 func (m *StateManager) ClearError() error {
 	return m.SetError("")
+}
+
+// SetRelatedDataError records an error message from related data migration.
+// This tracks errors from migrating reviews, comments, locks, and predictions.
+func (m *StateManager) SetRelatedDataError(errMsg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Update("related_data_error", errMsg).Error
 }
 
 // transitionState is a helper that validates and performs a state transition.

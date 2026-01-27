@@ -309,6 +309,40 @@ func (m *MockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	}, nil
 }
 
+// Migration bulk fetch methods
+func (m *MockDatastore) GetAllReviews() ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetAllComments() ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetAllLocks() ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetAllResults() ([]datastore.Results, error) {
+	return nil, nil
+}
+
+// Batched migration methods
+func (m *MockDatastore) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+	return nil, nil
+}
+
 // createTestProcessor creates a processor with mock datastore for testing
 func createTestProcessor() *Processor {
 	settings := &conf.Settings{}

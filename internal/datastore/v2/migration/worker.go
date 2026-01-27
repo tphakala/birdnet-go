@@ -56,16 +56,17 @@ type rateSample struct {
 
 // Worker performs background migration of legacy records to v2 schema.
 type Worker struct {
-	legacy       datastore.DetectionRepository
-	v2Detection  repository.DetectionRepository
-	labelRepo    repository.LabelRepository
-	modelRepo    repository.ModelRepository
-	sourceRepo   repository.AudioSourceRepository
-	stateManager *datastoreV2.StateManager
-	logger       logger.Logger
-	batchSize    int
-	sleepBetween time.Duration
-	timezone     *time.Location
+	legacy          datastore.DetectionRepository
+	v2Detection     repository.DetectionRepository
+	labelRepo       repository.LabelRepository
+	modelRepo       repository.ModelRepository
+	sourceRepo      repository.AudioSourceRepository
+	stateManager    *datastoreV2.StateManager
+	relatedMigrator *RelatedDataMigrator
+	logger          logger.Logger
+	batchSize       int
+	sleepBetween    time.Duration
+	timezone        *time.Location
 
 	// Control channels
 	pauseCh  chan struct{}
@@ -85,8 +86,8 @@ type Worker struct {
 	rateIndex   int
 
 	// Progress logging tracking
-	lastProgressLog      time.Time
-	recordsSinceLastLog  int64
+	lastProgressLog     time.Time
+	recordsSinceLastLog int64
 }
 
 // WorkerConfig configures the migration worker.
@@ -97,6 +98,7 @@ type WorkerConfig struct {
 	ModelRepo         repository.ModelRepository
 	SourceRepo        repository.AudioSourceRepository
 	StateManager      *datastoreV2.StateManager
+	RelatedMigrator   *RelatedDataMigrator // Optional: migrates reviews, comments, locks, predictions
 	Logger            logger.Logger
 	BatchSize         int
 	Timezone          *time.Location
@@ -154,6 +156,7 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		modelRepo:       cfg.ModelRepo,
 		sourceRepo:      cfg.SourceRepo,
 		stateManager:    cfg.StateManager,
+		relatedMigrator: cfg.RelatedMigrator,
 		logger:          cfg.Logger,
 		batchSize:       batchSize,
 		sleepBetween:    DefaultSleepBetweenBatches,
@@ -454,7 +457,7 @@ func (w *Worker) handleMigratingState(ctx context.Context) runAction {
 	w.resetConsecutiveErrors()
 
 	if batch.migrated == 0 && batch.lastID == 0 {
-		w.transitionToValidation()
+		w.transitionToValidation(ctx)
 		return runActionContinue
 	}
 
@@ -499,7 +502,9 @@ func (w *Worker) pauseOnValidationFailure() {
 
 // transitionToValidation transitions to the validating state.
 // Handles the case where we're still in dual_write by transitioning through migrating first.
-func (w *Worker) transitionToValidation() {
+// The ctx parameter is used as the parent context for related data migration, ensuring
+// cancellation from Start(ctx) propagates to the migration.
+func (w *Worker) transitionToValidation(ctx context.Context) {
 	w.logger.Info("migration complete, starting validation")
 
 	// Get current state to handle dual_write → migrating → validating transition
@@ -516,6 +521,35 @@ func (w *Worker) transitionToValidation() {
 			return
 		}
 		w.logger.Info("transitioned from dual_write to migrating")
+	}
+
+	// Migrate related data (reviews, comments, locks, predictions) before validation
+	if w.relatedMigrator != nil {
+		// Create context that cancels on shutdown OR when caller context is cancelled
+		migrateCtx, cancel := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() {
+			select {
+			case <-w.stopCh:
+				cancel()
+			case <-migrateCtx.Done():
+				// Parent context cancelled
+			case <-done:
+			}
+		}()
+
+		migrateErr := w.relatedMigrator.MigrateAll(migrateCtx)
+		close(done)
+		cancel() // Cleanup context resources
+
+		if migrateErr != nil {
+			w.logger.Error("related data migration failed", logger.Error(migrateErr))
+			// Persist error in state so operators can see it in API/UI
+			if setErr := w.stateManager.SetRelatedDataError(migrateErr.Error()); setErr != nil {
+				w.logger.Warn("failed to persist related data error", logger.Error(setErr))
+			}
+			// Continue to validation - related data is non-fatal but now tracked
+		}
 	}
 
 	// Now transition to validating

@@ -201,6 +201,19 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 func (ctx *TestContext) createWorker(t *testing.T) {
 	t.Helper()
 
+	// Batch size for test migrations - smaller than production for faster tests
+	const testMigrationBatchSize = 100
+
+	// Create related data migrator for reviews, comments, locks, predictions
+	// Use small batch size for faster testing
+	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
+		LegacyStore:   ctx.legacyInterface,
+		DetectionRepo: ctx.DetectionRepo,
+		LabelRepo:     ctx.LabelRepo,
+		Logger:        ctx.Logger,
+		BatchSize:     testMigrationBatchSize,
+	})
+
 	// Create worker with test configuration
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
 		Legacy:          ctx.legacyDetectionRepo,
@@ -209,8 +222,9 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		ModelRepo:       ctx.ModelRepo,
 		SourceRepo:      ctx.SourceRepo,
 		StateManager:    ctx.StateManager,
+		RelatedMigrator: relatedMigrator,
 		Logger:          ctx.Logger,
-		BatchSize:       100, // Smaller batch for tests
+		BatchSize:       testMigrationBatchSize,
 		Timezone:        time.UTC,
 		MaxConsecErrors: 5,
 	})
@@ -709,3 +723,67 @@ func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int
 	return 0, nil
 }
 func (s *testLegacyInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) { return nil, nil } //nolint:nilnil // stub
+
+// Migration bulk fetch methods - query actual database for integration tests
+
+// GetAllReviews returns all note reviews from legacy database.
+func (s *testLegacyInterface) GetAllReviews() ([]datastore.NoteReview, error) {
+	var reviews []datastore.NoteReview
+	err := s.db.Find(&reviews).Error
+	return reviews, err
+}
+
+// GetAllComments returns all note comments from legacy database.
+func (s *testLegacyInterface) GetAllComments() ([]datastore.NoteComment, error) {
+	var comments []datastore.NoteComment
+	err := s.db.Find(&comments).Error
+	return comments, err
+}
+
+// GetAllLocks returns all note locks from legacy database.
+func (s *testLegacyInterface) GetAllLocks() ([]datastore.NoteLock, error) {
+	var locks []datastore.NoteLock
+	err := s.db.Find(&locks).Error
+	return locks, err
+}
+
+// GetAllResults returns all secondary predictions from legacy database.
+func (s *testLegacyInterface) GetAllResults() ([]datastore.Results, error) {
+	var results []datastore.Results
+	err := s.db.Find(&results).Error
+	return results, err
+}
+
+// Batched fetch methods for memory-safe migration
+
+// GetReviewsBatch returns a batch of note reviews for memory-safe migration.
+func (s *testLegacyInterface) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	var reviews []datastore.NoteReview
+	err := s.db.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&reviews).Error
+	return reviews, err
+}
+
+// GetCommentsBatch returns a batch of note comments for memory-safe migration.
+func (s *testLegacyInterface) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	var comments []datastore.NoteComment
+	err := s.db.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&comments).Error
+	return comments, err
+}
+
+// GetLocksBatch returns a batch of note locks for memory-safe migration.
+func (s *testLegacyInterface) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	var locks []datastore.NoteLock
+	err := s.db.Where("note_id > ?", afterID).Order("note_id ASC").Limit(batchSize).Find(&locks).Error
+	return locks, err
+}
+
+// GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
+// Uses keyset pagination: returns results where (note_id > afterNoteID) OR (note_id = afterNoteID AND id > afterResultID).
+func (s *testLegacyInterface) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+	var results []datastore.Results
+	err := s.db.Where(
+		"(note_id > ?) OR (note_id = ? AND id > ?)",
+		afterNoteID, afterNoteID, afterResultID,
+	).Order("note_id ASC, id ASC").Limit(batchSize).Find(&results).Error
+	return results, err
+}

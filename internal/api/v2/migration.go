@@ -29,6 +29,7 @@ type MigrationStatusResponse struct {
 	ProgressPercent     float64    `json:"progress_percent"`
 	LastMigratedID      uint       `json:"last_migrated_id"`
 	ErrorMessage        string     `json:"error_message,omitempty"`
+	RelatedDataError    string     `json:"related_data_error,omitempty"` // Error from related data migration (reviews, comments, locks, predictions)
 	DirtyIDCount        int64      `json:"dirty_id_count"`
 	RecordsPerSecond    float64    `json:"records_per_second,omitempty"`
 	EstimatedRemaining  *string    `json:"estimated_remaining,omitempty"`
@@ -199,6 +200,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		ProgressPercent:    progressPercent,
 		LastMigratedID:     state.LastMigratedID,
 		ErrorMessage:       state.ErrorMessage,
+		RelatedDataError:   state.RelatedDataError,
 		DirtyIDCount:       dirtyCount,
 		RecordsPerSecond:   recordsPerSec,
 		EstimatedRemaining: estimatedRemaining,

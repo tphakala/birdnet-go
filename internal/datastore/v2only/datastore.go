@@ -717,6 +717,46 @@ func (ds *Datastore) GetNoteResults(noteID string) ([]datastore.Results, error) 
 	return results, nil
 }
 
+// GetAllReviews returns all reviews (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetAllReviews() ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+
+// GetAllComments returns all comments (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetAllComments() ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+
+// GetAllLocks returns all locks (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetAllLocks() ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+
+// GetAllResults returns all results (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetAllResults() ([]datastore.Results, error) {
+	return nil, nil
+}
+
+// GetReviewsBatch returns a batch of reviews (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+
+// GetCommentsBatch returns a batch of comments (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+
+// GetLocksBatch returns a batch of locks (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+
+// GetResultsBatch returns a batch of results (for migration - v2only returns empty as no migration needed).
+func (ds *Datastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+	return nil, nil
+}
+
 // SaveNoteComment saves a comment for a note.
 func (ds *Datastore) SaveNoteComment(comment *datastore.NoteComment) error {
 	ctx := context.Background()
