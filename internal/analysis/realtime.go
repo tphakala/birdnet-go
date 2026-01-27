@@ -1728,12 +1728,13 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 
 	// Create the related data migrator for reviews, comments, locks, predictions
 	// Use half of detection batch size since related data tables are typically smaller
+	const relatedDataBatchSize = migration.DefaultBatchSize / 2
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
 		LegacyStore:   ds,
 		DetectionRepo: v2DetectionRepo,
 		LabelRepo:     labelRepo,
 		Logger:        log,
-		BatchSize:     migration.DefaultBatchSize / 2,
+		BatchSize:     relatedDataBatchSize,
 	})
 
 	// Create the migration worker

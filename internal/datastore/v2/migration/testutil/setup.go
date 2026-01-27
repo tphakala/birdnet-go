@@ -201,6 +201,9 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 func (ctx *TestContext) createWorker(t *testing.T) {
 	t.Helper()
 
+	// Batch size for test migrations - smaller than production for faster tests
+	const testMigrationBatchSize = 100
+
 	// Create related data migrator for reviews, comments, locks, predictions
 	// Use small batch size for faster testing
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
@@ -208,7 +211,7 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		DetectionRepo: ctx.DetectionRepo,
 		LabelRepo:     ctx.LabelRepo,
 		Logger:        ctx.Logger,
-		BatchSize:     100,
+		BatchSize:     testMigrationBatchSize,
 	})
 
 	// Create worker with test configuration
@@ -221,7 +224,7 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		StateManager:    ctx.StateManager,
 		RelatedMigrator: relatedMigrator,
 		Logger:          ctx.Logger,
-		BatchSize:       100, // Smaller batch for tests
+		BatchSize:       testMigrationBatchSize,
 		Timezone:        time.UTC,
 		MaxConsecErrors: 5,
 	})

@@ -1244,6 +1244,9 @@ func (ds *DataStore) GetAllResults() ([]Results, error) {
 // GetReviewsBatch returns a batch of note reviews for memory-safe migration.
 // Returns reviews with ID > afterID, limited to batchSize records, ordered by ID ascending.
 func (ds *DataStore) GetReviewsBatch(afterID uint, batchSize int) ([]NoteReview, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
 	var reviews []NoteReview
 	if err := ds.DB.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&reviews).Error; err != nil {
 		return nil, errors.New(err).
@@ -1258,6 +1261,9 @@ func (ds *DataStore) GetReviewsBatch(afterID uint, batchSize int) ([]NoteReview,
 // GetCommentsBatch returns a batch of note comments for memory-safe migration.
 // Returns comments with ID > afterID, limited to batchSize records, ordered by ID ascending.
 func (ds *DataStore) GetCommentsBatch(afterID uint, batchSize int) ([]NoteComment, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
 	var comments []NoteComment
 	if err := ds.DB.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&comments).Error; err != nil {
 		return nil, errors.New(err).
@@ -1272,6 +1278,9 @@ func (ds *DataStore) GetCommentsBatch(afterID uint, batchSize int) ([]NoteCommen
 // GetLocksBatch returns a batch of note locks for memory-safe migration.
 // Returns locks with NoteID > afterID, limited to batchSize records, ordered by NoteID ascending.
 func (ds *DataStore) GetLocksBatch(afterID uint, batchSize int) ([]NoteLock, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
 	var locks []NoteLock
 	if err := ds.DB.Where("note_id > ?", afterID).Order("note_id ASC").Limit(batchSize).Find(&locks).Error; err != nil {
 		return nil, errors.New(err).
@@ -1288,6 +1297,9 @@ func (ds *DataStore) GetLocksBatch(afterID uint, batchSize int) ([]NoteLock, err
 // Uses keyset pagination: returns results where (note_id > afterNoteID) OR
 // (note_id = afterNoteID AND id > afterResultID).
 func (ds *DataStore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]Results, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
 	var results []Results
 	// Keyset pagination: (note_id, id) > (afterNoteID, afterResultID)
 	if err := ds.DB.Where(

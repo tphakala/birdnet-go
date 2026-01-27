@@ -457,7 +457,7 @@ func (w *Worker) handleMigratingState(ctx context.Context) runAction {
 	w.resetConsecutiveErrors()
 
 	if batch.migrated == 0 && batch.lastID == 0 {
-		w.transitionToValidation()
+		w.transitionToValidation(ctx)
 		return runActionContinue
 	}
 
@@ -502,7 +502,9 @@ func (w *Worker) pauseOnValidationFailure() {
 
 // transitionToValidation transitions to the validating state.
 // Handles the case where we're still in dual_write by transitioning through migrating first.
-func (w *Worker) transitionToValidation() {
+// The ctx parameter is used as the parent context for related data migration, ensuring
+// cancellation from Start(ctx) propagates to the migration.
+func (w *Worker) transitionToValidation(ctx context.Context) {
 	w.logger.Info("migration complete, starting validation")
 
 	// Get current state to handle dual_write → migrating → validating transition
@@ -523,25 +525,27 @@ func (w *Worker) transitionToValidation() {
 
 	// Migrate related data (reviews, comments, locks, predictions) before validation
 	if w.relatedMigrator != nil {
-		// Create context that cancels on shutdown
-		ctx, cancel := context.WithCancel(context.Background())
+		// Create context that cancels on shutdown OR when caller context is cancelled
+		migrateCtx, cancel := context.WithCancel(ctx)
 		done := make(chan struct{})
 		go func() {
 			select {
 			case <-w.stopCh:
 				cancel()
+			case <-migrateCtx.Done():
+				// Parent context cancelled
 			case <-done:
 			}
 		}()
 
-		err := w.relatedMigrator.MigrateAll(ctx)
+		migrateErr := w.relatedMigrator.MigrateAll(migrateCtx)
 		close(done)
 		cancel() // Cleanup context resources
 
-		if err != nil {
-			w.logger.Error("related data migration failed", logger.Error(err))
+		if migrateErr != nil {
+			w.logger.Error("related data migration failed", logger.Error(migrateErr))
 			// Persist error in state so operators can see it in API/UI
-			if setErr := w.stateManager.SetRelatedDataError(err.Error()); setErr != nil {
+			if setErr := w.stateManager.SetRelatedDataError(migrateErr.Error()); setErr != nil {
 				w.logger.Warn("failed to persist related data error", logger.Error(setErr))
 			}
 			// Continue to validation - related data is non-fatal but now tracked

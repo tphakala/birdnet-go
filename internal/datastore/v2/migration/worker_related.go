@@ -14,6 +14,10 @@ import (
 // Smaller than detection batch size since related data tables are typically smaller.
 const defaultRelatedDataBatchSize = 500
 
+// secondaryPredictionStartRank is the starting rank for additional predictions in migration.
+// The primary prediction has rank 1 (stored in Detection entity), so secondary predictions start at 2.
+const secondaryPredictionStartRank = 2
+
 // MigrateResult contains statistics from related data migration.
 type MigrateResult struct {
 	ReviewsMigrated     int
@@ -44,10 +48,19 @@ type RelatedDataMigratorConfig struct {
 }
 
 // NewRelatedDataMigrator creates a new related data migrator.
-// Panics if cfg.Logger is nil since logging is required for migration progress.
+// Panics if cfg or required dependencies are nil since they are essential for migration.
 func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator {
+	if cfg == nil {
+		panic("RelatedDataMigratorConfig cannot be nil")
+	}
 	if cfg.Logger == nil {
 		panic("RelatedDataMigratorConfig.Logger cannot be nil")
+	}
+	if cfg.DetectionRepo == nil {
+		panic("RelatedDataMigratorConfig.DetectionRepo cannot be nil")
+	}
+	if cfg.LabelRepo == nil {
+		panic("RelatedDataMigratorConfig.LabelRepo cannot be nil")
 	}
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
@@ -353,7 +366,7 @@ func (m *RelatedDataMigrator) migratePredictions(ctx context.Context) (migrated,
 			// Calculate rank - reset if new note, increment if same note
 			if r.NoteID != currentRankNoteID {
 				currentRankNoteID = r.NoteID
-				currentRank = 2 // Primary prediction is rank 1 (in Detection), additional start at 2
+				currentRank = secondaryPredictionStartRank // Primary prediction is rank 1 (in Detection)
 			} else {
 				currentRank++
 			}
