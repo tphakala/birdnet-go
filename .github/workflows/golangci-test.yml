@@ -194,3 +194,27 @@ jobs:
           name: test-log
           path: /tmp/gotest.log
           if-no-files-found: error
+
+  integration-tests:
+    needs: unit-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run quick integration tests
+        run: |
+          # Run integration tests in short mode with race detection
+          # Short mode skips the large dataset test (10K records)
+          go test -tags=integration -short -race -v ./internal/datastore/v2/migration/... 2>&1
+        timeout-minutes: 5
+
+      - name: Run full integration tests (scheduled only)
+        if: github.event_name == 'schedule' || contains(github.event.pull_request.labels.*.name, 'run-full-integration')
+        run: |
+          # Run full integration tests including large dataset
+          go test -tags=integration -race -v ./internal/datastore/v2/migration/... 2>&1
+        timeout-minutes: 15
