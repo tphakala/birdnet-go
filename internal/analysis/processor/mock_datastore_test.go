@@ -346,6 +346,12 @@ func (m *ActionMockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, erro
 	return &datastore.DatabaseStats{Type: "mock", Connected: true}, nil
 }
 
+// Migration bulk fetch methods
+func (m *ActionMockDatastore) GetAllReviews() ([]datastore.NoteReview, error)   { return nil, nil }
+func (m *ActionMockDatastore) GetAllComments() ([]datastore.NoteComment, error) { return nil, nil }
+func (m *ActionMockDatastore) GetAllLocks() ([]datastore.NoteLock, error)       { return nil, nil }
+func (m *ActionMockDatastore) GetAllResults() ([]datastore.Results, error)      { return nil, nil }
+
 // Compile-time check that ActionMockDatastore implements datastore.Interface
 var _ datastore.Interface = (*ActionMockDatastore)(nil)
 

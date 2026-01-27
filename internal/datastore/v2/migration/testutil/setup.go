@@ -709,3 +709,9 @@ func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int
 	return 0, nil
 }
 func (s *testLegacyInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) { return nil, nil } //nolint:nilnil // stub
+
+// Migration bulk fetch methods
+func (s *testLegacyInterface) GetAllReviews() ([]datastore.NoteReview, error)   { return nil, nil }
+func (s *testLegacyInterface) GetAllComments() ([]datastore.NoteComment, error) { return nil, nil }
+func (s *testLegacyInterface) GetAllLocks() ([]datastore.NoteLock, error)       { return nil, nil }
+func (s *testLegacyInterface) GetAllResults() ([]datastore.Results, error)      { return nil, nil }

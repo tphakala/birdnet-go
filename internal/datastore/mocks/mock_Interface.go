@@ -858,6 +858,63 @@ func (_c *MockInterface_GetActiveNotificationHistory_Call) RunAndReturn(run func
 	return _c
 }
 
+// GetAllComments provides a mock function with no fields
+func (_m *MockInterface) GetAllComments() ([]datastore.NoteComment, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAllComments")
+	}
+
+	var r0 []datastore.NoteComment
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]datastore.NoteComment, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []datastore.NoteComment); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NoteComment)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAllComments_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAllComments'
+type MockInterface_GetAllComments_Call struct {
+	*mock.Call
+}
+
+// GetAllComments is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetAllComments() *MockInterface_GetAllComments_Call {
+	return &MockInterface_GetAllComments_Call{Call: _e.mock.On("GetAllComments")}
+}
+
+func (_c *MockInterface_GetAllComments_Call) Run(run func()) *MockInterface_GetAllComments_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAllComments_Call) Return(_a0 []datastore.NoteComment, _a1 error) *MockInterface_GetAllComments_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAllComments_Call) RunAndReturn(run func() ([]datastore.NoteComment, error)) *MockInterface_GetAllComments_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetAllDailyEvents provides a mock function with no fields
 func (_m *MockInterface) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	ret := _m.Called()
@@ -1158,6 +1215,63 @@ func (_c *MockInterface_GetAllImageCaches_Call) RunAndReturn(run func(string) ([
 	return _c
 }
 
+// GetAllLocks provides a mock function with no fields
+func (_m *MockInterface) GetAllLocks() ([]datastore.NoteLock, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAllLocks")
+	}
+
+	var r0 []datastore.NoteLock
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]datastore.NoteLock, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []datastore.NoteLock); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NoteLock)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAllLocks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAllLocks'
+type MockInterface_GetAllLocks_Call struct {
+	*mock.Call
+}
+
+// GetAllLocks is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetAllLocks() *MockInterface_GetAllLocks_Call {
+	return &MockInterface_GetAllLocks_Call{Call: _e.mock.On("GetAllLocks")}
+}
+
+func (_c *MockInterface_GetAllLocks_Call) Run(run func()) *MockInterface_GetAllLocks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAllLocks_Call) Return(_a0 []datastore.NoteLock, _a1 error) *MockInterface_GetAllLocks_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAllLocks_Call) RunAndReturn(run func() ([]datastore.NoteLock, error)) *MockInterface_GetAllLocks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetAllNotes provides a mock function with no fields
 func (_m *MockInterface) GetAllNotes() ([]datastore.Note, error) {
 	ret := _m.Called()
@@ -1211,6 +1325,120 @@ func (_c *MockInterface_GetAllNotes_Call) Return(_a0 []datastore.Note, _a1 error
 }
 
 func (_c *MockInterface_GetAllNotes_Call) RunAndReturn(run func() ([]datastore.Note, error)) *MockInterface_GetAllNotes_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetAllResults provides a mock function with no fields
+func (_m *MockInterface) GetAllResults() ([]datastore.Results, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAllResults")
+	}
+
+	var r0 []datastore.Results
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]datastore.Results, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []datastore.Results); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.Results)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAllResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAllResults'
+type MockInterface_GetAllResults_Call struct {
+	*mock.Call
+}
+
+// GetAllResults is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetAllResults() *MockInterface_GetAllResults_Call {
+	return &MockInterface_GetAllResults_Call{Call: _e.mock.On("GetAllResults")}
+}
+
+func (_c *MockInterface_GetAllResults_Call) Run(run func()) *MockInterface_GetAllResults_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAllResults_Call) Return(_a0 []datastore.Results, _a1 error) *MockInterface_GetAllResults_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAllResults_Call) RunAndReturn(run func() ([]datastore.Results, error)) *MockInterface_GetAllResults_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetAllReviews provides a mock function with no fields
+func (_m *MockInterface) GetAllReviews() ([]datastore.NoteReview, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAllReviews")
+	}
+
+	var r0 []datastore.NoteReview
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]datastore.NoteReview, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []datastore.NoteReview); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NoteReview)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAllReviews_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAllReviews'
+type MockInterface_GetAllReviews_Call struct {
+	*mock.Call
+}
+
+// GetAllReviews is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetAllReviews() *MockInterface_GetAllReviews_Call {
+	return &MockInterface_GetAllReviews_Call{Call: _e.mock.On("GetAllReviews")}
+}
+
+func (_c *MockInterface_GetAllReviews_Call) Run(run func()) *MockInterface_GetAllReviews_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAllReviews_Call) Return(_a0 []datastore.NoteReview, _a1 error) *MockInterface_GetAllReviews_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAllReviews_Call) RunAndReturn(run func() ([]datastore.NoteReview, error)) *MockInterface_GetAllReviews_Call {
 	_c.Call.Return(run)
 	return _c
 }
