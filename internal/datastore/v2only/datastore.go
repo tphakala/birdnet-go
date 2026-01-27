@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 )
@@ -133,8 +134,14 @@ func (ds *Datastore) Manager() v2.Manager {
 	return ds.manager
 }
 
-// SetSunCalcMetrics sets the SunCalc metrics instance.
-func (ds *Datastore) SetSunCalcMetrics(_ any) {}
+// SetSunCalcMetrics sets the SunCalc metrics instance for observability.
+func (ds *Datastore) SetSunCalcMetrics(suncalcMetrics any) {
+	if ds.suncalc != nil && suncalcMetrics != nil {
+		if m, ok := suncalcMetrics.(*obmetrics.SunCalcMetrics); ok {
+			ds.suncalc.SetMetrics(m)
+		}
+	}
+}
 
 // Optimize performs database optimization.
 func (ds *Datastore) Optimize(ctx context.Context) error {
