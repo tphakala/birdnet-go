@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
 // =============================================================================
@@ -332,7 +333,247 @@ func ResolveLocationsToSourceIDs(ctx context.Context, deps *FilterLookupDeps, lo
 }
 
 // =============================================================================
-// Main Conversion Function
+// SearchFilters (API v2 Search) Conversion Helpers
+// =============================================================================
+
+// parseDateString parses a date string in YYYY-MM-DD format to Unix timestamp.
+// Returns the start of day (00:00:00) in the given timezone.
+// Returns nil if dateStr is empty.
+func parseDateString(dateStr string, tz *time.Location, endOfDay bool) *int64 {
+	if dateStr == "" {
+		return nil
+	}
+	if tz == nil {
+		tz = time.Local
+	}
+
+	t, err := time.ParseInLocation("2006-01-02", dateStr, tz)
+	if err != nil {
+		return nil
+	}
+
+	if endOfDay {
+		t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	}
+
+	ts := t.Unix()
+	return &ts
+}
+
+// singleTimeOfDayToHours converts a single time-of-day string to hour ranges.
+// This is used by ConvertSearchFilters which receives a single string, not a slice.
+// Supported values: "any", "day", "night", "sunrise", "sunset"
+func singleTimeOfDayToHours(timeOfDay string) []int {
+	switch strings.ToLower(timeOfDay) {
+	case "", "any":
+		return nil
+	case "day":
+		// Hours 6-18 (approximate daytime)
+		hours := make([]int, 0, 13)
+		for h := 6; h <= 18; h++ {
+			hours = append(hours, h)
+		}
+		return hours
+	case "night":
+		// Hours 18-23, 0-6 (wrapped)
+		hours := make([]int, 0, 12)
+		for h := 18; h <= 23; h++ {
+			hours = append(hours, h)
+		}
+		for h := 0; h <= 6; h++ {
+			hours = append(hours, h)
+		}
+		return hours
+	case "sunrise":
+		// Hours 5-7 (±1 hour around typical sunrise)
+		return []int{5, 6, 7}
+	case "sunset":
+		// Hours 17-19 (±1 hour around typical sunset)
+		return []int{17, 18, 19}
+	default:
+		return nil
+	}
+}
+
+// ResolveSpeciesToLabelIDsWithCommonName converts a species search string to label IDs.
+// This does a LIKE search on scientific names. The species parameter can be a partial match.
+// Returns nil if species is empty (no filtering).
+// Returns sentinel []uint{0} if species is non-empty but no labels are found.
+func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLookupDeps, species string) ([]uint, error) {
+	if species == "" {
+		return nil, nil
+	}
+	if deps == nil || deps.LabelRepo == nil {
+		return nil, nil
+	}
+
+	// Use the Search method which does LIKE matching on scientific_name
+	labels, err := deps.LabelRepo.Search(ctx, species, 100)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(labels) == 0 {
+		// Species specified but not found - use sentinel to ensure zero results
+		return sentinelNoMatchIDs, nil
+	}
+
+	labelIDs := make([]uint, len(labels))
+	for i, label := range labels {
+		labelIDs[i] = label.ID
+	}
+	return labelIDs, nil
+}
+
+// ResolveDeviceToSourceIDs converts a device name to audio source IDs.
+// Uses LIKE matching on NodeName to support partial matches.
+// Returns nil if device is empty (no filtering).
+// Returns sentinel []uint{0} if device is non-empty but no sources are found.
+func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, device string) ([]uint, error) {
+	if device == "" {
+		return nil, nil
+	}
+	if deps == nil || deps.SourceRepo == nil {
+		return nil, nil
+	}
+
+	// Get all sources and filter by device name (LIKE match)
+	// This is not ideal for large source counts, but source tables are typically small
+	allSources, err := deps.SourceRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	device = strings.ToLower(device)
+	var sourceIDs []uint
+	for _, src := range allSources {
+		if strings.Contains(strings.ToLower(src.NodeName), device) {
+			sourceIDs = append(sourceIDs, src.ID)
+		}
+	}
+
+	if len(sourceIDs) == 0 {
+		return sentinelNoMatchIDs, nil
+	}
+	return sourceIDs, nil
+}
+
+// ConvertSearchFilters converts API-level SearchFilters to repository SearchFilters.
+// This handles the conversion from the /api/v2/search endpoint filters.
+//
+// Parameters:
+//   - ctx: Context for database lookups
+//   - filters: The API-level SearchFilters to convert
+//   - deps: Repository dependencies for entity lookups (can be nil for direct field mappings only)
+//   - tz: Timezone for date/hour calculations (defaults to Local if nil)
+func ConvertSearchFilters(
+	ctx context.Context,
+	filters *datastore.SearchFilters,
+	deps *FilterLookupDeps,
+	tz *time.Location,
+) (*SearchFilters, error) {
+	if filters == nil {
+		return &SearchFilters{}, nil
+	}
+	if tz == nil {
+		tz = time.Local
+	}
+
+	sf := &SearchFilters{
+		// Timezone for hour calculations
+		TimezoneOffset: GetTimezoneOffset(tz),
+	}
+
+	// Date range conversion
+	sf.StartTime = parseDateString(filters.DateStart, tz, false)
+	sf.EndTime = parseDateString(filters.DateEnd, tz, true)
+
+	// Confidence range
+	if filters.ConfidenceMin > 0 {
+		sf.MinConfidence = &filters.ConfidenceMin
+	}
+	if filters.ConfidenceMax > 0 && filters.ConfidenceMax < 1.0 {
+		sf.MaxConfidence = &filters.ConfidenceMax
+	}
+
+	// Verification status
+	// VerifiedOnly: filter to detections with Verified = "correct"
+	// UnverifiedOnly: filter to detections with no review (IsReviewed = false)
+	if filters.VerifiedOnly {
+		verified := VerificationFilter(entities.VerificationCorrect)
+		sf.Verified = &verified
+	} else if filters.UnverifiedOnly {
+		isReviewed := false
+		sf.IsReviewed = &isReviewed
+	}
+
+	// Lock status
+	if filters.LockedOnly {
+		isLocked := true
+		sf.IsLocked = &isLocked
+	} else if filters.UnlockedOnly {
+		isLocked := false
+		sf.IsLocked = &isLocked
+	}
+
+	// TimeOfDay to hours conversion
+	sf.IncludedHours = singleTimeOfDayToHours(filters.TimeOfDay)
+
+	// Sorting
+	// Default sort is by detected_at descending
+	sf.SortBy = SortFieldDetectedAt
+	sf.SortDesc = true
+
+	switch strings.ToLower(filters.SortBy) {
+	case "date_asc":
+		sf.SortBy = SortFieldDetectedAt
+		sf.SortDesc = false
+	case "date_desc", "":
+		sf.SortBy = SortFieldDetectedAt
+		sf.SortDesc = true
+	case "species_asc":
+		// Note: sorting by species requires label join, use label_id as proxy
+		sf.SortBy = "label_id"
+		sf.SortDesc = false
+	case "confidence_desc":
+		sf.SortBy = SortFieldConfidence
+		sf.SortDesc = true
+	}
+
+	// Pagination: convert Page/PerPage to Limit/Offset
+	perPage := filters.PerPage
+	if perPage <= 0 || perPage > 200 {
+		perPage = 20
+	}
+	page := filters.Page
+	if page <= 0 {
+		page = 1
+	}
+	sf.Limit = perPage
+	sf.Offset = (page - 1) * perPage
+
+	// Entity lookups (require deps)
+	if deps != nil {
+		var err error
+
+		// Convert species string to label IDs (LIKE search)
+		sf.LabelIDs, err = ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, filters.Species)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert device string to audio source IDs
+		sf.AudioSourceIDs, err = ResolveDeviceToSourceIDs(ctx, deps, filters.Device)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return sf, nil
+}
+
+// =============================================================================
+// Main Conversion Function (AdvancedSearchFilters)
 // =============================================================================
 
 // ConvertAdvancedFilters converts AdvancedSearchFilters to repository SearchFilters.

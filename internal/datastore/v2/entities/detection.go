@@ -44,6 +44,10 @@ type Detection struct {
 	Model  *AIModel     `gorm:"foreignKey:ModelID"`
 	Label  *Label       `gorm:"foreignKey:LabelID"`
 	Source *AudioSource `gorm:"foreignKey:SourceID;references:ID;constraint:false"`
+
+	// Reverse relationships for preloading (constraint:false to avoid duplicate FKs)
+	Review *DetectionReview `gorm:"foreignKey:DetectionID;constraint:false"`
+	Lock   *DetectionLock   `gorm:"foreignKey:DetectionID;constraint:false"`
 }
 
 // TableName returns the table name for GORM.
