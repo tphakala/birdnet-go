@@ -56,16 +56,17 @@ type rateSample struct {
 
 // Worker performs background migration of legacy records to v2 schema.
 type Worker struct {
-	legacy       datastore.DetectionRepository
-	v2Detection  repository.DetectionRepository
-	labelRepo    repository.LabelRepository
-	modelRepo    repository.ModelRepository
-	sourceRepo   repository.AudioSourceRepository
-	stateManager *datastoreV2.StateManager
-	logger       logger.Logger
-	batchSize    int
-	sleepBetween time.Duration
-	timezone     *time.Location
+	legacy          datastore.DetectionRepository
+	v2Detection     repository.DetectionRepository
+	labelRepo       repository.LabelRepository
+	modelRepo       repository.ModelRepository
+	sourceRepo      repository.AudioSourceRepository
+	stateManager    *datastoreV2.StateManager
+	relatedMigrator *RelatedDataMigrator
+	logger          logger.Logger
+	batchSize       int
+	sleepBetween    time.Duration
+	timezone        *time.Location
 
 	// Control channels
 	pauseCh  chan struct{}
@@ -85,8 +86,8 @@ type Worker struct {
 	rateIndex   int
 
 	// Progress logging tracking
-	lastProgressLog      time.Time
-	recordsSinceLastLog  int64
+	lastProgressLog     time.Time
+	recordsSinceLastLog int64
 }
 
 // WorkerConfig configures the migration worker.
@@ -97,6 +98,7 @@ type WorkerConfig struct {
 	ModelRepo         repository.ModelRepository
 	SourceRepo        repository.AudioSourceRepository
 	StateManager      *datastoreV2.StateManager
+	RelatedMigrator   *RelatedDataMigrator // Optional: migrates reviews, comments, locks, predictions
 	Logger            logger.Logger
 	BatchSize         int
 	Timezone          *time.Location
@@ -154,6 +156,7 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		modelRepo:       cfg.ModelRepo,
 		sourceRepo:      cfg.SourceRepo,
 		stateManager:    cfg.StateManager,
+		relatedMigrator: cfg.RelatedMigrator,
 		logger:          cfg.Logger,
 		batchSize:       batchSize,
 		sleepBetween:    DefaultSleepBetweenBatches,
@@ -516,6 +519,15 @@ func (w *Worker) transitionToValidation() {
 			return
 		}
 		w.logger.Info("transitioned from dual_write to migrating")
+	}
+
+	// Migrate related data (reviews, comments, locks, predictions) before validation
+	if w.relatedMigrator != nil {
+		ctx := context.Background()
+		if err := w.relatedMigrator.MigrateAll(ctx); err != nil {
+			w.logger.Error("related data migration failed", logger.Error(err))
+			// Continue to validation - related data is non-fatal
+		}
 	}
 
 	// Now transition to validating
