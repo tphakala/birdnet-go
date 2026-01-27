@@ -100,6 +100,14 @@ type Interface interface {
 	GetNoteComments(noteID string) ([]NoteComment, error)
 	// GetNoteResults returns the additional predictions for a note.
 	GetNoteResults(noteID string) ([]Results, error)
+	// GetAllReviews returns all note reviews for migration.
+	GetAllReviews() ([]NoteReview, error)
+	// GetAllComments returns all note comments for migration.
+	GetAllComments() ([]NoteComment, error)
+	// GetAllLocks returns all note locks for migration.
+	GetAllLocks() ([]NoteLock, error)
+	// GetAllResults returns all secondary predictions for migration.
+	GetAllResults() ([]Results, error)
 	SaveNoteComment(comment *NoteComment) error
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
@@ -1153,6 +1161,58 @@ func (ds *DataStore) GetNoteResults(noteID string) ([]Results, error) {
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_note_results").
 			Context("note_id", noteID).
+			Build()
+	}
+	return results, nil
+}
+
+// GetAllReviews returns all note reviews for migration.
+func (ds *DataStore) GetAllReviews() ([]NoteReview, error) {
+	var reviews []NoteReview
+	if err := ds.DB.Find(&reviews).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_reviews").
+			Build()
+	}
+	return reviews, nil
+}
+
+// GetAllComments returns all note comments for migration.
+func (ds *DataStore) GetAllComments() ([]NoteComment, error) {
+	var comments []NoteComment
+	if err := ds.DB.Find(&comments).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_comments").
+			Build()
+	}
+	return comments, nil
+}
+
+// GetAllLocks returns all note locks for migration.
+func (ds *DataStore) GetAllLocks() ([]NoteLock, error) {
+	var locks []NoteLock
+	if err := ds.DB.Find(&locks).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_locks").
+			Build()
+	}
+	return locks, nil
+}
+
+// GetAllResults returns all secondary predictions for migration.
+func (ds *DataStore) GetAllResults() ([]Results, error) {
+	var results []Results
+	if err := ds.DB.Find(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_results").
 			Build()
 	}
 	return results, nil
