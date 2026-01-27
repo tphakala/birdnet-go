@@ -878,13 +878,13 @@ func TestConvertSearchFilters(t *testing.T) {
 	t.Run("pagination max per page", func(t *testing.T) {
 		filters := &datastore.SearchFilters{
 			Page:    1,
-			PerPage: 500, // Over max, should be capped to 20
+			PerPage: 500, // Over max, should be capped to 200
 		}
 
 		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
 		require.NoError(t, err)
 
-		assert.Equal(t, 20, result.Limit) // Capped to default
+		assert.Equal(t, 200, result.Limit) // Capped to max, not reset to default
 	})
 
 	t.Run("timezone offset is set", func(t *testing.T) {

@@ -418,7 +418,9 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 		return nil, nil
 	}
 
-	// Use the Search method which does LIKE matching on scientific_name
+	// Use the Search method which does LIKE matching on scientific_name and common_name.
+	// Limit of 100 is intentional for Simple Search API - a broader search term returning
+	// 100+ species indicates the user should refine their search.
 	labels, err := deps.LabelRepo.Search(ctx, species, 100)
 	if err != nil {
 		return nil, err
@@ -564,8 +566,10 @@ func ConvertSearchFilters(
 
 	// Pagination: convert Page/PerPage to Limit/Offset
 	perPage := filters.PerPage
-	if perPage <= 0 || perPage > 200 {
-		perPage = 20
+	if perPage <= 0 {
+		perPage = 20 // default
+	} else if perPage > 200 {
+		perPage = 200 // cap at max
 	}
 	page := filters.Page
 	if page <= 0 {
