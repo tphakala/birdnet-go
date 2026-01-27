@@ -606,3 +606,456 @@ func TestResolveLocationsToSourceIDs(t *testing.T) {
 		assert.Equal(t, []uint{5}, result)
 	})
 }
+
+// =============================================================================
+// singleTimeOfDayToHours Tests
+// =============================================================================
+
+func TestSingleTimeOfDayToHours(t *testing.T) {
+	t.Run("empty or any returns nil", func(t *testing.T) {
+		assert.Nil(t, singleTimeOfDayToHours(""))
+		assert.Nil(t, singleTimeOfDayToHours("any"))
+		assert.Nil(t, singleTimeOfDayToHours("ANY"))
+	})
+
+	t.Run("day returns hours 5-19 (all daylight)", func(t *testing.T) {
+		result := singleTimeOfDayToHours("day")
+		// day = dawn + day + dusk (DawnStartHour through DuskEndHour)
+		expected := []int{5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("night returns hours 20-23 and 0-4", func(t *testing.T) {
+		result := singleTimeOfDayToHours("night")
+		// night = NightStartHour (20) through NightEndHour (4)
+		expected := []int{20, 21, 22, 23, 0, 1, 2, 3, 4}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("sunrise returns hours 5-7", func(t *testing.T) {
+		result := singleTimeOfDayToHours("sunrise")
+		assert.Equal(t, []int{5, 6, 7}, result)
+	})
+
+	t.Run("sunset returns hours 17-19", func(t *testing.T) {
+		result := singleTimeOfDayToHours("sunset")
+		assert.Equal(t, []int{17, 18, 19}, result)
+	})
+
+	t.Run("case insensitive", func(t *testing.T) {
+		assert.NotNil(t, singleTimeOfDayToHours("DAY"))
+		assert.NotNil(t, singleTimeOfDayToHours("Night"))
+		assert.NotNil(t, singleTimeOfDayToHours("SUNRISE"))
+	})
+
+	t.Run("unknown returns nil", func(t *testing.T) {
+		assert.Nil(t, singleTimeOfDayToHours("unknown"))
+		assert.Nil(t, singleTimeOfDayToHours("evening"))
+	})
+}
+
+// =============================================================================
+// parseDateString Tests
+// =============================================================================
+
+func TestParseDateString(t *testing.T) {
+	tz := time.UTC
+
+	t.Run("empty string returns nil without error", func(t *testing.T) {
+		result, err := parseDateString("", tz, false)
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("valid date start of day", func(t *testing.T) {
+		result, err := parseDateString("2024-06-15", tz, false)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		ts := time.Unix(*result, 0).In(tz)
+		assert.Equal(t, 2024, ts.Year())
+		assert.Equal(t, time.June, ts.Month())
+		assert.Equal(t, 15, ts.Day())
+		assert.Equal(t, 0, ts.Hour())
+		assert.Equal(t, 0, ts.Minute())
+		assert.Equal(t, 0, ts.Second())
+	})
+
+	t.Run("valid date end of day", func(t *testing.T) {
+		result, err := parseDateString("2024-06-15", tz, true)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		ts := time.Unix(*result, 0).In(tz)
+		assert.Equal(t, 2024, ts.Year())
+		assert.Equal(t, time.June, ts.Month())
+		assert.Equal(t, 15, ts.Day())
+		assert.Equal(t, 23, ts.Hour())
+		assert.Equal(t, 59, ts.Minute())
+		assert.Equal(t, 59, ts.Second())
+	})
+
+	t.Run("invalid date returns error", func(t *testing.T) {
+		result, err := parseDateString("invalid-date", tz, false)
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "invalid date format")
+
+		result, err = parseDateString("2024/06/15", tz, false) // Wrong format
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("nil timezone uses local", func(t *testing.T) {
+		result, err := parseDateString("2024-06-15", nil, false)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+	})
+}
+
+// =============================================================================
+// ConvertSearchFilters Tests
+// =============================================================================
+
+func TestConvertSearchFilters(t *testing.T) {
+	ctx := context.Background()
+	tz := time.UTC
+
+	t.Run("nil filters returns empty SearchFilters", func(t *testing.T) {
+		result, err := ConvertSearchFilters(ctx, nil, nil, tz)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, &SearchFilters{}, result)
+	})
+
+	t.Run("date range conversion", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			DateStart: "2024-06-01",
+			DateEnd:   "2024-06-30",
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		require.NotNil(t, result.StartTime)
+		require.NotNil(t, result.EndTime)
+
+		startTime := time.Unix(*result.StartTime, 0).In(tz)
+		assert.Equal(t, 1, startTime.Day())
+		assert.Equal(t, 0, startTime.Hour())
+
+		endTime := time.Unix(*result.EndTime, 0).In(tz)
+		assert.Equal(t, 30, endTime.Day())
+		assert.Equal(t, 23, endTime.Hour())
+	})
+
+	t.Run("confidence range conversion", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			ConfidenceMin: 0.7,
+			ConfidenceMax: 0.95,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		require.NotNil(t, result.MinConfidence)
+		require.NotNil(t, result.MaxConfidence)
+		assert.InDelta(t, 0.7, *result.MinConfidence, 0.0001)
+		assert.InDelta(t, 0.95, *result.MaxConfidence, 0.0001)
+	})
+
+	t.Run("verified only sets correct verification filter", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			VerifiedOnly: true,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		require.NotNil(t, result.Verified)
+		assert.Equal(t, VerificationFilter(entities.VerificationCorrect), *result.Verified)
+		assert.Nil(t, result.IsReviewed)
+	})
+
+	t.Run("unverified only sets IsReviewed false", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			UnverifiedOnly: true,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.Nil(t, result.Verified)
+		require.NotNil(t, result.IsReviewed)
+		assert.False(t, *result.IsReviewed)
+	})
+
+	t.Run("locked only sets IsLocked true", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			LockedOnly: true,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		require.NotNil(t, result.IsLocked)
+		assert.True(t, *result.IsLocked)
+	})
+
+	t.Run("unlocked only sets IsLocked false", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			UnlockedOnly: true,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		require.NotNil(t, result.IsLocked)
+		assert.False(t, *result.IsLocked)
+	})
+
+	t.Run("time of day conversion", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			TimeOfDay: "sunrise",
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, []int{5, 6, 7}, result.IncludedHours)
+	})
+
+	t.Run("sort options", func(t *testing.T) {
+		tests := []struct {
+			sortBy   string
+			wantBy   string
+			wantDesc bool
+		}{
+			{"date_desc", SortFieldDetectedAt, true},
+			{"date_asc", SortFieldDetectedAt, false},
+			{"confidence_desc", SortFieldConfidence, true},
+			{"species_asc", "label_id", false},
+			{"", SortFieldDetectedAt, true}, // Default
+		}
+
+		for _, tt := range tests {
+			t.Run("sort_"+tt.sortBy, func(t *testing.T) {
+				filters := &datastore.SearchFilters{SortBy: tt.sortBy}
+				result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantBy, result.SortBy)
+				assert.Equal(t, tt.wantDesc, result.SortDesc)
+			})
+		}
+	})
+
+	t.Run("pagination conversion", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			Page:    3,
+			PerPage: 25,
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, 25, result.Limit)
+		assert.Equal(t, 50, result.Offset) // (3-1) * 25 = 50
+	})
+
+	t.Run("pagination defaults", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			Page:    0, // Invalid, should default to 1
+			PerPage: 0, // Invalid, should default to 20
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, 20, result.Limit)
+		assert.Equal(t, 0, result.Offset) // (1-1) * 20 = 0
+	})
+
+	t.Run("pagination max per page", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			Page:    1,
+			PerPage: 500, // Over max, should be capped to 200
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, 200, result.Limit) // Capped to max, not reset to default
+	})
+
+	t.Run("timezone offset is set", func(t *testing.T) {
+		filters := &datastore.SearchFilters{}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, result.TimezoneOffset) // UTC = 0
+	})
+
+	t.Run("invalid date start returns error", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			DateStart: "invalid-date",
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "invalid date format")
+	})
+
+	t.Run("invalid date end returns error", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			DateStart: "2024-06-01",
+			DateEnd:   "2024/06/30", // Wrong format
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+}
+
+// =============================================================================
+// ResolveSpeciesToLabelIDsWithCommonName Tests
+// =============================================================================
+
+// Extended mock that also implements Search
+type mockLabelRepositoryWithSearch struct {
+	mockLabelRepository
+	searchResults []*entities.Label
+}
+
+func (m *mockLabelRepositoryWithSearch) Search(_ context.Context, _ string, _ int) ([]*entities.Label, error) {
+	return m.searchResults, nil
+}
+
+func TestResolveSpeciesToLabelIDsWithCommonName(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty species returns nil", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "")
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("nil deps returns nil", func(t *testing.T) {
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, nil, "robin")
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("found species returns label IDs", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				searchResults: []*entities.Label{
+					{ID: 1},
+					{ID: 2},
+				},
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "robin")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{1, 2}, result)
+	})
+
+	t.Run("no results returns sentinel", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				searchResults: []*entities.Label{},
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "unknown")
+		require.NoError(t, err)
+		assert.Equal(t, []uint{0}, result)
+	})
+}
+
+// =============================================================================
+// ResolveDeviceToSourceIDs Tests
+// =============================================================================
+
+// Extended mock that also implements GetAll
+type mockAudioSourceRepositoryWithGetAll struct {
+	mockAudioSourceRepository
+	allSources []*entities.AudioSource
+}
+
+func (m *mockAudioSourceRepositoryWithGetAll) GetAll(_ context.Context) ([]*entities.AudioSource, error) {
+	return m.allSources, nil
+}
+
+func TestResolveDeviceToSourceIDs(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty device returns nil", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "")
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("nil deps returns nil", func(t *testing.T) {
+		result, err := ResolveDeviceToSourceIDs(ctx, nil, "node1")
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("found device returns source IDs", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "node1"},
+					{ID: 2, NodeName: "node2"},
+					{ID: 3, NodeName: "mynode1"},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "node1")
+		require.NoError(t, err)
+		// Should match "node1" and "mynode1" (contains "node1")
+		assert.ElementsMatch(t, []uint{1, 3}, result)
+	})
+
+	t.Run("case insensitive matching", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "MyDevice"},
+					{ID: 2, NodeName: "OTHER"},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "mydevice")
+		require.NoError(t, err)
+		assert.Equal(t, []uint{1}, result)
+	})
+
+	t.Run("no matches returns sentinel", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "node1"},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "unknown")
+		require.NoError(t, err)
+		assert.Equal(t, []uint{0}, result)
+	})
+}

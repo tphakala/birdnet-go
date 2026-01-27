@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 )
 
@@ -50,6 +51,7 @@ type Datastore struct {
 	log          logger.Logger
 	metrics      *datastore.Metrics
 	timezone     *time.Location
+	suncalc      *suncalc.SunCalc
 }
 
 // Config configures the Datastore.
@@ -65,6 +67,7 @@ type Config struct {
 	Notification repository.NotificationHistoryRepository
 	Logger       logger.Logger
 	Timezone     *time.Location
+	SunCalc      *suncalc.SunCalc
 }
 
 // New creates a new V2-only Datastore.
@@ -99,6 +102,7 @@ func New(cfg *Config) (*Datastore, error) {
 		notification: cfg.Notification,
 		log:          cfg.Logger,
 		timezone:     tz,
+		suncalc:      cfg.SunCalc,
 	}, nil
 }
 
@@ -402,6 +406,205 @@ func (ds *Datastore) detectionsToNotes(dets []*entities.Detection) []datastore.N
 		notes = append(notes, ds.detectionToNote(det, rawLabelsMap))
 	}
 	return notes
+}
+
+// buildRawLabelsMap batch fetches raw_labels for a set of detections.
+// Returns a map keyed by "{modelID}:{labelID}" for efficient lookup.
+// This avoids N+1 query problems when processing multiple detections.
+func (ds *Datastore) buildRawLabelsMap(ctx context.Context, dets []*entities.Detection) map[string]string {
+	if len(dets) == 0 || ds.label == nil {
+		return make(map[string]string)
+	}
+
+	// Collect unique (modelID, labelID) pairs
+	pairSet := make(map[string]repository.ModelLabelPair)
+	for _, det := range dets {
+		if det.ModelID > 0 && det.LabelID > 0 {
+			key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
+			if _, exists := pairSet[key]; !exists {
+				pairSet[key] = repository.ModelLabelPair{
+					ModelID: det.ModelID,
+					LabelID: det.LabelID,
+				}
+			}
+		}
+	}
+
+	if len(pairSet) == 0 {
+		return make(map[string]string)
+	}
+
+	// Convert to slice for batch fetch
+	pairs := make([]repository.ModelLabelPair, 0, len(pairSet))
+	for _, pair := range pairSet {
+		pairs = append(pairs, pair)
+	}
+
+	// Batch fetch raw_labels
+	rawLabelsMap, err := ds.label.GetRawLabelsForLabels(ctx, pairs)
+	if err != nil {
+		if ds.log != nil {
+			ds.log.Debug("failed to batch fetch raw_labels for common names",
+				logger.Error(err))
+		}
+		return make(map[string]string)
+	}
+
+	return rawLabelsMap
+}
+
+// detectionToRecord converts a v2 Detection to a DetectionRecord.
+// If rawLabelsMap is provided, it will be used to look up the common name
+// instead of making a database query (for batch efficiency).
+func (ds *Datastore) detectionToRecord(det *entities.Detection, rawLabelsMap map[string]string) datastore.DetectionRecord {
+	// Scientific name from Label
+	scientificName := ""
+	if det.Label != nil && det.Label.ScientificName != nil {
+		scientificName = *det.Label.ScientificName
+	}
+
+	// Common name from raw_label (batch lookup) or fallback to scientific name
+	commonName := scientificName
+	if det.ModelID > 0 && det.LabelID > 0 && rawLabelsMap != nil {
+		key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
+		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
+			if extracted := extractCommonName(rawLabel); extracted != "" {
+				commonName = extracted
+			}
+		}
+	}
+
+	// Timestamp conversion
+	timestamp := time.Unix(det.DetectedAt, 0).In(ds.timezone)
+
+	// Coordinates (nil-safe)
+	lat := 0.0
+	lon := 0.0
+	if det.Latitude != nil {
+		lat = *det.Latitude
+	}
+	if det.Longitude != nil {
+		lon = *det.Longitude
+	}
+
+	// Week number from timestamp
+	_, week := timestamp.ISOWeek()
+
+	// Audio file path (nil-safe)
+	audioFilePath := ""
+	hasAudio := false
+	if det.ClipName != nil && *det.ClipName != "" {
+		audioFilePath = *det.ClipName
+		hasAudio = true
+	}
+
+	// Verification status from Review
+	verified := "unverified"
+	if det.Review != nil {
+		switch det.Review.Verified {
+		case entities.VerificationCorrect:
+			verified = "verified"
+		case entities.VerificationFalsePositive:
+			verified = "false_positive"
+		}
+	}
+
+	// Lock status
+	locked := det.Lock != nil
+
+	// Device and Source from Source (the preloaded AudioSource)
+	device := ""
+	source := ""
+	if det.Source != nil {
+		device = det.Source.NodeName
+		source = string(det.Source.SourceType)
+	}
+
+	// TimeOfDay calculation
+	timeOfDay := ds.calculateTimeOfDay(timestamp, lat, lon)
+
+	return datastore.DetectionRecord{
+		ID:             strconv.FormatUint(uint64(det.ID), 10),
+		Timestamp:      timestamp,
+		ScientificName: scientificName,
+		CommonName:     commonName,
+		Confidence:     det.Confidence,
+		Latitude:       lat,
+		Longitude:      lon,
+		Week:           week,
+		AudioFilePath:  audioFilePath,
+		Verified:       verified,
+		Locked:         locked,
+		HasAudio:       hasAudio,
+		Device:         device,
+		Source:         source,
+		TimeOfDay:      timeOfDay,
+	}
+}
+
+// detectionsToRecords converts multiple detections to DetectionRecords.
+// Uses batch fetching of raw_labels to avoid N+1 query problem.
+func (ds *Datastore) detectionsToRecords(dets []*entities.Detection) []datastore.DetectionRecord {
+	if len(dets) == 0 {
+		return []datastore.DetectionRecord{}
+	}
+
+	ctx := context.Background()
+	rawLabelsMap := ds.buildRawLabelsMap(ctx, dets)
+
+	records := make([]datastore.DetectionRecord, 0, len(dets))
+	for _, det := range dets {
+		records = append(records, ds.detectionToRecord(det, rawLabelsMap))
+	}
+	return records
+}
+
+// calculateTimeOfDay determines the time of day category for a detection.
+// Uses the configured SunCalc instance with its observer location.
+// The lat/lon parameters are used only to check if valid coordinates exist.
+func (ds *Datastore) calculateTimeOfDay(timestamp time.Time, lat, lon float64) string {
+	// If no valid coordinates on the detection, we can't determine time of day
+	// Note: We use the global SunCalc's observer location for actual calculation
+	if lat == 0 && lon == 0 {
+		return datastore.TimeOfDayAny
+	}
+
+	// If no SunCalc available, return "any"
+	if ds.suncalc == nil {
+		return datastore.TimeOfDayAny
+	}
+
+	// Get sun events for the detection date using the configured observer location
+	sunEvents, err := ds.suncalc.GetSunEventTimes(timestamp)
+	if err != nil {
+		return datastore.TimeOfDayAny
+	}
+
+	// Define 30-minute window around sunrise/sunset
+	window := 30 * time.Minute
+
+	// Get detection time as string for comparison (format: "15:04:05")
+	detTime := timestamp.Format("15:04:05")
+
+	// Calculate window boundaries
+	sunriseStart := sunEvents.Sunrise.Add(-window).Format("15:04:05")
+	sunriseEnd := sunEvents.Sunrise.Add(window).Format("15:04:05")
+	sunsetStart := sunEvents.Sunset.Add(-window).Format("15:04:05")
+	sunsetEnd := sunEvents.Sunset.Add(window).Format("15:04:05")
+	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
+	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+
+	// Determine time of day
+	switch {
+	case detTime >= sunriseStart && detTime <= sunriseEnd:
+		return datastore.TimeOfDaySunrise
+	case detTime >= sunsetStart && detTime <= sunsetEnd:
+		return datastore.TimeOfDaySunset
+	case detTime >= sunriseTime && detTime < sunsetTime:
+		return datastore.TimeOfDayDay
+	default:
+		return datastore.TimeOfDayNight
+	}
 }
 
 // GetAllNotes retrieves all notes.
@@ -1038,8 +1241,125 @@ func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int
 
 // SearchDetections performs a detection search with filters.
 func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
-	// This method requires complex conversion logic not yet implemented
-	return nil, 0, fmt.Errorf("SearchDetections: %w", ErrNotImplemented)
+	ctx := filters.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Note: Validation is handled by ConvertSearchFilters which applies defaults
+	// for Page, PerPage, ConfidenceMax, etc.
+
+	// Set up dependencies for entity lookups
+	deps := &repository.FilterLookupDeps{
+		LabelRepo:  ds.label,
+		SourceRepo: ds.source,
+	}
+
+	// Convert API-level filters to repository filters
+	repoFilters, err := repository.ConvertSearchFilters(ctx, filters, deps, ds.timezone)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Execute search
+	dets, total, err := ds.detection.Search(ctx, repoFilters)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if len(dets) == 0 {
+		return []datastore.DetectionRecord{}, int(total), nil
+	}
+
+	// Batch load relations for the detections
+	if err := ds.loadDetectionRelations(ctx, dets); err != nil {
+		// Log but continue - some relations may still be usable
+		if ds.log != nil {
+			ds.log.Debug("failed to load some detection relations", logger.Error(err))
+		}
+	}
+
+	// Convert to DetectionRecord format
+	records := ds.detectionsToRecords(dets)
+
+	return records, int(total), nil
+}
+
+// loadDetectionRelations loads Label, Source, Review, and Lock for detections.
+// TODO(performance): This implementation makes individual queries per unique label/source
+// and per detection for reviews/locks. For optimal performance with large result sets,
+// consider adding batch methods to the repository (e.g., GetReviewsByDetectionIDs)
+// or modifying the Search method to use GORM Preload with appropriate table prefixes.
+// For typical search results (20-50 items), the current approach is acceptable.
+func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entities.Detection) error {
+	if len(dets) == 0 {
+		return nil
+	}
+
+	// Collect unique IDs for batch loading
+	detectionIDs := make([]uint, len(dets))
+	labelIDs := make(map[uint]struct{})
+	sourceIDs := make(map[uint]struct{})
+
+	for i, det := range dets {
+		detectionIDs[i] = det.ID
+		labelIDs[det.LabelID] = struct{}{}
+		if det.SourceID != nil {
+			sourceIDs[*det.SourceID] = struct{}{}
+		}
+	}
+
+	// Batch load labels
+	labelMap := make(map[uint]*entities.Label)
+	for labelID := range labelIDs {
+		label, err := ds.label.GetByID(ctx, labelID)
+		if err == nil {
+			labelMap[labelID] = label
+		}
+	}
+
+	// Batch load sources
+	sourceMap := make(map[uint]*entities.AudioSource)
+	for sourceID := range sourceIDs {
+		source, err := ds.source.GetByID(ctx, sourceID)
+		if err == nil {
+			sourceMap[sourceID] = source
+		}
+	}
+
+	// Batch load reviews and locks
+	reviewMap := make(map[uint]*entities.DetectionReview)
+	lockMap := make(map[uint]bool)
+	for _, detID := range detectionIDs {
+		review, err := ds.detection.GetReview(ctx, detID)
+		if err == nil {
+			reviewMap[detID] = review
+		}
+		isLocked, err := ds.detection.IsLocked(ctx, detID)
+		if err == nil && isLocked {
+			lockMap[detID] = true
+		}
+	}
+
+	// Assign loaded relations to detections
+	for _, det := range dets {
+		if label, ok := labelMap[det.LabelID]; ok {
+			det.Label = label
+		}
+		if det.SourceID != nil {
+			if source, ok := sourceMap[*det.SourceID]; ok {
+				det.Source = source
+			}
+		}
+		if review, ok := reviewMap[det.ID]; ok {
+			det.Review = review
+		}
+		if lockMap[det.ID] {
+			det.Lock = &entities.DetectionLock{DetectionID: det.ID}
+		}
+	}
+
+	return nil
 }
 
 // ============================================================

@@ -44,6 +44,13 @@ type Detection struct {
 	Model  *AIModel     `gorm:"foreignKey:ModelID"`
 	Label  *Label       `gorm:"foreignKey:LabelID"`
 	Source *AudioSource `gorm:"foreignKey:SourceID;references:ID;constraint:false"`
+
+	// Reverse relationships for manual assignment (NOT GORM relationships).
+	// These are populated by loadDetectionRelations, not by GORM preload.
+	// We avoid GORM relationship tags here because they interfere with
+	// the CASCADE constraints defined in DetectionReview/DetectionLock.
+	Review *DetectionReview `gorm:"-"`
+	Lock   *DetectionLock   `gorm:"-"`
 }
 
 // TableName returns the table name for GORM.
