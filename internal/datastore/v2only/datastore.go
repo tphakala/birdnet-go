@@ -27,6 +27,15 @@ var (
 	ErrNotImplemented = errors.NewStd("not implemented in v2-only datastore")
 )
 
+// parseID converts a string ID to uint.
+func parseID(id string) (uint, error) {
+	parsed, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid ID %q: %w", id, err)
+	}
+	return uint(parsed), nil
+}
+
 // Datastore implements datastore.Interface using only v2 repositories.
 type Datastore struct {
 	manager      v2.Manager
@@ -239,22 +248,22 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 // Delete deletes a note by ID.
 func (ds *Datastore) Delete(id string) error {
 	ctx := context.Background()
-	noteID, err := strconv.ParseUint(id, 10, 32)
+	noteID, err := parseID(id)
 	if err != nil {
-		return fmt.Errorf("invalid note ID: %w", err)
+		return err
 	}
-	return ds.detection.Delete(ctx, uint(noteID))
+	return ds.detection.Delete(ctx, noteID)
 }
 
 // Get retrieves a note by ID.
 func (ds *Datastore) Get(id string) (datastore.Note, error) {
 	ctx := context.Background()
-	noteID, err := strconv.ParseUint(id, 10, 32)
+	noteID, err := parseID(id)
 	if err != nil {
-		return datastore.Note{}, fmt.Errorf("invalid note ID: %w", err)
+		return datastore.Note{}, err
 	}
 
-	det, err := ds.detection.GetWithRelations(ctx, uint(noteID))
+	det, err := ds.detection.GetWithRelations(ctx, noteID)
 	if err != nil {
 		return datastore.Note{}, err
 	}
@@ -599,39 +608,39 @@ func (ds *Datastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilter
 // GetNoteClipPath retrieves the clip path for a note.
 func (ds *Datastore) GetNoteClipPath(noteID string) (string, error) {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return "", err
 	}
-	return ds.detection.GetClipPath(ctx, uint(id))
+	return ds.detection.GetClipPath(ctx, id)
 }
 
 // DeleteNoteClipPath deletes the clip path for a note.
 func (ds *Datastore) DeleteNoteClipPath(noteID string) error {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return err
 	}
-	return ds.detection.Update(ctx, uint(id), map[string]any{"clip_name": nil})
+	return ds.detection.Update(ctx, id, map[string]any{"clip_name": nil})
 }
 
 // GetNoteReview retrieves the review for a note.
 func (ds *Datastore) GetNoteReview(noteID string) (*datastore.NoteReview, error) {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return nil, err
 	}
 
-	review, err := ds.detection.GetReview(ctx, uint(id))
+	review, err := ds.detection.GetReview(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	return &datastore.NoteReview{
 		ID:        review.ID,
-		NoteID:    uint(id),
+		NoteID:    id,
 		Verified:  string(review.Verified),
 		CreatedAt: review.CreatedAt,
 		UpdatedAt: review.UpdatedAt,
@@ -653,12 +662,12 @@ func (ds *Datastore) SaveNoteReview(review *datastore.NoteReview) error {
 // GetNoteComments retrieves comments for a note.
 func (ds *Datastore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return nil, err
 	}
 
-	comments, err := ds.detection.GetComments(ctx, uint(id))
+	comments, err := ds.detection.GetComments(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -667,7 +676,7 @@ func (ds *Datastore) GetNoteComments(noteID string) ([]datastore.NoteComment, er
 	for _, c := range comments {
 		result = append(result, datastore.NoteComment{
 			ID:        c.ID,
-			NoteID:    uint(id),
+			NoteID:    id,
 			Entry:     c.Entry,
 			CreatedAt: c.CreatedAt,
 			UpdatedAt: c.UpdatedAt,
@@ -680,12 +689,12 @@ func (ds *Datastore) GetNoteComments(noteID string) ([]datastore.NoteComment, er
 // GetNoteResults retrieves additional predictions for a note.
 func (ds *Datastore) GetNoteResults(noteID string) ([]datastore.Results, error) {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return nil, err
 	}
 
-	preds, err := ds.detection.GetPredictions(ctx, uint(id))
+	preds, err := ds.detection.GetPredictions(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -724,21 +733,21 @@ func (ds *Datastore) SaveNoteComment(comment *datastore.NoteComment) error {
 // UpdateNoteComment updates a comment.
 func (ds *Datastore) UpdateNoteComment(commentID, entry string) error {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(commentID, 10, 32)
+	id, err := parseID(commentID)
 	if err != nil {
 		return err
 	}
-	return ds.detection.UpdateComment(ctx, uint(id), entry)
+	return ds.detection.UpdateComment(ctx, id, entry)
 }
 
 // DeleteNoteComment deletes a comment.
 func (ds *Datastore) DeleteNoteComment(commentID string) error {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(commentID, 10, 32)
+	id, err := parseID(commentID)
 	if err != nil {
 		return err
 	}
-	return ds.detection.DeleteComment(ctx, uint(id))
+	return ds.detection.DeleteComment(ctx, id)
 }
 
 // ============================================================
@@ -1000,27 +1009,27 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 // LockNote locks a note.
 func (ds *Datastore) LockNote(noteID string) error {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return err
 	}
-	return ds.detection.Lock(ctx, uint(id))
+	return ds.detection.Lock(ctx, id)
 }
 
 // UnlockNote unlocks a note.
 func (ds *Datastore) UnlockNote(noteID string) error {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return err
 	}
-	return ds.detection.Unlock(ctx, uint(id))
+	return ds.detection.Unlock(ctx, id)
 }
 
 // GetNoteLock retrieves the lock for a note.
 func (ds *Datastore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return nil, err
 	}
@@ -1039,7 +1048,7 @@ func (ds *Datastore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 
 	return &datastore.NoteLock{
 		ID:       lock.ID,
-		NoteID:   uint(id),
+		NoteID:   id,
 		LockedAt: lock.LockedAt,
 	}, nil
 }
@@ -1047,11 +1056,11 @@ func (ds *Datastore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 // IsNoteLocked checks if a note is locked.
 func (ds *Datastore) IsNoteLocked(noteID string) (bool, error) {
 	ctx := context.Background()
-	id, err := strconv.ParseUint(noteID, 10, 32)
+	id, err := parseID(noteID)
 	if err != nil {
 		return false, err
 	}
-	return ds.detection.IsLocked(ctx, uint(id))
+	return ds.detection.IsLocked(ctx, id)
 }
 
 // GetLockedNotesClipPaths retrieves clip paths for locked notes.

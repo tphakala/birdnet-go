@@ -12,6 +12,34 @@ import (
 )
 
 // =============================================================================
+// Time Period Constants
+// =============================================================================
+
+// Time period hour boundaries for filtering.
+// These define the hour ranges for each time-of-day period.
+const (
+	// DawnStartHour is the beginning of dawn (5:00 AM).
+	DawnStartHour = 5
+	// DawnEndHour is the end of dawn (6:59 AM).
+	DawnEndHour = 6
+
+	// DayStartHour is the beginning of day (7:00 AM).
+	DayStartHour = 7
+	// DayEndHour is the end of day (5:59 PM).
+	DayEndHour = 17
+
+	// DuskStartHour is the beginning of dusk (6:00 PM).
+	DuskStartHour = 18
+	// DuskEndHour is the end of dusk (7:59 PM).
+	DuskEndHour = 19
+
+	// NightStartHour is the beginning of night (8:00 PM).
+	NightStartHour = 20
+	// NightEndHour is the end of night (4:59 AM, wraps midnight).
+	NightEndHour = 4
+)
+
+// =============================================================================
 // Time Conversion Helpers
 // =============================================================================
 
@@ -62,24 +90,23 @@ func TimeOfDayToHours(periods []string) []int {
 	for _, period := range periods {
 		switch strings.ToLower(period) {
 		case "dawn":
-			// 5:00 AM - 6:59 AM
-			hourSet[5] = struct{}{}
-			hourSet[6] = struct{}{}
+			for h := DawnStartHour; h <= DawnEndHour; h++ {
+				hourSet[h] = struct{}{}
+			}
 		case "day":
-			// 7:00 AM - 5:59 PM
-			for h := 7; h <= 17; h++ {
+			for h := DayStartHour; h <= DayEndHour; h++ {
 				hourSet[h] = struct{}{}
 			}
 		case "dusk":
-			// 6:00 PM - 7:59 PM
-			hourSet[18] = struct{}{}
-			hourSet[19] = struct{}{}
-		case "night":
-			// 8:00 PM - 4:59 AM (wraps midnight)
-			for h := 20; h <= 23; h++ {
+			for h := DuskStartHour; h <= DuskEndHour; h++ {
 				hourSet[h] = struct{}{}
 			}
-			for h := 0; h <= 4; h++ {
+		case "night":
+			// Night wraps around midnight
+			for h := NightStartHour; h <= 23; h++ {
+				hourSet[h] = struct{}{}
+			}
+			for h := 0; h <= NightEndHour; h++ {
 				hourSet[h] = struct{}{}
 			}
 		}
@@ -228,6 +255,12 @@ case "<":
 // Entity Lookup Helpers
 // =============================================================================
 
+// sentinelNoMatchIDs is returned when filter input is non-empty but resolves
+// to no matching entities. ID 0 never exists in the database, so this ensures
+// queries return zero results. This distinguishes "filter to nothing" from
+// "no filter applied" (nil).
+var sentinelNoMatchIDs = []uint{0}
+
 // FilterLookupDeps contains dependencies for filter entity lookups.
 type FilterLookupDeps struct {
 	LabelRepo  LabelRepository
@@ -261,7 +294,7 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 
 	// If input was non-empty but we found nothing, use sentinel
 	if len(labelIDs) == 0 {
-		return []uint{0}, nil // ID 0 will never exist, ensures zero results
+		return sentinelNoMatchIDs, nil
 	}
 
 	return labelIDs, nil
@@ -292,7 +325,7 @@ func ResolveLocationsToSourceIDs(ctx context.Context, deps *FilterLookupDeps, lo
 
 	// If input was non-empty but we found nothing, use sentinel
 	if len(sourceIDs) == 0 {
-		return []uint{0}, nil // ID 0 will never exist, ensures zero results
+		return sentinelNoMatchIDs, nil
 	}
 
 	return sourceIDs, nil
