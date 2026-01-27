@@ -842,11 +842,14 @@ func (r *detectionRepository) SavePredictions(ctx context.Context, detectionID u
 }
 
 // SavePredictionsBatch stores predictions for multiple detections efficiently.
+// Uses ON CONFLICT DO NOTHING for idempotent migration support.
 func (r *detectionRepository) SavePredictionsBatch(ctx context.Context, preds []*entities.DetectionPrediction) error {
 	if len(preds) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Table(r.predictionsTable()).CreateInBatches(preds, defaultDBBatchSize).Error
+	return r.db.WithContext(ctx).Table(r.predictionsTable()).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(preds, defaultDBBatchSize).Error
 }
 
 // GetPredictions retrieves all predictions for a detection.
