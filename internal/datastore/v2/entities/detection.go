@@ -45,9 +45,12 @@ type Detection struct {
 	Label  *Label       `gorm:"foreignKey:LabelID"`
 	Source *AudioSource `gorm:"foreignKey:SourceID;references:ID;constraint:false"`
 
-	// Reverse relationships for preloading (constraint:false to avoid duplicate FKs)
-	Review *DetectionReview `gorm:"foreignKey:DetectionID;constraint:false"`
-	Lock   *DetectionLock   `gorm:"foreignKey:DetectionID;constraint:false"`
+	// Reverse relationships for manual assignment (NOT GORM relationships).
+	// These are populated by loadDetectionRelations, not by GORM preload.
+	// We avoid GORM relationship tags here because they interfere with
+	// the CASCADE constraints defined in DetectionReview/DetectionLock.
+	Review *DetectionReview `gorm:"-"`
+	Lock   *DetectionLock   `gorm:"-"`
 }
 
 // TableName returns the table name for GORM.
