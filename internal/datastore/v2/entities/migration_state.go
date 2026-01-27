@@ -26,8 +26,9 @@ type MigrationState struct {
 	LastMigratedID  uint  `gorm:"default:0"` // Last legacy notes.id processed
 	TotalRecords    int64 `gorm:"default:0"` // Total records to migrate
 	MigratedRecords int64 `gorm:"default:0"` // Records migrated so far
-	ErrorMessage    string `gorm:"type:text"`
-	UpdatedAt       time.Time `gorm:"autoUpdateTime"`
+	ErrorMessage     string `gorm:"type:text"`
+	RelatedDataError string `gorm:"column:related_data_error;type:text"` // Error from related data migration (reviews, comments, locks, predictions)
+	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
 }
 
 // TableName returns the table name for GORM.

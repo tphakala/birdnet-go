@@ -202,11 +202,13 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 	t.Helper()
 
 	// Create related data migrator for reviews, comments, locks, predictions
+	// Use small batch size for faster testing
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
 		LegacyStore:   ctx.legacyInterface,
 		DetectionRepo: ctx.DetectionRepo,
 		LabelRepo:     ctx.LabelRepo,
 		Logger:        ctx.Logger,
+		BatchSize:     100,
 	})
 
 	// Create worker with test configuration

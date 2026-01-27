@@ -632,11 +632,6 @@ func TestMigration_RelatedData_ReviewsMigrated(t *testing.T) {
 			}
 		}
 	}
-	// TODO: Enable assertion once reviews migration is implemented
-	// For now, just log the count to track progress
-	if reviewedCount == 0 {
-		t.Skip("reviews migration not yet implemented")
-	}
 	assert.Equal(t, 5, reviewedCount, "should have migrated all 5 reviews")
 }
 
@@ -683,10 +678,6 @@ func TestMigration_RelatedData_CommentsMigrated(t *testing.T) {
 	var commentCount int64
 	err = ctx.V2Manager.DB().Model(&entities.DetectionComment{}).Count(&commentCount).Error
 	require.NoError(t, err, "failed to count comments")
-	// TODO: Enable assertion once comments migration is implemented
-	if commentCount == 0 {
-		t.Skip("comments migration not yet implemented")
-	}
 	assert.Equal(t, int64(len(comments)), commentCount, "should have migrated all comments")
 }
 
@@ -727,10 +718,6 @@ func TestMigration_RelatedData_LocksMigrated(t *testing.T) {
 	var lockCount int64
 	err = ctx.V2Manager.DB().Model(&entities.DetectionLock{}).Count(&lockCount).Error
 	require.NoError(t, err, "failed to count locks")
-	// TODO: Enable assertion once locks migration is implemented
-	if lockCount == 0 {
-		t.Skip("locks migration not yet implemented")
-	}
 	assert.Equal(t, int64(3), lockCount, "should have migrated all 3 locks")
 }
 
@@ -778,10 +765,6 @@ func TestMigration_RelatedData_SecondaryPredictionsMigrated(t *testing.T) {
 	var predictionCount int64
 	err = ctx.V2Manager.DB().Model(&entities.DetectionPrediction{}).Count(&predictionCount).Error
 	require.NoError(t, err, "failed to count predictions")
-	// TODO: Enable assertion once predictions migration is implemented
-	if predictionCount == 0 {
-		t.Skip("predictions migration not yet implemented")
-	}
 	assert.Equal(t, int64(len(results)), predictionCount, "should have migrated all predictions")
 }
 

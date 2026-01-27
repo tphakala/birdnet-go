@@ -339,7 +339,7 @@ func (m *MockDatastore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.
 	return nil, nil
 }
 
-func (m *MockDatastore) GetResultsBatch(afterNoteID uint, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+func (m *MockDatastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
 	return nil, nil
 }
 

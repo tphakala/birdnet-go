@@ -540,7 +540,11 @@ func (w *Worker) transitionToValidation() {
 
 		if err != nil {
 			w.logger.Error("related data migration failed", logger.Error(err))
-			// Continue to validation - related data is non-fatal
+			// Persist error in state so operators can see it in API/UI
+			if setErr := w.stateManager.SetRelatedDataError(err.Error()); setErr != nil {
+				w.logger.Warn("failed to persist related data error", logger.Error(setErr))
+			}
+			// Continue to validation - related data is non-fatal but now tracked
 		}
 	}
 
