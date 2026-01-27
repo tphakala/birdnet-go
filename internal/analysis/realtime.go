@@ -1726,17 +1726,26 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	// Create the legacy detection repository
 	legacyRepo := datastore.NewDetectionRepository(ds, time.Local)
 
+	// Create the related data migrator for reviews, comments, locks, predictions
+	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
+		LegacyStore:   ds,
+		DetectionRepo: v2DetectionRepo,
+		LabelRepo:     labelRepo,
+		Logger:        log,
+	})
+
 	// Create the migration worker
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
-		Legacy:       legacyRepo,
-		V2Detection:  v2DetectionRepo,
-		LabelRepo:    labelRepo,
-		ModelRepo:    modelRepo,
-		SourceRepo:   sourceRepo,
-		StateManager: stateManager,
-		Logger:       log,
-		BatchSize:    migration.DefaultBatchSize,
-		Timezone:     time.Local,
+		Legacy:          legacyRepo,
+		V2Detection:     v2DetectionRepo,
+		LabelRepo:       labelRepo,
+		ModelRepo:       modelRepo,
+		SourceRepo:      sourceRepo,
+		StateManager:    stateManager,
+		RelatedMigrator: relatedMigrator,
+		Logger:          log,
+		BatchSize:       migration.DefaultBatchSize,
+		Timezone:        time.Local,
 	})
 	if err != nil {
 		// Close the manager on worker creation failure to avoid resource leak
