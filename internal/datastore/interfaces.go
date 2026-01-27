@@ -127,8 +127,10 @@ type Interface interface {
 	// Returns locks with NoteID > afterID, limited to batchSize records.
 	GetLocksBatch(afterID uint, batchSize int) ([]NoteLock, error)
 	// GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
-	// Returns results with ID > afterID, limited to batchSize records.
-	GetResultsBatch(afterID uint, batchSize int) ([]Results, error)
+	// Results are ordered by (note_id, id) to keep predictions grouped by detection.
+	// Uses keyset pagination: returns results where (note_id > afterNoteID) OR
+	// (note_id = afterNoteID AND id > afterResultID).
+	GetResultsBatch(afterNoteID uint, afterResultID uint, batchSize int) ([]Results, error)
 	SaveNoteComment(comment *NoteComment) error
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
@@ -1282,10 +1284,18 @@ func (ds *DataStore) GetLocksBatch(afterID uint, batchSize int) ([]NoteLock, err
 }
 
 // GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
-// Returns results with ID > afterID, limited to batchSize records, ordered by ID ascending.
-func (ds *DataStore) GetResultsBatch(afterID uint, batchSize int) ([]Results, error) {
+// Results are ordered by (note_id, id) to keep predictions grouped by detection.
+// Uses keyset pagination: returns results where (note_id > afterNoteID) OR
+// (note_id = afterNoteID AND id > afterResultID).
+func (ds *DataStore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]Results, error) {
 	var results []Results
-	if err := ds.DB.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&results).Error; err != nil {
+	// Keyset pagination: (note_id, id) > (afterNoteID, afterResultID)
+	if err := ds.DB.Where(
+		"(note_id > ?) OR (note_id = ? AND id > ?)",
+		afterNoteID, afterNoteID, afterResultID,
+	).Order("note_id ASC, id ASC").
+		Limit(batchSize).
+		Find(&results).Error; err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).

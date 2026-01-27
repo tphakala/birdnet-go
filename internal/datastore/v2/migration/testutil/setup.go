@@ -773,8 +773,12 @@ func (s *testLegacyInterface) GetLocksBatch(afterID uint, batchSize int) ([]data
 }
 
 // GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
-func (s *testLegacyInterface) GetResultsBatch(afterID uint, batchSize int) ([]datastore.Results, error) {
+// Uses keyset pagination: returns results where (note_id > afterNoteID) OR (note_id = afterNoteID AND id > afterResultID).
+func (s *testLegacyInterface) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
 	var results []datastore.Results
-	err := s.db.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&results).Error
+	err := s.db.Where(
+		"(note_id > ?) OR (note_id = ? AND id > ?)",
+		afterNoteID, afterNoteID, afterResultID,
+	).Order("note_id ASC, id ASC").Limit(batchSize).Find(&results).Error
 	return results, err
 }

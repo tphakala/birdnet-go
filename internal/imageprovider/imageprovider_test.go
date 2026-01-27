@@ -333,7 +333,7 @@ func (m *mockStore) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.N
 func (m *mockStore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
 	return nil, nil
 }
-func (m *mockStore) GetResultsBatch(afterID uint, batchSize int) ([]datastore.Results, error) {
+func (m *mockStore) GetResultsBatch(afterNoteID uint, afterResultID uint, batchSize int) ([]datastore.Results, error) {
 	return nil, nil
 }
 

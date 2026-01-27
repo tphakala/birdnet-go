@@ -2931,9 +2931,9 @@ func (_c *MockInterface_GetRecentThresholdEvents_Call) RunAndReturn(run func(int
 	return _c
 }
 
-// GetResultsBatch provides a mock function with given fields: afterID, batchSize
-func (_m *MockInterface) GetResultsBatch(afterID uint, batchSize int) ([]datastore.Results, error) {
-	ret := _m.Called(afterID, batchSize)
+// GetResultsBatch provides a mock function with given fields: afterNoteID, afterResultID, batchSize
+func (_m *MockInterface) GetResultsBatch(afterNoteID uint, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+	ret := _m.Called(afterNoteID, afterResultID, batchSize)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetResultsBatch")
@@ -2941,19 +2941,19 @@ func (_m *MockInterface) GetResultsBatch(afterID uint, batchSize int) ([]datasto
 
 	var r0 []datastore.Results
 	var r1 error
-	if rf, ok := ret.Get(0).(func(uint, int) ([]datastore.Results, error)); ok {
-		return rf(afterID, batchSize)
+	if rf, ok := ret.Get(0).(func(uint, uint, int) ([]datastore.Results, error)); ok {
+		return rf(afterNoteID, afterResultID, batchSize)
 	}
-	if rf, ok := ret.Get(0).(func(uint, int) []datastore.Results); ok {
-		r0 = rf(afterID, batchSize)
+	if rf, ok := ret.Get(0).(func(uint, uint, int) []datastore.Results); ok {
+		r0 = rf(afterNoteID, afterResultID, batchSize)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.Results)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(uint, int) error); ok {
-		r1 = rf(afterID, batchSize)
+	if rf, ok := ret.Get(1).(func(uint, uint, int) error); ok {
+		r1 = rf(afterNoteID, afterResultID, batchSize)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2967,15 +2967,16 @@ type MockInterface_GetResultsBatch_Call struct {
 }
 
 // GetResultsBatch is a helper method to define mock.On call
-//   - afterID uint
+//   - afterNoteID uint
+//   - afterResultID uint
 //   - batchSize int
-func (_e *MockInterface_Expecter) GetResultsBatch(afterID interface{}, batchSize interface{}) *MockInterface_GetResultsBatch_Call {
-	return &MockInterface_GetResultsBatch_Call{Call: _e.mock.On("GetResultsBatch", afterID, batchSize)}
+func (_e *MockInterface_Expecter) GetResultsBatch(afterNoteID interface{}, afterResultID interface{}, batchSize interface{}) *MockInterface_GetResultsBatch_Call {
+	return &MockInterface_GetResultsBatch_Call{Call: _e.mock.On("GetResultsBatch", afterNoteID, afterResultID, batchSize)}
 }
 
-func (_c *MockInterface_GetResultsBatch_Call) Run(run func(afterID uint, batchSize int)) *MockInterface_GetResultsBatch_Call {
+func (_c *MockInterface_GetResultsBatch_Call) Run(run func(afterNoteID uint, afterResultID uint, batchSize int)) *MockInterface_GetResultsBatch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(uint), args[1].(int))
+		run(args[0].(uint), args[1].(uint), args[2].(int))
 	})
 	return _c
 }
@@ -2985,7 +2986,7 @@ func (_c *MockInterface_GetResultsBatch_Call) Return(_a0 []datastore.Results, _a
 	return _c
 }
 
-func (_c *MockInterface_GetResultsBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.Results, error)) *MockInterface_GetResultsBatch_Call {
+func (_c *MockInterface_GetResultsBatch_Call) RunAndReturn(run func(uint, uint, int) ([]datastore.Results, error)) *MockInterface_GetResultsBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }

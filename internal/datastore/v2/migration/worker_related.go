@@ -3,7 +3,6 @@ package migration
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -33,7 +32,11 @@ type RelatedDataMigratorConfig struct {
 }
 
 // NewRelatedDataMigrator creates a new related data migrator.
+// Panics if cfg.Logger is nil since logging is required for migration progress.
 func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator {
+	if cfg.Logger == nil {
+		panic("RelatedDataMigratorConfig.Logger cannot be nil")
+	}
 	return &RelatedDataMigrator{
 		legacyStore:   cfg.LegacyStore,
 		detectionRepo: cfg.DetectionRepo,
@@ -81,7 +84,7 @@ func (m *RelatedDataMigrator) MigrateAll(ctx context.Context) error {
 
 // migrateReviews migrates all note reviews to detection reviews using batched retrieval.
 func (m *RelatedDataMigrator) migrateReviews(ctx context.Context) error {
-	var totalMigrated, totalProcessed int
+	var totalMigrated int
 	var lastID uint
 
 	for {
@@ -113,14 +116,15 @@ func (m *RelatedDataMigrator) migrateReviews(ctx context.Context) error {
 			lastID = r.ID // Track last ID for next batch
 		}
 
-		// Save batch
+		// Save batch - errors are logged but not fatal since:
+		// 1. ON CONFLICT DO NOTHING handles duplicates from re-runs
+		// 2. Individual batch failures don't invalidate other batches
+		// 3. Migration can be re-run to catch any missed records
 		if err := m.detectionRepo.SaveReviewsBatch(ctx, v2Reviews); err != nil {
 			m.logger.Warn("failed to save reviews batch", logger.Error(err))
-			// Continue with next batch - ON CONFLICT DO NOTHING handles duplicates
 		}
 
-		totalProcessed += len(batch)
-		totalMigrated += len(v2Reviews)
+		totalMigrated += len(batch)
 
 		// If we got fewer than batch size, we're done
 		if len(batch) < relatedDataBatchSize {
@@ -128,10 +132,9 @@ func (m *RelatedDataMigrator) migrateReviews(ctx context.Context) error {
 		}
 	}
 
-	if totalProcessed > 0 {
+	if totalMigrated > 0 {
 		m.logger.Info("reviews migration completed",
-			logger.Int("processed", totalProcessed),
-			logger.Int("attempted", totalMigrated))
+			logger.Int("migrated", totalMigrated))
 	} else {
 		m.logger.Debug("no reviews to migrate")
 	}
@@ -140,7 +143,7 @@ func (m *RelatedDataMigrator) migrateReviews(ctx context.Context) error {
 
 // migrateComments migrates all note comments to detection comments using batched retrieval.
 func (m *RelatedDataMigrator) migrateComments(ctx context.Context) error {
-	var totalMigrated, totalProcessed int
+	var totalMigrated int
 	var lastID uint
 
 	for {
@@ -172,23 +175,24 @@ func (m *RelatedDataMigrator) migrateComments(ctx context.Context) error {
 			lastID = c.ID // Track last ID for next batch
 		}
 
-		// Save batch
+		// Save batch - errors are logged but not fatal since:
+		// 1. ON CONFLICT DO NOTHING handles duplicates from re-runs
+		// 2. Individual batch failures don't invalidate other batches
+		// 3. Migration can be re-run to catch any missed records
 		if err := m.detectionRepo.SaveCommentsBatch(ctx, v2Comments); err != nil {
 			m.logger.Warn("failed to save comments batch", logger.Error(err))
 		}
 
-		totalProcessed += len(batch)
-		totalMigrated += len(v2Comments)
+		totalMigrated += len(batch)
 
 		if len(batch) < relatedDataBatchSize {
 			break
 		}
 	}
 
-	if totalProcessed > 0 {
+	if totalMigrated > 0 {
 		m.logger.Info("comments migration completed",
-			logger.Int("processed", totalProcessed),
-			logger.Int("attempted", totalMigrated))
+			logger.Int("migrated", totalMigrated))
 	} else {
 		m.logger.Debug("no comments to migrate")
 	}
@@ -197,7 +201,7 @@ func (m *RelatedDataMigrator) migrateComments(ctx context.Context) error {
 
 // migrateLocks migrates all note locks to detection locks using batched retrieval.
 func (m *RelatedDataMigrator) migrateLocks(ctx context.Context) error {
-	var totalMigrated, totalProcessed int
+	var totalMigrated int
 	var lastNoteID uint
 
 	for {
@@ -227,23 +231,24 @@ func (m *RelatedDataMigrator) migrateLocks(ctx context.Context) error {
 			lastNoteID = l.NoteID // Track last NoteID for next batch
 		}
 
-		// Save batch
+		// Save batch - errors are logged but not fatal since:
+		// 1. ON CONFLICT DO NOTHING handles duplicates from re-runs
+		// 2. Individual batch failures don't invalidate other batches
+		// 3. Migration can be re-run to catch any missed records
 		if err := m.detectionRepo.SaveLocksBatch(ctx, v2Locks); err != nil {
 			m.logger.Warn("failed to save locks batch", logger.Error(err))
 		}
 
-		totalProcessed += len(batch)
-		totalMigrated += len(v2Locks)
+		totalMigrated += len(batch)
 
 		if len(batch) < relatedDataBatchSize {
 			break
 		}
 	}
 
-	if totalProcessed > 0 {
+	if totalMigrated > 0 {
 		m.logger.Info("locks migration completed",
-			logger.Int("processed", totalProcessed),
-			logger.Int("attempted", totalMigrated))
+			logger.Int("migrated", totalMigrated))
 	} else {
 		m.logger.Debug("no locks to migrate")
 	}
@@ -251,9 +256,17 @@ func (m *RelatedDataMigrator) migrateLocks(ctx context.Context) error {
 }
 
 // migratePredictions migrates all results to detection predictions using batched retrieval.
+// Uses keyset pagination with dual cursor (note_id, id) to keep predictions grouped by detection,
+// ensuring correct rank assignment even when predictions span multiple batches.
 func (m *RelatedDataMigrator) migratePredictions(ctx context.Context) error {
 	var totalMigrated, totalProcessed, totalSkipped int
-	var lastID uint
+
+	// Keyset pagination cursors - dual cursor ensures correct ordering
+	var lastNoteID, lastResultID uint
+
+	// Rank tracking - only need current state since data is contiguous by note_id
+	var currentRankNoteID uint
+	var currentRank int
 
 	for {
 		// Check context cancellation
@@ -261,57 +274,58 @@ func (m *RelatedDataMigrator) migratePredictions(ctx context.Context) error {
 			return fmt.Errorf("context cancelled during predictions migration: %w", err)
 		}
 
-		// Fetch batch
-		batch, err := m.legacyStore.GetResultsBatch(lastID, relatedDataBatchSize)
+		// Fetch batch using keyset pagination with dual cursor
+		batch, err := m.legacyStore.GetResultsBatch(lastNoteID, lastResultID, relatedDataBatchSize)
 		if err != nil {
-			return fmt.Errorf("failed to fetch results batch (afterID=%d): %w", lastID, err)
+			return fmt.Errorf("failed to fetch results batch (afterNoteID=%d, afterResultID=%d): %w",
+				lastNoteID, lastResultID, err)
 		}
 
 		if len(batch) == 0 {
 			break // No more data
 		}
 
-		// Group results by NoteID to assign proper ranks
-		resultsByNote := make(map[uint][]datastore.Results)
-		for i := range batch {
-			r := &batch[i]
-			resultsByNote[r.NoteID] = append(resultsByNote[r.NoteID], *r)
-			lastID = r.ID // Track last ID for next batch
-		}
-
-		// Sort note IDs for deterministic ordering
-		noteIDs := make([]uint, 0, len(resultsByNote))
-		for noteID := range resultsByNote {
-			noteIDs = append(noteIDs, noteID)
-		}
-		slices.Sort(noteIDs)
-
 		// Convert to V2 entities
 		v2Predictions := make([]*entities.DetectionPrediction, 0, len(batch))
 		var batchSkipped int
-		for _, noteID := range noteIDs {
-			results := resultsByNote[noteID]
-			for rank, r := range results {
-				// Resolve label for species name
-				label, err := m.labelRepo.GetOrCreate(ctx, r.Species, entities.LabelTypeSpecies)
-				if err != nil {
-					m.logger.Debug("failed to resolve label for prediction",
-						logger.String("species", r.Species),
-						logger.Error(err))
-					batchSkipped++
-					continue
-				}
 
-				v2Predictions = append(v2Predictions, &entities.DetectionPrediction{
-					DetectionID: noteID,
-					LabelID:     label.ID,
-					Confidence:  float64(r.Confidence),
-					Rank:        rank + 2, // Primary is rank 1 (in Detection), additional start at 2
-				})
+		for i := range batch {
+			r := &batch[i]
+
+			// Update pagination cursors
+			lastNoteID = r.NoteID
+			lastResultID = r.ID
+
+			// Calculate rank - reset if new note, increment if same note
+			if r.NoteID != currentRankNoteID {
+				currentRankNoteID = r.NoteID
+				currentRank = 2 // Primary prediction is rank 1 (in Detection), additional start at 2
+			} else {
+				currentRank++
 			}
+
+			// Resolve label for species name
+			label, err := m.labelRepo.GetOrCreate(ctx, r.Species, entities.LabelTypeSpecies)
+			if err != nil {
+				m.logger.Debug("failed to resolve label for prediction",
+					logger.String("species", r.Species),
+					logger.Error(err))
+				batchSkipped++
+				continue
+			}
+
+			v2Predictions = append(v2Predictions, &entities.DetectionPrediction{
+				DetectionID: r.NoteID,
+				LabelID:     label.ID,
+				Confidence:  float64(r.Confidence),
+				Rank:        currentRank,
+			})
 		}
 
-		// Save batch
+		// Save batch - errors are logged but not fatal since:
+		// 1. ON CONFLICT DO NOTHING handles duplicates from re-runs
+		// 2. Individual batch failures don't invalidate other batches
+		// 3. Migration can be re-run to catch any missed records
 		if err := m.detectionRepo.SavePredictionsBatch(ctx, v2Predictions); err != nil {
 			m.logger.Warn("failed to save predictions batch", logger.Error(err))
 		}

@@ -362,7 +362,7 @@ func (m *ActionMockDatastore) GetCommentsBatch(_ uint, _ int) ([]datastore.NoteC
 func (m *ActionMockDatastore) GetLocksBatch(_ uint, _ int) ([]datastore.NoteLock, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetResultsBatch(_ uint, _ int) ([]datastore.Results, error) {
+func (m *ActionMockDatastore) GetResultsBatch(_, _ uint, _ int) ([]datastore.Results, error) {
 	return nil, nil
 }
 

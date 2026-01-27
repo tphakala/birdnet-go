@@ -753,7 +753,7 @@ func (ds *Datastore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.Not
 }
 
 // GetResultsBatch returns a batch of results (for migration - v2only returns empty as no migration needed).
-func (ds *Datastore) GetResultsBatch(afterID uint, batchSize int) ([]datastore.Results, error) {
+func (ds *Datastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
 	return nil, nil
 }
 
