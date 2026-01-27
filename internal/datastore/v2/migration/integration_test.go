@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration/testutil"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
 // ============================================================================
@@ -112,16 +113,20 @@ func TestMigration_EndToEnd_HappyPath(t *testing.T) {
 	thresholds := make([]datastore.DynamicThreshold, 5)
 	for i := range thresholds {
 		thresholds[i] = testutil.NewDynamicThresholdBuilder().
+			WithID(uint(i + 1)). //nolint:gosec // G115: test data uses small values
 			WithSpeciesName("test_species_" + string(rune('a'+i))).
 			Build()
 	}
 	err = ctx.Seeder.SeedDynamicThresholds(thresholds)
 	require.NoError(t, err, "failed to seed thresholds")
 
-	// Seed image caches
+	// Seed image caches (unique scientific name required for unique constraint)
 	imageCaches := make([]datastore.ImageCache, 10)
 	for i := range imageCaches {
-		imageCaches[i] = testutil.NewImageCacheBuilder().Build()
+		imageCaches[i] = testutil.NewImageCacheBuilder().
+			WithID(uint(i + 1)).                                           //nolint:gosec // G115: test data uses small values
+			WithScientificName("ImageCache Species " + string(rune('A'+i))). // Unique per entry
+			Build()
 	}
 	err = ctx.Seeder.SeedImageCaches(imageCaches)
 	require.NoError(t, err, "failed to seed image caches")
@@ -130,6 +135,7 @@ func TestMigration_EndToEnd_HappyPath(t *testing.T) {
 	histories := make([]datastore.NotificationHistory, 5)
 	for i := range histories {
 		histories[i] = testutil.NewNotificationHistoryBuilder().
+			WithID(uint(i + 1)). //nolint:gosec // G115: test data uses small values
 			WithScientificName("Notification Species " + string(rune('A'+i))).
 			Build()
 	}
@@ -233,19 +239,18 @@ func TestMigration_PauseResume(t *testing.T) {
 	// Pause
 	ctx.Worker.Pause()
 
-	// Poll for paused state instead of fixed sleep
+	// Poll for worker paused flag (separate from state machine)
+	// The worker's internal paused flag controls processing, checked via IsPaused()
 	pauseDeadline := time.Now().Add(5 * time.Second)
+	var isPaused bool
 	for time.Now().Before(pauseDeadline) {
-		state, stateErr := ctx.StateManager.GetState()
-		require.NoError(t, stateErr)
-		if state.State == entities.MigrationStatusPaused {
+		if ctx.Worker.IsPaused() {
+			isPaused = true
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	state, err := ctx.StateManager.GetState()
-	require.NoError(t, err)
-	require.Equal(t, entities.MigrationStatusPaused, state.State, "should be paused within timeout")
+	require.True(t, isPaused, "worker should be paused within timeout")
 
 	// Get count before wait
 	countBeforePause := ctx.GetV2DetectionCount(t)
@@ -478,12 +483,15 @@ func TestMigration_UnicodeSpeciesNames(t *testing.T) {
 	// WithSpecies takes (code, scientific, common)
 	notes := []datastore.Note{
 		testutil.NewDetectionBuilder().
+			WithID(1).
 			WithSpecies("turmer", "Turdus mérula", "Blackbird"). // Latin character with accent
 			Build(),
 		testutil.NewDetectionBuilder().
+			WithID(2).
 			WithSpecies("parma1", "Große Meise", "Great Tit"). // German ß character
 			Build(),
 		testutil.NewDetectionBuilder().
+			WithID(3).
 			WithSpecies("nippon", "日本鳩", "Japanese Dove"). // Japanese characters
 			Build(),
 	}
@@ -501,7 +509,7 @@ func TestMigration_UnicodeSpeciesNames(t *testing.T) {
 
 	// Verify species names preserved by checking labels
 	c := context.Background()
-	detections, _, err := ctx.DetectionRepo.Search(c, nil)
+	detections, _, err := ctx.DetectionRepo.Search(c, &repository.SearchFilters{})
 	require.NoError(t, err, "failed to search detections")
 	require.Len(t, detections, 3, "should find 3 detections")
 }
@@ -522,16 +530,20 @@ func TestMigration_ExtremeValues(t *testing.T) {
 
 	notes := []datastore.Note{
 		testutil.NewDetectionBuilder().
+			WithID(1).
 			WithConfidence(0.0). // Minimum confidence
 			Build(),
 		testutil.NewDetectionBuilder().
+			WithID(2).
 			WithConfidence(1.0). // Maximum confidence
 			Build(),
 		testutil.NewDetectionBuilder().
+			WithID(3).
 			WithDate(oldTime.Format("2006-01-02")).
 			WithTime(oldTime.Format("15:04:05")).
 			Build(),
 		testutil.NewDetectionBuilder().
+			WithID(4).
 			WithDate(futureTime.Format("2006-01-02")).
 			WithTime(futureTime.Format("15:04:05")).
 			Build(),
@@ -550,7 +562,7 @@ func TestMigration_ExtremeValues(t *testing.T) {
 
 	// Verify extreme values preserved
 	c := context.Background()
-	detections, _, err := ctx.DetectionRepo.Search(c, nil)
+	detections, _, err := ctx.DetectionRepo.Search(c, &repository.SearchFilters{})
 	require.NoError(t, err, "failed to search detections")
 	require.Len(t, detections, 4, "should find 4 detections")
 
@@ -590,6 +602,7 @@ func TestMigration_RelatedData_ReviewsMigrated(t *testing.T) {
 			verified = "false_positive"
 		}
 		reviews[i] = testutil.NewReviewBuilder().
+			WithID(uint(i + 1)).     //nolint:gosec // G115: test data uses small values
 			WithNoteID(uint(i + 1)). //nolint:gosec // G115: test data uses small values
 			WithVerified(verified).
 			Build()
@@ -639,13 +652,16 @@ func TestMigration_RelatedData_CommentsMigrated(t *testing.T) {
 
 	// Add comments to 8 detections (1-3 comments each)
 	var comments []datastore.NoteComment
+	commentID := uint(1)
 	for i := range 8 {
 		numComments := (i % 3) + 1 // 1, 2, or 3 comments
 		for j := range numComments {
 			comments = append(comments, testutil.NewCommentBuilder().
+				WithID(commentID).
 				WithNoteID(uint(i+1)). //nolint:gosec // G115: test data uses small values
 				WithEntry("Test comment "+string(rune('A'+j))).
 				Build())
+			commentID++
 		}
 	}
 	err = ctx.Seeder.SeedComments(comments)
@@ -684,6 +700,7 @@ func TestMigration_RelatedData_LocksMigrated(t *testing.T) {
 	locks := make([]datastore.NoteLock, 3)
 	for i := range locks {
 		locks[i] = testutil.NewLockBuilder().
+			WithID(uint(i + 1)).     //nolint:gosec // G115: test data uses small values
 			WithNoteID(uint(i + 1)). //nolint:gosec // G115: test data uses small values
 			Build()
 	}
@@ -721,14 +738,17 @@ func TestMigration_RelatedData_SecondaryPredictionsMigrated(t *testing.T) {
 
 	// Add 2-5 secondary results to each detection
 	var results []datastore.Results
+	resultID := uint(1)
 	for i := range 10 {
 		numResults := (i % 4) + 2 // 2, 3, 4, or 5 results
 		for j := range numResults {
 			results = append(results, testutil.NewResultsBuilder().
+				WithID(resultID).
 				WithNoteID(uint(i+1)). //nolint:gosec // G115: test data uses small values
 				WithSpecies("Secondary Species "+string(rune('A'+j))).
 				WithConfidence(float32(0.5 + float64(j)*0.1)).
 				Build())
+			resultID++
 		}
 	}
 	err = ctx.Seeder.SeedResults(results)
