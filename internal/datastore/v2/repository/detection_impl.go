@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Sort field constants for Search queries.
@@ -937,6 +938,16 @@ func (r *detectionRepository) DeleteReview(ctx context.Context, detectionID uint
 	return nil
 }
 
+// SaveReviewsBatch saves multiple reviews efficiently.
+func (r *detectionRepository) SaveReviewsBatch(ctx context.Context, reviews []*entities.DetectionReview) error {
+	if len(reviews) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table(r.reviewsTable()).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(reviews, defaultDBBatchSize).Error
+}
+
 // ============================================================================
 // Comments
 // ============================================================================
@@ -983,6 +994,16 @@ func (r *detectionRepository) DeleteComment(ctx context.Context, commentID uint)
 		return ErrCommentNotFound
 	}
 	return nil
+}
+
+// SaveCommentsBatch saves multiple comments efficiently.
+func (r *detectionRepository) SaveCommentsBatch(ctx context.Context, comments []*entities.DetectionComment) error {
+	if len(comments) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table(r.commentsTable()).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(comments, defaultDBBatchSize).Error
 }
 
 // ============================================================================
@@ -1043,6 +1064,16 @@ func (r *detectionRepository) GetLockedClipPaths(ctx context.Context) ([]string,
 		Where(fmt.Sprintf("%s.clip_name IS NOT NULL", r.tableName())).
 		Pluck("clip_name", &paths).Error
 	return paths, err
+}
+
+// SaveLocksBatch saves multiple locks efficiently.
+func (r *detectionRepository) SaveLocksBatch(ctx context.Context, locks []*entities.DetectionLock) error {
+	if len(locks) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table(r.locksTable()).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(locks, defaultDBBatchSize).Error
 }
 
 // ============================================================================
