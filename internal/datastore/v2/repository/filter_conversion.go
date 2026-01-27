@@ -229,14 +229,14 @@ func ConfidenceFilterToMinMax(cf *datastore.ConfidenceFilter) (minConf, maxConf 
 
 	// Always return pointer to local copy to prevent unintended mutation of the original struct.
 	switch cf.Operator {
-case ">":
+	case ">":
 		// Greater than
 		v := cf.Value
 		return &v, nil
 	case ">=":
 		v := cf.Value
 		return &v, nil
-case "<":
+	case "<":
 		// Less than
 		v := cf.Value
 		return nil, &v
@@ -337,11 +337,12 @@ func ResolveLocationsToSourceIDs(ctx context.Context, deps *FilterLookupDeps, lo
 // =============================================================================
 
 // parseDateString parses a date string in YYYY-MM-DD format to Unix timestamp.
-// Returns the start of day (00:00:00) in the given timezone.
-// Returns nil if dateStr is empty.
-func parseDateString(dateStr string, tz *time.Location, endOfDay bool) *int64 {
+// Returns the start of day (00:00:00) or end of day (23:59:59) in the given timezone.
+// Returns (nil, nil) if dateStr is empty (no filter, not an error).
+// Returns error if dateStr is non-empty but invalid format.
+func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, error) {
 	if dateStr == "" {
-		return nil
+		return nil, nil //nolint:nilnil // nil,nil is intentional: empty string = no filter, not an error
 	}
 	if tz == nil {
 		tz = time.Local
@@ -349,7 +350,7 @@ func parseDateString(dateStr string, tz *time.Location, endOfDay bool) *int64 {
 
 	t, err := time.ParseInLocation("2006-01-02", dateStr, tz)
 	if err != nil {
-		return nil
+		return nil, errors.New("invalid date format: expected YYYY-MM-DD, got " + dateStr)
 	}
 
 	if endOfDay {
@@ -357,39 +358,49 @@ func parseDateString(dateStr string, tz *time.Location, endOfDay bool) *int64 {
 	}
 
 	ts := t.Unix()
-	return &ts
+	return &ts, nil
 }
 
 // singleTimeOfDayToHours converts a single time-of-day string to hour ranges.
 // This is used by ConvertSearchFilters which receives a single string, not a slice.
+//
+// For Simple Search API, "day" and "night" use broader ranges than Advanced Search:
+//   - "day" = all daylight hours (dawn + day + dusk): hours 5-19
+//   - "night" = true night only: hours 20-23, 0-4
+//
+// This provides intuitive filtering for casual users without requiring granular
+// period selection (dawn, day, dusk, night) available in Advanced Search.
+//
 // Supported values: "any", "day", "night", "sunrise", "sunset"
 func singleTimeOfDayToHours(timeOfDay string) []int {
 	switch strings.ToLower(timeOfDay) {
 	case "", "any":
 		return nil
 	case "day":
-		// Hours 6-18 (approximate daytime)
-		hours := make([]int, 0, 13)
-		for h := 6; h <= 18; h++ {
+		// Simple Search "day" = all daylight hours (dawn + day + dusk)
+		// Using constants: DawnStartHour (5) through DuskEndHour (19)
+		hours := make([]int, 0, DuskEndHour-DawnStartHour+1)
+		for h := DawnStartHour; h <= DuskEndHour; h++ {
 			hours = append(hours, h)
 		}
 		return hours
 	case "night":
-		// Hours 18-23, 0-6 (wrapped)
-		hours := make([]int, 0, 12)
-		for h := 18; h <= 23; h++ {
+		// Simple Search "night" = true night only
+		// Using constants: NightStartHour (20) through NightEndHour (4)
+		hours := make([]int, 0, (23-NightStartHour+1)+(NightEndHour+1))
+		for h := NightStartHour; h <= 23; h++ {
 			hours = append(hours, h)
 		}
-		for h := 0; h <= 6; h++ {
+		for h := 0; h <= NightEndHour; h++ {
 			hours = append(hours, h)
 		}
 		return hours
 	case "sunrise":
-		// Hours 5-7 (±1 hour around typical sunrise)
-		return []int{5, 6, 7}
+		// ±1 hour around typical sunrise
+		return []int{DawnStartHour, DawnEndHour, DayStartHour}
 	case "sunset":
-		// Hours 17-19 (±1 hour around typical sunset)
-		return []int{17, 18, 19}
+		// ±1 hour around typical sunset
+		return []int{DayEndHour, DuskStartHour, DuskEndHour}
 	default:
 		return nil
 	}
@@ -485,8 +496,15 @@ func ConvertSearchFilters(
 	}
 
 	// Date range conversion
-	sf.StartTime = parseDateString(filters.DateStart, tz, false)
-	sf.EndTime = parseDateString(filters.DateEnd, tz, true)
+	var err error
+	sf.StartTime, err = parseDateString(filters.DateStart, tz, false)
+	if err != nil {
+		return nil, err
+	}
+	sf.EndTime, err = parseDateString(filters.DateEnd, tz, true)
+	if err != nil {
+		return nil, err
+	}
 
 	// Confidence range
 	if filters.ConfidenceMin > 0 {
@@ -532,7 +550,11 @@ func ConvertSearchFilters(
 		sf.SortBy = SortFieldDetectedAt
 		sf.SortDesc = true
 	case "species_asc":
-		// Note: sorting by species requires label join, use label_id as proxy
+		// WARNING: label_id is an auto-increment integer with no correlation to
+		// alphabetical species names. This provides stable grouping by species,
+		// but NOT alphabetical ordering. True species sorting requires a JOIN
+		// with the labels table, which is not implemented.
+		// TODO: Implement proper species sorting via label JOIN (follow-up issue)
 		sf.SortBy = "label_id"
 		sf.SortDesc = false
 	case "confidence_desc":
@@ -554,8 +576,6 @@ func ConvertSearchFilters(
 
 	// Entity lookups (require deps)
 	if deps != nil {
-		var err error
-
 		// Convert species string to label IDs (LIKE search)
 		sf.LabelIDs, err = ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, filters.Species)
 		if err != nil {

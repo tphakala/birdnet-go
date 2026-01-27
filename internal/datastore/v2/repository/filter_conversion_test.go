@@ -618,15 +618,17 @@ func TestSingleTimeOfDayToHours(t *testing.T) {
 		assert.Nil(t, singleTimeOfDayToHours("ANY"))
 	})
 
-	t.Run("day returns hours 6-18", func(t *testing.T) {
+	t.Run("day returns hours 5-19 (all daylight)", func(t *testing.T) {
 		result := singleTimeOfDayToHours("day")
-		expected := []int{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}
+		// day = dawn + day + dusk (DawnStartHour through DuskEndHour)
+		expected := []int{5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("night returns hours 18-23 and 0-6", func(t *testing.T) {
+	t.Run("night returns hours 20-23 and 0-4", func(t *testing.T) {
 		result := singleTimeOfDayToHours("night")
-		expected := []int{18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6}
+		// night = NightStartHour (20) through NightEndHour (4)
+		expected := []int{20, 21, 22, 23, 0, 1, 2, 3, 4}
 		assert.Equal(t, expected, result)
 	})
 
@@ -659,13 +661,15 @@ func TestSingleTimeOfDayToHours(t *testing.T) {
 func TestParseDateString(t *testing.T) {
 	tz := time.UTC
 
-	t.Run("empty string returns nil", func(t *testing.T) {
-		result := parseDateString("", tz, false)
+	t.Run("empty string returns nil without error", func(t *testing.T) {
+		result, err := parseDateString("", tz, false)
+		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("valid date start of day", func(t *testing.T) {
-		result := parseDateString("2024-06-15", tz, false)
+		result, err := parseDateString("2024-06-15", tz, false)
+		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		ts := time.Unix(*result, 0).In(tz)
@@ -678,7 +682,8 @@ func TestParseDateString(t *testing.T) {
 	})
 
 	t.Run("valid date end of day", func(t *testing.T) {
-		result := parseDateString("2024-06-15", tz, true)
+		result, err := parseDateString("2024-06-15", tz, true)
+		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		ts := time.Unix(*result, 0).In(tz)
@@ -690,16 +695,20 @@ func TestParseDateString(t *testing.T) {
 		assert.Equal(t, 59, ts.Second())
 	})
 
-	t.Run("invalid date returns nil", func(t *testing.T) {
-		result := parseDateString("invalid-date", tz, false)
+	t.Run("invalid date returns error", func(t *testing.T) {
+		result, err := parseDateString("invalid-date", tz, false)
+		require.Error(t, err)
 		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "invalid date format")
 
-		result = parseDateString("2024/06/15", tz, false) // Wrong format
+		result, err = parseDateString("2024/06/15", tz, false) // Wrong format
+		require.Error(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("nil timezone uses local", func(t *testing.T) {
-		result := parseDateString("2024-06-15", nil, false)
+		result, err := parseDateString("2024-06-15", nil, false)
+		require.NoError(t, err)
 		require.NotNil(t, result)
 	})
 }
@@ -885,6 +894,28 @@ func TestConvertSearchFilters(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, 0, result.TimezoneOffset) // UTC = 0
+	})
+
+	t.Run("invalid date start returns error", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			DateStart: "invalid-date",
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "invalid date format")
+	})
+
+	t.Run("invalid date end returns error", func(t *testing.T) {
+		filters := &datastore.SearchFilters{
+			DateStart: "2024-06-01",
+			DateEnd:   "2024/06/30", // Wrong format
+		}
+
+		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
+		require.Error(t, err)
+		assert.Nil(t, result)
 	})
 }
 
