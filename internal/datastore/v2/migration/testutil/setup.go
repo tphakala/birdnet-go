@@ -201,6 +201,14 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 func (ctx *TestContext) createWorker(t *testing.T) {
 	t.Helper()
 
+	// Create related data migrator for reviews, comments, locks, predictions
+	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
+		LegacyStore:   ctx.legacyInterface,
+		DetectionRepo: ctx.DetectionRepo,
+		LabelRepo:     ctx.LabelRepo,
+		Logger:        ctx.Logger,
+	})
+
 	// Create worker with test configuration
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
 		Legacy:          ctx.legacyDetectionRepo,
@@ -209,6 +217,7 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		ModelRepo:       ctx.ModelRepo,
 		SourceRepo:      ctx.SourceRepo,
 		StateManager:    ctx.StateManager,
+		RelatedMigrator: relatedMigrator,
 		Logger:          ctx.Logger,
 		BatchSize:       100, // Smaller batch for tests
 		Timezone:        time.UTC,
@@ -710,8 +719,32 @@ func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int
 }
 func (s *testLegacyInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) { return nil, nil } //nolint:nilnil // stub
 
-// Migration bulk fetch methods
-func (s *testLegacyInterface) GetAllReviews() ([]datastore.NoteReview, error)   { return nil, nil }
-func (s *testLegacyInterface) GetAllComments() ([]datastore.NoteComment, error) { return nil, nil }
-func (s *testLegacyInterface) GetAllLocks() ([]datastore.NoteLock, error)       { return nil, nil }
-func (s *testLegacyInterface) GetAllResults() ([]datastore.Results, error)      { return nil, nil }
+// Migration bulk fetch methods - query actual database for integration tests
+
+// GetAllReviews returns all note reviews from legacy database.
+func (s *testLegacyInterface) GetAllReviews() ([]datastore.NoteReview, error) {
+	var reviews []datastore.NoteReview
+	err := s.db.Find(&reviews).Error
+	return reviews, err
+}
+
+// GetAllComments returns all note comments from legacy database.
+func (s *testLegacyInterface) GetAllComments() ([]datastore.NoteComment, error) {
+	var comments []datastore.NoteComment
+	err := s.db.Find(&comments).Error
+	return comments, err
+}
+
+// GetAllLocks returns all note locks from legacy database.
+func (s *testLegacyInterface) GetAllLocks() ([]datastore.NoteLock, error) {
+	var locks []datastore.NoteLock
+	err := s.db.Find(&locks).Error
+	return locks, err
+}
+
+// GetAllResults returns all secondary predictions from legacy database.
+func (s *testLegacyInterface) GetAllResults() ([]datastore.Results, error) {
+	var results []datastore.Results
+	err := s.db.Find(&results).Error
+	return results, err
+}
