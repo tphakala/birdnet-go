@@ -352,6 +352,20 @@ func (m *ActionMockDatastore) GetAllComments() ([]datastore.NoteComment, error) 
 func (m *ActionMockDatastore) GetAllLocks() ([]datastore.NoteLock, error)       { return nil, nil }
 func (m *ActionMockDatastore) GetAllResults() ([]datastore.Results, error)      { return nil, nil }
 
+// Batched migration methods
+func (m *ActionMockDatastore) GetReviewsBatch(_ uint, _ int) ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetCommentsBatch(_ uint, _ int) ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetLocksBatch(_ uint, _ int) ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetResultsBatch(_ uint, _ int) ([]datastore.Results, error) {
+	return nil, nil
+}
+
 // Compile-time check that ActionMockDatastore implements datastore.Interface
 var _ datastore.Interface = (*ActionMockDatastore)(nil)
 

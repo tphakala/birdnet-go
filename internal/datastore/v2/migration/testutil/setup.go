@@ -748,3 +748,33 @@ func (s *testLegacyInterface) GetAllResults() ([]datastore.Results, error) {
 	err := s.db.Find(&results).Error
 	return results, err
 }
+
+// Batched fetch methods for memory-safe migration
+
+// GetReviewsBatch returns a batch of note reviews for memory-safe migration.
+func (s *testLegacyInterface) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	var reviews []datastore.NoteReview
+	err := s.db.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&reviews).Error
+	return reviews, err
+}
+
+// GetCommentsBatch returns a batch of note comments for memory-safe migration.
+func (s *testLegacyInterface) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	var comments []datastore.NoteComment
+	err := s.db.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&comments).Error
+	return comments, err
+}
+
+// GetLocksBatch returns a batch of note locks for memory-safe migration.
+func (s *testLegacyInterface) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	var locks []datastore.NoteLock
+	err := s.db.Where("note_id > ?", afterID).Order("note_id ASC").Limit(batchSize).Find(&locks).Error
+	return locks, err
+}
+
+// GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
+func (s *testLegacyInterface) GetResultsBatch(afterID uint, batchSize int) ([]datastore.Results, error) {
+	var results []datastore.Results
+	err := s.db.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&results).Error
+	return results, err
+}

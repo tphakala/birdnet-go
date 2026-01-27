@@ -523,8 +523,22 @@ func (w *Worker) transitionToValidation() {
 
 	// Migrate related data (reviews, comments, locks, predictions) before validation
 	if w.relatedMigrator != nil {
-		ctx := context.Background()
-		if err := w.relatedMigrator.MigrateAll(ctx); err != nil {
+		// Create context that cancels on shutdown
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			select {
+			case <-w.stopCh:
+				cancel()
+			case <-done:
+			}
+		}()
+
+		err := w.relatedMigrator.MigrateAll(ctx)
+		close(done)
+		cancel() // Cleanup context resources
+
+		if err != nil {
 			w.logger.Error("related data migration failed", logger.Error(err))
 			// Continue to validation - related data is non-fatal
 		}

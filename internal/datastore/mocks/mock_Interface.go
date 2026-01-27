@@ -1443,6 +1443,65 @@ func (_c *MockInterface_GetAllReviews_Call) RunAndReturn(run func() ([]datastore
 	return _c
 }
 
+// GetCommentsBatch provides a mock function with given fields: afterID, batchSize
+func (_m *MockInterface) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	ret := _m.Called(afterID, batchSize)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCommentsBatch")
+	}
+
+	var r0 []datastore.NoteComment
+	var r1 error
+	if rf, ok := ret.Get(0).(func(uint, int) ([]datastore.NoteComment, error)); ok {
+		return rf(afterID, batchSize)
+	}
+	if rf, ok := ret.Get(0).(func(uint, int) []datastore.NoteComment); ok {
+		r0 = rf(afterID, batchSize)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NoteComment)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(uint, int) error); ok {
+		r1 = rf(afterID, batchSize)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetCommentsBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCommentsBatch'
+type MockInterface_GetCommentsBatch_Call struct {
+	*mock.Call
+}
+
+// GetCommentsBatch is a helper method to define mock.On call
+//   - afterID uint
+//   - batchSize int
+func (_e *MockInterface_Expecter) GetCommentsBatch(afterID interface{}, batchSize interface{}) *MockInterface_GetCommentsBatch_Call {
+	return &MockInterface_GetCommentsBatch_Call{Call: _e.mock.On("GetCommentsBatch", afterID, batchSize)}
+}
+
+func (_c *MockInterface_GetCommentsBatch_Call) Run(run func(afterID uint, batchSize int)) *MockInterface_GetCommentsBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetCommentsBatch_Call) Return(_a0 []datastore.NoteComment, _a1 error) *MockInterface_GetCommentsBatch_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetCommentsBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.NoteComment, error)) *MockInterface_GetCommentsBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetDailyAnalyticsData provides a mock function with given fields: ctx, startDate, endDate, species
 func (_m *MockInterface) GetDailyAnalyticsData(ctx context.Context, startDate string, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
 	ret := _m.Called(ctx, startDate, endDate, species)
@@ -2346,6 +2405,65 @@ func (_c *MockInterface_GetLockedNotesClipPaths_Call) RunAndReturn(run func() ([
 	return _c
 }
 
+// GetLocksBatch provides a mock function with given fields: afterID, batchSize
+func (_m *MockInterface) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	ret := _m.Called(afterID, batchSize)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLocksBatch")
+	}
+
+	var r0 []datastore.NoteLock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(uint, int) ([]datastore.NoteLock, error)); ok {
+		return rf(afterID, batchSize)
+	}
+	if rf, ok := ret.Get(0).(func(uint, int) []datastore.NoteLock); ok {
+		r0 = rf(afterID, batchSize)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NoteLock)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(uint, int) error); ok {
+		r1 = rf(afterID, batchSize)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetLocksBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLocksBatch'
+type MockInterface_GetLocksBatch_Call struct {
+	*mock.Call
+}
+
+// GetLocksBatch is a helper method to define mock.On call
+//   - afterID uint
+//   - batchSize int
+func (_e *MockInterface_Expecter) GetLocksBatch(afterID interface{}, batchSize interface{}) *MockInterface_GetLocksBatch_Call {
+	return &MockInterface_GetLocksBatch_Call{Call: _e.mock.On("GetLocksBatch", afterID, batchSize)}
+}
+
+func (_c *MockInterface_GetLocksBatch_Call) Run(run func(afterID uint, batchSize int)) *MockInterface_GetLocksBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetLocksBatch_Call) Return(_a0 []datastore.NoteLock, _a1 error) *MockInterface_GetLocksBatch_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetLocksBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.NoteLock, error)) *MockInterface_GetLocksBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetNewSpeciesDetections provides a mock function with given fields: ctx, startDate, endDate, limit, offset
 func (_m *MockInterface) GetNewSpeciesDetections(ctx context.Context, startDate string, endDate string, limit int, offset int) ([]datastore.NewSpeciesData, error) {
 	ret := _m.Called(ctx, startDate, endDate, limit, offset)
@@ -2809,6 +2927,124 @@ func (_c *MockInterface_GetRecentThresholdEvents_Call) Return(_a0 []datastore.Th
 }
 
 func (_c *MockInterface_GetRecentThresholdEvents_Call) RunAndReturn(run func(int) ([]datastore.ThresholdEvent, error)) *MockInterface_GetRecentThresholdEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetResultsBatch provides a mock function with given fields: afterID, batchSize
+func (_m *MockInterface) GetResultsBatch(afterID uint, batchSize int) ([]datastore.Results, error) {
+	ret := _m.Called(afterID, batchSize)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetResultsBatch")
+	}
+
+	var r0 []datastore.Results
+	var r1 error
+	if rf, ok := ret.Get(0).(func(uint, int) ([]datastore.Results, error)); ok {
+		return rf(afterID, batchSize)
+	}
+	if rf, ok := ret.Get(0).(func(uint, int) []datastore.Results); ok {
+		r0 = rf(afterID, batchSize)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.Results)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(uint, int) error); ok {
+		r1 = rf(afterID, batchSize)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetResultsBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetResultsBatch'
+type MockInterface_GetResultsBatch_Call struct {
+	*mock.Call
+}
+
+// GetResultsBatch is a helper method to define mock.On call
+//   - afterID uint
+//   - batchSize int
+func (_e *MockInterface_Expecter) GetResultsBatch(afterID interface{}, batchSize interface{}) *MockInterface_GetResultsBatch_Call {
+	return &MockInterface_GetResultsBatch_Call{Call: _e.mock.On("GetResultsBatch", afterID, batchSize)}
+}
+
+func (_c *MockInterface_GetResultsBatch_Call) Run(run func(afterID uint, batchSize int)) *MockInterface_GetResultsBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetResultsBatch_Call) Return(_a0 []datastore.Results, _a1 error) *MockInterface_GetResultsBatch_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetResultsBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.Results, error)) *MockInterface_GetResultsBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetReviewsBatch provides a mock function with given fields: afterID, batchSize
+func (_m *MockInterface) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	ret := _m.Called(afterID, batchSize)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetReviewsBatch")
+	}
+
+	var r0 []datastore.NoteReview
+	var r1 error
+	if rf, ok := ret.Get(0).(func(uint, int) ([]datastore.NoteReview, error)); ok {
+		return rf(afterID, batchSize)
+	}
+	if rf, ok := ret.Get(0).(func(uint, int) []datastore.NoteReview); ok {
+		r0 = rf(afterID, batchSize)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NoteReview)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(uint, int) error); ok {
+		r1 = rf(afterID, batchSize)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetReviewsBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReviewsBatch'
+type MockInterface_GetReviewsBatch_Call struct {
+	*mock.Call
+}
+
+// GetReviewsBatch is a helper method to define mock.On call
+//   - afterID uint
+//   - batchSize int
+func (_e *MockInterface_Expecter) GetReviewsBatch(afterID interface{}, batchSize interface{}) *MockInterface_GetReviewsBatch_Call {
+	return &MockInterface_GetReviewsBatch_Call{Call: _e.mock.On("GetReviewsBatch", afterID, batchSize)}
+}
+
+func (_c *MockInterface_GetReviewsBatch_Call) Run(run func(afterID uint, batchSize int)) *MockInterface_GetReviewsBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetReviewsBatch_Call) Return(_a0 []datastore.NoteReview, _a1 error) *MockInterface_GetReviewsBatch_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetReviewsBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.NoteReview, error)) *MockInterface_GetReviewsBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }
