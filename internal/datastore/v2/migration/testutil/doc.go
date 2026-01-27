@@ -7,5 +7,5 @@
 //   - Assertions: Field-by-field verification helpers
 //   - TestContext: Complete test environment setup and teardown
 //
-//nolint:dupl,gosec // Test utilities intentionally have similar patterns and use int->uint for test IDs
+//nolint:dupl,gosec,nilnil // Test utilities intentionally have similar patterns, use int->uint for test IDs, and return nil,nil in stubs
 package testutil

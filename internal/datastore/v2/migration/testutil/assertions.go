@@ -115,7 +115,7 @@ func AssertResultsMatch(t *testing.T, legacyResults []datastore.Results, v2Predi
 
 	// Note: legacy Results may have different IDs than V2 predictions.
 	// We compare by species and confidence.
-	assert.Equal(t, len(legacyResults), len(v2Predictions),
+	assert.Len(t, v2Predictions, len(legacyResults),
 		"prediction count should match results count")
 
 	// Build a map of legacy species -> confidence for comparison
@@ -297,6 +297,8 @@ type MigrationCounts struct {
 }
 
 // AssertMigrationCountsMatch verifies that V2 counts match legacy counts.
+//
+//nolint:gocritic // hugeParam: pass by value is simpler for test utilities
 func AssertMigrationCountsMatch(t *testing.T, legacy, v2 MigrationCounts) {
 	t.Helper()
 
@@ -315,6 +317,8 @@ func AssertMigrationCountsMatch(t *testing.T, legacy, v2 MigrationCounts) {
 
 // AssertAllDataMigrated is a comprehensive check that all legacy data was migrated.
 // This combines count verification with sample field verification.
+//
+//nolint:gocritic // hugeParam: pass by value is simpler for test utilities
 func AssertAllDataMigrated(t *testing.T, legacy, v2 MigrationCounts, sampleVerified bool) {
 	t.Helper()
 

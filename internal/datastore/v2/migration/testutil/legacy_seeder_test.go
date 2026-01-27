@@ -16,12 +16,18 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// Verification status constants for tests.
+const (
+	verifiedCorrect       = "correct"
+	verifiedFalsePositive = "false_positive"
+)
+
 // setupTestDB creates a temporary SQLite database with the legacy schema.
-func setupTestDB(t *testing.T) (*sql.DB, string, func()) {
+func setupTestDB(t *testing.T) (db *sql.DB, dbPath string, cleanup func()) {
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
+	dbPath = filepath.Join(tmpDir, "test.db")
 
 	// Create database with GORM to set up schema
 	gormDB, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
@@ -49,7 +55,7 @@ func setupTestDB(t *testing.T) (*sql.DB, string, func()) {
 	sqlDB, err := sql.Open("sqlite3", dbPath)
 	require.NoError(t, err)
 
-	cleanup := func() {
+	cleanup = func() {
 		_ = sqlDB.Close()
 		_ = os.RemoveAll(tmpDir)
 	}
@@ -464,14 +470,15 @@ func TestGenerateRelatedData(t *testing.T) {
 	// Verify review statuses vary
 	var correctCount, fpCount int
 	for _, review := range data.Reviews {
-		if review.Verified == "correct" {
+		switch review.Verified {
+		case verifiedCorrect:
 			correctCount++
-		} else if review.Verified == "false_positive" {
+		case verifiedFalsePositive:
 			fpCount++
 		}
 	}
-	assert.Greater(t, correctCount, 0, "should have some correct reviews")
-	assert.Greater(t, fpCount, 0, "should have some false_positive reviews")
+	assert.Positive(t, correctCount, "should have some correct reviews")
+	assert.Positive(t, fpCount, "should have some false_positive reviews")
 }
 
 func TestGenerateRelatedData_DefaultConfig(t *testing.T) {
@@ -483,8 +490,8 @@ func TestGenerateRelatedData_DefaultConfig(t *testing.T) {
 	data := GenerateRelatedData(notes, nil)
 
 	assert.Len(t, data.Notes, 10)
-	assert.Greater(t, len(data.Results), 0)
-	assert.Greater(t, len(data.Reviews), 0)
+	assert.NotEmpty(t, data.Results)
+	assert.NotEmpty(t, data.Reviews)
 }
 
 func TestLegacySeeder_ProcessingTimeStorage(t *testing.T) {

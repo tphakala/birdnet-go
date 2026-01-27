@@ -423,7 +423,7 @@ func TestGenerateDetections(t *testing.T) {
 
 	// Check IDs are sequential
 	for i, note := range notes {
-		assert.Equal(t, uint(i+1), note.ID)
+		assert.Equal(t, uint(i+1), note.ID) //nolint:gosec // G115: test data uses small values
 	}
 
 	// Check species variety (we have 10 test species, so with 25 notes we should see repeats)
@@ -434,7 +434,7 @@ func TestGenerateDetections(t *testing.T) {
 	assert.GreaterOrEqual(t, len(speciesSet), 5, "should have variety in species")
 
 	// Check confidence variation
-	var minConf, maxConf float64 = 1.0, 0.0
+	minConf, maxConf := 1.0, 0.0
 	for _, note := range notes {
 		if note.Confidence < minConf {
 			minConf = note.Confidence
@@ -456,7 +456,7 @@ func TestGenerateWeatherData(t *testing.T) {
 
 	// Check daily events have sequential IDs
 	for i, event := range dailyEvents {
-		assert.Equal(t, uint(i+1), event.ID)
+		assert.Equal(t, uint(i+1), event.ID) //nolint:gosec // G115: test data uses small values
 	}
 
 	// Check hourly weather references correct daily events

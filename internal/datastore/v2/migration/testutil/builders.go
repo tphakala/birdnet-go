@@ -553,9 +553,9 @@ func (b *HourlyWeatherBuilder) WithFeelsLike(temp float64) *HourlyWeatherBuilder
 }
 
 // WithTempMinMax sets the min and max temperatures.
-func (b *HourlyWeatherBuilder) WithTempMinMax(min, max float64) *HourlyWeatherBuilder {
-	b.weather.TempMin = min
-	b.weather.TempMax = max
+func (b *HourlyWeatherBuilder) WithTempMinMax(minTemp, maxTemp float64) *HourlyWeatherBuilder {
+	b.weather.TempMin = minTemp
+	b.weather.TempMax = maxTemp
 	return b
 }
 
@@ -761,16 +761,16 @@ func (b *ThresholdEventBuilder) WithSpeciesName(name string) *ThresholdEventBuil
 }
 
 // WithLevelChange sets the previous and new levels.
-func (b *ThresholdEventBuilder) WithLevelChange(prev, new int) *ThresholdEventBuilder {
+func (b *ThresholdEventBuilder) WithLevelChange(prev, newLevel int) *ThresholdEventBuilder {
 	b.event.PreviousLevel = prev
-	b.event.NewLevel = new
+	b.event.NewLevel = newLevel
 	return b
 }
 
 // WithValueChange sets the previous and new threshold values.
-func (b *ThresholdEventBuilder) WithValueChange(prev, new float64) *ThresholdEventBuilder {
+func (b *ThresholdEventBuilder) WithValueChange(prev, newVal float64) *ThresholdEventBuilder {
 	b.event.PreviousValue = prev
-	b.event.NewValue = new
+	b.event.NewValue = newVal
 	return b
 }
 
@@ -972,7 +972,7 @@ var TestSpecies = []struct {
 	{"blujay", "Cyanocitta cristata", "Blue Jay"},
 	{"houspa", "Passer domesticus", "House Sparrow"},
 	{"carwre", "Thryothorus ludovicianus", "Carolina Wren"},
-	{"norcar", "Cardinalis cardinalis", "Northern Cardinal"},
+	{"norcar", "Cardinalis cardinalis", "Northern Cardinal"}, //nolint:misspell // Cardinalis is a valid scientific genus name
 	{"amerob", "Turdus migratorius", "American Robin"},
 	{"eunsta", "Sturnus vulgaris", "European Starling"},
 	{"rebnut", "Sitta canadensis", "Red-breasted Nuthatch"},
@@ -992,7 +992,7 @@ func GenerateDetections(count int) []datastore.Note {
 		confidence := 0.5 + (float64(i%50) / 100.0) // Vary between 0.50 and 0.99
 
 		notes[i] = NewDetectionBuilder().
-			WithID(uint(i + 1)).
+			WithID(uint(i + 1)). //nolint:gosec // G115: test data uses small values that cannot overflow
 			WithTimestamp(ts).
 			WithSpecies(species.Code, species.Scientific, species.Common).
 			WithConfidence(confidence).
@@ -1012,7 +1012,7 @@ func GenerateWeatherData(days int) ([]datastore.DailyEvents, []datastore.HourlyW
 
 	for d := range days {
 		date := baseDate.AddDate(0, 0, d)
-		dayID := uint(d + 1)
+		dayID := uint(d + 1) //nolint:gosec // G115: test data uses small values
 
 		// Create daily events
 		dailyEvents[d] = NewDailyEventsBuilder().
@@ -1025,7 +1025,7 @@ func GenerateWeatherData(days int) ([]datastore.DailyEvents, []datastore.HourlyW
 		// Create 24 hourly weather records for this day
 		for h := range 24 {
 			hourTime := date.Add(time.Duration(h) * time.Hour)
-			weatherID := uint(d*24 + h + 1)
+			weatherID := uint(d*24 + h + 1) //nolint:gosec // G115: test data uses small values
 
 			// Vary temperature based on hour (cooler at night)
 			baseTemp := 15.0

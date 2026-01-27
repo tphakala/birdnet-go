@@ -62,7 +62,8 @@ func (s *LegacySeeder) seedDetectionBatch(notes []datastore.Note, insertSQL stri
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, note := range notes {
+	for i := range notes {
+		note := &notes[i]
 		// Convert time.Duration to nanoseconds for storage (GORM default)
 		processingTimeNs := note.ProcessingTime.Nanoseconds()
 
@@ -329,7 +330,8 @@ func (s *LegacySeeder) seedWeatherBatch(weather []datastore.HourlyWeather, inser
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, w := range weather {
+	for i := range weather {
+		w := &weather[i]
 		_, err := stmt.Exec(
 			w.ID,
 			w.DailyEventsID,
@@ -396,24 +398,25 @@ func (s *LegacySeeder) SeedDynamicThresholds(thresholds []datastore.DynamicThres
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, t := range thresholds {
+	for i := range thresholds {
+		th := &thresholds[i]
 		_, err := stmt.Exec(
-			t.ID,
-			t.SpeciesName,
-			t.ScientificName,
-			t.Level,
-			t.CurrentValue,
-			t.BaseThreshold,
-			t.HighConfCount,
-			t.ValidHours,
-			t.ExpiresAt,
-			t.LastTriggered,
-			t.FirstCreated,
-			t.UpdatedAt,
-			t.TriggerCount,
+			th.ID,
+			th.SpeciesName,
+			th.ScientificName,
+			th.Level,
+			th.CurrentValue,
+			th.BaseThreshold,
+			th.HighConfCount,
+			th.ValidHours,
+			th.ExpiresAt,
+			th.LastTriggered,
+			th.FirstCreated,
+			th.UpdatedAt,
+			th.TriggerCount,
 		)
 		if err != nil {
-			return fmt.Errorf("insert threshold %d: %w", t.ID, err)
+			return fmt.Errorf("insert threshold %d: %w", th.ID, err)
 		}
 	}
 
@@ -494,7 +497,8 @@ func (s *LegacySeeder) SeedImageCaches(caches []datastore.ImageCache) error {
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, c := range caches {
+	for i := range caches {
+		c := &caches[i]
 		_, err := stmt.Exec(
 			c.ID,
 			c.ProviderName,
@@ -541,7 +545,8 @@ func (s *LegacySeeder) SeedNotificationHistory(history []datastore.NotificationH
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, h := range history {
+	for i := range history {
+		h := &history[i]
 		_, err := stmt.Exec(
 			h.ID,
 			h.ScientificName,
@@ -670,7 +675,8 @@ func GenerateRelatedData(notes []datastore.Note, config *RelatedDataConfig) *See
 	var resultID, reviewID, commentID, lockID uint = 1, 1, 1, 1
 	baseTime := time.Now()
 
-	for i, note := range notes {
+	for i := range notes {
+		note := &notes[i]
 		// Generate secondary results
 		for j := range config.ResultsPerNote {
 			speciesIdx := (i + j + 1) % len(TestSpecies)
