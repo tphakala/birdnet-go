@@ -269,14 +269,17 @@ func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*enti
 	}
 
 	// Load relations for each detection
-	r.loadRelationsForDetections(ctx, dets)
+	if err := r.loadRelationsForDetections(ctx, dets); err != nil {
+		return nil, err
+	}
 	return dets, nil
 }
 
 // loadRelationsForDetections loads Label, Model, Source for multiple detections.
-func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, dets []*entities.Detection) {
+// Returns error if any relation lookup fails.
+func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
-		return
+		return nil
 	}
 
 	// Collect unique IDs
@@ -296,7 +299,9 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 	if len(labelIDs) > 0 {
 		ids := mapKeysToSlice(labelIDs)
 		var labelList []*entities.Label
-		r.db.WithContext(ctx).Table(r.labelsTable()).Where("id IN ?", ids).Find(&labelList)
+		if err := r.db.WithContext(ctx).Table(r.labelsTable()).Where("id IN ?", ids).Find(&labelList).Error; err != nil {
+			return fmt.Errorf("load labels: %w", err)
+		}
 		for _, l := range labelList {
 			labels[l.ID] = l
 		}
@@ -307,7 +312,9 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 	if len(modelIDs) > 0 {
 		ids := mapKeysToSlice(modelIDs)
 		var modelList []*entities.AIModel
-		r.db.WithContext(ctx).Table(r.modelsTable()).Where("id IN ?", ids).Find(&modelList)
+		if err := r.db.WithContext(ctx).Table(r.modelsTable()).Where("id IN ?", ids).Find(&modelList).Error; err != nil {
+			return fmt.Errorf("load models: %w", err)
+		}
 		for _, m := range modelList {
 			models[m.ID] = m
 		}
@@ -318,7 +325,9 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 	if len(sourceIDs) > 0 {
 		ids := mapKeysToSlice(sourceIDs)
 		var sourceList []*entities.AudioSource
-		r.db.WithContext(ctx).Table(r.sourcesTable()).Where("id IN ?", ids).Find(&sourceList)
+		if err := r.db.WithContext(ctx).Table(r.sourcesTable()).Where("id IN ?", ids).Find(&sourceList).Error; err != nil {
+			return fmt.Errorf("load sources: %w", err)
+		}
 		for _, s := range sourceList {
 			sources[s.ID] = s
 		}
@@ -332,6 +341,8 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 			d.Source = sources[*d.SourceID]
 		}
 	}
+
+	return nil
 }
 
 func mapKeysToSlice(m map[uint]bool) []uint {
@@ -413,14 +424,8 @@ func (r *detectionRepository) GetByAudioSource(ctx context.Context, sourceID uin
 // Search
 // ============================================================================
 
-// Search finds detections matching the given filters.
-func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters) ([]*entities.Detection, int64, error) {
-	var dets []*entities.Detection
-	var total int64
-
-	query := r.db.WithContext(ctx).Table(r.tableName())
-
-	// Apply filters
+// buildSearchFilters applies basic WHERE clauses from SearchFilters.
+func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 	if len(filters.LabelIDs) > 0 {
 		query = query.Where("label_id IN ?", filters.LabelIDs)
 	}
@@ -439,7 +444,7 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	if len(filters.IncludedHours) > 0 {
 		// Extract local hour from Unix timestamp using timezone offset.
 		// Formula: FLOOR((detected_at + offset) / 3600) % 24
-		// FLOOR() ensures integer results on both SQLite and MySQL (MySQL returns floats for division).
+		// FLOOR() ensures integer results on both SQLite and MySQL.
 		hourExpr := fmt.Sprintf("FLOOR((detected_at + %d) / 3600) %% 24", filters.TimezoneOffset)
 		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
 	}
@@ -452,15 +457,19 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	if filters.MinID > 0 {
 		query = query.Where("id > ?", filters.MinID)
 	}
+	return query
+}
 
-	// Text search on scientific name (requires join)
+// buildSearchJoins applies JOIN clauses for filters requiring related tables.
+func (r *detectionRepository) buildSearchJoins(query *gorm.DB, filters *SearchFilters) *gorm.DB {
+	// Text search on scientific name (requires labels join)
 	if filters.Query != "" {
 		query = query.Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id",
 			r.labelsTable(), r.labelsTable(), r.tableName())).
 			Where(fmt.Sprintf("%s.scientific_name LIKE ?", r.labelsTable()), "%"+filters.Query+"%")
 	}
 
-	// Verified filter (requires join with reviews for specific status)
+	// Verified filter (requires reviews join for specific status)
 	if filters.Verified != nil {
 		query = query.Joins(fmt.Sprintf("JOIN %s ON %s.detection_id = %s.id",
 			r.reviewsTable(), r.reviewsTable(), r.tableName())).
@@ -470,19 +479,17 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	// IsReviewed filter (has review with verdict vs no review)
 	if filters.IsReviewed != nil {
 		if *filters.IsReviewed {
-			// Has a review with verdict (verified != '')
 			query = query.Where(fmt.Sprintf(
 				"EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id AND %s.verified != '')",
 				r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()))
 		} else {
-			// No review or no verdict
 			query = query.Where(fmt.Sprintf(
 				"NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id AND %s.verified != '')",
 				r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()))
 		}
 	}
 
-	// Locked filter (requires join with locks)
+	// Locked filter (requires locks join)
 	if filters.IsLocked != nil {
 		if *filters.IsLocked {
 			query = query.Joins(fmt.Sprintf("JOIN %s ON %s.detection_id = %s.id",
@@ -493,21 +500,15 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 		}
 	}
 
-	// Count total
-	countQuery := query.Session(&gorm.Session{})
-	if err := countQuery.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
+	return query
+}
 
+// applySearchOrdering applies sorting and pagination to the query.
+func (r *detectionRepository) applySearchOrdering(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 	// Sorting
 	sortField := SortFieldDetectedAt
-	if filters.SortBy != "" {
-		switch filters.SortBy {
-		case SortFieldConfidence:
-			sortField = SortFieldConfidence
-		case SortFieldDetectedAt:
-			sortField = SortFieldDetectedAt
-		}
+	if filters.SortBy == SortFieldConfidence {
+		sortField = SortFieldConfidence
 	}
 	order := sortField
 	if filters.SortDesc {
@@ -525,8 +526,37 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 		query = query.Offset(filters.Offset)
 	}
 
-	err := query.Find(&dets).Error
-	return dets, total, err
+	return query
+}
+
+// Search finds detections matching the given filters.
+func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters) ([]*entities.Detection, int64, error) {
+	if filters == nil {
+		filters = &SearchFilters{}
+	}
+
+	// Build query with filters
+	query := r.db.WithContext(ctx).Table(r.tableName())
+	query = r.buildSearchFilters(query, filters)
+	query = r.buildSearchJoins(query, filters)
+
+	// Count total before pagination
+	var total int64
+	countQuery := query.Session(&gorm.Session{})
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Apply ordering and pagination
+	query = r.applySearchOrdering(query, filters)
+
+	// Execute query
+	var dets []*entities.Detection
+	if err := query.Find(&dets).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return dets, total, nil
 }
 
 // ============================================================================
