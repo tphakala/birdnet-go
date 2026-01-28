@@ -12,7 +12,7 @@ import (
 type modelRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
-	isMySQL     bool
+	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
 }
 
 // NewModelRepository creates a new ModelRepository.

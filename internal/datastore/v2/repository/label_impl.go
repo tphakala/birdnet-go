@@ -14,7 +14,7 @@ import (
 type labelRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool // For MySQL: use v2_ table prefix
-	isMySQL     bool // For MySQL dialect (affects SQL expressions)
+	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
 }
 
 // NewLabelRepository creates a new LabelRepository.

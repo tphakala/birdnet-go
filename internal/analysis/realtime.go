@@ -1660,6 +1660,103 @@ func printSystemDetails(settings *conf.Settings) {
 		logger.Int("interval", settings.Realtime.Interval))
 }
 
+// migrationSetupConfig holds configuration for migration infrastructure setup.
+type migrationSetupConfig struct {
+	manager     datastoreV2.Manager // Satisfies both SQLite and MySQL managers
+	ds          datastore.Interface
+	log         logger.Logger
+	useV2Prefix bool   // true for MySQL migration (v2_ prefix), false for SQLite (separate file)
+	opName      string // For log messages: "initialize_migration_infrastructure" or "initialize_mysql_migration"
+}
+
+// setupMigrationWorker performs the common setup after manager creation and initialization.
+// It creates repositories, the migration worker, stores the manager for cleanup, and handles state recovery.
+// The caller should close the manager if this function returns an error.
+func setupMigrationWorker(cfg *migrationSetupConfig) error {
+	// Get dialect from manager interface (avoids redundant parameter)
+	isMySQL := cfg.manager.IsMySQL()
+
+	// Create the state manager
+	stateManager := datastoreV2.NewStateManager(cfg.manager.DB())
+
+	// Create repositories for the migration worker
+	v2DB := cfg.manager.DB()
+	labelRepo := repository.NewLabelRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	v2DetectionRepo := repository.NewDetectionRepository(v2DB, cfg.useV2Prefix, isMySQL)
+
+	// Create the legacy detection repository
+	legacyRepo := datastore.NewDetectionRepository(cfg.ds, time.Local)
+
+	// Create the related data migrator for reviews, comments, locks, predictions
+	// Use half of detection batch size since related data tables are typically smaller
+	const relatedDataBatchSize = migration.DefaultBatchSize / 2
+	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
+		LegacyStore:   cfg.ds,
+		DetectionRepo: v2DetectionRepo,
+		LabelRepo:     labelRepo,
+		Logger:        cfg.log,
+		BatchSize:     relatedDataBatchSize,
+	})
+
+	// Create the migration worker
+	worker, err := migration.NewWorker(&migration.WorkerConfig{
+		Legacy:          legacyRepo,
+		V2Detection:     v2DetectionRepo,
+		LabelRepo:       labelRepo,
+		ModelRepo:       modelRepo,
+		SourceRepo:      sourceRepo,
+		StateManager:    stateManager,
+		RelatedMigrator: relatedMigrator,
+		Logger:          cfg.log,
+		BatchSize:       migration.DefaultBatchSize,
+		Timezone:        time.Local,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create migration worker: %w", err)
+	}
+
+	// Store manager for shutdown cleanup - only after successful worker creation
+	// to prevent GetV2DatabaseManager() from returning a partially initialized manager
+	v2DatabaseManagerMu.Lock()
+	v2DatabaseManager = cfg.manager
+	v2DatabaseManagerMu.Unlock()
+
+	// Inject dependencies into the API layer
+	apiv2.SetMigrationDependencies(stateManager, worker)
+
+	// Check for state recovery - resume migration if it was in progress
+	state, err := stateManager.GetState()
+	if err != nil {
+		cfg.log.Warn("failed to get migration state for recovery",
+			logger.Error(err),
+			logger.String("operation", cfg.opName))
+	} else {
+		cfg.log.Info("migration infrastructure initialized",
+			logger.String("state", string(state.State)),
+			logger.Int64("migrated_records", state.MigratedRecords),
+			logger.Int64("total_records", state.TotalRecords),
+			logger.String("operation", cfg.opName))
+
+		// Resume worker if migration was in progress
+		if state.State == entities.MigrationStatusDualWrite ||
+			state.State == entities.MigrationStatusMigrating {
+			cfg.log.Info("resuming migration worker after restart",
+				logger.String("state", string(state.State)),
+				logger.String("operation", cfg.opName))
+			// Start worker with background context
+			if startErr := worker.Start(context.Background()); startErr != nil {
+				cfg.log.Warn("failed to resume migration worker",
+					logger.Error(startErr),
+					logger.String("operation", cfg.opName))
+			}
+		}
+	}
+
+	return nil
+}
+
 // initializeMigrationInfrastructure sets up the v2 database migration infrastructure.
 // This creates the StateManager and Worker instances needed for the migration API.
 // The function handles state recovery on restart and resumes migration if it was in progress.
@@ -1699,7 +1796,6 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 
 	// Initialize the v2 database schema
 	if err := v2Manager.Initialize(); err != nil {
-		// Close the manager on initialization failure
 		if closeErr := v2Manager.Close(); closeErr != nil {
 			log.Warn("failed to close v2 manager after initialization failure",
 				logger.Error(closeErr),
@@ -1708,91 +1804,20 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		return fmt.Errorf("failed to initialize v2 database: %w", err)
 	}
 
-	// Create the state manager
-	stateManager := datastoreV2.NewStateManager(v2Manager.DB())
-
-	// Create repositories for the migration worker
-	v2DB := v2Manager.DB()
-	useV2Prefix := false // SQLite uses separate file, not prefixed tables
-	isMySQL := false     // SQLite dialect
-
-	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix, isMySQL)
-	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
-	v2DetectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix, isMySQL)
-
-	// Create the legacy detection repository
-	legacyRepo := datastore.NewDetectionRepository(ds, time.Local)
-
-	// Create the related data migrator for reviews, comments, locks, predictions
-	// Use half of detection batch size since related data tables are typically smaller
-	const relatedDataBatchSize = migration.DefaultBatchSize / 2
-	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
-		LegacyStore:   ds,
-		DetectionRepo: v2DetectionRepo,
-		LabelRepo:     labelRepo,
-		Logger:        log,
-		BatchSize:     relatedDataBatchSize,
-	})
-
-	// Create the migration worker
-	worker, err := migration.NewWorker(&migration.WorkerConfig{
-		Legacy:          legacyRepo,
-		V2Detection:     v2DetectionRepo,
-		LabelRepo:       labelRepo,
-		ModelRepo:       modelRepo,
-		SourceRepo:      sourceRepo,
-		StateManager:    stateManager,
-		RelatedMigrator: relatedMigrator,
-		Logger:          log,
-		BatchSize:       migration.DefaultBatchSize,
-		Timezone:        time.Local,
-	})
-	if err != nil {
-		// Close the manager on worker creation failure to avoid resource leak
+	// Setup the migration worker using the common helper
+	if err := setupMigrationWorker(&migrationSetupConfig{
+		manager:     v2Manager,
+		ds:          ds,
+		log:         log,
+		useV2Prefix: false, // SQLite uses separate file, not prefixed tables
+		opName:      "initialize_migration_infrastructure",
+	}); err != nil {
 		if closeErr := v2Manager.Close(); closeErr != nil {
-			log.Warn("failed to close v2 manager after worker creation failure",
+			log.Warn("failed to close v2 manager after worker setup failure",
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
-		return fmt.Errorf("failed to create migration worker: %w", err)
-	}
-
-	// Store manager for shutdown cleanup - only after successful worker creation
-	// to prevent GetV2DatabaseManager() from returning a partially initialized manager
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = v2Manager
-	v2DatabaseManagerMu.Unlock()
-
-	// Inject dependencies into the API layer
-	apiv2.SetMigrationDependencies(stateManager, worker)
-
-	// Check for state recovery - resume migration if it was in progress
-	state, err := stateManager.GetState()
-	if err != nil {
-		log.Warn("failed to get migration state for recovery",
-			logger.Error(err),
-			logger.String("operation", "initialize_migration_infrastructure"))
-	} else {
-		log.Info("migration infrastructure initialized",
-			logger.String("state", string(state.State)),
-			logger.Int64("migrated_records", state.MigratedRecords),
-			logger.Int64("total_records", state.TotalRecords),
-			logger.String("operation", "initialize_migration_infrastructure"))
-
-		// Resume worker if migration was in progress
-		if state.State == entities.MigrationStatusDualWrite ||
-			state.State == entities.MigrationStatusMigrating {
-			log.Info("resuming migration worker after restart",
-				logger.String("state", string(state.State)),
-				logger.String("operation", "initialize_migration_infrastructure"))
-			// Start worker with background context
-			if startErr := worker.Start(context.Background()); startErr != nil {
-				log.Warn("failed to resume migration worker",
-					logger.Error(startErr),
-					logger.String("operation", "initialize_migration_infrastructure"))
-			}
-		}
+		return err
 	}
 
 	return nil
@@ -1825,87 +1850,20 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		return fmt.Errorf("failed to initialize MySQL v2 schema: %w", err)
 	}
 
-	// Create state manager
-	stateManager := datastoreV2.NewStateManager(v2Manager.DB())
-
-	// Create repositories with v2_ prefix and MySQL dialect
-	v2DB := v2Manager.DB()
-	useV2Prefix := true // MySQL migration uses prefixed tables
-	isMySQL := true     // MySQL dialect for SQL expressions
-
-	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix, isMySQL)
-	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
-	v2DetectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix, isMySQL)
-
-	// Create legacy detection repository
-	legacyRepo := datastore.NewDetectionRepository(ds, time.Local)
-
-	// Create related data migrator
-	const relatedDataBatchSize = migration.DefaultBatchSize / 2
-	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
-		LegacyStore:   ds,
-		DetectionRepo: v2DetectionRepo,
-		LabelRepo:     labelRepo,
-		Logger:        log,
-		BatchSize:     relatedDataBatchSize,
-	})
-
-	// Create migration worker
-	worker, err := migration.NewWorker(&migration.WorkerConfig{
-		Legacy:          legacyRepo,
-		V2Detection:     v2DetectionRepo,
-		LabelRepo:       labelRepo,
-		ModelRepo:       modelRepo,
-		SourceRepo:      sourceRepo,
-		StateManager:    stateManager,
-		RelatedMigrator: relatedMigrator,
-		Logger:          log,
-		BatchSize:       migration.DefaultBatchSize,
-		Timezone:        time.Local,
-	})
-	if err != nil {
+	// Setup the migration worker using the common helper
+	if err := setupMigrationWorker(&migrationSetupConfig{
+		manager:     v2Manager,
+		ds:          ds,
+		log:         log,
+		useV2Prefix: true, // MySQL migration uses v2_ prefixed tables
+		opName:      "initialize_mysql_migration",
+	}); err != nil {
 		if closeErr := v2Manager.Close(); closeErr != nil {
-			log.Warn("failed to close MySQL v2 manager after worker creation failure",
+			log.Warn("failed to close MySQL v2 manager after worker setup failure",
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_mysql_migration"))
 		}
-		return fmt.Errorf("failed to create migration worker: %w", err)
-	}
-
-	// Store manager for shutdown cleanup
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = v2Manager
-	v2DatabaseManagerMu.Unlock()
-
-	// Inject dependencies into API layer
-	apiv2.SetMigrationDependencies(stateManager, worker)
-
-	// Check for state recovery
-	state, err := stateManager.GetState()
-	if err != nil {
-		log.Warn("failed to get MySQL migration state for recovery",
-			logger.Error(err),
-			logger.String("operation", "initialize_mysql_migration"))
-	} else {
-		log.Info("MySQL migration infrastructure initialized",
-			logger.String("state", string(state.State)),
-			logger.Int64("migrated_records", state.MigratedRecords),
-			logger.Int64("total_records", state.TotalRecords),
-			logger.String("operation", "initialize_mysql_migration"))
-
-		// Resume worker if migration was in progress
-		if state.State == entities.MigrationStatusDualWrite ||
-			state.State == entities.MigrationStatusMigrating {
-			log.Info("resuming MySQL migration worker after restart",
-				logger.String("state", string(state.State)),
-				logger.String("operation", "initialize_mysql_migration"))
-			if startErr := worker.Start(context.Background()); startErr != nil {
-				log.Warn("failed to resume MySQL migration worker",
-					logger.Error(startErr),
-					logger.String("operation", "initialize_mysql_migration"))
-			}
-		}
+		return err
 	}
 
 	return nil

@@ -19,7 +19,7 @@ const (
 // MigrationState tracks the progress of database migration.
 // This is a singleton table (only one row with ID=1).
 type MigrationState struct {
-	ID              uint            `gorm:"primaryKey;check:id = 1"` // Singleton constraint
+	ID uint `gorm:"primaryKey"` // Singleton enforced by StateManager (id=1)
 	State           MigrationStatus `gorm:"type:varchar(20);not null;default:'idle'"`
 	StartedAt       *time.Time
 	CompletedAt     *time.Time

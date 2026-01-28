@@ -14,7 +14,7 @@ import (
 type weatherRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
-	isMySQL     bool
+	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
 }
 
 // NewWeatherRepository creates a new WeatherRepository.
