@@ -435,6 +435,12 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				logger.String("operation", "graceful_shutdown"))
 			shutdownStart := time.Now()
 
+			// Stop migration worker FIRST - before any other shutdown steps
+			// This ensures the worker stops even if later steps timeout
+			log.Info("stopping migration worker early in shutdown",
+				logger.String("operation", "shutdown_migration_worker_early"))
+			apiv2.StopMigrationWorker()
+
 			// Create context with timeout for the entire shutdown process
 			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 
@@ -608,6 +614,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				GetLogger().Warn("shutdown timeout exceeded, forcing exit",
 					logger.Float64("timeout_seconds", shutdownTimeout.Seconds()),
 					logger.String("operation", "shutdown_forced_exit"))
+				// Ensure migration worker is stopped on timeout
+				apiv2.StopMigrationWorker()
 				cancel()
 				return nil
 			}
@@ -1745,8 +1753,12 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			cfg.log.Info("resuming migration worker after restart",
 				logger.String("state", string(state.State)),
 				logger.String("operation", cfg.opName))
-			// Start worker with background context
-			if startErr := worker.Start(context.Background()); startErr != nil {
+			// Create cancellable context for the worker - this allows graceful shutdown
+			// to stop the worker by cancelling this context
+			workerCtx, workerCancel := context.WithCancel(context.Background())
+			apiv2.SetMigrationWorkerCancel(workerCancel)
+			if startErr := worker.Start(workerCtx); startErr != nil {
+				workerCancel() // Clean up on failure
 				cfg.log.Warn("failed to resume migration worker",
 					logger.Error(startErr),
 					logger.String("operation", cfg.opName))
