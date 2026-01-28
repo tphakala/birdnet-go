@@ -777,27 +777,38 @@ func closeV2Database() {
 
 	log := GetLogger()
 
-	// Perform WAL checkpoint before closing
-	log.Info("performing v2 SQLite WAL checkpoint",
-		logger.String("operation", "v2_wal_checkpoint_before_shutdown"))
+	// Determine database type for logging
+	dbType := "SQLite"
+	if manager.IsMySQL() {
+		dbType = "MySQL"
+	}
 
-	if err := manager.CheckpointWAL(); err != nil {
-		log.Warn("v2 WAL checkpoint failed",
-			logger.Error(err),
-			logger.String("operation", "v2_wal_checkpoint"))
+	// Perform WAL checkpoint before closing (SQLite only, no-op for MySQL)
+	if !manager.IsMySQL() {
+		log.Info("performing v2 SQLite WAL checkpoint",
+			logger.String("operation", "v2_wal_checkpoint_before_shutdown"))
+
+		if err := manager.CheckpointWAL(); err != nil {
+			log.Warn("v2 WAL checkpoint failed",
+				logger.Error(err),
+				logger.String("operation", "v2_wal_checkpoint"))
+		}
 	}
 
 	// Close the database
-	log.Info("closing v2 SQLite database",
+	log.Info("closing v2 database",
+		logger.String("type", dbType),
 		logger.String("path", manager.Path()),
 		logger.String("operation", "v2_database_close"))
 
 	if err := manager.Close(); err != nil {
 		log.Error("failed to close v2 database",
 			logger.Error(err),
+			logger.String("type", dbType),
 			logger.String("operation", "v2_database_close"))
 	} else {
-		log.Info("v2 SQLite database closed successfully",
+		log.Info("v2 database closed successfully",
+			logger.String("type", dbType),
 			logger.String("path", manager.Path()))
 	}
 }
