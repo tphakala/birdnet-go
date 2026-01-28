@@ -30,6 +30,9 @@
 
   interface MigrationStatus {
     state: string;
+    current_phase?: string; // Current migration phase (detections, predictions, etc.)
+    phase_number?: number; // Current phase number (1-based)
+    total_phases?: number; // Total number of phases
     total_records: number;
     migrated_records: number;
     progress_percent: number;
@@ -124,7 +127,13 @@
           class="px-2.5 py-1 text-xs font-medium rounded-full {stateStyles[status.state] ||
             stateStyles.idle}"
         >
-          {t(`system.database.migration.status.${status.state}`)}
+          {#if status.current_phase === 'predictions'}
+            {t('system.database.migration.status.migrating_predictions')}
+          {:else if status.current_phase === 'detections'}
+            {t('system.database.migration.status.migrating')}
+          {:else}
+            {t(`system.database.migration.status.${status.state}`)}
+          {/if}
         </span>
       {/if}
     </div>
@@ -247,42 +256,98 @@
     {:else if status}
       <!-- Active State (migrating, dualWrite, etc.) -->
       <div class="space-y-4">
-        <!-- Friendly status note -->
+        <!-- Info note at top -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
           <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
-            {t(`system.database.migration.notes.${status.state}`)}
+            {t('system.database.migration.notes.inProgress')}
           </p>
         </div>
 
-        <!-- Progress bar -->
-        <div>
-          <div class="flex justify-between text-sm mb-2 text-[var(--color-base-content)]">
-            <span
-              >{status.migrated_records.toLocaleString()} / {status.total_records.toLocaleString()}</span
-            >
-            <span>{status.progress_percent.toFixed(1)}%</span>
-          </div>
-          <div class="w-full h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden">
-            <div
-              class="h-full bg-[var(--color-primary)] transition-all duration-300 rounded-full"
-              style:width="{status.progress_percent}%"
-            ></div>
-          </div>
-        </div>
+        <!-- Current Phase Indicator - Always visible during active migration -->
+        {#if status.current_phase && status.phase_number && status.total_phases}
+          <div
+            class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
+          >
+            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+              <Loader2 class="size-4 animate-spin" />
+              <span>
+                {t('system.database.migration.phase.indicator', {
+                  current: status.phase_number,
+                  total: status.total_phases,
+                })}
+                {#if status.current_phase === 'predictions'}
+                  {t('system.database.migration.phase.predictions')}
+                {:else if status.current_phase === 'detections'}
+                  {t('system.database.migration.phase.detections')}
+                {:else}
+                  {t(`system.database.migration.phase.${status.current_phase}`)}
+                {/if}
+              </span>
+            </div>
 
-        <!-- Rate and ETA -->
-        {#if status.records_per_second && status.records_per_second > 0}
-          <div class="flex justify-between text-sm text-[var(--color-base-content)]/70">
-            <span
-              >{t('system.database.migration.progress.rateValue', {
-                rate: status.records_per_second.toFixed(1),
-              })}</span
-            >
-            {#if status.estimated_remaining}
+            <!-- Phase-specific progress bar within phase indicator -->
+            <div class="mt-3">
+              <div class="flex justify-between text-sm mb-1.5 text-[var(--color-base-content)]">
+                <span
+                  >{status.migrated_records.toLocaleString()} / {status.total_records.toLocaleString()}
+                  {t('system.database.migration.progress.records')}</span
+                >
+                <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
+              </div>
+              <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-[var(--color-primary)] transition-all duration-300 rounded-full"
+                  style:width="{status.progress_percent}%"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Rate and ETA inside phase indicator -->
+            {#if status.records_per_second && status.records_per_second > 0}
+              <div class="flex justify-between text-sm mt-2 text-[var(--color-base-content)]/70">
+                <span
+                  >{t('system.database.migration.progress.rateValue', {
+                    rate: status.records_per_second.toFixed(1),
+                  })}</span
+                >
+                {#if status.estimated_remaining}
+                  <span
+                    >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
+                  >
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <!-- Fallback progress for states without explicit phase info -->
+          <div>
+            <div class="flex justify-between text-sm mb-2 text-[var(--color-base-content)]">
               <span
-                >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
+                >{status.migrated_records.toLocaleString()} / {status.total_records.toLocaleString()}</span
               >
+              <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
+            </div>
+            <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
+              <div
+                class="h-full bg-[var(--color-primary)] transition-all duration-300 rounded-full"
+                style:width="{status.progress_percent}%"
+              ></div>
+            </div>
+            <!-- Rate and ETA for fallback -->
+            {#if status.records_per_second && status.records_per_second > 0}
+              <div class="flex justify-between text-sm mt-2 text-[var(--color-base-content)]/70">
+                <span
+                  >{t('system.database.migration.progress.rateValue', {
+                    rate: status.records_per_second.toFixed(1),
+                  })}</span
+                >
+                {#if status.estimated_remaining}
+                  <span
+                    >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
+                  >
+                {/if}
+              </div>
             {/if}
           </div>
         {/if}

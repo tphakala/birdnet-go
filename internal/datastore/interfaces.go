@@ -131,6 +131,9 @@ type Interface interface {
 	// Uses keyset pagination: returns results where (note_id > afterNoteID) OR
 	// (note_id = afterNoteID AND id > afterResultID).
 	GetResultsBatch(afterNoteID uint, afterResultID uint, batchSize int) ([]Results, error)
+	// CountResults returns the total number of secondary predictions.
+	// Used for progress tracking during migration.
+	CountResults() (int64, error)
 	SaveNoteComment(comment *NoteComment) error
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
@@ -1315,6 +1318,20 @@ func (ds *DataStore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize 
 			Build()
 	}
 	return results, nil
+}
+
+// CountResults returns the total number of secondary predictions.
+// Used for progress tracking during migration.
+func (ds *DataStore) CountResults() (int64, error) {
+	var count int64
+	if err := ds.DB.Model(&Results{}).Count(&count).Error; err != nil {
+		return 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "count_results").
+			Build()
+	}
+	return count, nil
 }
 
 // SaveNoteComment saves a new comment for a note

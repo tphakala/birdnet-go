@@ -1708,23 +1708,29 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	// Create the legacy detection repository
 	legacyRepo := datastore.NewDetectionRepository(cfg.ds, time.Local)
 
+	// Determine batch size and sleep duration based on database type
+	// MySQL handles larger batches and concurrent access better than SQLite
+	batchSize := migration.DefaultBatchSize
+	sleepBetweenBatches := migration.DefaultSleepBetweenBatches
+	if isMySQL {
+		batchSize = migration.MySQLBatchSize
+		sleepBetweenBatches = migration.MySQLSleepBetweenBatches
+	}
+
+	// Use datastore logger for migration components (not analysis logger)
+	migrationLogger := datastore.GetLogger()
+
 	// Create the related data migrator for reviews, comments, locks, predictions
 	// Use half of detection batch size since related data tables are typically smaller
-	const relatedDataBatchSize = migration.DefaultBatchSize / 2
+	relatedDataBatchSize := batchSize / 2
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
 		LegacyStore:   cfg.ds,
 		DetectionRepo: v2DetectionRepo,
 		LabelRepo:     labelRepo,
-		Logger:        cfg.log,
+		StateManager:  stateManager,
+		Logger:        migrationLogger,
 		BatchSize:     relatedDataBatchSize,
 	})
-
-	// Determine sleep duration based on database type
-	// MySQL handles concurrent access better, so use minimal throttling
-	sleepBetweenBatches := migration.DefaultSleepBetweenBatches
-	if isMySQL {
-		sleepBetweenBatches = migration.MySQLSleepBetweenBatches
-	}
 
 	// Create the migration worker
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
@@ -1735,10 +1741,11 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		SourceRepo:          sourceRepo,
 		StateManager:        stateManager,
 		RelatedMigrator:     relatedMigrator,
-		Logger:              cfg.log,
-		BatchSize:           migration.DefaultBatchSize,
+		Logger:              migrationLogger,
+		BatchSize:           batchSize,
 		SleepBetweenBatches: sleepBetweenBatches,
 		Timezone:            time.Local,
+		UseBatchMode:        isMySQL, // Use efficient batch inserts for MySQL
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create migration worker: %w", err)
@@ -1756,11 +1763,11 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	// Check for state recovery - resume migration if it was in progress
 	state, err := stateManager.GetState()
 	if err != nil {
-		cfg.log.Warn("failed to get migration state for recovery",
+		migrationLogger.Warn("failed to get migration state for recovery",
 			logger.Error(err),
 			logger.String("operation", cfg.opName))
 	} else {
-		cfg.log.Info("migration infrastructure initialized",
+		migrationLogger.Info("migration infrastructure initialized",
 			logger.String("state", string(state.State)),
 			logger.Int64("migrated_records", state.MigratedRecords),
 			logger.Int64("total_records", state.TotalRecords),
@@ -1769,7 +1776,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		// Resume worker if migration was in progress
 		if state.State == entities.MigrationStatusDualWrite ||
 			state.State == entities.MigrationStatusMigrating {
-			cfg.log.Info("resuming migration worker after restart",
+			migrationLogger.Info("resuming migration worker after restart",
 				logger.String("state", string(state.State)),
 				logger.String("operation", cfg.opName))
 			// Create cancellable context for the worker - this allows graceful shutdown
@@ -1778,7 +1785,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			apiv2.SetMigrationWorkerCancel(workerCancel)
 			if startErr := worker.Start(workerCtx); startErr != nil {
 				workerCancel() // Clean up on failure
-				cfg.log.Warn("failed to resume migration worker",
+				migrationLogger.Warn("failed to resume migration worker",
 					logger.Error(startErr),
 					logger.String("operation", cfg.opName))
 			}

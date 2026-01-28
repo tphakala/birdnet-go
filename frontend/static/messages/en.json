@@ -785,7 +785,8 @@
           "idle": "Ready to Start",
           "initializing": "Initializing",
           "dual_write": "Dual-Write Active",
-          "migrating": "Migrating Records",
+          "migrating": "Migrating Primary",
+          "migrating_predictions": "Migrating Secondary",
           "paused": "Paused",
           "validating": "Validating",
           "cutover": "Cutover in Progress",
@@ -802,9 +803,18 @@
           "eta": "Estimated time remaining",
           "dirtyIds": "{count} records pending re-sync"
         },
+        "phase": {
+          "indicator": "Phase {current} of {total}: ",
+          "detections": "Migrating primary detections",
+          "predictions": "Migrating secondary detections",
+          "reviews": "Migrating Reviews",
+          "comments": "Migrating Comments",
+          "locks": "Migrating Locks"
+        },
         "notes": {
-          "dual_write": "Migration in progress. Your data is safe - all new detections are being saved to both databases. You can continue using BirdNET-Go normally.",
-          "migrating": "Copying your existing detections to the new database. This may take a while depending on how many detections you have. You can pause and resume at any time.",
+          "inProgress": "You can continue using the system normally while migration runs in the background.",
+          "dual_write": "Migration in progress. Your data is safe - all new detections are being saved to both databases.",
+          "migrating": "Copying your existing detections to the new database.",
           "validating": "Verifying all records were copied correctly. Almost done!",
           "cutover": "Switching to the new database. This only takes a moment.",
           "paused": "Migration is paused. Your data is safe. Resume when you're ready to continue."

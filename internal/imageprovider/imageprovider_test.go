@@ -336,6 +336,9 @@ func (m *mockStore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.Note
 func (m *mockStore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
 	return nil, nil
 }
+func (m *mockStore) CountResults() (int64, error) {
+	return 0, nil
+}
 
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {

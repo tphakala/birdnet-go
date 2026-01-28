@@ -22,6 +22,9 @@ import (
 // MigrationStatusResponse represents the migration status for the API.
 type MigrationStatusResponse struct {
 	State               string     `json:"state"`
+	CurrentPhase        string     `json:"current_phase,omitempty"`   // Current migration phase (detections, predictions, etc.)
+	PhaseNumber         int        `json:"phase_number,omitempty"`    // Current phase number (1-based)
+	TotalPhases         int        `json:"total_phases,omitempty"`    // Total number of phases
 	StartedAt           *time.Time `json:"started_at,omitempty"`
 	CompletedAt         *time.Time `json:"completed_at,omitempty"`
 	TotalRecords        int64      `json:"total_records"`
@@ -206,6 +209,9 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 
 	response := MigrationStatusResponse{
 		State:              string(state.State),
+		CurrentPhase:       string(state.CurrentPhase),
+		PhaseNumber:        state.PhaseNumber,
+		TotalPhases:        state.TotalPhases,
 		StartedAt:          state.StartedAt,
 		CompletedAt:        state.CompletedAt,
 		TotalRecords:       state.TotalRecords,
@@ -226,12 +232,17 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		CanRollback:        canRollback,
 		IsDualWriteActive:  isDualWriteActive,
 		ShouldReadFromV2:   shouldReadFromV2,
+		IsV2OnlyMode:       isV2OnlyMode,
 	}
 
 	c.logInfoIfEnabled("Migration status retrieved",
 		logger.String("state", response.State),
+		logger.String("phase", response.CurrentPhase),
+		logger.Int("phase_number", response.PhaseNumber),
+		logger.Int("total_phases", response.TotalPhases),
 		logger.Int64("migrated", response.MigratedRecords),
 		logger.Int64("total", response.TotalRecords),
+		logger.Float64("percent", response.ProgressPercent),
 		logger.Bool("worker_running", response.WorkerRunning),
 		logger.String("path", path), logger.String("ip", ip))
 

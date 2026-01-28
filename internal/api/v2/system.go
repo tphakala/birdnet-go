@@ -1456,15 +1456,35 @@ func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse
 		response.Type = "MySQL"
 	}
 
-	// Get database file size for SQLite
+	// Get database size
+	db := c.V2Manager.DB()
 	if !c.V2Manager.IsMySQL() {
+		// SQLite: get file size
 		if fi, err := os.Stat(c.V2Manager.Path()); err == nil {
 			response.SizeBytes = fi.Size()
+		}
+	} else if db != nil {
+		// MySQL: query information_schema for database size
+		// Extract database name from location (format: host:port/database)
+		location := c.V2Manager.Path()
+		if idx := strings.LastIndex(location, "/"); idx != -1 {
+			dbName := location[idx+1:]
+			var sizeBytes int64
+			err := db.Raw(`
+				SELECT COALESCE(SUM(data_length + index_length), 0) as size
+				FROM information_schema.TABLES
+				WHERE table_schema = ?
+			`, dbName).Scan(&sizeBytes).Error
+			if err == nil {
+				response.SizeBytes = sizeBytes
+			} else {
+				c.logWarnIfEnabled("Failed to get MySQL database size",
+					logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
+			}
 		}
 	}
 
 	// Count total detections from v2 database
-	db := c.V2Manager.DB()
 	if db != nil {
 		var count int64
 		if err := db.Table("detections").Count(&count).Error; err == nil {

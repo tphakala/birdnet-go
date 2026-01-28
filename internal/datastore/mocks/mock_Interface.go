@@ -292,6 +292,58 @@ func (_c *MockInterface_CountSpeciesDetections_Call) RunAndReturn(run func(strin
 	return _c
 }
 
+// CountResults provides a mock function with no fields
+func (_m *MockInterface) CountResults() (int64, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountResults")
+	}
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_CountResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountResults'
+type MockInterface_CountResults_Call struct {
+	*mock.Call
+}
+
+// CountResults is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) CountResults() *MockInterface_CountResults_Call {
+	return &MockInterface_CountResults_Call{Call: _e.mock.On("CountResults")}
+}
+
+func (_c *MockInterface_CountResults_Call) Run(run func()) *MockInterface_CountResults_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_CountResults_Call) Return(_a0 int64, _a1 error) *MockInterface_CountResults_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_CountResults_Call) RunAndReturn(run func() (int64, error)) *MockInterface_CountResults_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with given fields: id
 func (_m *MockInterface) Delete(id string) error {
 	ret := _m.Called(id)

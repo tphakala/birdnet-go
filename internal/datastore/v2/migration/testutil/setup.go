@@ -787,3 +787,10 @@ func (s *testLegacyInterface) GetResultsBatch(afterNoteID, afterResultID uint, b
 	).Order("note_id ASC, id ASC").Limit(batchSize).Find(&results).Error
 	return results, err
 }
+
+// CountResults returns the total number of secondary predictions.
+func (s *testLegacyInterface) CountResults() (int64, error) {
+	var count int64
+	err := s.db.Model(&datastore.Results{}).Count(&count).Error
+	return count, err
+}
