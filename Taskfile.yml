@@ -853,6 +853,12 @@ tasks:
       - rm -f {{.AVICOMMONS_DATA_DIR}}/{{.AVICOMMONS_JSON_FILE}}
       - rm -rf frontend/dist frontend/node_modules
 
+  # Database migration tools
+  dbexport:
+    desc: Build the SQLite to MySQL export tool
+    cmds:
+      - go build -ldflags "-X 'main.version={{.VERSION}}'" -o {{.BINARY_DIR}}/dbexport ./tools/dbexport
+
   # Non-embedded builds (without embedded models - smaller binary size)
   noembed:
     desc: Build for native platform without embedded models
