@@ -38,8 +38,8 @@ const sunriseSetWindowMinutes = 30
 // Database dialect constants.
 const (
 	DialectUnknown = "unknown"
-	DialectSQLite  = "sqlite"
-	DialectMySQL   = "mysql"
+	DialectSQLite  = "SQLite"
+	DialectMySQL   = "MySQL"
 )
 
 // Time-of-day filter constants for detection queries.

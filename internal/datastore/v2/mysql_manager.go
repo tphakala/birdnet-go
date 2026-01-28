@@ -200,9 +200,10 @@ func (m *MySQLManager) Delete() error {
 
 // Exists checks if v2 tables exist in the MySQL database.
 func (m *MySQLManager) Exists() bool {
-	// Check if the migration_state table exists as an indicator
-	// Use the stored prefix (could be "" for fresh install or "v2_" for migration)
-	return m.db.Migrator().HasTable(m.tablePrefix + "migration_state")
+	// Check if the migration_state table exists as an indicator.
+	// Note: Entity TableName() methods override GORM's NamingStrategy,
+	// so the table is always "migration_state" regardless of prefix setting.
+	return m.db.Migrator().HasTable("migration_state")
 }
 
 // IsMySQL returns true for MySQL manager.

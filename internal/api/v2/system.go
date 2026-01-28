@@ -1446,14 +1446,14 @@ func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse
 
 	// Build response
 	response := &V2DatabaseStatsResponse{
-		Type:      "sqlite",
+		Type:      "SQLite",
 		Location:  c.V2Manager.Path(),
 		Connected: true,
 	}
 
 	// Adjust type for MySQL
 	if c.V2Manager.IsMySQL() {
-		response.Type = "mysql"
+		response.Type = "MySQL"
 	}
 
 	// Get database file size for SQLite
