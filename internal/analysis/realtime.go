@@ -1824,23 +1824,25 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 }
 
 // initializeMySQLMigrationInfrastructure sets up migration infrastructure for MySQL.
-// Unlike SQLite which uses a separate file, MySQL uses v2_ prefixed tables in the same database.
+// Unlike SQLite which uses a separate file, MySQL shares the same database.
+// V2 tables have different names from legacy (detections vs notes), so no prefix needed.
 func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) error {
-	// Create v2 MySQL manager with v2_ prefix for migration mode
+	// Create v2 MySQL manager - no prefix needed since v2 table names differ from legacy
+	// (Entity TableName() methods override GORM NamingStrategy anyway)
 	v2Manager, err := datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
 		Host:        settings.Output.MySQL.Host,
 		Port:        settings.Output.MySQL.Port,
 		Username:    settings.Output.MySQL.Username,
 		Password:    settings.Output.MySQL.Password,
 		Database:    settings.Output.MySQL.Database,
-		UseV2Prefix: true, // Migration mode: use v2_ prefix
+		UseV2Prefix: false, // No prefix - v2 tables have different names from legacy
 		Debug:       settings.Debug,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create MySQL v2 manager: %w", err)
 	}
 
-	// Initialize the v2 schema (creates v2_ prefixed tables)
+	// Initialize the v2 schema (creates tables without prefix)
 	if err := v2Manager.Initialize(); err != nil {
 		if closeErr := v2Manager.Close(); closeErr != nil {
 			log.Warn("failed to close MySQL v2 manager after initialization failure",
@@ -1851,11 +1853,14 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 	}
 
 	// Setup the migration worker using the common helper
+	// Note: useV2Prefix is false because entity TableName() methods override
+	// GORM's NamingStrategy, creating tables without prefix. Since v2 tables
+	// have different names from legacy (detections vs notes), prefix isn't needed.
 	if err := setupMigrationWorker(&migrationSetupConfig{
 		manager:     v2Manager,
 		ds:          ds,
 		log:         log,
-		useV2Prefix: true, // MySQL migration uses v2_ prefixed tables
+		useV2Prefix: false, // Tables created without prefix due to TableName() methods
 		opName:      "initialize_mysql_migration",
 	}); err != nil {
 		if closeErr := v2Manager.Close(); closeErr != nil {
