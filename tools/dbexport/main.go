@@ -76,7 +76,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 
 	if cfg.Verbose {
 		fmt.Printf("Source: %s\n", cfg.SQLitePath)
-		fmt.Printf("Target: %s\n", cfg.GetMySQLDSN())
+		fmt.Printf("Target: %s\n", cfg.GetSanitizedMySQLDSN())
 		fmt.Printf("Batch size: %d\n", cfg.BatchSize)
 		fmt.Printf("Clean mode: %v\n", cfg.Clean)
 	}

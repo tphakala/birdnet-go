@@ -69,14 +69,17 @@ func (c *Config) loadFromConfigFile() error {
 	// Determine config file path
 	configPath := c.ConfigPath
 	if configPath == "" {
-		// Try default locations
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			configPath = filepath.Join(homeDir, ".config", "birdnet-go", "config.yaml")
-			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				// Try current directory
-				configPath = "config.yaml"
+		// Try default locations, preferring home directory
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			p := filepath.Join(homeDir, ".config", "birdnet-go", "config.yaml")
+			if _, statErr := os.Stat(p); statErr == nil {
+				configPath = p
 			}
+		}
+
+		// Fall back to current directory if home config was not found/accessible
+		if configPath == "" {
+			configPath = "config.yaml"
 		}
 	}
 

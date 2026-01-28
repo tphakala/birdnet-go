@@ -189,12 +189,7 @@ func (m *Migrator) Run() (*MigrationStats, error) {
 
 	stats.EndTime = time.Now()
 
-	// Re-enable foreign key checks
-	if err := m.targetDB.Exec("SET FOREIGN_KEY_CHECKS=1").Error; err != nil {
-		fmt.Printf("Warning: failed to re-enable foreign key checks: %v\n", err)
-	}
-
-	fmt.Println("Foreign key checks re-enabled")
+	// Note: FK checks re-enabled by defer on line 147
 
 	return stats, nil
 }
