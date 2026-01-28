@@ -21,8 +21,12 @@ import (
 const DefaultBatchSize = 100
 
 // DefaultSleepBetweenBatches is the default sleep duration between batches
-// to reduce database load and allow other operations.
+// to reduce database load and allow other operations (used for SQLite).
 const DefaultSleepBetweenBatches = 100 * time.Millisecond
+
+// MySQLSleepBetweenBatches is the sleep duration for MySQL migrations.
+// MySQL handles concurrent access better than SQLite, so we use minimal throttling.
+const MySQLSleepBetweenBatches = 10 * time.Millisecond
 
 // DefaultErrorBackoff is the sleep duration after encountering errors.
 const DefaultErrorBackoff = 5 * time.Second
@@ -101,6 +105,7 @@ type WorkerConfig struct {
 	RelatedMigrator   *RelatedDataMigrator // Optional: migrates reviews, comments, locks, predictions
 	Logger            logger.Logger
 	BatchSize         int
+	SleepBetweenBatches time.Duration // Optional: defaults to DefaultSleepBetweenBatches; use MySQLSleepBetweenBatches for MySQL
 	Timezone          *time.Location
 	MaxConsecErrors   int // Optional: defaults to DefaultMaxConsecutiveErrors
 }
@@ -149,6 +154,11 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		maxConsecErrors = DefaultMaxConsecutiveErrors
 	}
 
+	sleepBetween := cfg.SleepBetweenBatches
+	if sleepBetween <= 0 {
+		sleepBetween = DefaultSleepBetweenBatches
+	}
+
 	return &Worker{
 		legacy:          cfg.Legacy,
 		v2Detection:     cfg.V2Detection,
@@ -159,7 +169,7 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		relatedMigrator: cfg.RelatedMigrator,
 		logger:          cfg.Logger,
 		batchSize:       batchSize,
-		sleepBetween:    DefaultSleepBetweenBatches,
+		sleepBetween:    sleepBetween,
 		timezone:        tz,
 		pauseCh:         make(chan struct{}),
 		resumeCh:        make(chan struct{}),

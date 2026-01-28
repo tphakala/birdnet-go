@@ -1708,18 +1708,26 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		BatchSize:     relatedDataBatchSize,
 	})
 
+	// Determine sleep duration based on database type
+	// MySQL handles concurrent access better, so use minimal throttling
+	sleepBetweenBatches := migration.DefaultSleepBetweenBatches
+	if isMySQL {
+		sleepBetweenBatches = migration.MySQLSleepBetweenBatches
+	}
+
 	// Create the migration worker
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
-		Legacy:          legacyRepo,
-		V2Detection:     v2DetectionRepo,
-		LabelRepo:       labelRepo,
-		ModelRepo:       modelRepo,
-		SourceRepo:      sourceRepo,
-		StateManager:    stateManager,
-		RelatedMigrator: relatedMigrator,
-		Logger:          cfg.log,
-		BatchSize:       migration.DefaultBatchSize,
-		Timezone:        time.Local,
+		Legacy:              legacyRepo,
+		V2Detection:         v2DetectionRepo,
+		LabelRepo:           labelRepo,
+		ModelRepo:           modelRepo,
+		SourceRepo:          sourceRepo,
+		StateManager:        stateManager,
+		RelatedMigrator:     relatedMigrator,
+		Logger:              cfg.log,
+		BatchSize:           migration.DefaultBatchSize,
+		SleepBetweenBatches: sleepBetweenBatches,
+		Timezone:            time.Local,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create migration worker: %w", err)
