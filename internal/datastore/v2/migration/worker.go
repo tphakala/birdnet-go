@@ -861,7 +861,16 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 	// Check if record already exists in V2 (from dual-write)
 	existing, err := w.v2Detection.Get(ctx, result.ID)
 	if err == nil && existing != nil {
-		// Update existing record - legacy is source of truth during migration
+		// Record already exists - check if it's locked
+		locked, lockErr := w.v2Detection.IsLocked(ctx, result.ID)
+		if lockErr == nil && locked {
+			// Locked detections are user-verified; skip update and consider migrated
+			w.logger.Debug("skipping update for locked detection",
+				logger.Uint64("id", uint64(result.ID)))
+			return nil
+		}
+
+		// Update existing unlocked record - legacy is source of truth during migration
 		updates := map[string]any{
 			"label_id":   det.LabelID,
 			"model_id":   det.ModelID,
