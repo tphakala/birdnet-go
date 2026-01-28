@@ -1717,11 +1717,12 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	// Create repositories for the migration worker
 	v2DB := v2Manager.DB()
 	useV2Prefix := false // SQLite uses separate file, not prefixed tables
+	isMySQL := false     // SQLite dialect
 
-	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix)
-	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix)
-	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix)
-	v2DetectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix)
+	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
+	v2DetectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix, isMySQL)
 
 	// Create the legacy detection repository
 	legacyRepo := datastore.NewDetectionRepository(ds, time.Local)
@@ -1879,14 +1880,15 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 
 	// Create repositories
 	v2DB := v2Manager.DB()
-	detectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix)
-	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix)
-	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix)
-	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix)
-	weatherRepo := repository.NewWeatherRepository(v2DB, useV2Prefix)
-	imageCacheRepo := repository.NewImageCacheRepository(v2DB, useV2Prefix)
-	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, useV2Prefix)
-	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, useV2Prefix)
+	isMySQL := settings.Output.MySQL.Enabled // Determine dialect from settings
+	detectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(v2DB, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, useV2Prefix, isMySQL)
 
 	// Create V2OnlyDatastore
 	ds, err := v2only.New(&v2only.Config{

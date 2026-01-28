@@ -12,14 +12,19 @@ import (
 type audioSourceRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool
 }
 
 // NewAudioSourceRepository creates a new AudioSourceRepository.
-// Set useV2Prefix to true for MySQL to use v2_ table prefix.
-func NewAudioSourceRepository(db *gorm.DB, useV2Prefix bool) AudioSourceRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewAudioSourceRepository(db *gorm.DB, useV2Prefix, isMySQL bool) AudioSourceRepository {
 	return &audioSourceRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 

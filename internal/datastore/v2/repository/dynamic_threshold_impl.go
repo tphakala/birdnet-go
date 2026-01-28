@@ -14,13 +14,19 @@ import (
 type dynamicThresholdRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool
 }
 
 // NewDynamicThresholdRepository creates a new DynamicThresholdRepository.
-func NewDynamicThresholdRepository(db *gorm.DB, useV2Prefix bool) DynamicThresholdRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewDynamicThresholdRepository(db *gorm.DB, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
 	return &dynamicThresholdRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 

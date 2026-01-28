@@ -86,15 +86,16 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 
 	// Create repositories (no v2 prefix for fresh installs)
 	db := manager.DB()
-	useV2Prefix := false // Fresh installs use clean table names
-	detectionRepo := repository.NewDetectionRepository(db, useV2Prefix)
-	labelRepo := repository.NewLabelRepository(db, useV2Prefix)
-	modelRepo := repository.NewModelRepository(db, useV2Prefix)
-	sourceRepo := repository.NewAudioSourceRepository(db, useV2Prefix)
-	weatherRepo := repository.NewWeatherRepository(db, useV2Prefix)
-	imageCacheRepo := repository.NewImageCacheRepository(db, useV2Prefix)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, useV2Prefix)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, useV2Prefix)
+	useV2Prefix := false                      // Fresh installs use clean table names
+	isMySQL := settings.Output.MySQL.Enabled  // Determine dialect from settings
+	detectionRepo := repository.NewDetectionRepository(db, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(db, useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(db, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(db, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(db, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, useV2Prefix, isMySQL)
 
 	ds, err := New(&Config{
 		Manager:      manager,

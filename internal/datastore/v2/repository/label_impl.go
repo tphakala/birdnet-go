@@ -14,14 +14,19 @@ import (
 type labelRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool // For MySQL: use v2_ table prefix
+	isMySQL     bool // For MySQL dialect (affects SQL expressions)
 }
 
 // NewLabelRepository creates a new LabelRepository.
-// Set useV2Prefix to true for MySQL to use v2_ table prefix.
-func NewLabelRepository(db *gorm.DB, useV2Prefix bool) LabelRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewLabelRepository(db *gorm.DB, useV2Prefix, isMySQL bool) LabelRepository {
 	return &labelRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 

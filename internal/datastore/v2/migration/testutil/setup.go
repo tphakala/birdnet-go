@@ -176,16 +176,16 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	// Create state manager
 	ctx.StateManager = datastoreV2.NewStateManager(mgr.DB())
 
-	// Create repositories (useV2Prefix = false for direct table access in tests)
+	// Create repositories (useV2Prefix = false for direct table access in tests, isMySQL = false for SQLite)
 	db := mgr.DB()
-	ctx.DetectionRepo = repository.NewDetectionRepository(db, false)
-	ctx.LabelRepo = repository.NewLabelRepository(db, false)
-	ctx.ModelRepo = repository.NewModelRepository(db, false)
-	ctx.SourceRepo = repository.NewAudioSourceRepository(db, false)
-	ctx.WeatherRepo = repository.NewWeatherRepository(db, false)
-	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, false)
-	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, false)
+	ctx.DetectionRepo = repository.NewDetectionRepository(db, false, false)
+	ctx.LabelRepo = repository.NewLabelRepository(db, false, false)
+	ctx.ModelRepo = repository.NewModelRepository(db, false, false)
+	ctx.SourceRepo = repository.NewAudioSourceRepository(db, false, false)
+	ctx.WeatherRepo = repository.NewWeatherRepository(db, false, false)
+	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, false, false)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, false, false)
+	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, false, false)
 
 	// Add to cleanup
 	oldCleanup := ctx.cleanup

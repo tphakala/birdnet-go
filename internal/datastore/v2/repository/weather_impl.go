@@ -14,13 +14,19 @@ import (
 type weatherRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool
 }
 
 // NewWeatherRepository creates a new WeatherRepository.
-func NewWeatherRepository(db *gorm.DB, useV2Prefix bool) WeatherRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewWeatherRepository(db *gorm.DB, useV2Prefix, isMySQL bool) WeatherRepository {
 	return &weatherRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 

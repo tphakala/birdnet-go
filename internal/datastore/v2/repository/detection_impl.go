@@ -26,14 +26,19 @@ const defaultDBBatchSize = 100
 type detectionRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool
 }
 
 // NewDetectionRepository creates a new DetectionRepository.
-// Set useV2Prefix to true for MySQL to use v2_ table prefix.
-func NewDetectionRepository(db *gorm.DB, useV2Prefix bool) DetectionRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewDetectionRepository(db *gorm.DB, useV2Prefix, isMySQL bool) DetectionRepository {
 	return &detectionRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 
@@ -98,11 +103,9 @@ func (r *detectionRepository) sourcesTable() string {
 // SQLite: DATE(datetime(column, 'unixepoch'))
 // MySQL:  DATE(FROM_UNIXTIME(column))
 func (r *detectionRepository) dateFromUnixExpr(column string) string {
-	if r.useV2Prefix {
-		// MySQL
+	if r.isMySQL {
 		return fmt.Sprintf("DATE(FROM_UNIXTIME(%s))", column)
 	}
-	// SQLite
 	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch'))", column)
 }
 

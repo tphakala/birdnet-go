@@ -13,13 +13,19 @@ import (
 type imageCacheRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool
 }
 
 // NewImageCacheRepository creates a new ImageCacheRepository.
-func NewImageCacheRepository(db *gorm.DB, useV2Prefix bool) ImageCacheRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewImageCacheRepository(db *gorm.DB, useV2Prefix, isMySQL bool) ImageCacheRepository {
 	return &imageCacheRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 
