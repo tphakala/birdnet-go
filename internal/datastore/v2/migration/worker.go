@@ -800,6 +800,8 @@ func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 
 	// Migrate each record (no in-memory filtering needed - DB already filtered)
 	var result batchResult
+	var batchFailures int
+	var firstError error // Capture first error for systemic failure reporting
 	for _, r := range results {
 		// Check for pause/stop
 		select {
@@ -821,6 +823,10 @@ func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 		}
 
 		if err := w.migrateRecord(ctx, r); err != nil {
+			batchFailures++
+			if firstError == nil {
+				firstError = err // Capture the first error for reporting
+			}
 			w.logger.Warn("failed to migrate record", logger.Uint64("id", uint64(r.ID)), logger.Error(err))
 			// Track failed records for later reconciliation
 			if addErr := w.stateManager.AddDirtyID(r.ID); addErr != nil {
@@ -832,6 +838,13 @@ func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 		}
 		result.migrated++
 		result.lastID = r.ID
+	}
+
+	// Detect systemic failures: if ALL records in a batch fail, it indicates
+	// a fundamental problem (e.g., missing table, permissions) rather than
+	// individual record issues. Return error to trigger auto-pause.
+	if batchFailures == len(results) && len(results) > 0 {
+		return result, fmt.Errorf("systemic failure: all %d records in batch failed: %w", len(results), firstError)
 	}
 
 	return result, nil
