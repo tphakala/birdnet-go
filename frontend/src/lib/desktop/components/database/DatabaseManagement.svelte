@@ -113,17 +113,6 @@
   async function fetchMigrationStatus(): Promise<void> {
     try {
       const data = await api.get<MigrationStatus>('/api/v2/system/database/migration/status');
-      // Debug: log phase data to console
-      if (data.current_phase || data.phase_number) {
-        console.log('[Migration] Phase data:', {
-          current_phase: data.current_phase,
-          phase_number: data.phase_number,
-          total_phases: data.total_phases,
-          migrated: data.migrated_records,
-          total: data.total_records,
-          percent: data.progress_percent,
-        });
-      }
       migrationStatus.data = data;
       migrationStatus.error = null;
     } catch (e) {

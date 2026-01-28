@@ -73,6 +73,9 @@ func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator
 	if cfg.LabelRepo == nil {
 		panic("RelatedDataMigratorConfig.LabelRepo cannot be nil")
 	}
+	if cfg.StateManager == nil {
+		panic("RelatedDataMigratorConfig.StateManager cannot be nil")
+	}
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = defaultRelatedDataBatchSize
@@ -103,33 +106,29 @@ func (m *RelatedDataMigrator) MigrateAll(ctx context.Context) error {
 
 	m.logger.Info("starting related data migration")
 
-	// ALWAYS set phase 2 at the START of related data migration
+	// Set phase 2 at the START of related data migration
 	// This ensures UI switches from "Phase 1: Detections" immediately when detections complete.
 	// Reviews/comments/locks are fast and included in the predictions phase for simplicity.
-	if m.stateManager != nil {
-		// Count predictions for progress tracking (but set phase regardless of count result)
-		var totalPredictions int64
-		if count, countErr := m.legacyStore.CountResults(); countErr != nil {
-			m.logger.Warn("failed to count predictions for progress tracking", logger.Error(countErr))
-			// Use 0 - progress will be indeterminate but phase will still switch
-		} else {
-			totalPredictions = count
-			m.logger.Info("counted predictions for phase 2", logger.Int64("total_predictions", totalPredictions))
-		}
-
-		// Always set phase 2, even if count is 0 (progress will show 0/0 which is fine)
-		m.logger.Info("setting migration phase to predictions",
-			logger.String("phase", string(entities.MigrationPhasePredictions)),
-			logger.Int("phase_number", 2),
-			logger.Int("total_phases", 2),
-			logger.Int64("total_records", totalPredictions))
-		if phaseErr := m.stateManager.SetPhaseWithProgress(entities.MigrationPhasePredictions, 2, 2, totalPredictions); phaseErr != nil {
-			m.logger.Warn("failed to set predictions phase progress", logger.Error(phaseErr))
-		} else {
-			m.logger.Info("successfully set migration phase to predictions")
-		}
+	// Note: stateManager is guaranteed non-nil by constructor validation
+	var totalPredictions int64
+	if count, countErr := m.legacyStore.CountResults(); countErr != nil {
+		m.logger.Warn("failed to count predictions for progress tracking", logger.Error(countErr))
+		// Use 0 - progress will be indeterminate but phase will still switch
 	} else {
-		m.logger.Warn("stateManager is nil, cannot set phase 2")
+		totalPredictions = count
+		m.logger.Info("counted predictions for phase 2", logger.Int64("total_predictions", totalPredictions))
+	}
+
+	// Always set phase 2, even if count is 0 (progress will show 0/0 which is fine)
+	m.logger.Info("setting migration phase to predictions",
+		logger.String("phase", string(entities.MigrationPhasePredictions)),
+		logger.Int("phase_number", 2),
+		logger.Int("total_phases", 2),
+		logger.Int64("total_records", totalPredictions))
+	if phaseErr := m.stateManager.SetPhaseWithProgress(entities.MigrationPhasePredictions, 2, 2, totalPredictions); phaseErr != nil {
+		m.logger.Warn("failed to set predictions phase progress", logger.Error(phaseErr))
+	} else {
+		m.logger.Info("successfully set migration phase to predictions")
 	}
 
 	var result MigrateResult
