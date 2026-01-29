@@ -210,6 +210,7 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		LegacyStore:   ctx.legacyInterface,
 		DetectionRepo: ctx.DetectionRepo,
 		LabelRepo:     ctx.LabelRepo,
+		StateManager:  ctx.StateManager,
 		Logger:        ctx.Logger,
 		BatchSize:     testMigrationBatchSize,
 	})
