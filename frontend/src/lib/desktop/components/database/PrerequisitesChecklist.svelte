@@ -25,24 +25,7 @@
     Loader2,
     ShieldCheck,
   } from '@lucide/svelte';
-
-  interface PrerequisiteCheck {
-    id: string;
-    name: string;
-    description: string;
-    status: 'passed' | 'failed' | 'warning' | 'skipped' | 'error';
-    message: string;
-    severity: 'critical' | 'warning';
-  }
-
-  interface PrerequisitesResponse {
-    all_passed: boolean;
-    can_start_migration: boolean;
-    checks: PrerequisiteCheck[];
-    critical_failures: number;
-    warnings: number;
-    checked_at: string;
-  }
+  import type { PrerequisitesResponse } from '$lib/types/migration';
 
   interface Props {
     prerequisites: PrerequisitesResponse | null;
@@ -92,7 +75,7 @@
   }
 </script>
 
-<div class="space-y-4">
+<div class="space-y-4 relative">
   <!-- Header -->
   <div class="flex items-center justify-between">
     <h4 class="text-sm font-medium text-[var(--color-base-content)] flex items-center gap-2">

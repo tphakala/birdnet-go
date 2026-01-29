@@ -322,8 +322,9 @@ func TestGetDatabaseDirectoryResolved_SQLite(t *testing.T) {
 
 	_, controller, _ := setupPrerequisitesTestEnvironment(t)
 
-	dir := controller.getDatabaseDirectoryResolved()
+	dir, err := controller.getDatabaseDirectoryResolved()
 
+	require.NoError(t, err, "Should not return an error for valid SQLite config")
 	assert.NotEmpty(t, dir, "Should return a non-empty directory path")
 }
 
@@ -335,9 +336,10 @@ func TestGetDatabaseDirectoryResolved_NilSettings(t *testing.T) {
 
 	controller := &Controller{Settings: nil}
 
-	dir := controller.getDatabaseDirectoryResolved()
+	_, err := controller.getDatabaseDirectoryResolved()
 
-	assert.Equal(t, ".", dir, "Should return current directory when Settings is nil")
+	require.Error(t, err, "Should return error when Settings is nil")
+	assert.Contains(t, err.Error(), "settings not available")
 }
 
 // TestGetLegacyGormDB_Success tests getLegacyGormDB returns DB from testDatastoreWrapper.

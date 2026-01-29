@@ -31,50 +31,7 @@
     Info,
   } from '@lucide/svelte';
   import PrerequisitesChecklist from './PrerequisitesChecklist.svelte';
-
-  interface MigrationStatus {
-    state: string;
-    current_phase?: string; // Current migration phase (detections, predictions, etc.)
-    phase_number?: number; // Current phase number (1-based)
-    total_phases?: number; // Total number of phases
-    total_records: number;
-    migrated_records: number;
-    progress_percent: number;
-    records_per_second?: number;
-    estimated_remaining?: string;
-    worker_running: boolean;
-    worker_paused: boolean;
-    can_start: boolean;
-    can_pause: boolean;
-    can_resume: boolean;
-    can_cancel: boolean;
-    dirty_id_count: number;
-    error_message?: string;
-  }
-
-  interface PrerequisiteCheck {
-    id: string;
-    name: string;
-    description: string;
-    status: 'passed' | 'failed' | 'warning' | 'skipped' | 'error';
-    message: string;
-    severity: 'critical' | 'warning';
-  }
-
-  interface PrerequisitesResponse {
-    all_passed: boolean;
-    can_start_migration: boolean;
-    checks: PrerequisiteCheck[];
-    critical_failures: number;
-    warnings: number;
-    checked_at: string;
-  }
-
-  interface PrerequisitesState {
-    loading: boolean;
-    error: string | null;
-    data: PrerequisitesResponse | null;
-  }
+  import type { MigrationStatus, PrerequisitesState } from '$lib/types/migration';
 
   interface Props {
     status: MigrationStatus | null;

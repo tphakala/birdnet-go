@@ -19,60 +19,12 @@
   import DatabaseStatsCard from './DatabaseStatsCard.svelte';
   import MigrationControlCard from './MigrationControlCard.svelte';
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
-
-  // Types
-  interface DatabaseStats {
-    type: string;
-    location: string;
-    size_bytes: number;
-    total_detections: number;
-    connected: boolean;
-  }
-
-  interface MigrationStatus {
-    state: string;
-    current_phase?: string; // Current migration phase (detections, predictions, etc.)
-    phase_number?: number; // Current phase number (1-based)
-    total_phases?: number; // Total number of phases
-    total_records: number;
-    migrated_records: number;
-    progress_percent: number;
-    records_per_second?: number;
-    estimated_remaining?: string;
-    worker_running: boolean;
-    worker_paused: boolean;
-    can_start: boolean;
-    can_pause: boolean;
-    can_resume: boolean;
-    can_cancel: boolean;
-    dirty_id_count: number;
-    error_message?: string;
-    is_v2_only_mode?: boolean;
-  }
-
-  interface PrerequisiteCheck {
-    id: string;
-    name: string;
-    description: string;
-    status: 'passed' | 'failed' | 'warning' | 'skipped' | 'error';
-    message: string;
-    severity: 'critical' | 'warning';
-  }
-
-  interface PrerequisitesResponse {
-    all_passed: boolean;
-    can_start_migration: boolean;
-    checks: PrerequisiteCheck[];
-    critical_failures: number;
-    warnings: number;
-    checked_at: string;
-  }
-
-  interface ApiState<T> {
-    loading: boolean;
-    error: string | null;
-    data: T | null;
-  }
+  import type {
+    DatabaseStats,
+    MigrationStatus,
+    PrerequisitesResponse,
+    ApiState,
+  } from '$lib/types/migration';
 
   // State
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
