@@ -36,10 +36,11 @@ import (
 const sunriseSetWindowMinutes = 30
 
 // Database dialect constants.
+// NOTE: These must be lowercase to match GORM's dialector.Name() output.
 const (
 	DialectUnknown = "unknown"
-	DialectSQLite  = "SQLite"
-	DialectMySQL   = "MySQL"
+	DialectSQLite  = "sqlite"
+	DialectMySQL   = "mysql"
 )
 
 // Time-of-day filter constants for detection queries.
