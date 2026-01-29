@@ -967,6 +967,12 @@ func (ds *Datastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize 
 	return nil, nil
 }
 
+// CountResults returns the total number of secondary predictions.
+// In v2-only mode, this returns 0 since there's no legacy data to count.
+func (ds *Datastore) CountResults() (int64, error) {
+	return 0, nil
+}
+
 // SaveNoteComment saves a comment for a note.
 func (ds *Datastore) SaveNoteComment(comment *datastore.NoteComment) error {
 	ctx := context.Background()

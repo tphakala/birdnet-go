@@ -22,6 +22,9 @@ import (
 // MigrationStatusResponse represents the migration status for the API.
 type MigrationStatusResponse struct {
 	State               string     `json:"state"`
+	CurrentPhase        string     `json:"current_phase,omitempty"`   // Current migration phase (detections, predictions, etc.)
+	PhaseNumber         int        `json:"phase_number,omitempty"`    // Current phase number (1-based)
+	TotalPhases         int        `json:"total_phases,omitempty"`    // Total number of phases
 	StartedAt           *time.Time `json:"started_at,omitempty"`
 	CompletedAt         *time.Time `json:"completed_at,omitempty"`
 	TotalRecords        int64      `json:"total_records"`
@@ -59,9 +62,10 @@ type MigrationActionResponse struct {
 
 // StateManager and Worker are injected via controller fields
 var (
-	stateManager     *datastoreV2.StateManager
-	migrationWorker  *migration.Worker
-	isV2OnlyMode     bool
+	stateManager           *datastoreV2.StateManager
+	migrationWorker        *migration.Worker
+	migrationWorkerCancel  context.CancelFunc // Cancel function for worker context
+	isV2OnlyMode           bool
 )
 
 // SetMigrationDependencies sets the migration-related dependencies.
@@ -69,6 +73,12 @@ var (
 func SetMigrationDependencies(sm *datastoreV2.StateManager, worker *migration.Worker) {
 	stateManager = sm
 	migrationWorker = worker
+}
+
+// SetMigrationWorkerCancel stores the cancel function for the migration worker context.
+// This allows graceful shutdown to stop the worker by cancelling its context.
+func SetMigrationWorkerCancel(cancel context.CancelFunc) {
+	migrationWorkerCancel = cancel
 }
 
 // SetV2OnlyMode indicates that the system is running in v2-only mode.
@@ -79,7 +89,13 @@ func SetV2OnlyMode() {
 
 // StopMigrationWorker stops the migration worker if it's running.
 // This should be called during graceful shutdown before closing the v2 database.
+// It cancels the worker's context and then calls Stop() for immediate termination.
 func StopMigrationWorker() {
+	// Cancel the worker's context first - this signals shutdown through context.Done()
+	if migrationWorkerCancel != nil {
+		migrationWorkerCancel()
+	}
+	// Then call Stop() to close the stop channel for immediate termination
 	if migrationWorker != nil && migrationWorker.IsRunning() {
 		migrationWorker.Stop()
 	}
@@ -193,6 +209,9 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 
 	response := MigrationStatusResponse{
 		State:              string(state.State),
+		CurrentPhase:       string(state.CurrentPhase),
+		PhaseNumber:        state.PhaseNumber,
+		TotalPhases:        state.TotalPhases,
 		StartedAt:          state.StartedAt,
 		CompletedAt:        state.CompletedAt,
 		TotalRecords:       state.TotalRecords,
@@ -213,12 +232,17 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		CanRollback:        canRollback,
 		IsDualWriteActive:  isDualWriteActive,
 		ShouldReadFromV2:   shouldReadFromV2,
+		IsV2OnlyMode:       isV2OnlyMode,
 	}
 
 	c.logInfoIfEnabled("Migration status retrieved",
 		logger.String("state", response.State),
+		logger.String("phase", response.CurrentPhase),
+		logger.Int("phase_number", response.PhaseNumber),
+		logger.Int("total_phases", response.TotalPhases),
 		logger.Int64("migrated", response.MigratedRecords),
 		logger.Int64("total", response.TotalRecords),
+		logger.Float64("percent", response.ProgressPercent),
 		logger.Bool("worker_running", response.WorkerRunning),
 		logger.String("path", path), logger.String("ip", ip))
 
@@ -287,10 +311,12 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	}
 
 	// Start the migration worker if available
-	// Use context.Background() because the worker is a long-running background task
-	// that should not be tied to the HTTP request lifecycle
+	// Use a cancellable context so shutdown can stop the worker gracefully
 	if migrationWorker != nil {
-		if err := migrationWorker.Start(context.Background()); err != nil {
+		workerCtx, workerCancel := context.WithCancel(context.Background())
+		SetMigrationWorkerCancel(workerCancel)
+		if err := migrationWorker.Start(workerCtx); err != nil {
+			workerCancel() // Clean up on failure
 			c.logWarnIfEnabled("Failed to start migration worker",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			// Migration state is still valid, worker can be started later
@@ -359,8 +385,11 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 		if migrationWorker.IsPaused() {
 			migrationWorker.Resume()
 		} else if !migrationWorker.IsRunning() {
-			// Worker was stopped, restart it with background context
-			if err := migrationWorker.Start(context.Background()); err != nil {
+			// Worker was stopped, restart it with a cancellable context
+			workerCtx, workerCancel := context.WithCancel(context.Background())
+			SetMigrationWorkerCancel(workerCancel)
+			if err := migrationWorker.Start(workerCtx); err != nil {
+				workerCancel() // Clean up on failure
 				c.logWarnIfEnabled("Failed to restart migration worker",
 					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 			}

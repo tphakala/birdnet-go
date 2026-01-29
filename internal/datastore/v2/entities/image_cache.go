@@ -9,11 +9,11 @@ type ImageCache struct {
 	ProviderName   string    `gorm:"uniqueIndex:idx_image_cache_provider_species;size:50;not null;default:wikimedia"`
 	ScientificName string    `gorm:"uniqueIndex:idx_image_cache_provider_species;size:200;not null"`
 	SourceProvider string    `gorm:"size:50;not null;default:wikimedia"`
-	URL            string    `gorm:"size:500"`
+	URL            string    `gorm:"size:2048"`
 	LicenseName    string    `gorm:"size:200"`
-	LicenseURL     string    `gorm:"size:500"`
+	LicenseURL     string    `gorm:"size:2048"`
 	AuthorName     string    `gorm:"size:200"`
-	AuthorURL      string    `gorm:"size:500"`
+	AuthorURL      string    `gorm:"size:2048"`
 	CachedAt       time.Time `gorm:"index"`
 	CreatedAt      time.Time `gorm:"autoCreateTime"`
 	UpdatedAt      time.Time `gorm:"autoUpdateTime"`

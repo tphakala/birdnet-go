@@ -39,8 +39,17 @@ type DetectionRepository interface {
 	// SaveBatch persists multiple detections in a single transaction.
 	SaveBatch(ctx context.Context, dets []*entities.Detection) error
 
+	// SaveBatchWithIDs persists multiple detections with specific IDs (for migration).
+	// Used for efficient bulk migration instead of individual SaveWithID calls.
+	SaveBatchWithIDs(ctx context.Context, dets []*entities.Detection) error
+
 	// DeleteBatch removes multiple detections by ID.
 	DeleteBatch(ctx context.Context, ids []uint) error
+
+	// GetExistingAndLockedIDs checks which IDs exist and which are locked.
+	// Returns two sets: existing IDs and locked IDs. Used for batch migration
+	// to minimize round-trips when checking for duplicates.
+	GetExistingAndLockedIDs(ctx context.Context, ids []uint) (existing map[uint]bool, locked map[uint]bool, err error)
 
 	// === Query Methods ===
 
@@ -232,6 +241,10 @@ type DetectionRepository interface {
 
 	// Exists checks if a detection with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
+
+	// FilterExistingIDs returns only the IDs that exist in the detections table.
+	// Used during related data migration to skip records for non-existent detections.
+	FilterExistingIDs(ctx context.Context, ids []uint) ([]uint, error)
 
 	// GetLastMigratedID returns the highest legacy_id that has been migrated.
 	// Used by the migration worker to track progress.

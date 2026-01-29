@@ -14,6 +14,14 @@ import (
 // The migration state table always contains exactly one row with this ID.
 const migrationStateID = 1
 
+// Migration phase number constants.
+const (
+	MigrationPhaseNumberNone        = 0 // No active phase (idle/completed/cancelled)
+	MigrationPhaseNumberDetections  = 1 // Phase 1: Migrating detection records
+	MigrationPhaseNumberPredictions = 2 // Phase 2: Migrating predictions and related data
+	MigrationTotalPhases            = 2 // Total number of migration phases
+)
+
 // StateManager manages the migration state machine and tracks progress.
 // It provides thread-safe access to the migration state.
 // State transitions use atomic SQL updates to ensure multi-process safety.
@@ -50,6 +58,9 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 	now := time.Now()
 	updates := map[string]any{
 		"state":              entities.MigrationStatusInitializing,
+		"current_phase":      entities.MigrationPhaseDetections,
+		"phase_number":       MigrationPhaseNumberDetections,
+		"total_phases":       MigrationTotalPhases,
 		"started_at":         &now,
 		"total_records":      totalRecords,
 		"migrated_records":   0,
@@ -195,6 +206,9 @@ func (m *StateManager) Cancel() error {
 
 	updates := map[string]any{
 		"state":              entities.MigrationStatusIdle,
+		"current_phase":      entities.MigrationPhaseNone,
+		"phase_number":       MigrationPhaseNumberNone,
+		"total_phases":       MigrationPhaseNumberNone,
 		"started_at":         nil,
 		"completed_at":       nil,
 		"total_records":      0,
@@ -305,6 +319,40 @@ func (m *StateManager) SetRelatedDataError(errMsg string) error {
 	defer m.mu.Unlock()
 
 	return m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Update("related_data_error", errMsg).Error
+}
+
+// SetCurrentPhase updates the current migration phase for UI display.
+// This helps the UI show which phase of migration is active (detections, predictions, etc).
+func (m *StateManager) SetCurrentPhase(phase entities.MigrationPhase) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Update("current_phase", phase).Error
+}
+
+// SetPhaseWithProgress sets the current phase and resets progress counters for that phase.
+// Used when transitioning to a new phase (like predictions) that has its own progress tracking.
+// phaseNumber is 1-based (e.g., phase 1 of 2, phase 2 of 2).
+func (m *StateManager) SetPhaseWithProgress(phase entities.MigrationPhase, phaseNumber, totalPhases int, totalRecords int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	updates := map[string]any{
+		"current_phase":    phase,
+		"phase_number":     phaseNumber,
+		"total_phases":     totalPhases,
+		"total_records":    totalRecords,
+		"migrated_records": int64(0), // Explicit int64 to ensure GORM doesn't skip zero value
+	}
+
+	result := m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to set phase with progress: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("no rows affected when setting phase %s", phase)
+	}
+	return nil
 }
 
 // transitionState is a helper that validates and performs a state transition.

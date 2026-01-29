@@ -200,9 +200,10 @@ func (m *MySQLManager) Delete() error {
 
 // Exists checks if v2 tables exist in the MySQL database.
 func (m *MySQLManager) Exists() bool {
-	// Check if the migration_state table exists as an indicator
-	// Use the stored prefix (could be "" for fresh install or "v2_" for migration)
-	return m.db.Migrator().HasTable(m.tablePrefix + "migration_state")
+	// Check if the migration_state table exists as an indicator.
+	// Must account for the v2_ prefix when in migration mode.
+	tableName := m.tablePrefix + "migration_state"
+	return m.db.Migrator().HasTable(tableName)
 }
 
 // IsMySQL returns true for MySQL manager.

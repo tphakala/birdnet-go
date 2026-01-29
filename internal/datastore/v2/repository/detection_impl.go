@@ -20,20 +20,26 @@ const (
 )
 
 // defaultDBBatchSize is the batch size for bulk database operations.
-const defaultDBBatchSize = 100
+// Larger batches are more efficient for MySQL but use more memory.
+const defaultDBBatchSize = 500
 
 // detectionRepository implements DetectionRepository.
 type detectionRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool
 }
 
 // NewDetectionRepository creates a new DetectionRepository.
-// Set useV2Prefix to true for MySQL to use v2_ table prefix.
-func NewDetectionRepository(db *gorm.DB, useV2Prefix bool) DetectionRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewDetectionRepository(db *gorm.DB, useV2Prefix, isMySQL bool) DetectionRepository {
 	return &detectionRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 
@@ -98,11 +104,9 @@ func (r *detectionRepository) sourcesTable() string {
 // SQLite: DATE(datetime(column, 'unixepoch'))
 // MySQL:  DATE(FROM_UNIXTIME(column))
 func (r *detectionRepository) dateFromUnixExpr(column string) string {
-	if r.useV2Prefix {
-		// MySQL
+	if r.isMySQL {
 		return fmt.Sprintf("DATE(FROM_UNIXTIME(%s))", column)
 	}
-	// SQLite
 	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch'))", column)
 }
 
@@ -252,6 +256,52 @@ func (r *detectionRepository) DeleteBatch(ctx context.Context, ids []uint) error
 		return nil
 	}
 	return r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.Detection{}, ids).Error
+}
+
+// SaveBatchWithIDs persists multiple detections with specific IDs (for migration).
+// Uses CreateInBatches for efficient bulk inserts. GORM respects pre-set IDs.
+func (r *detectionRepository) SaveBatchWithIDs(ctx context.Context, dets []*entities.Detection) error {
+	if len(dets) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table(r.tableName()).CreateInBatches(dets, defaultDBBatchSize).Error
+}
+
+// GetExistingAndLockedIDs checks which IDs exist and which are locked.
+// Returns two maps for O(1) lookups: existing IDs and locked IDs.
+func (r *detectionRepository) GetExistingAndLockedIDs(ctx context.Context, ids []uint) (existing, locked map[uint]bool, err error) {
+	existing = make(map[uint]bool)
+	locked = make(map[uint]bool)
+
+	if len(ids) == 0 {
+		return existing, locked, nil
+	}
+
+	// Query existing IDs
+	var existingIDs []uint
+	if err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("id IN ?", ids).
+		Pluck("id", &existingIDs).Error; err != nil {
+		return nil, nil, err
+	}
+	for _, id := range existingIDs {
+		existing[id] = true
+	}
+
+	// Query locked IDs (only need to check existing ones)
+	if len(existingIDs) > 0 {
+		var lockedIDs []uint
+		if err := r.db.WithContext(ctx).Table(r.locksTable()).
+			Where("detection_id IN ?", existingIDs).
+			Pluck("detection_id", &lockedIDs).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, id := range lockedIDs {
+			locked[id] = true
+		}
+	}
+
+	return existing, locked, nil
 }
 
 // ============================================================================
@@ -1284,6 +1334,24 @@ func (r *detectionRepository) Exists(ctx context.Context, id uint) (bool, error)
 		Where("id = ?", id).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// FilterExistingIDs returns only the IDs that exist in the detections table.
+// This is used during related data migration to filter out records whose
+// parent detection failed to migrate (tracked as dirty IDs).
+func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint) ([]uint, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var existingIDs []uint
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("id IN ?", ids).
+		Pluck("id", &existingIDs).Error
+	if err != nil {
+		return nil, err
+	}
+	return existingIDs, nil
 }
 
 // GetLastMigratedID returns the highest legacy_id that has been migrated.

@@ -31,6 +31,9 @@
 
   interface MigrationStatus {
     state: string;
+    current_phase?: string; // Current migration phase (detections, predictions, etc.)
+    phase_number?: number; // Current phase number (1-based)
+    total_phases?: number; // Total number of phases
     total_records: number;
     migrated_records: number;
     progress_percent: number;
@@ -109,9 +112,8 @@
 
   async function fetchMigrationStatus(): Promise<void> {
     try {
-      migrationStatus.data = await api.get<MigrationStatus>(
-        '/api/v2/system/database/migration/status'
-      );
+      const data = await api.get<MigrationStatus>('/api/v2/system/database/migration/status');
+      migrationStatus.data = data;
       migrationStatus.error = null;
     } catch (e) {
       migrationStatus.error =

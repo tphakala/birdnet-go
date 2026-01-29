@@ -36,14 +36,14 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	err = manager.Initialize()
 	require.NoError(t, err)
 
-	// Create repositories (useV2Prefix = false for SQLite)
-	detectionRepo := repository.NewDetectionRepository(manager.DB(), false)
-	labelRepo := repository.NewLabelRepository(manager.DB(), false)
-	modelRepo := repository.NewModelRepository(manager.DB(), false)
-	weatherRepo := repository.NewWeatherRepository(manager.DB(), false)
-	imageCacheRepo := repository.NewImageCacheRepository(manager.DB(), false)
-	thresholdRepo := repository.NewDynamicThresholdRepository(manager.DB(), false)
-	notificationRepo := repository.NewNotificationHistoryRepository(manager.DB(), false)
+	// Create repositories (useV2Prefix = false for SQLite, isMySQL = false)
+	detectionRepo := repository.NewDetectionRepository(manager.DB(), false, false)
+	labelRepo := repository.NewLabelRepository(manager.DB(), false, false)
+	modelRepo := repository.NewModelRepository(manager.DB(), false, false)
+	weatherRepo := repository.NewWeatherRepository(manager.DB(), false, false)
+	imageCacheRepo := repository.NewImageCacheRepository(manager.DB(), false, false)
+	thresholdRepo := repository.NewDynamicThresholdRepository(manager.DB(), false, false)
+	notificationRepo := repository.NewNotificationHistoryRepository(manager.DB(), false, false)
 
 	// Create datastore
 	var err2 error

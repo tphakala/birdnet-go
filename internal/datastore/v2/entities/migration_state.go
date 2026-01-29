@@ -16,16 +16,31 @@ const (
 	MigrationStatusCompleted    MigrationStatus = "completed"
 )
 
+// MigrationPhase represents which phase of migration is currently active.
+type MigrationPhase string
+
+const (
+	MigrationPhaseNone        MigrationPhase = ""            // Not migrating
+	MigrationPhaseDetections  MigrationPhase = "detections"  // Migrating detection records
+	MigrationPhaseReviews     MigrationPhase = "reviews"     // Migrating reviews
+	MigrationPhaseComments    MigrationPhase = "comments"    // Migrating comments
+	MigrationPhaseLocks       MigrationPhase = "locks"       // Migrating locks
+	MigrationPhasePredictions MigrationPhase = "predictions" // Migrating predictions (largest)
+)
+
 // MigrationState tracks the progress of database migration.
 // This is a singleton table (only one row with ID=1).
 type MigrationState struct {
-	ID              uint            `gorm:"primaryKey;check:id = 1"` // Singleton constraint
+	ID uint `gorm:"primaryKey"` // Singleton enforced by StateManager (id=1)
 	State           MigrationStatus `gorm:"type:varchar(20);not null;default:'idle'"`
+	CurrentPhase    MigrationPhase  `gorm:"type:varchar(20);not null;default:''"` // Current migration phase for UI display
+	PhaseNumber     int             `gorm:"default:0"`                            // Current phase number (1-based)
+	TotalPhases     int             `gorm:"default:0"`                            // Total number of phases
 	StartedAt       *time.Time
 	CompletedAt     *time.Time
 	LastMigratedID  uint  `gorm:"default:0"` // Last legacy notes.id processed
-	TotalRecords    int64 `gorm:"default:0"` // Total records to migrate
-	MigratedRecords int64 `gorm:"default:0"` // Records migrated so far
+	TotalRecords    int64 `gorm:"default:0"` // Total records for current phase
+	MigratedRecords int64 `gorm:"default:0"` // Records migrated in current phase
 	ErrorMessage     string `gorm:"type:text"`
 	RelatedDataError string `gorm:"column:related_data_error;type:text"` // Error from related data migration (reviews, comments, locks, predictions)
 	UpdatedAt        time.Time `gorm:"autoUpdateTime"`

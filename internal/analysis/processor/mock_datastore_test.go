@@ -365,6 +365,9 @@ func (m *ActionMockDatastore) GetLocksBatch(_ uint, _ int) ([]datastore.NoteLock
 func (m *ActionMockDatastore) GetResultsBatch(_, _ uint, _ int) ([]datastore.Results, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) CountResults() (int64, error) {
+	return 0, nil
+}
 
 // Compile-time check that ActionMockDatastore implements datastore.Interface
 var _ datastore.Interface = (*ActionMockDatastore)(nil)

@@ -20,9 +20,17 @@ import (
 // DefaultBatchSize is the default number of records processed per batch.
 const DefaultBatchSize = 100
 
+// MySQLBatchSize is the batch size for MySQL migrations.
+// MySQL handles larger batches more efficiently than SQLite.
+const MySQLBatchSize = 1000
+
 // DefaultSleepBetweenBatches is the default sleep duration between batches
-// to reduce database load and allow other operations.
+// to reduce database load and allow other operations (used for SQLite).
 const DefaultSleepBetweenBatches = 100 * time.Millisecond
+
+// MySQLSleepBetweenBatches is the sleep duration for MySQL migrations.
+// MySQL handles concurrent access better than SQLite, so we use minimal throttling.
+const MySQLSleepBetweenBatches = 10 * time.Millisecond
 
 // DefaultErrorBackoff is the sleep duration after encountering errors.
 const DefaultErrorBackoff = 5 * time.Second
@@ -67,6 +75,7 @@ type Worker struct {
 	batchSize       int
 	sleepBetween    time.Duration
 	timezone        *time.Location
+	useBatchMode    bool // Use efficient batch inserts (for MySQL)
 
 	// Control channels
 	pauseCh  chan struct{}
@@ -101,8 +110,10 @@ type WorkerConfig struct {
 	RelatedMigrator   *RelatedDataMigrator // Optional: migrates reviews, comments, locks, predictions
 	Logger            logger.Logger
 	BatchSize         int
+	SleepBetweenBatches time.Duration // Optional: defaults to DefaultSleepBetweenBatches; use MySQLSleepBetweenBatches for MySQL
 	Timezone          *time.Location
-	MaxConsecErrors   int // Optional: defaults to DefaultMaxConsecutiveErrors
+	MaxConsecErrors   int  // Optional: defaults to DefaultMaxConsecutiveErrors
+	UseBatchMode      bool // Use efficient batch inserts (recommended for MySQL)
 }
 
 // NewWorker creates a new migration worker.
@@ -149,6 +160,11 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		maxConsecErrors = DefaultMaxConsecutiveErrors
 	}
 
+	sleepBetween := cfg.SleepBetweenBatches
+	if sleepBetween <= 0 {
+		sleepBetween = DefaultSleepBetweenBatches
+	}
+
 	return &Worker{
 		legacy:          cfg.Legacy,
 		v2Detection:     cfg.V2Detection,
@@ -159,8 +175,9 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		relatedMigrator: cfg.RelatedMigrator,
 		logger:          cfg.Logger,
 		batchSize:       batchSize,
-		sleepBetween:    DefaultSleepBetweenBatches,
+		sleepBetween:    sleepBetween,
 		timezone:        tz,
+		useBatchMode:    cfg.UseBatchMode,
 		pauseCh:         make(chan struct{}),
 		resumeCh:        make(chan struct{}),
 		stopCh:          make(chan struct{}),
@@ -275,9 +292,16 @@ func (w *Worker) run(ctx context.Context) {
 		w.mu.Lock()
 		w.running = false
 		w.mu.Unlock()
+		// Clear phase on exit
+		_ = w.stateManager.SetCurrentPhase(entities.MigrationPhaseNone)
 	}()
 
 	w.logger.Info("migration worker started")
+
+	// Set initial phase to detections
+	if err := w.stateManager.SetCurrentPhase(entities.MigrationPhaseDetections); err != nil {
+		w.logger.Warn("failed to set migration phase", logger.Error(err))
+	}
 
 	for {
 		action := w.runIteration(ctx)
@@ -525,6 +549,9 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 
 	// Migrate related data (reviews, comments, locks, predictions) before validation
 	if w.relatedMigrator != nil {
+		// Note: MigrateAll handles phase transitions via SetPhaseWithProgress
+		// which properly sets both phase name and phase_number/total_phases
+
 		// Create context that cancels on shutdown OR when caller context is cancelled
 		migrateCtx, cancel := context.WithCancel(ctx)
 		done := make(chan struct{})
@@ -550,6 +577,11 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 			}
 			// Continue to validation - related data is non-fatal but now tracked
 		}
+	}
+
+	// Clear the phase after related data migration (also resets phase_number/total_phases)
+	if err := w.stateManager.SetPhaseWithProgress(entities.MigrationPhaseNone, 0, 0, 0); err != nil {
+		w.logger.Warn("failed to clear migration phase", logger.Error(err))
 	}
 
 	// Now transition to validating
@@ -798,8 +830,21 @@ func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 		return batchResult{}, nil
 	}
 
-	// Migrate each record (no in-memory filtering needed - DB already filtered)
+	// Use batch mode for MySQL (much more efficient with network latency)
+	if w.useBatchMode {
+		return w.processBatchEfficient(ctx, results)
+	}
+
+	// Default: process each record individually (works well for SQLite)
+	return w.processBatchSequential(ctx, results)
+}
+
+// processBatchSequential processes records one at a time (efficient for SQLite).
+func (w *Worker) processBatchSequential(ctx context.Context, results []*detection.Result) (batchResult, error) {
 	var result batchResult
+	var batchFailures int
+	var firstError error
+
 	for _, r := range results {
 		// Check for pause/stop
 		select {
@@ -821,12 +866,14 @@ func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 		}
 
 		if err := w.migrateRecord(ctx, r); err != nil {
+			batchFailures++
+			if firstError == nil {
+				firstError = err
+			}
 			w.logger.Warn("failed to migrate record", logger.Uint64("id", uint64(r.ID)), logger.Error(err))
-			// Track failed records for later reconciliation
 			if addErr := w.stateManager.AddDirtyID(r.ID); addErr != nil {
 				w.logger.Error("failed to track dirty ID", logger.Uint64("id", uint64(r.ID)), logger.Error(addErr))
 			}
-			// Still update lastID to avoid re-processing this record
 			result.lastID = r.ID
 			continue
 		}
@@ -834,7 +881,190 @@ func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 		result.lastID = r.ID
 	}
 
+	if batchFailures == len(results) && len(results) > 0 {
+		return result, fmt.Errorf("systemic failure: all %d records in batch failed: %w", len(results), firstError)
+	}
+
 	return result, nil
+}
+
+// processBatchEfficient uses bulk operations to minimize database round-trips.
+// This is much faster for MySQL where network latency dominates.
+func (w *Worker) processBatchEfficient(ctx context.Context, results []*detection.Result) (batchResult, error) {
+	var result batchResult
+
+	// Check for pause/stop before processing
+	if interrupted, err := w.checkBatchInterruption(ctx); interrupted {
+		result.incomplete = true
+		return result, err
+	}
+
+	// Collect all IDs and set last ID
+	ids := make([]uint, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+		result.lastID = r.ID
+	}
+
+	// Query which IDs exist and which are locked (2 queries vs N*2)
+	existingIDs, lockedIDs, err := w.v2Detection.GetExistingAndLockedIDs(ctx, ids)
+	if err != nil {
+		return result, fmt.Errorf("failed to check existing IDs: %w", err)
+	}
+
+	// Categorize records
+	newRecords, updateRecords, skippedLocked := w.categorizeRecords(results, existingIDs, lockedIDs)
+	result.migrated += skippedLocked // Locked records count as migrated
+
+	// Batch insert new records
+	if len(newRecords) > 0 {
+		migrated, err := w.batchInsertNewRecords(ctx, newRecords)
+		result.migrated += migrated
+		if err != nil {
+			return result, err
+		}
+	}
+
+	// Update existing unlocked records
+	result.migrated += w.updateExistingRecords(ctx, updateRecords)
+
+	if skippedLocked > 0 {
+		w.logger.Debug("skipped locked detections in batch", logger.Int("count", skippedLocked))
+	}
+
+	return result, nil
+}
+
+// checkBatchInterruption checks if batch should be interrupted due to pause/stop/cancel.
+func (w *Worker) checkBatchInterruption(ctx context.Context) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return true, ctx.Err()
+	case <-w.stopCh:
+		return true, ErrMigrationCancelled
+	default:
+	}
+
+	w.mu.RLock()
+	paused := w.paused
+	w.mu.RUnlock()
+	if paused {
+		return true, ErrMigrationPaused
+	}
+	return false, nil
+}
+
+// categorizeRecords separates records into new, existing-unlocked, and locked categories.
+func (w *Worker) categorizeRecords(results []*detection.Result, existingIDs, lockedIDs map[uint]bool) (
+	newRecords, updateRecords []*detection.Result, skippedLocked int,
+) {
+	for _, r := range results {
+		if lockedIDs[r.ID] {
+			skippedLocked++
+			continue
+		}
+		if existingIDs[r.ID] {
+			updateRecords = append(updateRecords, r)
+		} else {
+			newRecords = append(newRecords, r)
+		}
+	}
+	return
+}
+
+// batchInsertNewRecords converts and inserts new records in batch.
+// Returns number migrated and any systemic error.
+func (w *Worker) batchInsertNewRecords(ctx context.Context, records []*detection.Result) (int, error) {
+	newDets := make([]*entities.Detection, 0, len(records))
+	var conversionErrors int
+	var firstConvErr error
+
+	for _, r := range records {
+		det, convErr := w.convertToV2Detection(ctx, r)
+		if convErr != nil {
+			conversionErrors++
+			if firstConvErr == nil {
+				firstConvErr = convErr
+			}
+			w.logger.Warn("failed to convert record", logger.Uint64("id", uint64(r.ID)), logger.Error(convErr))
+			w.trackDirtyID(r.ID)
+			continue
+		}
+		newDets = append(newDets, det)
+	}
+
+	// Batch insert all new detections
+	migrated := 0
+	if len(newDets) > 0 {
+		if insertErr := w.v2Detection.SaveBatchWithIDs(ctx, newDets); insertErr != nil {
+			// Fall back to individual inserts to identify which ones fail
+			w.logger.Warn("batch insert failed, falling back to individual inserts", logger.Error(insertErr))
+			migrated = w.insertRecordsIndividually(ctx, newDets)
+		} else {
+			migrated = len(newDets)
+		}
+	}
+
+	// Handle systemic conversion failures
+	if conversionErrors == len(records) && len(records) > 0 {
+		return migrated, fmt.Errorf("systemic failure: all %d new records failed conversion: %w", len(records), firstConvErr)
+	}
+
+	return migrated, nil
+}
+
+// insertRecordsIndividually saves records one at a time when batch insert fails.
+func (w *Worker) insertRecordsIndividually(ctx context.Context, dets []*entities.Detection) int {
+	migrated := 0
+	for _, det := range dets {
+		if saveErr := w.v2Detection.SaveWithID(ctx, det); saveErr != nil {
+			w.logger.Warn("failed to save record", logger.Uint64("id", uint64(det.ID)), logger.Error(saveErr))
+			w.trackDirtyID(det.ID)
+		} else {
+			migrated++
+		}
+	}
+	return migrated
+}
+
+// updateExistingRecords updates existing unlocked records. Returns count migrated.
+func (w *Worker) updateExistingRecords(ctx context.Context, records []*detection.Result) int {
+	migrated := 0
+	for _, r := range records {
+		det, convErr := w.convertToV2Detection(ctx, r)
+		if convErr != nil {
+			w.logger.Warn("failed to convert record for update", logger.Uint64("id", uint64(r.ID)), logger.Error(convErr))
+			w.trackDirtyID(r.ID)
+			continue
+		}
+
+		updates := map[string]any{
+			"label_id":   det.LabelID,
+			"model_id":   det.ModelID,
+			"confidence": det.Confidence,
+		}
+		if det.SourceID != nil {
+			updates["source_id"] = *det.SourceID
+		}
+		if det.ClipName != nil {
+			updates["clip_name"] = *det.ClipName
+		}
+
+		if updateErr := w.v2Detection.Update(ctx, r.ID, updates); updateErr != nil {
+			w.logger.Warn("failed to update record", logger.Uint64("id", uint64(r.ID)), logger.Error(updateErr))
+			w.trackDirtyID(r.ID)
+			continue
+		}
+		migrated++
+	}
+	return migrated
+}
+
+// trackDirtyID adds an ID to the dirty ID list for later reconciliation.
+func (w *Worker) trackDirtyID(id uint) {
+	if addErr := w.stateManager.AddDirtyID(id); addErr != nil {
+		w.logger.Error("failed to track dirty ID", logger.Uint64("id", uint64(id)), logger.Error(addErr))
+	}
 }
 
 // migrateRecord converts and saves a single legacy record to v2.
@@ -848,7 +1078,16 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 	// Check if record already exists in V2 (from dual-write)
 	existing, err := w.v2Detection.Get(ctx, result.ID)
 	if err == nil && existing != nil {
-		// Update existing record - legacy is source of truth during migration
+		// Record already exists - check if it's locked
+		locked, lockErr := w.v2Detection.IsLocked(ctx, result.ID)
+		if lockErr == nil && locked {
+			// Locked detections are user-verified; skip update and consider migrated
+			w.logger.Debug("skipping update for locked detection",
+				logger.Uint64("id", uint64(result.ID)))
+			return nil
+		}
+
+		// Update existing unlocked record - legacy is source of truth during migration
 		updates := map[string]any{
 			"label_id":   det.LabelID,
 			"model_id":   det.ModelID,

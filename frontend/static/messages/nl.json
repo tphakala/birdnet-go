@@ -762,7 +762,8 @@
           "idle": "Klaar om te starten",
           "initializing": "Initialiseren",
           "dual_write": "Dubbel schrijven actief",
-          "migrating": "Records migreren",
+          "migrating": "Primaire gegevens migreren",
+          "migrating_predictions": "Secundaire gegevens migreren",
           "paused": "Gepauzeerd",
           "validating": "Valideren",
           "cutover": "Overschakeling bezig",
@@ -778,6 +779,14 @@
           "eta": "Geschatte resterende tijd",
           "dirtyIds": "{count} records wachtend",
           "paused": "Migratie gepauzeerd"
+        },
+        "phase": {
+          "indicator": "Fase {current} van {total}: ",
+          "detections": "Primaire detecties migreren",
+          "predictions": "Secundaire detecties migreren",
+          "reviews": "Beoordelingen migreren",
+          "comments": "Opmerkingen migreren",
+          "locks": "Vergrendelingen migreren"
         },
         "notes": {
           "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",

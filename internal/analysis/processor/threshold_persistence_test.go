@@ -343,6 +343,10 @@ func (m *MockDatastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSi
 	return nil, nil
 }
 
+func (m *MockDatastore) CountResults() (int64, error) {
+	return 0, nil
+}
+
 // createTestProcessor creates a processor with mock datastore for testing
 func createTestProcessor() *Processor {
 	settings := &conf.Settings{}

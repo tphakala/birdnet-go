@@ -14,13 +14,19 @@ import (
 type notificationHistoryRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
+	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
 }
 
 // NewNotificationHistoryRepository creates a new NotificationHistoryRepository.
-func NewNotificationHistoryRepository(db *gorm.DB, useV2Prefix bool) NotificationHistoryRepository {
+// Parameters:
+//   - db: GORM database connection
+//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
+//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
+func NewNotificationHistoryRepository(db *gorm.DB, useV2Prefix, isMySQL bool) NotificationHistoryRepository {
 	return &notificationHistoryRepository{
 		db:          db,
 		useV2Prefix: useV2Prefix,
+		isMySQL:     isMySQL,
 	}
 }
 
