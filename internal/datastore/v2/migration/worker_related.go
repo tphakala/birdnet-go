@@ -122,10 +122,10 @@ func (m *RelatedDataMigrator) MigrateAll(ctx context.Context) error {
 	// Always set phase 2, even if count is 0 (progress will show 0/0 which is fine)
 	m.logger.Info("setting migration phase to predictions",
 		logger.String("phase", string(entities.MigrationPhasePredictions)),
-		logger.Int("phase_number", 2),
-		logger.Int("total_phases", 2),
+		logger.Int("phase_number", datastoreV2.MigrationPhaseNumberPredictions),
+		logger.Int("total_phases", datastoreV2.MigrationTotalPhases),
 		logger.Int64("total_records", totalPredictions))
-	if phaseErr := m.stateManager.SetPhaseWithProgress(entities.MigrationPhasePredictions, 2, 2, totalPredictions); phaseErr != nil {
+	if phaseErr := m.stateManager.SetPhaseWithProgress(entities.MigrationPhasePredictions, datastoreV2.MigrationPhaseNumberPredictions, datastoreV2.MigrationTotalPhases, totalPredictions); phaseErr != nil {
 		m.logger.Warn("failed to set predictions phase progress", logger.Error(phaseErr))
 	} else {
 		m.logger.Info("successfully set migration phase to predictions")

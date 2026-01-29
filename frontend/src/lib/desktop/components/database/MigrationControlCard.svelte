@@ -127,10 +127,10 @@
           class="px-2.5 py-1 text-xs font-medium rounded-full {stateStyles[status.state] ||
             stateStyles.idle}"
         >
-          {#if status.current_phase === 'predictions'}
-            {t('system.database.migration.status.migrating_predictions')}
-          {:else if status.current_phase === 'detections'}
+          {#if status.current_phase === 'detections'}
             {t('system.database.migration.status.migrating')}
+          {:else if status.current_phase}
+            {t('system.database.migration.status.migrating_predictions')}
           {:else}
             {t(`system.database.migration.status.${status.state}`)}
           {/if}

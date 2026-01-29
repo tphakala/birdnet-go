@@ -86,8 +86,8 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 
 	// Create repositories (no v2 prefix for fresh installs)
 	db := manager.DB()
-	useV2Prefix := false                      // Fresh installs use clean table names
-	isMySQL := settings.Output.MySQL.Enabled  // Determine dialect from settings
+	useV2Prefix := false          // Fresh installs use clean table names
+	isMySQL := manager.IsMySQL()  // Derive dialect from actual manager, not settings
 	detectionRepo := repository.NewDetectionRepository(db, useV2Prefix, isMySQL)
 	labelRepo := repository.NewLabelRepository(db, useV2Prefix, isMySQL)
 	modelRepo := repository.NewModelRepository(db, useV2Prefix, isMySQL)

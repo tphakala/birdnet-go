@@ -14,6 +14,14 @@ import (
 // The migration state table always contains exactly one row with this ID.
 const migrationStateID = 1
 
+// Migration phase number constants.
+const (
+	MigrationPhaseNumberNone        = 0 // No active phase (idle/completed/cancelled)
+	MigrationPhaseNumberDetections  = 1 // Phase 1: Migrating detection records
+	MigrationPhaseNumberPredictions = 2 // Phase 2: Migrating predictions and related data
+	MigrationTotalPhases            = 2 // Total number of migration phases
+)
+
 // StateManager manages the migration state machine and tracks progress.
 // It provides thread-safe access to the migration state.
 // State transitions use atomic SQL updates to ensure multi-process safety.
@@ -51,8 +59,8 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 	updates := map[string]any{
 		"state":              entities.MigrationStatusInitializing,
 		"current_phase":      entities.MigrationPhaseDetections,
-		"phase_number":       1,
-		"total_phases":       2,
+		"phase_number":       MigrationPhaseNumberDetections,
+		"total_phases":       MigrationTotalPhases,
 		"started_at":         &now,
 		"total_records":      totalRecords,
 		"migrated_records":   0,
@@ -199,8 +207,8 @@ func (m *StateManager) Cancel() error {
 	updates := map[string]any{
 		"state":              entities.MigrationStatusIdle,
 		"current_phase":      entities.MigrationPhaseNone,
-		"phase_number":       0,
-		"total_phases":       0,
+		"phase_number":       MigrationPhaseNumberNone,
+		"total_phases":       MigrationPhaseNumberNone,
 		"started_at":         nil,
 		"completed_at":       nil,
 		"total_records":      0,

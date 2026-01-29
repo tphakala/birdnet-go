@@ -762,7 +762,8 @@
           "idle": "Listo para iniciar",
           "initializing": "Inicializando",
           "dual_write": "Escritura dual activa",
-          "migrating": "Migrando registros",
+          "migrating": "Migrando datos primarios",
+          "migrating_predictions": "Migrando datos secundarios",
           "paused": "Pausado",
           "validating": "Validando",
           "cutover": "Cambio en progreso",
@@ -778,6 +779,14 @@
           "eta": "Tiempo restante estimado",
           "dirtyIds": "{count} registros pendientes",
           "paused": "Migración pausada"
+        },
+        "phase": {
+          "indicator": "Fase {current} de {total}: ",
+          "detections": "Migrando detecciones primarias",
+          "predictions": "Migrando detecciones secundarias",
+          "reviews": "Migrando revisiones",
+          "comments": "Migrando comentarios",
+          "locks": "Migrando bloqueos"
         },
         "notes": {
           "dual_write": "Migración en curso. Sus datos están seguros - todas las nuevas detecciones se guardan en ambas bases de datos. Puede seguir usando BirdNET-Go normalmente.",

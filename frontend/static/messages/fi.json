@@ -762,7 +762,8 @@
           "idle": "Valmis aloitettavaksi",
           "initializing": "Alustus",
           "dual_write": "Kaksoiskirjoitus aktiivinen",
-          "migrating": "Migroidaan tietueita",
+          "migrating": "Migroidaan ensisijaiset",
+          "migrating_predictions": "Migroidaan toissijaiset",
           "paused": "Keskeytetty",
           "validating": "Vahvistetaan",
           "cutover": "Vaihto käynnissä",
@@ -778,6 +779,14 @@
           "eta": "Arvioitu jäljellä oleva aika",
           "dirtyIds": "{count} tietuetta odottaa",
           "paused": "Migraatio keskeytetty"
+        },
+        "phase": {
+          "indicator": "Vaihe {current}/{total}: ",
+          "detections": "Migroidaan ensisijaiset havainnot",
+          "predictions": "Migroidaan toissijaiset havainnot",
+          "reviews": "Migroidaan arvioinnit",
+          "comments": "Migroidaan kommentit",
+          "locks": "Migroidaan lukitukset"
         },
         "notes": {
           "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
