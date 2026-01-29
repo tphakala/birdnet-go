@@ -276,13 +276,7 @@
                   current: status.phase_number,
                   total: status.total_phases,
                 })}
-                {#if status.current_phase === 'predictions'}
-                  {t('system.database.migration.phase.predictions')}
-                {:else if status.current_phase === 'detections'}
-                  {t('system.database.migration.phase.detections')}
-                {:else}
-                  {t(`system.database.migration.phase.${status.current_phase}`)}
-                {/if}
+                {t(`system.database.migration.phase.${status.current_phase}`)}
               </span>
             </div>
 
