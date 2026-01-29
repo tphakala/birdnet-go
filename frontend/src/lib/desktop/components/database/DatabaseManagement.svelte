@@ -50,6 +50,24 @@
     is_v2_only_mode?: boolean;
   }
 
+  interface PrerequisiteCheck {
+    id: string;
+    name: string;
+    description: string;
+    status: 'passed' | 'failed' | 'warning' | 'skipped' | 'error';
+    message: string;
+    severity: 'critical' | 'warning';
+  }
+
+  interface PrerequisitesResponse {
+    all_passed: boolean;
+    can_start_migration: boolean;
+    checks: PrerequisiteCheck[];
+    critical_failures: number;
+    warnings: number;
+    checked_at: string;
+  }
+
   interface ApiState<T> {
     loading: boolean;
     error: string | null;
@@ -60,6 +78,11 @@
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let migrationStatus = $state<ApiState<MigrationStatus>>({
+    loading: true,
+    error: null,
+    data: null,
+  });
+  let prerequisites = $state<ApiState<PrerequisitesResponse>>({
     loading: true,
     error: null,
     data: null,
@@ -123,8 +146,31 @@
     }
   }
 
+  async function fetchPrerequisites(): Promise<void> {
+    try {
+      prerequisites.loading = true;
+      const data = await api.get<PrerequisitesResponse>(
+        '/api/v2/system/database/migration/prerequisites'
+      );
+      prerequisites.data = data;
+      prerequisites.error = null;
+    } catch (e) {
+      prerequisites.error =
+        e instanceof ApiError
+          ? e.message
+          : t('system.database.migration.prerequisites.errors.fetchFailed');
+    } finally {
+      prerequisites.loading = false;
+    }
+  }
+
   async function fetchAll(): Promise<void> {
-    await Promise.all([fetchLegacyStats(), fetchV2Stats(), fetchMigrationStatus()]);
+    await Promise.all([
+      fetchLegacyStats(),
+      fetchV2Stats(),
+      fetchMigrationStatus(),
+      fetchPrerequisites(),
+    ]);
   }
 
   // Migration actions
@@ -290,10 +336,12 @@
       isLoading={migrationStatus.loading && !migrationStatus.data}
       isStarting={startLoading}
       error={migrationStatus.error}
+      {prerequisites}
       onStart={() => (showConfirmDialog = true)}
       onPause={pauseMigration}
       onResume={resumeMigration}
       onCancel={cancelMigration}
+      onRefreshPrerequisites={fetchPrerequisites}
     />
   {/if}
 </div>

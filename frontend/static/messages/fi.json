@@ -827,6 +827,61 @@
           "paused": "Worker keskeytetty",
           "stopped": "Worker pysäytetty"
         },
+        "prerequisites": {
+          "title": "Migraation esitarkistukset",
+          "rerunChecks": "Suorita tarkistukset uudelleen",
+          "critical": "Kriittinen",
+          "allPassed": "Kaikki tarkistukset läpäisty - valmis migraatioon",
+          "criticalIssues": "{count} kriittinen ongelma on ratkaistava",
+          "warningsCount": "{count} varoitus(ta)",
+          "errors": {
+            "fetchFailed": "Esivaatimusten haku epäonnistui"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migraation tila"
+            },
+            "disk_space": {
+              "name": "Levytila"
+            },
+            "legacy_accessible": {
+              "name": "Tietokantayhteys"
+            },
+            "sqlite_integrity": {
+              "name": "Tietokannan eheys"
+            },
+            "mysql_table_health": {
+              "name": "Taulujen kunto"
+            },
+            "write_permission": {
+              "name": "Kirjoitusoikeus"
+            },
+            "mysql_create_permission": {
+              "name": "CREATE-oikeus"
+            },
+            "mysql_dml_permission": {
+              "name": "DML-oikeudet"
+            },
+            "record_count": {
+              "name": "Tietueiden määrä"
+            },
+            "existing_v2_data": {
+              "name": "Olemassa olevat V2-tiedot"
+            },
+            "no_active_locks": {
+              "name": "Aktiiviset lukot"
+            },
+            "memory_available": {
+              "name": "Käytettävissä oleva muisti"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeouts": {
+              "name": "MySQL Timeouts"
+            }
+          }
+        },
         "requiredNote": "Tietokannan migraatio vaaditaan tulevien BirdNET-Go-ominaisuuksien vuoksi, jotka hyödyntävät uutta normalisoitua tietokantaskeemaa. Uudet ominaisuudet eivät ole käytettävissä ennen migraation valmistumista.",
         "starting": "Käynnistetään migraatiota...",
         "confirmDialog": {

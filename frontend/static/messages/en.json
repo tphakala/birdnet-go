@@ -856,6 +856,61 @@
           "running": "Worker Running",
           "paused": "Worker Paused",
           "stopped": "Worker Stopped"
+        },
+        "prerequisites": {
+          "title": "Pre-Migration Checks",
+          "rerunChecks": "Re-run Checks",
+          "critical": "Critical",
+          "allPassed": "All checks passed - ready to migrate",
+          "criticalIssues": "{count} critical issue(s) must be resolved",
+          "warningsCount": "{count} warning(s)",
+          "errors": {
+            "fetchFailed": "Failed to fetch prerequisites"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migration State"
+            },
+            "disk_space": {
+              "name": "Disk Space"
+            },
+            "legacy_accessible": {
+              "name": "Database Connection"
+            },
+            "sqlite_integrity": {
+              "name": "Database Integrity"
+            },
+            "mysql_table_health": {
+              "name": "Table Health"
+            },
+            "write_permission": {
+              "name": "Write Permission"
+            },
+            "mysql_create_permission": {
+              "name": "CREATE Permission"
+            },
+            "mysql_dml_permission": {
+              "name": "DML Permissions"
+            },
+            "record_count": {
+              "name": "Record Count"
+            },
+            "existing_v2_data": {
+              "name": "Existing V2 Data"
+            },
+            "no_active_locks": {
+              "name": "Active Locks"
+            },
+            "memory_available": {
+              "name": "Memory Available"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeouts": {
+              "name": "MySQL Timeouts"
+            }
+          }
         }
       }
     }

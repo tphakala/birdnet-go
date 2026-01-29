@@ -827,6 +827,61 @@
           "paused": "Worker pausado",
           "stopped": "Worker parado"
         },
+        "prerequisites": {
+          "title": "Verificações pré-migração",
+          "rerunChecks": "Executar verificações novamente",
+          "critical": "Crítico",
+          "allPassed": "Todas as verificações passaram - pronto para migrar",
+          "criticalIssues": "{count} problema(s) crítico(s) deve(m) ser resolvido(s)",
+          "warningsCount": "{count} aviso(s)",
+          "errors": {
+            "fetchFailed": "Falha ao obter os pré-requisitos"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Estado da migração"
+            },
+            "disk_space": {
+              "name": "Espaço em disco"
+            },
+            "legacy_accessible": {
+              "name": "Conexão à base de dados"
+            },
+            "sqlite_integrity": {
+              "name": "Integridade da base de dados"
+            },
+            "mysql_table_health": {
+              "name": "Saúde das tabelas"
+            },
+            "write_permission": {
+              "name": "Permissão de escrita"
+            },
+            "mysql_create_permission": {
+              "name": "Permissão CREATE"
+            },
+            "mysql_dml_permission": {
+              "name": "Permissões DML"
+            },
+            "record_count": {
+              "name": "Contagem de registos"
+            },
+            "existing_v2_data": {
+              "name": "Dados V2 existentes"
+            },
+            "no_active_locks": {
+              "name": "Bloqueios ativos"
+            },
+            "memory_available": {
+              "name": "Memória disponível"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeouts": {
+              "name": "MySQL Timeouts"
+            }
+          }
+        },
         "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
         "starting": "A iniciar migração...",
         "confirmDialog": {

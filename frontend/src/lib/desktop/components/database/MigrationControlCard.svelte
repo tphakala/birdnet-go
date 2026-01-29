@@ -3,15 +3,18 @@
 
   Displays migration status and provides controls for migration operations.
   Shows progress, state, and action buttons based on current migration state.
+  Includes prerequisites checklist in idle state.
 
   Props:
   - status: Migration status from API
   - isLoading: Whether status is being loaded
   - error: Error message if status fetch failed
+  - prerequisites: Prerequisites check state
   - onStart: Callback to open confirmation dialog
   - onPause: Callback to pause migration
   - onResume: Callback to resume migration
   - onCancel: Callback to cancel migration
+  - onRefreshPrerequisites: Callback to refresh prerequisites
 
   @component
 -->
@@ -27,6 +30,7 @@
     Loader2,
     Info,
   } from '@lucide/svelte';
+  import PrerequisitesChecklist from './PrerequisitesChecklist.svelte';
 
   interface MigrationStatus {
     state: string;
@@ -48,15 +52,41 @@
     error_message?: string;
   }
 
+  interface PrerequisiteCheck {
+    id: string;
+    name: string;
+    description: string;
+    status: 'passed' | 'failed' | 'warning' | 'skipped' | 'error';
+    message: string;
+    severity: 'critical' | 'warning';
+  }
+
+  interface PrerequisitesResponse {
+    all_passed: boolean;
+    can_start_migration: boolean;
+    checks: PrerequisiteCheck[];
+    critical_failures: number;
+    warnings: number;
+    checked_at: string;
+  }
+
+  interface PrerequisitesState {
+    loading: boolean;
+    error: string | null;
+    data: PrerequisitesResponse | null;
+  }
+
   interface Props {
     status: MigrationStatus | null;
     isLoading: boolean;
     isStarting?: boolean;
     error: string | null;
+    prerequisites: PrerequisitesState;
     onStart: () => void;
     onPause: () => Promise<void>;
     onResume: () => Promise<void>;
     onCancel: () => Promise<void>;
+    onRefreshPrerequisites: () => Promise<void>;
   }
 
   let {
@@ -64,11 +94,18 @@
     isLoading,
     isStarting = false,
     error,
+    prerequisites,
     onStart,
     onPause,
     onResume,
     onCancel,
+    onRefreshPrerequisites,
   }: Props = $props();
+
+  // Derived: Can start migration (prerequisites passed and status allows it)
+  let canStartMigration = $derived(
+    status?.can_start === true && prerequisites.data?.can_start_migration === true
+  );
 
   let showCancelConfirm = $state(false);
   let actionLoading = $state(false);
@@ -172,6 +209,17 @@
         >
           <p>{t('system.database.migration.requiredNote')}</p>
         </div>
+
+        <!-- Prerequisites Checklist -->
+        <div class="mb-4">
+          <PrerequisitesChecklist
+            prerequisites={prerequisites.data}
+            isLoading={prerequisites.loading}
+            error={prerequisites.error}
+            onRefresh={onRefreshPrerequisites}
+          />
+        </div>
+
         <button
           class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5
                  text-sm font-medium rounded-lg transition-colors
@@ -179,7 +227,7 @@
                  hover:bg-[var(--color-primary)]/90
                  disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={onStart}
-          disabled={!status.can_start}
+          disabled={!canStartMigration}
         >
           <Play class="size-4" />
           {t('system.database.migration.actions.start')}
