@@ -754,7 +754,28 @@
       "title": "Database Management",
       "description": "Manage database schema migration",
       "legacy": {
-        "title": "Legacy Database"
+        "title": "Legacy Database",
+        "fetchFailed": "Failed to fetch legacy database status",
+        "cleanup": {
+          "title": "Legacy Database Cleanup",
+          "location": "Location",
+          "size": "Size",
+          "records": "Records",
+          "detections": "detections",
+          "lastModified": "Last Modified",
+          "warning": "Warning: This action cannot be undone",
+          "backupReminder": "Make sure you have a backup before deleting the legacy database.",
+          "deleteButton": "Delete Legacy Database",
+          "inProgress": "Deleting...",
+          "success": "{size} of disk space has been reclaimed",
+          "failed": "Cleanup Failed",
+          "notAvailable": "Cleanup Not Available",
+          "confirmTitle": "Delete Legacy Database?",
+          "confirmMessage": "You are about to permanently delete the legacy database ({size}). This action cannot be undone.",
+          "confirmCheckbox": "I understand this will permanently delete the legacy database",
+          "cancelButton": "Cancel",
+          "deleteConfirmButton": "Delete Permanently"
+        }
       },
       "v2": {
         "title": "Enhanced Database"
