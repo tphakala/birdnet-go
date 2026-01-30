@@ -891,7 +891,28 @@
         }
       },
       "legacy": {
-        "title": "Stara baza danych"
+        "title": "Stara baza danych",
+        "fetchFailed": "Nie udało się pobrać statusu starej bazy danych",
+        "cleanup": {
+          "title": "Czyszczenie starej bazy danych",
+          "location": "Lokalizacja",
+          "size": "Rozmiar",
+          "records": "Rekordy",
+          "detections": "wykryć",
+          "lastModified": "Ostatnia modyfikacja",
+          "warning": "Ostrzeżenie: Tej operacji nie można cofnąć",
+          "backupReminder": "Upewnij się, że masz kopię zapasową przed usunięciem starej bazy danych.",
+          "deleteButton": "Usuń starą bazę danych",
+          "inProgress": "Usuwanie...",
+          "success": "Odzyskano {size} miejsca na dysku",
+          "failed": "Czyszczenie nie powiodło się",
+          "notAvailable": "Czyszczenie niedostępne",
+          "confirmTitle": "Usunąć starą bazę danych?",
+          "confirmMessage": "Zamierzasz trwale usunąć starą bazę danych ({size}). Tej operacji nie można cofnąć.",
+          "confirmCheckbox": "Rozumiem, że spowoduje to trwałe usunięcie starej bazy danych",
+          "cancelButton": "Anuluj",
+          "deleteConfirmButton": "Usuń trwale"
+        }
       },
       "v2": {
         "title": "Ulepszona baza danych"

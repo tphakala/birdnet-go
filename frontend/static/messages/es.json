@@ -891,7 +891,28 @@
         }
       },
       "legacy": {
-        "title": "Base de datos heredada"
+        "title": "Base de datos heredada",
+        "fetchFailed": "Error al obtener el estado de la base de datos heredada",
+        "cleanup": {
+          "title": "Limpieza de base de datos heredada",
+          "location": "Ubicación",
+          "size": "Tamaño",
+          "records": "Registros",
+          "detections": "detecciones",
+          "lastModified": "Última modificación",
+          "warning": "Advertencia: Esta acción no se puede deshacer",
+          "backupReminder": "Asegúrese de tener una copia de seguridad antes de eliminar la base de datos heredada.",
+          "deleteButton": "Eliminar base de datos heredada",
+          "inProgress": "Eliminando...",
+          "success": "Se han liberado {size} de espacio en disco",
+          "failed": "Error en la limpieza",
+          "notAvailable": "Limpieza no disponible",
+          "confirmTitle": "¿Eliminar base de datos heredada?",
+          "confirmMessage": "Está a punto de eliminar permanentemente la base de datos heredada ({size}). Esta acción no se puede deshacer.",
+          "confirmCheckbox": "Entiendo que esto eliminará permanentemente la base de datos heredada",
+          "cancelButton": "Cancelar",
+          "deleteConfirmButton": "Eliminar permanentemente"
+        }
       },
       "v2": {
         "title": "Base de datos mejorada"

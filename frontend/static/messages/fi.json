@@ -891,7 +891,28 @@
         }
       },
       "legacy": {
-        "title": "Vanha tietokanta"
+        "title": "Vanha tietokanta",
+        "fetchFailed": "Vanhan tietokannan tilan haku epäonnistui",
+        "cleanup": {
+          "title": "Vanhan tietokannan siivous",
+          "location": "Sijainti",
+          "size": "Koko",
+          "records": "Tietueet",
+          "detections": "havaintoa",
+          "lastModified": "Viimeksi muokattu",
+          "warning": "Varoitus: Tätä toimintoa ei voi kumota",
+          "backupReminder": "Varmista, että sinulla on varmuuskopio ennen vanhan tietokannan poistamista.",
+          "deleteButton": "Poista vanha tietokanta",
+          "inProgress": "Poistetaan...",
+          "success": "{size} levytilaa vapautettu",
+          "failed": "Siivous epäonnistui",
+          "notAvailable": "Siivous ei ole käytettävissä",
+          "confirmTitle": "Poista vanha tietokanta?",
+          "confirmMessage": "Olet poistamassa pysyvästi vanhan tietokannan ({size}). Tätä toimintoa ei voi kumota.",
+          "confirmCheckbox": "Ymmärrän, että tämä poistaa vanhan tietokannan pysyvästi",
+          "cancelButton": "Peruuta",
+          "deleteConfirmButton": "Poista pysyvästi"
+        }
       },
       "v2": {
         "title": "Parannettu tietokanta"

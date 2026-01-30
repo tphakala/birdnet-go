@@ -891,7 +891,28 @@
         }
       },
       "legacy": {
-        "title": "Legacy-Datenbank"
+        "title": "Legacy-Datenbank",
+        "fetchFailed": "Legacy-Datenbankstatus konnte nicht abgerufen werden",
+        "cleanup": {
+          "title": "Legacy-Datenbank bereinigen",
+          "location": "Speicherort",
+          "size": "Größe",
+          "records": "Einträge",
+          "detections": "Erkennungen",
+          "lastModified": "Zuletzt geändert",
+          "warning": "Warnung: Diese Aktion kann nicht rückgängig gemacht werden",
+          "backupReminder": "Stellen Sie sicher, dass Sie eine Sicherung haben, bevor Sie die Legacy-Datenbank löschen.",
+          "deleteButton": "Legacy-Datenbank löschen",
+          "inProgress": "Wird gelöscht...",
+          "success": "{size} Speicherplatz wurden freigegeben",
+          "failed": "Bereinigung fehlgeschlagen",
+          "notAvailable": "Bereinigung nicht verfügbar",
+          "confirmTitle": "Legacy-Datenbank löschen?",
+          "confirmMessage": "Sie sind dabei, die Legacy-Datenbank ({size}) dauerhaft zu löschen. Diese Aktion kann nicht rückgängig gemacht werden.",
+          "confirmCheckbox": "Ich verstehe, dass dies die Legacy-Datenbank dauerhaft löscht",
+          "cancelButton": "Abbrechen",
+          "deleteConfirmButton": "Dauerhaft löschen"
+        }
       },
       "v2": {
         "title": "Erweiterte Datenbank"

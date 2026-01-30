@@ -891,7 +891,28 @@
         }
       },
       "legacy": {
-        "title": "Base de dados legada"
+        "title": "Base de dados legada",
+        "fetchFailed": "Falha ao obter o estado da base de dados legada",
+        "cleanup": {
+          "title": "Limpeza da base de dados legada",
+          "location": "Localização",
+          "size": "Tamanho",
+          "records": "Registos",
+          "detections": "deteções",
+          "lastModified": "Última modificação",
+          "warning": "Aviso: Esta ação não pode ser desfeita",
+          "backupReminder": "Certifique-se de que tem uma cópia de segurança antes de eliminar a base de dados legada.",
+          "deleteButton": "Eliminar base de dados legada",
+          "inProgress": "A eliminar...",
+          "success": "{size} de espaço em disco foram libertados",
+          "failed": "Falha na limpeza",
+          "notAvailable": "Limpeza não disponível",
+          "confirmTitle": "Eliminar base de dados legada?",
+          "confirmMessage": "Está prestes a eliminar permanentemente a base de dados legada ({size}). Esta ação não pode ser desfeita.",
+          "confirmCheckbox": "Compreendo que isto eliminará permanentemente a base de dados legada",
+          "cancelButton": "Cancelar",
+          "deleteConfirmButton": "Eliminar permanentemente"
+        }
       },
       "v2": {
         "title": "Base de dados melhorada"

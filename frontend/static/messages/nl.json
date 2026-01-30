@@ -891,7 +891,28 @@
         }
       },
       "legacy": {
-        "title": "Legacy database"
+        "title": "Legacy database",
+        "fetchFailed": "Kon legacy databasestatus niet ophalen",
+        "cleanup": {
+          "title": "Legacy database opruimen",
+          "location": "Locatie",
+          "size": "Grootte",
+          "records": "Records",
+          "detections": "detecties",
+          "lastModified": "Laatst gewijzigd",
+          "warning": "Waarschuwing: Deze actie kan niet ongedaan worden gemaakt",
+          "backupReminder": "Zorg ervoor dat u een back-up heeft voordat u de legacy database verwijdert.",
+          "deleteButton": "Legacy database verwijderen",
+          "inProgress": "Verwijderen...",
+          "success": "{size} schijfruimte vrijgemaakt",
+          "failed": "Opruimen mislukt",
+          "notAvailable": "Opruimen niet beschikbaar",
+          "confirmTitle": "Legacy database verwijderen?",
+          "confirmMessage": "U staat op het punt de legacy database ({size}) permanent te verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
+          "confirmCheckbox": "Ik begrijp dat dit de legacy database permanent zal verwijderen",
+          "cancelButton": "Annuleren",
+          "deleteConfirmButton": "Permanent verwijderen"
+        }
       },
       "v2": {
         "title": "Verbeterde database"
