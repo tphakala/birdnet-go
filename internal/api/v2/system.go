@@ -312,6 +312,9 @@ func (c *Controller) initSystemRoutes() {
 	// Initialize migration routes
 	c.initMigrationRoutes()
 
+	// Initialize legacy cleanup routes
+	c.initLegacyCleanupRoutes()
+
 	c.logInfoIfEnabled("System routes initialized successfully")
 }
 
