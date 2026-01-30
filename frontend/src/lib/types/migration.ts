@@ -36,6 +36,12 @@ export interface MigrationStatus {
   dirty_id_count: number;
   error_message?: string;
   is_v2_only_mode?: boolean;
+
+  // Cleanup state fields
+  cleanup_state?: string;
+  cleanup_error?: string;
+  cleanup_tables_remaining?: string[];
+  cleanup_space_reclaimed?: number;
 }
 
 /**
