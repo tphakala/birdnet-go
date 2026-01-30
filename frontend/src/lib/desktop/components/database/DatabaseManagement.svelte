@@ -160,9 +160,8 @@
 
     try {
       await api.post('/api/v2/system/database/legacy/cleanup');
-      // Immediately fetch status to start tracking progress
-      await fetchMigrationStatus();
-      await fetchLegacyStatus();
+      // Immediately fetch status to start tracking progress (parallel for performance)
+      await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
     } catch (e) {
       legacyStatus.error =
         e instanceof ApiError ? e.message : t('system.database.legacy.cleanup.failed');

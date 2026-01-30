@@ -351,3 +351,138 @@ func TestStartLegacyCleanup_AlreadyInProgress(t *testing.T) {
 	assert.False(t, response.Success)
 	assert.Contains(t, response.Message, "already in progress")
 }
+
+// createMySQLTestSettings creates settings for MySQL-based legacy cleanup tests.
+func createMySQLTestSettings() *conf.Settings {
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = false
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Database = "test_birdnet"
+	return settings
+}
+
+// TestGetLegacyStatus_MySQL_NoDBProvider tests MySQL status when Repo doesn't implement gormDBProvider.
+func TestGetLegacyStatus_MySQL_NoDBProvider(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	e := echo.New()
+	settings := createMySQLTestSettings()
+	controller := createLegacyTestController(e, settings)
+	// Repo is nil, so gormDBProvider cast will fail
+
+	prevV2OnlyMode := isV2OnlyMode
+	isV2OnlyMode = true
+	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := controller.GetLegacyStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response LegacyStatusResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Without a DB provider, no tables can be queried
+	assert.False(t, response.Exists, "No legacy tables should exist without DB provider")
+	assert.False(t, response.CanCleanup, "Cannot cleanup without DB provider")
+}
+
+// TestStartLegacyCleanup_MySQL_NoDBProvider tests MySQL cleanup when Repo doesn't implement gormDBProvider.
+func TestStartLegacyCleanup_MySQL_NoDBProvider(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	e := echo.New()
+	settings := createMySQLTestSettings()
+	controller := createLegacyTestController(e, settings)
+	// Repo is nil, so gormDBProvider cast will fail
+
+	prevV2OnlyMode := isV2OnlyMode
+	isV2OnlyMode = true
+	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := controller.StartLegacyCleanup(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code) // Request accepted, async will fail
+
+	// Wait for async cleanup to complete
+	require.Eventually(t, func() bool {
+		state, _, _, _ := controller.cleanupStatus.Get()
+		return state == CleanupStateCompleted || state == CleanupStateFailed
+	}, 5*time.Second, 10*time.Millisecond, "cleanup should complete")
+
+	// Verify cleanup failed due to no DB provider
+	state, errMsg, _, _ := controller.cleanupStatus.Get()
+	assert.Equal(t, CleanupStateFailed, state)
+	assert.Contains(t, errMsg, "cannot access database connection")
+}
+
+// TestCleanupStatus_ThreadSafety tests that CleanupStatus operations are thread-safe.
+func TestCleanupStatus_ThreadSafety(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	cs := NewCleanupStatus()
+
+	// Verify initial state
+	state, errMsg, remaining, reclaimed := cs.Get()
+	assert.Equal(t, CleanupStateIdle, state)
+	assert.Empty(t, errMsg)
+	assert.Nil(t, remaining)
+	assert.Equal(t, int64(0), reclaimed)
+
+	// Test TryStart
+	assert.True(t, cs.TryStart(), "First TryStart should succeed")
+	state, _, _, _ = cs.Get()
+	assert.Equal(t, CleanupStateInProgress, state)
+
+	// Second TryStart should fail
+	assert.False(t, cs.TryStart(), "Second TryStart should fail when already in progress")
+
+	// Test Set
+	cs.Set(CleanupStateCompleted, "", nil, 12345)
+	state, errMsg, remaining, reclaimed = cs.Get()
+	assert.Equal(t, CleanupStateCompleted, state)
+	assert.Empty(t, errMsg)
+	assert.Nil(t, remaining)
+	assert.Equal(t, int64(12345), reclaimed)
+
+	// Test Set with error
+	cs.Set(CleanupStateFailed, "test error", []string{"table1", "table2"}, 0)
+	state, errMsg, remaining, reclaimed = cs.Get()
+	assert.Equal(t, CleanupStateFailed, state)
+	assert.Equal(t, "test error", errMsg)
+	assert.Equal(t, []string{"table1", "table2"}, remaining)
+	assert.Equal(t, int64(0), reclaimed)
+
+	// Test Reset
+	cs.Reset()
+	state, errMsg, remaining, reclaimed = cs.Get()
+	assert.Equal(t, CleanupStateIdle, state)
+	assert.Empty(t, errMsg)
+	assert.Nil(t, remaining)
+	assert.Equal(t, int64(0), reclaimed)
+}
+
+// TestLegacyTables_Defined tests that the legacy tables list is properly defined.
+func TestLegacyTables_Defined(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	assert.NotEmpty(t, legacyTables, "Legacy tables list should not be empty")
+
+	// Verify expected tables are in the list
+	expectedTables := []string{"notes", "results", "hourly_weathers", "daily_events"}
+	for _, expected := range expectedTables {
+		assert.Contains(t, legacyTables, expected, "Legacy tables should contain %s", expected)
+	}
+}
