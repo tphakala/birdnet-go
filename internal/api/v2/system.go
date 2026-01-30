@@ -1322,9 +1322,9 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		logger.String("ip", ip),
 	)
 
-	// In v2-only mode, return v2 database stats as the primary database
+	// In enhanced database mode, return v2 database stats as the primary database
 	if isV2OnlyMode {
-		c.logInfoIfEnabled("Running in v2-only mode, returning v2 database as primary",
+		c.logInfoIfEnabled("Running in enhanced database mode, returning v2 database as primary",
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
@@ -1341,7 +1341,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 			})
 		}
 		// V2 database not available, return disconnected state
-		c.logWarnIfEnabled("V2-only mode but v2 database not available",
+		c.logWarnIfEnabled("Enhanced database mode but v2 database not available",
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)

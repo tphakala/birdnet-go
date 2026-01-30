@@ -149,10 +149,11 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
 
-	// Log startup mode detection
+	// Log startup mode detection - use datastore module for database mode messages
+	datastoreLog := logger.Global().Module("datastore")
 	switch {
 	case v2OnlyMode:
-		GetLogger().Info("migration completed, starting in v2-only mode",
+		datastoreLog.Info("migration completed, starting in enhanced database mode",
 			logger.String("migration_status", string(startupState.MigrationStatus)),
 			logger.String("operation", "startup_mode_check"))
 	case freshInstall:
@@ -177,10 +178,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		var err error
 		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
 		if err != nil {
-			// V2-only mode failed, fall back to legacy startup
-			GetLogger().Warn("v2-only mode initialization failed, falling back to legacy mode",
+			// Enhanced database mode failed, fall back to legacy startup
+			datastoreLog.Warn("enhanced database mode initialization failed, falling back to legacy mode",
 				logger.Error(err),
-				logger.String("operation", "initialize_v2_only_mode"))
+				logger.String("operation", "initialize_enhanced_database_mode"))
 			dataStore = datastore.New(settings)
 			v2OnlyMode = false
 		} else {
@@ -321,8 +322,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
 
-	// Initialize v2 migration infrastructure only if not in v2-only mode
-	// In v2-only mode, migration is already complete - no need for migration infrastructure
+	// Initialize v2 migration infrastructure only if not in enhanced database mode
+	// In enhanced database mode, migration is already complete - no need for migration infrastructure
 	if !v2OnlyMode {
 		// This sets up the StateManager and Worker for the database migration API
 		if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
@@ -332,7 +333,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
 	} else {
-		GetLogger().Debug("skipping migration infrastructure in v2-only mode",
+		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
 	// Ensure v2 database is closed on shutdown (handles nil case gracefully)
@@ -1918,9 +1919,9 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 //   - Fresh installs: v2 schema at configured path (no _v2 suffix, no v2_ prefix)
 //   - Post-migration: v2 schema at migration path (_v2 suffix, v2_ prefix)
 func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
-	log := GetLogger()
-	log.Info("initializing v2-only mode",
-		logger.String("operation", "initialize_v2_only_mode"))
+	log := logger.Global().Module("datastore")
+	log.Info("initializing enhanced database mode",
+		logger.String("operation", "initialize_enhanced_database_mode"))
 
 	// Determine configuration based on database type
 	var v2Manager datastoreV2.Manager
@@ -2025,8 +2026,8 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	v2DatabaseManager = v2Manager
 	v2DatabaseManagerMu.Unlock()
 
-	log.Info("v2-only mode initialized successfully",
-		logger.String("operation", "initialize_v2_only_mode"))
+	log.Info("enhanced database mode initialized successfully",
+		logger.String("operation", "initialize_enhanced_database_mode"))
 
 	return ds, nil
 }

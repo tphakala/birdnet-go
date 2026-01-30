@@ -25,10 +25,10 @@ import (
 // The function also sets the global enhanced database flag via v2.SetEnhancedDatabaseMode().
 func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datastore, error) {
 	if log == nil {
-		log = logger.Global().Module("v2only")
+		log = logger.Global().Module("datastore")
 	}
 
-	log.Info("initializing fresh installation in v2-only mode")
+	log.Info("initializing fresh installation in enhanced database mode")
 
 	var manager v2.Manager
 	var err error

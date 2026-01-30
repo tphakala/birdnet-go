@@ -129,9 +129,9 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 
 	// Check if state manager is available
 	if stateManager == nil {
-		// In v2-only mode, migration is complete and state manager is not needed
+		// In enhanced database mode, migration is complete and state manager is not needed
 		if isV2OnlyMode {
-			c.logInfoIfEnabled("Running in v2-only mode, migration is complete",
+			c.logInfoIfEnabled("Running in enhanced database mode, migration is complete",
 				logger.String("path", path), logger.String("ip", ip))
 			return ctx.JSON(http.StatusOK, MigrationStatusResponse{
 				State:             string(entities.MigrationStatusCompleted),

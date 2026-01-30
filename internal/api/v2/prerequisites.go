@@ -152,7 +152,7 @@ func (c *Controller) checkStateIdle() PrerequisiteCheck {
 	if stateManager == nil {
 		if isV2OnlyMode {
 			check.Status = CheckStatusSkipped
-			check.Message = "Running in v2-only mode, migration already complete"
+			check.Message = "Running in enhanced database mode, migration already complete"
 			return check
 		}
 		check.Status = CheckStatusError
