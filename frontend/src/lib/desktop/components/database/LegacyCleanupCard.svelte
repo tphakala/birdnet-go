@@ -49,6 +49,8 @@
       <!-- Success state -->
       <div
         class="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--color-success)] flex items-start gap-3"
+        role="status"
+        aria-live="polite"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -73,6 +75,8 @@
       <!-- Error state -->
       <div
         class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-start gap-3"
+        role="alert"
+        aria-live="assertive"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

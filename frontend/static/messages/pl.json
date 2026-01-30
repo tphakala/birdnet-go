@@ -911,7 +911,9 @@
           "confirmMessage": "Zamierzasz trwale usunąć starą bazę danych ({size}). Tej operacji nie można cofnąć.",
           "confirmCheckbox": "Rozumiem, że spowoduje to trwałe usunięcie starej bazy danych",
           "cancelButton": "Anuluj",
-          "deleteConfirmButton": "Usuń trwale"
+          "deleteConfirmButton": "Usuń trwale",
+          "description": "Ta baza danych jest teraz offline i nie jest już używana. Wszystkie Twoje dane zostały przeniesione do ulepszonej bazy danych.",
+          "recommendation": "Zaleca się usunięcie tej bazy danych, aby zwolnić miejsce na dysku."
         }
       },
       "v2": {

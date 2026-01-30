@@ -911,7 +911,9 @@
           "confirmMessage": "U staat op het punt de legacy database ({size}) permanent te verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
           "confirmCheckbox": "Ik begrijp dat dit de legacy database permanent zal verwijderen",
           "cancelButton": "Annuleren",
-          "deleteConfirmButton": "Permanent verwijderen"
+          "deleteConfirmButton": "Permanent verwijderen",
+          "description": "Deze database is nu offline en wordt niet meer gebruikt. Al uw gegevens zijn gemigreerd naar de verbeterde database.",
+          "recommendation": "Het wordt aanbevolen om deze database te verwijderen om schijfruimte vrij te maken."
         }
       },
       "v2": {

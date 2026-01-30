@@ -911,7 +911,9 @@
           "confirmMessage": "Olet poistamassa pysyvästi vanhan tietokannan ({size}). Tätä toimintoa ei voi kumota.",
           "confirmCheckbox": "Ymmärrän, että tämä poistaa vanhan tietokannan pysyvästi",
           "cancelButton": "Peruuta",
-          "deleteConfirmButton": "Poista pysyvästi"
+          "deleteConfirmButton": "Poista pysyvästi",
+          "description": "Tämä tietokanta on nyt offline-tilassa eikä sitä enää käytetä. Kaikki tietosi on siirretty parannettuun tietokantaan.",
+          "recommendation": "Tietokannan poistamista suositellaan levytilan vapauttamiseksi."
         }
       },
       "v2": {

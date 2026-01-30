@@ -95,10 +95,12 @@ func NewCleanupStatus() *CleanupStatus {
 }
 
 // Get returns the current cleanup state safely.
+// Returns a copy of tablesRemaining to prevent callers from observing concurrent mutations.
 func (cs *CleanupStatus) Get() (state, errMsg string, remaining []string, reclaimed int64) {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
-	return cs.state, cs.errorMsg, cs.tablesRemaining, cs.spaceReclaimed
+	remainingCopy := append([]string(nil), cs.tablesRemaining...)
+	return cs.state, cs.errorMsg, remainingCopy, cs.spaceReclaimed
 }
 
 // Set sets the cleanup state safely.

@@ -911,7 +911,9 @@
           "confirmMessage": "Está prestes a eliminar permanentemente a base de dados legada ({size}). Esta ação não pode ser desfeita.",
           "confirmCheckbox": "Compreendo que isto eliminará permanentemente a base de dados legada",
           "cancelButton": "Cancelar",
-          "deleteConfirmButton": "Eliminar permanentemente"
+          "deleteConfirmButton": "Eliminar permanentemente",
+          "description": "Este banco de dados agora está offline e não está mais em uso. Todos os seus dados foram migrados para o banco de dados aprimorado.",
+          "recommendation": "Recomenda-se excluir este banco de dados para liberar espaço em disco."
         }
       },
       "v2": {

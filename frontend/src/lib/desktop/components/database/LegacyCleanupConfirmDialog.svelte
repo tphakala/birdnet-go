@@ -34,8 +34,14 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center">
     <div
       class="bg-[var(--color-base-100)] rounded-xl shadow-xl max-w-md w-full mx-4 p-6 border border-[var(--color-base-200)]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="legacy-cleanup-confirm-title"
     >
-      <h3 class="font-bold text-lg text-[var(--color-base-content)]">
+      <h3
+        id="legacy-cleanup-confirm-title"
+        class="font-bold text-lg text-[var(--color-base-content)]"
+      >
         {t('system.database.legacy.cleanup.confirmTitle')}
       </h3>
 
@@ -44,8 +50,9 @@
       </p>
 
       <div class="mb-4">
-        <label class="flex items-center cursor-pointer gap-3">
+        <label class="flex items-center cursor-pointer gap-3" for="legacy-cleanup-confirm-checkbox">
           <input
+            id="legacy-cleanup-confirm-checkbox"
             type="checkbox"
             class="w-4 h-4 rounded border-[var(--color-base-300)] text-[var(--color-error)] focus:ring-[var(--color-error)]"
             bind:checked={confirmed}

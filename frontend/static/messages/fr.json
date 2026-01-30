@@ -911,7 +911,9 @@
           "confirmMessage": "Vous êtes sur le point de supprimer définitivement la base de données héritée ({size}). Cette action ne peut pas être annulée.",
           "confirmCheckbox": "Je comprends que cela supprimera définitivement la base de données héritée",
           "cancelButton": "Annuler",
-          "deleteConfirmButton": "Supprimer définitivement"
+          "deleteConfirmButton": "Supprimer définitivement",
+          "description": "Cette base de données est maintenant hors ligne et n'est plus utilisée. Toutes vos données ont été migrées vers la base de données améliorée.",
+          "recommendation": "Il est recommandé de supprimer cette base de données pour libérer de l'espace disque."
         }
       },
       "v2": {
