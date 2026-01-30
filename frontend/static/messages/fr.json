@@ -891,7 +891,30 @@
         }
       },
       "legacy": {
-        "title": "Base de données héritée"
+        "title": "Base de données héritée",
+        "fetchFailed": "Échec de la récupération du statut de la base de données héritée",
+        "cleanup": {
+          "title": "Nettoyage de la base de données héritée",
+          "location": "Emplacement",
+          "size": "Taille",
+          "records": "Enregistrements",
+          "detections": "détections",
+          "lastModified": "Dernière modification",
+          "warning": "Attention : Cette action ne peut pas être annulée",
+          "backupReminder": "Assurez-vous d'avoir une sauvegarde avant de supprimer la base de données héritée.",
+          "deleteButton": "Supprimer la base de données héritée",
+          "inProgress": "Suppression...",
+          "success": "{size} d'espace disque libéré",
+          "failed": "Échec du nettoyage",
+          "notAvailable": "Nettoyage non disponible",
+          "confirmTitle": "Supprimer la base de données héritée ?",
+          "confirmMessage": "Vous êtes sur le point de supprimer définitivement la base de données héritée ({size}). Cette action ne peut pas être annulée.",
+          "confirmCheckbox": "Je comprends que cela supprimera définitivement la base de données héritée",
+          "cancelButton": "Annuler",
+          "deleteConfirmButton": "Supprimer définitivement",
+          "description": "Cette base de données est maintenant hors ligne et n'est plus utilisée. Toutes vos données ont été migrées vers la base de données améliorée.",
+          "recommendation": "Il est recommandé de supprimer cette base de données pour libérer de l'espace disque."
+        }
       },
       "v2": {
         "title": "Base de données améliorée"

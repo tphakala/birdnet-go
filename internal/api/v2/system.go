@@ -312,6 +312,9 @@ func (c *Controller) initSystemRoutes() {
 	// Initialize migration routes
 	c.initMigrationRoutes()
 
+	// Initialize legacy cleanup routes
+	c.initLegacyCleanupRoutes()
+
 	c.logInfoIfEnabled("System routes initialized successfully")
 }
 
@@ -1446,14 +1449,14 @@ func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse
 
 	// Build response
 	response := &V2DatabaseStatsResponse{
-		Type:      "SQLite",
+		Type:      datastore.DialectSQLite,
 		Location:  c.V2Manager.Path(),
 		Connected: true,
 	}
 
 	// Adjust type for MySQL
 	if c.V2Manager.IsMySQL() {
-		response.Type = "MySQL"
+		response.Type = datastore.DialectMySQL
 	}
 
 	// Get database size

@@ -42,6 +42,12 @@ type MigrationStatusResponse struct {
 	IsDualWriteActive   bool       `json:"is_dual_write_active"`
 	ShouldReadFromV2    bool       `json:"should_read_from_v2"`
 	IsV2OnlyMode        bool       `json:"is_v2_only_mode"`
+
+	// Cleanup state fields
+	CleanupState           string   `json:"cleanup_state"`             // idle, in_progress, completed, failed
+	CleanupError           string   `json:"cleanup_error,omitempty"`   // Error message if failed
+	CleanupTablesRemaining []string `json:"cleanup_tables_remaining"`  // MySQL: tables that failed to drop
+	CleanupSpaceReclaimed  int64    `json:"cleanup_space_reclaimed"`   // Bytes freed
 }
 
 // MigrationStartRequest represents the request to start migration.
@@ -133,19 +139,32 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		if isV2OnlyMode {
 			c.logInfoIfEnabled("Running in enhanced database mode, migration is complete",
 				logger.String("path", path), logger.String("ip", ip))
+			// Get cleanup state for v2-only mode
+			var cleanupState, cleanupErr string
+			var cleanupRemaining []string
+			var cleanupReclaimed int64
+			if c.cleanupStatus != nil {
+				cleanupState, cleanupErr, cleanupRemaining, cleanupReclaimed = c.cleanupStatus.Get()
+			} else {
+				cleanupState = CleanupStateIdle
+			}
 			return ctx.JSON(http.StatusOK, MigrationStatusResponse{
-				State:             string(entities.MigrationStatusCompleted),
-				ProgressPercent:   100.0,
-				WorkerRunning:     false,
-				WorkerPaused:      false,
-				CanStart:          false,
-				CanPause:          false,
-				CanResume:         false,
-				CanCancel:         false,
-				CanRollback:       false, // No rollback for fresh v2 installs
-				IsDualWriteActive: false,
-				ShouldReadFromV2:  true,
-				IsV2OnlyMode:      true,
+				State:                  string(entities.MigrationStatusCompleted),
+				ProgressPercent:        100.0,
+				WorkerRunning:          false,
+				WorkerPaused:           false,
+				CanStart:               false,
+				CanPause:               false,
+				CanResume:              false,
+				CanCancel:              false,
+				CanRollback:            false, // No rollback for fresh v2 installs
+				IsDualWriteActive:      false,
+				ShouldReadFromV2:       true,
+				IsV2OnlyMode:           true,
+				CleanupState:           cleanupState,
+				CleanupError:           cleanupErr,
+				CleanupTablesRemaining: cleanupRemaining,
+				CleanupSpaceReclaimed:  cleanupReclaimed,
 			})
 		}
 		c.logWarnIfEnabled("Migration state manager not available",
@@ -204,6 +223,16 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		state.State != entities.MigrationStatusCompleted
 	canRollback := state.State == entities.MigrationStatusCompleted
 
+	// Get cleanup state
+	var cleanupState, cleanupErr string
+	var cleanupRemaining []string
+	var cleanupReclaimed int64
+	if c.cleanupStatus != nil {
+		cleanupState, cleanupErr, cleanupRemaining, cleanupReclaimed = c.cleanupStatus.Get()
+	} else {
+		cleanupState = CleanupStateIdle
+	}
+
 	response := MigrationStatusResponse{
 		State:              string(state.State),
 		CurrentPhase:       string(state.CurrentPhase),
@@ -227,9 +256,13 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		CanResume:          canResume,
 		CanCancel:          canCancel,
 		CanRollback:        canRollback,
-		IsDualWriteActive:  isDualWriteActive,
-		ShouldReadFromV2:   shouldReadFromV2,
-		IsV2OnlyMode:       isV2OnlyMode,
+		IsDualWriteActive:      isDualWriteActive,
+		ShouldReadFromV2:       shouldReadFromV2,
+		IsV2OnlyMode:           isV2OnlyMode,
+		CleanupState:           cleanupState,
+		CleanupError:           cleanupErr,
+		CleanupTablesRemaining: cleanupRemaining,
+		CleanupSpaceReclaimed:  cleanupReclaimed,
 	}
 
 	c.logInfoIfEnabled("Migration status retrieved",
