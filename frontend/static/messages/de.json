@@ -827,6 +827,60 @@
           "paused": "Worker pausiert",
           "stopped": "Worker gestoppt"
         },
+        "prerequisites": {
+          "title": "Prüfungen vor der Migration",
+          "rerunChecks": "Prüfungen wiederholen",
+          "critical": "Kritisch",
+          "allPassed": "Alle Prüfungen bestanden - bereit zur Migration",
+          "criticalIssues": "{count} kritische(s) Problem(e) muss/müssen behoben werden",
+          "warningsCount": "{count} Warnung(en)",
+          "running": "Führe Vorab-Prüfungen durch...",
+          "checkingStep": "Schritt {current} von {total}",
+          "errors": {
+            "fetchFailed": "Fehler beim Abrufen der Voraussetzungen"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migrationsstatus"
+            },
+            "disk_space": {
+              "name": "Speicherplatz"
+            },
+            "legacy_accessible": {
+              "name": "Datenbankverbindung"
+            },
+            "sqlite_integrity": {
+              "name": "Datenbankintegrität"
+            },
+            "mysql_table_health": {
+              "name": "Tabellengesundheit"
+            },
+            "write_permission": {
+              "name": "Schreibberechtigung"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-Berechtigungen"
+            },
+            "record_count": {
+              "name": "Datensatzanzahl"
+            },
+            "existing_v2_data": {
+              "name": "Vorhandene Migrationsdaten"
+            },
+            "no_active_locks": {
+              "name": "Aktive Sperren"
+            },
+            "memory_available": {
+              "name": "Verfügbarer Speicher"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
         "requiredNote": "Die Datenbankmigration ist für kommende BirdNET-Go-Funktionen erforderlich, die das neue normalisierte Datenbankschema nutzen. Neue Funktionen sind erst nach Abschluss der Migration verfügbar.",
         "starting": "Migration wird gestartet...",
         "confirmDialog": {

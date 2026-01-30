@@ -19,47 +19,22 @@
   import DatabaseStatsCard from './DatabaseStatsCard.svelte';
   import MigrationControlCard from './MigrationControlCard.svelte';
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
-
-  // Types
-  interface DatabaseStats {
-    type: string;
-    location: string;
-    size_bytes: number;
-    total_detections: number;
-    connected: boolean;
-  }
-
-  interface MigrationStatus {
-    state: string;
-    current_phase?: string; // Current migration phase (detections, predictions, etc.)
-    phase_number?: number; // Current phase number (1-based)
-    total_phases?: number; // Total number of phases
-    total_records: number;
-    migrated_records: number;
-    progress_percent: number;
-    records_per_second?: number;
-    estimated_remaining?: string;
-    worker_running: boolean;
-    worker_paused: boolean;
-    can_start: boolean;
-    can_pause: boolean;
-    can_resume: boolean;
-    can_cancel: boolean;
-    dirty_id_count: number;
-    error_message?: string;
-    is_v2_only_mode?: boolean;
-  }
-
-  interface ApiState<T> {
-    loading: boolean;
-    error: string | null;
-    data: T | null;
-  }
+  import type {
+    DatabaseStats,
+    MigrationStatus,
+    PrerequisitesResponse,
+    ApiState,
+  } from '$lib/types/migration';
 
   // State
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let migrationStatus = $state<ApiState<MigrationStatus>>({
+    loading: true,
+    error: null,
+    data: null,
+  });
+  let prerequisites = $state<ApiState<PrerequisitesResponse>>({
     loading: true,
     error: null,
     data: null,
@@ -123,8 +98,32 @@
     }
   }
 
+  async function fetchPrerequisites(): Promise<void> {
+    try {
+      prerequisites.loading = true;
+      prerequisites.error = null;
+      const data = await api.get<PrerequisitesResponse>(
+        '/api/v2/system/database/migration/prerequisites'
+      );
+      prerequisites.data = data;
+    } catch (e) {
+      prerequisites.data = null;
+      prerequisites.error =
+        e instanceof ApiError
+          ? e.message
+          : t('system.database.migration.prerequisites.errors.fetchFailed');
+    } finally {
+      prerequisites.loading = false;
+    }
+  }
+
   async function fetchAll(): Promise<void> {
-    await Promise.all([fetchLegacyStats(), fetchV2Stats(), fetchMigrationStatus()]);
+    await Promise.all([
+      fetchLegacyStats(),
+      fetchV2Stats(),
+      fetchMigrationStatus(),
+      fetchPrerequisites(),
+    ]);
   }
 
   // Migration actions
@@ -290,10 +289,12 @@
       isLoading={migrationStatus.loading && !migrationStatus.data}
       isStarting={startLoading}
       error={migrationStatus.error}
+      {prerequisites}
       onStart={() => (showConfirmDialog = true)}
       onPause={pauseMigration}
       onResume={resumeMigration}
       onCancel={cancelMigration}
+      onRefreshPrerequisites={fetchPrerequisites}
     />
   {/if}
 </div>

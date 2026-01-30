@@ -3,15 +3,11 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shirou/gopsutil/v3/disk"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
@@ -116,6 +112,7 @@ func (c *Controller) initMigrationRoutes() {
 
 	// Migration status and control routes
 	protectedGroup.GET("/status", c.GetMigrationStatus)
+	protectedGroup.GET("/prerequisites", c.GetPrerequisites)
 	protectedGroup.POST("/start", c.StartMigration)
 	protectedGroup.POST("/pause", c.PauseMigration)
 	protectedGroup.POST("/resume", c.ResumeMigration)
@@ -485,54 +482,51 @@ func (c *Controller) RollbackMigration(ctx echo.Context) error {
 	})
 }
 
-// MinDiskSpaceForMigration is the minimum free disk space required to start migration (1GB).
-const MinDiskSpaceForMigration = 1 << 30 // 1GB in bytes
-
 // runPreflightChecks verifies the system is ready for migration.
+// This runs the same critical checks as GetPrerequisites and fails if any are not passed.
 func (c *Controller) runPreflightChecks() error {
-	// Check database availability
-	if c.DS == nil {
-		return errors.New("database not available")
-	}
+	// Run all critical prerequisite checks
+	checks := c.runCriticalPrerequisiteChecks()
 
-	// Determine the database directory for accurate disk space check
-	diskCheckPath := c.getDatabaseDirectory()
-
-	// Check disk space on the database directory
-	usage, err := disk.Usage(diskCheckPath)
-	if err != nil {
-		return fmt.Errorf("failed to check disk space on %s: %w", diskCheckPath, err)
-	}
-
-	if usage.Free < MinDiskSpaceForMigration {
-		return fmt.Errorf("insufficient disk space on %s: %d bytes free, need at least %d bytes (1GB)",
-			diskCheckPath, usage.Free, MinDiskSpaceForMigration)
+	// Check for any failures
+	for _, check := range checks {
+		if check.Status == CheckStatusFailed || check.Status == CheckStatusError {
+			return fmt.Errorf("prerequisite check '%s' failed: %s", check.Name, check.Message)
+		}
 	}
 
 	return nil
 }
 
-// getDatabaseDirectory returns the directory where the database resides.
-// Falls back to current directory "." if the path cannot be determined.
-func (c *Controller) getDatabaseDirectory() string {
-	// Try to get path from settings
-	if c.Settings != nil && c.Settings.Output.SQLite.Path != "" {
-		dbPath := c.Settings.Output.SQLite.Path
-		// Handle relative paths - resolve to absolute using CWD
-		if !filepath.IsAbs(dbPath) {
-			if absPath, err := filepath.Abs(dbPath); err == nil {
-				dbPath = absPath
-			}
-		}
-		dir := filepath.Dir(dbPath)
-		// Verify the directory exists
-		if _, err := os.Stat(dir); err == nil {
-			return dir
-		}
+// runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
+// This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
+func (c *Controller) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
+	checks := make([]PrerequisiteCheck, 0, 6)
+
+	// Common critical checks
+	checks = append(checks,
+		c.checkStateIdle(),
+		c.checkDiskSpace(),
+		c.checkLegacyAccessible(),
+	)
+
+	// Database-specific critical checks
+	if c.isUsingMySQL() {
+		checks = append(checks,
+			c.checkMySQLTableHealth(),
+			c.checkMySQLPermissions(),
+		)
+	} else {
+		checks = append(checks,
+			c.checkSQLiteIntegrity(),
+			c.checkWritePermission(),
+		)
 	}
 
-	// Fallback to current directory (better cross-platform default than "/")
-	return "."
+	// Record count is also critical
+	checks = append(checks, c.checkRecordCount())
+
+	return checks
 }
 
 // migrationActionParams defines parameters for a migration action.

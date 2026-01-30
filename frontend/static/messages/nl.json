@@ -827,6 +827,60 @@
           "paused": "Worker gepauzeerd",
           "stopped": "Worker gestopt"
         },
+        "prerequisites": {
+          "title": "Pre-migratiecontroles",
+          "rerunChecks": "Controles opnieuw uitvoeren",
+          "critical": "Kritiek",
+          "allPassed": "Alle controles geslaagd - klaar voor migratie",
+          "criticalIssues": "{count} kritiek(e) probleem/problemen moet(en) worden opgelost",
+          "warningsCount": "{count} waarschuwing(en)",
+          "running": "Pre-migratie controles uitvoeren...",
+          "checkingStep": "Stap {current} van {total}",
+          "errors": {
+            "fetchFailed": "Kan vereisten niet ophalen"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migratiestatus"
+            },
+            "disk_space": {
+              "name": "Schijfruimte"
+            },
+            "legacy_accessible": {
+              "name": "Databaseverbinding"
+            },
+            "sqlite_integrity": {
+              "name": "Database-integriteit"
+            },
+            "mysql_table_health": {
+              "name": "Tabelgezondheid"
+            },
+            "write_permission": {
+              "name": "Schrijfrechten"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-rechten"
+            },
+            "record_count": {
+              "name": "Aantal records"
+            },
+            "existing_v2_data": {
+              "name": "Bestaande migratiegegevens"
+            },
+            "no_active_locks": {
+              "name": "Actieve vergrendelingen"
+            },
+            "memory_available": {
+              "name": "Beschikbaar geheugen"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
         "requiredNote": "Databasemigratie is vereist voor aankomende BirdNET-Go-functies die afhankelijk zijn van het nieuwe genormaliseerde databaseschema. Nieuwe functies zijn pas beschikbaar na voltooiing van de migratie.",
         "starting": "Migratie wordt gestart...",
         "confirmDialog": {

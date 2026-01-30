@@ -12,7 +12,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/driver/sqlite"
@@ -23,6 +25,18 @@ import (
 
 // migrationTestMu protects the global stateManager and migrationWorker during tests.
 var migrationTestMu sync.Mutex
+
+// testDatastoreWrapper wraps a mock interface and provides GORM DB access for tests.
+// This allows prerequisite checks like checkSQLiteIntegrity to run properly.
+type testDatastoreWrapper struct {
+	*mocks.MockInterface
+	db *gorm.DB
+}
+
+// GetDB implements the gormProvider interface for prerequisite checks.
+func (w *testDatastoreWrapper) GetDB() *gorm.DB {
+	return w.db
+}
 
 // setupMigrationTestDB creates an in-memory SQLite database with migration state tables.
 func setupMigrationTestDB(t *testing.T) *gorm.DB {
@@ -88,11 +102,26 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 	})
 
 	mockDS := mocks.NewMockInterface(t)
+	mockRepo := mocks.NewMockDetectionRepository(t)
+
+	// Set up common mock expectations for prerequisite checks
+	// These are called by runPreflightChecks -> runCriticalPrerequisiteChecks
+	mockDS.EXPECT().GetLastDetections(1).Return([]datastore.Note{}, nil).Maybe()
+	mockRepo.EXPECT().CountAll(mock.Anything).Return(int64(100), nil).Maybe()
+
+	// Create a wrapper that provides both the mock interface and the GORM DB
+	// This is needed for checkSQLiteIntegrity which requires a real database
+	testDS := &testDatastoreWrapper{
+		MockInterface: mockDS,
+		db:            db,
+	}
+
 	controller := &Controller{
 		Echo:     e,
 		Group:    e.Group("/api/v2"),
 		Settings: getTestSettings(t),
-		DS:       mockDS,
+		DS:       testDS,
+		Repo:     mockRepo,
 	}
 
 	return e, controller, sm
@@ -185,9 +214,9 @@ func TestStartMigration_AlreadyRunning(t *testing.T) {
 	ctx := e.NewContext(req, rec)
 
 	err = controller.StartMigration(ctx)
-	// Should return conflict since already running
+	// Should return bad request since prerequisite check fails (not in IDLE state)
 	require.NoError(t, err) // Error is handled in response
-	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 // TestPauseMigration_Success tests pausing migration successfully.

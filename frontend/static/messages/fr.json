@@ -827,6 +827,60 @@
           "paused": "Worker en pause",
           "stopped": "Worker arrêté"
         },
+        "prerequisites": {
+          "title": "Vérifications pré-migration",
+          "rerunChecks": "Relancer les vérifications",
+          "critical": "Critique",
+          "allPassed": "Toutes les vérifications réussies - prêt pour la migration",
+          "criticalIssues": "{count} problème(s) critique(s) doit/doivent être résolu(s)",
+          "warningsCount": "{count} avertissement(s)",
+          "running": "Exécution des vérifications pré-migration...",
+          "checkingStep": "Étape {current} sur {total}",
+          "errors": {
+            "fetchFailed": "Échec de la récupération des prérequis"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "État de migration"
+            },
+            "disk_space": {
+              "name": "Espace disque"
+            },
+            "legacy_accessible": {
+              "name": "Connexion à la base de données"
+            },
+            "sqlite_integrity": {
+              "name": "Intégrité de la base de données"
+            },
+            "mysql_table_health": {
+              "name": "Santé des tables"
+            },
+            "write_permission": {
+              "name": "Permission d'écriture"
+            },
+            "mysql_permissions": {
+              "name": "Permissions MySQL"
+            },
+            "record_count": {
+              "name": "Nombre d'enregistrements"
+            },
+            "existing_v2_data": {
+              "name": "Données de migration existantes"
+            },
+            "no_active_locks": {
+              "name": "Verrous actifs"
+            },
+            "memory_available": {
+              "name": "Mémoire disponible"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
         "requiredNote": "La migration de la base de données est requise pour les prochaines fonctionnalités de BirdNET-Go qui reposent sur le nouveau schéma de base de données normalisé. Les nouvelles fonctionnalités ne seront pas disponibles tant que la migration ne sera pas terminée.",
         "starting": "Démarrage de la migration...",
         "confirmDialog": {
