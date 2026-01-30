@@ -181,10 +181,15 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	}, nil
 }
 
-// Save saves a note with its results.
+// Save saves a note with its results atomically.
+// The detection and its predictions are saved in a single transaction to prevent
+// partial writes (e.g., detection saved but predictions failed).
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
 	ctx := context.Background()
 
+	// NOTE: Label and Model GetOrCreate calls are outside the transaction.
+	// If the detection save fails, orphaned reference data may persist.
+	// This is acceptable as they will be reused on subsequent saves.
 	label, err := ds.label.GetOrCreate(ctx, note.ScientificName, entities.LabelTypeSpecies)
 	if err != nil {
 		return fmt.Errorf("failed to get/create label: %w", err)
@@ -194,6 +199,20 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, entities.ModelTypeBird)
 	if err != nil {
 		return fmt.Errorf("failed to get/create model: %w", err)
+	}
+
+	// Pre-resolve all prediction labels before starting transaction.
+	// This keeps the transaction short and avoids potential deadlocks.
+	var predLabels []*entities.Label
+	if len(results) > 0 {
+		predLabels = make([]*entities.Label, len(results))
+		for i, r := range results {
+			predLabel, err := ds.label.GetOrCreate(ctx, r.Species, entities.LabelTypeSpecies)
+			if err != nil {
+				return fmt.Errorf("failed to get/create prediction label for %s: %w", r.Species, err)
+			}
+			predLabels[i] = predLabel
+		}
 	}
 
 	// Parse the date string and time string to get Unix timestamp
@@ -229,31 +248,33 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		det.ClipName = &note.ClipName
 	}
 
-	if err := ds.detection.Save(ctx, det); err != nil {
-		return fmt.Errorf("failed to save detection: %w", err)
-	}
-
-	if len(results) > 0 {
-		preds := make([]*entities.DetectionPrediction, 0, len(results))
-		for _, r := range results {
-			predLabel, err := ds.label.GetOrCreate(ctx, r.Species, entities.LabelTypeSpecies)
-			if err != nil {
-				return fmt.Errorf("failed to get/create prediction label for %s: %w", r.Species, err)
-			}
-			preds = append(preds, &entities.DetectionPrediction{
-				DetectionID: det.ID,
-				LabelID:     predLabel.ID,
-				Confidence:  float64(r.Confidence),
-			})
+	// Wrap detection and predictions in a transaction for atomicity.
+	// DIRECT DB WRITE: We use tx.Create directly instead of ds.detection.Save()
+	// to ensure both detection and predictions are in the same transaction.
+	// The repository doesn't currently support transaction injection.
+	return ds.manager.DB().Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(det).Error; err != nil {
+			return fmt.Errorf("failed to save detection: %w", err)
 		}
-		if len(preds) > 0 {
-			if err := ds.detection.SavePredictions(ctx, det.ID, preds); err != nil {
-				return fmt.Errorf("failed to save predictions: %w", err)
+
+		if len(results) > 0 && len(predLabels) > 0 {
+			preds := make([]*entities.DetectionPrediction, 0, len(results))
+			for i, r := range results {
+				preds = append(preds, &entities.DetectionPrediction{
+					DetectionID: det.ID,
+					LabelID:     predLabels[i].ID,
+					Confidence:  float64(r.Confidence),
+				})
+			}
+			if len(preds) > 0 {
+				if err := tx.Create(&preds).Error; err != nil {
+					return fmt.Errorf("failed to save predictions: %w", err)
+				}
 			}
 		}
-	}
 
-	return nil
+		return nil
+	})
 }
 
 // Delete deletes a note by ID.
@@ -286,6 +307,11 @@ func (ds *Datastore) Get(id string) (datastore.Note, error) {
 // If rawLabelsMap is provided, it will be used to look up the common name
 // instead of making a database query (for batch efficiency).
 func (ds *Datastore) detectionToNote(det *entities.Detection, rawLabelsMap map[string]string) datastore.Note {
+	// Guard against nil detection to prevent panics
+	if det == nil {
+		return datastore.Note{}
+	}
+
 	scientificName := ""
 	// Try to get scientific name from preloaded Label first
 	if det.Label != nil && det.Label.ScientificName != nil {
