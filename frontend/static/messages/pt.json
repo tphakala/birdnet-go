@@ -856,11 +856,8 @@
             "write_permission": {
               "name": "Permissão de escrita"
             },
-            "mysql_create_permission": {
-              "name": "Permissão CREATE"
-            },
-            "mysql_dml_permission": {
-              "name": "Permissões DML"
+            "mysql_permissions": {
+              "name": "Permissões MySQL"
             },
             "record_count": {
               "name": "Contagem de registos"

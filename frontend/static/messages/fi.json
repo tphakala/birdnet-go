@@ -856,11 +856,8 @@
             "write_permission": {
               "name": "Kirjoitusoikeus"
             },
-            "mysql_create_permission": {
-              "name": "CREATE-oikeus"
-            },
-            "mysql_dml_permission": {
-              "name": "DML-oikeudet"
+            "mysql_permissions": {
+              "name": "MySQL-oikeudet"
             },
             "record_count": {
               "name": "Tietueiden määrä"

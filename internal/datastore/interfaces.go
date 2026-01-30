@@ -258,6 +258,12 @@ func (ds *DataStore) SetMetrics(m *Metrics) {
 	ds.metrics = m
 }
 
+// GetDB returns the underlying GORM database instance.
+// This is used by prerequisites checks to run database-specific validation queries.
+func (ds *DataStore) GetDB() *gorm.DB {
+	return ds.DB
+}
+
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
 func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 	ds.metricsMu.RLock()
