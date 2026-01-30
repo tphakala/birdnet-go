@@ -29,6 +29,10 @@ var (
 	ErrNotImplemented = errors.NewStd("not implemented in v2-only datastore")
 )
 
+// saveTransactionTimeout is the maximum duration for a Save transaction.
+// This prevents indefinite lock holding during slow I/O operations.
+const saveTransactionTimeout = 30 * time.Second
+
 // parseID converts a string ID to uint.
 func parseID(id string) (uint, error) {
 	parsed, err := strconv.ParseUint(id, 10, 32)
@@ -248,11 +252,15 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		det.ClipName = &note.ClipName
 	}
 
+	// Use timeout context for transaction to prevent indefinite lock holding.
+	txCtx, cancel := context.WithTimeout(ctx, saveTransactionTimeout)
+	defer cancel()
+
 	// Wrap detection and predictions in a transaction for atomicity.
 	// DIRECT DB WRITE: We use tx.Create directly instead of ds.detection.Save()
 	// to ensure both detection and predictions are in the same transaction.
 	// The repository doesn't currently support transaction injection.
-	return ds.manager.DB().Transaction(func(tx *gorm.DB) error {
+	return ds.manager.DB().WithContext(txCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(det).Error; err != nil {
 			return fmt.Errorf("failed to save detection: %w", err)
 		}
