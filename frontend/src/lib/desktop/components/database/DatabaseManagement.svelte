@@ -19,12 +19,15 @@
   import DatabaseStatsCard from './DatabaseStatsCard.svelte';
   import MigrationControlCard from './MigrationControlCard.svelte';
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
+  import LegacyCleanupCard from './LegacyCleanupCard.svelte';
+  import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
   import type {
     DatabaseStats,
     MigrationStatus,
     PrerequisitesResponse,
     ApiState,
   } from '$lib/types/migration';
+  import type { LegacyStatus } from '$lib/types/legacy';
 
   // State
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
@@ -43,6 +46,11 @@
   let startLoading = $state(false);
   let initialized = $state(false);
 
+  // Legacy cleanup state
+  let legacyStatus = $state<ApiState<LegacyStatus>>({ loading: false, error: null, data: null });
+  let showCleanupDialog = $state(false);
+  let cleanupLoading = $state(false);
+
   // Computed: Is migration active (should poll)
   let isActive = $derived(
     migrationStatus.data?.state === 'dual_write' ||
@@ -54,6 +62,9 @@
   // Computed: Is v2-only mode (fresh install or post-migration complete)
   // In this mode, we only show the primary database card and hide migration controls
   let isV2OnlyMode = $derived(migrationStatus.data?.is_v2_only_mode === true);
+
+  // Computed: Is cleanup in progress (should poll)
+  let isCleanupActive = $derived(migrationStatus.data?.cleanup_state === 'in_progress');
 
   // Fetch functions
   async function fetchLegacyStats(): Promise<void> {
@@ -124,6 +135,37 @@
       fetchMigrationStatus(),
       fetchPrerequisites(),
     ]);
+  }
+
+  // Legacy cleanup functions
+  async function fetchLegacyStatus(): Promise<void> {
+    try {
+      legacyStatus.loading = true;
+      legacyStatus.error = null;
+      legacyStatus.data = await api.get<LegacyStatus>('/api/v2/system/database/legacy/status');
+    } catch (e) {
+      legacyStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.legacy.fetchFailed');
+    } finally {
+      legacyStatus.loading = false;
+    }
+  }
+
+  async function startCleanup(): Promise<void> {
+    showCleanupDialog = false;
+    cleanupLoading = true;
+
+    try {
+      await api.post('/api/v2/system/database/legacy/cleanup');
+      // Immediately fetch status to start tracking progress
+      await fetchMigrationStatus();
+      await fetchLegacyStatus();
+    } catch (e) {
+      legacyStatus.error =
+        e instanceof ApiError ? e.message : t('system.database.legacy.cleanup.failed');
+    } finally {
+      cleanupLoading = false;
+    }
   }
 
   // Migration actions
@@ -201,14 +243,33 @@
       fetchAll();
     }
   });
+
+  // Fetch legacy status when entering v2-only mode
+  $effect(() => {
+    if (isV2OnlyMode && !legacyStatus.data && !legacyStatus.loading) {
+      fetchLegacyStatus();
+    }
+  });
+
+  // Poll during cleanup
+  $effect(() => {
+    if (!isCleanupActive) return;
+
+    const interval = setInterval(() => {
+      fetchMigrationStatus();
+      fetchLegacyStatus();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  });
 </script>
 
 <div class="space-y-6">
   <!-- Database Stats Grid with Data Flow Animation -->
   <div class="relative">
     {#if isV2OnlyMode}
-      <!-- V2-only mode: Show single database card -->
-      <div class="max-w-md mx-auto">
+      <!-- V2-only mode: Show single database card and legacy cleanup -->
+      <div class="max-w-md mx-auto space-y-6">
         <DatabaseStatsCard
           title={t('system.database.v2.title')}
           dbType="v2"
@@ -217,6 +278,18 @@
           error={legacyStats.error}
           migrationActive={false}
         />
+
+        <!-- Legacy cleanup card (only if legacy database exists) -->
+        {#if legacyStatus.data?.exists}
+          <LegacyCleanupCard
+            status={legacyStatus.data}
+            cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
+            cleanupError={migrationStatus.data?.cleanup_error ?? ''}
+            cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
+            isLoading={legacyStatus.loading || cleanupLoading}
+            onDelete={() => (showCleanupDialog = true)}
+          />
+        {/if}
       </div>
     {:else}
       <!-- Normal mode: Show both legacy and v2 database cards -->
@@ -305,6 +378,15 @@
   onConfirm={startMigration}
   onCancel={() => (showConfirmDialog = false)}
   isLoading={startLoading}
+/>
+
+<!-- Legacy Cleanup Confirmation Dialog -->
+<LegacyCleanupConfirmDialog
+  open={showCleanupDialog}
+  sizeBytes={legacyStatus.data?.size_bytes ?? 0}
+  isLoading={cleanupLoading}
+  onConfirm={startCleanup}
+  onCancel={() => (showCleanupDialog = false)}
 />
 
 <style>
