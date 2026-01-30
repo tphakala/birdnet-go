@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -62,17 +63,25 @@ type MigrationActionResponse struct {
 	State   string `json:"state,omitempty"`
 }
 
-// StateManager and Worker are injected via controller fields
+// migrationMu protects concurrent access to package-level migration state.
+// All reads and writes to the variables below must hold this lock.
+var migrationMu sync.RWMutex
+
+// StateManager and Worker are injected via controller fields.
+// Access these via getter functions (getStateManager, getMigrationWorker, etc.)
+// to ensure thread-safety.
 var (
-	stateManager           *datastoreV2.StateManager
-	migrationWorker        *migration.Worker
-	migrationWorkerCancel  context.CancelFunc // Cancel function for worker context
-	isV2OnlyMode           bool
+	stateManager          *datastoreV2.StateManager
+	migrationWorker       *migration.Worker
+	migrationWorkerCancel context.CancelFunc // Cancel function for worker context
+	isV2OnlyMode          bool
 )
 
 // SetMigrationDependencies sets the migration-related dependencies.
 // This should be called during server initialization.
 func SetMigrationDependencies(sm *datastoreV2.StateManager, worker *migration.Worker) {
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
 	stateManager = sm
 	migrationWorker = worker
 }
@@ -80,27 +89,60 @@ func SetMigrationDependencies(sm *datastoreV2.StateManager, worker *migration.Wo
 // SetMigrationWorkerCancel stores the cancel function for the migration worker context.
 // This allows graceful shutdown to stop the worker by cancelling its context.
 func SetMigrationWorkerCancel(cancel context.CancelFunc) {
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
 	migrationWorkerCancel = cancel
 }
 
 // SetV2OnlyMode indicates that the system is running in v2-only mode.
 // In this mode, migration is complete and the legacy database is not available.
 func SetV2OnlyMode() {
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
 	isV2OnlyMode = true
 }
 
 // StopMigrationWorker stops the migration worker if it's running.
 // This should be called during graceful shutdown before closing the v2 database.
 // It cancels the worker's context and then calls Stop() for immediate termination.
+// Note: We snapshot the variables under lock then release before calling methods
+// to prevent potential deadlocks if Stop() blocks.
 func StopMigrationWorker() {
+	// Snapshot variables under lock to prevent race conditions
+	migrationMu.Lock()
+	cancel := migrationWorkerCancel
+	worker := migrationWorker
+	migrationMu.Unlock()
+
 	// Cancel the worker's context first - this signals shutdown through context.Done()
-	if migrationWorkerCancel != nil {
-		migrationWorkerCancel()
+	if cancel != nil {
+		cancel()
 	}
 	// Then call Stop() to close the stop channel for immediate termination
-	if migrationWorker != nil && migrationWorker.IsRunning() {
-		migrationWorker.Stop()
+	if worker != nil && worker.IsRunning() {
+		worker.Stop()
 	}
+}
+
+// getStateManager returns the state manager with proper locking.
+func getStateManager() *datastoreV2.StateManager {
+	migrationMu.RLock()
+	defer migrationMu.RUnlock()
+	return stateManager
+}
+
+// getMigrationWorker returns the migration worker with proper locking.
+func getMigrationWorker() *migration.Worker {
+	migrationMu.RLock()
+	defer migrationMu.RUnlock()
+	return migrationWorker
+}
+
+// getIsV2OnlyMode returns whether v2-only mode is active with proper locking.
+func getIsV2OnlyMode() bool {
+	migrationMu.RLock()
+	defer migrationMu.RUnlock()
+	return isV2OnlyMode
 }
 
 // initMigrationRoutes registers the migration API routes.
@@ -133,10 +175,15 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Getting migration status", logger.String("path", path), logger.String("ip", ip))
 
+	// Snapshot state under lock for thread-safety
+	sm := getStateManager()
+	worker := getMigrationWorker()
+	v2Only := getIsV2OnlyMode()
+
 	// Check if state manager is available
-	if stateManager == nil {
+	if sm == nil {
 		// In enhanced database mode, migration is complete and state manager is not needed
-		if isV2OnlyMode {
+		if v2Only {
 			c.logInfoIfEnabled("Running in enhanced database mode, migration is complete",
 				logger.String("path", path), logger.String("ip", ip))
 			// Get cleanup state for v2-only mode
@@ -174,7 +221,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	}
 
 	// Get migration state
-	state, err := stateManager.GetState()
+	state, err := sm.GetState()
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get migration state",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -182,7 +229,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	}
 
 	// Get dirty ID count
-	dirtyCount, err := stateManager.GetDirtyIDCount()
+	dirtyCount, err := sm.GetDirtyIDCount()
 	if err != nil {
 		c.logWarnIfEnabled("Failed to get dirty ID count",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -190,8 +237,8 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	}
 
 	// Check dual-write and read modes
-	isDualWriteActive, _ := stateManager.IsInDualWriteMode()
-	shouldReadFromV2, _ := stateManager.ShouldReadFromV2()
+	isDualWriteActive, _ := sm.IsInDualWriteMode()
+	shouldReadFromV2, _ := sm.ShouldReadFromV2()
 
 	// Calculate progress percentage
 	var progressPercent float64
@@ -200,15 +247,15 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	}
 
 	// Get worker status
-	workerRunning := migrationWorker != nil && migrationWorker.IsRunning()
-	workerPaused := migrationWorker != nil && migrationWorker.IsPaused()
+	workerRunning := worker != nil && worker.IsRunning()
+	workerPaused := worker != nil && worker.IsPaused()
 
 	// Get rate and estimated remaining time
 	var recordsPerSec float64
 	var estimatedRemaining *string
-	if migrationWorker != nil && workerRunning && !workerPaused {
-		recordsPerSec = migrationWorker.GetMigrationRate()
-		if remaining := migrationWorker.EstimateRemainingTime(); remaining != nil {
+	if worker != nil && workerRunning && !workerPaused {
+		recordsPerSec = worker.GetMigrationRate()
+		if remaining := worker.EstimateRemainingTime(); remaining != nil {
 			formatted := formatDuration(*remaining)
 			estimatedRemaining = &formatted
 		}
@@ -258,7 +305,7 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		CanRollback:        canRollback,
 		IsDualWriteActive:      isDualWriteActive,
 		ShouldReadFromV2:       shouldReadFromV2,
-		IsV2OnlyMode:           isV2OnlyMode,
+		IsV2OnlyMode:           v2Only,
 		CleanupState:           cleanupState,
 		CleanupError:           cleanupErr,
 		CleanupTablesRemaining: cleanupRemaining,
@@ -284,7 +331,11 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Starting migration", logger.String("path", path), logger.String("ip", ip))
 
-	if stateManager == nil {
+	// Snapshot state under lock for thread-safety
+	sm := getStateManager()
+	worker := getMigrationWorker()
+
+	if sm == nil {
 		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
 			"Migration is not configured", http.StatusServiceUnavailable)
 	}
@@ -322,18 +373,18 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	}
 
 	// Start migration
-	if err := stateManager.StartMigration(totalRecords); err != nil {
+	if err := sm.StartMigration(totalRecords); err != nil {
 		c.logErrorIfEnabled("Failed to start migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to start migration", http.StatusConflict)
 	}
 
 	// Transition to dual-write
-	if err := stateManager.TransitionToDualWrite(); err != nil {
+	if err := sm.TransitionToDualWrite(); err != nil {
 		c.logErrorIfEnabled("Failed to transition to dual-write",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		// Try to cancel since we couldn't complete initialization
-		if cancelErr := stateManager.Cancel(); cancelErr != nil {
+		if cancelErr := sm.Cancel(); cancelErr != nil {
 			c.logWarnIfEnabled("Failed to cancel after transition failure",
 				logger.Error(cancelErr))
 		}
@@ -342,10 +393,10 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 
 	// Start the migration worker if available
 	// Use a cancellable context so shutdown can stop the worker gracefully
-	if migrationWorker != nil {
+	if worker != nil {
 		workerCtx, workerCancel := context.WithCancel(context.Background())
 		SetMigrationWorkerCancel(workerCancel)
-		if err := migrationWorker.Start(workerCtx); err != nil {
+		if err := worker.Start(workerCtx); err != nil {
 			workerCancel() // Clean up on failure
 			c.logWarnIfEnabled("Failed to start migration worker",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -380,16 +431,22 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 
 // PauseMigration handles POST /api/v2/system/database/migration/pause
 func (c *Controller) PauseMigration(ctx echo.Context) error {
+	// Snapshot state under lock for thread-safety
+	sm := getStateManager()
+	worker := getMigrationWorker()
+
 	return c.executeMigrationAction(ctx, &migrationActionParams{
 		logStart:          "Pausing migration",
-		workerAction:      func() { migrationWorker.Pause() },
-		stateAction:       func() error { return stateManager.Pause() },
+		workerAction:      func() { worker.Pause() },
+		stateAction:       func() error { return sm.Pause() },
 		logFailure:        "Failed to pause migration",
 		logSuccess:        "Migration paused successfully",
 		responseMessage:   "Migration paused",
 		responseState:     entities.MigrationStatusPaused,
 		notificationTitle: "Database Migration Paused",
 		notificationBody:  "Database migration has been paused. You can resume it at any time from the Database settings.",
+		stateManager:      sm,
+		worker:            worker,
 	})
 }
 
@@ -398,27 +455,31 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Resuming migration", logger.String("path", path), logger.String("ip", ip))
 
-	if stateManager == nil {
+	// Snapshot state under lock for thread-safety
+	sm := getStateManager()
+	worker := getMigrationWorker()
+
+	if sm == nil {
 		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
 			"Migration is not configured", http.StatusServiceUnavailable)
 	}
 
 	// Resume the state
-	if err := stateManager.Resume(); err != nil {
+	if err := sm.Resume(); err != nil {
 		c.logErrorIfEnabled("Failed to resume migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to resume migration", http.StatusConflict)
 	}
 
 	// Resume the worker if it was paused
-	if migrationWorker != nil {
-		if migrationWorker.IsPaused() {
-			migrationWorker.Resume()
-		} else if !migrationWorker.IsRunning() {
+	if worker != nil {
+		if worker.IsPaused() {
+			worker.Resume()
+		} else if !worker.IsRunning() {
 			// Worker was stopped, restart it with a cancellable context
 			workerCtx, workerCancel := context.WithCancel(context.Background())
 			SetMigrationWorkerCancel(workerCancel)
-			if err := migrationWorker.Start(workerCtx); err != nil {
+			if err := worker.Start(workerCtx); err != nil {
 				workerCancel() // Clean up on failure
 				c.logWarnIfEnabled("Failed to restart migration worker",
 					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
@@ -427,7 +488,7 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 	}
 
 	// Clear any previous error
-	if err := stateManager.ClearError(); err != nil {
+	if err := sm.ClearError(); err != nil {
 		c.logWarnIfEnabled("Failed to clear error message",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	}
@@ -436,7 +497,7 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 		logger.String("path", path), logger.String("ip", ip))
 
 	// Get the actual state after resume
-	currentState, _ := stateManager.GetState()
+	currentState, _ := sm.GetState()
 	actualState := entities.MigrationStatusDualWrite
 	if currentState != nil {
 		actualState = currentState.State
@@ -454,25 +515,29 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Cancelling migration", logger.String("path", path), logger.String("ip", ip))
 
-	if stateManager == nil {
+	// Snapshot state under lock for thread-safety
+	sm := getStateManager()
+	worker := getMigrationWorker()
+
+	if sm == nil {
 		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
 			"Migration is not configured", http.StatusServiceUnavailable)
 	}
 
 	// Stop the worker first if running
-	if migrationWorker != nil && migrationWorker.IsRunning() {
-		migrationWorker.Stop()
+	if worker != nil && worker.IsRunning() {
+		worker.Stop()
 	}
 
 	// Cancel the state
-	if err := stateManager.Cancel(); err != nil {
+	if err := sm.Cancel(); err != nil {
 		c.logErrorIfEnabled("Failed to cancel migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		return c.HandleError(ctx, err, "Failed to cancel migration", http.StatusConflict)
 	}
 
 	// Clear dirty IDs since we're cancelling
-	if err := stateManager.ClearDirtyIDs(); err != nil {
+	if err := sm.ClearDirtyIDs(); err != nil {
 		c.logWarnIfEnabled("Failed to clear dirty IDs",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 	}
@@ -504,14 +569,20 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 // RollbackMigration handles POST /api/v2/system/database/migration/rollback
 // Rolls back a completed migration to use the legacy database.
 func (c *Controller) RollbackMigration(ctx echo.Context) error {
+	// Snapshot state under lock for thread-safety
+	sm := getStateManager()
+	worker := getMigrationWorker()
+
 	return c.executeMigrationAction(ctx, &migrationActionParams{
 		logStart:        "Rolling back migration",
-		workerAction:    func() { migrationWorker.Stop() },
-		stateAction:     func() error { return stateManager.Rollback() },
+		workerAction:    func() { worker.Stop() },
+		stateAction:     func() error { return sm.Rollback() },
 		logFailure:      "Failed to rollback migration",
 		logSuccess:      "Migration rolled back successfully",
 		responseMessage: "Migration rolled back to legacy database",
 		responseState:   entities.MigrationStatusIdle,
+		stateManager:    sm,
+		worker:          worker,
 	})
 }
 
@@ -573,6 +644,8 @@ type migrationActionParams struct {
 	responseState     entities.MigrationStatus
 	notificationTitle string // Optional: if set, sends a notification
 	notificationBody  string
+	stateManager      *datastoreV2.StateManager // Thread-safe snapshot
+	worker            *migration.Worker         // Thread-safe snapshot
 }
 
 // executeMigrationAction handles common migration action logic.
@@ -580,13 +653,13 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled(params.logStart, logger.String("path", path), logger.String("ip", ip))
 
-	if stateManager == nil {
+	if params.stateManager == nil {
 		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
 			"Migration is not configured", http.StatusServiceUnavailable)
 	}
 
 	// Perform worker action if worker is running
-	if migrationWorker != nil && migrationWorker.IsRunning() {
+	if params.worker != nil && params.worker.IsRunning() {
 		params.workerAction()
 	}
 
