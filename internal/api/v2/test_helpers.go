@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -82,9 +82,9 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.WebServer.Enabled = true
 
 	// Output settings - SQLite path for prerequisite checks
-	// Use temp directory which is guaranteed to exist and be writable
+	// Use t.TempDir() for test-isolated, auto-cleaned directory
 	settings.Output.SQLite.Enabled = true
-	settings.Output.SQLite.Path = os.TempDir() + "/birdnet-test.db"
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet-test.db")
 
 	// Initialize other maps to prevent nil pointer issues
 	settings.Realtime.MQTT.RetrySettings.MaxRetries = 3

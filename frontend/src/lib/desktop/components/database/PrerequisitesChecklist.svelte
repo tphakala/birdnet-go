@@ -51,6 +51,8 @@
     'record_count',
     'existing_v2_data',
     'memory_available',
+    'mysql_max_packet',
+    'mysql_timeout',
   ];
 
   const totalSteps = checkSteps.length;
@@ -205,7 +207,7 @@
         <div
           class="flex items-center gap-2 text-sm text-[var(--color-error)]"
           role="alert"
-          aria-live="polite"
+          aria-live="assertive"
         >
           <AlertCircle class="size-4" />
           <span>

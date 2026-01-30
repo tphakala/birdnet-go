@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -540,7 +541,13 @@ func (c *Controller) checkRecordCount() PrerequisiteCheck {
 		return check
 	}
 
-	count, err := c.Repo.CountAll(c.ctx)
+	// Use context.Background() as fallback if ctx is nil (e.g., in tests)
+	ctx := c.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	count, err := c.Repo.CountAll(ctx)
 	if err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("Failed to count records: %v", err)
