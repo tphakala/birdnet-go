@@ -834,6 +834,8 @@
           "allPassed": "Alle controles geslaagd - klaar voor migratie",
           "criticalIssues": "{count} kritiek(e) probleem/problemen moet(en) worden opgelost",
           "warningsCount": "{count} waarschuwing(en)",
+          "running": "Pre-migratie controles uitvoeren...",
+          "checkingStep": "Stap {current} van {total}",
           "errors": {
             "fetchFailed": "Kan vereisten niet ophalen"
           },
@@ -863,7 +865,7 @@
               "name": "Aantal records"
             },
             "existing_v2_data": {
-              "name": "Bestaande V2-gegevens"
+              "name": "Bestaande migratiegegevens"
             },
             "no_active_locks": {
               "name": "Actieve vergrendelingen"
@@ -874,8 +876,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         },

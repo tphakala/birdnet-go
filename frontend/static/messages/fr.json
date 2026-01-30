@@ -834,6 +834,8 @@
           "allPassed": "Toutes les vérifications réussies - prêt pour la migration",
           "criticalIssues": "{count} problème(s) critique(s) doit/doivent être résolu(s)",
           "warningsCount": "{count} avertissement(s)",
+          "running": "Exécution des vérifications pré-migration...",
+          "checkingStep": "Étape {current} sur {total}",
           "errors": {
             "fetchFailed": "Échec de la récupération des prérequis"
           },
@@ -863,7 +865,7 @@
               "name": "Nombre d'enregistrements"
             },
             "existing_v2_data": {
-              "name": "Données V2 existantes"
+              "name": "Données de migration existantes"
             },
             "no_active_locks": {
               "name": "Verrous actifs"
@@ -874,8 +876,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         },

@@ -37,6 +37,37 @@
   let { prerequisites, isLoading, error, onRefresh }: Props = $props();
 
   let isRefreshing = $state(false);
+  let currentStep = $state(1);
+
+  // Check names for the loading animation (matches backend check order)
+  const checkSteps = [
+    'state_idle',
+    'disk_space',
+    'legacy_accessible',
+    'sqlite_integrity',
+    'mysql_table_health',
+    'mysql_permissions',
+    'write_permission',
+    'record_count',
+    'existing_v2_data',
+    'memory_available',
+  ];
+
+  const totalSteps = checkSteps.length;
+
+  // Animate through steps while loading
+  $effect(() => {
+    if (!isLoading && !isRefreshing) {
+      currentStep = 1;
+      return;
+    }
+
+    const interval = setInterval(() => {
+      currentStep = currentStep >= totalSteps ? 1 : currentStep + 1;
+    }, 400);
+
+    return () => clearInterval(interval);
+  });
 
   // Status icon mapping
   const statusIcons = {
@@ -100,17 +131,20 @@
 
   <!-- Content -->
   {#if isLoading && !prerequisites}
-    <!-- Initial loading state -->
-    <div class="space-y-2">
-      {#each Array(5) as _, i (i)}
-        <div class="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-base-200)]/50">
-          <div class="size-5 rounded-full bg-[var(--color-base-300)] animate-pulse"></div>
-          <div class="flex-1 space-y-1.5">
-            <div class="h-4 bg-[var(--color-base-300)] rounded animate-pulse w-1/3"></div>
-            <div class="h-3 bg-[var(--color-base-300)] rounded animate-pulse w-2/3"></div>
-          </div>
-        </div>
-      {/each}
+    <!-- Initial loading state with spinner and step progress -->
+    <div class="flex flex-col items-center justify-center py-8 gap-4">
+      <Loader2 class="size-8 animate-spin text-[var(--color-primary)]" />
+      <div class="text-center space-y-1">
+        <p class="text-sm font-medium text-[var(--color-base-content)]">
+          {t('system.database.migration.prerequisites.running')}
+        </p>
+        <p class="text-xs text-[var(--color-base-content)]/60">
+          {t('system.database.migration.prerequisites.checkingStep', {
+            current: currentStep,
+            total: totalSteps,
+          })}
+        </p>
+      </div>
     </div>
   {:else if error}
     <!-- Error state -->

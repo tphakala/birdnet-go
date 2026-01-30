@@ -834,6 +834,8 @@
           "allPassed": "Todas as verificações passaram - pronto para migrar",
           "criticalIssues": "{count} problema(s) crítico(s) deve(m) ser resolvido(s)",
           "warningsCount": "{count} aviso(s)",
+          "running": "A executar verificações pré-migração...",
+          "checkingStep": "Passo {current} de {total}",
           "errors": {
             "fetchFailed": "Falha ao obter os pré-requisitos"
           },
@@ -863,7 +865,7 @@
               "name": "Contagem de registos"
             },
             "existing_v2_data": {
-              "name": "Dados V2 existentes"
+              "name": "Dados de migração existentes"
             },
             "no_active_locks": {
               "name": "Bloqueios ativos"
@@ -874,8 +876,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         },

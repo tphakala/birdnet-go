@@ -834,6 +834,8 @@
           "allPassed": "Alle Prüfungen bestanden - bereit zur Migration",
           "criticalIssues": "{count} kritische(s) Problem(e) muss/müssen behoben werden",
           "warningsCount": "{count} Warnung(en)",
+          "running": "Führe Vorab-Prüfungen durch...",
+          "checkingStep": "Schritt {current} von {total}",
           "errors": {
             "fetchFailed": "Fehler beim Abrufen der Voraussetzungen"
           },
@@ -863,7 +865,7 @@
               "name": "Datensatzanzahl"
             },
             "existing_v2_data": {
-              "name": "Vorhandene V2-Daten"
+              "name": "Vorhandene Migrationsdaten"
             },
             "no_active_locks": {
               "name": "Aktive Sperren"
@@ -874,8 +876,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         },

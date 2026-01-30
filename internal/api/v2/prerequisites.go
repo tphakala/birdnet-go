@@ -552,25 +552,25 @@ func (c *Controller) checkRecordCount() PrerequisiteCheck {
 	return check
 }
 
-// checkExistingV2Data warns if v2 tables already have data.
+// checkExistingV2Data warns if migration target tables already have data.
 func (c *Controller) checkExistingV2Data() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "existing_v2_data",
-		Name:        "Existing V2 Data",
-		Description: "Check for existing data in v2 tables",
+		Name:        "Existing Migration Data",
+		Description: "Check for existing data in migration target tables",
 		Severity:    CheckSeverityWarning,
 	}
 
 	if c.V2Manager == nil {
 		check.Status = CheckStatusSkipped
-		check.Message = "V2 manager not available"
+		check.Message = "Migration target database not available"
 		return check
 	}
 
 	db := c.V2Manager.DB()
 	if db == nil {
 		check.Status = CheckStatusSkipped
-		check.Message = "V2 database not available"
+		check.Message = "Migration target database not available"
 		return check
 	}
 
@@ -584,16 +584,16 @@ func (c *Controller) checkExistingV2Data() PrerequisiteCheck {
 	if err := db.Table(tableName).Count(&count).Error; err != nil {
 		// Table might not exist yet, which is fine
 		check.Status = CheckStatusPassed
-		check.Message = "No existing v2 data found"
+		check.Message = "No existing migration data found"
 		return check
 	}
 
 	if count > 0 {
 		check.Status = CheckStatusWarning
-		check.Message = fmt.Sprintf("V2 tables contain %d existing records", count)
+		check.Message = fmt.Sprintf("Migration target contains %d existing records", count)
 	} else {
 		check.Status = CheckStatusPassed
-		check.Message = "No existing v2 data"
+		check.Message = "No existing migration data"
 	}
 
 	return check

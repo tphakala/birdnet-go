@@ -834,6 +834,8 @@
           "allPassed": "Wszystkie sprawdzenia zakończone sukcesem - gotowe do migracji",
           "criticalIssues": "{count} krytyczny problem/problemy do rozwiązania",
           "warningsCount": "{count} ostrzeżenie/ostrzeżeń",
+          "running": "Wykonywanie wstępnych sprawdzeń...",
+          "checkingStep": "Krok {current} z {total}",
           "errors": {
             "fetchFailed": "Nie udało się pobrać wymagań wstępnych"
           },
@@ -863,7 +865,7 @@
               "name": "Liczba rekordów"
             },
             "existing_v2_data": {
-              "name": "Istniejące dane V2"
+              "name": "Istniejące dane migracji"
             },
             "no_active_locks": {
               "name": "Aktywne blokady"
@@ -874,8 +876,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         },

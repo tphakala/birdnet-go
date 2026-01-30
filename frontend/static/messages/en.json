@@ -864,6 +864,8 @@
           "allPassed": "All checks passed - ready to migrate",
           "criticalIssues": "{count} critical issue(s) must be resolved",
           "warningsCount": "{count} warning(s)",
+          "running": "Running pre-migration checks...",
+          "checkingStep": "Step {current} of {total}",
           "errors": {
             "fetchFailed": "Failed to fetch prerequisites"
           },
@@ -893,7 +895,7 @@
               "name": "Record Count"
             },
             "existing_v2_data": {
-              "name": "Existing V2 Data"
+              "name": "Existing Migration Data"
             },
             "no_active_locks": {
               "name": "Active Locks"
@@ -904,8 +906,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         }

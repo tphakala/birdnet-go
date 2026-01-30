@@ -834,6 +834,8 @@
           "allPassed": "Kaikki tarkistukset läpäisty - valmis migraatioon",
           "criticalIssues": "{count} kriittinen ongelma on ratkaistava",
           "warningsCount": "{count} varoitus(ta)",
+          "running": "Suoritetaan esitarkistuksia...",
+          "checkingStep": "Vaihe {current}/{total}",
           "errors": {
             "fetchFailed": "Esivaatimusten haku epäonnistui"
           },
@@ -863,7 +865,7 @@
               "name": "Tietueiden määrä"
             },
             "existing_v2_data": {
-              "name": "Olemassa olevat V2-tiedot"
+              "name": "Olemassa olevat migraatiotiedot"
             },
             "no_active_locks": {
               "name": "Aktiiviset lukot"
@@ -874,8 +876,8 @@
             "mysql_max_packet": {
               "name": "MySQL Max Packet"
             },
-            "mysql_timeouts": {
-              "name": "MySQL Timeouts"
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
             }
           }
         },
