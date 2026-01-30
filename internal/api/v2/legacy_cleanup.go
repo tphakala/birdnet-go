@@ -13,6 +13,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"gorm.io/gorm"
 )
 
 // LegacyStatusResponse represents legacy database status for cleanup UI.
@@ -63,56 +64,80 @@ var legacyTables = []string{
 	"notification_histories",
 }
 
-// Cleanup state (in-memory, not persisted).
-var (
-	cleanupState           = CleanupStateIdle
-	cleanupError           = ""
-	cleanupTablesRemaining []string
-	cleanupSpaceReclaimed  int64
-	cleanupMu              sync.RWMutex
-)
-
-// getCleanupState returns the current cleanup state safely.
-func getCleanupState() (state, errMsg string, remaining []string, reclaimed int64) {
-	cleanupMu.RLock()
-	defer cleanupMu.RUnlock()
-	return cleanupState, cleanupError, cleanupTablesRemaining, cleanupSpaceReclaimed
+// tableExistsMySQL checks if a table exists in the MySQL database.
+func (c *Controller) tableExistsMySQL(db *gorm.DB, tableName string) (bool, error) {
+	var count int64
+	err := db.Raw(
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
+		c.Settings.Output.MySQL.Database, tableName,
+	).Scan(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
-// setCleanupState sets the cleanup state safely.
-func setCleanupState(state, errMsg string, remaining []string, reclaimed int64) {
-	cleanupMu.Lock()
-	defer cleanupMu.Unlock()
-	cleanupState = state
-	cleanupError = errMsg
-	cleanupTablesRemaining = remaining
-	cleanupSpaceReclaimed = reclaimed
+// CleanupStatus tracks the state of legacy database cleanup.
+// Thread-safe for concurrent access.
+type CleanupStatus struct {
+	mu              sync.RWMutex
+	state           string
+	errorMsg        string
+	tablesRemaining []string
+	spaceReclaimed  int64
 }
 
-// resetCleanupState resets the cleanup state to idle.
-func resetCleanupState() {
-	setCleanupState(CleanupStateIdle, "", nil, 0)
+// NewCleanupStatus creates a new cleanup status tracker initialized to idle.
+func NewCleanupStatus() *CleanupStatus {
+	return &CleanupStatus{
+		state: CleanupStateIdle,
+	}
 }
 
-// tryStartCleanup atomically checks if cleanup can start and sets state to in_progress.
+// Get returns the current cleanup state safely.
+func (cs *CleanupStatus) Get() (state, errMsg string, remaining []string, reclaimed int64) {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	return cs.state, cs.errorMsg, cs.tablesRemaining, cs.spaceReclaimed
+}
+
+// Set sets the cleanup state safely.
+func (cs *CleanupStatus) Set(state, errMsg string, remaining []string, reclaimed int64) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.state = state
+	cs.errorMsg = errMsg
+	cs.tablesRemaining = remaining
+	cs.spaceReclaimed = reclaimed
+}
+
+// Reset resets the cleanup state to idle.
+func (cs *CleanupStatus) Reset() {
+	cs.Set(CleanupStateIdle, "", nil, 0)
+}
+
+// TryStart atomically checks if cleanup can start and sets state to in_progress.
 // Returns true if cleanup was started, false if already in progress.
 // This prevents race conditions between concurrent cleanup requests.
-func tryStartCleanup() bool {
-	cleanupMu.Lock()
-	defer cleanupMu.Unlock()
-	if cleanupState == CleanupStateInProgress {
+func (cs *CleanupStatus) TryStart() bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	if cs.state == CleanupStateInProgress {
 		return false
 	}
-	cleanupState = CleanupStateInProgress
-	cleanupError = ""
-	cleanupTablesRemaining = nil
-	cleanupSpaceReclaimed = 0
+	cs.state = CleanupStateInProgress
+	cs.errorMsg = ""
+	cs.tablesRemaining = nil
+	cs.spaceReclaimed = 0
 	return true
 }
 
 // initLegacyCleanupRoutes registers the legacy cleanup API routes.
 func (c *Controller) initLegacyCleanupRoutes() {
 	c.logInfoIfEnabled("Initializing legacy cleanup routes")
+
+	// Initialize cleanup status tracker
+	c.cleanupStatus = NewCleanupStatus()
 
 	// Create legacy API group under system/database
 	legacyGroup := c.Group.Group("/system/database/legacy")
@@ -244,11 +269,9 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		var tableInfo LegacyTableInfo
 		tableInfo.Name = tableName
 
-		// Check if table exists and get row count
-		var count int64
-		err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-			c.Settings.Output.MySQL.Database, tableName).Scan(&count).Error
-		if err != nil || count == 0 {
+		// Check if table exists
+		exists, err := c.tableExistsMySQL(db, tableName)
+		if err != nil || !exists {
 			continue // Table doesn't exist, skip
 		}
 
@@ -305,7 +328,7 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	}
 
 	// Atomically check and set cleanup state to prevent race conditions
-	if !tryStartCleanup() {
+	if !c.cleanupStatus.TryStart() {
 		return ctx.JSON(http.StatusConflict, CleanupActionResponse{
 			Success: false,
 			Message: "Cleanup already in progress",
@@ -322,23 +345,30 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 
 	// Start async cleanup using WaitGroup for proper lifecycle management
 	c.wg.Go(func() {
+		// Use controller's shutdown context for graceful cancellation
+		cleanupCtx := c.ctx
+		if cleanupCtx == nil {
+			cleanupCtx = context.Background()
+		}
+
 		var err error
 		var remaining []string
 
 		if c.isUsingMySQL() {
-			remaining, err = c.cleanupMySQLLegacy(context.Background())
+			remaining, err = c.cleanupMySQLLegacy(cleanupCtx)
 		} else {
-			err = c.cleanupSQLiteLegacy(context.Background())
+			err = c.cleanupSQLiteLegacy(cleanupCtx)
 		}
 
 		if err != nil {
 			c.logErrorIfEnabled("Legacy cleanup failed", logger.Error(err))
-			setCleanupState(CleanupStateFailed, err.Error(), remaining, 0)
+			c.cleanupStatus.Set(CleanupStateFailed, err.Error(), remaining, 0)
 			c.sendCleanupNotification(false, 0, err.Error())
 		} else {
 			c.logInfoIfEnabled("Legacy cleanup completed successfully",
-				logger.Int64("space_reclaimed", sizeBytes))
-			setCleanupState(CleanupStateCompleted, "", nil, sizeBytes)
+				logger.Int64("space_reclaimed_bytes", sizeBytes),
+				logger.String("space_reclaimed", formatBytes(sizeBytes)))
+			c.cleanupStatus.Set(CleanupStateCompleted, "", nil, sizeBytes)
 			c.sendCleanupNotification(true, sizeBytes, "")
 		}
 	})
@@ -352,28 +382,53 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 }
 
 // cleanupSQLiteLegacy deletes the legacy SQLite database files.
-func (c *Controller) cleanupSQLiteLegacy(_ context.Context) error {
+func (c *Controller) cleanupSQLiteLegacy(ctx context.Context) error {
+	// Check for cancellation before starting
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	legacyPath := c.Settings.Output.SQLite.Path
+
+	c.logInfoIfEnabled("Starting SQLite legacy database cleanup",
+		logger.String("path", legacyPath))
 
 	// CRITICAL SAFETY CHECK: Ensure we're not deleting a V2 database
 	if datastoreV2.CheckSQLiteHasV2Schema(legacyPath) {
+		c.logErrorIfEnabled("Safety check failed: target is a V2 database",
+			logger.String("path", legacyPath))
 		return fmt.Errorf("target file appears to be a V2 database - cleanup aborted for safety")
 	}
+
+	c.logInfoIfEnabled("Safety check passed: confirmed legacy database",
+		logger.String("path", legacyPath))
 
 	// Delete main database file
 	if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete legacy database: %w", err)
 	}
+	c.logInfoIfEnabled("Deleted legacy database file",
+		logger.String("file", legacyPath))
 
 	// Delete WAL and SHM files if they exist (ignore errors)
-	_ = os.Remove(legacyPath + "-wal")
-	_ = os.Remove(legacyPath + "-shm")
+	walDeleted := os.Remove(legacyPath+"-wal") == nil
+	shmDeleted := os.Remove(legacyPath+"-shm") == nil
+
+	c.logInfoIfEnabled("SQLite legacy cleanup completed",
+		logger.String("path", legacyPath),
+		logger.Bool("wal_deleted", walDeleted),
+		logger.Bool("shm_deleted", shmDeleted))
 
 	return nil
 }
 
 // cleanupMySQLLegacy drops legacy tables from MySQL.
-func (c *Controller) cleanupMySQLLegacy(_ context.Context) ([]string, error) {
+func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
+	c.logInfoIfEnabled("Starting MySQL legacy tables cleanup",
+		logger.Int("total_tables", len(legacyTables)))
+
 	dbProvider, ok := c.Repo.(gormDBProvider)
 	if !ok {
 		return legacyTables, fmt.Errorf("cannot access database connection")
@@ -381,24 +436,43 @@ func (c *Controller) cleanupMySQLLegacy(_ context.Context) ([]string, error) {
 	db := dbProvider.GetDB()
 
 	var remaining []string
+	var droppedCount int
 
 	for i, tableName := range legacyTables {
+		// Check for cancellation before each table
+		select {
+		case <-ctx.Done():
+			c.logWarnIfEnabled("MySQL cleanup cancelled",
+				logger.Int("tables_dropped", droppedCount),
+				logger.Int("tables_remaining", len(legacyTables)-i))
+			return legacyTables[i:], ctx.Err()
+		default:
+		}
+
 		// Check if table exists first
-		var count int64
-		err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-			c.Settings.Output.MySQL.Database, tableName).Scan(&count).Error
-		if err != nil || count == 0 {
+		exists, err := c.tableExistsMySQL(db, tableName)
+		if err != nil || !exists {
 			continue // Table doesn't exist, skip
 		}
 
 		// Drop the table
 		err = db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)).Error
 		if err != nil {
+			c.logErrorIfEnabled("Failed to drop legacy table",
+				logger.String("table", tableName),
+				logger.Error(err))
 			// Stop on first error, return remaining tables
 			remaining = legacyTables[i:]
 			return remaining, fmt.Errorf("failed to drop table %s: %w", tableName, err)
 		}
+
+		droppedCount++
+		c.logInfoIfEnabled("Dropped legacy table",
+			logger.String("table", tableName))
 	}
+
+	c.logInfoIfEnabled("MySQL legacy cleanup completed",
+		logger.Int("tables_dropped", droppedCount))
 
 	return nil, nil
 }

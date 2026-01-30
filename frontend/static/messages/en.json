@@ -758,6 +758,8 @@
         "fetchFailed": "Failed to fetch legacy database status",
         "cleanup": {
           "title": "Legacy Database Cleanup",
+          "description": "This database is now offline and no longer in use. All your data has been migrated to the Enhanced Database.",
+          "recommendation": "It is recommended to delete this database to free up disk space.",
           "location": "Location",
           "size": "Size",
           "records": "Records",

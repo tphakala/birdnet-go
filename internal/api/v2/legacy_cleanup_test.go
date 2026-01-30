@@ -27,6 +27,15 @@ func createTestSettings(legacyPath string) *conf.Settings {
 	return settings
 }
 
+// createLegacyTestController creates a controller with initialized cleanupStatus for testing.
+func createLegacyTestController(e *echo.Echo, settings *conf.Settings) *Controller {
+	return &Controller{
+		Settings:      settings,
+		Echo:          e,
+		cleanupStatus: NewCleanupStatus(),
+	}
+}
+
 // TestGetLegacyStatus_V2OnlyMode_NoLegacy tests status when in v2-only mode with no legacy DB.
 func TestGetLegacyStatus_V2OnlyMode_NoLegacy(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
@@ -38,11 +47,7 @@ func TestGetLegacyStatus_V2OnlyMode_NoLegacy(t *testing.T) {
 
 	// Create settings with non-existent legacy path
 	settings := createTestSettings(filepath.Join(tmpDir, "nonexistent.db"))
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -80,11 +85,7 @@ func TestGetLegacyStatus_V2OnlyMode_WithLegacy(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -122,11 +123,7 @@ func TestGetLegacyStatus_NotV2OnlyMode(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	// NOT in v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -163,19 +160,12 @@ func TestStartLegacyCleanup_NotV2OnlyMode(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	// NOT in v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = false
 	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
-
-	// Reset cleanup state
-	resetCleanupState()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -213,19 +203,12 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
 	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
-
-	// Reset cleanup state
-	resetCleanupState()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -241,8 +224,11 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 
 	assert.True(t, response.Success)
 
-	// Wait for async cleanup to complete (small timeout for test)
-	time.Sleep(100 * time.Millisecond)
+	// Wait for async cleanup to complete using Eventually
+	require.Eventually(t, func() bool {
+		state, _, _, _ := controller.cleanupStatus.Get()
+		return state == CleanupStateCompleted || state == CleanupStateFailed
+	}, 5*time.Second, 10*time.Millisecond, "cleanup should complete")
 
 	// Verify files are deleted
 	_, err = os.Stat(legacyPath)
@@ -255,7 +241,7 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "SHM file should be deleted")
 
 	// Verify cleanup state is completed
-	state, _, _, _ := getCleanupState()
+	state, _, _, _ := controller.cleanupStatus.Get()
 	assert.Equal(t, CleanupStateCompleted, state)
 }
 
@@ -298,17 +284,11 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 	require.NoError(t, db.Close())
 
 	settings := createTestSettings(legacyPath)
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
 	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
-
-	resetCleanupState()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -318,11 +298,14 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code) // Request accepted, but async will fail
 
-	// Wait for async cleanup to complete
-	time.Sleep(200 * time.Millisecond)
+	// Wait for async cleanup to complete using Eventually
+	require.Eventually(t, func() bool {
+		state, _, _, _ := controller.cleanupStatus.Get()
+		return state == CleanupStateCompleted || state == CleanupStateFailed
+	}, 5*time.Second, 10*time.Millisecond, "cleanup should complete")
 
 	// Verify cleanup failed due to safety check
-	state, errMsg, _, _ := getCleanupState()
+	state, errMsg, _, _ := controller.cleanupStatus.Get()
 	assert.Equal(t, CleanupStateFailed, state)
 	assert.Contains(t, errMsg, "V2 database")
 
@@ -344,19 +327,14 @@ func TestStartLegacyCleanup_AlreadyInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-
-	controller := &Controller{
-		Settings: settings,
-		Echo:     e,
-	}
+	controller := createLegacyTestController(e, settings)
 
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
 	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
 
 	// Set cleanup as already in progress
-	setCleanupState(CleanupStateInProgress, "", nil, 0)
-	t.Cleanup(resetCleanupState)
+	controller.cleanupStatus.Set(CleanupStateInProgress, "", nil, 0)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
 	rec := httptest.NewRecorder()

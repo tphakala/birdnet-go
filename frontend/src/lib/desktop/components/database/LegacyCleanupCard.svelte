@@ -29,22 +29,30 @@
   let isFailed = $derived(cleanupState === 'failed');
 </script>
 
-<div class="card bg-base-100 shadow-lg">
-  <div class="card-body">
-    <h2 class="card-title text-lg">
+<div class="rounded-lg bg-[var(--color-base-100)] shadow-sm border border-[var(--color-base-200)]">
+  <!-- Header -->
+  <div class="px-6 py-4 border-b border-[var(--color-base-200)]">
+    <h3 class="text-lg font-semibold text-[var(--color-base-content)]">
       {t('system.database.legacy.cleanup.title')}
-    </h2>
+    </h3>
+  </div>
 
+  <!-- Body -->
+  <div class="px-6 py-4">
     {#if isLoading}
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
+      <div class="flex justify-center py-4">
+        <span
+          class="animate-spin rounded-full border-2 h-8 w-8 border-[var(--color-primary)] border-t-transparent"
+        ></span>
       </div>
     {:else if isCompleted}
       <!-- Success state -->
-      <div class="alert alert-success">
+      <div
+        class="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--color-success)] flex items-start gap-3"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 shrink-0 stroke-current"
+          class="h-5 w-5 shrink-0 stroke-current"
           fill="none"
           viewBox="0 0 24 24"
         >
@@ -55,7 +63,7 @@
             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <span>
+        <span class="text-sm">
           {t('system.database.legacy.cleanup.success', {
             size: formatBytes(cleanupSpaceReclaimed),
           })}
@@ -63,10 +71,12 @@
       </div>
     {:else if isFailed}
       <!-- Error state -->
-      <div class="alert alert-error">
+      <div
+        class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-start gap-3"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 shrink-0 stroke-current"
+          class="h-5 w-5 shrink-0 stroke-current"
           fill="none"
           viewBox="0 0 24 24"
         >
@@ -78,42 +88,75 @@
           />
         </svg>
         <div>
-          <p class="font-semibold">{t('system.database.legacy.cleanup.failed')}</p>
-          <p class="text-sm">{cleanupError}</p>
+          <p class="font-medium text-sm">{t('system.database.legacy.cleanup.failed')}</p>
+          <p class="text-sm opacity-80">{cleanupError}</p>
         </div>
       </div>
     {:else if status?.exists && status?.can_cleanup}
       <!-- Normal state - show info and cleanup button -->
       <div class="space-y-4">
-        <!-- Database info -->
-        <div class="grid grid-cols-2 gap-2 text-sm">
-          <div class="text-base-content/70">{t('system.database.legacy.cleanup.location')}</div>
-          <div class="font-mono text-xs break-all">{status.location}</div>
+        <!-- Description -->
+        <p class="text-sm text-[var(--color-base-content)]/70">
+          {t('system.database.legacy.cleanup.description')}
+          <span class="font-medium text-[var(--color-base-content)] ml-1"
+            >{t('system.database.legacy.cleanup.recommendation')}</span
+          >
+        </p>
 
-          <div class="text-base-content/70">{t('system.database.legacy.cleanup.size')}</div>
-          <div>{formatBytes(status.size_bytes)}</div>
+        <!-- Database info -->
+        <div class="space-y-2">
+          <div class="flex justify-between text-sm">
+            <span class="text-[var(--color-base-content)]/70">
+              {t('system.database.legacy.cleanup.location')}
+            </span>
+            <span
+              class="font-mono text-xs text-[var(--color-base-content)] truncate max-w-[200px]"
+              title={status.location}
+            >
+              {status.location}
+            </span>
+          </div>
+
+          <div class="flex justify-between text-sm">
+            <span class="text-[var(--color-base-content)]/70">
+              {t('system.database.legacy.cleanup.size')}
+            </span>
+            <span class="font-medium text-[var(--color-base-content)]"
+              >{formatBytes(status.size_bytes)}</span
+            >
+          </div>
 
           {#if status.total_records > 0}
-            <div class="text-base-content/70">{t('system.database.legacy.cleanup.records')}</div>
-            <div>
-              {status.total_records.toLocaleString()}
-              {t('system.database.legacy.cleanup.detections')}
+            <div class="flex justify-between text-sm">
+              <span class="text-[var(--color-base-content)]/70">
+                {t('system.database.legacy.cleanup.records')}
+              </span>
+              <span class="font-medium text-[var(--color-base-content)]">
+                {status.total_records.toLocaleString()}
+                {t('system.database.legacy.cleanup.detections')}
+              </span>
             </div>
           {/if}
 
           {#if status.last_modified}
-            <div class="text-base-content/70">
-              {t('system.database.legacy.cleanup.lastModified')}
+            <div class="flex justify-between text-sm">
+              <span class="text-[var(--color-base-content)]/70">
+                {t('system.database.legacy.cleanup.lastModified')}
+              </span>
+              <span class="font-medium text-[var(--color-base-content)]"
+                >{formatDate(status.last_modified)}</span
+              >
             </div>
-            <div>{formatDate(status.last_modified)}</div>
           {/if}
         </div>
 
         <!-- Warning -->
-        <div class="alert alert-warning">
+        <div
+          class="p-3 rounded-lg bg-[var(--color-warning)]/10 text-[var(--color-warning)] flex items-start gap-3"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-6 w-6 shrink-0 stroke-current"
+            class="h-5 w-5 shrink-0 stroke-current"
             fill="none"
             viewBox="0 0 24 24"
           >
@@ -125,29 +168,19 @@
             />
           </svg>
           <div>
-            <p class="font-semibold">{t('system.database.legacy.cleanup.warning')}</p>
-            <p class="text-sm">{t('system.database.legacy.cleanup.backupReminder')}</p>
+            <p class="font-medium text-sm">{t('system.database.legacy.cleanup.warning')}</p>
+            <p class="text-sm opacity-80">{t('system.database.legacy.cleanup.backupReminder')}</p>
           </div>
-        </div>
-
-        <!-- Cleanup button -->
-        <div class="card-actions justify-end">
-          <button class="btn btn-error" onclick={onDelete} disabled={isInProgress}>
-            {#if isInProgress}
-              <span class="loading loading-spinner loading-sm"></span>
-              {t('system.database.legacy.cleanup.inProgress')}
-            {:else}
-              {t('system.database.legacy.cleanup.deleteButton')}
-            {/if}
-          </button>
         </div>
       </div>
     {:else if status?.exists && !status?.can_cleanup}
       <!-- Cannot cleanup - show reason -->
-      <div class="alert alert-info">
+      <div
+        class="p-3 rounded-lg bg-[var(--color-info)]/10 text-[var(--color-info)] flex items-start gap-3"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 shrink-0 stroke-current"
+          class="h-5 w-5 shrink-0 stroke-current"
           fill="none"
           viewBox="0 0 24 24"
         >
@@ -159,10 +192,34 @@
           />
         </svg>
         <div>
-          <p class="font-semibold">{t('system.database.legacy.cleanup.notAvailable')}</p>
-          <p class="text-sm">{status.reason}</p>
+          <p class="font-medium text-sm">{t('system.database.legacy.cleanup.notAvailable')}</p>
+          <p class="text-sm opacity-80">{status.reason}</p>
         </div>
       </div>
     {/if}
   </div>
+
+  <!-- Footer with action button -->
+  {#if status?.exists && status?.can_cleanup && !isCompleted && !isFailed}
+    <div class="px-6 py-4 border-t border-[var(--color-base-200)]">
+      <button
+        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
+               text-sm font-medium rounded-lg transition-colors
+               bg-[var(--color-error)] text-white
+               hover:bg-[var(--color-error)]/90
+               disabled:opacity-50 disabled:cursor-not-allowed"
+        onclick={onDelete}
+        disabled={isInProgress}
+      >
+        {#if isInProgress}
+          <span
+            class="animate-spin rounded-full border-2 h-4 w-4 border-current border-t-transparent"
+          ></span>
+          {t('system.database.legacy.cleanup.inProgress')}
+        {:else}
+          {t('system.database.legacy.cleanup.deleteButton')}
+        {/if}
+      </button>
+    </div>
+  {/if}
 </div>

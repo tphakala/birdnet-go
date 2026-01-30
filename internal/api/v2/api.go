@@ -84,6 +84,9 @@ type Controller struct {
 	// V2Manager provides access to the v2 normalized database for stats and backup
 	V2Manager datastoreV2.Manager
 
+	// Legacy cleanup state tracker
+	cleanupStatus *CleanupStatus
+
 	// Test synchronization fields (only populated when initializeRoutes is true)
 	// goroutinesStarted signals when all background goroutines have successfully started.
 	// This is primarily used in testing to ensure proper setup before assertions.

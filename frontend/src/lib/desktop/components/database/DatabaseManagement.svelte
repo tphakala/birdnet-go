@@ -29,6 +29,9 @@
   } from '$lib/types/migration';
   import type { LegacyStatus } from '$lib/types/legacy';
 
+  // Polling interval for migration and cleanup status updates (milliseconds)
+  const STATUS_POLL_INTERVAL_MS = 2000;
+
   // State
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
@@ -230,7 +233,7 @@
     const interval = setInterval(() => {
       fetchMigrationStatus();
       fetchV2Stats(); // Also refresh v2 stats to show growing detection count
-    }, 2000);
+    }, STATUS_POLL_INTERVAL_MS);
 
     // Cleanup when isActive becomes false or component unmounts
     return () => clearInterval(interval);
@@ -258,7 +261,7 @@
     const interval = setInterval(() => {
       fetchMigrationStatus();
       fetchLegacyStatus();
-    }, 2000);
+    }, STATUS_POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
   });
@@ -269,7 +272,7 @@
   <div class="relative">
     {#if isV2OnlyMode}
       <!-- V2-only mode: Show single database card and legacy cleanup -->
-      <div class="max-w-md mx-auto space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <DatabaseStatsCard
           title={t('system.database.v2.title')}
           dbType="v2"

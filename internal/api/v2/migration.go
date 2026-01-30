@@ -140,7 +140,14 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 			c.logInfoIfEnabled("Running in enhanced database mode, migration is complete",
 				logger.String("path", path), logger.String("ip", ip))
 			// Get cleanup state for v2-only mode
-			cleanupState, cleanupErr, cleanupRemaining, cleanupReclaimed := getCleanupState()
+			var cleanupState, cleanupErr string
+			var cleanupRemaining []string
+			var cleanupReclaimed int64
+			if c.cleanupStatus != nil {
+				cleanupState, cleanupErr, cleanupRemaining, cleanupReclaimed = c.cleanupStatus.Get()
+			} else {
+				cleanupState = CleanupStateIdle
+			}
 			return ctx.JSON(http.StatusOK, MigrationStatusResponse{
 				State:                  string(entities.MigrationStatusCompleted),
 				ProgressPercent:        100.0,
@@ -217,7 +224,14 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	canRollback := state.State == entities.MigrationStatusCompleted
 
 	// Get cleanup state
-	cleanupState, cleanupErr, cleanupRemaining, cleanupReclaimed := getCleanupState()
+	var cleanupState, cleanupErr string
+	var cleanupRemaining []string
+	var cleanupReclaimed int64
+	if c.cleanupStatus != nil {
+		cleanupState, cleanupErr, cleanupRemaining, cleanupReclaimed = c.cleanupStatus.Get()
+	} else {
+		cleanupState = CleanupStateIdle
+	}
 
 	response := MigrationStatusResponse{
 		State:              string(state.State),
