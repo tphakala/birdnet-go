@@ -101,12 +101,13 @@
   async function fetchPrerequisites(): Promise<void> {
     try {
       prerequisites.loading = true;
+      prerequisites.error = null;
       const data = await api.get<PrerequisitesResponse>(
         '/api/v2/system/database/migration/prerequisites'
       );
       prerequisites.data = data;
-      prerequisites.error = null;
     } catch (e) {
+      prerequisites.data = null;
       prerequisites.error =
         e instanceof ApiError
           ? e.message
