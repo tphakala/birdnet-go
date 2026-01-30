@@ -94,6 +94,22 @@ func resetCleanupState() {
 	setCleanupState(CleanupStateIdle, "", nil, 0)
 }
 
+// tryStartCleanup atomically checks if cleanup can start and sets state to in_progress.
+// Returns true if cleanup was started, false if already in progress.
+// This prevents race conditions between concurrent cleanup requests.
+func tryStartCleanup() bool {
+	cleanupMu.Lock()
+	defer cleanupMu.Unlock()
+	if cleanupState == CleanupStateInProgress {
+		return false
+	}
+	cleanupState = CleanupStateInProgress
+	cleanupError = ""
+	cleanupTablesRemaining = nil
+	cleanupSpaceReclaimed = 0
+	return true
+}
+
 // initLegacyCleanupRoutes registers the legacy cleanup API routes.
 func (c *Controller) initLegacyCleanupRoutes() {
 	c.logInfoIfEnabled("Initializing legacy cleanup routes")
@@ -280,20 +296,19 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
 
-	// Check if cleanup is already in progress
-	state, _, _, _ := getCleanupState()
-	if state == CleanupStateInProgress {
-		return ctx.JSON(http.StatusConflict, CleanupActionResponse{
-			Success: false,
-			Message: "Cleanup already in progress",
-		})
-	}
-
-	// Check if we're in v2-only mode
+	// Check if we're in v2-only mode (check before trying to start)
 	if !isV2OnlyMode {
 		return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
 			Success: false,
 			Message: "Cannot cleanup: Application must be restarted after migration",
+		})
+	}
+
+	// Atomically check and set cleanup state to prevent race conditions
+	if !tryStartCleanup() {
+		return ctx.JSON(http.StatusConflict, CleanupActionResponse{
+			Success: false,
+			Message: "Cleanup already in progress",
 		})
 	}
 
@@ -305,10 +320,8 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 		sizeBytes = c.getSQLiteLegacySize()
 	}
 
-	// Start async cleanup
-	setCleanupState(CleanupStateInProgress, "", nil, 0)
-
-	go func() {
+	// Start async cleanup using WaitGroup for proper lifecycle management
+	c.wg.Go(func() {
 		var err error
 		var remaining []string
 
@@ -328,7 +341,7 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 			setCleanupState(CleanupStateCompleted, "", nil, sizeBytes)
 			c.sendCleanupNotification(true, sizeBytes, "")
 		}
-	}()
+	})
 
 	c.logInfoIfEnabled("Legacy cleanup started", logger.String("path", path), logger.String("ip", ip))
 
