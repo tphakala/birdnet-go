@@ -66,8 +66,9 @@ const (
 // MinDiskSpaceBytes is the minimum free disk space required (1GB).
 const MinDiskSpaceBytes = 1 << 30 // 1GB in bytes
 
-// MinMemoryBytes is the minimum recommended free memory (256MB).
-const MinMemoryBytes = 256 * 1024 * 1024 // 256MB
+// MinMemoryBytes is the minimum recommended free memory (50MB).
+// Kept low to support resource-constrained devices like Raspberry Pi Zero 2 (512MB total RAM).
+const MinMemoryBytes = 50 * 1024 * 1024 // 50MB
 
 // MinMySQLMaxPacket is the minimum recommended max_allowed_packet (16MB).
 const MinMySQLMaxPacket = 16 * 1024 * 1024 // 16MB
@@ -178,12 +179,13 @@ func (c *Controller) checkStateIdle() PrerequisiteCheck {
 	return check
 }
 
-// checkDiskSpace verifies there is at least 1GB of free disk space.
+// checkDiskSpace verifies there is sufficient free disk space for migration.
+// Required space is the greater of: 1GB minimum or 50% of existing database size.
 func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          "disk_space",
 		Name:        "Disk Space",
-		Description: "At least 1GB free space required",
+		Description: "Sufficient free space for migration",
 		Severity:    CheckSeverityCritical,
 	}
 
@@ -201,6 +203,26 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 		return check
 	}
 
+	// Calculate required space: max(1GB, 50% of existing DB size)
+	requiredSpace := uint64(MinDiskSpaceBytes)
+	dbSizeInfo := ""
+
+	if c.Settings != nil && !c.Settings.Output.MySQL.Enabled {
+		dbPath := c.Settings.Output.SQLite.Path
+		if !filepath.IsAbs(dbPath) {
+			dbPath, _ = filepath.Abs(dbPath)
+		}
+		if info, err := os.Stat(dbPath); err == nil {
+			dbSize := uint64(info.Size())
+			halfDBSize := dbSize / 2
+			if halfDBSize > requiredSpace {
+				requiredSpace = halfDBSize
+			}
+			dbSizeGB := float64(dbSize) / (1024 * 1024 * 1024)
+			dbSizeInfo = fmt.Sprintf(" (DB size: %.1fGB)", dbSizeGB)
+		}
+	}
+
 	usage, err := disk.Usage(diskPath)
 	if err != nil {
 		check.Status = CheckStatusError
@@ -209,12 +231,14 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 	}
 
 	freeGB := float64(usage.Free) / (1024 * 1024 * 1024)
-	if usage.Free >= MinDiskSpaceBytes {
+	requiredGB := float64(requiredSpace) / (1024 * 1024 * 1024)
+
+	if usage.Free >= requiredSpace {
 		check.Status = CheckStatusPassed
-		check.Message = fmt.Sprintf("%.1fGB available (need 1GB)", freeGB)
+		check.Message = fmt.Sprintf("%.1fGB available (need %.1fGB)%s", freeGB, requiredGB, dbSizeInfo)
 	} else {
 		check.Status = CheckStatusFailed
-		check.Message = fmt.Sprintf("%.1fGB available, need at least 1GB", freeGB)
+		check.Message = fmt.Sprintf("%.1fGB available, need at least %.1fGB%s", freeGB, requiredGB, dbSizeInfo)
 	}
 
 	return check
@@ -628,7 +652,7 @@ func (c *Controller) checkMemoryAvailable() PrerequisiteCheck {
 		check.Message = fmt.Sprintf("%dMB available", availableMB)
 	} else {
 		check.Status = CheckStatusWarning
-		check.Message = fmt.Sprintf("%dMB available, recommend >= 256MB", availableMB)
+		check.Message = fmt.Sprintf("%dMB available, recommend >= 50MB", availableMB)
 	}
 
 	return check
