@@ -313,6 +313,13 @@ func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
 //
 // This prevents false positives from partially initialized databases.
 func CheckSQLiteHasV2Schema(dbPath string) bool {
+	// Check if file exists first - GORM/SQLite with mode=ro may still create an empty file
+	// even when opening in read-only mode, which causes issues when checking non-existent
+	// legacy databases (they get created as empty files during the check).
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return false
+	}
+
 	dsn := dbPath + "?mode=ro"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
