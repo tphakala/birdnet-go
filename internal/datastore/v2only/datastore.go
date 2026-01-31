@@ -1333,59 +1333,54 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 }
 
 // loadDetectionRelations loads Label, Source, Review, and Lock for detections.
-// TODO(performance): This implementation makes individual queries per unique label/source
-// and per detection for reviews/locks. For optimal performance with large result sets,
-// consider adding batch methods to the repository (e.g., GetReviewsByDetectionIDs)
-// or modifying the Search method to use GORM Preload with appropriate table prefixes.
-// For typical search results (20-50 items), the current approach is acceptable.
+// Uses batch queries to minimize database round-trips.
 func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
 		return nil
 	}
 
-	// Collect unique IDs for batch loading
+	// Collect IDs for batch loading
 	detectionIDs := make([]uint, len(dets))
-	labelIDs := make(map[uint]struct{})
-	sourceIDs := make(map[uint]struct{})
+	labelIDSet := make(map[uint]struct{})
+	sourceIDSet := make(map[uint]struct{})
 
 	for i, det := range dets {
 		detectionIDs[i] = det.ID
-		labelIDs[det.LabelID] = struct{}{}
+		labelIDSet[det.LabelID] = struct{}{}
 		if det.SourceID != nil {
-			sourceIDs[*det.SourceID] = struct{}{}
+			sourceIDSet[*det.SourceID] = struct{}{}
 		}
 	}
 
-	// Batch load labels
-	labelMap := make(map[uint]*entities.Label)
-	for labelID := range labelIDs {
-		label, err := ds.label.GetByID(ctx, labelID)
-		if err == nil {
-			labelMap[labelID] = label
-		}
+	// Convert sets to slices
+	labelIDs := make([]uint, 0, len(labelIDSet))
+	for id := range labelIDSet {
+		labelIDs = append(labelIDs, id)
+	}
+	sourceIDs := make([]uint, 0, len(sourceIDSet))
+	for id := range sourceIDSet {
+		sourceIDs = append(sourceIDs, id)
 	}
 
-	// Batch load sources
-	sourceMap := make(map[uint]*entities.AudioSource)
-	for sourceID := range sourceIDs {
-		source, err := ds.source.GetByID(ctx, sourceID)
-		if err == nil {
-			sourceMap[sourceID] = source
-		}
+	// Batch load all relations
+	labelMap, err := ds.label.GetByIDs(ctx, labelIDs)
+	if err != nil {
+		return fmt.Errorf("load labels: %w", err)
 	}
 
-	// Batch load reviews and locks
-	reviewMap := make(map[uint]*entities.DetectionReview)
-	lockMap := make(map[uint]bool)
-	for _, detID := range detectionIDs {
-		review, err := ds.detection.GetReview(ctx, detID)
-		if err == nil {
-			reviewMap[detID] = review
-		}
-		isLocked, err := ds.detection.IsLocked(ctx, detID)
-		if err == nil && isLocked {
-			lockMap[detID] = true
-		}
+	sourceMap, err := ds.source.GetByIDs(ctx, sourceIDs)
+	if err != nil {
+		return fmt.Errorf("load sources: %w", err)
+	}
+
+	reviewMap, err := ds.detection.GetReviewsByDetectionIDs(ctx, detectionIDs)
+	if err != nil {
+		return fmt.Errorf("load reviews: %w", err)
+	}
+
+	lockMap, err := ds.detection.GetLocksByDetectionIDs(ctx, detectionIDs)
+	if err != nil {
+		return fmt.Errorf("load locks: %w", err)
 	}
 
 	// Assign loaded relations to detections

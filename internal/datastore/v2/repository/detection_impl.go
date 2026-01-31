@@ -1001,6 +1001,33 @@ func (r *detectionRepository) SaveReviewsBatch(ctx context.Context, reviews []*e
 		CreateInBatches(reviews, defaultDBBatchSize).Error
 }
 
+// GetReviewsByDetectionIDs retrieves reviews for multiple detections.
+// Handles large ID sets by chunking to avoid SQL parameter limits.
+func (r *detectionRepository) GetReviewsByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint]*entities.DetectionReview, error) {
+	result := make(map[uint]*entities.DetectionReview)
+	if len(detectionIDs) == 0 {
+		return result, nil
+	}
+
+	for i := 0; i < len(detectionIDs); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(detectionIDs))
+		batchIDs := detectionIDs[i:end]
+
+		var reviews []*entities.DetectionReview
+		err := r.db.WithContext(ctx).Table(r.reviewsTable()).
+			Where("detection_id IN ?", batchIDs).
+			Find(&reviews).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load reviews: %w", err)
+		}
+
+		for _, review := range reviews {
+			result[review.DetectionID] = review
+		}
+	}
+	return result, nil
+}
+
 // ============================================================================
 // Comments
 // ============================================================================
@@ -1127,6 +1154,33 @@ func (r *detectionRepository) SaveLocksBatch(ctx context.Context, locks []*entit
 	return r.db.WithContext(ctx).Table(r.locksTable()).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		CreateInBatches(locks, defaultDBBatchSize).Error
+}
+
+// GetLocksByDetectionIDs retrieves lock status for multiple detections.
+// Handles large ID sets by chunking to avoid SQL parameter limits.
+func (r *detectionRepository) GetLocksByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint]bool, error) {
+	result := make(map[uint]bool)
+	if len(detectionIDs) == 0 {
+		return result, nil
+	}
+
+	for i := 0; i < len(detectionIDs); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(detectionIDs))
+		batchIDs := detectionIDs[i:end]
+
+		var locks []*entities.DetectionLock
+		err := r.db.WithContext(ctx).Table(r.locksTable()).
+			Where("detection_id IN ?", batchIDs).
+			Find(&locks).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load locks: %w", err)
+		}
+
+		for _, lock := range locks {
+			result[lock.DetectionID] = true
+		}
+	}
+	return result, nil
 }
 
 // ============================================================================

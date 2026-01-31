@@ -17,6 +17,11 @@ type LabelRepository interface {
 	// Returns ErrLabelNotFound if not found.
 	GetByID(ctx context.Context, id uint) (*entities.Label, error)
 
+	// GetByIDs retrieves multiple labels by their IDs in a single query.
+	// Returns a map of ID to Label for efficient lookup.
+	// Handles large ID sets by chunking to avoid SQL parameter limits.
+	GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.Label, error)
+
 	// GetByScientificName retrieves a label by scientific name.
 	// Returns ErrLabelNotFound if not found.
 	GetByScientificName(ctx context.Context, name string) (*entities.Label, error)

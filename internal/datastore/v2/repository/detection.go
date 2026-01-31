@@ -167,6 +167,11 @@ type DetectionRepository interface {
 	// SaveReviewsBatch saves multiple reviews efficiently.
 	SaveReviewsBatch(ctx context.Context, reviews []*entities.DetectionReview) error
 
+	// GetReviewsByDetectionIDs retrieves reviews for multiple detections in a single query.
+	// Returns a map of detection ID to DetectionReview.
+	// Handles large ID sets by chunking to avoid SQL parameter limits.
+	GetReviewsByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint]*entities.DetectionReview, error)
+
 	// === Comments ===
 
 	// SaveComment adds a comment to a detection.
@@ -204,6 +209,11 @@ type DetectionRepository interface {
 
 	// SaveLocksBatch saves multiple locks efficiently.
 	SaveLocksBatch(ctx context.Context, locks []*entities.DetectionLock) error
+
+	// GetLocksByDetectionIDs retrieves lock status for multiple detections in a single query.
+	// Returns a map of detection ID to bool (true if locked).
+	// Handles large ID sets by chunking to avoid SQL parameter limits.
+	GetLocksByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint]bool, error)
 
 	// === Analytics (model-aware) ===
 

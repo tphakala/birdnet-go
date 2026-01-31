@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
@@ -110,6 +111,33 @@ func (r *audioSourceRepository) GetByID(ctx context.Context, id uint) (*entities
 		return nil, err
 	}
 	return &source, nil
+}
+
+// GetByIDs retrieves multiple audio sources by their IDs.
+// Handles large ID sets by chunking to avoid SQL parameter limits.
+func (r *audioSourceRepository) GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.AudioSource, error) {
+	result := make(map[uint]*entities.AudioSource)
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	for i := 0; i < len(ids); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(ids))
+		batchIDs := ids[i:end]
+
+		var sources []*entities.AudioSource
+		err := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("id IN ?", batchIDs).
+			Find(&sources).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load audio sources: %w", err)
+		}
+
+		for _, source := range sources {
+			result[source.ID] = source
+		}
+	}
+	return result, nil
 }
 
 // GetBySourceURI retrieves an audio source by its URI and node name.

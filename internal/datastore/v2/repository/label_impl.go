@@ -108,6 +108,37 @@ func (r *labelRepository) GetByID(ctx context.Context, id uint) (*entities.Label
 	return &label, nil
 }
 
+// batchQuerySize is the maximum number of IDs to include in a single IN clause.
+// SQLite has a default limit of 999 parameters; we use 500 to be safe.
+const batchQuerySize = 500
+
+// GetByIDs retrieves multiple labels by their IDs.
+// Handles large ID sets by chunking to avoid SQL parameter limits.
+func (r *labelRepository) GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.Label, error) {
+	result := make(map[uint]*entities.Label)
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	for i := 0; i < len(ids); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(ids))
+		batchIDs := ids[i:end]
+
+		var labels []*entities.Label
+		err := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("id IN ?", batchIDs).
+			Find(&labels).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load labels: %w", err)
+		}
+
+		for _, label := range labels {
+			result[label.ID] = label
+		}
+	}
+	return result, nil
+}
+
 // GetByScientificName retrieves a label by scientific name.
 func (r *labelRepository) GetByScientificName(ctx context.Context, name string) (*entities.Label, error) {
 	var label entities.Label

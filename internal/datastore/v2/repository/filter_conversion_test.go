@@ -422,6 +422,9 @@ func (m *mockLabelRepository) GetOrCreate(_ context.Context, _ string, _ entitie
 func (m *mockLabelRepository) GetByID(_ context.Context, _ uint) (*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+func (m *mockLabelRepository) GetByIDs(_ context.Context, _ []uint) (map[uint]*entities.Label, error) {
+	return nil, nil //nolint:nilnil // mock implementation
+}
 func (m *mockLabelRepository) GetAllByType(_ context.Context, _ entities.LabelType) ([]*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
@@ -459,6 +462,9 @@ func (m *mockAudioSourceRepository) GetOrCreate(_ context.Context, _, _ string, 
 	return nil, nil //nolint:nilnil // mock implementation
 }
 func (m *mockAudioSourceRepository) GetByID(_ context.Context, _ uint) (*entities.AudioSource, error) {
+	return nil, nil //nolint:nilnil // mock implementation
+}
+func (m *mockAudioSourceRepository) GetByIDs(_ context.Context, _ []uint) (map[uint]*entities.AudioSource, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
 func (m *mockAudioSourceRepository) GetBySourceURI(_ context.Context, _, _ string) (*entities.AudioSource, error) {
