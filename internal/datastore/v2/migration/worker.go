@@ -745,6 +745,44 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 		}
 	}
 
+	// Migrate auxiliary data (weather, thresholds, image cache, notifications)
+	if w.auxiliaryMigrator != nil {
+		w.logger.Info("starting auxiliary data migration")
+
+		// Create context that cancels on shutdown OR when caller context is cancelled
+		auxCtx, auxCancel := context.WithCancel(ctx)
+		auxDone := make(chan struct{})
+		go func() {
+			select {
+			case <-w.stopCh:
+				auxCancel()
+			case <-auxCtx.Done():
+				// Parent context cancelled
+			case <-auxDone:
+			}
+		}()
+
+		auxResult, auxErr := w.auxiliaryMigrator.MigrateAll(auxCtx)
+		close(auxDone)
+		auxCancel() // Cleanup context resources
+
+		if auxErr != nil {
+			w.logger.Error("auxiliary data migration failed", logger.Error(auxErr))
+		} else if auxResult != nil {
+			w.logger.Info("auxiliary data migration completed",
+				logger.Int("image_caches_migrated", auxResult.ImageCaches.Migrated),
+				logger.Int("thresholds_migrated", auxResult.Thresholds.Migrated),
+				logger.Int("weather_daily_migrated", auxResult.Weather.DailyEventsMigrated),
+				logger.Int("weather_hourly_migrated", auxResult.Weather.HourlyWeatherMigrated),
+				logger.Int("notifications_migrated", auxResult.Notifications.Migrated))
+
+			if auxResult.HasErrors() {
+				w.logger.Warn("auxiliary data migration completed with some errors",
+					logger.String("summary", auxResult.Summary()))
+			}
+		}
+	}
+
 	// Clear the phase after related data migration (also resets phase_number/total_phases)
 	if err := w.stateManager.SetPhaseWithProgress(entities.MigrationPhaseNone, 0, 0, 0); err != nil {
 		w.logger.Warn("failed to clear migration phase", logger.Error(err))
