@@ -5,6 +5,7 @@ log/
 clips/
 models/
 plans/
+db/
 spectrograms/
 .task/*
 .vscode/*
