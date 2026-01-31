@@ -41,10 +41,11 @@ func (r *labelRepository) tableName() string {
 
 // GetOrCreate retrieves an existing label or creates a new one.
 // Returns an error if scientificName is empty or whitespace-only.
+// Input is normalized (trimmed) before use.
 func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string, labelType entities.LabelType) (*entities.Label, error) {
-	// Validate input - reject empty or whitespace-only names
-	trimmedName := strings.TrimSpace(scientificName)
-	if trimmedName == "" {
+	// Validate and normalize input - reject empty or whitespace-only names
+	scientificName = strings.TrimSpace(scientificName)
+	if scientificName == "" {
 		return nil, fmt.Errorf("scientific name cannot be empty")
 	}
 
@@ -74,7 +75,7 @@ func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string
 		}
 	}
 
-	// Create new label
+	// Create new label with normalized name
 	label = entities.Label{
 		ScientificName: &scientificName,
 		LabelType:      labelType,

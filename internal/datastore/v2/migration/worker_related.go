@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -491,12 +492,17 @@ func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []
 	}
 
 	// Extract unique scientific names (multiple raw species may map to same scientific name)
+	// Skip empty or whitespace-only names to avoid creating invalid labels
 	scientificNames := make([]string, 0, len(speciesMapping))
 	seen := make(map[string]struct{})
 	for _, sciName := range speciesMapping {
-		if _, exists := seen[sciName]; !exists {
-			seen[sciName] = struct{}{}
-			scientificNames = append(scientificNames, sciName)
+		trimmed := strings.TrimSpace(sciName)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; !exists {
+			seen[trimmed] = struct{}{}
+			scientificNames = append(scientificNames, trimmed)
 		}
 	}
 

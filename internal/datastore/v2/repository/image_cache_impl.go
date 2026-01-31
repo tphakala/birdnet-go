@@ -39,9 +39,21 @@ func (r *imageCacheRepository) tableName() string {
 	return tableImageCaches
 }
 
+// ensureLabelRepo returns an error if labelRepo is nil.
+// This guards against misconfiguration that would cause nil pointer panics.
+func (r *imageCacheRepository) ensureLabelRepo() error {
+	if r.labelRepo == nil {
+		return errors.NewStd("label repository not configured for image cache repository")
+	}
+	return nil
+}
+
 // GetImageCache retrieves an image cache entry by provider and scientific name.
 // Internally resolves scientific name to label ID for the lookup.
 func (r *imageCacheRepository) GetImageCache(ctx context.Context, providerName, scientificName string) (*entities.ImageCache, error) {
+	if err := r.ensureLabelRepo(); err != nil {
+		return nil, err
+	}
 	// Resolve scientific name to label ID
 	label, err := r.labelRepo.GetByScientificName(ctx, scientificName)
 	if err != nil {
@@ -96,6 +108,10 @@ func (r *imageCacheRepository) GetAllImageCaches(ctx context.Context, providerNa
 func (r *imageCacheRepository) GetImageCacheBatch(ctx context.Context, providerName string, scientificNames []string) (map[string]*entities.ImageCache, error) {
 	if len(scientificNames) == 0 {
 		return make(map[string]*entities.ImageCache), nil
+	}
+
+	if err := r.ensureLabelRepo(); err != nil {
+		return nil, err
 	}
 
 	// Batch lookup labels by scientific names
