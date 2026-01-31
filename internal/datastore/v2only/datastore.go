@@ -1483,6 +1483,10 @@ func (ds *Datastore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.
 	ctx := context.Background()
 	cache, err := ds.imageCache.GetImageCache(ctx, query.ProviderName, query.ScientificName)
 	if err != nil {
+		// Convert repository-level error to datastore-level error for API consistency
+		if errors.Is(err, repository.ErrImageCacheNotFound) {
+			return nil, datastore.ErrImageCacheNotFound
+		}
 		return nil, err
 	}
 	return &datastore.ImageCache{
