@@ -585,6 +585,11 @@ func (c *Controller) Shutdown() {
 	// Wait for all goroutines to finish
 	c.wg.Wait()
 
+	// Shutdown the backup job manager to stop its cleanup goroutine
+	if backupJobManager != nil {
+		backupJobManager.Shutdown()
+	}
+
 	// Flush the API logger
 	if err := c.apiLogger.Flush(); err != nil {
 		GetLogger().Error("Error flushing API log", logger.Error(err))
