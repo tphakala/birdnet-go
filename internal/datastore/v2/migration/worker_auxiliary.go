@@ -443,6 +443,10 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	migrated, err := m.weatherRepo.SaveAllDailyEvents(ctx, v2Events)
 	if err != nil {
 		m.logger.Warn("failed to migrate some daily events", logger.Error(err))
+		// Record first save error for HasErrors() to report
+		if result.Weather.Error == nil {
+			result.Weather.Error = err
+		}
 	}
 	result.Weather.DailyEventsMigrated = migrated
 	m.logger.Info("daily events migration completed",
@@ -505,6 +509,10 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	migratedWeather, err := m.weatherRepo.SaveAllHourlyWeather(ctx, v2Weather)
 	if err != nil {
 		m.logger.Warn("failed to migrate some hourly weather", logger.Error(err))
+		// Record first save error for HasErrors() to report
+		if result.Weather.Error == nil {
+			result.Weather.Error = err
+		}
 	}
 	result.Weather.HourlyWeatherMigrated = migratedWeather
 

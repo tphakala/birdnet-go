@@ -1431,6 +1431,9 @@ func (r *ImageProviderRegistry) GetOrRegister(name string, factory func() (*Bird
 	if err != nil {
 		return nil, err
 	}
+	if cache == nil {
+		return nil, fmt.Errorf("factory returned nil cache for provider %s", name)
+	}
 
 	r.caches[name] = cache
 	return cache, nil

@@ -40,6 +40,15 @@ func (r *notificationHistoryRepository) tableName() string {
 	return tableNotificationHistory
 }
 
+// ensureLabelRepo returns an error if labelRepo is nil.
+// This guards against misconfiguration that would cause nil pointer panics.
+func (r *notificationHistoryRepository) ensureLabelRepo() error {
+	if r.labelRepo == nil {
+		return errors.NewStd("label repository not configured for notification history repository")
+	}
+	return nil
+}
+
 // SaveNotificationHistory saves or updates a notification history entry (upsert).
 // The history.LabelID must be set by the caller.
 func (r *notificationHistoryRepository) SaveNotificationHistory(ctx context.Context, history *entities.NotificationHistory) error {
@@ -57,6 +66,9 @@ func (r *notificationHistoryRepository) SaveNotificationHistory(ctx context.Cont
 // GetNotificationHistory retrieves a notification history entry by scientific name.
 // Internally resolves the scientific name to a label ID for the lookup.
 func (r *notificationHistoryRepository) GetNotificationHistory(ctx context.Context, scientificName, notificationType string) (*entities.NotificationHistory, error) {
+	if err := r.ensureLabelRepo(); err != nil {
+		return nil, err
+	}
 	// Resolve scientific name to label ID
 	label, err := r.labelRepo.GetByScientificName(ctx, scientificName)
 	if err != nil {

@@ -454,7 +454,7 @@ func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []st
 	return result, nil
 }
 func (m *mockLabelRepository) BatchGetOrCreate(_ context.Context, _ []string, _ entities.LabelType) (map[string]*entities.Label, error) {
-	return nil, nil //nolint:nilnil // mock implementation
+	return make(map[string]*entities.Label), nil
 }
 
 // mockAudioSourceRepository is a simple mock for testing ResolveLocationsToSourceIDs
