@@ -2198,15 +2198,9 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 		}
 	}
 
-	// Deduplicate by ID (in case both queries return the same event)
-	seen := make(map[uint]bool)
-	uniqueEvents := make([]entities.ThresholdEvent, 0, len(v2Events))
-	for i := range v2Events {
-		if !seen[v2Events[i].ID] {
-			seen[v2Events[i].ID] = true
-			uniqueEvents = append(uniqueEvents, v2Events[i])
-		}
-	}
+	// Note: Deduplication not needed - each event has exactly one LabelID,
+	// so queries for different labels return disjoint result sets.
+	uniqueEvents := v2Events
 
 	// Sort by CreatedAt DESC (most recent first)
 	sort.Slice(uniqueEvents, func(i, j int) bool {
