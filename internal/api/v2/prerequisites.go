@@ -213,6 +213,7 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 			dbPath, _ = filepath.Abs(dbPath)
 		}
 		if info, err := os.Stat(dbPath); err == nil {
+			// #nosec G115 -- info.Size() from os.FileInfo is always non-negative
 			dbSize := uint64(info.Size())
 			halfDBSize := dbSize / 2
 			if halfDBSize > requiredSpace {

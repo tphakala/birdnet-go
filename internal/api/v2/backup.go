@@ -378,6 +378,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to check disk space", http.StatusInternalServerError)
 	}
+	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 	requiredSpace := uint64(dbSize) + backupDiskBuffer
 	if usage.Free < requiredSpace {
 		return c.HandleError(ctx, fmt.Errorf("insufficient space"),

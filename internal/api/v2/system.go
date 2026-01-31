@@ -1604,6 +1604,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	c.logInfoIfEnabled("Database backup: source database info",
 		logger.String("db_type", dbType),
 		logger.String("db_path", dbPath),
+		// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 		logger.String("db_size", formatBytesUint64(uint64(dbSize))))
 
 	// Check disk space on temp directory where VACUUM INTO will write
@@ -1684,6 +1685,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	var backupSizeBytes int64
 	if statErr == nil {
 		backupSizeBytes = backupInfo.Size()
+		// #nosec G115 -- backupSizeBytes from os.FileInfo.Size() is always non-negative
 		backupSize = formatBytesUint64(uint64(backupSizeBytes))
 	}
 
@@ -1701,7 +1703,11 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 			logger.Error(err))
 		return err
 	}
-	defer backupFile.Close()
+	defer func() {
+		if err := backupFile.Close(); err != nil {
+			c.logWarnIfEnabled("Database backup: failed to close backup file", logger.Error(err))
+		}
+	}()
 
 	// Stream the file to the response
 	written, copyErr := io.Copy(resp.Writer, backupFile)

@@ -47,6 +47,19 @@ const ProgressLogInterval = 10 * time.Second
 // ProgressLogRecordThreshold is the minimum records between progress log entries.
 const ProgressLogRecordThreshold = 1000
 
+// validationMaxRetries is the maximum number of validation retry attempts.
+const validationMaxRetries = 5
+
+// validationCatchUpThreshold is the max record difference to attempt auto-recovery.
+const validationCatchUpThreshold = 100
+
+// validationPreDelay is the delay before validation to let dual-writes complete.
+const validationPreDelay = 3 * time.Second
+
+// catchUpMaxBatches is the safety limit for catch-up iterations per validation attempt.
+// Prevents infinite loop if records are created faster than migration can process.
+const catchUpMaxBatches = 50
+
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.New("migration paused")
 
@@ -392,11 +405,50 @@ func (w *Worker) handlePausedState(ctx context.Context) runAction {
 	}
 }
 
-// handleValidatingState runs validation and completes migration.
+// handleValidatingState runs validation with auto-retry and catch-up logic.
+// If validation fails due to small count differences (from records added during migration),
+// it attempts to catch up by migrating the new records and retrying validation.
 func (w *Worker) handleValidatingState(ctx context.Context) runAction {
-	w.logger.Info("running validation")
-	if err := w.validate(ctx); err != nil {
-		w.logger.Error("validation failed", logger.Error(err))
+	for attempt := 1; attempt <= validationMaxRetries; attempt++ {
+		w.logger.Info("running validation", logger.Int("attempt", attempt))
+
+		// Wait for in-flight dual-writes to complete
+		select {
+		case <-ctx.Done():
+			return runActionReturn
+		case <-time.After(validationPreDelay):
+		}
+
+		// Run validation and get counts for recovery logic
+		legacyCount, v2Count, err := w.validateWithCounts(ctx)
+		if err == nil {
+			// Validation passed - complete the migration
+			return w.completeValidation(ctx)
+		}
+
+		// Check if this is a recoverable count mismatch
+		diff := legacyCount - v2Count
+		if diff > 0 && diff <= validationCatchUpThreshold {
+			w.logger.Info("validation: count mismatch, attempting catch-up",
+				logger.Int64("legacy_count", legacyCount),
+				logger.Int64("v2_count", v2Count),
+				logger.Int64("difference", diff),
+				logger.Int("attempt", attempt))
+
+			// Run catch-up to migrate new records
+			caught, catchErr := w.runCatchUp(ctx)
+			if catchErr != nil {
+				w.logger.Warn("catch-up failed", logger.Error(catchErr))
+			} else {
+				w.logger.Info("catch-up completed", logger.Int64("records_caught", caught))
+			}
+			continue // Retry validation
+		}
+
+		// Non-recoverable error or large difference - fail
+		w.logger.Error("validation failed", logger.Error(err),
+			logger.Int64("legacy_count", legacyCount),
+			logger.Int64("v2_count", v2Count))
 		if setErr := w.stateManager.SetError(fmt.Sprintf("validation failed: %v", err)); setErr != nil {
 			w.logger.Warn("failed to set error in state", logger.Error(setErr))
 		}
@@ -404,19 +456,33 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 		return runActionContinue
 	}
 
-	// Validation passed - transition to cutover and complete
+	// Exhausted retries
+	w.logger.Error("validation failed after max retries",
+		logger.Int("max_retries", validationMaxRetries))
+	if setErr := w.stateManager.SetError("validation failed after maximum retry attempts"); setErr != nil {
+		w.logger.Warn("failed to set error in state", logger.Error(setErr))
+	}
+	w.pauseOnValidationFailure()
+	return runActionContinue
+}
+
+// completeValidation handles the successful validation path.
+func (w *Worker) completeValidation(ctx context.Context) runAction {
 	w.logger.Info("validation passed, transitioning to cutover")
+
 	if err := w.stateManager.TransitionToCutover(); err != nil {
 		w.logger.Error("failed to transition to cutover", logger.Error(err))
 		return runActionContinue
 	}
+
 	if err := w.stateManager.Complete(); err != nil {
 		w.logger.Error("failed to complete migration", logger.Error(err))
 		return runActionContinue
 	}
+
 	w.logger.Info("migration completed successfully")
 
-	// Send notification that migration has completed
+	// Send completion notification
 	if notifService := notification.GetService(); notifService != nil {
 		if _, err := notifService.CreateWithComponent(
 			notification.TypeSystem,
@@ -430,6 +496,50 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 	}
 
 	return runActionReturn
+}
+
+// runCatchUp processes any records in legacy that aren't yet in V2.
+// Returns the number of records caught up.
+// Has a safety limit (catchUpMaxBatches) to prevent infinite loops.
+func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
+	var totalCaught int64
+
+	for batch := range catchUpMaxBatches {
+		// Check for cancellation
+		select {
+		case <-ctx.Done():
+			return totalCaught, ctx.Err()
+		default:
+		}
+
+		// Process one batch
+		result, err := w.processBatch(ctx)
+		if err != nil {
+			if errors.Is(err, ErrMigrationPaused) || errors.Is(err, ErrMigrationCancelled) {
+				return totalCaught, err
+			}
+			return totalCaught, fmt.Errorf("catch-up batch failed: %w", err)
+		}
+
+		// No more records to process
+		if result.migrated == 0 {
+			break
+		}
+
+		totalCaught += int64(result.migrated)
+
+		// Update progress
+		if err := w.stateManager.IncrementProgress(result.lastID, int64(result.migrated)); err != nil {
+			w.logger.Warn("failed to update progress during catch-up", logger.Error(err))
+		}
+
+		w.logger.Debug("catch-up batch completed",
+			logger.Int("batch_migrated", result.migrated),
+			logger.Int64("total_caught", totalCaught),
+			logger.Int("batch_number", batch+1))
+	}
+
+	return totalCaught, nil
 }
 
 // handleCutoverState handles the cutover state by attempting to complete migration.
@@ -677,48 +787,40 @@ func (w *Worker) handleError(err error, msg string) bool {
 	return false
 }
 
-// validate performs validation checks to ensure migration completeness.
-func (w *Worker) validate(ctx context.Context) error {
+// validateWithCounts performs validation and returns the counts for recovery logic.
+// Returns legacy count, v2 count, and error if validation fails.
+func (w *Worker) validateWithCounts(ctx context.Context) (legacyCount, v2Count int64, err error) {
 	w.logger.Info("starting migration validation")
 
-	// Get migration state for totals
-	state, err := w.stateManager.GetState()
-	if err != nil {
-		return fmt.Errorf("failed to get state for validation: %w", err)
-	}
-
-	// Check 1: Record count comparison
 	// Count legacy records
-	legacyCount, err := w.countLegacyRecords(ctx)
+	legacyCount, err = w.countLegacyRecords(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to count legacy records: %w", err)
+		return 0, 0, fmt.Errorf("failed to count legacy records: %w", err)
 	}
 
 	// Count V2 records
-	v2Count, err := w.v2Detection.CountAll(ctx)
+	v2Count, err = w.v2Detection.CountAll(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to count v2 records: %w", err)
+		return legacyCount, 0, fmt.Errorf("failed to count v2 records: %w", err)
 	}
 
 	w.logger.Info("validation record counts",
 		logger.Int64("legacy", legacyCount),
-		logger.Int64("v2", v2Count),
-		logger.Int64("migrated", state.MigratedRecords))
+		logger.Int64("v2", v2Count))
 
-	// Allow for small discrepancy due to new records during migration
 	// V2 should have at least as many records as legacy (could have more from dual-write)
 	if v2Count < legacyCount {
-		return fmt.Errorf("v2 count (%d) is less than legacy count (%d)", v2Count, legacyCount)
+		return legacyCount, v2Count, fmt.Errorf("v2 count (%d) is less than legacy count (%d)", v2Count, legacyCount)
 	}
 
-	// Check 2: No dirty IDs remaining
+	// Check for dirty IDs
 	dirtyCount, err := w.stateManager.GetDirtyIDCount()
 	if err != nil {
-		return fmt.Errorf("failed to get dirty ID count: %w", err)
+		return legacyCount, v2Count, fmt.Errorf("failed to get dirty ID count: %w", err)
 	}
 
 	if dirtyCount > 0 {
-		return fmt.Errorf("%d records failed to migrate (dirty IDs)", dirtyCount)
+		return legacyCount, v2Count, fmt.Errorf("%d records failed to migrate (dirty IDs)", dirtyCount)
 	}
 
 	w.logger.Info("validation passed",
@@ -726,7 +828,7 @@ func (w *Worker) validate(ctx context.Context) error {
 		logger.Int64("v2_count", v2Count),
 		logger.Int64("dirty_count", dirtyCount))
 
-	return nil
+	return legacyCount, v2Count, nil
 }
 
 // countLegacyRecords returns the total number of records in the legacy database.
