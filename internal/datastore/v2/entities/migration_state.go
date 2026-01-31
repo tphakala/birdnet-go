@@ -37,6 +37,7 @@ type MigrationState struct {
 	PhaseNumber     int             `gorm:"default:0"`                            // Current phase number (1-based)
 	TotalPhases     int             `gorm:"default:0"`                            // Total number of phases
 	StartedAt       *time.Time
+	PhaseStartedAt  *time.Time                                        // When current phase started (for rate calculation)
 	CompletedAt     *time.Time
 	LastMigratedID  uint  `gorm:"default:0"` // Last legacy notes.id processed
 	TotalRecords    int64 `gorm:"default:0"` // Total records for current phase

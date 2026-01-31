@@ -258,6 +258,54 @@
           </button>
         </div>
       </div>
+    {:else if status?.state === 'validating'}
+      <!-- Validating State - special UI with indeterminate progress -->
+      <div class="space-y-4">
+        <!-- Info note -->
+        <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
+          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <p class="text-sm text-[var(--color-base-content)]">
+            {t('system.database.migration.notes.inProgress')}
+          </p>
+        </div>
+
+        <!-- Validation indicator -->
+        <div
+          class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
+        >
+          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+            <Loader2 class="size-4 animate-spin" />
+            <span>{t('system.database.migration.status.validating')}</span>
+          </div>
+
+          <!-- Indeterminate progress bar -->
+          <div class="mt-3">
+            <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
+              <div class="h-full w-1/3 bg-[var(--color-primary)] rounded-full animate-pulse"></div>
+            </div>
+          </div>
+
+          <p class="mt-2 text-sm text-[var(--color-base-content)]/70">
+            {t('system.database.migration.notes.validating')}
+          </p>
+        </div>
+
+        <!-- Cancel button (validation can be cancelled) -->
+        {#if status.can_cancel}
+          <button
+            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
+                   text-sm font-medium rounded-lg transition-colors
+                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   hover:bg-[var(--color-error)]/20
+                   disabled:opacity-50 disabled:cursor-not-allowed"
+            onclick={() => (showCancelConfirm = true)}
+            disabled={actionLoading}
+          >
+            <Square class="size-4" />
+            {t('system.database.migration.actions.cancel')}
+          </button>
+        {/if}
+      </div>
     {:else if status}
       <!-- Active State (migrating, dualWrite, etc.) -->
       <div class="space-y-4">

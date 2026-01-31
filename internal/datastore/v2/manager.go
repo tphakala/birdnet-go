@@ -17,7 +17,8 @@ import (
 )
 
 // defaultGormSlowThreshold is the duration above which GORM queries are logged as slow.
-const defaultGormSlowThreshold = 500 * time.Millisecond
+// Set to 1 second to accommodate migration batch queries which can take 800-900ms.
+const defaultGormSlowThreshold = 1 * time.Second
 
 // Manager defines the interface for v2 database operations.
 type Manager interface {

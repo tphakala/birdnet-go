@@ -20,8 +20,10 @@ const defaultRelatedDataBatchSize = 2000
 const predictionsBatchSize = 5000
 
 // progressUpdateInterval controls how often we update progress in the database.
-// Updating every batch is costly; update every N batches instead.
-const progressUpdateInterval = 10
+// Must be frequent enough for stable ETA calculation (rate = records / elapsed).
+// If too infrequent, elapsed time increases between updates while records stays same,
+// causing rate to appear to drop and ETA to bounce.
+const progressUpdateInterval = 1
 
 // secondaryPredictionStartRank is the starting rank for additional predictions in migration.
 // The primary prediction has rank 1 (stored in Detection entity), so secondary predictions start at 2.

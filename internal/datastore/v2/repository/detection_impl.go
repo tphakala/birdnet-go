@@ -1390,9 +1390,10 @@ func (r *detectionRepository) Exists(ctx context.Context, id uint) (bool, error)
 	return count > 0, err
 }
 
-// FilterExistingIDs returns only the IDs that exist in the detections table.
-// This is used during related data migration to filter out records whose
-// parent detection failed to migrate (tracked as dirty IDs).
+// FilterExistingIDs returns only the legacy IDs that have been migrated to V2.
+// This checks the legacy_id column (not the V2 auto-generated id) since that's
+// where the original legacy notes.id is stored during migration.
+// Used by catch-up to find records that exist in legacy but not in V2.
 func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint) ([]uint, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -1400,8 +1401,8 @@ func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint)
 
 	var existingIDs []uint
 	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("id IN ?", ids).
-		Pluck("id", &existingIDs).Error
+		Where("legacy_id IN ?", ids).
+		Pluck("legacy_id", &existingIDs).Error
 	if err != nil {
 		return nil, err
 	}

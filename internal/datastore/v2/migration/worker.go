@@ -58,7 +58,8 @@ const validationPreDelay = 3 * time.Second
 
 // catchUpMaxBatches is the safety limit for catch-up iterations per validation attempt.
 // Prevents infinite loop if records are created faster than migration can process.
-const catchUpMaxBatches = 50
+// With batch size of 100, this allows scanning up to 1M records (10000 * 100).
+const catchUpMaxBatches = 10000
 
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.New("migration paused")
@@ -103,9 +104,15 @@ type Worker struct {
 	consecutiveErrors int
 	maxConsecErrors   int
 
-	// Rate tracking for time estimates
+	// Rate tracking for time estimates (sliding window for display)
 	rateSamples []rateSample
 	rateIndex   int
+
+	// Cumulative rate tracking for stable ETA calculations
+	phaseStartTime       time.Time // When current phase started
+	phaseRecordsAtStart  int64     // Records already migrated when phase started
+	cumulativeRate       float64   // Running average rate (records/second)
+	cumulativeRateSamples int      // Number of samples contributing to cumulative rate
 
 	// Progress logging tracking
 	lastProgressLog     time.Time
@@ -498,11 +505,14 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 	return runActionReturn
 }
 
-// runCatchUp processes any records in legacy that aren't yet in V2.
+// runCatchUp finds and migrates records that exist in legacy but not in V2.
+// Unlike processBatch which continues from LastMigratedID, this function
+// scans the entire legacy database to find actually missing records.
 // Returns the number of records caught up.
 // Has a safety limit (catchUpMaxBatches) to prevent infinite loops.
 func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 	var totalCaught int64
+	var lastID uint
 
 	for batch := range catchUpMaxBatches {
 		// Check for cancellation
@@ -512,31 +522,74 @@ func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 		default:
 		}
 
-		// Process one batch
-		result, err := w.processBatch(ctx)
+		// Fetch a batch of legacy records starting from lastID
+		filters := datastore.NewDetectionFilters().
+			WithMinID(lastID).
+			WithLimit(w.batchSize)
+
+		results, _, err := w.legacy.Search(ctx, filters)
 		if err != nil {
-			if errors.Is(err, ErrMigrationPaused) || errors.Is(err, ErrMigrationCancelled) {
-				return totalCaught, err
-			}
-			return totalCaught, fmt.Errorf("catch-up batch failed: %w", err)
+			return totalCaught, fmt.Errorf("failed to fetch legacy records for catch-up: %w", err)
 		}
 
-		// No more records to process
-		if result.migrated == 0 {
+		if len(results) == 0 {
+			break // No more records
+		}
+
+		// Collect IDs from this batch
+		ids := make([]uint, len(results))
+		idToResult := make(map[uint]*detection.Result, len(results))
+		for i, r := range results {
+			ids[i] = r.ID
+			idToResult[r.ID] = r
+			lastID = r.ID // Track for next batch
+		}
+
+		// Find which IDs already exist in V2
+		existingIDs, err := w.v2Detection.FilterExistingIDs(ctx, ids)
+		if err != nil {
+			return totalCaught, fmt.Errorf("failed to filter existing IDs: %w", err)
+		}
+
+		// Create set of existing IDs for quick lookup
+		existingSet := make(map[uint]bool, len(existingIDs))
+		for _, id := range existingIDs {
+			existingSet[id] = true
+		}
+
+		// Find missing IDs and migrate them
+		var migratedInBatch int64
+		for _, id := range ids {
+			if existingSet[id] {
+				continue // Already exists in V2
+			}
+
+			// This record is missing from V2 - migrate it
+			r := idToResult[id]
+			if err := w.migrateRecord(ctx, r); err != nil {
+				w.logger.Warn("failed to migrate missing record during catch-up",
+					logger.Uint64("id", uint64(id)),
+					logger.Error(err))
+				if addErr := w.stateManager.AddDirtyID(id); addErr != nil {
+					w.logger.Error("failed to track dirty ID", logger.Uint64("id", uint64(id)), logger.Error(addErr))
+				}
+				continue
+			}
+			migratedInBatch++
+			totalCaught++
+		}
+
+		if migratedInBatch > 0 {
+			w.logger.Info("catch-up batch found missing records",
+				logger.Int64("migrated", migratedInBatch),
+				logger.Int("batch_size", len(results)),
+				logger.Int("batch_number", batch+1))
+		}
+
+		// If we processed fewer than batch size, we're done
+		if len(results) < w.batchSize {
 			break
 		}
-
-		totalCaught += int64(result.migrated)
-
-		// Update progress
-		if err := w.stateManager.IncrementProgress(result.lastID, int64(result.migrated)); err != nil {
-			w.logger.Warn("failed to update progress during catch-up", logger.Error(err))
-		}
-
-		w.logger.Debug("catch-up batch completed",
-			logger.Int("batch_migrated", result.migrated),
-			logger.Int64("total_caught", totalCaught),
-			logger.Int("batch_number", batch+1))
 	}
 
 	return totalCaught, nil

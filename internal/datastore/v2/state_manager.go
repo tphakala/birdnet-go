@@ -62,6 +62,7 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 		"phase_number":       MigrationPhaseNumberDetections,
 		"total_phases":       MigrationTotalPhases,
 		"started_at":         &now,
+		"phase_started_at":   &now, // Track phase start for rate calculation
 		"total_records":      totalRecords,
 		"migrated_records":   0,
 		"last_migrated_id":   0,
@@ -337,12 +338,14 @@ func (m *StateManager) SetPhaseWithProgress(phase entities.MigrationPhase, phase
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	now := time.Now()
 	updates := map[string]any{
 		"current_phase":    phase,
 		"phase_number":     phaseNumber,
 		"total_phases":     totalPhases,
 		"total_records":    totalRecords,
 		"migrated_records": int64(0), // Explicit int64 to ensure GORM doesn't skip zero value
+		"phase_started_at": &now,     // Track phase start for rate calculation
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Updates(updates)

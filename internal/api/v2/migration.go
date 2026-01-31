@@ -250,14 +250,26 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 	workerRunning := worker != nil && worker.IsRunning()
 	workerPaused := worker != nil && worker.IsPaused()
 
-	// Get rate and estimated remaining time
+	// Calculate rate from cumulative progress (more stable than sliding window)
+	// This works correctly for both phase 1 (detections) and phase 2 (predictions)
 	var recordsPerSec float64
 	var estimatedRemaining *string
-	if worker != nil && workerRunning && !workerPaused {
-		recordsPerSec = worker.GetMigrationRate()
-		if remaining := worker.EstimateRemainingTime(); remaining != nil {
-			formatted := formatDuration(*remaining)
-			estimatedRemaining = &formatted
+	if workerRunning && !workerPaused && state.PhaseStartedAt != nil && state.MigratedRecords > 0 {
+		elapsed := time.Since(*state.PhaseStartedAt).Seconds()
+		if elapsed > 0 {
+			recordsPerSec = float64(state.MigratedRecords) / elapsed
+
+			// Calculate estimated remaining time
+			remaining := state.TotalRecords - state.MigratedRecords
+			if remaining > 0 && recordsPerSec > 0 {
+				seconds := float64(remaining) / recordsPerSec
+				duration := time.Duration(seconds * float64(time.Second))
+				formatted := formatDuration(duration)
+				estimatedRemaining = &formatted
+			} else if remaining <= 0 {
+				zero := "0s"
+				estimatedRemaining = &zero
+			}
 		}
 	}
 
