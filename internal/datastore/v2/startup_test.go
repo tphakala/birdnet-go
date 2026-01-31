@@ -187,6 +187,13 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		dbPath := filepath.Join(tmpDir, "nonexistent.db")
 
 		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for non-existent")
+
+		// CRITICAL: Verify the file was NOT created during the check.
+		// This is a regression test for the bug where GORM/SQLite would create
+		// an empty file even when opened with mode=ro, causing the legacy
+		// database cleanup UI to appear after the legacy DB was manually deleted.
+		_, err := os.Stat(dbPath)
+		assert.True(t, os.IsNotExist(err), "checking non-existent file should not create it")
 	})
 
 	t.Run("empty file", func(t *testing.T) {
