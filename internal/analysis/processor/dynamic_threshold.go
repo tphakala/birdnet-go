@@ -100,7 +100,7 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, base
 		dt.LastLearnedAt = time.Time{}
 
 		if previousLevel != 0 {
-			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, dt.CurrentValue, changeReasonExpiry, 0)
+			p.recordThresholdEvent(speciesLowercase, dt.ScientificName, previousLevel, 0, previousValue, dt.CurrentValue, changeReasonExpiry, 0)
 		}
 	}
 
@@ -113,20 +113,23 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, base
 }
 
 // recordThresholdEvent saves a threshold change event to the database (BG-59)
-func (p *Processor) recordThresholdEvent(speciesName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
+// scientificName is required for v2only datastore to correctly resolve the Label FK.
+// See issue #1907 for context on why both names are needed.
+func (p *Processor) recordThresholdEvent(speciesName, scientificName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
 	if p.Ds == nil {
 		return
 	}
 
 	event := &datastore.ThresholdEvent{
-		SpeciesName:   speciesName,
-		PreviousLevel: previousLevel,
-		NewLevel:      newLevel,
-		PreviousValue: previousValue,
-		NewValue:      newValue,
-		ChangeReason:  changeReason,
-		Confidence:    confidence,
-		CreatedAt:     time.Now(),
+		SpeciesName:    speciesName,
+		ScientificName: scientificName, // Used by v2only for correct label resolution (#1907)
+		PreviousLevel:  previousLevel,
+		NewLevel:       newLevel,
+		PreviousValue:  previousValue,
+		NewValue:       newValue,
+		ChangeReason:   changeReason,
+		Confidence:     confidence,
+		CreatedAt:      time.Now(),
 	}
 
 	// Save asynchronously to avoid blocking the detection pipeline
@@ -221,7 +224,7 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 
 	// Record event if level changed
 	if dt.Level != previousLevel {
-		p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level,
+		p.recordThresholdEvent(speciesLowercase, dt.ScientificName, previousLevel, dt.Level,
 			previousValue, dt.CurrentValue, changeReasonHighConfidence, float64(confidence))
 	}
 

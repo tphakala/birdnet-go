@@ -5,6 +5,7 @@ package v2only
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,12 @@ type Datastore struct {
 	metrics      *datastore.Metrics
 	timezone     *time.Location
 	suncalc      *suncalc.SunCalc
+
+	// speciesMap provides O(1) lookup from common name (lowercase) to scientific name.
+	// Used by GetThresholdEvents to query both old (common name) and new (scientific name)
+	// labels when retrieving threshold events. See issue #1907.
+	// TODO: Remove this workaround when legacy database support is dropped.
+	speciesMap map[string]string
 }
 
 // Config configures the Datastore.
@@ -73,6 +80,10 @@ type Config struct {
 	Logger       logger.Logger
 	Timezone     *time.Location
 	SunCalc      *suncalc.SunCalc
+
+	// Labels provides species label mappings in "ScientificName_CommonName" format.
+	// Used to build speciesMap for GetThresholdEvents workaround. See issue #1907.
+	Labels []string
 }
 
 // New creates a new V2-only Datastore.
@@ -95,6 +106,21 @@ func New(cfg *Config) (*Datastore, error) {
 		tz = time.Local
 	}
 
+	// Build common name -> scientific name map for GetThresholdEvents workaround.
+	// Labels are in "ScientificName_CommonName" format (e.g., "Turdus merula_Eurasian Blackbird").
+	// See issue #1907 for context.
+	speciesMap := make(map[string]string)
+	for _, label := range cfg.Labels {
+		parts := strings.SplitN(label, "_", 2)
+		if len(parts) == 2 {
+			scientificName := strings.TrimSpace(parts[0])
+			commonName := strings.ToLower(strings.TrimSpace(parts[1]))
+			if commonName != "" && scientificName != "" {
+				speciesMap[commonName] = scientificName
+			}
+		}
+	}
+
 	return &Datastore{
 		manager:      cfg.Manager,
 		detection:    cfg.Detection,
@@ -108,6 +134,7 @@ func New(cfg *Config) (*Datastore, error) {
 		log:          cfg.Logger,
 		timezone:     tz,
 		suncalc:      cfg.SunCalc,
+		speciesMap:   speciesMap,
 	}, nil
 }
 
@@ -2106,22 +2133,25 @@ func eventSpeciesName(e *entities.ThresholdEvent) string {
 }
 
 // SaveThresholdEvent saves a threshold event.
-// NOTE: The legacy ThresholdEvent.SpeciesName contains the common name (lowercase),
-// but the V2 schema uses labels with scientific names. This creates a semantic mismatch.
-// TODO(#1907): Resolve scientific name from parent DynamicThreshold instead of using
-// common name directly. Current behavior creates labels with common names as the
-// scientific_name field, which is incorrect but internally consistent for threshold queries.
+// Uses event.ScientificName (if provided) for correct label resolution in V2 schema.
+// Falls back to event.SpeciesName (common name) for backward compatibility with
+// events created before #1907 fix.
 func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
 
-	// NOTE: event.SpeciesName is the common name (lowercase), not scientific name.
-	// This creates a label with common name as scientific_name, which is semantically
-	// incorrect but works for threshold event queries that also use common name.
-	// See TODO above for proper fix.
-	label, err := ds.label.GetOrCreate(ctx, event.SpeciesName, entities.LabelTypeSpecies)
+	// Use ScientificName if available (new behavior after #1907 fix),
+	// otherwise fall back to SpeciesName (common name) for backward compatibility.
+	labelName := event.ScientificName
+	if labelName == "" {
+		// Fallback for events without ScientificName populated.
+		// This creates incorrect labels but maintains backward compatibility.
+		labelName = event.SpeciesName
+	}
+
+	label, err := ds.label.GetOrCreate(ctx, labelName, entities.LabelTypeSpecies)
 	if err != nil {
 		return fmt.Errorf("failed to resolve label for event: %w", err)
 	}
@@ -2140,20 +2170,58 @@ func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 }
 
 // GetThresholdEvents retrieves threshold events for a species.
-// NOTE: speciesName is expected to be the common name (lowercase) to match how events are saved.
-// See SaveThresholdEvent TODO for details on the common name vs scientific name mismatch.
+// WORKAROUND(#1907): Prior to the fix, events were saved with labels created from common names
+// (e.g., "american robin" stored as scientific_name). After the fix, events are saved with
+// correct scientific names (e.g., "Turdus migratorius"). This method queries both label types
+// to return all events during the transition period.
+// TODO: Remove this workaround when legacy database support is dropped. At that point,
+// clean up orphaned common-name labels and simplify to a single query using scientific name.
 func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datastore.ThresholdEvent, error) {
 	if ds.threshold == nil {
 		return []datastore.ThresholdEvent{}, nil
 	}
 	ctx := context.Background()
+
+	// Query 1: Try with the provided name (common name) - finds legacy/incorrectly saved events
 	v2Events, err := ds.threshold.GetThresholdEvents(ctx, speciesName, limit)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]datastore.ThresholdEvent, 0, len(v2Events))
+
+	// Query 2: If we can resolve to scientific name, also query with that
+	// This finds correctly saved events (after #1907 fix)
+	normalizedCommon := strings.ToLower(strings.TrimSpace(speciesName))
+	if scientificName, ok := ds.speciesMap[normalizedCommon]; ok && scientificName != speciesName {
+		sciEvents, err := ds.threshold.GetThresholdEvents(ctx, scientificName, limit)
+		if err == nil && len(sciEvents) > 0 {
+			v2Events = append(v2Events, sciEvents...)
+		}
+	}
+
+	// Deduplicate by ID (in case both queries return the same event)
+	seen := make(map[uint]bool)
+	uniqueEvents := make([]entities.ThresholdEvent, 0, len(v2Events))
 	for i := range v2Events {
-		e := &v2Events[i]
+		if !seen[v2Events[i].ID] {
+			seen[v2Events[i].ID] = true
+			uniqueEvents = append(uniqueEvents, v2Events[i])
+		}
+	}
+
+	// Sort by CreatedAt DESC (most recent first)
+	sort.Slice(uniqueEvents, func(i, j int) bool {
+		return uniqueEvents[i].CreatedAt.After(uniqueEvents[j].CreatedAt)
+	})
+
+	// Apply limit after merge
+	if limit > 0 && len(uniqueEvents) > limit {
+		uniqueEvents = uniqueEvents[:limit]
+	}
+
+	// Convert to datastore.ThresholdEvent
+	result := make([]datastore.ThresholdEvent, 0, len(uniqueEvents))
+	for i := range uniqueEvents {
+		e := &uniqueEvents[i]
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
 			SpeciesName:   eventSpeciesName(e),
