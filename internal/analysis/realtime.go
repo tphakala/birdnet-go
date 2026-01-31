@@ -1686,6 +1686,12 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	sourceRepo := repository.NewAudioSourceRepository(v2DB, cfg.useV2Prefix, isMySQL)
 	v2DetectionRepo := repository.NewDetectionRepository(v2DB, cfg.useV2Prefix, isMySQL)
 
+	// Create repositories for auxiliary data migration
+	weatherRepo := repository.NewWeatherRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, labelRepo, cfg.useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, labelRepo, cfg.useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, labelRepo, cfg.useV2Prefix, isMySQL)
+
 	// Create the legacy detection repository
 	legacyRepo := datastore.NewDetectionRepository(cfg.ds, time.Local)
 
@@ -1713,6 +1719,17 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		BatchSize:     relatedDataBatchSize,
 	})
 
+	// Create the auxiliary data migrator for weather, thresholds, image cache, notifications
+	auxiliaryMigrator := migration.NewAuxiliaryMigrator(&migration.AuxiliaryMigratorConfig{
+		LegacyStore:      cfg.ds,
+		LabelRepo:        labelRepo,
+		WeatherRepo:      weatherRepo,
+		ImageCacheRepo:   imageCacheRepo,
+		ThresholdRepo:    thresholdRepo,
+		NotificationRepo: notificationRepo,
+		Logger:           migrationLogger,
+	})
+
 	// Create the migration worker
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
 		Legacy:              legacyRepo,
@@ -1722,6 +1739,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		SourceRepo:          sourceRepo,
 		StateManager:        stateManager,
 		RelatedMigrator:     relatedMigrator,
+		AuxiliaryMigrator:   auxiliaryMigrator,
 		Logger:              migrationLogger,
 		BatchSize:           batchSize,
 		SleepBetweenBatches: sleepBetweenBatches,

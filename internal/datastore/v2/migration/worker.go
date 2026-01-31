@@ -78,14 +78,15 @@ type rateSample struct {
 
 // Worker performs background migration of legacy records to v2 schema.
 type Worker struct {
-	legacy          datastore.DetectionRepository
-	v2Detection     repository.DetectionRepository
-	labelRepo       repository.LabelRepository
-	modelRepo       repository.ModelRepository
-	sourceRepo      repository.AudioSourceRepository
-	stateManager    *datastoreV2.StateManager
-	relatedMigrator *RelatedDataMigrator
-	logger          logger.Logger
+	legacy            datastore.DetectionRepository
+	v2Detection       repository.DetectionRepository
+	labelRepo         repository.LabelRepository
+	modelRepo         repository.ModelRepository
+	sourceRepo        repository.AudioSourceRepository
+	stateManager      *datastoreV2.StateManager
+	relatedMigrator   *RelatedDataMigrator
+	auxiliaryMigrator *AuxiliaryMigrator
+	logger            logger.Logger
 	batchSize       int
 	sleepBetween    time.Duration
 	timezone        *time.Location
@@ -121,19 +122,20 @@ type Worker struct {
 
 // WorkerConfig configures the migration worker.
 type WorkerConfig struct {
-	Legacy            datastore.DetectionRepository
-	V2Detection       repository.DetectionRepository
-	LabelRepo         repository.LabelRepository
-	ModelRepo         repository.ModelRepository
-	SourceRepo        repository.AudioSourceRepository
-	StateManager      *datastoreV2.StateManager
-	RelatedMigrator   *RelatedDataMigrator // Optional: migrates reviews, comments, locks, predictions
-	Logger            logger.Logger
-	BatchSize         int
+	Legacy              datastore.DetectionRepository
+	V2Detection         repository.DetectionRepository
+	LabelRepo           repository.LabelRepository
+	ModelRepo           repository.ModelRepository
+	SourceRepo          repository.AudioSourceRepository
+	StateManager        *datastoreV2.StateManager
+	RelatedMigrator     *RelatedDataMigrator // Optional: migrates reviews, comments, locks, predictions
+	AuxiliaryMigrator   *AuxiliaryMigrator   // Optional: migrates weather, thresholds, image cache, notifications
+	Logger              logger.Logger
+	BatchSize           int
 	SleepBetweenBatches time.Duration // Optional: defaults to DefaultSleepBetweenBatches; use MySQLSleepBetweenBatches for MySQL
-	Timezone          *time.Location
-	MaxConsecErrors   int  // Optional: defaults to DefaultMaxConsecutiveErrors
-	UseBatchMode      bool // Use efficient batch inserts (recommended for MySQL)
+	Timezone            *time.Location
+	MaxConsecErrors     int  // Optional: defaults to DefaultMaxConsecutiveErrors
+	UseBatchMode        bool // Use efficient batch inserts (recommended for MySQL)
 }
 
 // NewWorker creates a new migration worker.
@@ -186,14 +188,15 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 	}
 
 	return &Worker{
-		legacy:          cfg.Legacy,
-		v2Detection:     cfg.V2Detection,
-		labelRepo:       cfg.LabelRepo,
-		modelRepo:       cfg.ModelRepo,
-		sourceRepo:      cfg.SourceRepo,
-		stateManager:    cfg.StateManager,
-		relatedMigrator: cfg.RelatedMigrator,
-		logger:          cfg.Logger,
+		legacy:            cfg.Legacy,
+		v2Detection:       cfg.V2Detection,
+		labelRepo:         cfg.LabelRepo,
+		modelRepo:         cfg.ModelRepo,
+		sourceRepo:        cfg.SourceRepo,
+		stateManager:      cfg.StateManager,
+		relatedMigrator:   cfg.RelatedMigrator,
+		auxiliaryMigrator: cfg.AuxiliaryMigrator,
+		logger:            cfg.Logger,
 		batchSize:       batchSize,
 		sleepBetween:    sleepBetween,
 		timezone:        tz,
@@ -739,6 +742,44 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 				w.logger.Warn("failed to persist related data error", logger.Error(setErr))
 			}
 			// Continue to validation - related data is non-fatal but now tracked
+		}
+	}
+
+	// Migrate auxiliary data (weather, thresholds, image cache, notifications)
+	if w.auxiliaryMigrator != nil {
+		w.logger.Info("starting auxiliary data migration")
+
+		// Create context that cancels on shutdown OR when caller context is cancelled
+		auxCtx, auxCancel := context.WithCancel(ctx)
+		auxDone := make(chan struct{})
+		go func() {
+			select {
+			case <-w.stopCh:
+				auxCancel()
+			case <-auxCtx.Done():
+				// Parent context cancelled
+			case <-auxDone:
+			}
+		}()
+
+		auxResult, auxErr := w.auxiliaryMigrator.MigrateAll(auxCtx)
+		close(auxDone)
+		auxCancel() // Cleanup context resources
+
+		if auxErr != nil {
+			w.logger.Error("auxiliary data migration failed", logger.Error(auxErr))
+		} else if auxResult != nil {
+			w.logger.Info("auxiliary data migration completed",
+				logger.Int("image_caches_migrated", auxResult.ImageCaches.Migrated),
+				logger.Int("thresholds_migrated", auxResult.Thresholds.Migrated),
+				logger.Int("weather_daily_migrated", auxResult.Weather.DailyEventsMigrated),
+				logger.Int("weather_hourly_migrated", auxResult.Weather.HourlyWeatherMigrated),
+				logger.Int("notifications_migrated", auxResult.Notifications.Migrated))
+
+			if auxResult.HasErrors() {
+				w.logger.Warn("auxiliary data migration completed with some errors",
+					logger.String("summary", auxResult.Summary()))
+			}
 		}
 	}
 
