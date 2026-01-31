@@ -930,7 +930,11 @@
       },
       "backup": {
         "download": "Pobierz kopię zapasową",
-        "downloading": "Tworzenie kopii zapasowej...",
+        "downloading": "Pobieranie...",
+        "starting": "Rozpoczynanie kopii zapasowej...",
+        "creating": "Tworzenie kopii zapasowej...",
+        "cancel": "Anuluj",
+        "retry": "Ponów próbę",
         "mysqlNote": "Kopia zapasowa MySQL wymaga zewnętrznych narzędzi (mysqldump)"
       },
       "notInitialized": "Nie zainicjalizowano"

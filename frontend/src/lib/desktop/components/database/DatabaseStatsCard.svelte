@@ -1,7 +1,7 @@
 <!--
   DatabaseStatsCard Component
 
-  Displays database statistics with backup download capability.
+  Displays database statistics with async backup capability and progress tracking.
   Shows type, location, size, detections count, and connection status.
 
   Props:
@@ -14,10 +14,11 @@
   @component
 -->
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { getCsrfToken } from '$lib/utils/api';
   import { formatBytes } from '$lib/utils/formatters';
-  import { Database, Download, Loader2 } from '@lucide/svelte';
+  import { Database, Download, X } from '@lucide/svelte';
 
   interface DatabaseStats {
     type: string;
@@ -25,6 +26,19 @@
     size_bytes: number;
     total_detections: number;
     connected: boolean;
+  }
+
+  interface BackupJob {
+    job_id: string;
+    db_type: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'failed';
+    progress: number;
+    bytes_written: number;
+    total_bytes: number;
+    started_at: string;
+    completed_at?: string;
+    error?: string;
+    download_url?: string;
   }
 
   interface Props {
@@ -38,20 +52,77 @@
 
   let { title, dbType, stats, isLoading, error, migrationActive = false }: Props = $props();
 
-  let isDownloading = $state(false);
-  let downloadError = $state<string | null>(null);
+  // Backup state
+  let backupJobId = $state<string | null>(null);
+  let backupStatus = $state<
+    'idle' | 'pending' | 'in_progress' | 'completed' | 'downloading' | 'failed'
+  >('idle');
+  let backupProgress = $state(0);
+  let backupBytesWritten = $state(0);
+  let backupTotalBytes = $state(0);
+  let backupError = $state<string | null>(null);
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Polling interval in milliseconds
+  const POLL_INTERVAL_MS = 1500;
 
   // Check if backup is available (SQLite only)
   let canBackup = $derived(stats?.type === 'sqlite' && stats?.connected);
 
-  async function handleBackupDownload() {
-    if (!canBackup) return;
+  // Check if backup is in progress (includes downloading state)
+  let isBackupActive = $derived(
+    backupStatus === 'pending' || backupStatus === 'in_progress' || backupStatus === 'downloading'
+  );
 
-    isDownloading = true;
-    downloadError = null;
+  // Check for active backup jobs on mount
+  onMount(async () => {
+    await checkForActiveJob();
+  });
+
+  // Cleanup polling on destroy
+  onDestroy(() => {
+    stopPolling();
+  });
+
+  // Check for existing active backup job
+  async function checkForActiveJob() {
+    try {
+      const response = await fetch(`/api/v2/system/database/backup/jobs?type=${dbType}`, {
+        headers: {
+          'X-CSRF-Token': getCsrfToken() ?? '',
+        },
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const activeJob = data.jobs?.find(
+        (job: BackupJob) => job.status === 'pending' || job.status === 'in_progress'
+      );
+
+      if (activeJob) {
+        // Resume tracking this job
+        backupJobId = activeJob.job_id;
+        updateFromJob(activeJob);
+        startPolling();
+      }
+    } catch {
+      // Ignore errors - just means no active job
+    }
+  }
+
+  // Start a new backup job
+  async function startBackup() {
+    if (!canBackup || isBackupActive) return;
+
+    backupError = null;
+    backupStatus = 'pending';
+    backupProgress = 0;
+    backupBytesWritten = 0;
+    backupTotalBytes = stats?.size_bytes ?? 0;
 
     try {
-      const response = await fetch(`/api/v2/system/database/backup?type=${dbType}`, {
+      const response = await fetch(`/api/v2/system/database/backup/jobs?type=${dbType}`, {
         method: 'POST',
         headers: {
           'X-CSRF-Token': getCsrfToken() ?? '',
@@ -60,7 +131,118 @@
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Backup failed');
+
+        // Check if backup already in progress
+        if (response.status === 409 && errorData.existing_job_id) {
+          backupJobId = errorData.existing_job_id;
+          startPolling();
+          return;
+        }
+
+        throw new Error(errorData.message || errorData.error || 'Failed to start backup');
+      }
+
+      const data = await response.json();
+      backupJobId = data.job_id;
+      startPolling();
+    } catch (e) {
+      backupStatus = 'failed';
+      backupError = e instanceof Error ? e.message : 'Failed to start backup';
+    }
+  }
+
+  // Start polling for job status
+  function startPolling() {
+    if (pollInterval) return;
+
+    pollInterval = setInterval(pollJobStatus, POLL_INTERVAL_MS);
+    // Also poll immediately
+    pollJobStatus();
+  }
+
+  // Stop polling
+  function stopPolling() {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  // Poll for job status
+  async function pollJobStatus() {
+    if (!backupJobId) {
+      stopPolling();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v2/system/database/backup/jobs/${backupJobId}`, {
+        headers: {
+          'X-CSRF-Token': getCsrfToken() ?? '',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 410) {
+          // Job expired or not found
+          stopPolling();
+          resetBackupState();
+          return;
+        }
+        throw new Error('Failed to get backup status');
+      }
+
+      const job: BackupJob = await response.json();
+      updateFromJob(job);
+
+      // Handle completed/failed states
+      if (job.status === 'completed' && backupStatus !== 'downloading') {
+        stopPolling();
+        backupStatus = 'downloading';
+        await triggerDownload();
+      } else if (job.status === 'failed') {
+        stopPolling();
+        backupError = job.error || 'Backup failed';
+      }
+    } catch {
+      // Don't stop polling on transient errors - silently retry
+    }
+  }
+
+  // Update state from job data
+  function updateFromJob(job: BackupJob) {
+    backupStatus = job.status;
+    backupProgress = job.progress;
+    backupBytesWritten = job.bytes_written;
+    backupTotalBytes = job.total_bytes;
+    if (job.error) {
+      backupError = job.error;
+    }
+  }
+
+  // Trigger the file download
+  async function triggerDownload() {
+    if (!backupJobId) return;
+
+    try {
+      const response = await fetch(`/api/v2/system/database/backup/jobs/${backupJobId}/download`, {
+        headers: {
+          'X-CSRF-Token': getCsrfToken() ?? '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download backup');
+      }
+
+      // Get filename from Content-Disposition header or generate one
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `birdnet-${dbType}-backup-${Date.now()}.db`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match) {
+          filename = match[1];
+        }
       }
 
       // Trigger browser download
@@ -68,14 +250,52 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `birdnet-${dbType}-backup-${Date.now()}.db`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      // Reset state after successful download
+      resetBackupState();
     } catch (e) {
-      downloadError = e instanceof Error ? e.message : 'Backup failed';
-    } finally {
-      isDownloading = false;
+      backupError = e instanceof Error ? e.message : 'Failed to download backup';
+      backupStatus = 'failed';
     }
+  }
+
+  // Cancel backup job
+  async function cancelBackup() {
+    if (!backupJobId) return;
+
+    stopPolling();
+
+    try {
+      await fetch(`/api/v2/system/database/backup/jobs/${backupJobId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-Token': getCsrfToken() ?? '',
+        },
+      });
+    } catch {
+      // Ignore cancel errors
+    }
+
+    resetBackupState();
+  }
+
+  // Reset backup state
+  function resetBackupState() {
+    backupJobId = null;
+    backupStatus = 'idle';
+    backupProgress = 0;
+    backupBytesWritten = 0;
+    backupTotalBytes = 0;
+    backupError = null;
+  }
+
+  // Retry backup after failure
+  function retryBackup() {
+    resetBackupState();
+    startBackup();
   }
 </script>
 
@@ -160,13 +380,13 @@
 
   <!-- Footer -->
   <div class="px-6 py-4 border-t border-[var(--color-base-200)]">
-    {#if downloadError}
+    {#if backupError}
       <div
         class="mb-3 p-2 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]"
         role="alert"
         aria-live="assertive"
       >
-        {downloadError}
+        {backupError}
       </div>
     {/if}
 
@@ -174,7 +394,61 @@
       <p class="text-xs text-[var(--color-base-content)]/60 text-center">
         {t('system.database.backup.mysqlNote')}
       </p>
+    {:else if isBackupActive}
+      <!-- Backup in progress -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-[var(--color-base-content)]">
+            {#if backupStatus === 'pending'}
+              {t('system.database.backup.starting')}
+            {:else if backupStatus === 'downloading'}
+              {t('system.database.backup.downloading')}
+            {:else}
+              {t('system.database.backup.creating')}
+            {/if}
+          </span>
+          {#if backupStatus !== 'downloading'}
+            <button
+              class="p-1 text-[var(--color-base-content)]/60 hover:text-[var(--color-error)] transition-colors"
+              onclick={cancelBackup}
+              title={t('system.database.backup.cancel')}
+            >
+              <X class="size-4" />
+            </button>
+          {/if}
+        </div>
+
+        <!-- Progress bar -->
+        <div class="w-full bg-[var(--color-base-200)] rounded-full h-2 overflow-hidden">
+          <div
+            class="bg-[var(--color-primary)] h-2 rounded-full transition-all duration-300"
+            style:width="{backupStatus === 'downloading' ? 100 : backupProgress}%"
+          ></div>
+        </div>
+
+        <!-- Progress text -->
+        {#if backupStatus !== 'downloading'}
+          <div class="flex justify-between text-xs text-[var(--color-base-content)]/70">
+            <span>{backupProgress}%</span>
+            <span>{formatBytes(backupBytesWritten)} / {formatBytes(backupTotalBytes)}</span>
+          </div>
+        {/if}
+      </div>
+    {:else if backupStatus === 'failed'}
+      <!-- Backup failed - show retry button -->
+      <button
+        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
+               text-sm font-medium rounded-lg transition-colors
+               border border-[var(--color-error)]
+               text-[var(--color-error)]
+               hover:bg-[var(--color-error)]/10"
+        onclick={retryBackup}
+      >
+        <Download class="size-4" />
+        {t('system.database.backup.retry')}
+      </button>
     {:else}
+      <!-- Idle state - show download button -->
       <button
         class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
                text-sm font-medium rounded-lg transition-colors
@@ -182,16 +456,11 @@
                text-[var(--color-base-content)]
                hover:bg-[var(--color-base-200)]
                disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick={handleBackupDownload}
-        disabled={isLoading || !canBackup || isDownloading || migrationActive}
+        onclick={startBackup}
+        disabled={isLoading || !canBackup || migrationActive}
       >
-        {#if isDownloading}
-          <Loader2 class="size-4 animate-spin" />
-          {t('system.database.backup.downloading')}
-        {:else}
-          <Download class="size-4" />
-          {t('system.database.backup.download')}
-        {/if}
+        <Download class="size-4" />
+        {t('system.database.backup.download')}
       </button>
     {/if}
   </div>

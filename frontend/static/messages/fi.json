@@ -930,7 +930,11 @@
       },
       "backup": {
         "download": "Lataa varmuuskopio",
-        "downloading": "Luodaan varmuuskopiota...",
+        "downloading": "Ladataan...",
+        "starting": "Aloitetaan varmuuskopiointia...",
+        "creating": "Luodaan varmuuskopiota...",
+        "cancel": "Peruuta",
+        "retry": "Yritä uudelleen",
         "mysqlNote": "MySQL-varmuuskopiointi vaatii ulkoisia työkaluja (mysqldump)"
       },
       "notInitialized": "Ei alustettu"

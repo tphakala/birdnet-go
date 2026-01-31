@@ -793,7 +793,11 @@
       },
       "backup": {
         "download": "Download Backup",
-        "downloading": "Creating Backup...",
+        "downloading": "Downloading...",
+        "starting": "Starting backup...",
+        "creating": "Creating backup...",
+        "cancel": "Cancel",
+        "retry": "Retry Backup",
         "mysqlNote": "MySQL backup requires external tools (mysqldump)"
       },
       "notInitialized": "Not initialized",

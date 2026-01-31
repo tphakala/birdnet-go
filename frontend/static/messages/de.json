@@ -930,7 +930,11 @@
       },
       "backup": {
         "download": "Backup herunterladen",
-        "downloading": "Backup wird erstellt...",
+        "downloading": "Wird heruntergeladen...",
+        "starting": "Backup wird gestartet...",
+        "creating": "Backup wird erstellt...",
+        "cancel": "Abbrechen",
+        "retry": "Erneut versuchen",
         "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)"
       },
       "notInitialized": "Nicht initialisiert"

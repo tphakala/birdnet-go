@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"golang.org/x/text/cases"
+	"gorm.io/gorm"
 	"golang.org/x/text/language"
 )
 
@@ -311,6 +313,9 @@ func (c *Controller) initSystemRoutes() {
 
 	// Initialize migration routes
 	c.initMigrationRoutes()
+
+	// Initialize async backup routes
+	c.initBackupRoutes()
 
 	// Initialize legacy cleanup routes
 	c.initLegacyCleanupRoutes()
@@ -1534,13 +1539,15 @@ const (
 
 // DownloadDatabaseBackup handles POST /api/v2/system/database/backup
 // Creates a safe backup using SQLite's VACUUM INTO command.
+// Uses chunked transfer encoding to keep connection alive during long VACUUM operations.
 func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
-	ip, path := ctx.RealIP(), ctx.Request().URL.Path
+	backupStart := time.Now()
+	ip, reqPath := ctx.RealIP(), ctx.Request().URL.Path
 	dbType := ctx.QueryParam("type")
 
 	c.logInfoIfEnabled("Database backup requested",
 		logger.String("db_type", dbType),
-		logger.String("path", path), logger.String("ip", ip))
+		logger.String("path", reqPath), logger.String("ip", ip))
 
 	// Validate dbType parameter
 	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
@@ -1550,6 +1557,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 
 	// Get database path based on type
 	var dbPath string
+	var gormDB *gorm.DB
 
 	if dbType == dbTypeLegacy {
 		// Check if it's SQLite
@@ -1565,6 +1573,12 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 			return c.HandleError(ctx, fmt.Errorf("datastore not available"),
 				"Database not configured", http.StatusServiceUnavailable)
 		}
+		sqliteStore, ok := c.DS.(*datastore.SQLiteStore)
+		if !ok {
+			return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
+				"Cannot perform backup on this datastore type", http.StatusInternalServerError)
+		}
+		gormDB = sqliteStore.DB
 	} else {
 		// V2 database
 		if c.V2Manager == nil {
@@ -1577,6 +1591,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 				http.StatusBadRequest)
 		}
 		dbPath = c.V2Manager.Path()
+		gormDB = c.V2Manager.DB()
 	}
 
 	// Get source database size for disk space check
@@ -1585,6 +1600,11 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get database info", http.StatusInternalServerError)
 	}
 	dbSize := fileInfo.Size()
+
+	c.logInfoIfEnabled("Database backup: source database info",
+		logger.String("db_type", dbType),
+		logger.String("db_path", dbPath),
+		logger.String("db_size", formatBytesUint64(uint64(dbSize))))
 
 	// Check disk space on temp directory where VACUUM INTO will write
 	tempDir := os.TempDir()
@@ -1602,49 +1622,111 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 			http.StatusInsufficientStorage) // HTTP 507
 	}
 
+	c.logInfoIfEnabled("Database backup: disk space check passed",
+		logger.String("temp_dir", tempDir),
+		logger.String("free_space", formatBytesUint64(usage.Free)),
+		logger.String("required_space", formatBytesUint64(requiredSpace)))
+
 	// Create temp file path for VACUUM INTO
 	timestamp := time.Now().Format("20060102-150405")
 	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp))
+	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
+
+	// Set response headers BEFORE starting VACUUM to establish the connection.
+	// This prevents connection timeout during the long VACUUM operation.
+	// We use chunked transfer encoding since we don't know the final size yet.
+	resp := ctx.Response()
+	resp.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	resp.Header().Set("Content-Type", "application/octet-stream")
+	resp.Header().Set("Transfer-Encoding", "chunked")
+	resp.Header().Set("X-Content-Type-Options", "nosniff")
+	resp.WriteHeader(http.StatusOK)
+
+	// Flush headers to client immediately to establish connection
+	if flusher, ok := resp.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	c.logInfoIfEnabled("Database backup: headers sent, starting VACUUM INTO",
+		logger.String("db_type", dbType),
+		logger.String("temp_path", tempPath))
+
+	// Execute VACUUM INTO for safe, consistent backup
+	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
+	vacuumStart := time.Now()
+
+	vacuumErr := gormDB.Exec(vacuumSQL).Error
+	vacuumDuration := time.Since(vacuumStart)
+
+	if vacuumErr != nil {
+		c.logWarnIfEnabled("Database backup: VACUUM INTO failed",
+			logger.String("db_type", dbType),
+			logger.Duration("duration", vacuumDuration),
+			logger.Error(vacuumErr))
+		// Headers already sent, can't return error response - just log and close
+		return vacuumErr
+	}
 
 	// Ensure cleanup of temp file after response is sent
 	defer func() {
 		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
 			c.logWarnIfEnabled("Failed to cleanup backup temp file",
 				logger.String("path", tempPath), logger.Error(err))
+		} else {
+			c.logInfoIfEnabled("Database backup: temp file cleaned up",
+				logger.String("path", tempPath))
 		}
 	}()
 
-	// Execute VACUUM INTO for safe, consistent backup
-	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
-	if dbType == dbTypeLegacy {
-		// Use the legacy datastore's DB
-		sqliteStore, ok := c.DS.(*datastore.SQLiteStore)
-		if !ok {
-			return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
-				"Cannot perform backup on this datastore type", http.StatusInternalServerError)
-		}
-		if err := sqliteStore.DB.Exec(vacuumSQL).Error; err != nil {
-			return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
-		}
-	} else {
-		// Use V2Manager's DB
-		if err := c.V2Manager.DB().Exec(vacuumSQL).Error; err != nil {
-			return c.HandleError(ctx, err, "Failed to create backup", http.StatusInternalServerError)
-		}
+	// Get backup file size
+	backupInfo, statErr := os.Stat(tempPath)
+	backupSize := "unknown"
+	var backupSizeBytes int64
+	if statErr == nil {
+		backupSizeBytes = backupInfo.Size()
+		backupSize = formatBytesUint64(uint64(backupSizeBytes))
 	}
 
-	// Set response headers and stream file
-	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
-	ctx.Response().Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename=%q", filename))
-	ctx.Response().Header().Set("Content-Type", "application/octet-stream")
-
-	c.logInfoIfEnabled("Database backup created successfully",
+	c.logInfoIfEnabled("Database backup: VACUUM INTO completed, streaming file",
 		logger.String("db_type", dbType),
-		logger.String("backup_file", filename),
-		logger.String("path", path), logger.String("ip", ip))
+		logger.Duration("vacuum_duration", vacuumDuration),
+		logger.String("backup_size", backupSize))
 
-	return ctx.File(tempPath)
+	// Open and stream the backup file
+	//#nosec G304 -- tempPath is constructed from trusted sources (os.TempDir + controlled filename)
+	backupFile, err := os.Open(tempPath)
+	if err != nil {
+		c.logWarnIfEnabled("Database backup: failed to open backup file",
+			logger.String("path", tempPath),
+			logger.Error(err))
+		return err
+	}
+	defer backupFile.Close()
+
+	// Stream the file to the response
+	written, copyErr := io.Copy(resp.Writer, backupFile)
+
+	totalDuration := time.Since(backupStart)
+	if copyErr != nil {
+		c.logWarnIfEnabled("Database backup: file transfer failed",
+			logger.String("db_type", dbType),
+			logger.String("filename", filename),
+			logger.Int64("bytes_written", written),
+			logger.Duration("total_duration", totalDuration),
+			logger.Error(copyErr))
+		return copyErr
+	}
+
+	c.logInfoIfEnabled("Database backup: completed successfully",
+		logger.String("db_type", dbType),
+		logger.String("filename", filename),
+		logger.String("backup_size", backupSize),
+		logger.Int64("bytes_sent", written),
+		logger.Duration("vacuum_duration", vacuumDuration),
+		logger.Duration("total_duration", totalDuration),
+		logger.String("ip", ip))
+
+	return nil
 }
 
 // formatBytesUint64 formats bytes into human-readable format (for uint64 values).

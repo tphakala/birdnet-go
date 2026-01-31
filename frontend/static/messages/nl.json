@@ -930,7 +930,11 @@
       },
       "backup": {
         "download": "Back-up downloaden",
-        "downloading": "Back-up maken...",
+        "downloading": "Downloaden...",
+        "starting": "Back-up starten...",
+        "creating": "Back-up maken...",
+        "cancel": "Annuleren",
+        "retry": "Opnieuw proberen",
         "mysqlNote": "MySQL-back-up vereist externe tools (mysqldump)"
       },
       "notInitialized": "Niet geïnitialiseerd"

@@ -930,7 +930,11 @@
       },
       "backup": {
         "download": "Descargar copia de seguridad",
-        "downloading": "Creando copia de seguridad...",
+        "downloading": "Descargando...",
+        "starting": "Iniciando copia de seguridad...",
+        "creating": "Creando copia de seguridad...",
+        "cancel": "Cancelar",
+        "retry": "Reintentar",
         "mysqlNote": "La copia de seguridad de MySQL requiere herramientas externas (mysqldump)"
       },
       "notInitialized": "No inicializado"

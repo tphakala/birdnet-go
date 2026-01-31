@@ -930,7 +930,11 @@
       },
       "backup": {
         "download": "Télécharger la sauvegarde",
-        "downloading": "Création de la sauvegarde...",
+        "downloading": "Téléchargement...",
+        "starting": "Démarrage de la sauvegarde...",
+        "creating": "Création de la sauvegarde...",
+        "cancel": "Annuler",
+        "retry": "Réessayer",
         "mysqlNote": "La sauvegarde MySQL nécessite des outils externes (mysqldump)"
       },
       "notInitialized": "Non initialisé"
