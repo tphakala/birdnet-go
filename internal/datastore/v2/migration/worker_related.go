@@ -460,6 +460,22 @@ func collectDetectionIDs(batch []datastore.Results) []uint {
 	return ids
 }
 
+// minPredictionConfidence is the minimum confidence threshold for migrating predictions.
+// Predictions below this threshold are skipped to avoid creating orphaned labels.
+const minPredictionConfidence = 0.1
+
+// filterBatchByConfidence returns only results that meet the minimum confidence threshold.
+// This should be called BEFORE resolveSpeciesLabels to avoid creating orphaned labels.
+func filterBatchByConfidence(batch []datastore.Results) []datastore.Results {
+	filtered := make([]datastore.Results, 0, len(batch))
+	for i := range batch {
+		if batch[i].Confidence >= minPredictionConfidence {
+			filtered = append(filtered, batch[i])
+		}
+	}
+	return filtered
+}
+
 // resolveSpeciesLabels ensures all species in the batch have label IDs in the cache.
 // It parses raw BirdNET species strings to extract the scientific name before creating labels.
 // Uses batch resolution to minimize database round-trips (N species -> 2-3 queries instead of N).
@@ -574,8 +590,12 @@ func (m *RelatedDataMigrator) migratePredictions(ctx context.Context) (migrated,
 			existingIDSet[id] = struct{}{}
 		}
 
-		// Resolve species labels for this batch
-		m.resolveSpeciesLabels(ctx, batch, speciesLabelCache)
+		// Filter batch to only include predictions that meet minimum confidence threshold
+		// This MUST happen before label resolution to avoid creating orphaned labels
+		filteredBatch := filterBatchByConfidence(batch)
+
+		// Resolve species labels for filtered batch only
+		m.resolveSpeciesLabels(ctx, filteredBatch, speciesLabelCache)
 
 		// Convert batch to v2 predictions
 		v2Predictions, batchSkipped, newLastNoteID, newLastResultID := m.convertResultsToPredictions(
