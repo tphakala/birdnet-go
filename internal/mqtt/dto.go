@@ -48,7 +48,7 @@ type MQTTEventDTO struct {
 	// ===========================================================================
 	SourceType    string `json:"sourceType,omitempty"`    // "rtsp", "alsa", "pulseaudio"
 	SourceName    string `json:"sourceName,omitempty"`    // Display name
-	ModelName     string `json:"modelName,omitempty"`     // "BirdNET-Analyzer"
+	ModelName     string `json:"modelName,omitempty"`     // "BirdNET"
 	ModelVersion  string `json:"modelVersion,omitempty"`  // "2.4"
 	IsCustomModel bool   `json:"isCustomModel,omitempty"` // Custom model flag
 	Timezone      string `json:"timezone,omitempty"`      // e.g., "Europe/Helsinki"
