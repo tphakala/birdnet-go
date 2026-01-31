@@ -84,11 +84,11 @@ func SetupIntegrationTest(t *testing.T) *TestContext {
 	// Set up V2 database
 	ctx.setupV2DB(t, tmpDir)
 
-	// Create migration worker
-	ctx.createWorker(t)
-
-	// Create auxiliary migrator
+	// Create auxiliary migrator first (worker depends on it)
 	ctx.createAuxiliaryMigrator(t)
+
+	// Create migration worker (uses auxiliary migrator)
+	ctx.createWorker(t)
 
 	// Register cleanup
 	t.Cleanup(func() {
@@ -217,17 +217,18 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 
 	// Create worker with test configuration
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
-		Legacy:          ctx.legacyDetectionRepo,
-		V2Detection:     ctx.DetectionRepo,
-		LabelRepo:       ctx.LabelRepo,
-		ModelRepo:       ctx.ModelRepo,
-		SourceRepo:      ctx.SourceRepo,
-		StateManager:    ctx.StateManager,
-		RelatedMigrator: relatedMigrator,
-		Logger:          ctx.Logger,
-		BatchSize:       testMigrationBatchSize,
-		Timezone:        time.UTC,
-		MaxConsecErrors: 5,
+		Legacy:            ctx.legacyDetectionRepo,
+		V2Detection:       ctx.DetectionRepo,
+		LabelRepo:         ctx.LabelRepo,
+		ModelRepo:         ctx.ModelRepo,
+		SourceRepo:        ctx.SourceRepo,
+		StateManager:      ctx.StateManager,
+		RelatedMigrator:   relatedMigrator,
+		AuxiliaryMigrator: ctx.AuxiliaryMigrator,
+		Logger:            ctx.Logger,
+		BatchSize:         testMigrationBatchSize,
+		Timezone:          time.UTC,
+		MaxConsecErrors:   5,
 	})
 	require.NoError(t, err, "failed to create migration worker")
 
