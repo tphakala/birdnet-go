@@ -804,3 +804,71 @@ func TestMigration_TimezoneHandling(t *testing.T) {
 	assert.Equal(t, 23, detTime.Hour(), "hour should be preserved")
 	assert.Equal(t, 30, detTime.Minute(), "minute should be preserved")
 }
+
+// ============================================================================
+// Test: Auxiliary Data Migrated Through Worker
+// ============================================================================
+
+func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.SetupIntegrationTest(t)
+
+	// Seed minimal detections (needed for migration to complete)
+	notes := testutil.GenerateDetections(5)
+	err := ctx.Seeder.SeedDetections(notes)
+	require.NoError(t, err, "failed to seed detections")
+
+	// Seed auxiliary data
+	threshold := testutil.NewDynamicThresholdBuilder().
+		WithID(1).
+		WithSpeciesName("Parus major").
+		WithScientificName("Parus major").
+		Build()
+	err = ctx.Seeder.SeedDynamicThresholds([]datastore.DynamicThreshold{threshold})
+	require.NoError(t, err, "failed to seed threshold")
+
+	imageCache := testutil.NewImageCacheBuilder().
+		WithID(1).
+		WithScientificName("Parus major").
+		Build()
+	err = ctx.Seeder.SeedImageCaches([]datastore.ImageCache{imageCache})
+	require.NoError(t, err, "failed to seed image cache")
+
+	dailyEvent := testutil.NewDailyEventsBuilder().
+		WithID(1).
+		WithDate(time.Now().Format("2006-01-02")).
+		Build()
+	err = ctx.Seeder.SeedDailyEvents([]datastore.DailyEvents{dailyEvent})
+	require.NoError(t, err, "failed to seed daily event")
+
+	// Run migration WITHOUT calling AuxiliaryMigrator directly
+	// This tests that auxiliary migration happens through the worker
+	c := context.Background()
+	ctx.InitMigrationState(t, len(notes))
+	ctx.TransitionToDualWrite(t)
+
+	// Start worker (auxiliary migration should happen in transitionToValidation)
+	err = ctx.Worker.Start(c)
+	require.NoError(t, err, "worker start failed")
+
+	// Wait for completion
+	ctx.WaitForCompletion(t, 60*time.Second)
+
+	// Verify detections migrated
+	v2Count := ctx.GetV2DetectionCount(t)
+	assert.Equal(t, int64(5), v2Count, "should have 5 detections in V2")
+
+	// Verify auxiliary data was migrated through the worker
+	var thresholdCount int64
+	ctx.V2Manager.DB().Model(&entities.DynamicThreshold{}).Count(&thresholdCount)
+	assert.Equal(t, int64(1), thresholdCount, "dynamic threshold should be migrated through worker")
+
+	var imageCacheCount int64
+	ctx.V2Manager.DB().Model(&entities.ImageCache{}).Count(&imageCacheCount)
+	assert.Equal(t, int64(1), imageCacheCount, "image cache should be migrated through worker")
+
+	var dailyEventCount int64
+	ctx.V2Manager.DB().Model(&entities.DailyEvents{}).Count(&dailyEventCount)
+	assert.Equal(t, int64(1), dailyEventCount, "daily event should be migrated through worker")
+}
