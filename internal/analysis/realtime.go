@@ -1995,6 +1995,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		Notification: notificationRepo,
 		Logger:       log,
 		Timezone:     time.Local,
+		Labels:       settings.BirdNET.Labels, // For GetThresholdEvents workaround (#1907)
 	})
 	if err != nil {
 		_ = v2Manager.Close()

@@ -190,6 +190,12 @@ type ThresholdEvent struct {
 	ChangeReason  string    `gorm:"not null;size:50"`        // "high_confidence", "expiry", "manual_reset"
 	Confidence    float64   `gorm:"default:0"`               // Detection confidence that triggered change (if applicable)
 	CreatedAt     time.Time `gorm:"index;not null"`          // When the event occurred
+
+	// ScientificName is a virtual field (not persisted in legacy DB) used by v2only
+	// datastore to correctly resolve the Label foreign key. The processor populates
+	// this from DynamicThreshold.ScientificName when recording events.
+	// See issue #1907 for context.
+	ScientificName string `gorm:"-"`
 }
 
 // NotificationHistory tracks sent notifications to prevent duplicate notifications after restart
