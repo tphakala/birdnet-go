@@ -56,7 +56,8 @@
 
   // Computed: Is migration active (should poll)
   let isActive = $derived(
-    migrationStatus.data?.state === 'dual_write' ||
+    migrationStatus.data?.state === 'initializing' ||
+      migrationStatus.data?.state === 'dual_write' ||
       migrationStatus.data?.state === 'migrating' ||
       migrationStatus.data?.state === 'validating' ||
       migrationStatus.data?.state === 'cutover'
