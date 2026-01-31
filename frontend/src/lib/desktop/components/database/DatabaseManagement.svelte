@@ -59,6 +59,7 @@
     migrationStatus.data?.state === 'initializing' ||
       migrationStatus.data?.state === 'dual_write' ||
       migrationStatus.data?.state === 'migrating' ||
+      migrationStatus.data?.state === 'migrating_predictions' ||
       migrationStatus.data?.state === 'validating' ||
       migrationStatus.data?.state === 'cutover'
   );
