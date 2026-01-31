@@ -444,6 +444,18 @@ func (m *mockLabelRepository) GetRawLabelForLabel(_ context.Context, _, _ uint) 
 func (m *mockLabelRepository) GetRawLabelsForLabels(_ context.Context, _ []ModelLabelPair) (map[string]string, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []string) ([]*entities.Label, error) {
+	var result []*entities.Label
+	for _, name := range names {
+		if label, ok := m.labels[name]; ok {
+			result = append(result, label)
+		}
+	}
+	return result, nil
+}
+func (m *mockLabelRepository) BatchGetOrCreate(_ context.Context, _ []string, _ entities.LabelType) (map[string]*entities.Label, error) {
+	return nil, nil //nolint:nilnil // mock implementation
+}
 
 // mockAudioSourceRepository is a simple mock for testing ResolveLocationsToSourceIDs
 type mockAudioSourceRepository struct {

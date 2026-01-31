@@ -212,14 +212,19 @@ func AssertHourlyWeatherMatches(t *testing.T, legacy *datastore.HourlyWeather, v
 }
 
 // AssertDynamicThresholdMatches verifies that a V2 DynamicThreshold matches a legacy DynamicThreshold.
+// The v2 DynamicThreshold should have its Label preloaded for species name comparison.
 func AssertDynamicThresholdMatches(t *testing.T, legacy *datastore.DynamicThreshold, v2 *entities.DynamicThreshold) {
 	t.Helper()
 
 	require.NotNil(t, legacy, "legacy threshold should not be nil")
 	require.NotNil(t, v2, "v2 threshold should not be nil")
 
-	assert.Equal(t, legacy.SpeciesName, v2.SpeciesName, "species_name should match")
-	assert.Equal(t, legacy.ScientificName, v2.ScientificName, "scientific_name should match")
+	// Compare scientific name via label relationship
+	if v2.Label != nil && v2.Label.ScientificName != nil {
+		assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific_name should match (via label)")
+	} else {
+		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
+	}
 	assert.Equal(t, legacy.Level, v2.Level, "level should match")
 	assert.InDelta(t, legacy.CurrentValue, v2.CurrentValue, floatDelta, "current_value should match")
 	assert.InDelta(t, legacy.BaseThreshold, v2.BaseThreshold, floatDelta, "base_threshold should match")
@@ -234,13 +239,17 @@ func AssertDynamicThresholdMatches(t *testing.T, legacy *datastore.DynamicThresh
 }
 
 // AssertThresholdEventMatches verifies that a V2 ThresholdEvent matches a legacy ThresholdEvent.
+// Note: The legacy ThresholdEvent.SpeciesName is the common name (lowercase), while the V2 event
+// is linked to a label containing the scientific name. These are different by design - the species
+// relationship is verified implicitly through the parent DynamicThreshold migration.
 func AssertThresholdEventMatches(t *testing.T, legacy *datastore.ThresholdEvent, v2 *entities.ThresholdEvent) {
 	t.Helper()
 
 	require.NotNil(t, legacy, "legacy threshold event should not be nil")
 	require.NotNil(t, v2, "v2 threshold event should not be nil")
 
-	assert.Equal(t, legacy.SpeciesName, v2.SpeciesName, "species_name should match")
+	// Verify label relationship exists (species matching is verified at parent threshold level)
+	assert.NotZero(t, v2.LabelID, "label_id should be set")
 	assert.Equal(t, legacy.PreviousLevel, v2.PreviousLevel, "previous_level should match")
 	assert.Equal(t, legacy.NewLevel, v2.NewLevel, "new_level should match")
 	assert.InDelta(t, legacy.PreviousValue, v2.PreviousValue, floatDelta, "previous_value should match")
@@ -251,6 +260,7 @@ func AssertThresholdEventMatches(t *testing.T, legacy *datastore.ThresholdEvent,
 }
 
 // AssertImageCacheMatches verifies that a V2 ImageCache matches a legacy ImageCache.
+// The v2 ImageCache should have its Label preloaded for scientific name comparison.
 func AssertImageCacheMatches(t *testing.T, legacy *datastore.ImageCache, v2 *entities.ImageCache) {
 	t.Helper()
 
@@ -258,7 +268,12 @@ func AssertImageCacheMatches(t *testing.T, legacy *datastore.ImageCache, v2 *ent
 	require.NotNil(t, v2, "v2 image cache should not be nil")
 
 	assert.Equal(t, legacy.ProviderName, v2.ProviderName, "provider_name should match")
-	assert.Equal(t, legacy.ScientificName, v2.ScientificName, "scientific_name should match")
+	// Compare scientific name via label relationship
+	if v2.Label != nil && v2.Label.ScientificName != nil {
+		assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific_name should match (via label)")
+	} else {
+		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
+	}
 	assert.Equal(t, legacy.SourceProvider, v2.SourceProvider, "source_provider should match")
 	assert.Equal(t, legacy.URL, v2.URL, "url should match")
 	assert.Equal(t, legacy.LicenseName, v2.LicenseName, "license_name should match")
@@ -269,13 +284,19 @@ func AssertImageCacheMatches(t *testing.T, legacy *datastore.ImageCache, v2 *ent
 }
 
 // AssertNotificationHistoryMatches verifies that a V2 NotificationHistory matches a legacy NotificationHistory.
+// The v2 NotificationHistory should have its Label preloaded for scientific name comparison.
 func AssertNotificationHistoryMatches(t *testing.T, legacy *datastore.NotificationHistory, v2 *entities.NotificationHistory) {
 	t.Helper()
 
 	require.NotNil(t, legacy, "legacy notification history should not be nil")
 	require.NotNil(t, v2, "v2 notification history should not be nil")
 
-	assert.Equal(t, legacy.ScientificName, v2.ScientificName, "scientific_name should match")
+	// Compare scientific name via label relationship
+	if v2.Label != nil && v2.Label.ScientificName != nil {
+		assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific_name should match (via label)")
+	} else {
+		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
+	}
 	assert.Equal(t, legacy.NotificationType, v2.NotificationType, "notification_type should match")
 	assert.InDelta(t, legacy.LastSent.Unix(), v2.LastSent.Unix(), 1, "last_sent should match")
 	assert.InDelta(t, legacy.ExpiresAt.Unix(), v2.ExpiresAt.Unix(), 1, "expires_at should match")

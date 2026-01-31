@@ -183,9 +183,9 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.ModelRepo = repository.NewModelRepository(db, false, false)
 	ctx.SourceRepo = repository.NewAudioSourceRepository(db, false, false)
 	ctx.WeatherRepo = repository.NewWeatherRepository(db, false, false)
-	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, false, false)
-	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, false, false)
+	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, ctx.LabelRepo, false, false)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, ctx.LabelRepo, false, false)
+	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, ctx.LabelRepo, false, false)
 
 	// Add to cleanup
 	oldCleanup := ctx.cleanup
@@ -240,6 +240,7 @@ func (ctx *TestContext) createAuxiliaryMigrator(t *testing.T) {
 
 	ctx.AuxiliaryMigrator = migration.NewAuxiliaryMigrator(&migration.AuxiliaryMigratorConfig{
 		LegacyStore:      ctx.legacyInterface,
+		LabelRepo:        ctx.LabelRepo,
 		WeatherRepo:      ctx.WeatherRepo,
 		ImageCacheRepo:   ctx.ImageCacheRepo,
 		ThresholdRepo:    ctx.ThresholdRepo,
@@ -288,7 +289,7 @@ func (ctx *TestContext) StartMigration(t *testing.T, totalRecords int) {
 	ctx.TransitionToDualWrite(t)
 
 	// Run auxiliary migration (weather, thresholds, etc.)
-	err := ctx.AuxiliaryMigrator.MigrateAll(c)
+	_, err := ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
 	// Start worker

@@ -8,6 +8,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -459,21 +460,57 @@ func collectDetectionIDs(batch []datastore.Results) []uint {
 }
 
 // resolveSpeciesLabels ensures all species in the batch have label IDs in the cache.
+// It parses raw BirdNET species strings to extract the scientific name before creating labels.
+// Uses batch resolution to minimize database round-trips (N species -> 2-3 queries instead of N).
 func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []datastore.Results, cache map[string]uint) {
-	speciesSet := make(map[string]struct{}, len(batch))
+	// Collect unique species not in cache, map raw species -> scientific name
+	speciesMapping := make(map[string]string) // raw species -> scientific name
+
 	for i := range batch {
-		speciesSet[batch[i].Species] = struct{}{}
+		species := batch[i].Species
+		if _, cached := cache[species]; cached {
+			continue
+		}
+		if _, seen := speciesMapping[species]; seen {
+			continue
+		}
+
+		// Parse the species string to extract the scientific name.
+		// Raw BirdNET labels are in format "ScientificName_CommonName_Code" or "ScientificName_CommonName".
+		// We need the scientific name for the label, not the raw string.
+		parsed := detection.ParseSpeciesString(species)
+		scientificName := parsed.ScientificName
+		if scientificName == "" {
+			scientificName = species // fallback to original if parsing fails
+		}
+		speciesMapping[species] = scientificName
 	}
-	for species := range speciesSet {
-		if _, cached := cache[species]; !cached {
-			label, err := m.labelRepo.GetOrCreate(ctx, species, entities.LabelTypeSpecies)
-			if err != nil {
-				m.logger.Warn("failed to resolve label for species",
-					logger.String("species", species),
-					logger.Error(err))
-				continue
-			}
-			cache[species] = label.ID
+
+	if len(speciesMapping) == 0 {
+		return
+	}
+
+	// Extract unique scientific names (multiple raw species may map to same scientific name)
+	scientificNames := make([]string, 0, len(speciesMapping))
+	seen := make(map[string]struct{})
+	for _, sciName := range speciesMapping {
+		if _, exists := seen[sciName]; !exists {
+			seen[sciName] = struct{}{}
+			scientificNames = append(scientificNames, sciName)
+		}
+	}
+
+	// Batch resolve all at once
+	labels, err := m.labelRepo.BatchGetOrCreate(ctx, scientificNames, entities.LabelTypeSpecies)
+	if err != nil {
+		m.logger.Warn("failed to batch resolve labels", logger.Error(err))
+		return
+	}
+
+	// Update cache: raw species -> label ID (via scientific name)
+	for rawSpecies, sciName := range speciesMapping {
+		if label, found := labels[sciName]; found {
+			cache[rawSpecies] = label.ID
 		}
 	}
 }

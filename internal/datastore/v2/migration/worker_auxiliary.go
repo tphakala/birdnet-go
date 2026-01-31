@@ -3,28 +3,116 @@ package migration
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// AuxiliaryMigrationResult tracks what was migrated and what was skipped.
+type AuxiliaryMigrationResult struct {
+	ImageCaches struct {
+		Total    int
+		Migrated int
+		Skipped  int
+		Error    error // Non-nil if fetch from legacy failed
+	}
+	Thresholds struct {
+		Total    int
+		Migrated int
+		Skipped  int
+		Error    error
+	}
+	ThresholdEvents struct {
+		Total    int
+		Migrated int
+		Skipped  int
+		Error    error // Non-nil if fetch from legacy failed
+	}
+	Notifications struct {
+		Total    int
+		Migrated int
+		Skipped  int
+		Error    error
+	}
+	Weather struct {
+		DailyEventsTotal      int
+		DailyEventsMigrated   int
+		HourlyWeatherTotal    int
+		HourlyWeatherMigrated int
+		Skipped               int
+		Error                 error
+	}
+}
+
+// HasErrors returns true if any migration step encountered errors fetching legacy data.
+func (r *AuxiliaryMigrationResult) HasErrors() bool {
+	return r.ImageCaches.Error != nil ||
+		r.Thresholds.Error != nil ||
+		r.ThresholdEvents.Error != nil ||
+		r.Notifications.Error != nil ||
+		r.Weather.Error != nil
+}
+
+// Summary returns a human-readable summary of the migration.
+func (r *AuxiliaryMigrationResult) Summary() string {
+	var b strings.Builder
+	b.WriteString("Auxiliary Migration Summary:\n")
+
+	fmt.Fprintf(&b, "  Image Caches: %d/%d migrated", r.ImageCaches.Migrated, r.ImageCaches.Total)
+	if r.ImageCaches.Error != nil {
+		fmt.Fprintf(&b, " (fetch error: %v)", r.ImageCaches.Error)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "  Thresholds: %d/%d migrated", r.Thresholds.Migrated, r.Thresholds.Total)
+	if r.Thresholds.Error != nil {
+		fmt.Fprintf(&b, " (fetch error: %v)", r.Thresholds.Error)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "  Threshold Events: %d/%d migrated", r.ThresholdEvents.Migrated, r.ThresholdEvents.Total)
+	if r.ThresholdEvents.Error != nil {
+		fmt.Fprintf(&b, " (fetch error: %v)", r.ThresholdEvents.Error)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "  Notifications: %d/%d migrated", r.Notifications.Migrated, r.Notifications.Total)
+	if r.Notifications.Error != nil {
+		fmt.Fprintf(&b, " (fetch error: %v)", r.Notifications.Error)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "  Daily Events: %d/%d migrated", r.Weather.DailyEventsMigrated, r.Weather.DailyEventsTotal)
+	fmt.Fprintf(&b, ", Hourly Weather: %d/%d migrated", r.Weather.HourlyWeatherMigrated, r.Weather.HourlyWeatherTotal)
+	if r.Weather.Error != nil {
+		fmt.Fprintf(&b, " (fetch error: %v)", r.Weather.Error)
+	}
+	b.WriteString("\n")
+
+	return b.String()
+}
 
 // AuxiliaryMigrator handles migration of auxiliary tables (weather, image cache, thresholds, etc.)
 // These tables are independent of detections and can be migrated in bulk.
 type AuxiliaryMigrator struct {
-	legacyStore   datastore.Interface
-	weatherRepo   repository.WeatherRepository
-	imageCacheRepo repository.ImageCacheRepository
-	thresholdRepo repository.DynamicThresholdRepository
+	legacyStore      datastore.Interface
+	labelRepo        repository.LabelRepository
+	weatherRepo      repository.WeatherRepository
+	imageCacheRepo   repository.ImageCacheRepository
+	thresholdRepo    repository.DynamicThresholdRepository
 	notificationRepo repository.NotificationHistoryRepository
-	logger        logger.Logger
+	logger           logger.Logger
 }
 
 // AuxiliaryMigratorConfig configures the auxiliary migrator.
 type AuxiliaryMigratorConfig struct {
 	LegacyStore      datastore.Interface
+	LabelRepo        repository.LabelRepository
 	WeatherRepo      repository.WeatherRepository
 	ImageCacheRepo   repository.ImageCacheRepository
 	ThresholdRepo    repository.DynamicThresholdRepository
@@ -36,6 +124,7 @@ type AuxiliaryMigratorConfig struct {
 func NewAuxiliaryMigrator(cfg *AuxiliaryMigratorConfig) *AuxiliaryMigrator {
 	return &AuxiliaryMigrator{
 		legacyStore:      cfg.LegacyStore,
+		labelRepo:        cfg.LabelRepo,
 		weatherRepo:      cfg.WeatherRepo,
 		imageCacheRepo:   cfg.ImageCacheRepo,
 		thresholdRepo:    cfg.ThresholdRepo,
@@ -46,60 +135,74 @@ func NewAuxiliaryMigrator(cfg *AuxiliaryMigratorConfig) *AuxiliaryMigrator {
 
 // MigrateAll migrates all auxiliary tables from legacy to v2.
 // This should be called once during the migration process.
-func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) error {
+// Returns a result struct with detailed migration statistics.
+func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) (*AuxiliaryMigrationResult, error) {
+	result := &AuxiliaryMigrationResult{}
+
 	if m.legacyStore == nil {
 		m.logger.Debug("no legacy store provided, skipping auxiliary migration")
-		return nil
+		return result, nil
+	}
+
+	// Fail fast if label repo is not configured - it's required for migration
+	if m.labelRepo == nil {
+		return result, errors.NewStd("label repository not configured")
 	}
 
 	m.logger.Info("starting auxiliary table migration")
 
-	// Migrate each auxiliary table type
-	if err := m.migrateImageCaches(ctx); err != nil {
-		return fmt.Errorf("image cache migration failed: %w", err)
-	}
+	// Migrate each table, collecting results
+	m.migrateImageCaches(ctx, result)
+	m.migrateDynamicThresholds(ctx, result)
+	m.migrateNotificationHistory(ctx, result)
+	m.migrateWeatherData(ctx, result)
 
-	if err := m.migrateDynamicThresholds(ctx); err != nil {
-		return fmt.Errorf("dynamic threshold migration failed: %w", err)
-	}
+	// Log comprehensive summary
+	m.logger.Info("auxiliary migration completed",
+		logger.String("summary", result.Summary()))
 
-	if err := m.migrateNotificationHistory(ctx); err != nil {
-		return fmt.Errorf("notification history migration failed: %w", err)
-	}
-
-	if err := m.migrateWeatherData(ctx); err != nil {
-		return fmt.Errorf("weather data migration failed: %w", err)
-	}
-
-	m.logger.Info("auxiliary table migration completed")
-	return nil
+	// Caller can inspect result.HasErrors() to decide if this is acceptable
+	return result, nil
 }
 
 // migrateImageCaches migrates all image cache entries.
-func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context) error {
+// Resolves scientific names to label IDs for the normalized schema.
+func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.imageCacheRepo == nil {
 		m.logger.Debug("image cache repo not configured, skipping")
-		return nil
+		return
 	}
 
 	// Get all image caches from legacy (wikimedia provider is default)
 	legacyCaches, err := m.legacyStore.GetAllImageCaches("wikimedia")
 	if err != nil {
 		m.logger.Warn("failed to get legacy image caches", logger.Error(err))
-		return nil // Non-fatal: image cache is not critical
+		result.ImageCaches.Error = err
+		return
 	}
 
+	result.ImageCaches.Total = len(legacyCaches)
 	if len(legacyCaches) == 0 {
 		m.logger.Debug("no image caches to migrate")
-		return nil
+		return
 	}
 
-	var migrated int
 	for i := range legacyCaches {
 		cache := &legacyCaches[i]
+
+		// Resolve scientific name to label ID
+		label, err := m.labelRepo.GetOrCreate(ctx, cache.ScientificName, entities.LabelTypeSpecies)
+		if err != nil {
+			m.logger.Warn("failed to resolve label for image cache",
+				logger.String("species", cache.ScientificName),
+				logger.Error(err))
+			result.ImageCaches.Skipped++
+			continue
+		}
+
 		v2Cache := &entities.ImageCache{
 			ProviderName:   cache.ProviderName,
-			ScientificName: cache.ScientificName,
+			LabelID:        label.ID,
 			SourceProvider: cache.SourceProvider,
 			URL:            cache.URL,
 			LicenseName:    cache.LicenseName,
@@ -112,86 +215,106 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context) error {
 			m.logger.Warn("failed to migrate image cache",
 				logger.String("species", cache.ScientificName),
 				logger.Error(err))
+			result.ImageCaches.Skipped++
 			continue
 		}
-		migrated++
+		result.ImageCaches.Migrated++
 	}
 
 	m.logger.Info("image cache migration completed",
-		logger.Int("total", len(legacyCaches)),
-		logger.Int("migrated", migrated))
-	return nil
+		logger.Int("total", result.ImageCaches.Total),
+		logger.Int("migrated", result.ImageCaches.Migrated),
+		logger.Int("skipped", result.ImageCaches.Skipped))
 }
 
 // migrateDynamicThresholds migrates all dynamic thresholds and their events.
-func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context) error {
+// Resolves scientific names to label IDs for the normalized schema.
+func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.thresholdRepo == nil {
 		m.logger.Debug("threshold repo not configured, skipping")
-		return nil
+		return
 	}
 
 	// Get all thresholds from legacy
 	legacyThresholds, err := m.legacyStore.GetAllDynamicThresholds()
 	if err != nil {
 		m.logger.Warn("failed to get legacy thresholds", logger.Error(err))
-		return nil // Non-fatal
+		result.Thresholds.Error = err
+		return
 	}
 
+	result.Thresholds.Total = len(legacyThresholds)
 	if len(legacyThresholds) == 0 {
 		m.logger.Debug("no dynamic thresholds to migrate")
-		return nil
+		return
 	}
 
-	var migrated int
 	for i := range legacyThresholds {
 		threshold := &legacyThresholds[i]
+
+		// Resolve scientific name to label ID
+		label, err := m.labelRepo.GetOrCreate(ctx, threshold.ScientificName, entities.LabelTypeSpecies)
+		if err != nil {
+			m.logger.Warn("failed to resolve label for threshold",
+				logger.String("species", threshold.SpeciesName),
+				logger.String("scientific_name", threshold.ScientificName),
+				logger.Error(err))
+			result.Thresholds.Skipped++
+			continue
+		}
+
 		v2Threshold := entities.DynamicThreshold{
-			SpeciesName:    threshold.SpeciesName,
-			ScientificName: threshold.ScientificName,
-			Level:          threshold.Level,
-			CurrentValue:   threshold.CurrentValue,
-			BaseThreshold:  threshold.BaseThreshold,
-			HighConfCount:  threshold.HighConfCount,
-			ValidHours:     threshold.ValidHours,
-			ExpiresAt:      threshold.ExpiresAt,
-			LastTriggered:  threshold.LastTriggered,
-			FirstCreated:   threshold.FirstCreated,
-			TriggerCount:   threshold.TriggerCount,
+			LabelID:       label.ID,
+			Level:         threshold.Level,
+			CurrentValue:  threshold.CurrentValue,
+			BaseThreshold: threshold.BaseThreshold,
+			HighConfCount: threshold.HighConfCount,
+			ValidHours:    threshold.ValidHours,
+			ExpiresAt:     threshold.ExpiresAt,
+			LastTriggered: threshold.LastTriggered,
+			FirstCreated:  threshold.FirstCreated,
+			TriggerCount:  threshold.TriggerCount,
 		}
 		if err := m.thresholdRepo.SaveDynamicThreshold(ctx, &v2Threshold); err != nil {
 			m.logger.Warn("failed to migrate threshold",
 				logger.String("species", threshold.SpeciesName),
 				logger.Error(err))
+			result.Thresholds.Skipped++
 			continue
 		}
-		migrated++
+		result.Thresholds.Migrated++
 
-		// Migrate threshold events for this species
-		if err := m.migrateThresholdEvents(ctx, threshold.SpeciesName); err != nil {
-			m.logger.Warn("failed to migrate threshold events",
-				logger.String("species", threshold.SpeciesName),
-				logger.Error(err))
-		}
+		// Migrate threshold events for this species using the resolved label ID
+		m.migrateThresholdEvents(ctx, threshold.SpeciesName, label.ID, result)
 	}
 
 	m.logger.Info("dynamic threshold migration completed",
-		logger.Int("total", len(legacyThresholds)),
-		logger.Int("migrated", migrated))
-	return nil
+		logger.Int("total", result.Thresholds.Total),
+		logger.Int("migrated", result.Thresholds.Migrated),
+		logger.Int("skipped", result.Thresholds.Skipped))
 }
 
 // migrateThresholdEvents migrates threshold events for a species.
-func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesName string) error {
+// Uses the pre-resolved labelID to avoid repeated label lookups.
+func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesName string, labelID uint, result *AuxiliaryMigrationResult) {
 	// Get events from legacy (limit to 100 most recent)
 	legacyEvents, err := m.legacyStore.GetThresholdEvents(speciesName, 100)
 	if err != nil {
-		return err
+		m.logger.Warn("failed to get threshold events",
+			logger.String("species", speciesName),
+			logger.Error(err))
+		// Record the first fetch error encountered
+		if result.ThresholdEvents.Error == nil {
+			result.ThresholdEvents.Error = err
+		}
+		return
 	}
 
+	result.ThresholdEvents.Total += len(legacyEvents)
 	for i := range legacyEvents {
 		event := &legacyEvents[i]
 		v2Event := &entities.ThresholdEvent{
-			SpeciesName:   event.SpeciesName,
+			LabelID:       labelID,
 			PreviousLevel: event.PreviousLevel,
 			NewLevel:      event.NewLevel,
 			PreviousValue: event.PreviousValue,
@@ -201,36 +324,53 @@ func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesN
 			CreatedAt:     event.CreatedAt,
 		}
 		if err := m.thresholdRepo.SaveThresholdEvent(ctx, v2Event); err != nil {
-			return err
+			m.logger.Warn("failed to migrate threshold event",
+				logger.String("species", speciesName),
+				logger.Error(err))
+			result.ThresholdEvents.Skipped++
+			continue
 		}
+		result.ThresholdEvents.Migrated++
 	}
-	return nil
 }
 
 // migrateNotificationHistory migrates notification history.
-func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context) error {
+// Resolves scientific names to label IDs for the normalized schema.
+func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.notificationRepo == nil {
 		m.logger.Debug("notification repo not configured, skipping")
-		return nil
+		return
 	}
 
 	// Get active notification history (not expired)
 	legacyHistory, err := m.legacyStore.GetActiveNotificationHistory(time.Now())
 	if err != nil {
 		m.logger.Warn("failed to get legacy notification history", logger.Error(err))
-		return nil // Non-fatal
+		result.Notifications.Error = err
+		return
 	}
 
+	result.Notifications.Total = len(legacyHistory)
 	if len(legacyHistory) == 0 {
 		m.logger.Debug("no notification history to migrate")
-		return nil
+		return
 	}
 
-	var migrated int
 	for i := range legacyHistory {
 		history := &legacyHistory[i]
+
+		// Resolve scientific name to label ID
+		label, err := m.labelRepo.GetOrCreate(ctx, history.ScientificName, entities.LabelTypeSpecies)
+		if err != nil {
+			m.logger.Warn("failed to resolve label for notification history",
+				logger.String("species", history.ScientificName),
+				logger.Error(err))
+			result.Notifications.Skipped++
+			continue
+		}
+
 		v2History := &entities.NotificationHistory{
-			ScientificName:   history.ScientificName,
+			LabelID:          label.ID,
 			NotificationType: history.NotificationType,
 			LastSent:         history.LastSent,
 			ExpiresAt:        history.ExpiresAt,
@@ -239,41 +379,47 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context) erro
 			m.logger.Warn("failed to migrate notification history",
 				logger.String("species", history.ScientificName),
 				logger.Error(err))
+			result.Notifications.Skipped++
 			continue
 		}
-		migrated++
+		result.Notifications.Migrated++
 	}
 
 	m.logger.Info("notification history migration completed",
-		logger.Int("total", len(legacyHistory)),
-		logger.Int("migrated", migrated))
-	return nil
+		logger.Int("total", result.Notifications.Total),
+		logger.Int("migrated", result.Notifications.Migrated),
+		logger.Int("skipped", result.Notifications.Skipped))
 }
 
 // migrateWeatherData migrates DailyEvents and HourlyWeather from legacy to v2.
 // Handles ID remapping since V2 may have different IDs for the same dates.
-func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context) error {
+func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.weatherRepo == nil {
 		m.logger.Debug("weather repo not configured, skipping")
-		return nil
+		return
 	}
 
 	// Step 1: Get legacy data
 	legacyEvents, err := m.legacyStore.GetAllDailyEvents()
 	if err != nil {
 		m.logger.Warn("failed to get legacy daily events", logger.Error(err))
-		return nil // Non-fatal
+		result.Weather.Error = err
+		return
 	}
 
 	legacyWeather, err := m.legacyStore.GetAllHourlyWeather()
 	if err != nil {
 		m.logger.Warn("failed to get legacy hourly weather", logger.Error(err))
-		return nil // Non-fatal
+		result.Weather.Error = err
+		return
 	}
+
+	result.Weather.DailyEventsTotal = len(legacyEvents)
+	result.Weather.HourlyWeatherTotal = len(legacyWeather)
 
 	if len(legacyEvents) == 0 {
 		m.logger.Debug("no weather data to migrate")
-		return nil
+		return
 	}
 
 	// Step 2: Build Legacy ID -> Date mapping
@@ -298,15 +444,16 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context) error {
 	if err != nil {
 		m.logger.Warn("failed to migrate some daily events", logger.Error(err))
 	}
+	result.Weather.DailyEventsMigrated = migrated
 	m.logger.Info("daily events migration completed",
-		logger.Int("total", len(legacyEvents)),
-		logger.Int("migrated", migrated))
+		logger.Int("total", result.Weather.DailyEventsTotal),
+		logger.Int("migrated", result.Weather.DailyEventsMigrated))
 
 	// Step 4: Build Date -> V2 ID mapping (after migration)
 	v2EventsAll, err := m.weatherRepo.GetAllDailyEvents(ctx)
 	if err != nil {
 		m.logger.Warn("failed to get v2 daily events for ID mapping", logger.Error(err))
-		return nil
+		return
 	}
 
 	dateToV2ID := make(map[string]uint, len(v2EventsAll))
@@ -317,22 +464,21 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context) error {
 	// Step 5: Migrate HourlyWeather with ID remapping
 	if len(legacyWeather) == 0 {
 		m.logger.Debug("no hourly weather to migrate")
-		return nil
+		return
 	}
 
 	v2Weather := make([]entities.HourlyWeather, 0, len(legacyWeather))
-	var skipped int
 	for i := range legacyWeather {
 		w := &legacyWeather[i]
 		// Lookup: LegacyID -> Date -> V2ID
 		date, ok := legacyIDToDate[w.DailyEventsID]
 		if !ok {
-			skipped++
+			result.Weather.Skipped++
 			continue // Orphan record, skip
 		}
 		v2ID, ok := dateToV2ID[date]
 		if !ok {
-			skipped++
+			result.Weather.Skipped++
 			continue // Date not in V2, skip
 		}
 
@@ -360,13 +506,12 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context) error {
 	if err != nil {
 		m.logger.Warn("failed to migrate some hourly weather", logger.Error(err))
 	}
+	result.Weather.HourlyWeatherMigrated = migratedWeather
 
 	m.logger.Info("hourly weather migration completed",
-		logger.Int("total", len(legacyWeather)),
-		logger.Int("migrated", migratedWeather),
-		logger.Int("skipped", skipped))
-
-	return nil
+		logger.Int("total", result.Weather.HourlyWeatherTotal),
+		logger.Int("migrated", result.Weather.HourlyWeatherMigrated),
+		logger.Int("skipped", result.Weather.Skipped))
 }
 
 // ValidateAuxiliaryTables validates that auxiliary tables have been migrated.

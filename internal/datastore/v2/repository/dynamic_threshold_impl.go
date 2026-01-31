@@ -13,6 +13,7 @@ import (
 // dynamicThresholdRepository implements DynamicThresholdRepository.
 type dynamicThresholdRepository struct {
 	db          *gorm.DB
+	labelRepo   LabelRepository
 	useV2Prefix bool
 	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
 }
@@ -20,11 +21,13 @@ type dynamicThresholdRepository struct {
 // NewDynamicThresholdRepository creates a new DynamicThresholdRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - labelRepo: LabelRepository for resolving species names to label IDs
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewDynamicThresholdRepository(db *gorm.DB, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
+func NewDynamicThresholdRepository(db *gorm.DB, labelRepo LabelRepository, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
 	return &dynamicThresholdRepository{
 		db:          db,
+		labelRepo:   labelRepo,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -44,21 +47,47 @@ func (r *dynamicThresholdRepository) eventTable() string {
 	return tableThresholdEvents
 }
 
+// ensureLabelRepo returns an error if labelRepo is nil.
+// This guards against misconfiguration that would cause nil pointer panics.
+func (r *dynamicThresholdRepository) ensureLabelRepo() error {
+	if r.labelRepo == nil {
+		return errors.NewStd("label repository not configured for threshold repository")
+	}
+	return nil
+}
+
 // SaveDynamicThreshold saves or updates a dynamic threshold (upsert).
+// The threshold.LabelID must be set by the caller.
 func (r *dynamicThresholdRepository) SaveDynamicThreshold(ctx context.Context, threshold *entities.DynamicThreshold) error {
+	if threshold.LabelID == 0 {
+		return errors.NewStd("dynamic threshold LabelID must be set before saving")
+	}
 	return r.db.WithContext(ctx).Table(r.thresholdTable()).
 		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "species_name"}},
+			Columns:   []clause.Column{{Name: "label_id"}},
 			UpdateAll: true,
 		}).
 		Create(threshold).Error
 }
 
-// GetDynamicThreshold retrieves a threshold by species name.
+// GetDynamicThreshold retrieves a threshold by species name (scientific name).
+// Internally resolves the species name to a label ID for the lookup.
 func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, speciesName string) (*entities.DynamicThreshold, error) {
+	if err := r.ensureLabelRepo(); err != nil {
+		return nil, err
+	}
+	// Resolve species name to label ID
+	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	if err != nil {
+		if errors.Is(err, ErrLabelNotFound) {
+			return nil, ErrDynamicThresholdNotFound
+		}
+		return nil, err
+	}
+
 	var threshold entities.DynamicThreshold
-	err := r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Where("species_name = ?", speciesName).
+	err = r.db.WithContext(ctx).Table(r.thresholdTable()).
+		Where("label_id = ?", label.ID).
 		First(&threshold).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrDynamicThresholdNotFound
@@ -66,13 +95,18 @@ func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, sp
 	if err != nil {
 		return nil, err
 	}
+
+	// Attach the label for callers that need species name
+	threshold.Label = label
 	return &threshold, nil
 }
 
 // GetAllDynamicThresholds retrieves all thresholds with optional limit.
 func (r *dynamicThresholdRepository) GetAllDynamicThresholds(ctx context.Context, limit ...int) ([]entities.DynamicThreshold, error) {
 	var thresholds []entities.DynamicThreshold
-	query := r.db.WithContext(ctx).Table(r.thresholdTable()).Order("species_name ASC")
+	query := r.db.WithContext(ctx).Table(r.thresholdTable()).
+		Preload("Label").
+		Order("label_id ASC")
 	if len(limit) > 0 && limit[0] > 0 {
 		query = query.Limit(limit[0])
 	}
@@ -80,10 +114,22 @@ func (r *dynamicThresholdRepository) GetAllDynamicThresholds(ctx context.Context
 	return thresholds, err
 }
 
-// DeleteDynamicThreshold deletes a threshold by species name.
+// DeleteDynamicThreshold deletes a threshold by species name (scientific name).
 func (r *dynamicThresholdRepository) DeleteDynamicThreshold(ctx context.Context, speciesName string) error {
+	if err := r.ensureLabelRepo(); err != nil {
+		return err
+	}
+	// Resolve species name to label ID
+	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	if err != nil {
+		if errors.Is(err, ErrLabelNotFound) {
+			return ErrDynamicThresholdNotFound
+		}
+		return err
+	}
+
 	result := r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Where("species_name = ?", speciesName).
+		Where("label_id = ?", label.ID).
 		Delete(&entities.DynamicThreshold{})
 	if result.Error != nil {
 		return result.Error
@@ -104,8 +150,20 @@ func (r *dynamicThresholdRepository) DeleteExpiredDynamicThresholds(ctx context.
 
 // UpdateDynamicThresholdExpiry updates the expiry time for a threshold.
 func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Context, speciesName string, expiresAt time.Time) error {
+	if err := r.ensureLabelRepo(); err != nil {
+		return err
+	}
+	// Resolve species name to label ID
+	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	if err != nil {
+		if errors.Is(err, ErrLabelNotFound) {
+			return ErrDynamicThresholdNotFound
+		}
+		return err
+	}
+
 	result := r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Where("species_name = ?", speciesName).
+		Where("label_id = ?", label.ID).
 		Update("expires_at", expiresAt)
 	if result.Error != nil {
 		return result.Error
@@ -117,13 +175,20 @@ func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Co
 }
 
 // BatchSaveDynamicThresholds saves multiple thresholds in a batch (upsert).
+// All thresholds must have LabelID set.
 func (r *dynamicThresholdRepository) BatchSaveDynamicThresholds(ctx context.Context, thresholds []entities.DynamicThreshold) error {
 	if len(thresholds) == 0 {
 		return nil
 	}
+	// Validate all have LabelID set
+	for i := range thresholds {
+		if thresholds[i].LabelID == 0 {
+			return errors.NewStd("all thresholds must have LabelID set before batch save")
+		}
+	}
 	return r.db.WithContext(ctx).Table(r.thresholdTable()).
 		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "species_name"}},
+			Columns:   []clause.Column{{Name: "label_id"}},
 			UpdateAll: true,
 		}).
 		CreateInBatches(thresholds, 100).Error
@@ -180,20 +245,37 @@ func (r *dynamicThresholdRepository) GetDynamicThresholdStats(ctx context.Contex
 }
 
 // SaveThresholdEvent saves a threshold event.
+// The event.LabelID must be set by the caller.
 func (r *dynamicThresholdRepository) SaveThresholdEvent(ctx context.Context, event *entities.ThresholdEvent) error {
+	if event.LabelID == 0 {
+		return errors.NewStd("threshold event LabelID must be set before saving")
+	}
 	return r.db.WithContext(ctx).Table(r.eventTable()).Create(event).Error
 }
 
-// GetThresholdEvents retrieves events for a species.
+// GetThresholdEvents retrieves events for a species (by scientific name).
 func (r *dynamicThresholdRepository) GetThresholdEvents(ctx context.Context, speciesName string, limit int) ([]entities.ThresholdEvent, error) {
+	if err := r.ensureLabelRepo(); err != nil {
+		return nil, err
+	}
+	// Resolve species name to label ID
+	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	if err != nil {
+		if errors.Is(err, ErrLabelNotFound) {
+			return []entities.ThresholdEvent{}, nil
+		}
+		return nil, err
+	}
+
 	var events []entities.ThresholdEvent
 	query := r.db.WithContext(ctx).Table(r.eventTable()).
-		Where("species_name = ?", speciesName).
+		Preload("Label").
+		Where("label_id = ?", label.ID).
 		Order("created_at DESC")
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	err := query.Find(&events).Error
+	err = query.Find(&events).Error
 	return events, err
 }
 
@@ -201,6 +283,7 @@ func (r *dynamicThresholdRepository) GetThresholdEvents(ctx context.Context, spe
 func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Context, limit int) ([]entities.ThresholdEvent, error) {
 	var events []entities.ThresholdEvent
 	query := r.db.WithContext(ctx).Table(r.eventTable()).
+		Preload("Label").
 		Order("created_at DESC")
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -209,10 +292,22 @@ func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Contex
 	return events, err
 }
 
-// DeleteThresholdEvents deletes all events for a species.
+// DeleteThresholdEvents deletes all events for a species (by scientific name).
 func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, speciesName string) error {
+	if err := r.ensureLabelRepo(); err != nil {
+		return err
+	}
+	// Resolve species name to label ID
+	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	if err != nil {
+		if errors.Is(err, ErrLabelNotFound) {
+			return nil // Nothing to delete
+		}
+		return err
+	}
+
 	return r.db.WithContext(ctx).Table(r.eventTable()).
-		Where("species_name = ?", speciesName).
+		Where("label_id = ?", label.ID).
 		Delete(&entities.ThresholdEvent{}).Error
 }
 

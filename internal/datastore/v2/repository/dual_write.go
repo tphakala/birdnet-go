@@ -280,7 +280,7 @@ func (dw *DualWriteRepository) Delete(ctx context.Context, id string) error {
 				if !errors.Is(err, ErrDetectionNotFound) {
 					dw.logger.Warn("v2 delete failed", logger.String("id", id), logger.Error(err))
 					// Track for reconciliation - V2 record may still exist after legacy deletion
-					// TODO: Ensure reconciliation job processes dirty IDs from live writes.
+					// TODO(#1904): Ensure reconciliation job processes dirty IDs from live writes.
 					// Current dirty ID handling is primarily for migration phase failures.
 					// May need periodic "Retry Dirty IDs" task for dual-write failures.
 					dw.markDirty(uid)

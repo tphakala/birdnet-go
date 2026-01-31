@@ -9,6 +9,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
+// testSpeciesTurdus is the scientific name used across test assertions.
+const testSpeciesTurdus = "Turdus migratorius"
+
 func TestAssertDetectionMatches_Success(t *testing.T) {
 	t.Parallel()
 
@@ -20,7 +23,7 @@ func TestAssertDetectionMatches_Success(t *testing.T) {
 		Time:           "10:30:45",
 		BeginTime:      now,
 		EndTime:        now.Add(3 * time.Second),
-		ScientificName: "Turdus migratorius",
+		ScientificName: testSpeciesTurdus,
 		Confidence:     0.85,
 		Latitude:       42.3601,
 		Longitude:      -71.0589,
@@ -69,7 +72,7 @@ func TestAssertDetectionMatches_MinimalFields(t *testing.T) {
 		ID:             1,
 		Date:           "2024-06-15",
 		Time:           "10:30:45",
-		ScientificName: "Turdus migratorius",
+		ScientificName: testSpeciesTurdus,
 		Confidence:     0.85,
 		// All optional fields are zero/empty
 	}
@@ -89,10 +92,10 @@ func TestAssertDetectionLabelMatches_Success(t *testing.T) {
 	t.Parallel()
 
 	legacy := &datastore.Note{
-		ScientificName: "Turdus migratorius",
+		ScientificName: testSpeciesTurdus,
 	}
 
-	scientificName := "Turdus migratorius"
+	scientificName := testSpeciesTurdus
 	v2 := &entities.Detection{
 		Label: &entities.Label{
 			ScientificName: &scientificName,
@@ -257,7 +260,7 @@ func TestAssertDynamicThresholdMatches_Success(t *testing.T) {
 	legacy := &datastore.DynamicThreshold{
 		ID:             1,
 		SpeciesName:    "american robin",
-		ScientificName: "Turdus migratorius",
+		ScientificName: testSpeciesTurdus,
 		Level:          1,
 		CurrentValue:   0.75,
 		BaseThreshold:  0.65,
@@ -269,19 +272,20 @@ func TestAssertDynamicThresholdMatches_Success(t *testing.T) {
 		TriggerCount:   10,
 	}
 
+	sciName := testSpeciesTurdus
 	v2 := &entities.DynamicThreshold{
-		ID:             100, // V2 ID can differ
-		SpeciesName:    "american robin",
-		ScientificName: "Turdus migratorius",
-		Level:          1,
-		CurrentValue:   0.75,
-		BaseThreshold:  0.65,
-		HighConfCount:  5,
-		ValidHours:     24,
-		ExpiresAt:      expiresAt,
-		LastTriggered:  now,
-		FirstCreated:   now.Add(-7 * 24 * time.Hour),
-		TriggerCount:   10,
+		ID:            100, // V2 ID can differ
+		LabelID:       1,
+		Level:         1,
+		CurrentValue:  0.75,
+		BaseThreshold: 0.65,
+		HighConfCount: 5,
+		ValidHours:    24,
+		ExpiresAt:     expiresAt,
+		LastTriggered: now,
+		FirstCreated:  now.Add(-7 * 24 * time.Hour),
+		TriggerCount:  10,
+		Label:         &entities.Label{ID: 1, ScientificName: &sciName},
 	}
 
 	AssertDynamicThresholdMatches(t, legacy, v2)
@@ -295,7 +299,7 @@ func TestAssertImageCacheMatches_Success(t *testing.T) {
 	legacy := &datastore.ImageCache{
 		ID:             1,
 		ProviderName:   "wikimedia",
-		ScientificName: "Turdus migratorius",
+		ScientificName: testSpeciesTurdus,
 		SourceProvider: "wikimedia",
 		URL:            "https://example.com/image.jpg",
 		LicenseName:    "CC BY-SA 4.0",
@@ -305,10 +309,11 @@ func TestAssertImageCacheMatches_Success(t *testing.T) {
 		CachedAt:       cachedAt,
 	}
 
+	sciName := testSpeciesTurdus
 	v2 := &entities.ImageCache{
 		ID:             100, // V2 ID can differ
 		ProviderName:   "wikimedia",
-		ScientificName: "Turdus migratorius",
+		LabelID:        1,
 		SourceProvider: "wikimedia",
 		URL:            "https://example.com/image.jpg",
 		LicenseName:    "CC BY-SA 4.0",
@@ -316,6 +321,7 @@ func TestAssertImageCacheMatches_Success(t *testing.T) {
 		AuthorName:     "Test Author",
 		AuthorURL:      "https://example.com/author",
 		CachedAt:       cachedAt,
+		Label:          &entities.Label{ID: 1, ScientificName: &sciName},
 	}
 
 	AssertImageCacheMatches(t, legacy, v2)
@@ -329,18 +335,20 @@ func TestAssertNotificationHistoryMatches_Success(t *testing.T) {
 
 	legacy := &datastore.NotificationHistory{
 		ID:               1,
-		ScientificName:   "Turdus migratorius",
+		ScientificName:   testSpeciesTurdus,
 		NotificationType: "new_species",
 		LastSent:         now,
 		ExpiresAt:        expiresAt,
 	}
 
+	sciName := testSpeciesTurdus
 	v2 := &entities.NotificationHistory{
 		ID:               100, // V2 ID can differ
-		ScientificName:   "Turdus migratorius",
+		LabelID:          1,
 		NotificationType: "new_species",
 		LastSent:         now,
 		ExpiresAt:        expiresAt,
+		Label:            &entities.Label{ID: 1, ScientificName: &sciName},
 	}
 
 	AssertNotificationHistoryMatches(t, legacy, v2)

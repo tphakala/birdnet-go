@@ -556,7 +556,7 @@ func ConvertSearchFilters(
 		// alphabetical species names. This provides stable grouping by species,
 		// but NOT alphabetical ordering. True species sorting requires a JOIN
 		// with the labels table, which is not implemented.
-		// TODO: Implement proper species sorting via label JOIN (follow-up issue)
+		// TODO(#1905): Implement proper species sorting via label JOIN
 		sf.SortBy = "label_id"
 		sf.SortDesc = false
 	case "confidence_desc":

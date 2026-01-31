@@ -26,6 +26,16 @@ type LabelRepository interface {
 	// Returns ErrLabelNotFound if not found.
 	GetByScientificName(ctx context.Context, name string) (*entities.Label, error)
 
+	// GetByScientificNames retrieves multiple labels by scientific names in a single query.
+	// Returns a slice of labels for efficient batch processing.
+	// Handles large name sets by chunking to avoid SQL parameter limits.
+	GetByScientificNames(ctx context.Context, names []string) ([]*entities.Label, error)
+
+	// BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
+	// Returns a map of scientificName -> Label for all requested names.
+	// Uses bulk operations to minimize database round-trips.
+	BatchGetOrCreate(ctx context.Context, scientificNames []string, labelType entities.LabelType) (map[string]*entities.Label, error)
+
 	// GetAllByType retrieves all labels of a specific type.
 	GetAllByType(ctx context.Context, labelType entities.LabelType) ([]*entities.Label, error)
 
