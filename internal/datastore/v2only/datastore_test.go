@@ -41,9 +41,9 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	labelRepo := repository.NewLabelRepository(manager.DB(), false, false)
 	modelRepo := repository.NewModelRepository(manager.DB(), false, false)
 	weatherRepo := repository.NewWeatherRepository(manager.DB(), false, false)
-	imageCacheRepo := repository.NewImageCacheRepository(manager.DB(), false, false)
-	thresholdRepo := repository.NewDynamicThresholdRepository(manager.DB(), false, false)
-	notificationRepo := repository.NewNotificationHistoryRepository(manager.DB(), false, false)
+	imageCacheRepo := repository.NewImageCacheRepository(manager.DB(), labelRepo, false, false)
+	thresholdRepo := repository.NewDynamicThresholdRepository(manager.DB(), labelRepo, false, false)
+	notificationRepo := repository.NewNotificationHistoryRepository(manager.DB(), labelRepo, false, false)
 
 	// Create datastore
 	var err2 error
@@ -157,8 +157,10 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
+	// Note: With LabelID normalization, lookups are now by scientific name.
+	// The SpeciesName field is still populated from the Label for compatibility.
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "house sparrow",
+		SpeciesName:    "Passer domesticus", // Will be derived from Label
 		ScientificName: "Passer domesticus",
 		Level:          1,
 		CurrentValue:   0.7,
@@ -176,10 +178,10 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	err := ds.SaveDynamicThreshold(threshold)
 	require.NoError(t, err)
 
-	// Get threshold
-	retrieved, err := ds.GetDynamicThreshold("house sparrow")
+	// Get threshold by scientific name
+	retrieved, err := ds.GetDynamicThreshold("Passer domesticus")
 	require.NoError(t, err)
-	assert.Equal(t, "house sparrow", retrieved.SpeciesName)
+	assert.Equal(t, "Passer domesticus", retrieved.SpeciesName)
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
 	assert.Equal(t, 1, retrieved.Level)
 	assert.InDelta(t, 0.7, retrieved.CurrentValue, 0.001)
@@ -189,8 +191,8 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, all, 1)
 
-	// Delete threshold
-	err = ds.DeleteDynamicThreshold("house sparrow")
+	// Delete threshold by scientific name
+	err = ds.DeleteDynamicThreshold("Passer domesticus")
 	require.NoError(t, err)
 
 	// Verify deletion

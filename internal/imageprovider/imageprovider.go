@@ -1406,6 +1406,39 @@ func (r *ImageProviderRegistry) Register(name string, cache *BirdImageCache) err
 	return nil
 }
 
+// GetOrRegister atomically retrieves or registers a cache.
+// This eliminates the check-then-act race condition between GetCache and Register.
+// The factory function is only called if the cache doesn't exist.
+// Returns an error if name is empty or factory is nil.
+func (r *ImageProviderRegistry) GetOrRegister(name string, factory func() (*BirdImageCache, error)) (*BirdImageCache, error) {
+	// Validate inputs before acquiring lock
+	if name == "" {
+		return nil, fmt.Errorf("provider name cannot be empty")
+	}
+	if factory == nil {
+		return nil, fmt.Errorf("factory function cannot be nil")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if existing, ok := r.caches[name]; ok {
+		return existing, nil
+	}
+
+	// Factory might fail (e.g., database error during CreateDefaultCache)
+	cache, err := factory()
+	if err != nil {
+		return nil, err
+	}
+	if cache == nil {
+		return nil, fmt.Errorf("factory returned nil cache for provider %s", name)
+	}
+
+	r.caches[name] = cache
+	return cache, nil
+}
+
 // GetCache retrieves a cache instance by name.
 func (r *ImageProviderRegistry) GetCache(name string) (*BirdImageCache, bool) {
 	r.mu.RLock()

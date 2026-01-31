@@ -93,9 +93,9 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 	modelRepo := repository.NewModelRepository(db, useV2Prefix, isMySQL)
 	sourceRepo := repository.NewAudioSourceRepository(db, useV2Prefix, isMySQL)
 	weatherRepo := repository.NewWeatherRepository(db, useV2Prefix, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(db, useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, useV2Prefix, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, labelRepo, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, labelRepo, useV2Prefix, isMySQL)
 
 	ds, err := New(&Config{
 		Manager:      manager,

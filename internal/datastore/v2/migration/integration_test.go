@@ -217,7 +217,7 @@ func TestMigration_PauseResume(t *testing.T) {
 
 	// Run auxiliary migration
 	c := context.Background()
-	err = ctx.AuxiliaryMigrator.MigrateAll(c)
+	_, err = ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
 	// Start worker
@@ -292,7 +292,7 @@ func TestMigration_CrashRecovery(t *testing.T) {
 
 	// Run auxiliary migration
 	c := context.Background()
-	err = ctx.AuxiliaryMigrator.MigrateAll(c)
+	_, err = ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
 	// Start worker
@@ -393,7 +393,7 @@ func TestMigration_RaceConditions(t *testing.T) {
 
 	// Run auxiliary migration
 	c := context.Background()
-	err = ctx.AuxiliaryMigrator.MigrateAll(c)
+	_, err = ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
 	// Start worker

@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // labelRepository implements LabelRepository.
@@ -39,7 +40,15 @@ func (r *labelRepository) tableName() string {
 }
 
 // GetOrCreate retrieves an existing label or creates a new one.
+// Returns an error if scientificName is empty or whitespace-only.
+// Input is normalized (trimmed) before use.
 func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string, labelType entities.LabelType) (*entities.Label, error) {
+	// Validate and normalize input - reject empty or whitespace-only names
+	scientificName = strings.TrimSpace(scientificName)
+	if scientificName == "" {
+		return nil, fmt.Errorf("scientific name cannot be empty")
+	}
+
 	var label entities.Label
 
 	// For species, lookup by scientific name only
@@ -66,7 +75,7 @@ func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string
 		}
 	}
 
-	// Create new label
+	// Create new label with normalized name
 	label = entities.Label{
 		ScientificName: &scientificName,
 		LabelType:      labelType,
@@ -152,6 +161,144 @@ func (r *labelRepository) GetByScientificName(ctx context.Context, name string) 
 		return nil, err
 	}
 	return &label, nil
+}
+
+// GetByScientificNames retrieves multiple labels by scientific names in a single query.
+// Handles large name sets by chunking to avoid SQL parameter limits.
+func (r *labelRepository) GetByScientificNames(ctx context.Context, names []string) ([]*entities.Label, error) {
+	if len(names) == 0 {
+		return []*entities.Label{}, nil
+	}
+
+	var result []*entities.Label
+	for i := 0; i < len(names); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(names))
+		batchNames := names[i:end]
+
+		var labels []*entities.Label
+		err := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("scientific_name IN ?", batchNames).
+			Find(&labels).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load labels by scientific names: %w", err)
+		}
+		result = append(result, labels...)
+	}
+	return result, nil
+}
+
+// BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
+// Returns a map of scientificName -> Label for all requested names.
+// Only labels matching both the scientific name AND the specified labelType are returned.
+func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames []string, labelType entities.LabelType) (map[string]*entities.Label, error) {
+	if len(scientificNames) == 0 {
+		return make(map[string]*entities.Label), nil
+	}
+
+	// Deduplicate and validate input - trim whitespace and filter empty names
+	uniqueNames := make(map[string]struct{}, len(scientificNames))
+	for _, name := range scientificNames {
+		trimmedName := strings.TrimSpace(name)
+		if trimmedName != "" {
+			uniqueNames[trimmedName] = struct{}{}
+		}
+	}
+
+	// Early return if no valid names after filtering
+	if len(uniqueNames) == 0 {
+		return make(map[string]*entities.Label), nil
+	}
+
+	nameList := make([]string, 0, len(uniqueNames))
+	for name := range uniqueNames {
+		nameList = append(nameList, name)
+	}
+
+	result := make(map[string]*entities.Label, len(nameList))
+
+	// Step 1: Fetch existing labels with matching type (chunked for SQL limits)
+	existing, err := r.getByScientificNamesWithType(ctx, nameList, labelType)
+	if err != nil {
+		return nil, fmt.Errorf("batch fetch existing labels: %w", err)
+	}
+
+	// Build map of found names
+	for _, label := range existing {
+		if label.ScientificName != nil {
+			result[*label.ScientificName] = label
+		}
+	}
+
+	// Step 2: Identify missing names
+	var missing []string
+	for _, name := range nameList {
+		if _, found := result[name]; !found {
+			missing = append(missing, name)
+		}
+	}
+
+	if len(missing) == 0 {
+		return result, nil
+	}
+
+	// Step 3: Bulk insert missing labels with ON CONFLICT DO NOTHING
+	// This handles concurrent inserts gracefully
+	newLabels := make([]entities.Label, len(missing))
+	for i, name := range missing {
+		nameCopy := name // Avoid closure issues
+		newLabels[i] = entities.Label{
+			ScientificName: &nameCopy,
+			LabelType:      labelType,
+		}
+	}
+
+	if err := r.db.WithContext(ctx).Table(r.tableName()).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(newLabels, batchQuerySize).Error; err != nil {
+		return nil, fmt.Errorf("batch create labels: %w", err)
+	}
+
+	// Step 4: Re-fetch to get IDs (with type filter)
+	// This is necessary because:
+	// - ON CONFLICT DO NOTHING may not return IDs for conflicting rows
+	// - Some GORM drivers don't populate IDs after bulk insert with conflicts
+	// - This handles race conditions where another process inserted the same labels
+	created, err := r.getByScientificNamesWithType(ctx, missing, labelType)
+	if err != nil {
+		return nil, fmt.Errorf("fetch created labels: %w", err)
+	}
+
+	for _, label := range created {
+		if label.ScientificName != nil {
+			result[*label.ScientificName] = label
+		}
+	}
+
+	return result, nil
+}
+
+// getByScientificNamesWithType retrieves labels by scientific names filtered by type.
+// This is an internal helper for BatchGetOrCreate to ensure type-safe lookups.
+func (r *labelRepository) getByScientificNamesWithType(ctx context.Context, names []string, labelType entities.LabelType) ([]*entities.Label, error) {
+	if len(names) == 0 {
+		return []*entities.Label{}, nil
+	}
+
+	var result []*entities.Label
+	for i := 0; i < len(names); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(names))
+		batchNames := names[i:end]
+
+		var labels []*entities.Label
+		err := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("scientific_name IN ? AND label_type = ?", batchNames, labelType).
+			Find(&labels).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load labels by scientific names with type: %w", err)
+		}
+		result = append(result, labels...)
+	}
+	return result, nil
 }
 
 // GetAllByType retrieves all labels of a specific type.

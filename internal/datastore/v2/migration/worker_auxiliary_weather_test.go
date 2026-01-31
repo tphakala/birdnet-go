@@ -122,8 +122,8 @@ func TestMigrateWeatherData_IDRemapping(t *testing.T) {
 
 	// Execute migration
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	// Verify all expectations were met
 	mockWeather.AssertExpectations(t)
@@ -148,8 +148,8 @@ func TestMigrateWeatherData_EmptyData(t *testing.T) {
 
 	// Execute migration
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	// SaveAllDailyEvents and SaveAllHourlyWeather should NOT be called
 	// because there's no data to migrate
@@ -209,8 +209,8 @@ func TestMigrateWeatherData_OrphanRecords(t *testing.T) {
 
 	// Execute migration
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	mockWeather.AssertExpectations(t)
 }
@@ -260,8 +260,8 @@ func TestMigrateWeatherData_DateNotInV2(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	mockWeather.AssertExpectations(t)
 }
@@ -279,8 +279,8 @@ func TestMigrateWeatherData_NilRepo(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	// No methods should be called on mockStore for weather operations
 }
@@ -369,8 +369,8 @@ func TestMigrateWeatherData_PreservesFields(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	mockWeather.AssertExpectations(t)
 }
@@ -403,8 +403,8 @@ func TestMigrateWeatherData_NoHourlyWeather(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	// SaveAllHourlyWeather should NOT be called when there's no hourly weather
 	mockWeather.AssertNotCalled(t, "SaveAllHourlyWeather")
@@ -471,8 +471,8 @@ func TestMigrateWeatherData_ComplexIDMapping(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	err := migrator.migrateWeatherData(ctx)
-	require.NoError(t, err)
+	result := &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(ctx, result)
 
 	mockWeather.AssertExpectations(t)
 }
@@ -494,9 +494,10 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		err := migrator.migrateWeatherData(ctx)
-		// Should not return error (non-fatal)
-		require.NoError(t, err)
+		result := &AuxiliaryMigrationResult{}
+		migrator.migrateWeatherData(ctx, result)
+		// Error should be captured in result (non-fatal)
+		require.Error(t, result.Weather.Error)
 	})
 
 	t.Run("continues on GetAllHourlyWeather error", func(t *testing.T) {
@@ -518,8 +519,9 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		err := migrator.migrateWeatherData(ctx)
-		// Should not return error (non-fatal)
-		require.NoError(t, err)
+		result := &AuxiliaryMigrationResult{}
+		migrator.migrateWeatherData(ctx, result)
+		// Error should be captured in result (non-fatal)
+		require.Error(t, result.Weather.Error)
 	})
 }

@@ -1475,6 +1475,14 @@ func (ds *Datastore) GetLockedNotesClipPaths() ([]string, error) {
 // Image Cache Methods
 // ============================================================
 
+// imageCacheScientificName extracts the scientific name from an image cache's label.
+func imageCacheScientificName(cache *entities.ImageCache) string {
+	if cache.Label != nil && cache.Label.ScientificName != nil {
+		return *cache.Label.ScientificName
+	}
+	return ""
+}
+
 // GetImageCache retrieves an image cache entry.
 func (ds *Datastore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	if ds.imageCache == nil {
@@ -1492,7 +1500,7 @@ func (ds *Datastore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.
 	return &datastore.ImageCache{
 		ID:             cache.ID,
 		ProviderName:   cache.ProviderName,
-		ScientificName: cache.ScientificName,
+		ScientificName: imageCacheScientificName(cache),
 		SourceProvider: cache.SourceProvider,
 		URL:            cache.URL,
 		LicenseName:    cache.LicenseName,
@@ -1518,7 +1526,7 @@ func (ds *Datastore) GetImageCacheBatch(providerName string, scientificNames []s
 		result[name] = &datastore.ImageCache{
 			ID:             cache.ID,
 			ProviderName:   cache.ProviderName,
-			ScientificName: cache.ScientificName,
+			ScientificName: imageCacheScientificName(cache),
 			SourceProvider: cache.SourceProvider,
 			URL:            cache.URL,
 			LicenseName:    cache.LicenseName,
@@ -1532,14 +1540,22 @@ func (ds *Datastore) GetImageCacheBatch(providerName string, scientificNames []s
 }
 
 // SaveImageCache saves an image cache entry.
+// Resolves the scientific name to a label ID before saving.
 func (ds *Datastore) SaveImageCache(cache *datastore.ImageCache) error {
 	if ds.imageCache == nil {
 		return fmt.Errorf("image cache repository not configured")
 	}
 	ctx := context.Background()
+
+	// Resolve scientific name to label ID
+	label, err := ds.label.GetOrCreate(ctx, cache.ScientificName, entities.LabelTypeSpecies)
+	if err != nil {
+		return fmt.Errorf("failed to resolve label for image cache: %w", err)
+	}
+
 	v2Cache := &entities.ImageCache{
 		ProviderName:   cache.ProviderName,
-		ScientificName: cache.ScientificName,
+		LabelID:        label.ID,
 		SourceProvider: cache.SourceProvider,
 		URL:            cache.URL,
 		LicenseName:    cache.LicenseName,
@@ -1567,7 +1583,7 @@ func (ds *Datastore) GetAllImageCaches(providerName string) ([]datastore.ImageCa
 		result = append(result, datastore.ImageCache{
 			ID:             cache.ID,
 			ProviderName:   cache.ProviderName,
-			ScientificName: cache.ScientificName,
+			ScientificName: imageCacheScientificName(cache),
 			SourceProvider: cache.SourceProvider,
 			URL:            cache.URL,
 			LicenseName:    cache.LicenseName,
@@ -1884,30 +1900,44 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 // Dynamic Threshold Methods
 // ============================================================
 
+// thresholdScientificName extracts the scientific name from a threshold's label.
+func thresholdScientificName(t *entities.DynamicThreshold) string {
+	if t.Label != nil && t.Label.ScientificName != nil {
+		return *t.Label.ScientificName
+	}
+	return ""
+}
+
 // SaveDynamicThreshold saves a dynamic threshold.
+// Resolves the scientific name to a label ID before saving.
 func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
+
+	// Resolve scientific name to label ID
+	label, err := ds.label.GetOrCreate(ctx, threshold.ScientificName, entities.LabelTypeSpecies)
+	if err != nil {
+		return fmt.Errorf("failed to resolve label for threshold: %w", err)
+	}
+
 	v2Threshold := &entities.DynamicThreshold{
-		SpeciesName:    threshold.SpeciesName,
-		ScientificName: threshold.ScientificName,
-		Level:          threshold.Level,
-		CurrentValue:   threshold.CurrentValue,
-		BaseThreshold:  threshold.BaseThreshold,
-		HighConfCount:  threshold.HighConfCount,
-		ValidHours:     threshold.ValidHours,
-		ExpiresAt:      threshold.ExpiresAt,
-		LastTriggered:  threshold.LastTriggered,
-		FirstCreated:   threshold.FirstCreated,
-		UpdatedAt:      threshold.UpdatedAt,
-		TriggerCount:   threshold.TriggerCount,
+		LabelID:       label.ID,
+		Level:         threshold.Level,
+		CurrentValue:  threshold.CurrentValue,
+		BaseThreshold: threshold.BaseThreshold,
+		HighConfCount: threshold.HighConfCount,
+		ValidHours:    threshold.ValidHours,
+		ExpiresAt:     threshold.ExpiresAt,
+		LastTriggered: threshold.LastTriggered,
+		FirstCreated:  threshold.FirstCreated,
+		TriggerCount:  threshold.TriggerCount,
 	}
 	return ds.threshold.SaveDynamicThreshold(ctx, v2Threshold)
 }
 
-// GetDynamicThreshold retrieves a dynamic threshold.
+// GetDynamicThreshold retrieves a dynamic threshold by scientific name.
 func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
 	if ds.threshold == nil {
 		return nil, fmt.Errorf("threshold repository not configured")
@@ -1917,10 +1947,11 @@ func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.Dynamic
 	if err != nil {
 		return nil, err
 	}
+	scientificName := thresholdScientificName(t)
 	return &datastore.DynamicThreshold{
 		ID:             t.ID,
-		SpeciesName:    t.SpeciesName,
-		ScientificName: t.ScientificName,
+		SpeciesName:    scientificName, // Use scientific name as species name for compatibility
+		ScientificName: scientificName,
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
 		BaseThreshold:  t.BaseThreshold,
@@ -1947,10 +1978,11 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 	result := make([]datastore.DynamicThreshold, 0, len(v2Thresholds))
 	for i := range v2Thresholds {
 		t := &v2Thresholds[i]
+		scientificName := thresholdScientificName(t)
 		result = append(result, datastore.DynamicThreshold{
 			ID:             t.ID,
-			SpeciesName:    t.SpeciesName,
-			ScientificName: t.ScientificName,
+			SpeciesName:    scientificName,
+			ScientificName: scientificName,
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
 			BaseThreshold:  t.BaseThreshold,
@@ -1994,27 +2026,50 @@ func (ds *Datastore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 }
 
 // BatchSaveDynamicThresholds saves multiple thresholds.
+// Resolves scientific names to label IDs before saving.
 func (ds *Datastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
+	if len(thresholds) == 0 {
+		return nil
+	}
 	ctx := context.Background()
+
+	// Collect all scientific names for batch resolution
+	names := make([]string, 0, len(thresholds))
+	for i := range thresholds {
+		if thresholds[i].ScientificName != "" {
+			names = append(names, thresholds[i].ScientificName)
+		}
+	}
+
+	// Batch resolve all labels in one operation
+	labels, err := ds.label.BatchGetOrCreate(ctx, names, entities.LabelTypeSpecies)
+	if err != nil {
+		return fmt.Errorf("failed to resolve labels for thresholds: %w", err)
+	}
+
+	// Build v2 thresholds with resolved label IDs
 	v2Thresholds := make([]entities.DynamicThreshold, 0, len(thresholds))
 	for i := range thresholds {
 		t := &thresholds[i]
+		label := labels[t.ScientificName]
+		if label == nil {
+			return fmt.Errorf("label not found for threshold %s", t.ScientificName)
+		}
+
 		v2Thresholds = append(v2Thresholds, entities.DynamicThreshold{
-			SpeciesName:    t.SpeciesName,
-			ScientificName: t.ScientificName,
-			Level:          t.Level,
-			CurrentValue:   t.CurrentValue,
-			BaseThreshold:  t.BaseThreshold,
-			HighConfCount:  t.HighConfCount,
-			ValidHours:     t.ValidHours,
-			ExpiresAt:      t.ExpiresAt,
-			LastTriggered:  t.LastTriggered,
-			FirstCreated:   t.FirstCreated,
-			UpdatedAt:      t.UpdatedAt,
-			TriggerCount:   t.TriggerCount,
+			LabelID:       label.ID,
+			Level:         t.Level,
+			CurrentValue:  t.CurrentValue,
+			BaseThreshold: t.BaseThreshold,
+			HighConfCount: t.HighConfCount,
+			ValidHours:    t.ValidHours,
+			ExpiresAt:     t.ExpiresAt,
+			LastTriggered: t.LastTriggered,
+			FirstCreated:  t.FirstCreated,
+			TriggerCount:  t.TriggerCount,
 		})
 	}
 	return ds.threshold.BatchSaveDynamicThresholds(ctx, v2Thresholds)
@@ -2042,14 +2097,37 @@ func (ds *Datastore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 // Threshold Event Methods
 // ============================================================
 
+// eventSpeciesName extracts the species name from an event's label.
+func eventSpeciesName(e *entities.ThresholdEvent) string {
+	if e.Label != nil && e.Label.ScientificName != nil {
+		return *e.Label.ScientificName
+	}
+	return ""
+}
+
 // SaveThresholdEvent saves a threshold event.
+// NOTE: The legacy ThresholdEvent.SpeciesName contains the common name (lowercase),
+// but the V2 schema uses labels with scientific names. This creates a semantic mismatch.
+// TODO(#1907): Resolve scientific name from parent DynamicThreshold instead of using
+// common name directly. Current behavior creates labels with common names as the
+// scientific_name field, which is incorrect but internally consistent for threshold queries.
 func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
+
+	// NOTE: event.SpeciesName is the common name (lowercase), not scientific name.
+	// This creates a label with common name as scientific_name, which is semantically
+	// incorrect but works for threshold event queries that also use common name.
+	// See TODO above for proper fix.
+	label, err := ds.label.GetOrCreate(ctx, event.SpeciesName, entities.LabelTypeSpecies)
+	if err != nil {
+		return fmt.Errorf("failed to resolve label for event: %w", err)
+	}
+
 	v2Event := &entities.ThresholdEvent{
-		SpeciesName:   event.SpeciesName,
+		LabelID:       label.ID,
 		PreviousLevel: event.PreviousLevel,
 		NewLevel:      event.NewLevel,
 		PreviousValue: event.PreviousValue,
@@ -2062,6 +2140,8 @@ func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 }
 
 // GetThresholdEvents retrieves threshold events for a species.
+// NOTE: speciesName is expected to be the common name (lowercase) to match how events are saved.
+// See SaveThresholdEvent TODO for details on the common name vs scientific name mismatch.
 func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datastore.ThresholdEvent, error) {
 	if ds.threshold == nil {
 		return []datastore.ThresholdEvent{}, nil
@@ -2076,7 +2156,7 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 		e := &v2Events[i]
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
-			SpeciesName:   e.SpeciesName,
+			SpeciesName:   eventSpeciesName(e),
 			PreviousLevel: e.PreviousLevel,
 			NewLevel:      e.NewLevel,
 			PreviousValue: e.PreviousValue,
@@ -2104,7 +2184,7 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 		e := &v2Events[i]
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
-			SpeciesName:   e.SpeciesName,
+			SpeciesName:   eventSpeciesName(e),
 			PreviousLevel: e.PreviousLevel,
 			NewLevel:      e.NewLevel,
 			PreviousValue: e.PreviousValue,
@@ -2139,19 +2219,33 @@ func (ds *Datastore) DeleteAllThresholdEvents() (int64, error) {
 // Notification History Methods
 // ============================================================
 
+// notificationScientificName extracts the scientific name from a notification's label.
+func notificationScientificName(h *entities.NotificationHistory) string {
+	if h.Label != nil && h.Label.ScientificName != nil {
+		return *h.Label.ScientificName
+	}
+	return ""
+}
+
 // SaveNotificationHistory saves a notification history entry.
+// Resolves the scientific name to a label ID before saving.
 func (ds *Datastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
 	if ds.notification == nil {
 		return fmt.Errorf("notification repository not configured")
 	}
 	ctx := context.Background()
+
+	// Resolve scientific name to label ID
+	label, err := ds.label.GetOrCreate(ctx, history.ScientificName, entities.LabelTypeSpecies)
+	if err != nil {
+		return fmt.Errorf("failed to resolve label for notification history: %w", err)
+	}
+
 	v2History := &entities.NotificationHistory{
-		ScientificName:   history.ScientificName,
+		LabelID:          label.ID,
 		NotificationType: history.NotificationType,
 		LastSent:         history.LastSent,
 		ExpiresAt:        history.ExpiresAt,
-		CreatedAt:        history.CreatedAt,
-		UpdatedAt:        history.UpdatedAt,
 	}
 	return ds.notification.SaveNotificationHistory(ctx, v2History)
 }
@@ -2168,7 +2262,7 @@ func (ds *Datastore) GetNotificationHistory(scientificName, notificationType str
 	}
 	return &datastore.NotificationHistory{
 		ID:               h.ID,
-		ScientificName:   h.ScientificName,
+		ScientificName:   notificationScientificName(h),
 		NotificationType: h.NotificationType,
 		LastSent:         h.LastSent,
 		ExpiresAt:        h.ExpiresAt,
@@ -2192,7 +2286,7 @@ func (ds *Datastore) GetActiveNotificationHistory(after time.Time) ([]datastore.
 		h := &v2Histories[i]
 		result = append(result, datastore.NotificationHistory{
 			ID:               h.ID,
-			ScientificName:   h.ScientificName,
+			ScientificName:   notificationScientificName(h),
 			NotificationType: h.NotificationType,
 			LastSent:         h.LastSent,
 			ExpiresAt:        h.ExpiresAt,

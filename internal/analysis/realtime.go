@@ -930,12 +930,9 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	}
 }
 
-// NOTE: Potential Race Condition: If multiple goroutines call this function concurrently,
-// especially during initial startup, there's a risk of race conditions during provider
-// registration (checking Get then Register is not atomic). Consider using sync.Once
-// or ensuring this is called only once during a deterministic startup phase (e.g., in main).
 // setupImageProviderRegistry initializes or retrieves the global image provider registry
 // and registers the default providers (Wikimedia, AviCommons).
+// Uses atomic GetOrRegister to eliminate race conditions between concurrent calls.
 func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics) (*imageprovider.ImageProviderRegistry, error) {
 	// Use the global registry if available, otherwise create a new one
 	log := GetLogger()
@@ -953,43 +950,26 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 
 	var errs []error // Slice to collect errors
 
-	// Attempt to register Wikimedia
-	if _, ok := registry.GetCache("wikimedia"); !ok {
-		wikiCache, err := imageprovider.CreateDefaultCache(metrics, ds)
-		if err != nil {
-			log.Error("failed to create WikiMedia image cache",
-				logger.Error(err),
-				logger.String("provider", "wikimedia"),
-				logger.String("operation", "create_image_cache"))
-			errs = append(errs, errors.New(err).
-				Component("realtime-analysis").
-				Category(errors.CategoryImageProvider).
-				Context("operation", "create_wikimedia_cache").
-				Context("provider", "wikimedia").
-				Build())
-			// Continue even if one provider fails
-		} else {
-			if err := registry.Register("wikimedia", wikiCache); err != nil {
-				log.Error("failed to register WikiMedia image provider",
-					logger.Error(err),
-					logger.String("provider", "wikimedia"),
-					logger.String("operation", "register_image_provider"))
-				errs = append(errs, errors.New(err).
-					Component("realtime-analysis").
-					Category(errors.CategoryImageProvider).
-					Context("operation", "register_wikimedia_provider").
-					Context("provider", "wikimedia").
-					Build())
-			} else {
-				log.Info("successfully registered image provider",
-					logger.String("provider", "wikimedia"),
-					logger.String("operation", "register_image_provider"))
-			}
-		}
-	} else {
-		log.Info("using existing image provider",
+	// Use atomic GetOrRegister to eliminate race condition between GetCache and Register
+	_, err := registry.GetOrRegister("wikimedia", func() (*imageprovider.BirdImageCache, error) {
+		return imageprovider.CreateDefaultCache(metrics, ds)
+	})
+	if err != nil {
+		log.Error("failed to register WikiMedia image provider",
+			logger.Error(err),
 			logger.String("provider", "wikimedia"),
-			logger.String("operation", "setup_image_provider"))
+			logger.String("operation", "register_image_provider"))
+		errs = append(errs, errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryImageProvider).
+			Context("operation", "register_wikimedia_provider").
+			Context("provider", "wikimedia").
+			Build())
+		// Continue even if one provider fails
+	} else {
+		log.Info("successfully registered image provider",
+			logger.String("provider", "wikimedia"),
+			logger.String("operation", "register_image_provider"))
 	}
 
 	// Attempt to register AviCommons
@@ -1998,9 +1978,9 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
 	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
 	weatherRepo := repository.NewWeatherRepository(v2DB, useV2Prefix, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(v2DB, useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, useV2Prefix, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
 
 	// Create V2OnlyDatastore
 	ds, err := v2only.New(&v2only.Config{

@@ -3,15 +3,18 @@ package entities
 import "time"
 
 // NotificationHistory tracks notification suppression state.
-// This mirrors the legacy notification_histories table structure.
+// LabelID links to the species label for normalized storage.
 type NotificationHistory struct {
 	ID               uint      `gorm:"primaryKey"`
-	ScientificName   string    `gorm:"uniqueIndex:idx_notification_species_type;size:200;not null"`
-	NotificationType string    `gorm:"uniqueIndex:idx_notification_species_type;size:50;not null;default:new_species"`
+	LabelID          uint      `gorm:"uniqueIndex:idx_notification_label_type;not null"`
+	NotificationType string    `gorm:"uniqueIndex:idx_notification_label_type;size:50;not null;default:new_species"`
 	LastSent         time.Time `gorm:"index;not null"`
 	ExpiresAt        time.Time `gorm:"index;not null"`
 	CreatedAt        time.Time `gorm:"autoCreateTime"`
 	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
+
+	// Relationship
+	Label *Label `gorm:"foreignKey:LabelID"`
 }
 
 // TableName returns the table name for GORM.
