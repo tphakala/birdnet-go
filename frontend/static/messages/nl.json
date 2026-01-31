@@ -209,7 +209,8 @@
     "mainNavigation": "Top navigatie",
     "closeSidebar": "Sluit zijbalk",
     "analyticsSubmenu": "Statistiek submenu",
-    "settingsSubmenu": "Instellingen submenu"
+    "settingsSubmenu": "Instellingen submenu",
+    "systemSubmenu": "Systeemmenu"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -744,6 +745,199 @@
         "overallProgress": "Totale voortgang",
         "progress": "Voortgang"
       }
+    },
+    "sections": {
+      "overview": "Overzicht",
+      "database": "Database"
+    },
+    "database": {
+      "title": "Databasebeheer",
+      "description": "Beheer schema-migratie",
+      "migration": {
+        "title": "Databasemigratie",
+        "description": "Migreer van oud schema naar genormaliseerd v2 schema",
+        "completedTitle": "Migratie voltooid",
+        "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Uw systeem is nu klaar voor toekomstige functies die de genormaliseerde database vereisen. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
+        "status": {
+          "idle": "Klaar om te starten",
+          "initializing": "Initialiseren",
+          "dual_write": "Dubbel schrijven actief",
+          "migrating": "Primaire gegevens migreren",
+          "migrating_predictions": "Secundaire gegevens migreren",
+          "paused": "Gepauzeerd",
+          "validating": "Valideren",
+          "cutover": "Overschakeling bezig",
+          "completed": "Migratie voltooid"
+        },
+        "progress": {
+          "title": "Migratievoortgang",
+          "records": "records",
+          "percent": "{percent}%",
+          "rate": "{rate} records/sec",
+          "rateValue": "{rate} rec/s",
+          "remaining": "Resterend: {time}",
+          "eta": "Geschatte resterende tijd",
+          "dirtyIds": "{count} records wachtend",
+          "paused": "Migratie gepauzeerd"
+        },
+        "phase": {
+          "indicator": "Fase {current} van {total}: ",
+          "detections": "Primaire detecties migreren",
+          "predictions": "Secundaire detecties migreren",
+          "reviews": "Beoordelingen migreren",
+          "comments": "Opmerkingen migreren",
+          "locks": "Vergrendelingen migreren"
+        },
+        "notes": {
+          "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
+          "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
+          "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",
+          "cutover": "Overschakelen naar de nieuwe database. Dit duurt slechts een moment.",
+          "paused": "Migratie is gepauzeerd. Uw gegevens zijn veilig. Hervat wanneer u klaar bent."
+        },
+        "actions": {
+          "start": "Start migratie",
+          "pause": "Pauzeren",
+          "resume": "Hervatten",
+          "cancel": "Annuleren",
+          "rollback": "Terugdraaien"
+        },
+        "confirmCancel": {
+          "title": "Migratie annuleren?",
+          "message": "Dit stopt de migratie en keert terug naar de inactieve status. U kunt de migratie later veilig opnieuw starten - records worden niet gedupliceerd.",
+          "confirm": "Ja, annuleren",
+          "dismiss": "Nee, doorgaan"
+        },
+        "confirmRollback": {
+          "title": "Migratie terugdraaien?",
+          "message": "Dit keert terug naar de oude database. Nieuwe detecties sinds de migratie blijven bewaard in de verbeterde database maar zijn niet zichtbaar totdat de migratie opnieuw wordt uitgevoerd.",
+          "confirm": "Ja, terugdraaien",
+          "dismiss": "Nee, verbeterde behouden"
+        },
+        "errors": {
+          "startFailed": "Kan migratie niet starten",
+          "pauseFailed": "Kan migratie niet pauzeren",
+          "resumeFailed": "Kan migratie niet hervatten",
+          "cancelFailed": "Kan migratie niet annuleren",
+          "rollbackFailed": "Kan migratie niet terugdraaien",
+          "fetchFailed": "Kan migratiestatus niet ophalen"
+        },
+        "worker": {
+          "running": "Worker actief",
+          "paused": "Worker gepauzeerd",
+          "stopped": "Worker gestopt"
+        },
+        "prerequisites": {
+          "title": "Pre-migratiecontroles",
+          "rerunChecks": "Controles opnieuw uitvoeren",
+          "critical": "Kritiek",
+          "allPassed": "Alle controles geslaagd - klaar voor migratie",
+          "criticalIssues": "{count} kritiek(e) probleem/problemen moet(en) worden opgelost",
+          "warningsCount": "{count} waarschuwing(en)",
+          "running": "Pre-migratie controles uitvoeren...",
+          "checkingStep": "Stap {current} van {total}",
+          "errors": {
+            "fetchFailed": "Kan vereisten niet ophalen"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migratiestatus"
+            },
+            "disk_space": {
+              "name": "Schijfruimte"
+            },
+            "legacy_accessible": {
+              "name": "Databaseverbinding"
+            },
+            "sqlite_integrity": {
+              "name": "Database-integriteit"
+            },
+            "mysql_table_health": {
+              "name": "Tabelgezondheid"
+            },
+            "write_permission": {
+              "name": "Schrijfrechten"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-rechten"
+            },
+            "record_count": {
+              "name": "Aantal records"
+            },
+            "existing_v2_data": {
+              "name": "Bestaande migratiegegevens"
+            },
+            "no_active_locks": {
+              "name": "Actieve vergrendelingen"
+            },
+            "memory_available": {
+              "name": "Beschikbaar geheugen"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
+        "requiredNote": "Databasemigratie is vereist voor aankomende BirdNET-Go-functies die afhankelijk zijn van het nieuwe genormaliseerde databaseschema. Nieuwe functies zijn pas beschikbaar na voltooiing van de migratie.",
+        "starting": "Migratie wordt gestart...",
+        "confirmDialog": {
+          "title": "Databasemigratie starten",
+          "message": "De migratie kopieert uw detectiegegevens van de huidige database naar een nieuwe genormaliseerde database. Uw originele database blijft ongewijzigd. Het wordt echter aanbevolen om een back-up te maken voor het geval er onverwachte problemen optreden.",
+          "checkbox": "Ik bevestig dat ik een back-up van mijn database heb gemaakt of de risico's begrijp van doorgaan zonder back-up.",
+          "note": "U kunt een back-up downloaden met de knop \"Back-up downloaden\" hierboven."
+        }
+      },
+      "legacy": {
+        "title": "Legacy database",
+        "fetchFailed": "Kon legacy databasestatus niet ophalen",
+        "cleanup": {
+          "title": "Legacy database opruimen",
+          "location": "Locatie",
+          "size": "Grootte",
+          "records": "Records",
+          "detections": "detecties",
+          "lastModified": "Laatst gewijzigd",
+          "warning": "Waarschuwing: Deze actie kan niet ongedaan worden gemaakt",
+          "backupReminder": "Zorg ervoor dat u een back-up heeft voordat u de legacy database verwijdert.",
+          "deleteButton": "Legacy database verwijderen",
+          "inProgress": "Verwijderen...",
+          "success": "{size} schijfruimte vrijgemaakt",
+          "failed": "Opruimen mislukt",
+          "notAvailable": "Opruimen niet beschikbaar",
+          "confirmTitle": "Legacy database verwijderen?",
+          "confirmMessage": "U staat op het punt de legacy database ({size}) permanent te verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
+          "confirmCheckbox": "Ik begrijp dat dit de legacy database permanent zal verwijderen",
+          "cancelButton": "Annuleren",
+          "deleteConfirmButton": "Permanent verwijderen",
+          "description": "Deze database is nu offline en wordt niet meer gebruikt. Al uw gegevens zijn gemigreerd naar de verbeterde database.",
+          "recommendation": "Het wordt aanbevolen om deze database te verwijderen om schijfruimte vrij te maken."
+        }
+      },
+      "v2": {
+        "title": "Verbeterde database"
+      },
+      "stats": {
+        "connected": "Verbonden",
+        "disconnected": "Niet verbonden",
+        "type": "Type",
+        "location": "Locatie",
+        "size": "Grootte",
+        "detections": "Detecties",
+        "fetchFailed": "Ophalen van databasestatistieken mislukt"
+      },
+      "backup": {
+        "download": "Back-up downloaden",
+        "downloading": "Downloaden...",
+        "starting": "Back-up starten...",
+        "creating": "Back-up maken...",
+        "cancel": "Annuleren",
+        "retry": "Opnieuw proberen",
+        "mysqlNote": "MySQL-back-up vereist externe tools (mysqldump)"
+      },
+      "notInitialized": "Niet geïnitialiseerd"
     }
   },
   "analytics": {

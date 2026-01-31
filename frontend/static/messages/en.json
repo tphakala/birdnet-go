@@ -209,7 +209,8 @@
     "mainNavigation": "Main navigation",
     "closeSidebar": "Close sidebar",
     "analyticsSubmenu": "Analytics submenu",
-    "settingsSubmenu": "Settings submenu"
+    "settingsSubmenu": "Settings submenu",
+    "systemSubmenu": "System submenu"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -744,6 +745,200 @@
       "memoryUsage": "Failed to load memory usage: {error}",
       "temperature": "Failed to load temperature: {error}",
       "processes": "Failed to load process information: {error}"
+    },
+    "sections": {
+      "overview": "Overview",
+      "database": "Database"
+    },
+    "database": {
+      "title": "Database Management",
+      "description": "Manage database schema migration",
+      "legacy": {
+        "title": "Legacy Database",
+        "fetchFailed": "Failed to fetch legacy database status",
+        "cleanup": {
+          "title": "Legacy Database Cleanup",
+          "description": "This database is now offline and no longer in use. All your data has been migrated to the Enhanced Database.",
+          "recommendation": "It is recommended to delete this database to free up disk space.",
+          "location": "Location",
+          "size": "Size",
+          "records": "Records",
+          "detections": "detections",
+          "lastModified": "Last Modified",
+          "warning": "Warning: This action cannot be undone",
+          "backupReminder": "Make sure you have a backup before deleting the legacy database.",
+          "deleteButton": "Delete Legacy Database",
+          "inProgress": "Deleting...",
+          "success": "{size} of disk space has been reclaimed",
+          "failed": "Cleanup Failed",
+          "notAvailable": "Cleanup Not Available",
+          "confirmTitle": "Delete Legacy Database?",
+          "confirmMessage": "You are about to permanently delete the legacy database ({size}). This action cannot be undone.",
+          "confirmCheckbox": "I understand this will permanently delete the legacy database",
+          "cancelButton": "Cancel",
+          "deleteConfirmButton": "Delete Permanently"
+        }
+      },
+      "v2": {
+        "title": "Enhanced Database"
+      },
+      "stats": {
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "type": "Type",
+        "location": "Location",
+        "size": "Size",
+        "detections": "Detections",
+        "fetchFailed": "Failed to fetch database stats"
+      },
+      "backup": {
+        "download": "Download Backup",
+        "downloading": "Downloading...",
+        "starting": "Starting backup...",
+        "creating": "Creating backup...",
+        "cancel": "Cancel",
+        "retry": "Retry Backup",
+        "mysqlNote": "MySQL backup requires external tools (mysqldump)"
+      },
+      "notInitialized": "Not initialized",
+      "migration": {
+        "title": "Database Migration",
+        "description": "Migrate from legacy schema to normalized v2 schema",
+        "requiredNote": "Database migration is required for upcoming BirdNET-Go features that rely on the new normalized database schema. New features will not be available until migration is complete.",
+        "completedTitle": "Migration Complete",
+        "completedNote": "Your database has been successfully migrated to the new schema. Your system is now ready for upcoming features that require the normalized database. Note: The new database is smaller because it stores data more efficiently - this is expected and all your data is preserved.",
+        "starting": "Starting migration...",
+        "status": {
+          "idle": "Ready to Start",
+          "initializing": "Initializing",
+          "dual_write": "Dual-Write Active",
+          "migrating": "Migrating Primary",
+          "migrating_predictions": "Migrating Secondary",
+          "paused": "Paused",
+          "validating": "Validating",
+          "cutover": "Cutover in Progress",
+          "completed": "Migration Complete"
+        },
+        "progress": {
+          "title": "Migration Progress",
+          "records": "records",
+          "paused": "Migration Paused",
+          "percent": "{percent}%",
+          "rate": "{rate} records/sec",
+          "rateValue": "{rate} rec/s",
+          "remaining": "Est. remaining: {time}",
+          "eta": "Estimated time remaining",
+          "dirtyIds": "{count} records pending re-sync"
+        },
+        "phase": {
+          "indicator": "Phase {current} of {total}: ",
+          "detections": "Migrating primary detections",
+          "predictions": "Migrating secondary detections",
+          "reviews": "Migrating Reviews",
+          "comments": "Migrating Comments",
+          "locks": "Migrating Locks"
+        },
+        "notes": {
+          "inProgress": "You can continue using the system normally while migration runs in the background.",
+          "dual_write": "Migration in progress. Your data is safe - all new detections are being saved to both databases.",
+          "migrating": "Copying your existing detections to the new database.",
+          "validating": "Verifying all records were copied correctly. Almost done!",
+          "cutover": "Switching to the new database. This only takes a moment.",
+          "paused": "Migration is paused. Your data is safe. Resume when you're ready to continue."
+        },
+        "actions": {
+          "start": "Start Migration",
+          "pause": "Pause",
+          "resume": "Resume",
+          "cancel": "Cancel",
+          "rollback": "Rollback"
+        },
+        "confirmDialog": {
+          "title": "Start Database Migration",
+          "message": "The migration will copy your detection data from the current database to a new normalized database. Your original database remains unchanged. However, creating a backup is recommended in case of unexpected issues.",
+          "checkbox": "I confirm that I have backed up my database or understand the risks of proceeding without a backup.",
+          "note": "You can download a backup using the \"Download Backup\" button above."
+        },
+        "confirmCancel": {
+          "title": "Cancel Migration?",
+          "message": "This will stop the migration and return to idle state. You can safely restart the migration later - records will not be duplicated.",
+          "confirm": "Yes, Cancel",
+          "dismiss": "No, Keep Running"
+        },
+        "confirmRollback": {
+          "title": "Rollback Migration?",
+          "message": "This will revert to the legacy database. New detections recorded since migration will be preserved in the enhanced database but will not be visible until migration is run again.",
+          "confirm": "Yes, Rollback",
+          "dismiss": "No, Keep Enhanced"
+        },
+        "errors": {
+          "startFailed": "Failed to start migration",
+          "pauseFailed": "Failed to pause migration",
+          "resumeFailed": "Failed to resume migration",
+          "cancelFailed": "Failed to cancel migration",
+          "rollbackFailed": "Failed to rollback migration",
+          "fetchFailed": "Failed to fetch migration status"
+        },
+        "worker": {
+          "running": "Worker Running",
+          "paused": "Worker Paused",
+          "stopped": "Worker Stopped"
+        },
+        "prerequisites": {
+          "title": "Pre-Migration Checks",
+          "rerunChecks": "Re-run Checks",
+          "critical": "Critical",
+          "allPassed": "All checks passed - ready to migrate",
+          "criticalIssues": "{count} critical issue(s) must be resolved",
+          "warningsCount": "{count} warning(s)",
+          "running": "Running pre-migration checks...",
+          "checkingStep": "Step {current} of {total}",
+          "errors": {
+            "fetchFailed": "Failed to fetch prerequisites"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migration State"
+            },
+            "disk_space": {
+              "name": "Disk Space"
+            },
+            "legacy_accessible": {
+              "name": "Database Connection"
+            },
+            "sqlite_integrity": {
+              "name": "Database Integrity"
+            },
+            "mysql_table_health": {
+              "name": "Table Health"
+            },
+            "write_permission": {
+              "name": "Write Permission"
+            },
+            "mysql_permissions": {
+              "name": "MySQL Permissions"
+            },
+            "record_count": {
+              "name": "Record Count"
+            },
+            "existing_v2_data": {
+              "name": "Existing Migration Data"
+            },
+            "no_active_locks": {
+              "name": "Active Locks"
+            },
+            "memory_available": {
+              "name": "Memory Available"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        }
+      }
     }
   },
   "analytics": {

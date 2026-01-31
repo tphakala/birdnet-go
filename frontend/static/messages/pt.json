@@ -209,7 +209,8 @@
     "mainNavigation": "Navegação principal",
     "closeSidebar": "Fechar barra lateral",
     "analyticsSubmenu": "Submenu de análises",
-    "settingsSubmenu": "Submenu de configurações"
+    "settingsSubmenu": "Submenu de configurações",
+    "systemSubmenu": "Submenu do sistema"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -744,6 +745,199 @@
         "overallProgress": "Progresso geral",
         "progress": "Progresso"
       }
+    },
+    "sections": {
+      "overview": "Visão geral",
+      "database": "Base de dados"
+    },
+    "database": {
+      "title": "Gestão da base de dados",
+      "description": "Gerir migração de esquema",
+      "migration": {
+        "title": "Migração da base de dados",
+        "description": "Migrar do esquema antigo para o esquema v2 normalizado",
+        "completedTitle": "Migração concluída",
+        "completedNote": "Seu banco de dados foi migrado com sucesso para o novo esquema. Seu sistema está agora pronto para os próximos recursos que requerem o banco de dados normalizado. Nota: O novo banco de dados é menor porque armazena dados de forma mais eficiente - isso é normal e todos os seus dados estão preservados.",
+        "status": {
+          "idle": "Pronto para iniciar",
+          "initializing": "A inicializar",
+          "dual_write": "Escrita dupla ativa",
+          "migrating": "A migrar dados primários",
+          "migrating_predictions": "A migrar dados secundários",
+          "paused": "Pausado",
+          "validating": "A validar",
+          "cutover": "Transição em curso",
+          "completed": "Migração concluída"
+        },
+        "progress": {
+          "title": "Progresso da migração",
+          "records": "registos",
+          "percent": "{percent}%",
+          "rate": "{rate} registos/seg",
+          "rateValue": "{rate} reg/s",
+          "remaining": "Restante: {time}",
+          "eta": "Tempo restante estimado",
+          "dirtyIds": "{count} registos pendentes",
+          "paused": "Migração em pausa"
+        },
+        "phase": {
+          "indicator": "Fase {current} de {total}: ",
+          "detections": "A migrar detecções primárias",
+          "predictions": "A migrar detecções secundárias",
+          "reviews": "A migrar avaliações",
+          "comments": "A migrar comentários",
+          "locks": "A migrar bloqueios"
+        },
+        "notes": {
+          "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
+          "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
+          "validating": "Verificando se todos os registros foram copiados corretamente. Quase pronto!",
+          "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
+          "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
+        },
+        "actions": {
+          "start": "Iniciar migração",
+          "pause": "Pausar",
+          "resume": "Retomar",
+          "cancel": "Cancelar",
+          "rollback": "Reverter"
+        },
+        "confirmCancel": {
+          "title": "Cancelar migração?",
+          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registros não serão duplicados.",
+          "confirm": "Sim, cancelar",
+          "dismiss": "Não, continuar"
+        },
+        "confirmRollback": {
+          "title": "Reverter migração?",
+          "message": "Isto reverterá para a base de dados antiga. Novas deteções registadas desde a migração serão preservadas na base de dados melhorada mas não ficarão visíveis até a migração ser executada novamente.",
+          "confirm": "Sim, reverter",
+          "dismiss": "Não, manter melhorada"
+        },
+        "errors": {
+          "startFailed": "Falha ao iniciar a migração",
+          "pauseFailed": "Falha ao pausar a migração",
+          "resumeFailed": "Falha ao retomar a migração",
+          "cancelFailed": "Falha ao cancelar a migração",
+          "rollbackFailed": "Falha ao reverter a migração",
+          "fetchFailed": "Falha ao obter o estado da migração"
+        },
+        "worker": {
+          "running": "Worker em execução",
+          "paused": "Worker pausado",
+          "stopped": "Worker parado"
+        },
+        "prerequisites": {
+          "title": "Verificações pré-migração",
+          "rerunChecks": "Executar verificações novamente",
+          "critical": "Crítico",
+          "allPassed": "Todas as verificações passaram - pronto para migrar",
+          "criticalIssues": "{count} problema(s) crítico(s) deve(m) ser resolvido(s)",
+          "warningsCount": "{count} aviso(s)",
+          "running": "A executar verificações pré-migração...",
+          "checkingStep": "Passo {current} de {total}",
+          "errors": {
+            "fetchFailed": "Falha ao obter os pré-requisitos"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Estado da migração"
+            },
+            "disk_space": {
+              "name": "Espaço em disco"
+            },
+            "legacy_accessible": {
+              "name": "Conexão à base de dados"
+            },
+            "sqlite_integrity": {
+              "name": "Integridade da base de dados"
+            },
+            "mysql_table_health": {
+              "name": "Saúde das tabelas"
+            },
+            "write_permission": {
+              "name": "Permissão de escrita"
+            },
+            "mysql_permissions": {
+              "name": "Permissões MySQL"
+            },
+            "record_count": {
+              "name": "Contagem de registos"
+            },
+            "existing_v2_data": {
+              "name": "Dados de migração existentes"
+            },
+            "no_active_locks": {
+              "name": "Bloqueios ativos"
+            },
+            "memory_available": {
+              "name": "Memória disponível"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
+        "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
+        "starting": "A iniciar migração...",
+        "confirmDialog": {
+          "title": "Iniciar migração da base de dados",
+          "message": "A migração irá copiar os seus dados de deteção da base de dados atual para uma nova base de dados normalizada. A sua base de dados original permanece inalterada. No entanto, é recomendado criar uma cópia de segurança caso ocorram problemas inesperados.",
+          "checkbox": "Confirmo que fiz uma cópia de segurança da minha base de dados ou compreendo os riscos de continuar sem cópia de segurança.",
+          "note": "Pode transferir uma cópia de segurança usando o botão \"Transferir cópia de segurança\" acima."
+        }
+      },
+      "legacy": {
+        "title": "Base de dados legada",
+        "fetchFailed": "Falha ao obter o estado da base de dados legada",
+        "cleanup": {
+          "title": "Limpeza da base de dados legada",
+          "location": "Localização",
+          "size": "Tamanho",
+          "records": "Registos",
+          "detections": "deteções",
+          "lastModified": "Última modificação",
+          "warning": "Aviso: Esta ação não pode ser desfeita",
+          "backupReminder": "Certifique-se de que tem uma cópia de segurança antes de eliminar a base de dados legada.",
+          "deleteButton": "Eliminar base de dados legada",
+          "inProgress": "A eliminar...",
+          "success": "{size} de espaço em disco foram libertados",
+          "failed": "Falha na limpeza",
+          "notAvailable": "Limpeza não disponível",
+          "confirmTitle": "Eliminar base de dados legada?",
+          "confirmMessage": "Está prestes a eliminar permanentemente a base de dados legada ({size}). Esta ação não pode ser desfeita.",
+          "confirmCheckbox": "Compreendo que isto eliminará permanentemente a base de dados legada",
+          "cancelButton": "Cancelar",
+          "deleteConfirmButton": "Eliminar permanentemente",
+          "description": "Este banco de dados agora está offline e não está mais em uso. Todos os seus dados foram migrados para o banco de dados aprimorado.",
+          "recommendation": "Recomenda-se excluir este banco de dados para liberar espaço em disco."
+        }
+      },
+      "v2": {
+        "title": "Base de dados melhorada"
+      },
+      "stats": {
+        "connected": "Conectado",
+        "disconnected": "Desconectado",
+        "type": "Tipo",
+        "location": "Localização",
+        "size": "Tamanho",
+        "detections": "Deteções",
+        "fetchFailed": "Falha ao obter estatísticas da base de dados"
+      },
+      "backup": {
+        "download": "Transferir cópia de segurança",
+        "downloading": "A transferir...",
+        "starting": "A iniciar cópia de segurança...",
+        "creating": "A criar cópia de segurança...",
+        "cancel": "Cancelar",
+        "retry": "Tentar novamente",
+        "mysqlNote": "A cópia de segurança MySQL requer ferramentas externas (mysqldump)"
+      },
+      "notInitialized": "Não inicializado"
     }
   },
   "analytics": {

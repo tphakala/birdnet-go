@@ -84,6 +84,12 @@ func (m *MockDatastore) SaveDailyEvents(*datastore.DailyEvents) error { return n
 func (m *MockDatastore) GetDailyEvents(string) (datastore.DailyEvents, error) {
 	return datastore.DailyEvents{}, nil
 }
+func (m *MockDatastore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
+	return nil, nil
+}
+func (m *MockDatastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
+	return nil, nil
+}
 func (m *MockDatastore) SaveHourlyWeather(*datastore.HourlyWeather) error { return nil }
 func (m *MockDatastore) GetHourlyWeather(string) ([]datastore.HourlyWeather, error) {
 	return make([]datastore.HourlyWeather, 0), nil
@@ -301,6 +307,44 @@ func (m *MockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 		Type:      "mock",
 		Connected: true,
 	}, nil
+}
+
+// Migration bulk fetch methods
+func (m *MockDatastore) GetAllReviews() ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetAllComments() ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetAllLocks() ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetAllResults() ([]datastore.Results, error) {
+	return nil, nil
+}
+
+// Batched migration methods
+func (m *MockDatastore) GetReviewsBatch(afterID uint, batchSize int) ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetLocksBatch(afterID uint, batchSize int) ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]datastore.Results, error) {
+	return nil, nil
+}
+
+func (m *MockDatastore) CountResults() (int64, error) {
+	return 0, nil
 }
 
 // createTestProcessor creates a processor with mock datastore for testing

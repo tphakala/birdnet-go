@@ -36,6 +36,7 @@ import (
 const sunriseSetWindowMinutes = 30
 
 // Database dialect constants.
+// NOTE: These must be lowercase to match GORM's dialector.Name() output.
 const (
 	DialectUnknown = "unknown"
 	DialectSQLite  = "sqlite"
@@ -100,11 +101,47 @@ type Interface interface {
 	GetNoteComments(noteID string) ([]NoteComment, error)
 	// GetNoteResults returns the additional predictions for a note.
 	GetNoteResults(noteID string) ([]Results, error)
+	// GetAllReviews returns all note reviews for migration.
+	//
+	// Deprecated: Use GetReviewsBatch for memory-safe batched retrieval.
+	GetAllReviews() ([]NoteReview, error)
+	// GetAllComments returns all note comments for migration.
+	//
+	// Deprecated: Use GetCommentsBatch for memory-safe batched retrieval.
+	GetAllComments() ([]NoteComment, error)
+	// GetAllLocks returns all note locks for migration.
+	//
+	// Deprecated: Use GetLocksBatch for memory-safe batched retrieval.
+	GetAllLocks() ([]NoteLock, error)
+	// GetAllResults returns all secondary predictions for migration.
+	//
+	// Deprecated: Use GetResultsBatch for memory-safe batched retrieval.
+	GetAllResults() ([]Results, error)
+
+	// GetReviewsBatch returns a batch of note reviews for memory-safe migration.
+	// Returns reviews with ID > afterID, limited to batchSize records.
+	GetReviewsBatch(afterID uint, batchSize int) ([]NoteReview, error)
+	// GetCommentsBatch returns a batch of note comments for memory-safe migration.
+	// Returns comments with ID > afterID, limited to batchSize records.
+	GetCommentsBatch(afterID uint, batchSize int) ([]NoteComment, error)
+	// GetLocksBatch returns a batch of note locks for memory-safe migration.
+	// Returns locks with NoteID > afterID, limited to batchSize records.
+	GetLocksBatch(afterID uint, batchSize int) ([]NoteLock, error)
+	// GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
+	// Results are ordered by (note_id, id) to keep predictions grouped by detection.
+	// Uses keyset pagination: returns results where (note_id > afterNoteID) OR
+	// (note_id = afterNoteID AND id > afterResultID).
+	GetResultsBatch(afterNoteID uint, afterResultID uint, batchSize int) ([]Results, error)
+	// CountResults returns the total number of secondary predictions.
+	// Used for progress tracking during migration.
+	CountResults() (int64, error)
 	SaveNoteComment(comment *NoteComment) error
 	UpdateNoteComment(commentID string, entry string) error
 	DeleteNoteComment(commentID string) error
 	SaveDailyEvents(dailyEvents *DailyEvents) error
 	GetDailyEvents(date string) (DailyEvents, error)
+	GetAllDailyEvents() ([]DailyEvents, error)
+	GetAllHourlyWeather() ([]HourlyWeather, error)
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
@@ -219,6 +256,12 @@ func (ds *DataStore) SetMetrics(m *Metrics) {
 	ds.metricsMu.Lock()
 	defer ds.metricsMu.Unlock()
 	ds.metrics = m
+}
+
+// GetDB returns the underlying GORM database instance.
+// This is used by prerequisites checks to run database-specific validation queries.
+func (ds *DataStore) GetDB() *gorm.DB {
+	return ds.DB
 }
 
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
@@ -780,6 +823,34 @@ func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 	return dailyEvents, nil
 }
 
+// GetAllDailyEvents retrieves all daily events from the database.
+// Used for migration purposes.
+func (ds *DataStore) GetAllDailyEvents() ([]DailyEvents, error) {
+	var dailyEvents []DailyEvents
+	if err := ds.DB.Order("date ASC").Find(&dailyEvents).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_daily_events").
+			Build()
+	}
+	return dailyEvents, nil
+}
+
+// GetAllHourlyWeather retrieves all hourly weather records from the database.
+// Used for migration purposes.
+func (ds *DataStore) GetAllHourlyWeather() ([]HourlyWeather, error) {
+	var hourlyWeather []HourlyWeather
+	if err := ds.DB.Order("time ASC").Find(&hourlyWeather).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_hourly_weather").
+			Build()
+	}
+	return hourlyWeather, nil
+}
+
 // SaveHourlyWeather saves hourly weather data to the database.
 func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 	// Basic validation
@@ -1126,6 +1197,148 @@ func (ds *DataStore) GetNoteResults(noteID string) ([]Results, error) {
 			Build()
 	}
 	return results, nil
+}
+
+// GetAllReviews returns all note reviews for migration.
+func (ds *DataStore) GetAllReviews() ([]NoteReview, error) {
+	var reviews []NoteReview
+	if err := ds.DB.Find(&reviews).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_reviews").
+			Build()
+	}
+	return reviews, nil
+}
+
+// GetAllComments returns all note comments for migration.
+func (ds *DataStore) GetAllComments() ([]NoteComment, error) {
+	var comments []NoteComment
+	if err := ds.DB.Find(&comments).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_comments").
+			Build()
+	}
+	return comments, nil
+}
+
+// GetAllLocks returns all note locks for migration.
+func (ds *DataStore) GetAllLocks() ([]NoteLock, error) {
+	var locks []NoteLock
+	if err := ds.DB.Find(&locks).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_locks").
+			Build()
+	}
+	return locks, nil
+}
+
+// GetAllResults returns all secondary predictions for migration.
+func (ds *DataStore) GetAllResults() ([]Results, error) {
+	var results []Results
+	if err := ds.DB.Find(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_results").
+			Build()
+	}
+	return results, nil
+}
+
+// GetReviewsBatch returns a batch of note reviews for memory-safe migration.
+// Returns reviews with ID > afterID, limited to batchSize records, ordered by ID ascending.
+func (ds *DataStore) GetReviewsBatch(afterID uint, batchSize int) ([]NoteReview, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
+	var reviews []NoteReview
+	if err := ds.DB.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&reviews).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_reviews_batch").
+			Build()
+	}
+	return reviews, nil
+}
+
+// GetCommentsBatch returns a batch of note comments for memory-safe migration.
+// Returns comments with ID > afterID, limited to batchSize records, ordered by ID ascending.
+func (ds *DataStore) GetCommentsBatch(afterID uint, batchSize int) ([]NoteComment, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
+	var comments []NoteComment
+	if err := ds.DB.Where("id > ?", afterID).Order("id ASC").Limit(batchSize).Find(&comments).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_comments_batch").
+			Build()
+	}
+	return comments, nil
+}
+
+// GetLocksBatch returns a batch of note locks for memory-safe migration.
+// Returns locks with NoteID > afterID, limited to batchSize records, ordered by NoteID ascending.
+func (ds *DataStore) GetLocksBatch(afterID uint, batchSize int) ([]NoteLock, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
+	var locks []NoteLock
+	if err := ds.DB.Where("note_id > ?", afterID).Order("note_id ASC").Limit(batchSize).Find(&locks).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_locks_batch").
+			Build()
+	}
+	return locks, nil
+}
+
+// GetResultsBatch returns a batch of secondary predictions for memory-safe migration.
+// Results are ordered by (note_id, id) to keep predictions grouped by detection.
+// Uses keyset pagination: returns results where (note_id > afterNoteID) OR
+// (note_id = afterNoteID AND id > afterResultID).
+func (ds *DataStore) GetResultsBatch(afterNoteID, afterResultID uint, batchSize int) ([]Results, error) {
+	if batchSize <= 0 {
+		return nil, validationError("batch size must be positive", "batch_size", batchSize)
+	}
+	var results []Results
+	// Keyset pagination: (note_id, id) > (afterNoteID, afterResultID)
+	if err := ds.DB.Where(
+		"(note_id > ?) OR (note_id = ? AND id > ?)",
+		afterNoteID, afterNoteID, afterResultID,
+	).Order("note_id ASC, id ASC").
+		Limit(batchSize).
+		Find(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_results_batch").
+			Build()
+	}
+	return results, nil
+}
+
+// CountResults returns the total number of secondary predictions.
+// Used for progress tracking during migration.
+func (ds *DataStore) CountResults() (int64, error) {
+	var count int64
+	if err := ds.DB.Model(&Results{}).Count(&count).Error; err != nil {
+		return 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "count_results").
+			Build()
+	}
+	return count, nil
 }
 
 // SaveNoteComment saves a new comment for a note

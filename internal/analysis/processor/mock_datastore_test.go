@@ -203,6 +203,12 @@ func (m *ActionMockDatastore) SaveDailyEvents(_ *datastore.DailyEvents) error {
 func (m *ActionMockDatastore) GetDailyEvents(_ string) (datastore.DailyEvents, error) {
 	return datastore.DailyEvents{}, nil
 }
+func (m *ActionMockDatastore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
+	return nil, nil
+}
 func (m *ActionMockDatastore) SaveHourlyWeather(_ *datastore.HourlyWeather) error {
 	return nil
 }
@@ -340,6 +346,29 @@ func (m *ActionMockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, erro
 	return &datastore.DatabaseStats{Type: "mock", Connected: true}, nil
 }
 
+// Migration bulk fetch methods
+func (m *ActionMockDatastore) GetAllReviews() ([]datastore.NoteReview, error)   { return nil, nil }
+func (m *ActionMockDatastore) GetAllComments() ([]datastore.NoteComment, error) { return nil, nil }
+func (m *ActionMockDatastore) GetAllLocks() ([]datastore.NoteLock, error)       { return nil, nil }
+func (m *ActionMockDatastore) GetAllResults() ([]datastore.Results, error)      { return nil, nil }
+
+// Batched migration methods
+func (m *ActionMockDatastore) GetReviewsBatch(_ uint, _ int) ([]datastore.NoteReview, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetCommentsBatch(_ uint, _ int) ([]datastore.NoteComment, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetLocksBatch(_ uint, _ int) ([]datastore.NoteLock, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetResultsBatch(_, _ uint, _ int) ([]datastore.Results, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) CountResults() (int64, error) {
+	return 0, nil
+}
+
 // Compile-time check that ActionMockDatastore implements datastore.Interface
 var _ datastore.Interface = (*ActionMockDatastore)(nil)
 
@@ -453,6 +482,11 @@ func (m *MockDetectionRepository) GetClipPath(_ context.Context, _ string) (stri
 }
 func (m *MockDetectionRepository) GetAdditionalResults(_ context.Context, _ string) ([]detection.AdditionalResult, error) {
 	return nil, nil
+}
+func (m *MockDetectionRepository) CountAll(_ context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return int64(m.savedCount), nil
 }
 
 // Compile-time check that MockDetectionRepository implements datastore.DetectionRepository

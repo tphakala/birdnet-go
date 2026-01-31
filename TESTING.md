@@ -446,11 +446,8 @@ func TestConcurrent(t *testing.T) {
 ### When Writing Tests
 
 1. **Think ahead** - Identify patterns likely to repeat and create shared helpers proactively
-1. **Think ahead** - Identify patterns likely to repeat and create shared helpers proactively
 2. **Check for existing helpers** - Look in `*_test_helpers_test.go` files before creating new ones
 3. **Refactor when you see patterns** - If you encounter repeated test code, extract to helpers, and always include `t.Helper()`
-4. **Use testify exclusively** - Never fall back to manual if/error patterns
-3. **Refactor when you see patterns** - If you encounter repeated test code, extract to helpers
 4. **Use testify exclusively** - Never fall back to manual if/error patterns
 5. **Consider CI environment** - Use generous timeouts (500ms minimum for async operations)
 

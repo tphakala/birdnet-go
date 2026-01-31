@@ -200,10 +200,10 @@ func (s *SQLiteStore) Open() error {
 	var gormLogger gormlogger.Interface
 	if s.Settings.Debug {
 		// Use debug log level with lower slow threshold
-		gormLogger = NewGormLogger(100*time.Millisecond, gormlogger.Info, s.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Info, s.metrics)
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(200*time.Millisecond, gormlogger.Warn, s.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, s.metrics)
 	}
 
 	// Open SQLite database with GORM

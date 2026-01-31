@@ -199,7 +199,8 @@
     "mainNavigation": "Päänavigaatio",
     "closeSidebar": "Sulje sivupalkki",
     "analyticsSubmenu": "Analytiikan alavalikko",
-    "settingsSubmenu": "Asetusten alavalikko"
+    "settingsSubmenu": "Asetusten alavalikko",
+    "systemSubmenu": "Järjestelmän alavalikko"
   },
   "pageTitle": {
     "settings": "Asetukset - BirdNET-Go",
@@ -744,6 +745,199 @@
         "overallProgress": "Kokonaisedistyminen",
         "progress": "Edistyminen"
       }
+    },
+    "sections": {
+      "overview": "Yleiskatsaus",
+      "database": "Tietokanta"
+    },
+    "database": {
+      "title": "Tietokannan hallinta",
+      "description": "Hallitse skeemamigraatiota",
+      "migration": {
+        "title": "Tietokantamigraatio",
+        "description": "Migroi vanhasta skeemasta normalisoituun v2-skeemaan",
+        "completedTitle": "Migraatio valmis",
+        "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Järjestelmäsi on nyt valmis tulevia ominaisuuksia varten, jotka vaativat normalisoidun tietokannan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
+        "status": {
+          "idle": "Valmis aloitettavaksi",
+          "initializing": "Alustus",
+          "dual_write": "Kaksoiskirjoitus aktiivinen",
+          "migrating": "Migroidaan ensisijaiset",
+          "migrating_predictions": "Migroidaan toissijaiset",
+          "paused": "Keskeytetty",
+          "validating": "Vahvistetaan",
+          "cutover": "Vaihto käynnissä",
+          "completed": "Migraatio valmis"
+        },
+        "progress": {
+          "title": "Migraation edistyminen",
+          "records": "tietuetta",
+          "percent": "{percent}%",
+          "rate": "{rate} tietuetta/sek",
+          "rateValue": "{rate} tiet/s",
+          "remaining": "Jäljellä: {time}",
+          "eta": "Arvioitu jäljellä oleva aika",
+          "dirtyIds": "{count} tietuetta odottaa",
+          "paused": "Migraatio keskeytetty"
+        },
+        "phase": {
+          "indicator": "Vaihe {current}/{total}: ",
+          "detections": "Migroidaan ensisijaiset havainnot",
+          "predictions": "Migroidaan toissijaiset havainnot",
+          "reviews": "Migroidaan arvioinnit",
+          "comments": "Migroidaan kommentit",
+          "locks": "Migroidaan lukitukset"
+        },
+        "notes": {
+          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
+          "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
+          "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
+          "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
+          "paused": "Migraatio on keskeytetty. Tietosi ovat turvassa. Jatka kun olet valmis."
+        },
+        "actions": {
+          "start": "Aloita migraatio",
+          "pause": "Keskeytä",
+          "resume": "Jatka",
+          "cancel": "Peruuta",
+          "rollback": "Palauta"
+        },
+        "confirmCancel": {
+          "title": "Peruuta migraatio?",
+          "message": "Tämä pysäyttää migraation ja palauttaa lepotilaan. Voit käynnistää migraation turvallisesti uudelleen myöhemmin - tietueita ei kopioida.",
+          "confirm": "Kyllä, peruuta",
+          "dismiss": "Ei, jatka"
+        },
+        "confirmRollback": {
+          "title": "Palauta migraatio?",
+          "message": "Tämä palauttaa vanhaan tietokantaan. Migraation jälkeen tallennetut uudet havainnot säilyvät parannetussa tietokannassa, mutta eivät näy ennen uutta migraatiota.",
+          "confirm": "Kyllä, palauta",
+          "dismiss": "Ei, säilytä parannettu"
+        },
+        "errors": {
+          "startFailed": "Migraation käynnistys epäonnistui",
+          "pauseFailed": "Migraation keskeytys epäonnistui",
+          "resumeFailed": "Migraation jatkaminen epäonnistui",
+          "cancelFailed": "Migraation peruutus epäonnistui",
+          "rollbackFailed": "Migraation palautus epäonnistui",
+          "fetchFailed": "Migraation tilan haku epäonnistui"
+        },
+        "worker": {
+          "running": "Worker käynnissä",
+          "paused": "Worker keskeytetty",
+          "stopped": "Worker pysäytetty"
+        },
+        "prerequisites": {
+          "title": "Migraation esitarkistukset",
+          "rerunChecks": "Suorita tarkistukset uudelleen",
+          "critical": "Kriittinen",
+          "allPassed": "Kaikki tarkistukset läpäisty - valmis migraatioon",
+          "criticalIssues": "{count} kriittinen ongelma on ratkaistava",
+          "warningsCount": "{count} varoitus(ta)",
+          "running": "Suoritetaan esitarkistuksia...",
+          "checkingStep": "Vaihe {current}/{total}",
+          "errors": {
+            "fetchFailed": "Esivaatimusten haku epäonnistui"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migraation tila"
+            },
+            "disk_space": {
+              "name": "Levytila"
+            },
+            "legacy_accessible": {
+              "name": "Tietokantayhteys"
+            },
+            "sqlite_integrity": {
+              "name": "Tietokannan eheys"
+            },
+            "mysql_table_health": {
+              "name": "Taulujen kunto"
+            },
+            "write_permission": {
+              "name": "Kirjoitusoikeus"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-oikeudet"
+            },
+            "record_count": {
+              "name": "Tietueiden määrä"
+            },
+            "existing_v2_data": {
+              "name": "Olemassa olevat migraatiotiedot"
+            },
+            "no_active_locks": {
+              "name": "Aktiiviset lukot"
+            },
+            "memory_available": {
+              "name": "Käytettävissä oleva muisti"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
+        "requiredNote": "Tietokannan migraatio vaaditaan tulevien BirdNET-Go-ominaisuuksien vuoksi, jotka hyödyntävät uutta normalisoitua tietokantaskeemaa. Uudet ominaisuudet eivät ole käytettävissä ennen migraation valmistumista.",
+        "starting": "Käynnistetään migraatiota...",
+        "confirmDialog": {
+          "title": "Aloita tietokannan migraatio",
+          "message": "Migraatio kopioi havaintotietosi nykyisestä tietokannasta uuteen normalisoituun tietokantaan. Alkuperäinen tietokantasi säilyy muuttumattomana. Varmuuskopion luominen on kuitenkin suositeltavaa odottamattomien ongelmien varalta.",
+          "checkbox": "Vahvistan, että olen varmuuskopioinut tietokantani tai ymmärrän riskit jatkamisesta ilman varmuuskopiota.",
+          "note": "Voit ladata varmuuskopion käyttämällä yllä olevaa \"Lataa varmuuskopio\" -painiketta."
+        }
+      },
+      "legacy": {
+        "title": "Vanha tietokanta",
+        "fetchFailed": "Vanhan tietokannan tilan haku epäonnistui",
+        "cleanup": {
+          "title": "Vanhan tietokannan siivous",
+          "location": "Sijainti",
+          "size": "Koko",
+          "records": "Tietueet",
+          "detections": "havaintoa",
+          "lastModified": "Viimeksi muokattu",
+          "warning": "Varoitus: Tätä toimintoa ei voi kumota",
+          "backupReminder": "Varmista, että sinulla on varmuuskopio ennen vanhan tietokannan poistamista.",
+          "deleteButton": "Poista vanha tietokanta",
+          "inProgress": "Poistetaan...",
+          "success": "{size} levytilaa vapautettu",
+          "failed": "Siivous epäonnistui",
+          "notAvailable": "Siivous ei ole käytettävissä",
+          "confirmTitle": "Poista vanha tietokanta?",
+          "confirmMessage": "Olet poistamassa pysyvästi vanhan tietokannan ({size}). Tätä toimintoa ei voi kumota.",
+          "confirmCheckbox": "Ymmärrän, että tämä poistaa vanhan tietokannan pysyvästi",
+          "cancelButton": "Peruuta",
+          "deleteConfirmButton": "Poista pysyvästi",
+          "description": "Tämä tietokanta on nyt offline-tilassa eikä sitä enää käytetä. Kaikki tietosi on siirretty parannettuun tietokantaan.",
+          "recommendation": "Tietokannan poistamista suositellaan levytilan vapauttamiseksi."
+        }
+      },
+      "v2": {
+        "title": "Parannettu tietokanta"
+      },
+      "stats": {
+        "connected": "Yhdistetty",
+        "disconnected": "Ei yhdistetty",
+        "type": "Tyyppi",
+        "location": "Sijainti",
+        "size": "Koko",
+        "detections": "Havainnot",
+        "fetchFailed": "Tietokantatilastojen haku epäonnistui"
+      },
+      "backup": {
+        "download": "Lataa varmuuskopio",
+        "downloading": "Ladataan...",
+        "starting": "Aloitetaan varmuuskopiointia...",
+        "creating": "Luodaan varmuuskopiota...",
+        "cancel": "Peruuta",
+        "retry": "Yritä uudelleen",
+        "mysqlNote": "MySQL-varmuuskopiointi vaatii ulkoisia työkaluja (mysqldump)"
+      },
+      "notInitialized": "Ei alustettu"
     }
   },
   "analytics": {

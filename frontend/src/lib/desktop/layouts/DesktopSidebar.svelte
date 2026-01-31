@@ -89,14 +89,17 @@ Performance Optimizations:
   let showLoginModal = $state(false);
   let analyticsExpanded = $state(false);
   let settingsExpanded = $state(false);
+  let systemExpanded = $state(false);
 
   // Flyout state for collapsed mode
   let analyticsFlyoutOpen = $state(false);
   let settingsFlyoutOpen = $state(false);
+  let systemFlyoutOpen = $state(false);
 
   // Flyout position (for fixed positioning to escape overflow container)
   let analyticsFlyoutPosition = $state({ top: 0, left: 0 });
   let settingsFlyoutPosition = $state({ top: 0, left: 0 });
+  let systemFlyoutPosition = $state({ top: 0, left: 0 });
 
   // Tooltip state for fixed positioning (escapes overflow containers)
   let tooltipText = $state('');
@@ -123,6 +126,7 @@ Performance Optimizations:
   // Button refs for position calculation
   let analyticsButtonRef = $state<HTMLButtonElement | null>(null);
   let settingsButtonRef = $state<HTMLButtonElement | null>(null);
+  let systemButtonRef = $state<HTMLButtonElement | null>(null);
 
   // Toggle flyout with position calculation
   function toggleAnalyticsFlyout() {
@@ -136,6 +140,7 @@ Performance Optimizations:
     }
     analyticsFlyoutOpen = !analyticsFlyoutOpen;
     settingsFlyoutOpen = false;
+    systemFlyoutOpen = false;
   }
 
   function toggleSettingsFlyout() {
@@ -149,6 +154,21 @@ Performance Optimizations:
     }
     settingsFlyoutOpen = !settingsFlyoutOpen;
     analyticsFlyoutOpen = false;
+    systemFlyoutOpen = false;
+  }
+
+  function toggleSystemFlyout() {
+    hideTooltip(); // Hide tooltip when opening flyout
+    if (!systemFlyoutOpen && systemButtonRef) {
+      const rect = systemButtonRef.getBoundingClientRect();
+      systemFlyoutPosition = {
+        top: rect.top,
+        left: rect.right + 8, // 8px gap (ml-2)
+      };
+    }
+    systemFlyoutOpen = !systemFlyoutOpen;
+    analyticsFlyoutOpen = false;
+    settingsFlyoutOpen = false;
   }
 
   // Get collapsed state from store (using $ prefix for auto-subscription)
@@ -168,6 +188,8 @@ Performance Optimizations:
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
     system: actualRoute.startsWith('/ui/system'),
+    systemOverview: actualRoute === '/ui/system',
+    systemDatabase: actualRoute === '/ui/system/database',
     settings: actualRoute.startsWith('/ui/settings'),
     settingsMain: actualRoute === '/ui/settings/main',
     settingsAudio: actualRoute === '/ui/settings/audio',
@@ -184,6 +206,7 @@ Performance Optimizations:
     if (!isCollapsed) {
       if (routeCache.analytics) analyticsExpanded = true;
       if (routeCache.settings) settingsExpanded = true;
+      if (routeCache.system) systemExpanded = true;
     }
   });
 
@@ -193,6 +216,7 @@ Performance Optimizations:
     if (!target.closest('.flyout-container')) {
       analyticsFlyoutOpen = false;
       settingsFlyoutOpen = false;
+      systemFlyoutOpen = false;
     }
   }
 
@@ -204,7 +228,8 @@ Performance Optimizations:
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
-    system: onNavigate ? '/system' : '/ui/system',
+    systemOverview: onNavigate ? '/system' : '/ui/system',
+    systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
     settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
     settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
@@ -222,6 +247,7 @@ Performance Optimizations:
     // Close flyouts on navigation
     analyticsFlyoutOpen = false;
     settingsFlyoutOpen = false;
+    systemFlyoutOpen = false;
     if (onNavigate) {
       onNavigate(url);
     } else {
@@ -248,6 +274,7 @@ Performance Optimizations:
       // Sidebar is now collapsed - close expanded sections
       analyticsExpanded = false;
       settingsExpanded = false;
+      systemExpanded = false;
     }
   });
 
@@ -364,6 +391,7 @@ Performance Optimizations:
                   'hover:text-base-content hover:menu-hover'
                 )}
                 aria-expanded={analyticsFlyoutOpen}
+                aria-label={t('navigation.analyticsSubmenu')}
               >
                 <BarChart3 class="size-5 shrink-0" />
               </button>
@@ -502,25 +530,116 @@ Performance Optimizations:
           <!-- Divider -->
           <div class="my-2 border-t border-base-200/50"></div>
 
-          <!-- System -->
-          <div class="relative">
-            <button
-              onclick={() => navigate(navigationUrls.system)}
-              onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.system'))}
-              onmouseleave={hideTooltip}
-              class={cn(
-                menuItemBase,
-                menuItemCollapsed,
-                routeCache.system ? menuItemActive : menuItemDefault
-              )}
-              role="menuitem"
-              aria-current={routeCache.system ? 'page' : undefined}
-            >
-              <Cpu class="size-5 shrink-0" />
-              {#if !isCollapsed}
-                <span>{t('navigation.system')}</span>
+          <!-- System (Collapsible) -->
+          <div class="flex flex-col relative flyout-container">
+            {#if isCollapsed}
+              <!-- Collapsed: Icon with flyout -->
+              <div class="relative">
+                <button
+                  bind:this={systemButtonRef}
+                  onclick={toggleSystemFlyout}
+                  onmouseenter={e => !systemFlyoutOpen && showTooltip(e, t('navigation.system'))}
+                  onmouseleave={hideTooltip}
+                  class={cn(
+                    menuItemBase,
+                    menuItemCollapsed,
+                    routeCache.system ? 'text-primary' : 'text-base-content/80',
+                    'hover:text-base-content hover:menu-hover'
+                  )}
+                  aria-expanded={systemFlyoutOpen}
+                  aria-label={t('navigation.systemSubmenu')}
+                >
+                  <Cpu class="size-5 shrink-0" />
+                </button>
+              </div>
+              <!-- Flyout submenu (fixed positioning to escape overflow container) -->
+              {#if systemFlyoutOpen}
+                <div
+                  class="fixed bg-base-100 border border-base-200 rounded-lg shadow-xl min-w-48 z-[100]"
+                  style:top="{systemFlyoutPosition.top}px"
+                  style:left="{systemFlyoutPosition.left}px"
+                >
+                  <div
+                    class="px-3 py-2 border-b border-base-200 font-medium text-sm text-base-content"
+                  >
+                    {t('navigation.system')}
+                  </div>
+                  <div class="p-1">
+                    <button
+                      onclick={() => navigate(navigationUrls.systemOverview)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.systemOverview
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('system.sections.overview')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.systemDatabase)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.systemDatabase
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('system.sections.database')}
+                    </button>
+                  </div>
+                </div>
               {/if}
-            </button>
+            {:else}
+              <!-- Expanded: Regular collapsible -->
+              <button
+                onclick={() => (systemExpanded = !systemExpanded)}
+                class={cn(
+                  menuItemBase,
+                  routeCache.system ? 'text-primary' : 'text-base-content/80',
+                  'hover:text-base-content hover:menu-hover'
+                )}
+                aria-expanded={systemExpanded}
+              >
+                <Cpu class="size-5 shrink-0" />
+                <span class="flex-1">{t('navigation.system')}</span>
+                <ChevronDown
+                  class={cn('size-4 shrink-0 transition-transform duration-200', {
+                    'rotate-180': systemExpanded,
+                  })}
+                />
+              </button>
+
+              {#if systemExpanded}
+                <div
+                  class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
+                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+                >
+                  <button
+                    onclick={() => navigate(navigationUrls.systemOverview)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.systemOverview
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('system.sections.overview')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.systemDatabase)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.systemDatabase
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('system.sections.database')}
+                  </button>
+                </div>
+              {/if}
+            {/if}
           </div>
 
           <!-- Settings (Collapsible) -->
@@ -541,6 +660,7 @@ Performance Optimizations:
                     'hover:text-base-content hover:menu-hover'
                   )}
                   aria-expanded={settingsFlyoutOpen}
+                  aria-label={t('navigation.settingsSubmenu')}
                 >
                   <Settings class="size-5 shrink-0" />
                 </button>

@@ -16,10 +16,10 @@ import (
 
 const (
 	// DefaultSlowQueryThreshold defines the duration after which a query is considered slow.
-	// 200ms is chosen based on common industry practices and to catch queries that may
-	// impact user experience. This threshold helps identify queries that need optimization
-	// while avoiding false positives from typical database operations.
-	DefaultSlowQueryThreshold = 200 * time.Millisecond
+	// 1 second is chosen to accommodate migration batch queries which can take 800-900ms.
+	// This threshold helps identify queries that truly need optimization while avoiding
+	// false positives during normal database operations and migration workloads.
+	DefaultSlowQueryThreshold = 1 * time.Second
 
 	// MaxColumnsForDetailedDisplay defines the maximum number of columns to display
 	// in detailed logs. When more columns are present, only the count is shown to

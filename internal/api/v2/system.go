@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"golang.org/x/text/cases"
+	"gorm.io/gorm"
 	"golang.org/x/text/language"
 )
 
@@ -300,12 +302,23 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/processes", c.GetProcessInfo)
 	protectedGroup.GET("/temperature/cpu", c.GetSystemCPUTemperature)
 	protectedGroup.GET("/database/stats", c.GetDatabaseStats)
+	protectedGroup.GET("/database/v2/stats", c.GetV2DatabaseStats)
+	protectedGroup.POST("/database/backup", c.DownloadDatabaseBackup)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
 	audioGroup.GET("/devices", c.GetAudioDevices)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
+
+	// Initialize migration routes
+	c.initMigrationRoutes()
+
+	// Initialize async backup routes
+	c.initBackupRoutes()
+
+	// Initialize legacy cleanup routes
+	c.initLegacyCleanupRoutes()
 
 	c.logInfoIfEnabled("System routes initialized successfully")
 }
@@ -1307,17 +1320,51 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 }
 
 // GetDatabaseStats handles GET /api/v2/system/database/stats
+// This endpoint returns statistics for the primary database.
+// In v2-only mode (fresh install or post-migration), it returns v2 database stats.
+// In legacy mode, it returns legacy database stats.
 func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Getting database statistics",
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("ip", ctx.RealIP()),
+		logger.String("path", path),
+		logger.String("ip", ip),
 	)
+
+	// In enhanced database mode, return v2 database stats as the primary database
+	if isV2OnlyMode {
+		c.logInfoIfEnabled("Running in enhanced database mode, returning v2 database as primary",
+			logger.String("path", path),
+			logger.String("ip", ip),
+		)
+		// Get v2 database stats
+		v2Stats, ok := c.getV2Stats(path, ip)
+		if ok {
+			// Return v2 stats as the primary database stats
+			return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
+				Type:            v2Stats.Type,
+				Location:        v2Stats.Location,
+				SizeBytes:       v2Stats.SizeBytes,
+				TotalDetections: v2Stats.TotalDetections,
+				Connected:       v2Stats.Connected,
+			})
+		}
+		// V2 database not available, return disconnected state
+		c.logWarnIfEnabled("Enhanced database mode but v2 database not available",
+			logger.String("path", path),
+			logger.String("ip", ip),
+		)
+		return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
+			Type:      "none",
+			Connected: false,
+			Location:  "",
+		})
+	}
 
 	// Check if datastore is available
 	if c.DS == nil {
 		c.logErrorIfEnabled("Datastore not available",
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 		return c.HandleError(ctx, fmt.Errorf("datastore not available"), "Database not configured", http.StatusServiceUnavailable)
 	}
@@ -1332,16 +1379,16 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		if errors.Is(err, datastore.ErrDBNotConnected) {
 			c.logWarnIfEnabled("Database not connected, returning partial stats",
 				logger.Error(err),
-				logger.String("path", ctx.Request().URL.Path),
-				logger.String("ip", ctx.RealIP()),
+				logger.String("path", path),
+				logger.String("ip", ip),
 			)
 			isPartialStats = true
 			// Continue to return partial stats below
 		} else {
 			c.logErrorIfEnabled("Failed to get database stats",
 				logger.Error(err),
-				logger.String("path", ctx.Request().URL.Path),
-				logger.String("ip", ctx.RealIP()),
+				logger.String("path", path),
+				logger.String("ip", ip),
 			)
 			return c.HandleError(ctx, err, "Failed to retrieve database statistics", http.StatusInternalServerError)
 		}
@@ -1350,8 +1397,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	// Guard against nil stats (defensive - future implementations might return nil)
 	if stats == nil {
 		c.logErrorIfEnabled("GetDatabaseStats returned nil stats",
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 		return c.HandleError(ctx, fmt.Errorf("database stats unavailable"), "Failed to retrieve database statistics", http.StatusInternalServerError)
 	}
@@ -1361,8 +1408,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		c.logInfoIfEnabled("Database statistics retrieved (partial)",
 			logger.String("type", stats.Type),
 			logger.Bool("connected", stats.Connected),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 	} else {
 		c.logInfoIfEnabled("Database statistics retrieved successfully",
@@ -1370,10 +1417,334 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 			logger.Any("size_bytes", stats.SizeBytes),
 			logger.Any("total_detections", stats.TotalDetections),
 			logger.Bool("connected", stats.Connected),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
+			logger.String("path", path),
+			logger.String("ip", ip),
 		)
 	}
 
 	return ctx.JSON(http.StatusOK, stats)
+}
+
+// V2DatabaseStatsResponse represents v2 database statistics.
+type V2DatabaseStatsResponse struct {
+	Type            string `json:"type"`
+	Location        string `json:"location"`
+	SizeBytes       int64  `json:"size_bytes"`
+	TotalDetections int64  `json:"total_detections"`
+	Connected       bool   `json:"connected"`
+}
+
+// getV2Stats is a helper method that retrieves v2 database statistics.
+// It returns the stats and a boolean indicating if stats were successfully retrieved.
+// If the v2 database is not available, it returns nil and false.
+func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse, bool) {
+	// Check if V2Manager is available
+	if c.V2Manager == nil {
+		c.logInfoIfEnabled("V2 database not initialized",
+			logger.String("path", logPath), logger.String("ip", logIP))
+		return nil, false
+	}
+
+	// Check if database exists
+	if !c.V2Manager.Exists() {
+		c.logInfoIfEnabled("V2 database does not exist yet",
+			logger.String("path", logPath), logger.String("ip", logIP))
+		return nil, false
+	}
+
+	// Build response
+	response := &V2DatabaseStatsResponse{
+		Type:      datastore.DialectSQLite,
+		Location:  c.V2Manager.Path(),
+		Connected: true,
+	}
+
+	// Adjust type for MySQL
+	if c.V2Manager.IsMySQL() {
+		response.Type = datastore.DialectMySQL
+	}
+
+	// Get database size
+	db := c.V2Manager.DB()
+	if !c.V2Manager.IsMySQL() {
+		// SQLite: get file size
+		if fi, err := os.Stat(c.V2Manager.Path()); err == nil {
+			response.SizeBytes = fi.Size()
+		}
+	} else if db != nil {
+		// MySQL: query information_schema for database size
+		// Extract database name from location (format: host:port/database)
+		location := c.V2Manager.Path()
+		if idx := strings.LastIndex(location, "/"); idx != -1 {
+			dbName := location[idx+1:]
+			var sizeBytes int64
+			err := db.Raw(`
+				SELECT COALESCE(SUM(data_length + index_length), 0) as size
+				FROM information_schema.TABLES
+				WHERE table_schema = ?
+			`, dbName).Scan(&sizeBytes).Error
+			if err == nil {
+				response.SizeBytes = sizeBytes
+			} else {
+				c.logWarnIfEnabled("Failed to get MySQL database size",
+					logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
+			}
+		}
+	}
+
+	// Count total detections from v2 database
+	if db != nil {
+		var count int64
+		if err := db.Table("detections").Count(&count).Error; err == nil {
+			response.TotalDetections = count
+		} else {
+			c.logWarnIfEnabled("Failed to count v2 detections",
+				logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
+		}
+	}
+
+	c.logInfoIfEnabled("V2 database statistics retrieved successfully",
+		logger.String("type", response.Type),
+		logger.Any("size_bytes", response.SizeBytes),
+		logger.Any("total_detections", response.TotalDetections),
+		logger.Bool("connected", response.Connected),
+		logger.String("path", logPath), logger.String("ip", logIP))
+
+	return response, true
+}
+
+// GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
+func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
+	ip, path := ctx.RealIP(), ctx.Request().URL.Path
+	c.logInfoIfEnabled("Getting v2 database statistics",
+		logger.String("path", path), logger.String("ip", ip))
+
+	stats, ok := c.getV2Stats(path, ip)
+	if !ok {
+		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
+			"V2 database not initialized", http.StatusNotFound)
+	}
+
+	return ctx.JSON(http.StatusOK, stats)
+}
+
+// Backup constants
+const (
+	// backupDiskSpaceBuffer is the additional disk space required beyond the database size for backup.
+	backupDiskSpaceBuffer = 100 * 1024 * 1024 // 100 MB
+	// Database type constants for backup API
+	dbTypeLegacy = "legacy"
+	dbTypeV2     = "v2"
+)
+
+// DownloadDatabaseBackup handles POST /api/v2/system/database/backup
+// Creates a safe backup using SQLite's VACUUM INTO command.
+// Uses chunked transfer encoding to keep connection alive during long VACUUM operations.
+func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
+	backupStart := time.Now()
+	ip, reqPath := ctx.RealIP(), ctx.Request().URL.Path
+	dbType := ctx.QueryParam("type")
+
+	c.logInfoIfEnabled("Database backup requested",
+		logger.String("db_type", dbType),
+		logger.String("path", reqPath), logger.String("ip", ip))
+
+	// Validate dbType parameter
+	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
+		return c.HandleError(ctx, fmt.Errorf("invalid type"),
+			"Type must be 'legacy' or 'v2'", http.StatusBadRequest)
+	}
+
+	// Get database path based on type
+	var dbPath string
+	var gormDB *gorm.DB
+
+	if dbType == dbTypeLegacy {
+		// Check if it's SQLite
+		if c.Settings.Output.SQLite.Path == "" {
+			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
+				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
+				http.StatusBadRequest)
+		}
+		dbPath = c.Settings.Output.SQLite.Path
+
+		// Get the underlying GORM DB from the datastore
+		if c.DS == nil {
+			return c.HandleError(ctx, fmt.Errorf("datastore not available"),
+				"Database not configured", http.StatusServiceUnavailable)
+		}
+		sqliteStore, ok := c.DS.(*datastore.SQLiteStore)
+		if !ok {
+			return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
+				"Cannot perform backup on this datastore type", http.StatusInternalServerError)
+		}
+		gormDB = sqliteStore.DB
+	} else {
+		// V2 database
+		if c.V2Manager == nil {
+			return c.HandleError(ctx, fmt.Errorf("v2 not available"),
+				"V2 database not initialized", http.StatusNotFound)
+		}
+		if c.V2Manager.IsMySQL() {
+			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
+				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
+				http.StatusBadRequest)
+		}
+		dbPath = c.V2Manager.Path()
+		gormDB = c.V2Manager.DB()
+	}
+
+	// Get source database size for disk space check
+	fileInfo, err := os.Stat(dbPath)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get database info", http.StatusInternalServerError)
+	}
+	dbSize := fileInfo.Size()
+
+	c.logInfoIfEnabled("Database backup: source database info",
+		logger.String("db_type", dbType),
+		logger.String("db_path", dbPath),
+		// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
+		logger.String("db_size", formatBytesUint64(uint64(dbSize))))
+
+	// Check disk space on temp directory where VACUUM INTO will write
+	tempDir := os.TempDir()
+	usage, err := disk.Usage(tempDir)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to check disk space", http.StatusInternalServerError)
+	}
+	// Calculate required space. dbSize is always non-negative from FileInfo.Size()
+	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
+	requiredSpace := uint64(dbSize) + backupDiskSpaceBuffer
+	if usage.Free < requiredSpace {
+		return c.HandleError(ctx, fmt.Errorf("insufficient space"),
+			fmt.Sprintf("Not enough disk space for backup. Need %s free, have %s available.",
+				formatBytesUint64(requiredSpace), formatBytesUint64(usage.Free)),
+			http.StatusInsufficientStorage) // HTTP 507
+	}
+
+	c.logInfoIfEnabled("Database backup: disk space check passed",
+		logger.String("temp_dir", tempDir),
+		logger.String("free_space", formatBytesUint64(usage.Free)),
+		logger.String("required_space", formatBytesUint64(requiredSpace)))
+
+	// Create temp file path for VACUUM INTO
+	timestamp := time.Now().Format("20060102-150405")
+	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp))
+	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
+
+	// Set response headers BEFORE starting VACUUM to establish the connection.
+	// This prevents connection timeout during the long VACUUM operation.
+	// We use chunked transfer encoding since we don't know the final size yet.
+	resp := ctx.Response()
+	resp.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	resp.Header().Set("Content-Type", "application/octet-stream")
+	resp.Header().Set("Transfer-Encoding", "chunked")
+	resp.Header().Set("X-Content-Type-Options", "nosniff")
+	resp.WriteHeader(http.StatusOK)
+
+	// Flush headers to client immediately to establish connection
+	if flusher, ok := resp.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	c.logInfoIfEnabled("Database backup: headers sent, starting VACUUM INTO",
+		logger.String("db_type", dbType),
+		logger.String("temp_path", tempPath))
+
+	// Execute VACUUM INTO for safe, consistent backup
+	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
+	vacuumStart := time.Now()
+
+	vacuumErr := gormDB.Exec(vacuumSQL).Error
+	vacuumDuration := time.Since(vacuumStart)
+
+	if vacuumErr != nil {
+		c.logWarnIfEnabled("Database backup: VACUUM INTO failed",
+			logger.String("db_type", dbType),
+			logger.Duration("duration", vacuumDuration),
+			logger.Error(vacuumErr))
+		// Headers already sent, can't return error response - just log and close
+		return vacuumErr
+	}
+
+	// Ensure cleanup of temp file after response is sent
+	defer func() {
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			c.logWarnIfEnabled("Failed to cleanup backup temp file",
+				logger.String("path", tempPath), logger.Error(err))
+		} else {
+			c.logInfoIfEnabled("Database backup: temp file cleaned up",
+				logger.String("path", tempPath))
+		}
+	}()
+
+	// Get backup file size
+	backupInfo, statErr := os.Stat(tempPath)
+	backupSize := "unknown"
+	var backupSizeBytes int64
+	if statErr == nil {
+		backupSizeBytes = backupInfo.Size()
+		// #nosec G115 -- backupSizeBytes from os.FileInfo.Size() is always non-negative
+		backupSize = formatBytesUint64(uint64(backupSizeBytes))
+	}
+
+	c.logInfoIfEnabled("Database backup: VACUUM INTO completed, streaming file",
+		logger.String("db_type", dbType),
+		logger.Duration("vacuum_duration", vacuumDuration),
+		logger.String("backup_size", backupSize))
+
+	// Open and stream the backup file
+	//#nosec G304 -- tempPath is constructed from trusted sources (os.TempDir + controlled filename)
+	backupFile, err := os.Open(tempPath)
+	if err != nil {
+		c.logWarnIfEnabled("Database backup: failed to open backup file",
+			logger.String("path", tempPath),
+			logger.Error(err))
+		return err
+	}
+	defer func() {
+		if err := backupFile.Close(); err != nil {
+			c.logWarnIfEnabled("Database backup: failed to close backup file", logger.Error(err))
+		}
+	}()
+
+	// Stream the file to the response
+	written, copyErr := io.Copy(resp.Writer, backupFile)
+
+	totalDuration := time.Since(backupStart)
+	if copyErr != nil {
+		c.logWarnIfEnabled("Database backup: file transfer failed",
+			logger.String("db_type", dbType),
+			logger.String("filename", filename),
+			logger.Int64("bytes_written", written),
+			logger.Duration("total_duration", totalDuration),
+			logger.Error(copyErr))
+		return copyErr
+	}
+
+	c.logInfoIfEnabled("Database backup: completed successfully",
+		logger.String("db_type", dbType),
+		logger.String("filename", filename),
+		logger.String("backup_size", backupSize),
+		logger.Int64("bytes_sent", written),
+		logger.Duration("vacuum_duration", vacuumDuration),
+		logger.Duration("total_duration", totalDuration),
+		logger.String("ip", ip))
+
+	return nil
+}
+
+// formatBytesUint64 formats bytes into human-readable format (for uint64 values).
+func formatBytesUint64(bytes uint64) string {
+	const unit uint64 = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := unit, 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

@@ -20,6 +20,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -89,6 +94,19 @@ func (m *AudioDemuxManager) Done() {
 // Global audio demux manager instance
 var audioDemuxManager = NewAudioDemuxManager()
 
+// v2DatabaseManager holds the v2 database manager for shutdown cleanup.
+// This is set by initializeMigrationInfrastructure and cleared on shutdown.
+var v2DatabaseManager datastoreV2.Manager
+var v2DatabaseManagerMu sync.Mutex
+
+// GetV2DatabaseManager returns the v2 database manager.
+// Returns nil if the migration infrastructure is not initialized.
+func GetV2DatabaseManager() datastoreV2.Manager {
+	v2DatabaseManagerMu.Lock()
+	defer v2DatabaseManagerMu.Unlock()
+	return v2DatabaseManager
+}
+
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
@@ -125,8 +143,87 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Print system details and configuration
 	printSystemDetails(settings)
 
-	// Initialize database access.
-	dataStore := datastore.New(settings)
+	// Check migration state before initializing database
+	// This allows us to skip the legacy database when migration is complete
+	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
+	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
+	freshInstall := startupState.FreshInstall
+
+	// Log startup mode detection - use datastore module for database mode messages
+	datastoreLog := logger.Global().Module("datastore")
+	switch {
+	case v2OnlyMode:
+		datastoreLog.Info("migration completed, starting in enhanced database mode",
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.String("operation", "startup_mode_check"))
+	case freshInstall:
+		GetLogger().Info("fresh installation detected, initializing v2 schema",
+			logger.String("database_path", settings.Output.SQLite.Path),
+			logger.String("operation", "startup_mode_check"))
+	default:
+		GetLogger().Debug("migration state check completed",
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.Bool("v2_available", startupState.V2Available),
+			logger.Bool("legacy_required", startupState.LegacyRequired),
+			logger.String("operation", "startup_mode_check"))
+	}
+
+	// Initialize database access based on startup state
+	var dataStore datastore.Interface
+	var v2OnlyDatastore *v2only.Datastore
+
+	switch {
+	case v2OnlyMode:
+		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
+		var err error
+		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
+		if err != nil {
+			// Enhanced database mode failed, fall back to legacy startup
+			datastoreLog.Warn("enhanced database mode initialization failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_enhanced_database_mode"))
+			dataStore = datastore.New(settings)
+			v2OnlyMode = false
+		} else {
+			dataStore = v2OnlyDatastore
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager for API access
+			v2DatabaseManagerMu.Lock()
+			v2DatabaseManager = v2OnlyDatastore.Manager()
+			v2DatabaseManagerMu.Unlock()
+		}
+
+	case freshInstall:
+		// Fresh install: create at configured path with v2 schema
+		var err error
+		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger())
+		if err != nil {
+			// Fresh install failed, fall back to legacy mode
+			GetLogger().Warn("fresh install failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_fresh_install"))
+			dataStore = datastore.New(settings)
+		} else {
+			dataStore = v2OnlyDatastore
+			// Fresh install is now effectively v2-only mode
+			v2OnlyMode = true
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager for API access
+			v2DatabaseManagerMu.Lock()
+			v2DatabaseManager = v2OnlyDatastore.Manager()
+			v2DatabaseManagerMu.Unlock()
+		}
+
+	default:
+		// Legacy mode: use legacy datastore
+		dataStore = datastore.New(settings)
+	}
 
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
@@ -169,16 +266,19 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	dataStore.SetMetrics(metrics.Datastore)
 	dataStore.SetSunCalcMetrics(metrics.SunCalc)
 
-	// Validate disk space before attempting to open the database
-	// This prevents startup failures due to insufficient disk space
-	// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
-	if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
-		return err
-	}
+	// Only validate disk space and open for legacy mode (v2-only mode already opened)
+	if !v2OnlyMode {
+		// Validate disk space before attempting to open the database
+		// This prevents startup failures due to insufficient disk space
+		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
+		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+			return err
+		}
 
-	// Open a connection to the database and handle possible errors.
-	if err := dataStore.Open(); err != nil {
-		return err // Return error to stop execution if database connection fails.
+		// Open a connection to the database and handle possible errors.
+		if err := dataStore.Open(); err != nil {
+			return err // Return error to stop execution if database connection fails.
+		}
 	}
 	// Ensure the database connection is closed when the function returns.
 	defer closeDataStore(dataStore)
@@ -222,6 +322,23 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
 
+	// Initialize v2 migration infrastructure only if not in enhanced database mode
+	// In enhanced database mode, migration is already complete - no need for migration infrastructure
+	if !v2OnlyMode {
+		// This sets up the StateManager and Worker for the database migration API
+		if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
+			// Migration infrastructure is optional - log warning but continue
+			GetLogger().Warn("migration infrastructure initialization failed",
+				logger.Error(err),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
+	} else {
+		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
+			logger.String("operation", "initialize_migration_infrastructure"))
+	}
+	// Ensure v2 database is closed on shutdown (handles nil case gracefully)
+	defer closeV2Database()
+
 	// Initialize and start the HTTP server
 	GetLogger().Info("starting HTTP server")
 	oauth2Server := security.NewOAuth2Server()
@@ -236,6 +353,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		api.WithAudioLevelChannel(audioLevelChan),
 		api.WithOAuth2Server(oauth2Server),
 		api.WithSunCalc(sunCalc),
+		api.WithV2Manager(GetV2DatabaseManager()),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP server: %w", err)
@@ -317,6 +435,12 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				logger.Float64("shutdown_timeout_seconds", shutdownTimeout.Seconds()),
 				logger.String("operation", "graceful_shutdown"))
 			shutdownStart := time.Now()
+
+			// Stop migration worker FIRST - before any other shutdown steps
+			// This ensures the worker stops even if later steps timeout
+			log.Info("stopping migration worker early in shutdown",
+				logger.String("operation", "shutdown_migration_worker_early"))
+			apiv2.StopMigrationWorker()
 
 			// Create context with timeout for the entire shutdown process
 			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -464,6 +588,18 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					logger.String("operation", "shutdown_birdnet_cleanup"))
 				bn.Delete()
 
+				// Step 10: Stop migration worker (before closing databases)
+				log.Info("shutdown step 10: stopping migration worker",
+					logger.Int("step", 10),
+					logger.String("operation", "shutdown_migration_worker"))
+				apiv2.StopMigrationWorker()
+
+				// Step 11: Close v2 database (before legacy database closes via deferred closeDataStore)
+				log.Info("shutdown step 11: closing v2 database",
+					logger.Int("step", 11),
+					logger.String("operation", "shutdown_v2_database"))
+				closeV2Database()
+
 				log.Info("graceful shutdown completed",
 					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
 					logger.String("operation", "shutdown_complete"))
@@ -479,6 +615,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				GetLogger().Warn("shutdown timeout exceeded, forcing exit",
 					logger.Float64("timeout_seconds", shutdownTimeout.Seconds()),
 					logger.String("operation", "shutdown_forced_exit"))
+				// Ensure migration worker is stopped on timeout
+				apiv2.StopMigrationWorker()
 				cancel()
 				return nil
 			}
@@ -624,6 +762,55 @@ func closeDataStore(store datastore.Interface) {
 	} else {
 		log.Info("successfully closed database",
 			logger.String("operation", "close_database"))
+	}
+}
+
+// closeV2Database closes the v2 database with proper WAL checkpoint.
+func closeV2Database() {
+	v2DatabaseManagerMu.Lock()
+	manager := v2DatabaseManager
+	v2DatabaseManager = nil
+	v2DatabaseManagerMu.Unlock()
+
+	if manager == nil {
+		return
+	}
+
+	log := GetLogger()
+
+	// Determine database type for logging
+	dbType := "SQLite"
+	if manager.IsMySQL() {
+		dbType = "MySQL"
+	}
+
+	// Perform WAL checkpoint before closing (SQLite only, no-op for MySQL)
+	if !manager.IsMySQL() {
+		log.Info("performing v2 SQLite WAL checkpoint",
+			logger.String("operation", "v2_wal_checkpoint_before_shutdown"))
+
+		if err := manager.CheckpointWAL(); err != nil {
+			log.Warn("v2 WAL checkpoint failed",
+				logger.Error(err),
+				logger.String("operation", "v2_wal_checkpoint"))
+		}
+	}
+
+	// Close the database
+	log.Info("closing v2 database",
+		logger.String("type", dbType),
+		logger.String("path", manager.Path()),
+		logger.String("operation", "v2_database_close"))
+
+	if err := manager.Close(); err != nil {
+		log.Error("failed to close v2 database",
+			logger.Error(err),
+			logger.String("type", dbType),
+			logger.String("operation", "v2_database_close"))
+	} else {
+		log.Info("v2 database closed successfully",
+			logger.String("type", dbType),
+			logger.String("path", manager.Path()))
 	}
 }
 
@@ -1491,4 +1678,356 @@ func printSystemDetails(settings *conf.Settings) {
 		logger.Float64("overlap", settings.BirdNET.Overlap),
 		logger.Float64("sensitivity", settings.BirdNET.Sensitivity),
 		logger.Int("interval", settings.Realtime.Interval))
+}
+
+// migrationSetupConfig holds configuration for migration infrastructure setup.
+type migrationSetupConfig struct {
+	manager     datastoreV2.Manager // Satisfies both SQLite and MySQL managers
+	ds          datastore.Interface
+	log         logger.Logger
+	useV2Prefix bool   // true for MySQL migration (v2_ prefix), false for SQLite (separate file)
+	opName      string // For log messages: "initialize_migration_infrastructure" or "initialize_mysql_migration"
+}
+
+// setupMigrationWorker performs the common setup after manager creation and initialization.
+// It creates repositories, the migration worker, stores the manager for cleanup, and handles state recovery.
+// The caller should close the manager if this function returns an error.
+func setupMigrationWorker(cfg *migrationSetupConfig) error {
+	// Get dialect from manager interface (avoids redundant parameter)
+	isMySQL := cfg.manager.IsMySQL()
+
+	// Create the state manager
+	stateManager := datastoreV2.NewStateManager(cfg.manager.DB())
+
+	// Create repositories for the migration worker
+	v2DB := cfg.manager.DB()
+	labelRepo := repository.NewLabelRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	v2DetectionRepo := repository.NewDetectionRepository(v2DB, cfg.useV2Prefix, isMySQL)
+
+	// Create the legacy detection repository
+	legacyRepo := datastore.NewDetectionRepository(cfg.ds, time.Local)
+
+	// Determine batch size and sleep duration based on database type
+	// MySQL handles larger batches and concurrent access better than SQLite
+	batchSize := migration.DefaultBatchSize
+	sleepBetweenBatches := migration.DefaultSleepBetweenBatches
+	if isMySQL {
+		batchSize = migration.MySQLBatchSize
+		sleepBetweenBatches = migration.MySQLSleepBetweenBatches
+	}
+
+	// Use datastore logger for migration components (not analysis logger)
+	migrationLogger := datastore.GetLogger()
+
+	// Create the related data migrator for reviews, comments, locks, predictions
+	// Use half of detection batch size since related data tables are typically smaller
+	relatedDataBatchSize := batchSize / 2
+	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
+		LegacyStore:   cfg.ds,
+		DetectionRepo: v2DetectionRepo,
+		LabelRepo:     labelRepo,
+		StateManager:  stateManager,
+		Logger:        migrationLogger,
+		BatchSize:     relatedDataBatchSize,
+	})
+
+	// Create the migration worker
+	worker, err := migration.NewWorker(&migration.WorkerConfig{
+		Legacy:              legacyRepo,
+		V2Detection:         v2DetectionRepo,
+		LabelRepo:           labelRepo,
+		ModelRepo:           modelRepo,
+		SourceRepo:          sourceRepo,
+		StateManager:        stateManager,
+		RelatedMigrator:     relatedMigrator,
+		Logger:              migrationLogger,
+		BatchSize:           batchSize,
+		SleepBetweenBatches: sleepBetweenBatches,
+		Timezone:            time.Local,
+		UseBatchMode:        isMySQL, // Use efficient batch inserts for MySQL
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create migration worker: %w", err)
+	}
+
+	// Store manager for shutdown cleanup - only after successful worker creation
+	// to prevent GetV2DatabaseManager() from returning a partially initialized manager
+	v2DatabaseManagerMu.Lock()
+	v2DatabaseManager = cfg.manager
+	v2DatabaseManagerMu.Unlock()
+
+	// Inject dependencies into the API layer
+	apiv2.SetMigrationDependencies(stateManager, worker)
+
+	// Check for state recovery - resume migration if it was in progress
+	state, err := stateManager.GetState()
+	if err != nil {
+		migrationLogger.Warn("failed to get migration state for recovery",
+			logger.Error(err),
+			logger.String("operation", cfg.opName))
+	} else {
+		migrationLogger.Info("migration infrastructure initialized",
+			logger.String("state", string(state.State)),
+			logger.Int64("migrated_records", state.MigratedRecords),
+			logger.Int64("total_records", state.TotalRecords),
+			logger.String("operation", cfg.opName))
+
+		// Resume worker if migration was in progress
+		if state.State == entities.MigrationStatusDualWrite ||
+			state.State == entities.MigrationStatusMigrating {
+			migrationLogger.Info("resuming migration worker after restart",
+				logger.String("state", string(state.State)),
+				logger.String("operation", cfg.opName))
+			// Create cancellable context for the worker - this allows graceful shutdown
+			// to stop the worker by cancelling this context
+			workerCtx, workerCancel := context.WithCancel(context.Background())
+			apiv2.SetMigrationWorkerCancel(workerCancel)
+			if startErr := worker.Start(workerCtx); startErr != nil {
+				workerCancel() // Clean up on failure
+				migrationLogger.Warn("failed to resume migration worker",
+					logger.Error(startErr),
+					logger.String("operation", cfg.opName))
+			}
+		}
+	}
+
+	return nil
+}
+
+// initializeMigrationInfrastructure sets up the v2 database migration infrastructure.
+// This creates the StateManager and Worker instances needed for the migration API.
+// The function handles state recovery on restart and resumes migration if it was in progress.
+func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface) error {
+	log := GetLogger()
+
+	// Get the database directory from the legacy database path
+	var dataDir string
+	switch {
+	case settings.Output.SQLite.Enabled:
+		dataDir = datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
+	case settings.Output.MySQL.Enabled:
+		// MySQL uses v2_ prefixed tables in the same database
+		return initializeMySQLMigrationInfrastructure(settings, ds, log)
+	default:
+		log.Debug("no database configured, skipping migration infrastructure",
+			logger.String("operation", "initialize_migration_infrastructure"))
+		return nil
+	}
+
+	// Check if dataDir is empty (in-memory database)
+	if dataDir == "" {
+		log.Debug("in-memory database detected, skipping migration infrastructure",
+			logger.String("operation", "initialize_migration_infrastructure"))
+		return nil
+	}
+
+	// Create v2 database manager
+	v2Manager, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
+		DataDir: dataDir,
+		Debug:   settings.Debug,
+		Logger:  log,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create v2 database manager: %w", err)
+	}
+
+	// Initialize the v2 database schema
+	if err := v2Manager.Initialize(); err != nil {
+		if closeErr := v2Manager.Close(); closeErr != nil {
+			log.Warn("failed to close v2 manager after initialization failure",
+				logger.Error(closeErr),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
+		return fmt.Errorf("failed to initialize v2 database: %w", err)
+	}
+
+	// Setup the migration worker using the common helper
+	if err := setupMigrationWorker(&migrationSetupConfig{
+		manager:     v2Manager,
+		ds:          ds,
+		log:         log,
+		useV2Prefix: false, // SQLite uses separate file, not prefixed tables
+		opName:      "initialize_migration_infrastructure",
+	}); err != nil {
+		if closeErr := v2Manager.Close(); closeErr != nil {
+			log.Warn("failed to close v2 manager after worker setup failure",
+				logger.Error(closeErr),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
+		return err
+	}
+
+	return nil
+}
+
+// initializeMySQLMigrationInfrastructure sets up migration infrastructure for MySQL.
+// Unlike SQLite which uses a separate file, MySQL shares the same database.
+// V2 tables have different names from legacy (detections vs notes), so no prefix needed.
+func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) error {
+	// Create v2 MySQL manager - no prefix needed since v2 table names differ from legacy
+	// (Entity TableName() methods override GORM NamingStrategy anyway)
+	v2Manager, err := datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
+		Host:        settings.Output.MySQL.Host,
+		Port:        settings.Output.MySQL.Port,
+		Username:    settings.Output.MySQL.Username,
+		Password:    settings.Output.MySQL.Password,
+		Database:    settings.Output.MySQL.Database,
+		UseV2Prefix: false, // No prefix - v2 tables have different names from legacy
+		Debug:       settings.Debug,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create MySQL v2 manager: %w", err)
+	}
+
+	// Initialize the v2 schema (creates tables without prefix)
+	if err := v2Manager.Initialize(); err != nil {
+		if closeErr := v2Manager.Close(); closeErr != nil {
+			log.Warn("failed to close MySQL v2 manager after initialization failure",
+				logger.Error(closeErr),
+				logger.String("operation", "initialize_mysql_migration"))
+		}
+		return fmt.Errorf("failed to initialize MySQL v2 schema: %w", err)
+	}
+
+	// Setup the migration worker using the common helper
+	// Note: useV2Prefix is false because entity TableName() methods override
+	// GORM's NamingStrategy, creating tables without prefix. Since v2 tables
+	// have different names from legacy (detections vs notes), prefix isn't needed.
+	if err := setupMigrationWorker(&migrationSetupConfig{
+		manager:     v2Manager,
+		ds:          ds,
+		log:         log,
+		useV2Prefix: false, // Tables created without prefix due to TableName() methods
+		opName:      "initialize_mysql_migration",
+	}); err != nil {
+		if closeErr := v2Manager.Close(); closeErr != nil {
+			log.Warn("failed to close MySQL v2 manager after worker setup failure",
+				logger.Error(closeErr),
+				logger.String("operation", "initialize_mysql_migration"))
+		}
+		return err
+	}
+
+	return nil
+}
+
+// initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.
+// This allows the application to run without opening the legacy database.
+// It handles both:
+//   - Fresh installs: v2 schema at configured path (no _v2 suffix, no v2_ prefix)
+//   - Post-migration: v2 schema at migration path (_v2 suffix, v2_ prefix)
+func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
+	log := logger.Global().Module("datastore")
+	log.Info("initializing enhanced database mode",
+		logger.String("operation", "initialize_enhanced_database_mode"))
+
+	// Determine configuration based on database type
+	var v2Manager datastoreV2.Manager
+	var useV2Prefix bool
+	var err error
+
+	switch {
+	case settings.Output.SQLite.Enabled:
+		configuredPath := settings.Output.SQLite.Path
+		dataDir := datastoreV2.GetDataDirFromLegacyPath(configuredPath)
+		migrationPath := filepath.Join(dataDir, "birdnet_v2.db")
+
+		// Determine if v2 schema is at configured path (fresh) or migration path
+		if datastoreV2.CheckSQLiteHasV2Schema(configuredPath) {
+			// Fresh install restart: use configured path directly
+			log.Debug("v2 schema found at configured path (fresh install)",
+				logger.String("path", configuredPath))
+			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+				DirectPath: configuredPath,
+				Debug:      settings.Debug,
+				Logger:     log,
+			})
+			useV2Prefix = false
+		} else {
+			// Post-migration: use migration path
+			log.Debug("using migration v2 database path",
+				logger.String("path", migrationPath))
+			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+				DataDir: dataDir,
+				Debug:   settings.Debug,
+				Logger:  log,
+			})
+			useV2Prefix = false
+		}
+
+	case settings.Output.MySQL.Enabled:
+		// Check if fresh v2 tables exist (no prefix) or migration tables (v2_ prefix)
+		isFreshV2 := datastoreV2.CheckMySQLHasFreshV2Schema(settings)
+		useV2Prefix = !isFreshV2
+
+		log.Debug("MySQL v2 mode configuration",
+			logger.Bool("use_v2_prefix", useV2Prefix),
+			logger.Bool("is_fresh_v2", isFreshV2))
+
+		v2Manager, err = datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
+			Host:        settings.Output.MySQL.Host,
+			Port:        settings.Output.MySQL.Port,
+			Username:    settings.Output.MySQL.Username,
+			Password:    settings.Output.MySQL.Password,
+			Database:    settings.Output.MySQL.Database,
+			UseV2Prefix: useV2Prefix,
+			Debug:       settings.Debug,
+		})
+
+	default:
+		return nil, fmt.Errorf("no database configured")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create v2 database manager: %w", err)
+	}
+
+	// Initialize the v2 database schema (ensures auxiliary tables exist)
+	if err := v2Manager.Initialize(); err != nil {
+		_ = v2Manager.Close()
+		return nil, fmt.Errorf("failed to initialize v2 database: %w", err)
+	}
+
+	// Create repositories
+	v2DB := v2Manager.DB()
+	isMySQL := settings.Output.MySQL.Enabled // Determine dialect from settings
+	detectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(v2DB, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, useV2Prefix, isMySQL)
+
+	// Create V2OnlyDatastore
+	ds, err := v2only.New(&v2only.Config{
+		Manager:      v2Manager,
+		Detection:    detectionRepo,
+		Label:        labelRepo,
+		Model:        modelRepo,
+		Source:       sourceRepo,
+		Weather:      weatherRepo,
+		ImageCache:   imageCacheRepo,
+		Threshold:    thresholdRepo,
+		Notification: notificationRepo,
+		Logger:       log,
+		Timezone:     time.Local,
+	})
+	if err != nil {
+		_ = v2Manager.Close()
+		return nil, fmt.Errorf("failed to create v2-only datastore: %w", err)
+	}
+
+	// Store manager for shutdown cleanup
+	v2DatabaseManagerMu.Lock()
+	v2DatabaseManager = v2Manager
+	v2DatabaseManagerMu.Unlock()
+
+	log.Info("enhanced database mode initialized successfully",
+		logger.String("operation", "initialize_enhanced_database_mode"))
+
+	return ds, nil
 }

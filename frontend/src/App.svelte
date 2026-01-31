@@ -125,6 +125,11 @@
     '/support': 'settings.sections.support',
   };
 
+  // System subpage title keys
+  const systemSubpages: Record<string, string> = {
+    '/database': 'system.sections.database',
+  };
+
   // Dynamic import helper
   async function loadComponent(route: string): Promise<void> {
     if (loadingComponent) return;
@@ -275,6 +280,35 @@
         loadComponent('detection-detail');
         return;
       }
+    }
+
+    // Special handling for system subpages
+    if (path.startsWith('/ui/system/')) {
+      const systemConfig = findRouteConfig('system');
+      if (systemConfig) {
+        currentRoute = systemConfig.route;
+        currentPage = systemConfig.page;
+        pageTitleKey = systemConfig.titleKey;
+
+        // Update title based on specific system page
+        for (const [subpath, titleKey] of Object.entries(systemSubpages)) {
+          if (path.includes(subpath)) {
+            pageTitleKey = titleKey;
+            break;
+          }
+        }
+
+        if (systemConfig.component) {
+          loadComponent(systemConfig.component);
+        }
+      } else {
+        // System config not found, redirect to error page
+        currentRoute = 'error-404';
+        currentPage = 'error-404';
+        pageTitleKey = 'pageTitle.systemNotAvailable';
+        loadComponent('error-404');
+      }
+      return;
     }
 
     // Special handling for settings subpages

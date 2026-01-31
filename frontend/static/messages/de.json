@@ -209,7 +209,8 @@
     "mainNavigation": "Hauptnavigation",
     "closeSidebar": "Seitenleiste schließen",
     "analyticsSubmenu": "Analysen-Untermenü",
-    "settingsSubmenu": "Einstellungen-Untermenü"
+    "settingsSubmenu": "Einstellungen-Untermenü",
+    "systemSubmenu": "System-Untermenü"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -744,6 +745,199 @@
         "overallProgress": "Gesamtfortschritt",
         "progress": "Fortschritt"
       }
+    },
+    "sections": {
+      "overview": "Übersicht",
+      "database": "Datenbank"
+    },
+    "database": {
+      "title": "Datenbankverwaltung",
+      "description": "Schema-Migration verwalten",
+      "migration": {
+        "title": "Datenbankmigration",
+        "description": "Von Legacy-Schema zu normalisiertem v2-Schema migrieren",
+        "completedTitle": "Migration abgeschlossen",
+        "completedNote": "Ihre Datenbank wurde erfolgreich auf das neue Schema migriert. Ihr System ist jetzt bereit für zukünftige Funktionen, die die normalisierte Datenbank erfordern. Hinweis: Die neue Datenbank ist kleiner, weil sie Daten effizienter speichert - das ist normal und alle Ihre Daten sind erhalten.",
+        "status": {
+          "idle": "Bereit zum Starten",
+          "initializing": "Initialisierung",
+          "dual_write": "Dual-Write aktiv",
+          "migrating": "Migriere Primärdaten",
+          "migrating_predictions": "Migriere Sekundärdaten",
+          "paused": "Pausiert",
+          "validating": "Validierung",
+          "cutover": "Umstellung läuft",
+          "completed": "Migration abgeschlossen"
+        },
+        "progress": {
+          "title": "Migrationsfortschritt",
+          "records": "Datensätze",
+          "percent": "{percent}%",
+          "rate": "{rate} Datensätze/Sek",
+          "rateValue": "{rate} Dat/s",
+          "remaining": "Verbleibend: {time}",
+          "eta": "Geschätzte Restzeit",
+          "dirtyIds": "{count} Datensätze ausstehend",
+          "paused": "Migration pausiert"
+        },
+        "phase": {
+          "indicator": "Phase {current} von {total}: ",
+          "detections": "Migriere Primärerkennungen",
+          "predictions": "Migriere Sekundärerkennungen",
+          "reviews": "Migriere Überprüfungen",
+          "comments": "Migriere Kommentare",
+          "locks": "Migriere Sperren"
+        },
+        "notes": {
+          "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
+          "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
+          "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
+          "cutover": "Wechsle zur neuen Datenbank. Das dauert nur einen Moment.",
+          "paused": "Migration ist pausiert. Ihre Daten sind sicher. Setzen Sie fort, wenn Sie bereit sind."
+        },
+        "actions": {
+          "start": "Migration starten",
+          "pause": "Pausieren",
+          "resume": "Fortsetzen",
+          "cancel": "Abbrechen",
+          "rollback": "Zurücksetzen"
+        },
+        "confirmCancel": {
+          "title": "Migration abbrechen?",
+          "message": "Dies stoppt die Migration und setzt den Status auf Leerlauf zurück. Sie können die Migration später sicher neu starten - Datensätze werden nicht dupliziert.",
+          "confirm": "Ja, abbrechen",
+          "dismiss": "Nein, weiterlaufen lassen"
+        },
+        "confirmRollback": {
+          "title": "Migration zurücksetzen?",
+          "message": "Dies setzt auf die Legacy-Datenbank zurück. Neue Erkennungen seit der Migration bleiben in der erweiterten Datenbank erhalten, sind aber nicht sichtbar, bis die Migration erneut ausgeführt wird.",
+          "confirm": "Ja, zurücksetzen",
+          "dismiss": "Nein, beibehalten"
+        },
+        "errors": {
+          "startFailed": "Fehler beim Starten der Migration",
+          "pauseFailed": "Fehler beim Pausieren der Migration",
+          "resumeFailed": "Fehler beim Fortsetzen der Migration",
+          "cancelFailed": "Fehler beim Abbrechen der Migration",
+          "rollbackFailed": "Fehler beim Zurücksetzen der Migration",
+          "fetchFailed": "Fehler beim Abrufen des Migrationsstatus"
+        },
+        "worker": {
+          "running": "Worker läuft",
+          "paused": "Worker pausiert",
+          "stopped": "Worker gestoppt"
+        },
+        "prerequisites": {
+          "title": "Prüfungen vor der Migration",
+          "rerunChecks": "Prüfungen wiederholen",
+          "critical": "Kritisch",
+          "allPassed": "Alle Prüfungen bestanden - bereit zur Migration",
+          "criticalIssues": "{count} kritische(s) Problem(e) muss/müssen behoben werden",
+          "warningsCount": "{count} Warnung(en)",
+          "running": "Führe Vorab-Prüfungen durch...",
+          "checkingStep": "Schritt {current} von {total}",
+          "errors": {
+            "fetchFailed": "Fehler beim Abrufen der Voraussetzungen"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migrationsstatus"
+            },
+            "disk_space": {
+              "name": "Speicherplatz"
+            },
+            "legacy_accessible": {
+              "name": "Datenbankverbindung"
+            },
+            "sqlite_integrity": {
+              "name": "Datenbankintegrität"
+            },
+            "mysql_table_health": {
+              "name": "Tabellengesundheit"
+            },
+            "write_permission": {
+              "name": "Schreibberechtigung"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-Berechtigungen"
+            },
+            "record_count": {
+              "name": "Datensatzanzahl"
+            },
+            "existing_v2_data": {
+              "name": "Vorhandene Migrationsdaten"
+            },
+            "no_active_locks": {
+              "name": "Aktive Sperren"
+            },
+            "memory_available": {
+              "name": "Verfügbarer Speicher"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        },
+        "requiredNote": "Die Datenbankmigration ist für kommende BirdNET-Go-Funktionen erforderlich, die das neue normalisierte Datenbankschema nutzen. Neue Funktionen sind erst nach Abschluss der Migration verfügbar.",
+        "starting": "Migration wird gestartet...",
+        "confirmDialog": {
+          "title": "Datenbankmigration starten",
+          "message": "Die Migration kopiert Ihre Erkennungsdaten von der aktuellen Datenbank in eine neue normalisierte Datenbank. Ihre ursprüngliche Datenbank bleibt unverändert. Es wird jedoch empfohlen, ein Backup zu erstellen, falls unerwartete Probleme auftreten.",
+          "checkbox": "Ich bestätige, dass ich meine Datenbank gesichert habe oder die Risiken verstehe, ohne Backup fortzufahren.",
+          "note": "Sie können ein Backup über die Schaltfläche \"Backup herunterladen\" oben herunterladen."
+        }
+      },
+      "legacy": {
+        "title": "Legacy-Datenbank",
+        "fetchFailed": "Legacy-Datenbankstatus konnte nicht abgerufen werden",
+        "cleanup": {
+          "title": "Legacy-Datenbank bereinigen",
+          "location": "Speicherort",
+          "size": "Größe",
+          "records": "Einträge",
+          "detections": "Erkennungen",
+          "lastModified": "Zuletzt geändert",
+          "warning": "Warnung: Diese Aktion kann nicht rückgängig gemacht werden",
+          "backupReminder": "Stellen Sie sicher, dass Sie eine Sicherung haben, bevor Sie die Legacy-Datenbank löschen.",
+          "deleteButton": "Legacy-Datenbank löschen",
+          "inProgress": "Wird gelöscht...",
+          "success": "{size} Speicherplatz wurden freigegeben",
+          "failed": "Bereinigung fehlgeschlagen",
+          "notAvailable": "Bereinigung nicht verfügbar",
+          "confirmTitle": "Legacy-Datenbank löschen?",
+          "confirmMessage": "Sie sind dabei, die Legacy-Datenbank ({size}) dauerhaft zu löschen. Diese Aktion kann nicht rückgängig gemacht werden.",
+          "confirmCheckbox": "Ich verstehe, dass dies die Legacy-Datenbank dauerhaft löscht",
+          "cancelButton": "Abbrechen",
+          "deleteConfirmButton": "Dauerhaft löschen",
+          "description": "Diese Datenbank ist jetzt offline und wird nicht mehr verwendet. Alle Ihre Daten wurden in die erweiterte Datenbank migriert.",
+          "recommendation": "Es wird empfohlen, diese Datenbank zu löschen, um Speicherplatz freizugeben."
+        }
+      },
+      "v2": {
+        "title": "Erweiterte Datenbank"
+      },
+      "stats": {
+        "connected": "Verbunden",
+        "disconnected": "Getrennt",
+        "type": "Typ",
+        "location": "Speicherort",
+        "size": "Größe",
+        "detections": "Erkennungen",
+        "fetchFailed": "Fehler beim Abrufen der Datenbankstatistiken"
+      },
+      "backup": {
+        "download": "Backup herunterladen",
+        "downloading": "Wird heruntergeladen...",
+        "starting": "Backup wird gestartet...",
+        "creating": "Backup wird erstellt...",
+        "cancel": "Abbrechen",
+        "retry": "Erneut versuchen",
+        "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)"
+      },
+      "notInitialized": "Nicht initialisiert"
     }
   },
   "analytics": {

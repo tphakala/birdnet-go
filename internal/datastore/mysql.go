@@ -59,13 +59,14 @@ func (store *MySQLStore) Open() error {
 		logger.String("dsn", sanitizedDSN))
 
 	// Configure GORM logger with metrics if available
+	// Use 1 second threshold to accommodate migration batch queries (800-900ms typical).
 	var gormLogger gormlogger.Interface
 	if store.Settings.Debug {
-		// Use debug log level with lower slow threshold
-		gormLogger = NewGormLogger(100*time.Millisecond, gormlogger.Info, store.metrics)
+		// Use debug log level
+		gormLogger = NewGormLogger(1*time.Second, gormlogger.Info, store.metrics)
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(200*time.Millisecond, gormlogger.Warn, store.metrics)
+		gormLogger = NewGormLogger(1*time.Second, gormlogger.Warn, store.metrics)
 	}
 
 	// Open the MySQL database
