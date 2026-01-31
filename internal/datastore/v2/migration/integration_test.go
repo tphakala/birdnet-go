@@ -861,14 +861,17 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 
 	// Verify auxiliary data was migrated through the worker
 	var thresholdCount int64
-	ctx.V2Manager.DB().Model(&entities.DynamicThreshold{}).Count(&thresholdCount)
+	err = ctx.V2Manager.DB().Model(&entities.DynamicThreshold{}).Count(&thresholdCount).Error
+	require.NoError(t, err, "failed to count dynamic thresholds")
 	assert.Equal(t, int64(1), thresholdCount, "dynamic threshold should be migrated through worker")
 
 	var imageCacheCount int64
-	ctx.V2Manager.DB().Model(&entities.ImageCache{}).Count(&imageCacheCount)
+	err = ctx.V2Manager.DB().Model(&entities.ImageCache{}).Count(&imageCacheCount).Error
+	require.NoError(t, err, "failed to count image caches")
 	assert.Equal(t, int64(1), imageCacheCount, "image cache should be migrated through worker")
 
 	var dailyEventCount int64
-	ctx.V2Manager.DB().Model(&entities.DailyEvents{}).Count(&dailyEventCount)
+	err = ctx.V2Manager.DB().Model(&entities.DailyEvents{}).Count(&dailyEventCount).Error
+	require.NoError(t, err, "failed to count daily events")
 	assert.Equal(t, int64(1), dailyEventCount, "daily event should be migrated through worker")
 }
