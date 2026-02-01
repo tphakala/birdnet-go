@@ -752,7 +752,7 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // SpeciesDetections retrieves detections for a species.
-// The species parameter may be either a common name or scientific name.
+// The species parameter is expected to be a scientific name.
 func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	ctx := context.Background()
 
@@ -776,14 +776,8 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 
 	var labelIDs []uint
 	if species != "" {
-		// Normalize common name to scientific name if needed
-		speciesName := species
-		normalized := strings.ToLower(strings.TrimSpace(species))
-		if sci, ok := ds.speciesMap[normalized]; ok {
-			speciesName = sci
-		}
-
-		ids, err := ds.label.GetLabelIDsByScientificName(ctx, speciesName)
+		// Species is now always scientific name - query directly
+		ids, err := ds.label.GetLabelIDsByScientificName(ctx, species)
 		if err != nil {
 			return nil, err
 		}
@@ -1258,7 +1252,7 @@ func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, off
 }
 
 // CountSpeciesDetections counts detections for a species.
-// The species parameter may be either a common name or scientific name.
+// The species parameter is expected to be a scientific name.
 func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
 	ctx := context.Background()
 	var startTime, endTime *int64
@@ -1281,14 +1275,8 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 
 	var labelIDs []uint
 	if species != "" {
-		// Normalize common name to scientific name if needed
-		speciesName := species
-		normalized := strings.ToLower(strings.TrimSpace(species))
-		if sci, ok := ds.speciesMap[normalized]; ok {
-			speciesName = sci
-		}
-
-		ids, err := ds.label.GetLabelIDsByScientificName(ctx, speciesName)
+		// Species is now always scientific name - query directly
+		ids, err := ds.label.GetLabelIDsByScientificName(ctx, species)
 		if err != nil {
 			return 0, err
 		}
