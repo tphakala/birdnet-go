@@ -735,9 +735,15 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		// Format the latest time as HH:MM:SS
 		latestTime := time.Unix(r.LatestTime, 0).In(ds.timezone)
 
+		// Look up common name from the cached map
+		commonName := r.ScientificName
+		if cn, ok := ds.commonNameMap[r.ScientificName]; ok {
+			commonName = cn
+		}
+
 		note := datastore.Note{
 			ScientificName: r.ScientificName,
-			CommonName:     r.ScientificName, // Will be resolved by caller via speciesMap
+			CommonName:     commonName,
 			Confidence:     r.MaxConfidence,
 			Date:           selectedDate,
 			Time:           latestTime.Format("15:04:05"),
