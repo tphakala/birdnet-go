@@ -1390,10 +1390,9 @@ func (r *detectionRepository) Exists(ctx context.Context, id uint) (bool, error)
 	return count > 0, err
 }
 
-// FilterExistingIDs returns only the legacy IDs that have been migrated to V2.
-// This checks the legacy_id column (not the V2 auto-generated id) since that's
-// where the original legacy notes.id is stored during migration.
-// Used by catch-up to find records that exist in legacy but not in V2.
+// FilterExistingIDs returns only the IDs that exist in the detections table.
+// During migration, Detection.ID is set to the legacy notes.id, so we can
+// filter by the primary key directly.
 func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint) ([]uint, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -1401,33 +1400,11 @@ func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint)
 
 	var existingIDs []uint
 	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("legacy_id IN ?", ids).
-		Pluck("legacy_id", &existingIDs).Error
+		Where("id IN ?", ids).
+		Pluck("id", &existingIDs).Error
 	if err != nil {
 		return nil, err
 	}
 	return existingIDs, nil
 }
 
-// GetLastMigratedID returns the highest legacy_id that has been migrated.
-//
-// ASSUMPTION: This method assumes legacy IDs are monotonically increasing and
-// that migration proceeds in ID order. It returns MAX(legacy_id) which serves
-// as a cursor for the migration worker to determine where to resume.
-//
-// NOTE: This approach does not handle gaps in ID sequences that are filled later.
-// If legacy IDs can be inserted out of order (e.g., ID 100 inserted after ID 200),
-// those records will not be migrated unless a full re-scan is performed.
-func (r *detectionRepository) GetLastMigratedID(ctx context.Context) (uint, error) {
-	var maxID *uint
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Select("MAX(legacy_id)").
-		Pluck("MAX(legacy_id)", &maxID).Error
-	if err != nil {
-		return 0, err
-	}
-	if maxID == nil {
-		return 0, nil
-	}
-	return *maxID, nil
-}

@@ -130,11 +130,46 @@ func New(cfg *Config) (*Datastore, error) {
 	if cfg.Model == nil {
 		return nil, fmt.Errorf("model repository is required")
 	}
-	if cfg.DefaultModelID == 0 {
-		return nil, fmt.Errorf("default model ID is required")
+
+	// Self-initialize lookup table IDs if not provided.
+	// These are seeded during Manager.Initialize(), so we look them up.
+	db := cfg.Manager.DB()
+
+	// Get or verify species label type ID
+	speciesLabelTypeID := cfg.SpeciesLabelTypeID
+	if speciesLabelTypeID == 0 {
+		var labelType entities.LabelType
+		if err := db.Where("name = ?", "species").FirstOrCreate(&labelType, entities.LabelType{Name: "species"}).Error; err != nil {
+			return nil, fmt.Errorf("failed to get species label type: %w", err)
+		}
+		speciesLabelTypeID = labelType.ID
 	}
-	if cfg.SpeciesLabelTypeID == 0 {
-		return nil, fmt.Errorf("species label type ID is required")
+
+	// Get or verify default model ID (BirdNET)
+	defaultModelID := cfg.DefaultModelID
+	if defaultModelID == 0 {
+		var model entities.AIModel
+		if err := db.Where("name = ? AND version = ? AND variant = ?",
+			detection.DefaultModelName, detection.DefaultModelVersion, detection.DefaultModelVariant).
+			FirstOrCreate(&model, entities.AIModel{
+				Name:      detection.DefaultModelName,
+				Version:   detection.DefaultModelVersion,
+				Variant:   detection.DefaultModelVariant,
+				ModelType: entities.ModelTypeBird,
+			}).Error; err != nil {
+			return nil, fmt.Errorf("failed to get default model: %w", err)
+		}
+		defaultModelID = model.ID
+	}
+
+	// Get or verify Aves taxonomic class ID (optional, for birds)
+	avesClassID := cfg.AvesClassID
+	if avesClassID == nil {
+		var avesClass entities.TaxonomicClass
+		if err := db.Where("name = ?", "Aves").FirstOrCreate(&avesClass, entities.TaxonomicClass{Name: "Aves"}).Error; err != nil {
+			return nil, fmt.Errorf("failed to get Aves taxonomic class: %w", err)
+		}
+		avesClassID = &avesClass.ID
 	}
 
 	tz := cfg.Timezone
@@ -172,9 +207,9 @@ func New(cfg *Config) (*Datastore, error) {
 		log:                cfg.Logger,
 		timezone:           tz,
 		suncalc:            cfg.SunCalc,
-		defaultModelID:     cfg.DefaultModelID,
-		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
-		avesClassID:        cfg.AvesClassID,
+		defaultModelID:     defaultModelID,
+		speciesLabelTypeID: speciesLabelTypeID,
+		avesClassID:        avesClassID,
 		speciesMap:         speciesMap,
 		commonNameMap:      commonNameMap,
 	}, nil
@@ -378,13 +413,12 @@ func (ds *Datastore) Get(id string) (datastore.Note, error) {
 		return datastore.Note{}, err
 	}
 
-	return ds.detectionToNote(det, nil), nil
+	return ds.detectionToNote(det), nil
 }
 
 // detectionToNote converts a v2 Detection to a legacy Note.
-// If rawLabelsMap is provided, it will be used to look up the common name
-// instead of making a database query (for batch efficiency).
-func (ds *Datastore) detectionToNote(det *entities.Detection, rawLabelsMap map[string]string) datastore.Note {
+// Common name is looked up from ds.commonNameMap which is built at startup.
+func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	// Guard against nil detection to prevent panics
 	if det == nil {
 		return datastore.Note{}
@@ -402,18 +436,10 @@ func (ds *Datastore) detectionToNote(det *entities.Detection, rawLabelsMap map[s
 		}
 	}
 
-	// Common name defaults to scientific name.
-	// TODO: In V2 schema, common names should be resolved from a species lookup table
-	// or the label parsing should be enhanced to store both names.
+	// Look up common name from pre-built map, fallback to scientific name
 	commonName := scientificName
-	// Try to extract common name from preloaded raw labels map (batch mode)
-	if rawLabelsMap != nil {
-		key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
-		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
-			if extracted := extractCommonName(rawLabel); extracted != "" {
-				commonName = extracted
-			}
-		}
+	if cn, ok := ds.commonNameMap[scientificName]; ok {
+		commonName = cn
 	}
 
 	clipName := ""
@@ -473,7 +499,7 @@ func (ds *Datastore) detectionsToNotes(dets []*entities.Detection) []datastore.N
 	// Raw labels map is nil - common names will default to scientific names
 	notes := make([]datastore.Note, 0, len(dets))
 	for _, det := range dets {
-		notes = append(notes, ds.detectionToNote(det, nil))
+		notes = append(notes, ds.detectionToNote(det))
 	}
 	return notes
 }
@@ -686,12 +712,21 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 }
 
 // GetHourlyOccurrences retrieves hourly occurrences for a species on a date.
+// The parameter is named commonName for interface compatibility with legacy datastore,
+// but we need to normalize it to scientific name for the V2 label lookup.
 func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
 	ctx := context.Background()
 	var hourly [24]int
 
+	// Normalize common name to scientific name using speciesMap
+	speciesName := commonName
+	normalized := strings.ToLower(strings.TrimSpace(commonName))
+	if sci, ok := ds.speciesMap[normalized]; ok {
+		speciesName = sci
+	}
+
 	// Get label IDs for this species across all models
-	labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, commonName)
+	labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, speciesName)
 	if err != nil {
 		return hourly, err
 	}
@@ -717,6 +752,7 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // SpeciesDetections retrieves detections for a species.
+// The species parameter may be either a common name or scientific name.
 func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	ctx := context.Background()
 
@@ -740,7 +776,14 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 
 	var labelIDs []uint
 	if species != "" {
-		ids, err := ds.label.GetLabelIDsByScientificName(ctx, species)
+		// Normalize common name to scientific name if needed
+		speciesName := species
+		normalized := strings.ToLower(strings.TrimSpace(species))
+		if sci, ok := ds.speciesMap[normalized]; ok {
+			speciesName = sci
+		}
+
+		ids, err := ds.label.GetLabelIDsByScientificName(ctx, speciesName)
 		if err != nil {
 			return nil, err
 		}
@@ -1215,6 +1258,7 @@ func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, off
 }
 
 // CountSpeciesDetections counts detections for a species.
+// The species parameter may be either a common name or scientific name.
 func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
 	ctx := context.Background()
 	var startTime, endTime *int64
@@ -1237,7 +1281,14 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 
 	var labelIDs []uint
 	if species != "" {
-		ids, err := ds.label.GetLabelIDsByScientificName(ctx, species)
+		// Normalize common name to scientific name if needed
+		speciesName := species
+		normalized := strings.ToLower(strings.TrimSpace(species))
+		if sci, ok := ds.speciesMap[normalized]; ok {
+			speciesName = sci
+		}
+
+		ids, err := ds.label.GetLabelIDsByScientificName(ctx, speciesName)
 		if err != nil {
 			return 0, err
 		}

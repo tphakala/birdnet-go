@@ -113,15 +113,6 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 		lon = &result.Longitude
 	}
 
-	// Convert threshold and sensitivity
-	var threshold, sensitivity *float64
-	if result.Threshold != 0 {
-		threshold = &result.Threshold
-	}
-	if result.Sensitivity != 0 {
-		sensitivity = &result.Sensitivity
-	}
-
 	// Convert processing time
 	var processingTimeMs *int64
 	if result.ProcessingTime > 0 {
@@ -139,8 +130,6 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 		BeginTime:        beginTime,
 		EndTime:          endTime,
 		Confidence:       result.Confidence,
-		Threshold:        threshold,
-		Sensitivity:      sensitivity,
 		Latitude:         lat,
 		Longitude:        lon,
 		ClipName:         clipName,
@@ -220,14 +209,8 @@ func ConvertFromV2Detection(det *entities.Detection) *detection.Result {
 		result.EndTime = time.UnixMilli(*det.EndTime)
 	}
 
-	// Convert confidence and thresholds
+	// Convert confidence
 	result.Confidence = det.Confidence
-	if det.Threshold != nil {
-		result.Threshold = *det.Threshold
-	}
-	if det.Sensitivity != nil {
-		result.Sensitivity = *det.Sensitivity
-	}
 
 	// Convert location
 	if det.Latitude != nil {

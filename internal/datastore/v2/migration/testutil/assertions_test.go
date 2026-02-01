@@ -38,13 +38,11 @@ func TestAssertDetectionMatches_Success(t *testing.T) {
 	endTime := now.Add(3 * time.Second).UnixMilli()
 	lat := 42.3601
 	lon := -71.0589
-	threshold := 0.65
-	sensitivity := 1.0
 	clipName := "test_clip.wav"
 	processingTimeMs := int64(150)
 
 	v2 := &entities.Detection{
-		ID:               1, // V2 ID can differ
+		ID:               1,
 		LegacyID:         &legacyID,
 		DetectedAt:       now.Unix(),
 		BeginTime:        &beginTime,
@@ -52,8 +50,6 @@ func TestAssertDetectionMatches_Success(t *testing.T) {
 		Confidence:       0.85,
 		Latitude:         &lat,
 		Longitude:        &lon,
-		Threshold:        &threshold,
-		Sensitivity:      &sensitivity,
 		ClipName:         &clipName,
 		ProcessingTimeMs: &processingTimeMs,
 	}

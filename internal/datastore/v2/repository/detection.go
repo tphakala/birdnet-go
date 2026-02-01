@@ -255,8 +255,4 @@ type DetectionRepository interface {
 	// FilterExistingIDs returns only the IDs that exist in the detections table.
 	// Used during related data migration to skip records for non-existent detections.
 	FilterExistingIDs(ctx context.Context, ids []uint) ([]uint, error)
-
-	// GetLastMigratedID returns the highest legacy_id that has been migrated.
-	// Used by the migration worker to track progress.
-	GetLastMigratedID(ctx context.Context) (uint, error)
 }

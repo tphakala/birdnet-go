@@ -21,7 +21,7 @@ func AssertDetectionMatches(t *testing.T, legacy *datastore.Note, v2 *entities.D
 	require.NotNil(t, legacy, "legacy note should not be nil")
 	require.NotNil(t, v2, "v2 detection should not be nil")
 
-	// Core identification
+	// Core identification - legacy ID should be preserved
 	if v2.LegacyID != nil {
 		assert.Equal(t, legacy.ID, *v2.LegacyID, "legacy ID should be preserved")
 	}
@@ -54,16 +54,6 @@ func AssertDetectionMatches(t *testing.T, legacy *datastore.Note, v2 *entities.D
 	if legacy.Longitude != 0 {
 		require.NotNil(t, v2.Longitude, "v2 longitude should not be nil when legacy has value")
 		assert.InDelta(t, legacy.Longitude, *v2.Longitude, floatDelta, "longitude should match")
-	}
-
-	// Threshold and Sensitivity (optional)
-	if legacy.Threshold != 0 {
-		require.NotNil(t, v2.Threshold, "v2 threshold should not be nil when legacy has value")
-		assert.InDelta(t, legacy.Threshold, *v2.Threshold, floatDelta, "threshold should match")
-	}
-	if legacy.Sensitivity != 0 {
-		require.NotNil(t, v2.Sensitivity, "v2 sensitivity should not be nil when legacy has value")
-		assert.InDelta(t, legacy.Sensitivity, *v2.Sensitivity, floatDelta, "sensitivity should match")
 	}
 
 	// Clip name (optional)
