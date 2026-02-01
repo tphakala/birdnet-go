@@ -170,9 +170,20 @@ func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) (*AuxiliaryMigration
 	m.migrateNotificationHistory(ctx, result)
 	m.migrateWeatherData(ctx, result)
 
-	// Log comprehensive summary
+	// Log comprehensive summary with structured fields
 	m.logger.Info("auxiliary migration completed",
-		logger.String("summary", result.Summary()))
+		logger.Int("image_caches_total", result.ImageCaches.Total),
+		logger.Int("image_caches_migrated", result.ImageCaches.Migrated),
+		logger.Int("thresholds_total", result.Thresholds.Total),
+		logger.Int("thresholds_migrated", result.Thresholds.Migrated),
+		logger.Int("threshold_events_total", result.ThresholdEvents.Total),
+		logger.Int("threshold_events_migrated", result.ThresholdEvents.Migrated),
+		logger.Int("notifications_total", result.Notifications.Total),
+		logger.Int("notifications_migrated", result.Notifications.Migrated),
+		logger.Int("daily_events_total", result.Weather.DailyEventsTotal),
+		logger.Int("daily_events_migrated", result.Weather.DailyEventsMigrated),
+		logger.Int("hourly_weather_total", result.Weather.HourlyWeatherTotal),
+		logger.Int("hourly_weather_migrated", result.Weather.HourlyWeatherMigrated))
 
 	// Caller can inspect result.HasErrors() to decide if this is acceptable
 	return result, nil

@@ -793,8 +793,39 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 				logger.Int("notifications_migrated", auxResult.Notifications.Migrated))
 
 			if auxResult.HasErrors() {
-				w.logger.Warn("auxiliary data migration completed with some errors",
-					logger.String("summary", auxResult.Summary()))
+				// Log individual errors for each section that failed
+				if auxResult.ImageCaches.Error != nil {
+					w.logger.Warn("image cache migration had errors",
+						logger.Int("total", auxResult.ImageCaches.Total),
+						logger.Int("migrated", auxResult.ImageCaches.Migrated),
+						logger.Error(auxResult.ImageCaches.Error))
+				}
+				if auxResult.Thresholds.Error != nil {
+					w.logger.Warn("threshold migration had errors",
+						logger.Int("total", auxResult.Thresholds.Total),
+						logger.Int("migrated", auxResult.Thresholds.Migrated),
+						logger.Error(auxResult.Thresholds.Error))
+				}
+				if auxResult.ThresholdEvents.Error != nil {
+					w.logger.Warn("threshold events migration had errors",
+						logger.Int("total", auxResult.ThresholdEvents.Total),
+						logger.Int("migrated", auxResult.ThresholdEvents.Migrated),
+						logger.Error(auxResult.ThresholdEvents.Error))
+				}
+				if auxResult.Notifications.Error != nil {
+					w.logger.Warn("notifications migration had errors",
+						logger.Int("total", auxResult.Notifications.Total),
+						logger.Int("migrated", auxResult.Notifications.Migrated),
+						logger.Error(auxResult.Notifications.Error))
+				}
+				if auxResult.Weather.Error != nil {
+					w.logger.Warn("weather migration had errors",
+						logger.Int("daily_total", auxResult.Weather.DailyEventsTotal),
+						logger.Int("daily_migrated", auxResult.Weather.DailyEventsMigrated),
+						logger.Int("hourly_total", auxResult.Weather.HourlyWeatherTotal),
+						logger.Int("hourly_migrated", auxResult.Weather.HourlyWeatherMigrated),
+						logger.Error(auxResult.Weather.Error))
+				}
 			}
 		}
 	}

@@ -269,7 +269,7 @@
 </script>
 
 <div class="space-y-6">
-  <!-- Database Stats Grid with Data Flow Animation -->
+  <!-- Database Stats Grid -->
   <div class="relative">
     {#if isV2OnlyMode}
       <!-- V2-only mode: Show single database card and legacy cleanup -->
@@ -315,47 +315,6 @@
           migrationActive={isActive}
         />
       </div>
-
-      <!-- Data Flow Animation (visible during active migration on desktop) -->
-      {#if isActive}
-        <div
-          class="hidden lg:flex absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                 w-28 h-10 items-center justify-center pointer-events-none z-10"
-        >
-          <!-- Data stream track/bridge with faded ends -->
-          <div class="absolute inset-y-3 inset-x-0 flex items-center">
-            <div
-              class="h-1 flex-1 bg-gradient-to-r from-transparent via-[var(--color-primary)]/25 to-[var(--color-primary)]/25"
-            ></div>
-            <div class="h-1 flex-[2] bg-[var(--color-primary)]/25"></div>
-            <div
-              class="h-1 flex-1 bg-gradient-to-l from-transparent via-[var(--color-primary)]/25 to-[var(--color-primary)]/25"
-            ></div>
-          </div>
-
-          <!-- Subtle glow along the bridge with faded ends -->
-          <div class="absolute inset-y-2 inset-x-0 flex items-center">
-            <div
-              class="h-2 flex-1 bg-gradient-to-r from-transparent to-[var(--color-primary)]/10 blur-sm"
-            ></div>
-            <div class="h-2 flex-[2] bg-[var(--color-primary)]/10 blur-sm animate-pulse"></div>
-            <div
-              class="h-2 flex-1 bg-gradient-to-l from-transparent to-[var(--color-primary)]/10 blur-sm"
-            ></div>
-          </div>
-
-          <!-- Animated data packets flowing left to right -->
-          <div class="data-packet-container absolute inset-y-0 inset-x-0 overflow-hidden">
-            {#each { length: 4 } as _, i (i)}
-              <div
-                class="data-packet absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5
-                       rounded-full bg-[var(--color-primary)]"
-                style:animation-delay="{i * 0.5}s"
-              ></div>
-            {/each}
-          </div>
-        </div>
-      {/if}
     {/if}
   </div>
 
@@ -392,43 +351,3 @@
   onConfirm={startCleanup}
   onCancel={() => (showCleanupDialog = false)}
 />
-
-<style>
-  /* Gradient mask to fade particles at both ends */
-  .data-packet-container {
-    mask-image: linear-gradient(to right, transparent, black 25%, black 75%, transparent);
-  }
-
-  /* Data packet animation - flows from left to right */
-  .data-packet {
-    animation: flow-packet 2s ease-in-out infinite;
-    opacity: 0;
-    box-shadow:
-      0 0 6px var(--color-primary),
-      0 0 12px var(--color-primary);
-  }
-
-  @keyframes flow-packet {
-    0% {
-      left: -10%;
-      opacity: 0;
-      transform: translateY(-50%) scale(0.5);
-    }
-
-    15% {
-      opacity: 1;
-      transform: translateY(-50%) scale(1);
-    }
-
-    85% {
-      opacity: 1;
-      transform: translateY(-50%) scale(1);
-    }
-
-    100% {
-      left: 110%;
-      opacity: 0;
-      transform: translateY(-50%) scale(0.5);
-    }
-  }
-</style>

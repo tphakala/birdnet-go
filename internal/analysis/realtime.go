@@ -1750,13 +1750,16 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 
 	// Create the auxiliary data migrator for weather, thresholds, image cache, notifications
 	auxiliaryMigrator := migration.NewAuxiliaryMigrator(&migration.AuxiliaryMigratorConfig{
-		LegacyStore:      cfg.ds,
-		LabelRepo:        labelRepo,
-		WeatherRepo:      weatherRepo,
-		ImageCacheRepo:   imageCacheRepo,
-		ThresholdRepo:    thresholdRepo,
-		NotificationRepo: notificationRepo,
-		Logger:           migrationLogger,
+		LegacyStore:        cfg.ds,
+		LabelRepo:          labelRepo,
+		WeatherRepo:        weatherRepo,
+		ImageCacheRepo:     imageCacheRepo,
+		ThresholdRepo:      thresholdRepo,
+		NotificationRepo:   notificationRepo,
+		Logger:             migrationLogger,
+		DefaultModelID:     defaultModel.ID,
+		SpeciesLabelTypeID: speciesLabelType.ID,
+		AvesClassID:        &avesClass.ID,
 	})
 
 	// Create the migration worker
