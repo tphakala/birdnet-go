@@ -389,6 +389,7 @@ func (r *labelTypeRepository) GetAll(ctx context.Context) ([]*entities.LabelType
 	return types, err
 }
 
+//nolint:dupl // intentional similarity with taxonomicClassRepository.GetOrCreate - different types
 func (r *labelTypeRepository) GetOrCreate(ctx context.Context, name string) (*entities.LabelType, error) {
 	var lt entities.LabelType
 	err := r.db.WithContext(ctx).Table(r.tableName()).
@@ -466,6 +467,7 @@ func (r *taxonomicClassRepository) GetAll(ctx context.Context) ([]*entities.Taxo
 	return classes, err
 }
 
+//nolint:dupl // intentional similarity with labelTypeRepository.GetOrCreate - different types
 func (r *taxonomicClassRepository) GetOrCreate(ctx context.Context, name string) (*entities.TaxonomicClass, error) {
 	var tc entities.TaxonomicClass
 	err := r.db.WithContext(ctx).Table(r.tableName()).

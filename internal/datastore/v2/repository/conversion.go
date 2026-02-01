@@ -58,6 +58,8 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 		if deps.ChiropteraClassID != 0 {
 			taxonomicClassID = &deps.ChiropteraClassID
 		}
+	case entities.ModelTypeMulti:
+		// Multi-type models can detect multiple taxonomic classes; no default
 	}
 
 	// Resolve or create label (with model ID for model-specific labels)

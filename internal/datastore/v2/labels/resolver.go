@@ -181,6 +181,8 @@ func (r *Resolver) ResolveBatch(ctx context.Context, model *entities.AIModel, ra
 		if id, ok := r.taxClassIDs["Chiroptera"]; ok {
 			defaultTaxClassID = &id
 		}
+	case entities.ModelTypeMulti:
+		// Multi-type models can detect multiple taxonomic classes; no default
 	}
 
 	// Collect scientific names for batch operation

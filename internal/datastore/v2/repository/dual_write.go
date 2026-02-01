@@ -629,6 +629,8 @@ func (dw *DualWriteRepository) convertToPredictions(ctx context.Context, detecti
 		if dw.chiropteraClassID != 0 {
 			taxonomicClassID = &dw.chiropteraClassID
 		}
+	case entities.ModelTypeMulti:
+		// Multi-type models can detect multiple taxonomic classes; no default
 	}
 	return ConvertToPredictions(ctx, detectionID, modelID, dw.speciesLabelTypeID, taxonomicClassID, additional, dw.labelRepo)
 }
