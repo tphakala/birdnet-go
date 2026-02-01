@@ -500,7 +500,7 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		query = query.Where("detected_at >= ?", *filters.StartTime)
 	}
 	if filters.EndTime != nil {
-		query = query.Where("detected_at <= ?", *filters.EndTime)
+		query = query.Where("detected_at < ?", *filters.EndTime)
 	}
 	if len(filters.IncludedHours) > 0 {
 		// Extract local hour from Unix timestamp using timezone offset.
