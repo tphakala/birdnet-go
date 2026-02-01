@@ -1,5 +1,19 @@
 // Package v2only provides a datastore implementation using only the v2 schema.
 // This is used after migration completes when the legacy database is no longer needed.
+//
+// # Data Model Architecture
+//
+// The v2 schema separates primary and secondary predictions:
+//
+//   - detections table: Contains the primary prediction (label_id, confidence).
+//     Use this for ALL queries: daily grids, summaries, aggregations, search, etc.
+//
+//   - detection_predictions table: Contains ONLY secondary/alternative predictions.
+//     Use ONLY for per-detection detail views showing "what else could this be?".
+//
+// IMPORTANT: Never join detection_predictions in aggregate queries. Doing so excludes
+// detections that have no secondary predictions, causing species to randomly disappear
+// from grids and summaries.
 package v2only
 
 import (
@@ -709,6 +723,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// Query groups detections by species, counting occurrences and getting max confidence.
 	// Uses Detection.LabelID/Confidence directly (primary prediction) rather than
 	// detection_predictions table (which only stores secondary predictions).
+	// Secondary sort by scientific_name ensures deterministic results when counts are equal.
 	db := ds.manager.DB()
 	err = db.Table("detections d").
 		Select(`
@@ -721,7 +736,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
 		Where("d.confidence >= ?", minConfidenceNormalized).
 		Group("l.scientific_name").
-		Order("count DESC").
+		Order("count DESC, l.scientific_name ASC").
 		Limit(reportCount).
 		Scan(&results).Error
 
