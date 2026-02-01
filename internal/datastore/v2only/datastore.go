@@ -1,5 +1,19 @@
 // Package v2only provides a datastore implementation using only the v2 schema.
 // This is used after migration completes when the legacy database is no longer needed.
+//
+// # Data Model Architecture
+//
+// The v2 schema separates primary and secondary predictions:
+//
+//   - detections table: Contains the primary prediction (label_id, confidence).
+//     Use this for ALL queries: daily grids, summaries, aggregations, search, etc.
+//
+//   - detection_predictions table: Contains ONLY secondary/alternative predictions.
+//     Use ONLY for per-detection detail views showing "what else could this be?".
+//
+// IMPORTANT: Never join detection_predictions in aggregate queries. Doing so excludes
+// detections that have no secondary predictions, causing species to randomly disappear
+// from grids and summaries.
 package v2only
 
 import (
