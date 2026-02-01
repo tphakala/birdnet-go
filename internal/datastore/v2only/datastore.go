@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -685,8 +686,6 @@ func (ds *Datastore) GetAllNotes() ([]datastore.Note, error) {
 
 // GetTopBirdsData retrieves top birds data for a date.
 func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-	ctx := context.Background()
-
 	t, err := time.ParseInLocation("2006-01-02", selectedDate, ds.timezone)
 	if err != nil {
 		return nil, err
@@ -694,21 +693,65 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	startTime := t.Unix()
 	endTime := t.Add(24 * time.Hour).Unix()
 
-	filters := &repository.SearchFilters{
-		StartTime:     &startTime,
-		EndTime:       &endTime,
-		MinConfidence: &minConfidenceNormalized,
-		Limit:         100,
-		SortBy:        "detected_at",
-		SortDesc:      true,
+	// Get the number of species to report from the dashboard settings
+	reportCount := conf.Setting().Realtime.Dashboard.SummaryLimit
+
+	// Struct to hold aggregated results per species
+	type speciesAggregate struct {
+		ScientificName string  `gorm:"column:scientific_name"`
+		Count          int     `gorm:"column:count"`
+		MaxConfidence  float64 `gorm:"column:max_confidence"`
+		LatestTime     int64   `gorm:"column:latest_time"`
 	}
 
-	dets, _, err := ds.detection.Search(ctx, filters)
+	var results []speciesAggregate
+
+	// Query groups detections by species, counting occurrences and getting max confidence.
+	// Uses Detection.LabelID/Confidence directly (primary prediction) rather than
+	// detection_predictions table (which only stores secondary predictions).
+	db := ds.manager.DB()
+	err = db.Table("detections d").
+		Select(`
+			l.scientific_name,
+			COUNT(d.id) as count,
+			MAX(d.confidence) as max_confidence,
+			MAX(d.detected_at) as latest_time
+		`).
+		Joins("JOIN labels l ON d.label_id = l.id").
+		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
+		Where("d.confidence >= ?", minConfidenceNormalized).
+		Group("l.scientific_name").
+		Order("count DESC").
+		Limit(reportCount).
+		Scan(&results).Error
+
 	if err != nil {
 		return nil, err
 	}
 
-	return ds.detectionsToNotes(dets), nil
+	// Convert aggregated results to Notes
+	notes := make([]datastore.Note, 0, len(results))
+	for _, r := range results {
+		// Format the latest time as HH:MM:SS
+		latestTime := time.Unix(r.LatestTime, 0).In(ds.timezone)
+
+		// Look up common name from the cached map
+		commonName := r.ScientificName
+		if cn, ok := ds.commonNameMap[r.ScientificName]; ok {
+			commonName = cn
+		}
+
+		note := datastore.Note{
+			ScientificName: r.ScientificName,
+			CommonName:     commonName,
+			Confidence:     r.MaxConfidence,
+			Date:           selectedDate,
+			Time:           latestTime.Format("15:04:05"),
+		}
+		notes = append(notes, note)
+	}
+
+	return notes, nil
 }
 
 // GetHourlyOccurrences retrieves hourly occurrences for a species on a date.
