@@ -68,6 +68,7 @@ func (r *imageCacheRepository) GetImageCache(ctx context.Context, providerName, 
 	err = r.db.WithContext(ctx).Table(r.tableName()).
 		Preload("Label").
 		Where("provider_name = ? AND label_id IN ?", providerName, labelIDs).
+		Order("cached_at DESC").
 		First(&cache).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrImageCacheNotFound

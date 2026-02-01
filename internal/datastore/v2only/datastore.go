@@ -130,6 +130,12 @@ func New(cfg *Config) (*Datastore, error) {
 	if cfg.Model == nil {
 		return nil, fmt.Errorf("model repository is required")
 	}
+	if cfg.DefaultModelID == 0 {
+		return nil, fmt.Errorf("default model ID is required")
+	}
+	if cfg.SpeciesLabelTypeID == 0 {
+		return nil, fmt.Errorf("species label type ID is required")
+	}
 
 	tz := cfg.Timezone
 	if tz == nil {

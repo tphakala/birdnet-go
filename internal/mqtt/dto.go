@@ -90,7 +90,7 @@ func NewMQTTEventDTO(r *detection.Result) *MQTTEventDTO {
 		SourceName:     r.AudioSource.DisplayName,
 		ModelName:      r.Model.Name,
 		ModelVersion:   r.Model.Version,
-		IsCustomModel:  r.Model.Variant != detection.DefaultModelVariant,
+		IsCustomModel:  r.Model.Variant != "" && r.Model.Variant != detection.DefaultModelVariant,
 	}
 
 	// Add timezone if timestamp has location info
