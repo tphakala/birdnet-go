@@ -90,10 +90,12 @@ func (m *MySQLManager) Initialize() error {
 	// Run GORM auto-migrations for all entities
 	// Tables will be created with v2_ prefix due to NamingStrategy
 	err := m.db.AutoMigrate(
+		// Lookup tables (must be created first due to FK constraints)
+		&entities.LabelType{},
+		&entities.TaxonomicClass{},
 		// Core detection entities
-		&entities.Label{},
 		&entities.AIModel{},
-		&entities.ModelLabel{},
+		&entities.Label{},
 		&entities.AudioSource{},
 		&entities.Detection{},
 		&entities.DetectionPrediction{},
@@ -120,21 +122,46 @@ func (m *MySQLManager) Initialize() error {
 		return fmt.Errorf("failed to initialize migration state: %w", err)
 	}
 
+	// Seed lookup tables
+	if err := m.seedLookupTables(); err != nil {
+		return fmt.Errorf("failed to seed lookup tables: %w", err)
+	}
+
 	// Seed default AI model (BirdNET)
 	return m.seedDefaultModel()
 }
 
+// seedLookupTables seeds the label_types and taxonomic_classes tables with default values.
+func (m *MySQLManager) seedLookupTables() error {
+	// Seed label types
+	for _, lt := range entities.DefaultLabelTypes() {
+		if err := m.db.Where("name = ?", lt.Name).FirstOrCreate(&lt).Error; err != nil {
+			return fmt.Errorf("failed to seed label type %q: %w", lt.Name, err)
+		}
+	}
+
+	// Seed taxonomic classes
+	for _, tc := range entities.DefaultTaxonomicClasses() {
+		if err := m.db.Where("name = ?", tc.Name).FirstOrCreate(&tc).Error; err != nil {
+			return fmt.Errorf("failed to seed taxonomic class %q: %w", tc.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // seedDefaultModel ensures the default BirdNET model exists in the registry.
-// Uses detection.DefaultModelName and detection.DefaultModelVersion to ensure
-// consistency with the conversion layer's fallback logic.
+// Uses detection.DefaultModelName, detection.DefaultModelVersion, and detection.DefaultModelVariant
+// to ensure consistency with the conversion layer's fallback logic.
 func (m *MySQLManager) seedDefaultModel() error {
 	model := entities.AIModel{
 		Name:      detection.DefaultModelName,
 		Version:   detection.DefaultModelVersion,
+		Variant:   detection.DefaultModelVariant,
 		ModelType: entities.ModelTypeBird,
 	}
 	// Use FirstOrCreate to avoid duplicates
-	result := m.db.Where("name = ? AND version = ?", model.Name, model.Version).FirstOrCreate(&model)
+	result := m.db.Where("name = ? AND version = ? AND variant = ?", model.Name, model.Version, model.Variant).FirstOrCreate(&model)
 	if result.Error != nil {
 		return fmt.Errorf("failed to seed default model: %w", result.Error)
 	}
@@ -167,16 +194,17 @@ func (m *MySQLManager) Delete() error {
 	// Use the stored prefix (could be "" for fresh install or "v2_" for migration)
 	prefix := m.tablePrefix
 	tables := []string{
-		// Core detection tables
+		// Core detection tables (drop children first)
 		prefix + "detection_locks",
 		prefix + "detection_comments",
 		prefix + "detection_reviews",
 		prefix + "detection_predictions",
 		prefix + "detections",
 		prefix + "audio_sources",
-		prefix + "model_labels",
-		prefix + "ai_models",
 		prefix + "labels",
+		prefix + "ai_models",
+		prefix + "taxonomic_classes",
+		prefix + "label_types",
 		prefix + "migration_state",
 		prefix + "migration_dirty_ids",
 		// Auxiliary tables

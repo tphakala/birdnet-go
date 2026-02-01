@@ -103,10 +103,12 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 func (m *SQLiteManager) Initialize() error {
 	// Run GORM auto-migrations for all entities
 	err := m.db.AutoMigrate(
+		// Lookup tables (must be created first due to FK constraints)
+		&entities.LabelType{},
+		&entities.TaxonomicClass{},
 		// Core detection entities
-		&entities.Label{},
 		&entities.AIModel{},
-		&entities.ModelLabel{},
+		&entities.Label{},
 		&entities.AudioSource{},
 		&entities.Detection{},
 		&entities.DetectionPrediction{},
@@ -139,6 +141,11 @@ func (m *SQLiteManager) Initialize() error {
 		return fmt.Errorf("failed to initialize migration state: %w", err)
 	}
 
+	// Seed lookup tables
+	if err := m.seedLookupTables(); err != nil {
+		return fmt.Errorf("failed to seed lookup tables: %w", err)
+	}
+
 	// Seed default AI model (BirdNET)
 	return m.seedDefaultModel()
 }
@@ -161,17 +168,37 @@ func (m *SQLiteManager) fixSQLiteForeignKeys() error {
 	return m.db.Exec(triggerSQL).Error
 }
 
+// seedLookupTables seeds the label_types and taxonomic_classes tables with default values.
+func (m *SQLiteManager) seedLookupTables() error {
+	// Seed label types
+	for _, lt := range entities.DefaultLabelTypes() {
+		if err := m.db.Where("name = ?", lt.Name).FirstOrCreate(&lt).Error; err != nil {
+			return fmt.Errorf("failed to seed label type %q: %w", lt.Name, err)
+		}
+	}
+
+	// Seed taxonomic classes
+	for _, tc := range entities.DefaultTaxonomicClasses() {
+		if err := m.db.Where("name = ?", tc.Name).FirstOrCreate(&tc).Error; err != nil {
+			return fmt.Errorf("failed to seed taxonomic class %q: %w", tc.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // seedDefaultModel ensures the default BirdNET model exists in the registry.
-// Uses detection.DefaultModelName and detection.DefaultModelVersion to ensure
-// consistency with the conversion layer's fallback logic.
+// Uses detection.DefaultModelName, detection.DefaultModelVersion, and detection.DefaultModelVariant
+// to ensure consistency with the conversion layer's fallback logic.
 func (m *SQLiteManager) seedDefaultModel() error {
 	model := entities.AIModel{
 		Name:      detection.DefaultModelName,
 		Version:   detection.DefaultModelVersion,
+		Variant:   detection.DefaultModelVariant,
 		ModelType: entities.ModelTypeBird,
 	}
 	// Use FirstOrCreate to avoid duplicates
-	result := m.db.Where("name = ? AND version = ?", model.Name, model.Version).FirstOrCreate(&model)
+	result := m.db.Where("name = ? AND version = ? AND variant = ?", model.Name, model.Version, model.Variant).FirstOrCreate(&model)
 	if result.Error != nil {
 		return fmt.Errorf("failed to seed default model: %w", result.Error)
 	}

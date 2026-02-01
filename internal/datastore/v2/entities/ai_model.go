@@ -13,12 +13,13 @@ const (
 
 // AIModel represents an AI detection model (BirdNET, Perch, BatNET, etc.).
 type AIModel struct {
-	ID         uint      `gorm:"primaryKey"`
-	Name       string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_ai_models_name_version"`
-	Version    string    `gorm:"type:varchar(20);not null;uniqueIndex:idx_ai_models_name_version"`
-	ModelType  ModelType `gorm:"type:varchar(20);not null"`
-	LabelCount int       `gorm:"default:0"` // Cached count of known labels
-	CreatedAt  time.Time `gorm:"autoCreateTime"`
+	ID             uint      `gorm:"primaryKey"`
+	Name           string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_model_identity"`
+	Version        string    `gorm:"type:varchar(20);not null;uniqueIndex:idx_model_identity"`
+	Variant        string    `gorm:"type:varchar(100);not null;uniqueIndex:idx_model_identity;default:default"`
+	ModelType      ModelType `gorm:"type:varchar(20);not null"`
+	ClassifierPath *string   `gorm:"type:varchar(500)"` // path to custom classifier file
+	CreatedAt      time.Time `gorm:"autoCreateTime"`
 }
 
 // TableName returns the table name for GORM.
