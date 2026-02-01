@@ -674,7 +674,7 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int,
 
 	query := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
-	}).Where("common_name = ? AND date = ?", species, date)
+	}).Where("scientific_name = ? AND date = ?", species, date)
 	if hour != "" {
 		startTime, endTime, crossesMidnight := getHourRange(hour, duration)
 		if crossesMidnight {
@@ -1012,7 +1012,7 @@ func (ds *DataStore) GetHourlyDetections(date, hour string, duration, limit, off
 // CountSpeciesDetections counts the number of detections for a specific species, date, and hour.
 func (ds *DataStore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
 	var count int64
-	query := ds.DB.Model(&Note{}).Where("common_name = ? AND date = ?", species, date)
+	query := ds.DB.Model(&Note{}).Where("scientific_name = ? AND date = ?", species, date)
 
 	if hour != "" {
 		startTime, endTime, crossesMidnight := getHourRange(hour, duration)
