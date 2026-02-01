@@ -100,14 +100,24 @@ func (r *detectionRepository) sourcesTable() string {
 	return tableAudioSources
 }
 
-// dateFromUnixExpr returns a SQL expression to extract DATE from a Unix timestamp.
-// SQLite: DATE(datetime(column, 'unixepoch'))
+// dateFromUnixExpr returns a SQL expression to extract DATE from a Unix timestamp in local time.
+// SQLite: DATE(datetime(column, 'unixepoch', 'localtime'))
 // MySQL:  DATE(FROM_UNIXTIME(column))
 func (r *detectionRepository) dateFromUnixExpr(column string) string {
 	if r.isMySQL {
 		return fmt.Sprintf("DATE(FROM_UNIXTIME(%s))", column)
 	}
-	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch'))", column)
+	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch', 'localtime'))", column)
+}
+
+// hourFromUnixExpr returns a SQL expression to extract HOUR (0-23) from a Unix timestamp in local time.
+// SQLite: CAST(strftime('%%H', datetime(column, 'unixepoch', 'localtime')) AS INTEGER)
+// MySQL:  HOUR(FROM_UNIXTIME(column))
+func (r *detectionRepository) hourFromUnixExpr(column string) string {
+	if r.isMySQL {
+		return fmt.Sprintf("HOUR(FROM_UNIXTIME(%s))", column)
+	}
+	return fmt.Sprintf("CAST(strftime('%%H', datetime(%s, 'unixepoch', 'localtime')) AS INTEGER)", column)
 }
 
 // ============================================================================
@@ -490,7 +500,7 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		query = query.Where("detected_at >= ?", *filters.StartTime)
 	}
 	if filters.EndTime != nil {
-		query = query.Where("detected_at <= ?", *filters.EndTime)
+		query = query.Where("detected_at < ?", *filters.EndTime)
 	}
 	if len(filters.IncludedHours) > 0 {
 		// Extract local hour from Unix timestamp using timezone offset.
@@ -691,9 +701,10 @@ func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelID 
 	}
 	var results []hourCount
 
-	// Extract hour from Unix timestamp
+	// Extract hour from Unix timestamp in local timezone
+	hourExpr := r.hourFromUnixExpr("detected_at")
 	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Select("(detected_at / 3600) % 24 as hour, COUNT(*) as count").
+		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Where("label_id = ? AND detected_at >= ? AND detected_at <= ?", labelID, start, end).
 		Group("hour").
 		Scan(&results).Error
