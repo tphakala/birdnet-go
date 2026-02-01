@@ -761,16 +761,23 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 		t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
 		if err == nil {
 			if hour != "" {
+				// Specific hour requested - apply hour+duration filter
 				h, _ := strconv.Atoi(hour)
 				t = t.Add(time.Duration(h) * time.Hour)
+				start := t.Unix()
+				end := t.Add(time.Duration(duration) * time.Hour).Unix()
+				if duration == 0 {
+					end = t.Add(1 * time.Hour).Unix()
+				}
+				startTime = &start
+				endTime = &end
+			} else {
+				// No hour specified - search the full day (matches legacy behavior)
+				start := t.Unix()
+				end := t.Add(24 * time.Hour).Unix()
+				startTime = &start
+				endTime = &end
 			}
-			start := t.Unix()
-			end := t.Add(time.Duration(duration) * time.Hour).Unix()
-			if duration == 0 {
-				end = t.Add(24 * time.Hour).Unix()
-			}
-			startTime = &start
-			endTime = &end
 		}
 	}
 
@@ -1260,16 +1267,23 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 		t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
 		if err == nil {
 			if hour != "" {
+				// Specific hour requested - apply hour+duration filter
 				h, _ := strconv.Atoi(hour)
 				t = t.Add(time.Duration(h) * time.Hour)
+				start := t.Unix()
+				end := t.Add(time.Duration(duration) * time.Hour).Unix()
+				if duration == 0 {
+					end = t.Add(1 * time.Hour).Unix()
+				}
+				startTime = &start
+				endTime = &end
+			} else {
+				// No hour specified - search the full day (matches legacy behavior)
+				start := t.Unix()
+				end := t.Add(24 * time.Hour).Unix()
+				startTime = &start
+				endTime = &end
 			}
-			start := t.Unix()
-			end := t.Add(time.Duration(duration) * time.Hour).Unix()
-			if duration == 0 {
-				end = t.Add(24 * time.Hour).Unix()
-			}
-			startTime = &start
-			endTime = &end
 		}
 	}
 
