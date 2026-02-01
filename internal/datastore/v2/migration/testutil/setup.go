@@ -46,6 +46,11 @@ type TestContext struct {
 	ThresholdRepo    repository.DynamicThresholdRepository
 	NotificationRepo repository.NotificationHistoryRepository
 
+	// Lookup table IDs
+	SpeciesLabelTypeID uint  // "species" label type ID
+	AvesClassID        *uint // "Aves" taxonomic class ID
+	DefaultModelID     uint  // Default model ID for label resolution
+
 	// Migration components
 	Worker            *migration.Worker
 	AuxiliaryMigrator *migration.AuxiliaryMigrator
@@ -187,6 +192,9 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, ctx.LabelRepo, false, false)
 	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, ctx.LabelRepo, false, false)
 
+	// Populate lookup tables for V2 normalized schema
+	ctx.setupLookupTables(t)
+
 	// Add to cleanup
 	oldCleanup := ctx.cleanup
 	ctx.cleanup = func() {
@@ -195,6 +203,36 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 		}
 		_ = mgr.Close()
 	}
+}
+
+// setupLookupTables retrieves or creates the required lookup table entries for the V2 normalized schema.
+func (ctx *TestContext) setupLookupTables(t *testing.T) {
+	t.Helper()
+
+	db := ctx.V2Manager.DB()
+
+	// Get or create "species" label type (may already exist from schema initialization)
+	var labelType entities.LabelType
+	err := db.FirstOrCreate(&labelType, entities.LabelType{Name: "species"}).Error
+	require.NoError(t, err, "failed to get/create species label type")
+	ctx.SpeciesLabelTypeID = labelType.ID
+
+	// Get or create "Aves" taxonomic class
+	var avesClass entities.TaxonomicClass
+	err = db.FirstOrCreate(&avesClass, entities.TaxonomicClass{Name: "Aves"}).Error
+	require.NoError(t, err, "failed to get/create Aves taxonomic class")
+	ctx.AvesClassID = &avesClass.ID
+
+	// Get or create default model (BirdNET for migration)
+	var defaultModel entities.AIModel
+	err = db.FirstOrCreate(&defaultModel, entities.AIModel{
+		Name:      detection.DefaultModelName,
+		Version:   detection.DefaultModelVersion,
+		Variant:   detection.DefaultModelVariant,
+		ModelType: entities.ModelTypeBird,
+	}).Error
+	require.NoError(t, err, "failed to get/create default model")
+	ctx.DefaultModelID = defaultModel.ID
 }
 
 // createWorker creates the migration worker with all dependencies.
@@ -207,28 +245,33 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 	// Create related data migrator for reviews, comments, locks, predictions
 	// Use small batch size for faster testing
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
-		LegacyStore:   ctx.legacyInterface,
-		DetectionRepo: ctx.DetectionRepo,
-		LabelRepo:     ctx.LabelRepo,
-		StateManager:  ctx.StateManager,
-		Logger:        ctx.Logger,
-		BatchSize:     testMigrationBatchSize,
+		LegacyStore:        ctx.legacyInterface,
+		DetectionRepo:      ctx.DetectionRepo,
+		LabelRepo:          ctx.LabelRepo,
+		StateManager:       ctx.StateManager,
+		Logger:             ctx.Logger,
+		BatchSize:          testMigrationBatchSize,
+		DefaultModelID:     ctx.DefaultModelID,
+		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
+		AvesClassID:        ctx.AvesClassID,
 	})
 
 	// Create worker with test configuration
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
-		Legacy:            ctx.legacyDetectionRepo,
-		V2Detection:       ctx.DetectionRepo,
-		LabelRepo:         ctx.LabelRepo,
-		ModelRepo:         ctx.ModelRepo,
-		SourceRepo:        ctx.SourceRepo,
-		StateManager:      ctx.StateManager,
-		RelatedMigrator:   relatedMigrator,
-		AuxiliaryMigrator: ctx.AuxiliaryMigrator,
-		Logger:            ctx.Logger,
-		BatchSize:         testMigrationBatchSize,
-		Timezone:          time.UTC,
-		MaxConsecErrors:   5,
+		Legacy:             ctx.legacyDetectionRepo,
+		V2Detection:        ctx.DetectionRepo,
+		LabelRepo:          ctx.LabelRepo,
+		ModelRepo:          ctx.ModelRepo,
+		SourceRepo:         ctx.SourceRepo,
+		StateManager:       ctx.StateManager,
+		RelatedMigrator:    relatedMigrator,
+		AuxiliaryMigrator:  ctx.AuxiliaryMigrator,
+		Logger:             ctx.Logger,
+		BatchSize:          testMigrationBatchSize,
+		Timezone:           time.UTC,
+		MaxConsecErrors:    5,
+		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
+		AvesClassID:        ctx.AvesClassID,
 	})
 	require.NoError(t, err, "failed to create migration worker")
 
@@ -240,13 +283,16 @@ func (ctx *TestContext) createAuxiliaryMigrator(t *testing.T) {
 	t.Helper()
 
 	ctx.AuxiliaryMigrator = migration.NewAuxiliaryMigrator(&migration.AuxiliaryMigratorConfig{
-		LegacyStore:      ctx.legacyInterface,
-		LabelRepo:        ctx.LabelRepo,
-		WeatherRepo:      ctx.WeatherRepo,
-		ImageCacheRepo:   ctx.ImageCacheRepo,
-		ThresholdRepo:    ctx.ThresholdRepo,
-		NotificationRepo: ctx.NotificationRepo,
-		Logger:           ctx.Logger,
+		LegacyStore:        ctx.legacyInterface,
+		LabelRepo:          ctx.LabelRepo,
+		WeatherRepo:        ctx.WeatherRepo,
+		ImageCacheRepo:     ctx.ImageCacheRepo,
+		ThresholdRepo:      ctx.ThresholdRepo,
+		NotificationRepo:   ctx.NotificationRepo,
+		Logger:             ctx.Logger,
+		DefaultModelID:     ctx.DefaultModelID,
+		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
+		AvesClassID:        ctx.AvesClassID,
 	})
 }
 
@@ -313,7 +359,7 @@ func (ctx *TestContext) WaitForCompletion(t *testing.T, timeout time.Duration) {
 		}
 
 		if state.State == entities.MigrationStatusPaused {
-			t.Fatal("migration unexpectedly paused")
+			t.Fatalf("migration unexpectedly paused: %s", state.ErrorMessage)
 		}
 
 		// Check for error in state
