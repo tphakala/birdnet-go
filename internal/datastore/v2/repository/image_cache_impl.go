@@ -115,18 +115,19 @@ func (r *imageCacheRepository) GetImageCacheBatch(ctx context.Context, providerN
 		return nil, err
 	}
 
+	// Batch fetch all labels for scientific names (avoids N+1 queries)
+	labelsByName, err := r.labelRepo.GetByScientificNames(ctx, scientificNames)
+	if err != nil {
+		return nil, err
+	}
+
 	// Collect all label IDs and build reverse mapping
 	var allLabelIDs []uint
 	labelIDToSciName := make(map[uint]string)
-
-	for _, sciName := range scientificNames {
-		labels, err := r.labelRepo.GetByScientificName(ctx, sciName)
-		if err != nil {
-			return nil, err
-		}
+	for sciName, labels := range labelsByName {
 		for _, label := range labels {
 			allLabelIDs = append(allLabelIDs, label.ID)
-			labelIDToSciName[label.ID] = label.ScientificName
+			labelIDToSciName[label.ID] = sciName
 		}
 	}
 
@@ -135,7 +136,7 @@ func (r *imageCacheRepository) GetImageCacheBatch(ctx context.Context, providerN
 	}
 
 	var caches []entities.ImageCache
-	err := r.db.WithContext(ctx).Table(r.tableName()).
+	err = r.db.WithContext(ctx).Table(r.tableName()).
 		Preload("Label").
 		Where("provider_name = ? AND label_id IN ?", providerName, allLabelIDs).
 		Find(&caches).Error

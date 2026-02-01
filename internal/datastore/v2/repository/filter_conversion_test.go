@@ -486,6 +486,17 @@ func (m *mockLabelRepository) GetLabelIDsByScientificName(_ context.Context, nam
 	return []uint{}, nil
 }
 
+// GetByScientificNames implements LabelRepository (batch cross-model lookup).
+func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []string) (map[string][]*entities.Label, error) {
+	result := make(map[string][]*entities.Label, len(names))
+	for _, name := range names {
+		if label, ok := m.labels[name]; ok {
+			result[name] = []*entities.Label{label}
+		}
+	}
+	return result, nil
+}
+
 // mockAudioSourceRepository is a simple mock for testing ResolveLocationsToSourceIDs
 type mockAudioSourceRepository struct {
 	sources map[string][]*entities.AudioSource

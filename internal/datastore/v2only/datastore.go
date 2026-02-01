@@ -43,6 +43,22 @@ func parseID(id string) (uint, error) {
 	return uint(parsed), nil
 }
 
+// parseDetectionTimestamp converts date and time strings to Unix timestamp.
+// Falls back to current time if parsing fails.
+func parseDetectionTimestamp(date, timeStr string, tz *time.Location) int64 {
+	if date != "" && timeStr != "" {
+		dateTimeStr := date + " " + timeStr
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05", dateTimeStr, tz); err == nil {
+			return t.Unix()
+		}
+	} else if date != "" {
+		if t, err := time.ParseInLocation("2006-01-02", date, tz); err == nil {
+			return t.Unix()
+		}
+	}
+	return time.Now().Unix()
+}
+
 // Datastore implements datastore.Interface using only v2 repositories.
 type Datastore struct {
 	manager      v2.Manager
@@ -254,34 +270,34 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	}
 
 	// Pre-resolve all prediction labels before starting transaction.
-	// This keeps the transaction short and avoids potential deadlocks.
+	// Uses batch operation to avoid N+1 queries.
 	var predLabels []*entities.Label
 	if len(results) > 0 {
+		// Collect species names for batch resolution
+		speciesNames := make([]string, len(results))
+		for i, r := range results {
+			speciesNames[i] = r.Species
+		}
+
+		// Batch resolve all labels (returns map[scientificName]*Label)
+		labelMap, err := ds.label.BatchGetOrCreate(ctx, speciesNames, model.ID, ds.speciesLabelTypeID, ds.avesClassID)
+		if err != nil {
+			return fmt.Errorf("failed to batch get/create prediction labels: %w", err)
+		}
+
+		// Build predLabels slice from map, preserving order
 		predLabels = make([]*entities.Label, len(results))
 		for i, r := range results {
-			predLabel, err := ds.label.GetOrCreate(ctx, r.Species, model.ID, ds.speciesLabelTypeID, ds.avesClassID)
-			if err != nil {
-				return fmt.Errorf("failed to get/create prediction label for %s: %w", r.Species, err)
+			lbl, ok := labelMap[r.Species]
+			if !ok {
+				return fmt.Errorf("label not found for species %s after batch creation", r.Species)
 			}
-			predLabels[i] = predLabel
+			predLabels[i] = lbl
 		}
 	}
 
 	// Parse the date string and time string to get Unix timestamp
-	var detectedAt int64
-	if note.Date != "" && note.Time != "" {
-		dateTimeStr := note.Date + " " + note.Time
-		if t, err := time.ParseInLocation("2006-01-02 15:04:05", dateTimeStr, ds.timezone); err == nil {
-			detectedAt = t.Unix()
-		}
-	} else if note.Date != "" {
-		if t, err := time.ParseInLocation("2006-01-02", note.Date, ds.timezone); err == nil {
-			detectedAt = t.Unix()
-		}
-	}
-	if detectedAt == 0 {
-		detectedAt = time.Now().Unix()
-	}
+	detectedAt := parseDetectionTimestamp(note.Date, note.Time, ds.timezone)
 
 	det := &entities.Detection{
 		LabelID:    label.ID,

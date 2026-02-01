@@ -200,15 +200,31 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 		return
 	}
 
+	// Batch resolve all labels to avoid N+1 queries
+	speciesSet := make(map[string]struct{})
+	for i := range legacyCaches {
+		speciesSet[legacyCaches[i].ScientificName] = struct{}{}
+	}
+	speciesNames := make([]string, 0, len(speciesSet))
+	for name := range speciesSet {
+		speciesNames = append(speciesNames, name)
+	}
+
+	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
+	if err != nil {
+		m.logger.Warn("failed to batch resolve labels for image caches", logger.Error(err))
+		result.ImageCaches.Error = err
+		return
+	}
+
 	for i := range legacyCaches {
 		cache := &legacyCaches[i]
 
-		// Resolve scientific name to label ID
-		label, err := m.labelRepo.GetOrCreate(ctx, cache.ScientificName, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
-		if err != nil {
-			m.logger.Warn("failed to resolve label for image cache",
-				logger.String("species", cache.ScientificName),
-				logger.Error(err))
+		// Look up label from pre-resolved map
+		label, ok := labelMap[cache.ScientificName]
+		if !ok {
+			m.logger.Warn("label not found after batch creation",
+				logger.String("species", cache.ScientificName))
 			result.ImageCaches.Skipped++
 			continue
 		}
@@ -262,16 +278,32 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 		return
 	}
 
+	// Batch resolve all labels to avoid N+1 queries
+	speciesSet := make(map[string]struct{})
+	for i := range legacyThresholds {
+		speciesSet[legacyThresholds[i].ScientificName] = struct{}{}
+	}
+	speciesNames := make([]string, 0, len(speciesSet))
+	for name := range speciesSet {
+		speciesNames = append(speciesNames, name)
+	}
+
+	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
+	if err != nil {
+		m.logger.Warn("failed to batch resolve labels for thresholds", logger.Error(err))
+		result.Thresholds.Error = err
+		return
+	}
+
 	for i := range legacyThresholds {
 		threshold := &legacyThresholds[i]
 
-		// Resolve scientific name to label ID
-		label, err := m.labelRepo.GetOrCreate(ctx, threshold.ScientificName, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
-		if err != nil {
-			m.logger.Warn("failed to resolve label for threshold",
+		// Look up label from pre-resolved map
+		label, ok := labelMap[threshold.ScientificName]
+		if !ok {
+			m.logger.Warn("label not found after batch creation",
 				logger.String("species", threshold.SpeciesName),
-				logger.String("scientific_name", threshold.ScientificName),
-				logger.Error(err))
+				logger.String("scientific_name", threshold.ScientificName))
 			result.Thresholds.Skipped++
 			continue
 		}
@@ -369,15 +401,31 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 		return
 	}
 
+	// Batch resolve all labels to avoid N+1 queries
+	speciesSet := make(map[string]struct{})
+	for i := range legacyHistory {
+		speciesSet[legacyHistory[i].ScientificName] = struct{}{}
+	}
+	speciesNames := make([]string, 0, len(speciesSet))
+	for name := range speciesSet {
+		speciesNames = append(speciesNames, name)
+	}
+
+	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
+	if err != nil {
+		m.logger.Warn("failed to batch resolve labels for notification history", logger.Error(err))
+		result.Notifications.Error = err
+		return
+	}
+
 	for i := range legacyHistory {
 		history := &legacyHistory[i]
 
-		// Resolve scientific name to label ID
-		label, err := m.labelRepo.GetOrCreate(ctx, history.ScientificName, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
-		if err != nil {
-			m.logger.Warn("failed to resolve label for notification history",
-				logger.String("species", history.ScientificName),
-				logger.Error(err))
+		// Look up label from pre-resolved map
+		label, ok := labelMap[history.ScientificName]
+		if !ok {
+			m.logger.Warn("label not found after batch creation",
+				logger.String("species", history.ScientificName))
 			result.Notifications.Skipped++
 			continue
 		}

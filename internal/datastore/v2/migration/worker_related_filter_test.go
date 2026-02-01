@@ -8,6 +8,7 @@ import (
 )
 
 func TestFilterBatchByConfidence(t *testing.T) {
+	// Note: minPredictionConfidence is 0.2 (20%)
 	tests := []struct {
 		name     string
 		batch    []datastore.Results
@@ -16,12 +17,12 @@ func TestFilterBatchByConfidence(t *testing.T) {
 		{
 			name: "filters out low confidence",
 			batch: []datastore.Results{
-				{ID: 1, Species: "Parus major", Confidence: 0.05},  // below threshold
-				{ID: 2, Species: "Parus major", Confidence: 0.10},  // at threshold
+				{ID: 1, Species: "Parus major", Confidence: 0.10},  // below threshold
+				{ID: 2, Species: "Parus major", Confidence: 0.20},  // at threshold
 				{ID: 3, Species: "Parus major", Confidence: 0.50},  // above threshold
-				{ID: 4, Species: "Parus major", Confidence: 0.09},  // below threshold
+				{ID: 4, Species: "Parus major", Confidence: 0.19},  // below threshold
 			},
-			expected: 2, // only 0.10 and 0.50 pass
+			expected: 2, // only 0.20 and 0.50 pass
 		},
 		{
 			name:     "empty batch returns empty",
@@ -31,7 +32,7 @@ func TestFilterBatchByConfidence(t *testing.T) {
 		{
 			name: "all above threshold",
 			batch: []datastore.Results{
-				{ID: 1, Species: "Parus major", Confidence: 0.15},
+				{ID: 1, Species: "Parus major", Confidence: 0.25},
 				{ID: 2, Species: "Parus major", Confidence: 0.95},
 			},
 			expected: 2,
@@ -39,8 +40,8 @@ func TestFilterBatchByConfidence(t *testing.T) {
 		{
 			name: "all below threshold",
 			batch: []datastore.Results{
-				{ID: 1, Species: "Parus major", Confidence: 0.01},
-				{ID: 2, Species: "Parus major", Confidence: 0.05},
+				{ID: 1, Species: "Parus major", Confidence: 0.05},
+				{ID: 2, Species: "Parus major", Confidence: 0.15},
 			},
 			expected: 0,
 		},

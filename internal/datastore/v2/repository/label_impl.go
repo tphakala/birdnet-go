@@ -334,6 +334,35 @@ func (r *labelRepository) GetLabelIDsByScientificName(ctx context.Context, name 
 	return ids, err
 }
 
+// GetByScientificNames retrieves all labels matching any of the scientific names.
+// Handles large name sets by chunking to avoid SQL parameter limits.
+func (r *labelRepository) GetByScientificNames(ctx context.Context, names []string) (map[string][]*entities.Label, error) {
+	if len(names) == 0 {
+		return make(map[string][]*entities.Label), nil
+	}
+
+	result := make(map[string][]*entities.Label, len(names))
+
+	// Chunk to avoid SQL parameter limits
+	for i := 0; i < len(names); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(names))
+		batchNames := names[i:end]
+
+		var labels []*entities.Label
+		err := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("scientific_name IN ?", batchNames).
+			Find(&labels).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load labels: %w", err)
+		}
+
+		for _, label := range labels {
+			result[label.ScientificName] = append(result[label.ScientificName], label)
+		}
+	}
+	return result, nil
+}
+
 // labelTypeRepository implements LabelTypeRepository.
 type labelTypeRepository struct {
 	db          *gorm.DB

@@ -68,6 +68,11 @@ type LabelRepository interface {
 	// Returns empty slice if no labels found.
 	GetByScientificName(ctx context.Context, name string) ([]*entities.Label, error)
 
+	// GetByScientificNames retrieves all labels matching any of the scientific names.
+	// Returns a map of scientificName -> []*Label for efficient batch lookup.
+	// Handles large name sets by chunking to avoid SQL parameter limits.
+	GetByScientificNames(ctx context.Context, names []string) (map[string][]*entities.Label, error)
+
 	// GetLabelIDsByScientificName retrieves label IDs for a scientific name across all models.
 	// Convenience method for filter queries that need IDs only.
 	// Returns empty slice if no labels found.
