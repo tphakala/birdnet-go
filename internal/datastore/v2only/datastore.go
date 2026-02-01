@@ -712,7 +712,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	err = db.Table("detections d").
 		Select(`
 			l.scientific_name,
-			COUNT(*) as count,
+			COUNT(DISTINCT d.id) as count,
 			MAX(dp.confidence) as max_confidence,
 			MAX(d.detected_at) as latest_time
 		`).
