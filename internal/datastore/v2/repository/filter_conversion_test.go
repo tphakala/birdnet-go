@@ -408,53 +408,82 @@ type mockLabelRepository struct {
 	labels map[string]*entities.Label
 }
 
-func (m *mockLabelRepository) GetByScientificName(_ context.Context, name string) (*entities.Label, error) {
-	if label, ok := m.labels[name]; ok {
-		return label, nil
-	}
-	return nil, ErrLabelNotFound
-}
-
-// Implement other interface methods as no-ops for the mock
-func (m *mockLabelRepository) GetOrCreate(_ context.Context, _ string, _ entities.LabelType) (*entities.Label, error) {
+// GetOrCreate implements LabelRepository.
+func (m *mockLabelRepository) GetOrCreate(_ context.Context, _ string, _, _ uint, _ *uint) (*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+
+// GetByID implements LabelRepository.
 func (m *mockLabelRepository) GetByID(_ context.Context, _ uint) (*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+
+// GetByIDs implements LabelRepository.
 func (m *mockLabelRepository) GetByIDs(_ context.Context, _ []uint) (map[uint]*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
-func (m *mockLabelRepository) GetAllByType(_ context.Context, _ entities.LabelType) ([]*entities.Label, error) {
+
+// GetByScientificNameAndModel implements LabelRepository.
+func (m *mockLabelRepository) GetByScientificNameAndModel(_ context.Context, _ string, _ uint) (*entities.Label, error) {
+	return nil, ErrLabelNotFound
+}
+
+// GetByScientificNamesAndModel implements LabelRepository.
+func (m *mockLabelRepository) GetByScientificNamesAndModel(_ context.Context, _ []string, _ uint) ([]*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+
+// BatchGetOrCreate implements LabelRepository.
+func (m *mockLabelRepository) BatchGetOrCreate(_ context.Context, _ []string, _, _ uint, _ *uint) (map[string]*entities.Label, error) {
+	return make(map[string]*entities.Label), nil
+}
+
+// GetAllByModel implements LabelRepository.
+func (m *mockLabelRepository) GetAllByModel(_ context.Context, _ uint) ([]*entities.Label, error) {
+	return nil, nil //nolint:nilnil // mock implementation
+}
+
+// GetAllByLabelType implements LabelRepository.
+func (m *mockLabelRepository) GetAllByLabelType(_ context.Context, _ uint) ([]*entities.Label, error) {
+	return nil, nil //nolint:nilnil // mock implementation
+}
+
+// Search implements LabelRepository.
 func (m *mockLabelRepository) Search(_ context.Context, _ string, _ int) ([]*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+
+// Count implements LabelRepository.
 func (m *mockLabelRepository) Count(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockLabelRepository) CountByType(_ context.Context, _ entities.LabelType) (int64, error) {
-	return 0, nil
-}
-func (m *mockLabelRepository) GetAll(_ context.Context) ([]*entities.Label, error) { return nil, nil }
-func (m *mockLabelRepository) Delete(_ context.Context, _ uint) error              { return nil }
-func (m *mockLabelRepository) Exists(_ context.Context, _ uint) (bool, error)      { return false, nil }
-func (m *mockLabelRepository) GetRawLabelForLabel(_ context.Context, _, _ uint) (string, error) {
-	return "", nil
-}
-func (m *mockLabelRepository) GetRawLabelsForLabels(_ context.Context, _ []ModelLabelPair) (map[string]string, error) {
+
+// CountByModel implements LabelRepository.
+func (m *mockLabelRepository) CountByModel(_ context.Context, _ uint) (int64, error) { return 0, nil }
+
+// GetAll implements LabelRepository.
+func (m *mockLabelRepository) GetAll(_ context.Context) ([]*entities.Label, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
-func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []string) ([]*entities.Label, error) {
-	var result []*entities.Label
-	for _, name := range names {
-		if label, ok := m.labels[name]; ok {
-			result = append(result, label)
-		}
+
+// Delete implements LabelRepository.
+func (m *mockLabelRepository) Delete(_ context.Context, _ uint) error { return nil }
+
+// Exists implements LabelRepository.
+func (m *mockLabelRepository) Exists(_ context.Context, _ uint) (bool, error) { return false, nil }
+
+// GetByScientificName implements LabelRepository (cross-model lookup).
+func (m *mockLabelRepository) GetByScientificName(_ context.Context, name string) ([]*entities.Label, error) {
+	if label, ok := m.labels[name]; ok {
+		return []*entities.Label{label}, nil
 	}
-	return result, nil
+	return []*entities.Label{}, nil
 }
-func (m *mockLabelRepository) BatchGetOrCreate(_ context.Context, _ []string, _ entities.LabelType) (map[string]*entities.Label, error) {
-	return make(map[string]*entities.Label), nil
+
+// GetLabelIDsByScientificName implements LabelRepository (cross-model ID lookup).
+func (m *mockLabelRepository) GetLabelIDsByScientificName(_ context.Context, name string) ([]uint, error) {
+	if label, ok := m.labels[name]; ok {
+		return []uint{label.ID}, nil
+	}
+	return []uint{}, nil
 }
 
 // mockAudioSourceRepository is a simple mock for testing ResolveLocationsToSourceIDs

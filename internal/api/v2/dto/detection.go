@@ -123,7 +123,7 @@ func NewDetectionResponse(r *detection.Result) *DetectionResponse {
 		dto.Model = &ModelInfo{
 			Name:    r.Model.Name,
 			Version: r.Model.Version,
-			Custom:  r.Model.Custom,
+			Custom:  r.Model.Variant != detection.DefaultModelVariant,
 		}
 	}
 

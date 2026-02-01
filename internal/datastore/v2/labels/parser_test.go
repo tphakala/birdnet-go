@@ -19,7 +19,7 @@ func TestParseRawLabel_BirdNET(t *testing.T) {
 			expected: ParsedLabel{
 				ScientificName: "Turdus merula",
 				CommonName:     "Common Blackbird",
-				LabelType:      entities.LabelTypeSpecies,
+				LabelType:      LabelTypeSpecies,
 				TaxonomicClass: "Aves",
 			},
 		},
@@ -28,7 +28,7 @@ func TestParseRawLabel_BirdNET(t *testing.T) {
 			rawLabel: "noise",
 			expected: ParsedLabel{
 				ScientificName: "noise",
-				LabelType:      entities.LabelTypeNoise,
+				LabelType:      LabelTypeNoise,
 			},
 		},
 		{
@@ -36,7 +36,7 @@ func TestParseRawLabel_BirdNET(t *testing.T) {
 			rawLabel: "NOISE",
 			expected: ParsedLabel{
 				ScientificName: "noise",
-				LabelType:      entities.LabelTypeNoise,
+				LabelType:      LabelTypeNoise,
 			},
 		},
 		{
@@ -45,7 +45,7 @@ func TestParseRawLabel_BirdNET(t *testing.T) {
 			expected: ParsedLabel{
 				ScientificName: "Turdus merula",
 				CommonName:     "Common Blackbird",
-				LabelType:      entities.LabelTypeSpecies,
+				LabelType:      LabelTypeSpecies,
 				TaxonomicClass: "Aves",
 			},
 		},
@@ -54,7 +54,7 @@ func TestParseRawLabel_BirdNET(t *testing.T) {
 			rawLabel: "wind",
 			expected: ParsedLabel{
 				ScientificName: "wind",
-				LabelType:      entities.LabelTypeEnvironment,
+				LabelType:      LabelTypeEnvironment,
 			},
 		},
 		{
@@ -62,7 +62,7 @@ func TestParseRawLabel_BirdNET(t *testing.T) {
 			rawLabel: "audiomoth",
 			expected: ParsedLabel{
 				ScientificName: "audiomoth",
-				LabelType:      entities.LabelTypeDevice,
+				LabelType:      LabelTypeDevice,
 			},
 		},
 	}
@@ -80,7 +80,7 @@ func TestParseRawLabel_BatModel(t *testing.T) {
 
 	assert.Equal(t, "Eptesicus nilssonii", result.ScientificName)
 	assert.Equal(t, "Nordfladdermus", result.CommonName)
-	assert.Equal(t, entities.LabelTypeSpecies, result.LabelType)
+	assert.Equal(t, LabelTypeSpecies, result.LabelType)
 	assert.Equal(t, "Chiroptera", result.TaxonomicClass)
 }
 
@@ -89,7 +89,7 @@ func TestParseRawLabel_Perch(t *testing.T) {
 
 	assert.Equal(t, "Turdus merula", result.ScientificName)
 	assert.Empty(t, result.CommonName)
-	assert.Equal(t, entities.LabelTypeSpecies, result.LabelType)
+	assert.Equal(t, LabelTypeSpecies, result.LabelType)
 	// Multi model type does not set taxonomic class
 	assert.Empty(t, result.TaxonomicClass)
 }
@@ -100,7 +100,7 @@ func TestParseRawLabel_MultipleUnderscores(t *testing.T) {
 
 	assert.Equal(t, "Genus species", result.ScientificName)
 	assert.Equal(t, "Common_Name_Here", result.CommonName) // Preserves underscores in common name
-	assert.Equal(t, entities.LabelTypeSpecies, result.LabelType)
+	assert.Equal(t, LabelTypeSpecies, result.LabelType)
 }
 
 func TestIsValidScientificName(t *testing.T) {

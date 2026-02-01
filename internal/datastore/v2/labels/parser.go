@@ -11,34 +11,43 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
+// Label type name constants.
+const (
+	LabelTypeSpecies     = "species"
+	LabelTypeNoise       = "noise"
+	LabelTypeEnvironment = "environment"
+	LabelTypeDevice      = "device"
+	LabelTypeUnknown     = "unknown"
+)
+
 // ParsedLabel contains the extracted components from a raw model label.
 type ParsedLabel struct {
 	ScientificName string
 	CommonName     string // May be empty (e.g., Perch)
-	LabelType      entities.LabelType
+	LabelType      string // "species", "noise", "environment", "device", "unknown"
 	TaxonomicClass string // "Aves", "Chiroptera", or empty
 }
 
 // NonSpeciesLabels are known non-animal labels.
-var NonSpeciesLabels = map[string]entities.LabelType{
+var NonSpeciesLabels = map[string]string{
 	// Noise/silence
-	"noise":      entities.LabelTypeNoise,
-	"silence":    entities.LabelTypeNoise,
-	"background": entities.LabelTypeNoise,
+	"noise":      LabelTypeNoise,
+	"silence":    LabelTypeNoise,
+	"background": LabelTypeNoise,
 
 	// Environment sounds
-	"engine":    entities.LabelTypeEnvironment,
-	"train":     entities.LabelTypeEnvironment,
-	"wind":      entities.LabelTypeEnvironment,
-	"rain":      entities.LabelTypeEnvironment,
-	"thunder":   entities.LabelTypeEnvironment,
-	"water":     entities.LabelTypeEnvironment,
-	"fireworks": entities.LabelTypeEnvironment,
-	"siren":     entities.LabelTypeEnvironment,
+	"engine":    LabelTypeEnvironment,
+	"train":     LabelTypeEnvironment,
+	"wind":      LabelTypeEnvironment,
+	"rain":      LabelTypeEnvironment,
+	"thunder":   LabelTypeEnvironment,
+	"water":     LabelTypeEnvironment,
+	"fireworks": LabelTypeEnvironment,
+	"siren":     LabelTypeEnvironment,
 
 	// Device sounds
-	"audiomoth": entities.LabelTypeDevice,
-	"other":     entities.LabelTypeUnknown,
+	"audiomoth": LabelTypeDevice,
+	"other":     LabelTypeUnknown,
 }
 
 // ParseRawLabel extracts components from a model's raw label output.
@@ -61,7 +70,7 @@ func ParseRawLabel(rawLabel string, modelType entities.ModelType) ParsedLabel {
 
 	// Parse species label
 	parsed := ParsedLabel{
-		LabelType: entities.LabelTypeSpecies,
+		LabelType: LabelTypeSpecies,
 	}
 
 	// Determine taxonomic class from model type

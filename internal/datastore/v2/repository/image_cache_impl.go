@@ -49,23 +49,25 @@ func (r *imageCacheRepository) ensureLabelRepo() error {
 }
 
 // GetImageCache retrieves an image cache entry by provider and scientific name.
-// Internally resolves scientific name to label ID for the lookup.
+// Internally resolves scientific name to label IDs (cross-model) for the lookup.
+// Images are model-agnostic, so returns the first matching cache entry.
 func (r *imageCacheRepository) GetImageCache(ctx context.Context, providerName, scientificName string) (*entities.ImageCache, error) {
 	if err := r.ensureLabelRepo(); err != nil {
 		return nil, err
 	}
-	// Resolve scientific name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, scientificName)
+	// Resolve scientific name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, scientificName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return nil, ErrImageCacheNotFound
-		}
 		return nil, err
+	}
+	if len(labelIDs) == 0 {
+		return nil, ErrImageCacheNotFound
 	}
 
 	var cache entities.ImageCache
 	err = r.db.WithContext(ctx).Table(r.tableName()).
-		Where("provider_name = ? AND label_id = ?", providerName, label.ID).
+		Preload("Label").
+		Where("provider_name = ? AND label_id IN ?", providerName, labelIDs).
 		First(&cache).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrImageCacheNotFound
@@ -74,8 +76,6 @@ func (r *imageCacheRepository) GetImageCache(ctx context.Context, providerName, 
 		return nil, err
 	}
 
-	// Attach the label for callers that need scientific name
-	cache.Label = label
 	return &cache, nil
 }
 
@@ -105,6 +105,7 @@ func (r *imageCacheRepository) GetAllImageCaches(ctx context.Context, providerNa
 
 // GetImageCacheBatch retrieves multiple image cache entries by scientific names.
 // Returns a map keyed by scientific name for convenient lookup.
+// Uses cross-model lookup - images are model-agnostic.
 func (r *imageCacheRepository) GetImageCacheBatch(ctx context.Context, providerName string, scientificNames []string) (map[string]*entities.ImageCache, error) {
 	if len(scientificNames) == 0 {
 		return make(map[string]*entities.ImageCache), nil
@@ -114,40 +115,42 @@ func (r *imageCacheRepository) GetImageCacheBatch(ctx context.Context, providerN
 		return nil, err
 	}
 
-	// Batch lookup labels by scientific names
-	labels, err := r.labelRepo.GetByScientificNames(ctx, scientificNames)
-	if err != nil {
-		return nil, err
-	}
+	// Collect all label IDs and build reverse mapping
+	var allLabelIDs []uint
+	labelIDToSciName := make(map[uint]string)
 
-	// Build label ID list and create reverse mapping
-	labelIDs := make([]uint, 0, len(labels))
-	labelIDToSciName := make(map[uint]string, len(labels))
-	for _, label := range labels {
-		labelIDs = append(labelIDs, label.ID)
-		if label.ScientificName != nil {
-			labelIDToSciName[label.ID] = *label.ScientificName
+	for _, sciName := range scientificNames {
+		labels, err := r.labelRepo.GetByScientificName(ctx, sciName)
+		if err != nil {
+			return nil, err
+		}
+		for _, label := range labels {
+			allLabelIDs = append(allLabelIDs, label.ID)
+			labelIDToSciName[label.ID] = label.ScientificName
 		}
 	}
 
-	if len(labelIDs) == 0 {
+	if len(allLabelIDs) == 0 {
 		return make(map[string]*entities.ImageCache), nil
 	}
 
 	var caches []entities.ImageCache
-	err = r.db.WithContext(ctx).Table(r.tableName()).
+	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Preload("Label").
-		Where("provider_name = ? AND label_id IN ?", providerName, labelIDs).
+		Where("provider_name = ? AND label_id IN ?", providerName, allLabelIDs).
 		Find(&caches).Error
 	if err != nil {
 		return nil, err
 	}
 
 	// Build result map keyed by scientific name
+	// For duplicate sci names (multiple models), first cache wins
 	result := make(map[string]*entities.ImageCache, len(caches))
 	for i := range caches {
 		if sciName, ok := labelIDToSciName[caches[i].LabelID]; ok {
-			result[sciName] = &caches[i]
+			if _, exists := result[sciName]; !exists {
+				result[sciName] = &caches[i]
+			}
 		}
 	}
 	return result, nil

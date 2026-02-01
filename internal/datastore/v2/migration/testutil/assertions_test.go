@@ -98,7 +98,7 @@ func TestAssertDetectionLabelMatches_Success(t *testing.T) {
 	scientificName := testSpeciesTurdus
 	v2 := &entities.Detection{
 		Label: &entities.Label{
-			ScientificName: &scientificName,
+			ScientificName: scientificName,
 		},
 	}
 
@@ -285,7 +285,7 @@ func TestAssertDynamicThresholdMatches_Success(t *testing.T) {
 		LastTriggered: now,
 		FirstCreated:  now.Add(-7 * 24 * time.Hour),
 		TriggerCount:  10,
-		Label:         &entities.Label{ID: 1, ScientificName: &sciName},
+		Label:         &entities.Label{ID: 1, ScientificName: sciName},
 	}
 
 	AssertDynamicThresholdMatches(t, legacy, v2)
@@ -321,7 +321,7 @@ func TestAssertImageCacheMatches_Success(t *testing.T) {
 		AuthorName:     "Test Author",
 		AuthorURL:      "https://example.com/author",
 		CachedAt:       cachedAt,
-		Label:          &entities.Label{ID: 1, ScientificName: &sciName},
+		Label:          &entities.Label{ID: 1, ScientificName: sciName},
 	}
 
 	AssertImageCacheMatches(t, legacy, v2)
@@ -348,7 +348,7 @@ func TestAssertNotificationHistoryMatches_Success(t *testing.T) {
 		NotificationType: "new_species",
 		LastSent:         now,
 		ExpiresAt:        expiresAt,
-		Label:            &entities.Label{ID: 1, ScientificName: &sciName},
+		Label:            &entities.Label{ID: 1, ScientificName: sciName},
 	}
 
 	AssertNotificationHistoryMatches(t, legacy, v2)
@@ -400,8 +400,8 @@ func TestAssertResultsMatch_Success(t *testing.T) {
 	sparrow := "Passer domesticus"
 
 	v2Predictions := []*entities.DetectionPrediction{
-		{ID: 1, DetectionID: 1, LabelID: 1, Confidence: 0.7, Label: &entities.Label{ScientificName: &crow}},
-		{ID: 2, DetectionID: 1, LabelID: 2, Confidence: 0.5, Label: &entities.Label{ScientificName: &sparrow}},
+		{ID: 1, DetectionID: 1, LabelID: 1, Confidence: 0.7, Label: &entities.Label{ScientificName: crow}},
+		{ID: 2, DetectionID: 1, LabelID: 2, Confidence: 0.5, Label: &entities.Label{ScientificName: sparrow}},
 	}
 
 	AssertResultsMatch(t, legacyResults, v2Predictions)

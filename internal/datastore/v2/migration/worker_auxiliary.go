@@ -107,6 +107,11 @@ type AuxiliaryMigrator struct {
 	thresholdRepo    repository.DynamicThresholdRepository
 	notificationRepo repository.NotificationHistoryRepository
 	logger           logger.Logger
+
+	// Cached lookup table IDs for label creation
+	defaultModelID     uint // Model ID to use for migrated labels
+	speciesLabelTypeID uint // "species" label type ID
+	avesClassID        *uint // "Aves" taxonomic class ID (optional)
 }
 
 // AuxiliaryMigratorConfig configures the auxiliary migrator.
@@ -118,18 +123,26 @@ type AuxiliaryMigratorConfig struct {
 	ThresholdRepo    repository.DynamicThresholdRepository
 	NotificationRepo repository.NotificationHistoryRepository
 	Logger           logger.Logger
+
+	// Required: Cached lookup table IDs
+	DefaultModelID     uint  // Model ID to use for migrated labels (typically default BirdNET)
+	SpeciesLabelTypeID uint  // "species" label type ID
+	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
 }
 
 // NewAuxiliaryMigrator creates a new auxiliary migrator.
 func NewAuxiliaryMigrator(cfg *AuxiliaryMigratorConfig) *AuxiliaryMigrator {
 	return &AuxiliaryMigrator{
-		legacyStore:      cfg.LegacyStore,
-		labelRepo:        cfg.LabelRepo,
-		weatherRepo:      cfg.WeatherRepo,
-		imageCacheRepo:   cfg.ImageCacheRepo,
-		thresholdRepo:    cfg.ThresholdRepo,
-		notificationRepo: cfg.NotificationRepo,
-		logger:           cfg.Logger,
+		legacyStore:        cfg.LegacyStore,
+		labelRepo:          cfg.LabelRepo,
+		weatherRepo:        cfg.WeatherRepo,
+		imageCacheRepo:     cfg.ImageCacheRepo,
+		thresholdRepo:      cfg.ThresholdRepo,
+		notificationRepo:   cfg.NotificationRepo,
+		logger:             cfg.Logger,
+		defaultModelID:     cfg.DefaultModelID,
+		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
+		avesClassID:        cfg.AvesClassID,
 	}
 }
 
@@ -191,7 +204,7 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 		cache := &legacyCaches[i]
 
 		// Resolve scientific name to label ID
-		label, err := m.labelRepo.GetOrCreate(ctx, cache.ScientificName, entities.LabelTypeSpecies)
+		label, err := m.labelRepo.GetOrCreate(ctx, cache.ScientificName, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 		if err != nil {
 			m.logger.Warn("failed to resolve label for image cache",
 				logger.String("species", cache.ScientificName),
@@ -253,7 +266,7 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 		threshold := &legacyThresholds[i]
 
 		// Resolve scientific name to label ID
-		label, err := m.labelRepo.GetOrCreate(ctx, threshold.ScientificName, entities.LabelTypeSpecies)
+		label, err := m.labelRepo.GetOrCreate(ctx, threshold.ScientificName, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 		if err != nil {
 			m.logger.Warn("failed to resolve label for threshold",
 				logger.String("species", threshold.SpeciesName),
@@ -360,7 +373,7 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 		history := &legacyHistory[i]
 
 		// Resolve scientific name to label ID
-		label, err := m.labelRepo.GetOrCreate(ctx, history.ScientificName, entities.LabelTypeSpecies)
+		label, err := m.labelRepo.GetOrCreate(ctx, history.ScientificName, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 		if err != nil {
 			m.logger.Warn("failed to resolve label for notification history",
 				logger.String("species", history.ScientificName),

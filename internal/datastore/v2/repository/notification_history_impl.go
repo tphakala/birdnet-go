@@ -64,23 +64,25 @@ func (r *notificationHistoryRepository) SaveNotificationHistory(ctx context.Cont
 }
 
 // GetNotificationHistory retrieves a notification history entry by scientific name.
-// Internally resolves the scientific name to a label ID for the lookup.
+// Internally resolves the scientific name to label IDs (cross-model) for the lookup.
+// Returns the first matching entry if multiple models have history for this species.
 func (r *notificationHistoryRepository) GetNotificationHistory(ctx context.Context, scientificName, notificationType string) (*entities.NotificationHistory, error) {
 	if err := r.ensureLabelRepo(); err != nil {
 		return nil, err
 	}
-	// Resolve scientific name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, scientificName)
+	// Resolve scientific name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, scientificName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return nil, ErrNotificationHistoryNotFound
-		}
 		return nil, err
+	}
+	if len(labelIDs) == 0 {
+		return nil, ErrNotificationHistoryNotFound
 	}
 
 	var history entities.NotificationHistory
 	err = r.db.WithContext(ctx).Table(r.tableName()).
-		Where("label_id = ? AND notification_type = ?", label.ID, notificationType).
+		Preload("Label").
+		Where("label_id IN ? AND notification_type = ?", labelIDs, notificationType).
 		First(&history).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotificationHistoryNotFound
@@ -89,8 +91,6 @@ func (r *notificationHistoryRepository) GetNotificationHistory(ctx context.Conte
 		return nil, err
 	}
 
-	// Attach the label for callers that need scientific name
-	history.Label = label
 	return &history, nil
 }
 

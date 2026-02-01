@@ -62,6 +62,16 @@ type LabelRepository interface {
 
 	// Exists checks if a label with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
+
+	// GetByScientificName retrieves all labels matching a scientific name across all models.
+	// Used for model-agnostic features like dynamic thresholds and image caching.
+	// Returns empty slice if no labels found.
+	GetByScientificName(ctx context.Context, name string) ([]*entities.Label, error)
+
+	// GetLabelIDsByScientificName retrieves label IDs for a scientific name across all models.
+	// Convenience method for filter queries that need IDs only.
+	// Returns empty slice if no labels found.
+	GetLabelIDsByScientificName(ctx context.Context, name string) ([]uint, error)
 }
 
 // LabelTypeRepository provides access to the label_types lookup table.

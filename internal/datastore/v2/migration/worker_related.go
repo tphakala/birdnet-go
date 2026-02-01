@@ -50,6 +50,11 @@ type RelatedDataMigrator struct {
 	stateManager  *datastoreV2.StateManager
 	logger        logger.Logger
 	batchSize     int
+
+	// Cached lookup table IDs for label creation
+	defaultModelID     uint  // Model ID to use for migrated labels
+	speciesLabelTypeID uint  // "species" label type ID
+	avesClassID        *uint // "Aves" taxonomic class ID (optional)
 }
 
 // RelatedDataMigratorConfig configures the related data migrator.
@@ -60,6 +65,11 @@ type RelatedDataMigratorConfig struct {
 	StateManager  *datastoreV2.StateManager // For progress tracking
 	Logger        logger.Logger
 	BatchSize     int // If 0, uses defaultRelatedDataBatchSize
+
+	// Required: Cached lookup table IDs
+	DefaultModelID     uint  // Model ID to use for migrated labels (typically default BirdNET)
+	SpeciesLabelTypeID uint  // "species" label type ID
+	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
 }
 
 // NewRelatedDataMigrator creates a new related data migrator.
@@ -85,12 +95,15 @@ func NewRelatedDataMigrator(cfg *RelatedDataMigratorConfig) *RelatedDataMigrator
 		batchSize = defaultRelatedDataBatchSize
 	}
 	return &RelatedDataMigrator{
-		legacyStore:   cfg.LegacyStore,
-		detectionRepo: cfg.DetectionRepo,
-		labelRepo:     cfg.LabelRepo,
-		stateManager:  cfg.StateManager,
-		logger:        cfg.Logger,
-		batchSize:     batchSize,
+		legacyStore:        cfg.LegacyStore,
+		detectionRepo:      cfg.DetectionRepo,
+		labelRepo:          cfg.LabelRepo,
+		stateManager:       cfg.StateManager,
+		logger:             cfg.Logger,
+		batchSize:          batchSize,
+		defaultModelID:     cfg.DefaultModelID,
+		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
+		avesClassID:        cfg.AvesClassID,
 	}
 }
 
@@ -523,7 +536,7 @@ func (m *RelatedDataMigrator) resolveSpeciesLabels(ctx context.Context, batch []
 	}
 
 	// Batch resolve all at once
-	labels, err := m.labelRepo.BatchGetOrCreate(ctx, scientificNames, entities.LabelTypeSpecies)
+	labels, err := m.labelRepo.BatchGetOrCreate(ctx, scientificNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
 		m.logger.Warn("failed to batch resolve labels", logger.Error(err))
 		return

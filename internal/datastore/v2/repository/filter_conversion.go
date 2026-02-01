@@ -269,7 +269,7 @@ type FilterLookupDeps struct {
 }
 
 // ResolveSpeciesToLabelIDs converts species names to label IDs.
-// Accepts scientific names (looked up via GetByScientificName).
+// Accepts scientific names (looked up via GetLabelIDsByScientificName for cross-model support).
 // If species is non-empty but no labels are found, returns sentinel []uint{0}
 // to ensure the query returns zero results (rather than ignoring the filter).
 // Returns nil if species is empty.
@@ -283,14 +283,12 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 
 	labelIDs := make([]uint, 0, len(species))
 	for _, name := range species {
-		label, err := deps.LabelRepo.GetByScientificName(ctx, name)
+		// Use cross-model lookup to get all label IDs for this species
+		ids, err := deps.LabelRepo.GetLabelIDsByScientificName(ctx, name)
 		if err != nil {
-			if errors.Is(err, ErrLabelNotFound) {
-				continue // Skip unknown species
-			}
 			return nil, err
 		}
-		labelIDs = append(labelIDs, label.ID)
+		labelIDs = append(labelIDs, ids...)
 	}
 
 	// If input was non-empty but we found nothing, use sentinel

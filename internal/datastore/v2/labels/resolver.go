@@ -1,18 +1,30 @@
 package labels
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"gorm.io/gorm"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
 // Resolver handles lazy label creation and caching.
+// It uses repository interfaces for database access and caches
+// lookup table IDs for efficient label resolution.
 type Resolver struct {
-	db    *gorm.DB
-	cache sync.Map // map[cacheKey]*entities.Label
+	labelRepo    repository.LabelRepository
+	labelTypeRepo repository.LabelTypeRepository
+	taxClassRepo  repository.TaxonomicClassRepository
+	modelRepo     repository.ModelRepository
+
+	// Cached lookup table IDs (loaded at initialization)
+	labelTypeIDs   map[string]uint // "species" -> ID, "noise" -> ID, etc.
+	taxClassIDs    map[string]uint // "Aves" -> ID, "Chiroptera" -> ID
+
+	// Label cache: (modelID, rawLabel) -> *entities.Label
+	cache sync.Map
 }
 
 type cacheKey struct {
@@ -20,14 +32,74 @@ type cacheKey struct {
 	rawLabel string
 }
 
-// NewResolver creates a new label resolver.
-func NewResolver(db *gorm.DB) *Resolver {
-	return &Resolver{db: db}
+// NewResolver creates a new label resolver with repository dependencies.
+func NewResolver(
+	labelRepo repository.LabelRepository,
+	labelTypeRepo repository.LabelTypeRepository,
+	taxClassRepo repository.TaxonomicClassRepository,
+	modelRepo repository.ModelRepository,
+) *Resolver {
+	return &Resolver{
+		labelRepo:     labelRepo,
+		labelTypeRepo: labelTypeRepo,
+		taxClassRepo:  taxClassRepo,
+		modelRepo:     modelRepo,
+		labelTypeIDs:  make(map[string]uint),
+		taxClassIDs:   make(map[string]uint),
+	}
 }
 
-// Resolve returns the label ID for a model's raw label, creating entries as needed.
+// Initialize loads and caches all lookup table IDs.
+// This should be called once at application startup.
+func (r *Resolver) Initialize(ctx context.Context) error {
+	// Load label types
+	labelTypes, err := r.labelTypeRepo.GetAll(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load label types: %w", err)
+	}
+	for _, lt := range labelTypes {
+		r.labelTypeIDs[lt.Name] = lt.ID
+	}
+
+	// Ensure required label types exist
+	requiredTypes := []string{LabelTypeSpecies, LabelTypeNoise, LabelTypeEnvironment, LabelTypeDevice}
+	for _, name := range requiredTypes {
+		if _, exists := r.labelTypeIDs[name]; !exists {
+			lt, err := r.labelTypeRepo.GetOrCreate(ctx, name)
+			if err != nil {
+				return fmt.Errorf("failed to create label type %s: %w", name, err)
+			}
+			r.labelTypeIDs[lt.Name] = lt.ID
+		}
+	}
+
+	// Load taxonomic classes
+	taxClasses, err := r.taxClassRepo.GetAll(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load taxonomic classes: %w", err)
+	}
+	for _, tc := range taxClasses {
+		r.taxClassIDs[tc.Name] = tc.ID
+	}
+
+	// Ensure required taxonomic classes exist
+	requiredClasses := []string{"Aves", "Chiroptera"}
+	for _, name := range requiredClasses {
+		if _, exists := r.taxClassIDs[name]; !exists {
+			tc, err := r.taxClassRepo.GetOrCreate(ctx, name)
+			if err != nil {
+				return fmt.Errorf("failed to create taxonomic class %s: %w", name, err)
+			}
+			r.taxClassIDs[tc.Name] = tc.ID
+		}
+	}
+
+	return nil
+}
+
+// Resolve returns the label for a model's raw label, creating entries as needed.
 // This is the main entry point for lazy label resolution.
-func (r *Resolver) Resolve(model *entities.AIModel, rawLabel string) (*entities.Label, error) {
+func (r *Resolver) Resolve(ctx context.Context, model *entities.AIModel, rawLabel string) (*entities.Label, error) {
 	if model == nil {
 		return nil, errors.New("model cannot be nil")
 	}
@@ -39,150 +111,121 @@ func (r *Resolver) Resolve(model *entities.AIModel, rawLabel string) (*entities.
 		return cached.(*entities.Label), nil
 	}
 
-	// Try to find existing model_label mapping
-	var modelLabel entities.ModelLabel
-	err := r.db.Preload("Label").
-		Where("model_id = ? AND raw_label = ?", model.ID, rawLabel).
-		First(&modelLabel).Error
-
-	if err == nil {
-		r.cache.Store(key, modelLabel.Label)
-		return modelLabel.Label, nil
-	}
-
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("failed to lookup model label: %w", err)
-	}
-
 	// Parse the raw label
 	parsed := ParseRawLabel(rawLabel, model.ModelType)
 
-	// Find or create the label
-	label, err := r.findOrCreateLabel(parsed)
-	if err != nil {
-		return nil, err
+	// Get label type ID
+	labelTypeID, ok := r.labelTypeIDs[parsed.LabelType]
+	if !ok {
+		return nil, fmt.Errorf("unknown label type: %s", parsed.LabelType)
 	}
 
-	// Create model_label mapping
-	modelLabel = entities.ModelLabel{
-		ModelID:  model.ID,
-		LabelID:  label.ID,
-		RawLabel: rawLabel,
-	}
-	if err := r.db.Create(&modelLabel).Error; err != nil {
-		// Handle race condition - another goroutine may have created it
-		createErr := err
-		if err := r.db.Where("model_id = ? AND raw_label = ?", model.ID, rawLabel).
-			First(&modelLabel).Error; err != nil {
-			// Re-fetch failed; return the original create error for better context
-			return nil, fmt.Errorf("failed to create model label mapping: %w", createErr)
+	// Get taxonomic class ID (optional)
+	var taxonomicClassID *uint
+	if parsed.TaxonomicClass != "" {
+		if id, ok := r.taxClassIDs[parsed.TaxonomicClass]; ok {
+			taxonomicClassID = &id
 		}
-	} else {
-		// Update model's label count (best-effort, non-critical).
-		// This is a denormalized counter for performance; the true count can be
-		// derived from the model_labels table. Errors are intentionally ignored.
-		// Only increment when we successfully created a new mapping (not on race condition).
-		_ = r.db.Model(model).Update("label_count", gorm.Expr("label_count + 1")).Error
+	}
+
+	// Get or create the label via repository
+	label, err := r.labelRepo.GetOrCreate(ctx, parsed.ScientificName, model.ID, labelTypeID, taxonomicClassID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get or create label: %w", err)
 	}
 
 	r.cache.Store(key, label)
 	return label, nil
 }
 
-// findOrCreateLabel finds an existing label by scientific name or creates a new one.
-func (r *Resolver) findOrCreateLabel(parsed ParsedLabel) (*entities.Label, error) {
-	var label entities.Label
-
-	// For species, lookup by scientific name
-	if parsed.LabelType == entities.LabelTypeSpecies && parsed.ScientificName != "" {
-		err := r.db.Where("scientific_name = ?", parsed.ScientificName).First(&label).Error
-		if err == nil {
-			return &label, nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("failed to lookup label: %w", err)
-		}
+// ResolveBatch resolves multiple raw labels for a model in an optimized batch.
+// Returns a map of rawLabel -> *entities.Label.
+func (r *Resolver) ResolveBatch(ctx context.Context, model *entities.AIModel, rawLabels []string) (map[string]*entities.Label, error) {
+	if model == nil {
+		return nil, errors.New("model cannot be nil")
 	}
 
-	// For non-species, lookup by scientific_name field (stores the label identifier)
-	if parsed.LabelType != entities.LabelTypeSpecies {
-		err := r.db.Where("scientific_name = ? AND label_type = ?",
-			parsed.ScientificName, parsed.LabelType).First(&label).Error
-		if err == nil {
-			return &label, nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("failed to lookup non-species label: %w", err)
-		}
-	}
+	result := make(map[string]*entities.Label, len(rawLabels))
+	var uncached []string
+	var uncachedParsed []ParsedLabel
 
-	// Create new label
-	scientificName := parsed.ScientificName
-	var taxonomicClass *string
-	if parsed.TaxonomicClass != "" {
-		taxonomicClass = &parsed.TaxonomicClass
-	}
-
-	label = entities.Label{
-		ScientificName: &scientificName,
-		LabelType:      parsed.LabelType,
-		TaxonomicClass: taxonomicClass,
-	}
-
-	if err := r.db.Create(&label).Error; err != nil {
-		// Handle race condition - another goroutine may have created the label
-		createErr := err
-		if parsed.LabelType == entities.LabelTypeSpecies {
-			if err := r.db.Where("scientific_name = ?", parsed.ScientificName).
-				First(&label).Error; err != nil {
-				// Re-fetch failed; return the original create error for better context
-				return nil, fmt.Errorf("failed to create label: %w", createErr)
-			}
+	// Check cache for each label
+	for _, rawLabel := range rawLabels {
+		key := cacheKey{modelID: model.ID, rawLabel: rawLabel}
+		if cached, ok := r.cache.Load(key); ok {
+			result[rawLabel] = cached.(*entities.Label)
 		} else {
-			// For non-species, also handle race condition by fetching existing
-			if err := r.db.Where("scientific_name = ? AND label_type = ?",
-				parsed.ScientificName, parsed.LabelType).First(&label).Error; err != nil {
-				// Re-fetch failed; return the original create error for better context
-				return nil, fmt.Errorf("failed to create non-species label: %w", createErr)
-			}
+			uncached = append(uncached, rawLabel)
+			uncachedParsed = append(uncachedParsed, ParseRawLabel(rawLabel, model.ModelType))
 		}
 	}
 
-	return &label, nil
+	if len(uncached) == 0 {
+		return result, nil
+	}
+
+	// Get default label type ID for species (most common case for batch)
+	speciesTypeID, ok := r.labelTypeIDs[LabelTypeSpecies]
+	if !ok {
+		return nil, errors.New("species label type not initialized")
+	}
+
+	// Get default taxonomic class ID based on model type
+	var defaultTaxClassID *uint
+	switch model.ModelType {
+	case entities.ModelTypeBird:
+		if id, ok := r.taxClassIDs["Aves"]; ok {
+			defaultTaxClassID = &id
+		}
+	case entities.ModelTypeBat:
+		if id, ok := r.taxClassIDs["Chiroptera"]; ok {
+			defaultTaxClassID = &id
+		}
+	}
+
+	// Collect scientific names for batch operation
+	scientificNames := make([]string, len(uncachedParsed))
+	for i, parsed := range uncachedParsed {
+		scientificNames[i] = parsed.ScientificName
+	}
+
+	// Batch get or create labels
+	labels, err := r.labelRepo.BatchGetOrCreate(ctx, scientificNames, model.ID, speciesTypeID, defaultTaxClassID)
+	if err != nil {
+		return nil, fmt.Errorf("batch resolve labels: %w", err)
+	}
+
+	// Map results back and cache them
+	for i, rawLabel := range uncached {
+		parsed := uncachedParsed[i]
+		if label, found := labels[parsed.ScientificName]; found {
+			result[rawLabel] = label
+			key := cacheKey{modelID: model.ID, rawLabel: rawLabel}
+			r.cache.Store(key, label)
+		}
+	}
+
+	return result, nil
 }
 
-// GetModel retrieves or creates an AI model by name and version.
-func (r *Resolver) GetModel(name, version string, modelType entities.ModelType) (*entities.AIModel, error) {
-	var model entities.AIModel
-
-	err := r.db.Where("name = ? AND version = ?", name, version).First(&model).Error
-	if err == nil {
-		return &model, nil
-	}
-
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("failed to lookup model: %w", err)
-	}
-
-	// Create new model
-	model = entities.AIModel{
-		Name:      name,
-		Version:   version,
-		ModelType: modelType,
-	}
-
-	if err := r.db.Create(&model).Error; err != nil {
-		// Handle race condition
-		if err := r.db.Where("name = ? AND version = ?", name, version).
-			First(&model).Error; err != nil {
-			return nil, fmt.Errorf("failed to create model: %w", err)
-		}
-	}
-
-	return &model, nil
+// GetModel retrieves or creates an AI model by name, version, and variant.
+func (r *Resolver) GetModel(ctx context.Context, name, version, variant string, modelType entities.ModelType, classifierPath *string) (*entities.AIModel, error) {
+	return r.modelRepo.GetOrCreate(ctx, name, version, variant, modelType, classifierPath)
 }
 
 // ClearCache clears the resolver cache.
 func (r *Resolver) ClearCache() {
 	r.cache = sync.Map{}
+}
+
+// GetLabelTypeID returns the cached ID for a label type name.
+func (r *Resolver) GetLabelTypeID(name string) (uint, bool) {
+	id, ok := r.labelTypeIDs[name]
+	return id, ok
+}
+
+// GetTaxonomicClassID returns the cached ID for a taxonomic class name.
+func (r *Resolver) GetTaxonomicClassID(name string) (uint, bool) {
+	id, ok := r.taxClassIDs[name]
+	return id, ok
 }

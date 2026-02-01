@@ -59,11 +59,20 @@ type Datastore struct {
 	timezone     *time.Location
 	suncalc      *suncalc.SunCalc
 
+	// Cached lookup table IDs for label creation
+	defaultModelID     uint  // Model ID to use for new labels
+	speciesLabelTypeID uint  // "species" label type ID
+	avesClassID        *uint // "Aves" taxonomic class ID (optional)
+
 	// speciesMap provides O(1) lookup from common name (lowercase) to scientific name.
 	// Used by GetThresholdEvents to query both old (common name) and new (scientific name)
 	// labels when retrieving threshold events. See issue #1907.
 	// TODO: Remove this workaround when legacy database support is dropped.
 	speciesMap map[string]string
+
+	// commonNameMap provides O(1) lookup from scientific name to common name.
+	// Used for display purposes in analytics and summary endpoints.
+	commonNameMap map[string]string
 }
 
 // Config configures the Datastore.
@@ -80,6 +89,11 @@ type Config struct {
 	Logger       logger.Logger
 	Timezone     *time.Location
 	SunCalc      *suncalc.SunCalc
+
+	// Required: Cached lookup table IDs
+	DefaultModelID     uint  // Model ID to use for new labels (typically default BirdNET)
+	SpeciesLabelTypeID uint  // "species" label type ID
+	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
 
 	// Labels provides species label mappings in "ScientificName_CommonName" format.
 	// Used to build speciesMap for GetThresholdEvents workaround. See issue #1907.
@@ -106,35 +120,41 @@ func New(cfg *Config) (*Datastore, error) {
 		tz = time.Local
 	}
 
-	// Build common name -> scientific name map for GetThresholdEvents workaround.
+	// Build species name maps from labels.
 	// Labels are in "ScientificName_CommonName" format (e.g., "Turdus merula_Eurasian Blackbird").
-	// See issue #1907 for context.
+	// See issue #1907 for context on speciesMap usage.
 	speciesMap := make(map[string]string)
+	commonNameMap := make(map[string]string)
 	for _, label := range cfg.Labels {
 		parts := strings.SplitN(label, "_", 2)
 		if len(parts) == 2 {
 			scientificName := strings.TrimSpace(parts[0])
-			commonName := strings.ToLower(strings.TrimSpace(parts[1]))
+			commonName := strings.TrimSpace(parts[1])
 			if commonName != "" && scientificName != "" {
-				speciesMap[commonName] = scientificName
+				speciesMap[strings.ToLower(commonName)] = scientificName
+				commonNameMap[scientificName] = commonName
 			}
 		}
 	}
 
 	return &Datastore{
-		manager:      cfg.Manager,
-		detection:    cfg.Detection,
-		label:        cfg.Label,
-		model:        cfg.Model,
-		source:       cfg.Source,
-		weather:      cfg.Weather,
-		imageCache:   cfg.ImageCache,
-		threshold:    cfg.Threshold,
-		notification: cfg.Notification,
-		log:          cfg.Logger,
-		timezone:     tz,
-		suncalc:      cfg.SunCalc,
-		speciesMap:   speciesMap,
+		manager:            cfg.Manager,
+		detection:          cfg.Detection,
+		label:              cfg.Label,
+		model:              cfg.Model,
+		source:             cfg.Source,
+		weather:            cfg.Weather,
+		imageCache:         cfg.ImageCache,
+		threshold:          cfg.Threshold,
+		notification:       cfg.Notification,
+		log:                cfg.Logger,
+		timezone:           tz,
+		suncalc:            cfg.SunCalc,
+		defaultModelID:     cfg.DefaultModelID,
+		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
+		avesClassID:        cfg.AvesClassID,
+		speciesMap:         speciesMap,
+		commonNameMap:      commonNameMap,
 	}, nil
 }
 
@@ -218,18 +238,19 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
 	ctx := context.Background()
 
-	// NOTE: Label and Model GetOrCreate calls are outside the transaction.
-	// If the detection save fails, orphaned reference data may persist.
-	// This is acceptable as they will be reused on subsequent saves.
-	label, err := ds.label.GetOrCreate(ctx, note.ScientificName, entities.LabelTypeSpecies)
-	if err != nil {
-		return fmt.Errorf("failed to get/create label: %w", err)
-	}
-
+	// Get or create default model first (needed for model-specific labels)
 	modelInfo := detection.DefaultModelInfo()
-	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, entities.ModelTypeBird)
+	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, modelInfo.Variant, entities.ModelTypeBird, modelInfo.ClassifierPath)
 	if err != nil {
 		return fmt.Errorf("failed to get/create model: %w", err)
+	}
+
+	// NOTE: Label GetOrCreate calls are outside the transaction.
+	// If the detection save fails, orphaned reference data may persist.
+	// This is acceptable as they will be reused on subsequent saves.
+	label, err := ds.label.GetOrCreate(ctx, note.ScientificName, model.ID, ds.speciesLabelTypeID, ds.avesClassID)
+	if err != nil {
+		return fmt.Errorf("failed to get/create label: %w", err)
 	}
 
 	// Pre-resolve all prediction labels before starting transaction.
@@ -238,7 +259,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	if len(results) > 0 {
 		predLabels = make([]*entities.Label, len(results))
 		for i, r := range results {
-			predLabel, err := ds.label.GetOrCreate(ctx, r.Species, entities.LabelTypeSpecies)
+			predLabel, err := ds.label.GetOrCreate(ctx, r.Species, model.ID, ds.speciesLabelTypeID, ds.avesClassID)
 			if err != nil {
 				return fmt.Errorf("failed to get/create prediction label for %s: %w", r.Species, err)
 			}
@@ -349,35 +370,26 @@ func (ds *Datastore) detectionToNote(det *entities.Detection, rawLabelsMap map[s
 
 	scientificName := ""
 	// Try to get scientific name from preloaded Label first
-	if det.Label != nil && det.Label.ScientificName != nil {
-		scientificName = *det.Label.ScientificName
+	if det.Label != nil && det.Label.ScientificName != "" {
+		scientificName = det.Label.ScientificName
 	} else if det.LabelID > 0 && ds.label != nil {
 		// Label not preloaded, fetch it from the repository
 		ctx := context.Background()
-		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil && label.ScientificName != nil {
-			scientificName = *label.ScientificName
+		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil {
+			scientificName = label.ScientificName
 		}
 	}
 
-	// Resolve common name from raw_label
-	commonName := scientificName // Default to scientific name
-	if det.ModelID > 0 && det.LabelID > 0 {
-		// Try to get from preloaded map first (batch mode)
+	// Common name defaults to scientific name.
+	// TODO: In V2 schema, common names should be resolved from a species lookup table
+	// or the label parsing should be enhanced to store both names.
+	commonName := scientificName
+	// Try to extract common name from preloaded raw labels map (batch mode)
+	if rawLabelsMap != nil {
 		key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
-		if rawLabelsMap != nil {
-			if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
-				if extracted := extractCommonName(rawLabel); extracted != "" {
-					commonName = extracted
-				}
-			}
-		} else if ds.label != nil {
-			// Fallback to single query (for single detection lookups)
-			ctx := context.Background()
-			rawLabel, err := ds.label.GetRawLabelForLabel(ctx, det.ModelID, det.LabelID)
-			if err == nil && rawLabel != "" {
-				if extracted := extractCommonName(rawLabel); extracted != "" {
-					commonName = extracted
-				}
+		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
+			if extracted := extractCommonName(rawLabel); extracted != "" {
+				commonName = extracted
 			}
 		}
 	}
@@ -428,97 +440,28 @@ func extractCommonName(rawLabel string) string {
 }
 
 // detectionsToNotes converts multiple detections to notes.
-// Uses batch fetching of raw_labels to avoid N+1 query problem.
+// Note: Common names are currently not stored in the normalized schema.
+// They default to scientific names until a species lookup table is added.
 func (ds *Datastore) detectionsToNotes(dets []*entities.Detection) []datastore.Note {
 	if len(dets) == 0 {
 		return []datastore.Note{}
 	}
 
-	// Collect unique (modelID, labelID) pairs for batch fetching
-	pairSet := make(map[string]repository.ModelLabelPair)
-	for _, det := range dets {
-		if det.ModelID > 0 && det.LabelID > 0 {
-			key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
-			if _, exists := pairSet[key]; !exists {
-				pairSet[key] = repository.ModelLabelPair{
-					ModelID: det.ModelID,
-					LabelID: det.LabelID,
-				}
-			}
-		}
-	}
-
-	// Batch fetch raw_labels
-	var rawLabelsMap map[string]string
-	if len(pairSet) > 0 && ds.label != nil {
-		pairs := make([]repository.ModelLabelPair, 0, len(pairSet))
-		for _, pair := range pairSet {
-			pairs = append(pairs, pair)
-		}
-		ctx := context.Background()
-		var err error
-		rawLabelsMap, err = ds.label.GetRawLabelsForLabels(ctx, pairs)
-		if err != nil {
-			// Log error but continue - common names will fall back to scientific names
-			if ds.log != nil {
-				ds.log.Debug("failed to batch fetch raw_labels for common names",
-					logger.Error(err))
-			}
-			rawLabelsMap = make(map[string]string)
-		}
-	}
-
-	// Convert detections to notes using the preloaded map
+	// Convert detections to notes
+	// Raw labels map is nil - common names will default to scientific names
 	notes := make([]datastore.Note, 0, len(dets))
 	for _, det := range dets {
-		notes = append(notes, ds.detectionToNote(det, rawLabelsMap))
+		notes = append(notes, ds.detectionToNote(det, nil))
 	}
 	return notes
 }
 
-// buildRawLabelsMap batch fetches raw_labels for a set of detections.
-// Returns a map keyed by "{modelID}:{labelID}" for efficient lookup.
-// This avoids N+1 query problems when processing multiple detections.
-func (ds *Datastore) buildRawLabelsMap(ctx context.Context, dets []*entities.Detection) map[string]string {
-	if len(dets) == 0 || ds.label == nil {
-		return make(map[string]string)
-	}
-
-	// Collect unique (modelID, labelID) pairs
-	pairSet := make(map[string]repository.ModelLabelPair)
-	for _, det := range dets {
-		if det.ModelID > 0 && det.LabelID > 0 {
-			key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
-			if _, exists := pairSet[key]; !exists {
-				pairSet[key] = repository.ModelLabelPair{
-					ModelID: det.ModelID,
-					LabelID: det.LabelID,
-				}
-			}
-		}
-	}
-
-	if len(pairSet) == 0 {
-		return make(map[string]string)
-	}
-
-	// Convert to slice for batch fetch
-	pairs := make([]repository.ModelLabelPair, 0, len(pairSet))
-	for _, pair := range pairSet {
-		pairs = append(pairs, pair)
-	}
-
-	// Batch fetch raw_labels
-	rawLabelsMap, err := ds.label.GetRawLabelsForLabels(ctx, pairs)
-	if err != nil {
-		if ds.log != nil {
-			ds.log.Debug("failed to batch fetch raw_labels for common names",
-				logger.Error(err))
-		}
-		return make(map[string]string)
-	}
-
-	return rawLabelsMap
+// buildRawLabelsMap was used for batch fetching raw_labels for common name resolution.
+// In the normalized schema, raw labels are no longer stored in a separate table.
+// This function is kept as a stub for API compatibility but returns an empty map.
+// TODO: Implement common name lookup from a species table.
+func (ds *Datastore) buildRawLabelsMap(_ context.Context, _ []*entities.Detection) map[string]string {
+	return make(map[string]string)
 }
 
 // detectionToRecord converts a v2 Detection to a DetectionRecord.
@@ -527,8 +470,8 @@ func (ds *Datastore) buildRawLabelsMap(ctx context.Context, dets []*entities.Det
 func (ds *Datastore) detectionToRecord(det *entities.Detection, rawLabelsMap map[string]string) datastore.DetectionRecord {
 	// Scientific name from Label
 	scientificName := ""
-	if det.Label != nil && det.Label.ScientificName != nil {
-		scientificName = *det.Label.ScientificName
+	if det.Label != nil && det.Label.ScientificName != "" {
+		scientificName = det.Label.ScientificName
 	}
 
 	// Common name from raw_label (batch lookup) or fallback to scientific name
@@ -725,12 +668,13 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 	ctx := context.Background()
 	var hourly [24]int
 
-	label, err := ds.label.GetByScientificName(ctx, commonName)
+	// Get label IDs for this species across all models
+	labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, commonName)
 	if err != nil {
-		if errors.Is(err, repository.ErrLabelNotFound) {
-			return hourly, nil
-		}
 		return hourly, err
+	}
+	if len(labelIDs) == 0 {
+		return hourly, nil
 	}
 
 	t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
@@ -741,7 +685,8 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 	startTime := t.Unix()
 	endTime := t.Add(24 * time.Hour).Unix()
 
-	result, err := ds.detection.GetHourlyOccurrences(ctx, label.ID, startTime, endTime)
+	// Use the first label ID (aggregation across models if needed would be done differently)
+	result, err := ds.detection.GetHourlyOccurrences(ctx, labelIDs[0], startTime, endTime)
 	if err != nil {
 		return hourly, err
 	}
@@ -773,15 +718,15 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 
 	var labelIDs []uint
 	if species != "" {
-		label, err := ds.label.GetByScientificName(ctx, species)
+		ids, err := ds.label.GetLabelIDsByScientificName(ctx, species)
 		if err != nil {
-			// Species not found - return empty results instead of all detections
-			if errors.Is(err, repository.ErrLabelNotFound) {
-				return []datastore.Note{}, nil
-			}
 			return nil, err
 		}
-		labelIDs = []uint{label.ID}
+		if len(ids) == 0 {
+			// Species not found - return empty results instead of all detections
+			return []datastore.Note{}, nil
+		}
+		labelIDs = ids
 	}
 
 	filters := &repository.SearchFilters{
@@ -815,17 +760,22 @@ func (ds *Datastore) GetLastDetections(numDetections int) ([]datastore.Note, err
 // GetAllDetectedSpecies retrieves all detected species.
 func (ds *Datastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	ctx := context.Background()
-	labels, err := ds.label.GetAllByType(ctx, entities.LabelTypeSpecies)
+	labels, err := ds.label.GetAllByLabelType(ctx, ds.speciesLabelTypeID)
 	if err != nil {
 		return nil, err
 	}
 
+	// Use a map to deduplicate by scientific name (since labels are now per-model)
+	seen := make(map[string]struct{}, len(labels))
 	notes := make([]datastore.Note, 0, len(labels))
 	for i := range labels {
-		if labels[i].ScientificName != nil {
-			notes = append(notes, datastore.Note{
-				ScientificName: *labels[i].ScientificName,
-			})
+		if labels[i].ScientificName != "" {
+			if _, exists := seen[labels[i].ScientificName]; !exists {
+				seen[labels[i].ScientificName] = struct{}{}
+				notes = append(notes, datastore.Note{
+					ScientificName: labels[i].ScientificName,
+				})
+			}
 		}
 	}
 	return notes, nil
@@ -974,8 +924,8 @@ func (ds *Datastore) GetNoteResults(noteID string) ([]datastore.Results, error) 
 	for _, pred := range preds {
 		label, _ := ds.label.GetByID(ctx, pred.LabelID)
 		scientificName := ""
-		if label != nil && label.ScientificName != nil {
-			scientificName = *label.ScientificName
+		if label != nil && label.ScientificName != "" {
+			scientificName = label.ScientificName
 		}
 
 		results = append(results, datastore.Results{
@@ -1265,15 +1215,15 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 
 	var labelIDs []uint
 	if species != "" {
-		label, err := ds.label.GetByScientificName(ctx, species)
+		ids, err := ds.label.GetLabelIDsByScientificName(ctx, species)
 		if err != nil {
-			// Species not found - return zero count instead of all detections count
-			if errors.Is(err, repository.ErrLabelNotFound) {
-				return 0, nil
-			}
 			return 0, err
 		}
-		labelIDs = []uint{label.ID}
+		if len(ids) == 0 {
+			// Species not found - return zero count instead of all detections count
+			return 0, nil
+		}
+		labelIDs = ids
 	}
 
 	filters := &repository.SearchFilters{
@@ -1504,8 +1454,8 @@ func (ds *Datastore) GetLockedNotesClipPaths() ([]string, error) {
 
 // imageCacheScientificName extracts the scientific name from an image cache's label.
 func imageCacheScientificName(cache *entities.ImageCache) string {
-	if cache.Label != nil && cache.Label.ScientificName != nil {
-		return *cache.Label.ScientificName
+	if cache.Label != nil && cache.Label.ScientificName != "" {
+		return cache.Label.ScientificName
 	}
 	return ""
 }
@@ -1574,8 +1524,8 @@ func (ds *Datastore) SaveImageCache(cache *datastore.ImageCache) error {
 	}
 	ctx := context.Background()
 
-	// Resolve scientific name to label ID
-	label, err := ds.label.GetOrCreate(ctx, cache.ScientificName, entities.LabelTypeSpecies)
+	// Resolve scientific name to label ID using default model
+	label, err := ds.label.GetOrCreate(ctx, cache.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve label for image cache: %w", err)
 	}
@@ -1648,17 +1598,6 @@ func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64
 	return start, end, nil
 }
 
-// getDefaultModelID retrieves the ID of the default BirdNET model.
-// Returns 0 if not found (common name resolution will gracefully degrade).
-func (ds *Datastore) getDefaultModelID(ctx context.Context) uint {
-	modelInfo := detection.DefaultModelInfo()
-	model, err := ds.model.GetByNameVersion(ctx, modelInfo.Name, modelInfo.Version)
-	if err != nil || model == nil {
-		return 0
-	}
-	return model.ID
-}
-
 // GetSpeciesSummaryData retrieves species summary data.
 func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
@@ -1671,22 +1610,12 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	// Batch fetch raw_labels for common names using the default model
-	modelID := ds.getDefaultModelID(ctx)
-	pairs := make([]repository.ModelLabelPair, 0, len(v2Data))
-	for _, d := range v2Data {
-		pairs = append(pairs, repository.ModelLabelPair{ModelID: modelID, LabelID: d.LabelID})
-	}
-	rawLabelsMap, _ := ds.label.GetRawLabelsForLabels(ctx, pairs)
-
 	result := make([]datastore.SpeciesSummaryData, 0, len(v2Data))
 	for _, d := range v2Data {
+		// Look up common name from pre-built map, fallback to scientific name
 		commonName := d.ScientificName
-		key := fmt.Sprintf("%d:%d", modelID, d.LabelID)
-		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
-			if extracted := extractCommonName(rawLabel); extracted != "" {
-				commonName = extracted
-			}
+		if cn, ok := ds.commonNameMap[d.ScientificName]; ok {
+			commonName = cn
 		}
 
 		result = append(result, datastore.SpeciesSummaryData{
@@ -1744,14 +1673,14 @@ func (ds *Datastore) resolveLabelID(ctx context.Context, species string) (*uint,
 	if species == "" {
 		return nil, nil //nolint:nilnil // nil means no filter, which is valid
 	}
-	label, err := ds.label.GetByScientificName(ctx, species)
+	labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, species)
 	if err != nil {
-		if errors.Is(err, repository.ErrLabelNotFound) {
-			return nil, errNotFound
-		}
 		return nil, err
 	}
-	return &label.ID, nil
+	if len(labelIDs) == 0 {
+		return nil, errNotFound
+	}
+	return &labelIDs[0], nil
 }
 
 // GetDailyAnalyticsData retrieves daily analytics data.
@@ -1839,27 +1768,17 @@ type speciesFirstSeenInfo struct {
 }
 
 // convertToNewSpeciesData converts species first-seen data to NewSpeciesData with common name resolution.
-func (ds *Datastore) convertToNewSpeciesData(ctx context.Context, data []speciesFirstSeenInfo) []datastore.NewSpeciesData {
+func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFirstSeenInfo) []datastore.NewSpeciesData {
 	if len(data) == 0 {
 		return []datastore.NewSpeciesData{}
 	}
 
-	// Batch fetch raw_labels for common names using the default model
-	modelID := ds.getDefaultModelID(ctx)
-	pairs := make([]repository.ModelLabelPair, 0, len(data))
-	for _, d := range data {
-		pairs = append(pairs, repository.ModelLabelPair{ModelID: modelID, LabelID: d.LabelID})
-	}
-	rawLabelsMap, _ := ds.label.GetRawLabelsForLabels(ctx, pairs)
-
 	result := make([]datastore.NewSpeciesData, 0, len(data))
 	for _, d := range data {
+		// Look up common name from pre-built map, fallback to scientific name
 		commonName := d.ScientificName
-		key := fmt.Sprintf("%d:%d", modelID, d.LabelID)
-		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
-			if extracted := extractCommonName(rawLabel); extracted != "" {
-				commonName = extracted
-			}
+		if cn, ok := ds.commonNameMap[d.ScientificName]; ok {
+			commonName = cn
 		}
 
 		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format("2006-01-02")
@@ -1929,8 +1848,8 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 
 // thresholdScientificName extracts the scientific name from a threshold's label.
 func thresholdScientificName(t *entities.DynamicThreshold) string {
-	if t.Label != nil && t.Label.ScientificName != nil {
-		return *t.Label.ScientificName
+	if t.Label != nil && t.Label.ScientificName != "" {
+		return t.Label.ScientificName
 	}
 	return ""
 }
@@ -1943,8 +1862,8 @@ func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold)
 	}
 	ctx := context.Background()
 
-	// Resolve scientific name to label ID
-	label, err := ds.label.GetOrCreate(ctx, threshold.ScientificName, entities.LabelTypeSpecies)
+	// Resolve scientific name to label ID using default model
+	label, err := ds.label.GetOrCreate(ctx, threshold.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve label for threshold: %w", err)
 	}
@@ -2071,8 +1990,8 @@ func (ds *Datastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicTh
 		}
 	}
 
-	// Batch resolve all labels in one operation
-	labels, err := ds.label.BatchGetOrCreate(ctx, names, entities.LabelTypeSpecies)
+	// Batch resolve all labels in one operation using default model
+	labels, err := ds.label.BatchGetOrCreate(ctx, names, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve labels for thresholds: %w", err)
 	}
@@ -2126,8 +2045,8 @@ func (ds *Datastore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 
 // eventSpeciesName extracts the species name from an event's label.
 func eventSpeciesName(e *entities.ThresholdEvent) string {
-	if e.Label != nil && e.Label.ScientificName != nil {
-		return *e.Label.ScientificName
+	if e.Label != nil && e.Label.ScientificName != "" {
+		return e.Label.ScientificName
 	}
 	return ""
 }
@@ -2151,7 +2070,7 @@ func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 		labelName = event.SpeciesName
 	}
 
-	label, err := ds.label.GetOrCreate(ctx, labelName, entities.LabelTypeSpecies)
+	label, err := ds.label.GetOrCreate(ctx, labelName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve label for event: %w", err)
 	}
@@ -2283,8 +2202,8 @@ func (ds *Datastore) DeleteAllThresholdEvents() (int64, error) {
 
 // notificationScientificName extracts the scientific name from a notification's label.
 func notificationScientificName(h *entities.NotificationHistory) string {
-	if h.Label != nil && h.Label.ScientificName != nil {
-		return *h.Label.ScientificName
+	if h.Label != nil && h.Label.ScientificName != "" {
+		return h.Label.ScientificName
 	}
 	return ""
 }
@@ -2297,8 +2216,8 @@ func (ds *Datastore) SaveNotificationHistory(history *datastore.NotificationHist
 	}
 	ctx := context.Background()
 
-	// Resolve scientific name to label ID
-	label, err := ds.label.GetOrCreate(ctx, history.ScientificName, entities.LabelTypeSpecies)
+	// Resolve scientific name to label ID using default model
+	label, err := ds.label.GetOrCreate(ctx, history.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve label for notification history: %w", err)
 	}

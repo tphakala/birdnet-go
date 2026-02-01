@@ -17,18 +17,18 @@ type ConversionDeps struct {
 	ModelRepo  ModelRepository
 	SourceRepo AudioSourceRepository
 	Logger     logger.Logger
+
+	// Cached lookup table IDs (must be initialized before use)
+	SpeciesLabelTypeID uint // ID for "species" label type
+	AvesClassID        uint // ID for "Aves" taxonomic class
+	ChiropteraClassID  uint // ID for "Chiroptera" taxonomic class
 }
 
 // ConvertToV2Detection converts a domain Result to a v2 Detection entity.
 // This is shared between DualWriteRepository and migration Worker.
+// deps.SpeciesLabelTypeID, deps.AvesClassID, and deps.ChiropteraClassID must be initialized.
 func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *ConversionDeps) (*entities.Detection, error) {
-	// Resolve or create label
-	label, err := deps.LabelRepo.GetOrCreate(ctx, result.Species.ScientificName, entities.LabelTypeSpecies)
-	if err != nil {
-		return nil, fmt.Errorf("label resolution failed: %w", err)
-	}
-
-	// Get or create model
+	// Get or create model first (needed for label creation)
 	modelName := result.Model.Name
 	if modelName == "" {
 		modelName = detection.DefaultModelName
@@ -37,10 +37,33 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 	if modelVersion == "" {
 		modelVersion = detection.DefaultModelVersion
 	}
+	modelVariant := result.Model.Variant
+	if modelVariant == "" {
+		modelVariant = detection.DefaultModelVariant
+	}
 
-	model, err := deps.ModelRepo.GetOrCreate(ctx, modelName, modelVersion, entities.ModelTypeBird)
+	model, err := deps.ModelRepo.GetOrCreate(ctx, modelName, modelVersion, modelVariant, entities.ModelTypeBird, result.Model.ClassifierPath)
 	if err != nil {
 		return nil, fmt.Errorf("model resolution failed: %w", err)
+	}
+
+	// Determine taxonomic class ID based on model type
+	var taxonomicClassID *uint
+	switch model.ModelType {
+	case entities.ModelTypeBird:
+		if deps.AvesClassID != 0 {
+			taxonomicClassID = &deps.AvesClassID
+		}
+	case entities.ModelTypeBat:
+		if deps.ChiropteraClassID != 0 {
+			taxonomicClassID = &deps.ChiropteraClassID
+		}
+	}
+
+	// Resolve or create label (with model ID for model-specific labels)
+	label, err := deps.LabelRepo.GetOrCreate(ctx, result.Species.ScientificName, model.ID, deps.SpeciesLabelTypeID, taxonomicClassID)
+	if err != nil {
+		return nil, fmt.Errorf("label resolution failed: %w", err)
 	}
 
 	// Get or create audio source
@@ -128,11 +151,12 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 
 // ConvertToPredictions converts additional results to v2 prediction entities.
 // This is shared between DualWriteRepository and migration Worker.
-func ConvertToPredictions(ctx context.Context, detectionID uint, additional []detection.AdditionalResult, labelRepo LabelRepository) ([]*entities.DetectionPrediction, error) {
+// modelID and speciesLabelTypeID must be provided for label creation.
+func ConvertToPredictions(ctx context.Context, detectionID, modelID, speciesLabelTypeID uint, taxonomicClassID *uint, additional []detection.AdditionalResult, labelRepo LabelRepository) ([]*entities.DetectionPrediction, error) {
 	preds := make([]*entities.DetectionPrediction, 0, len(additional))
 
 	for i, ar := range additional {
-		label, err := labelRepo.GetOrCreate(ctx, ar.Species.ScientificName, entities.LabelTypeSpecies)
+		label, err := labelRepo.GetOrCreate(ctx, ar.Species.ScientificName, modelID, speciesLabelTypeID, taxonomicClassID)
 		if err != nil {
 			return nil, fmt.Errorf("prediction label resolution failed: %w", err)
 		}
@@ -157,20 +181,18 @@ func ConvertFromV2Detection(det *entities.Detection) *detection.Result {
 
 	// Convert label to species
 	if det.Label != nil {
-		scientificName := ""
-		if det.Label.ScientificName != nil {
-			scientificName = *det.Label.ScientificName
-		}
 		result.Species = detection.Species{
-			ScientificName: scientificName,
+			ScientificName: det.Label.ScientificName,
 		}
 	}
 
 	// Convert model
 	if det.Model != nil {
 		result.Model = detection.ModelInfo{
-			Name:    det.Model.Name,
-			Version: det.Model.Version,
+			Name:           det.Model.Name,
+			Version:        det.Model.Version,
+			Variant:        det.Model.Variant,
+			ClassifierPath: det.Model.ClassifierPath,
 		}
 	}
 

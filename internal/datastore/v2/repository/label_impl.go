@@ -315,6 +315,25 @@ func (r *labelRepository) Exists(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
+// GetByScientificName retrieves all labels matching a scientific name across all models.
+func (r *labelRepository) GetByScientificName(ctx context.Context, name string) ([]*entities.Label, error) {
+	var labels []*entities.Label
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("scientific_name = ?", name).
+		Find(&labels).Error
+	return labels, err
+}
+
+// GetLabelIDsByScientificName retrieves label IDs for a scientific name across all models.
+func (r *labelRepository) GetLabelIDsByScientificName(ctx context.Context, name string) ([]uint, error) {
+	var ids []uint
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Select("id").
+		Where("scientific_name = ?", name).
+		Pluck("id", &ids).Error
+	return ids, err
+}
+
 // labelTypeRepository implements LabelTypeRepository.
 type labelTypeRepository struct {
 	db          *gorm.DB
