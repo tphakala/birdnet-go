@@ -626,11 +626,11 @@ Responsive Breakpoints:
 
     // Create optimized, memoized URL builders
     urlBuilders.species = (species: DailySpeciesSummary) => {
-      const cacheKey = `species:${species.common_name}:${selectedDate}`;
+      const cacheKey = `species:${species.scientific_name}:${selectedDate}`;
       if (!urlCache.has(cacheKey)) {
         const params = new URLSearchParams({
           queryType: 'species',
-          species: species.common_name,
+          species: species.scientific_name,
           date: selectedDate,
           numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
           offset: '0',
@@ -645,11 +645,11 @@ Responsive Breakpoints:
       hour: number,
       duration: number = 1
     ) => {
-      const cacheKey = `species-hour:${species.common_name}:${selectedDate}:${hour}:${duration}`;
+      const cacheKey = `species-hour:${species.scientific_name}:${selectedDate}:${hour}:${duration}`;
       if (!urlCache.has(cacheKey)) {
         const params = new URLSearchParams({
           queryType: 'species',
-          species: species.common_name,
+          species: species.scientific_name,
           date: selectedDate,
           hour: hour.toString(),
           duration: duration.toString(),
