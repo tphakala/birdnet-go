@@ -709,6 +709,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// Query groups detections by species, counting occurrences and getting max confidence.
 	// Uses Detection.LabelID/Confidence directly (primary prediction) rather than
 	// detection_predictions table (which only stores secondary predictions).
+	// Secondary sort by scientific_name ensures deterministic results when counts are equal.
 	db := ds.manager.DB()
 	err = db.Table("detections d").
 		Select(`
@@ -721,7 +722,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
 		Where("d.confidence >= ?", minConfidenceNormalized).
 		Group("l.scientific_name").
-		Order("count DESC").
+		Order("count DESC, l.scientific_name ASC").
 		Limit(reportCount).
 		Scan(&results).Error
 
