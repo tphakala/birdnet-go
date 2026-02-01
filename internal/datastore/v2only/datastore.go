@@ -706,20 +706,20 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 
 	var results []speciesAggregate
 
-	// Query groups detections by species, counting occurrences and getting max confidence
-	// This matches the legacy GetTopBirdsData behavior using GROUP BY
+	// Query groups detections by species, counting occurrences and getting max confidence.
+	// Uses Detection.LabelID/Confidence directly (primary prediction) rather than
+	// detection_predictions table (which only stores secondary predictions).
 	db := ds.manager.DB()
 	err = db.Table("detections d").
 		Select(`
 			l.scientific_name,
-			COUNT(DISTINCT d.id) as count,
-			MAX(dp.confidence) as max_confidence,
+			COUNT(d.id) as count,
+			MAX(d.confidence) as max_confidence,
 			MAX(d.detected_at) as latest_time
 		`).
-		Joins("JOIN detection_predictions dp ON d.id = dp.detection_id").
-		Joins("JOIN labels l ON dp.label_id = l.id").
+		Joins("JOIN labels l ON d.label_id = l.id").
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
-		Where("dp.confidence >= ?", minConfidenceNormalized).
+		Where("d.confidence >= ?", minConfidenceNormalized).
 		Group("l.scientific_name").
 		Order("count DESC").
 		Limit(reportCount).
