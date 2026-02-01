@@ -48,6 +48,11 @@ type DualWriteRepository struct {
 	writeTimeout time.Duration   // Timeout for V2 write operations
 	shutdownCh   chan struct{}   // Signals shutdown to in-flight goroutines
 	shutdownOnce sync.Once       // Ensures shutdown is called only once
+
+	// Cached lookup table IDs
+	speciesLabelTypeID uint
+	avesClassID        uint
+	chiropteraClassID  uint
 }
 
 // DualWriteConfig configures the dual-write repository.
@@ -59,22 +64,31 @@ type DualWriteConfig struct {
 	ModelRepo    ModelRepository
 	SourceRepo   AudioSourceRepository
 	Logger       logger.Logger
+
+	// Cached lookup table IDs (required)
+	SpeciesLabelTypeID uint
+	AvesClassID        uint
+	ChiropteraClassID  uint
 }
 
 // NewDualWriteRepository creates a new dual-write repository.
 // Logger is required - caller must provide a valid logger.Logger instance.
+// Cached lookup table IDs (SpeciesLabelTypeID, AvesClassID, ChiropteraClassID) must be initialized.
 func NewDualWriteRepository(cfg *DualWriteConfig) *DualWriteRepository {
 	return &DualWriteRepository{
-		legacy:       cfg.Legacy,
-		v2:           cfg.V2,
-		stateManager: cfg.StateManager,
-		labelRepo:    cfg.LabelRepo,
-		modelRepo:    cfg.ModelRepo,
-		sourceRepo:   cfg.SourceRepo,
-		logger:       cfg.Logger,
-		semaphore:    make(chan struct{}, defaultMaxConcurrentWrites),
-		writeTimeout: defaultWriteTimeout,
-		shutdownCh:   make(chan struct{}),
+		legacy:             cfg.Legacy,
+		v2:                 cfg.V2,
+		stateManager:       cfg.StateManager,
+		labelRepo:          cfg.LabelRepo,
+		modelRepo:          cfg.ModelRepo,
+		sourceRepo:         cfg.SourceRepo,
+		logger:             cfg.Logger,
+		semaphore:          make(chan struct{}, defaultMaxConcurrentWrites),
+		writeTimeout:       defaultWriteTimeout,
+		shutdownCh:         make(chan struct{}),
+		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
+		avesClassID:        cfg.AvesClassID,
+		chiropteraClassID:  cfg.ChiropteraClassID,
 	}
 }
 
@@ -205,7 +219,13 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 
 	// Save additional predictions
 	if len(additionalResults) > 0 {
-		preds, err := dw.convertToPredictions(ctx, det.ID, additionalResults)
+		// Get model type for predictions (default to bird if not available)
+		modelType := entities.ModelTypeBird
+		if model, err := dw.modelRepo.GetByID(ctx, det.ModelID); err == nil {
+			modelType = model.ModelType
+		}
+
+		preds, err := dw.convertToPredictions(ctx, det.ID, det.ModelID, modelType, additionalResults)
 		if err != nil {
 			dw.logger.Warn("v2 prediction conversion failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
 			return
@@ -331,6 +351,7 @@ func (dw *DualWriteRepository) Search(ctx context.Context, filters *datastore.De
 }
 
 // GetBySpecies retrieves detections for a specific species.
+// Uses cross-model lookup to find detections across all models.
 func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string, filters *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
 	readFromV2, err := dw.stateManager.ShouldReadFromV2()
 	if err != nil {
@@ -338,10 +359,13 @@ func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string,
 	}
 
 	if readFromV2 {
-		// Resolve species name to label ID
-		label, err := dw.labelRepo.GetByScientificName(ctx, species)
+		// Resolve species name to label IDs (cross-model lookup)
+		labelIDs, err := dw.labelRepo.GetLabelIDsByScientificName(ctx, species)
 		if err != nil {
-			// Fall back to legacy if label not found
+			return nil, 0, err
+		}
+		if len(labelIDs) == 0 {
+			// Fall back to legacy if no labels found
 			return dw.legacy.GetBySpecies(ctx, species, filters)
 		}
 
@@ -354,7 +378,8 @@ func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string,
 			offset = filters.Offset
 		}
 
-		dets, total, err := dw.v2.GetByLabel(ctx, label.ID, limit, offset)
+		// Use the first label ID for now - TODO: support querying by multiple label IDs
+		dets, total, err := dw.v2.GetByLabel(ctx, labelIDs[0], limit, offset)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -575,10 +600,13 @@ func (dw *DualWriteRepository) GetAdditionalResults(ctx context.Context, id stri
 // conversionDeps returns the dependencies for shared conversion functions.
 func (dw *DualWriteRepository) conversionDeps() *ConversionDeps {
 	return &ConversionDeps{
-		LabelRepo:  dw.labelRepo,
-		ModelRepo:  dw.modelRepo,
-		SourceRepo: dw.sourceRepo,
-		Logger:     dw.logger,
+		LabelRepo:          dw.labelRepo,
+		ModelRepo:          dw.modelRepo,
+		SourceRepo:         dw.sourceRepo,
+		Logger:             dw.logger,
+		SpeciesLabelTypeID: dw.speciesLabelTypeID,
+		AvesClassID:        dw.avesClassID,
+		ChiropteraClassID:  dw.chiropteraClassID,
 	}
 }
 
@@ -588,8 +616,23 @@ func (dw *DualWriteRepository) convertToV2Detection(ctx context.Context, result 
 }
 
 // convertToPredictions converts additional results to v2 prediction entities.
-func (dw *DualWriteRepository) convertToPredictions(ctx context.Context, detectionID uint, additional []detection.AdditionalResult) ([]*entities.DetectionPrediction, error) {
-	return ConvertToPredictions(ctx, detectionID, additional, dw.labelRepo)
+// modelID is the ID of the model that produced the detection.
+// taxonomicClassID is determined from the model type (Aves for birds, Chiroptera for bats).
+func (dw *DualWriteRepository) convertToPredictions(ctx context.Context, detectionID, modelID uint, modelType entities.ModelType, additional []detection.AdditionalResult) ([]*entities.DetectionPrediction, error) {
+	var taxonomicClassID *uint
+	switch modelType {
+	case entities.ModelTypeBird:
+		if dw.avesClassID != 0 {
+			taxonomicClassID = &dw.avesClassID
+		}
+	case entities.ModelTypeBat:
+		if dw.chiropteraClassID != 0 {
+			taxonomicClassID = &dw.chiropteraClassID
+		}
+	case entities.ModelTypeMulti:
+		// Multi-type models can detect multiple taxonomic classes; no default
+	}
+	return ConvertToPredictions(ctx, detectionID, modelID, dw.speciesLabelTypeID, taxonomicClassID, additional, dw.labelRepo)
 }
 
 // convertFromV2Detection converts a v2 Detection entity to a domain Result.

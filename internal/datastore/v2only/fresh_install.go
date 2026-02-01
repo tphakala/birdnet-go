@@ -2,6 +2,7 @@
 package v2only
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -96,19 +97,46 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 	imageCacheRepo := repository.NewImageCacheRepository(db, labelRepo, useV2Prefix, isMySQL)
 	thresholdRepo := repository.NewDynamicThresholdRepository(db, labelRepo, useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(db, labelRepo, useV2Prefix, isMySQL)
+	labelTypeRepo := repository.NewLabelTypeRepository(db, useV2Prefix)
+	taxClassRepo := repository.NewTaxonomicClassRepository(db, useV2Prefix)
+
+	// Get or create required lookup table entries and cache their IDs
+	ctx := context.Background()
+	speciesLabelType, err := labelTypeRepo.GetOrCreate(ctx, "species")
+	if err != nil {
+		_ = manager.Close()
+		return nil, fmt.Errorf("failed to get/create species label type: %w", err)
+	}
+
+	avesClass, err := taxClassRepo.GetOrCreate(ctx, "Aves")
+	if err != nil {
+		_ = manager.Close()
+		return nil, fmt.Errorf("failed to get/create Aves taxonomic class: %w", err)
+	}
+	avesClassID := avesClass.ID
+
+	// Get the default model (seeded by Initialize)
+	defaultModel, err := modelRepo.GetByNameVersionVariant(ctx, "BirdNET", "2.4", "default")
+	if err != nil {
+		_ = manager.Close()
+		return nil, fmt.Errorf("failed to get default model: %w", err)
+	}
 
 	ds, err := New(&Config{
-		Manager:      manager,
-		Detection:    detectionRepo,
-		Label:        labelRepo,
-		Model:        modelRepo,
-		Source:       sourceRepo,
-		Weather:      weatherRepo,
-		ImageCache:   imageCacheRepo,
-		Threshold:    thresholdRepo,
-		Notification: notificationRepo,
-		Logger:       log,
-		Timezone:     time.Local,
+		Manager:            manager,
+		Detection:          detectionRepo,
+		Label:              labelRepo,
+		Model:              modelRepo,
+		Source:             sourceRepo,
+		Weather:            weatherRepo,
+		ImageCache:         imageCacheRepo,
+		Threshold:          thresholdRepo,
+		Notification:       notificationRepo,
+		Logger:             log,
+		Timezone:           time.Local,
+		DefaultModelID:     defaultModel.ID,
+		SpeciesLabelTypeID: speciesLabelType.ID,
+		AvesClassID:        &avesClassID,
 	})
 	if err != nil {
 		_ = manager.Close()

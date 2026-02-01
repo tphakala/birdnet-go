@@ -7,11 +7,11 @@ import (
 )
 
 // LabelRepository provides access to the labels table.
+// Labels are model-specific - the same species can have separate entries for different models.
 type LabelRepository interface {
 	// GetOrCreate retrieves an existing label or creates a new one.
-	// For species, matches on scientific_name.
-	// For non-species, matches on scientific_name and label_type.
-	GetOrCreate(ctx context.Context, scientificName string, labelType entities.LabelType) (*entities.Label, error)
+	// Labels are unique per (scientific_name, model_id).
+	GetOrCreate(ctx context.Context, scientificName string, modelID, labelTypeID uint, taxonomicClassID *uint) (*entities.Label, error)
 
 	// GetByID retrieves a label by its ID.
 	// Returns ErrLabelNotFound if not found.
@@ -22,22 +22,25 @@ type LabelRepository interface {
 	// Handles large ID sets by chunking to avoid SQL parameter limits.
 	GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.Label, error)
 
-	// GetByScientificName retrieves a label by scientific name.
+	// GetByScientificNameAndModel retrieves a label by scientific name and model ID.
 	// Returns ErrLabelNotFound if not found.
-	GetByScientificName(ctx context.Context, name string) (*entities.Label, error)
+	GetByScientificNameAndModel(ctx context.Context, name string, modelID uint) (*entities.Label, error)
 
-	// GetByScientificNames retrieves multiple labels by scientific names in a single query.
+	// GetByScientificNamesAndModel retrieves multiple labels by scientific names for a specific model.
 	// Returns a slice of labels for efficient batch processing.
 	// Handles large name sets by chunking to avoid SQL parameter limits.
-	GetByScientificNames(ctx context.Context, names []string) ([]*entities.Label, error)
+	GetByScientificNamesAndModel(ctx context.Context, names []string, modelID uint) ([]*entities.Label, error)
 
 	// BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
 	// Returns a map of scientificName -> Label for all requested names.
 	// Uses bulk operations to minimize database round-trips.
-	BatchGetOrCreate(ctx context.Context, scientificNames []string, labelType entities.LabelType) (map[string]*entities.Label, error)
+	BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error)
 
-	// GetAllByType retrieves all labels of a specific type.
-	GetAllByType(ctx context.Context, labelType entities.LabelType) ([]*entities.Label, error)
+	// GetAllByModel retrieves all labels for a specific model.
+	GetAllByModel(ctx context.Context, modelID uint) ([]*entities.Label, error)
+
+	// GetAllByLabelType retrieves all labels of a specific label type.
+	GetAllByLabelType(ctx context.Context, labelTypeID uint) ([]*entities.Label, error)
 
 	// Search finds labels matching the query string.
 	// Searches in scientific_name field.
@@ -46,8 +49,8 @@ type LabelRepository interface {
 	// Count returns the total number of labels.
 	Count(ctx context.Context) (int64, error)
 
-	// CountByType returns the count of labels for a specific type.
-	CountByType(ctx context.Context, labelType entities.LabelType) (int64, error)
+	// CountByModel returns the count of labels for a specific model.
+	CountByModel(ctx context.Context, modelID uint) (int64, error)
 
 	// GetAll retrieves all labels.
 	GetAll(ctx context.Context) ([]*entities.Label, error)
@@ -60,20 +63,52 @@ type LabelRepository interface {
 	// Exists checks if a label with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
 
-	// GetRawLabelForLabel retrieves the raw_label string from model_labels
-	// for a given model and label combination. This is useful for extracting
-	// common names which are stored in the raw_label format "ScientificName_CommonName".
-	// Returns empty string if no mapping exists.
-	GetRawLabelForLabel(ctx context.Context, modelID, labelID uint) (string, error)
+	// GetByScientificName retrieves all labels matching a scientific name across all models.
+	// Used for model-agnostic features like dynamic thresholds and image caching.
+	// Returns empty slice if no labels found.
+	GetByScientificName(ctx context.Context, name string) ([]*entities.Label, error)
 
-	// GetRawLabelsForLabels batch retrieves raw_labels from model_labels for multiple
-	// model/label combinations. Returns a map keyed by "modelID:labelID" string.
-	// This is more efficient than calling GetRawLabelForLabel in a loop.
-	GetRawLabelsForLabels(ctx context.Context, pairs []ModelLabelPair) (map[string]string, error)
+	// GetByScientificNames retrieves all labels matching any of the scientific names.
+	// Returns a map of scientificName -> []*Label for efficient batch lookup.
+	// Handles large name sets by chunking to avoid SQL parameter limits.
+	GetByScientificNames(ctx context.Context, names []string) (map[string][]*entities.Label, error)
+
+	// GetLabelIDsByScientificName retrieves label IDs for a scientific name across all models.
+	// Convenience method for filter queries that need IDs only.
+	// Returns empty slice if no labels found.
+	GetLabelIDsByScientificName(ctx context.Context, name string) ([]uint, error)
 }
 
-// ModelLabelPair represents a model_id and label_id combination for batch queries.
-type ModelLabelPair struct {
-	ModelID uint
-	LabelID uint
+// LabelTypeRepository provides access to the label_types lookup table.
+type LabelTypeRepository interface {
+	// GetByName retrieves a label type by name.
+	// Returns ErrLabelTypeNotFound if not found.
+	GetByName(ctx context.Context, name string) (*entities.LabelType, error)
+
+	// GetByID retrieves a label type by ID.
+	// Returns ErrLabelTypeNotFound if not found.
+	GetByID(ctx context.Context, id uint) (*entities.LabelType, error)
+
+	// GetAll retrieves all label types.
+	GetAll(ctx context.Context) ([]*entities.LabelType, error)
+
+	// GetOrCreate retrieves an existing label type or creates a new one.
+	GetOrCreate(ctx context.Context, name string) (*entities.LabelType, error)
+}
+
+// TaxonomicClassRepository provides access to the taxonomic_classes lookup table.
+type TaxonomicClassRepository interface {
+	// GetByName retrieves a taxonomic class by name.
+	// Returns ErrTaxonomicClassNotFound if not found.
+	GetByName(ctx context.Context, name string) (*entities.TaxonomicClass, error)
+
+	// GetByID retrieves a taxonomic class by ID.
+	// Returns ErrTaxonomicClassNotFound if not found.
+	GetByID(ctx context.Context, id uint) (*entities.TaxonomicClass, error)
+
+	// GetAll retrieves all taxonomic classes.
+	GetAll(ctx context.Context) ([]*entities.TaxonomicClass, error)
+
+	// GetOrCreate retrieves an existing taxonomic class or creates a new one.
+	GetOrCreate(ctx context.Context, name string) (*entities.TaxonomicClass, error)
 }

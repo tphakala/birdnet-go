@@ -14,6 +14,12 @@ var (
 	// ErrLabelNotFound indicates the requested label does not exist.
 	ErrLabelNotFound = errors.New("label not found")
 
+	// ErrLabelTypeNotFound indicates the requested label type does not exist.
+	ErrLabelTypeNotFound = errors.New("label type not found")
+
+	// ErrTaxonomicClassNotFound indicates the requested taxonomic class does not exist.
+	ErrTaxonomicClassNotFound = errors.New("taxonomic class not found")
+
 	// ErrModelNotFound indicates the requested AI model does not exist.
 	ErrModelNotFound = errors.New("model not found")
 

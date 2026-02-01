@@ -21,7 +21,7 @@ func AssertDetectionMatches(t *testing.T, legacy *datastore.Note, v2 *entities.D
 	require.NotNil(t, legacy, "legacy note should not be nil")
 	require.NotNil(t, v2, "v2 detection should not be nil")
 
-	// Core identification
+	// Core identification - legacy ID should be preserved
 	if v2.LegacyID != nil {
 		assert.Equal(t, legacy.ID, *v2.LegacyID, "legacy ID should be preserved")
 	}
@@ -56,16 +56,6 @@ func AssertDetectionMatches(t *testing.T, legacy *datastore.Note, v2 *entities.D
 		assert.InDelta(t, legacy.Longitude, *v2.Longitude, floatDelta, "longitude should match")
 	}
 
-	// Threshold and Sensitivity (optional)
-	if legacy.Threshold != 0 {
-		require.NotNil(t, v2.Threshold, "v2 threshold should not be nil when legacy has value")
-		assert.InDelta(t, legacy.Threshold, *v2.Threshold, floatDelta, "threshold should match")
-	}
-	if legacy.Sensitivity != 0 {
-		require.NotNil(t, v2.Sensitivity, "v2 sensitivity should not be nil when legacy has value")
-		assert.InDelta(t, legacy.Sensitivity, *v2.Sensitivity, floatDelta, "sensitivity should match")
-	}
-
 	// Clip name (optional)
 	if legacy.ClipName != "" {
 		require.NotNil(t, v2.ClipName, "v2 clip_name should not be nil when legacy has value")
@@ -85,8 +75,8 @@ func AssertDetectionLabelMatches(t *testing.T, legacy *datastore.Note, v2 *entit
 	t.Helper()
 
 	require.NotNil(t, v2.Label, "v2 detection should have label preloaded")
-	require.NotNil(t, v2.Label.ScientificName, "label should have scientific name")
-	assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific name should match")
+	require.NotEmpty(t, v2.Label.ScientificName, "label should have scientific name")
+	assert.Equal(t, legacy.ScientificName, v2.Label.ScientificName, "scientific name should match")
 }
 
 // AssertDetectionModelMatches verifies that V2 Detection's Model is set.
@@ -127,9 +117,9 @@ func AssertResultsMatch(t *testing.T, legacyResults []datastore.Results, v2Predi
 	// Verify each V2 prediction has a matching legacy result
 	for _, pred := range v2Predictions {
 		require.NotNil(t, pred.Label, "prediction should have label preloaded")
-		require.NotNil(t, pred.Label.ScientificName, "prediction label should have scientific name")
+		require.NotEmpty(t, pred.Label.ScientificName, "prediction label should have scientific name")
 
-		scientificName := *pred.Label.ScientificName
+		scientificName := pred.Label.ScientificName
 		legacyConf, found := legacyMap[scientificName]
 		if assert.True(t, found, "v2 prediction species %q should exist in legacy results", scientificName) {
 			assert.InDelta(t, float64(legacyConf), pred.Confidence, floatDelta,
@@ -220,8 +210,8 @@ func AssertDynamicThresholdMatches(t *testing.T, legacy *datastore.DynamicThresh
 	require.NotNil(t, v2, "v2 threshold should not be nil")
 
 	// Compare scientific name via label relationship
-	if v2.Label != nil && v2.Label.ScientificName != nil {
-		assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific_name should match (via label)")
+	if v2.Label != nil && v2.Label.ScientificName != "" {
+		assert.Equal(t, legacy.ScientificName, v2.Label.ScientificName, "scientific_name should match (via label)")
 	} else {
 		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
 	}
@@ -269,8 +259,8 @@ func AssertImageCacheMatches(t *testing.T, legacy *datastore.ImageCache, v2 *ent
 
 	assert.Equal(t, legacy.ProviderName, v2.ProviderName, "provider_name should match")
 	// Compare scientific name via label relationship
-	if v2.Label != nil && v2.Label.ScientificName != nil {
-		assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific_name should match (via label)")
+	if v2.Label != nil && v2.Label.ScientificName != "" {
+		assert.Equal(t, legacy.ScientificName, v2.Label.ScientificName, "scientific_name should match (via label)")
 	} else {
 		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
 	}
@@ -292,8 +282,8 @@ func AssertNotificationHistoryMatches(t *testing.T, legacy *datastore.Notificati
 	require.NotNil(t, v2, "v2 notification history should not be nil")
 
 	// Compare scientific name via label relationship
-	if v2.Label != nil && v2.Label.ScientificName != nil {
-		assert.Equal(t, legacy.ScientificName, *v2.Label.ScientificName, "scientific_name should match (via label)")
+	if v2.Label != nil && v2.Label.ScientificName != "" {
+		assert.Equal(t, legacy.ScientificName, v2.Label.ScientificName, "scientific_name should match (via label)")
 	} else {
 		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
 	}

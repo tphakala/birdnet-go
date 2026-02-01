@@ -36,28 +36,54 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	err = manager.Initialize()
 	require.NoError(t, err)
 
-	// Create repositories (useV2Prefix = false for SQLite, isMySQL = false)
-	detectionRepo := repository.NewDetectionRepository(manager.DB(), false, false)
-	labelRepo := repository.NewLabelRepository(manager.DB(), false, false)
-	modelRepo := repository.NewModelRepository(manager.DB(), false, false)
-	weatherRepo := repository.NewWeatherRepository(manager.DB(), false, false)
-	imageCacheRepo := repository.NewImageCacheRepository(manager.DB(), labelRepo, false, false)
-	thresholdRepo := repository.NewDynamicThresholdRepository(manager.DB(), labelRepo, false, false)
-	notificationRepo := repository.NewNotificationHistoryRepository(manager.DB(), labelRepo, false, false)
+	db := manager.DB()
 
-	// Create datastore
+	// Create lookup table entries for tests
+	// The LabelType and TaxonomicClass tables should be created by Initialize()
+	labelTypeRepo := repository.NewLabelTypeRepository(db, false)
+	taxClassRepo := repository.NewTaxonomicClassRepository(db, false)
+	modelRepo := repository.NewModelRepository(db, false, false)
+
+	ctx := context.Background()
+
+	// Create required label types
+	speciesLabelType, err := labelTypeRepo.GetOrCreate(ctx, "species")
+	require.NoError(t, err, "Failed to create species label type")
+
+	// Create required taxonomic classes
+	avesClass, err := taxClassRepo.GetOrCreate(ctx, "Aves")
+	require.NoError(t, err, "Failed to create Aves taxonomic class")
+
+	// Get the default model (seeded by Initialize)
+	defaultModel, err := modelRepo.GetByNameVersionVariant(ctx, "BirdNET", "2.4", "default")
+	require.NoError(t, err, "Failed to get default model")
+
+	avesClassID := avesClass.ID
+
+	// Create repositories (useV2Prefix = false for SQLite, isMySQL = false)
+	detectionRepo := repository.NewDetectionRepository(db, false, false)
+	labelRepo := repository.NewLabelRepository(db, false, false)
+	weatherRepo := repository.NewWeatherRepository(db, false, false)
+	imageCacheRepo := repository.NewImageCacheRepository(db, labelRepo, false, false)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, labelRepo, false, false)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, labelRepo, false, false)
+
+	// Create datastore with cached lookup table IDs
 	var err2 error
 	ds, err2 = New(&Config{
-		Manager:      manager,
-		Detection:    detectionRepo,
-		Label:        labelRepo,
-		Model:        modelRepo,
-		Weather:      weatherRepo,
-		ImageCache:   imageCacheRepo,
-		Threshold:    thresholdRepo,
-		Notification: notificationRepo,
-		Logger:       testLogger,
-		Timezone:     time.UTC,
+		Manager:            manager,
+		Detection:          detectionRepo,
+		Label:              labelRepo,
+		Model:              modelRepo,
+		Weather:            weatherRepo,
+		ImageCache:         imageCacheRepo,
+		Threshold:          thresholdRepo,
+		Notification:       notificationRepo,
+		Logger:             testLogger,
+		Timezone:           time.UTC,
+		DefaultModelID:     defaultModel.ID,
+		SpeciesLabelTypeID: speciesLabelType.ID,
+		AvesClassID:        &avesClassID,
 	})
 	require.NoError(t, err2)
 

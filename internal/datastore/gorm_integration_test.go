@@ -255,7 +255,7 @@ func TestDetectionRepository_RoundTrip(t *testing.T) {
 		Model: detection.ModelInfo{
 			Name:    "CustomModel",
 			Version: "1.0",
-			Custom:  true,
+			Variant: "custom",
 		},
 	}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -1681,6 +1682,31 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 
 	// Create repositories for the migration worker
 	v2DB := cfg.manager.DB()
+
+	// Look up required lookup table IDs (seeded during Manager.Initialize())
+	var speciesLabelType entities.LabelType
+	if err := v2DB.Where("name = ?", "species").FirstOrCreate(&speciesLabelType, entities.LabelType{Name: "species"}).Error; err != nil {
+		return fmt.Errorf("failed to get species label type: %w", err)
+	}
+
+	var avesClass entities.TaxonomicClass
+	if err := v2DB.Where("name = ?", "Aves").FirstOrCreate(&avesClass, entities.TaxonomicClass{Name: "Aves"}).Error; err != nil {
+		return fmt.Errorf("failed to get Aves taxonomic class: %w", err)
+	}
+
+	// Get default model for related data migration (uses detection package constants)
+	var defaultModel entities.AIModel
+	if err := v2DB.Where("name = ? AND version = ? AND variant = ?",
+		detection.DefaultModelName, detection.DefaultModelVersion, detection.DefaultModelVariant).
+		FirstOrCreate(&defaultModel, entities.AIModel{
+			Name:      detection.DefaultModelName,
+			Version:   detection.DefaultModelVersion,
+			Variant:   detection.DefaultModelVariant,
+			ModelType: entities.ModelTypeBird,
+		}).Error; err != nil {
+		return fmt.Errorf("failed to get default model: %w", err)
+	}
+
 	labelRepo := repository.NewLabelRepository(v2DB, cfg.useV2Prefix, isMySQL)
 	modelRepo := repository.NewModelRepository(v2DB, cfg.useV2Prefix, isMySQL)
 	sourceRepo := repository.NewAudioSourceRepository(v2DB, cfg.useV2Prefix, isMySQL)
@@ -1711,12 +1737,15 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	// Use half of detection batch size since related data tables are typically smaller
 	relatedDataBatchSize := batchSize / 2
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
-		LegacyStore:   cfg.ds,
-		DetectionRepo: v2DetectionRepo,
-		LabelRepo:     labelRepo,
-		StateManager:  stateManager,
-		Logger:        migrationLogger,
-		BatchSize:     relatedDataBatchSize,
+		LegacyStore:        cfg.ds,
+		DetectionRepo:      v2DetectionRepo,
+		LabelRepo:          labelRepo,
+		StateManager:       stateManager,
+		Logger:             migrationLogger,
+		BatchSize:          relatedDataBatchSize,
+		DefaultModelID:     defaultModel.ID,
+		SpeciesLabelTypeID: speciesLabelType.ID,
+		AvesClassID:        &avesClass.ID,
 	})
 
 	// Create the auxiliary data migrator for weather, thresholds, image cache, notifications
@@ -1745,6 +1774,8 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		SleepBetweenBatches: sleepBetweenBatches,
 		Timezone:            time.Local,
 		UseBatchMode:        isMySQL, // Use efficient batch inserts for MySQL
+		SpeciesLabelTypeID:  speciesLabelType.ID,
+		AvesClassID:         &avesClass.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create migration worker: %w", err)

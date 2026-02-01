@@ -87,10 +87,15 @@ type Worker struct {
 	relatedMigrator   *RelatedDataMigrator
 	auxiliaryMigrator *AuxiliaryMigrator
 	logger            logger.Logger
-	batchSize       int
-	sleepBetween    time.Duration
-	timezone        *time.Location
-	useBatchMode    bool // Use efficient batch inserts (for MySQL)
+	batchSize         int
+	sleepBetween      time.Duration
+	timezone          *time.Location
+	useBatchMode      bool // Use efficient batch inserts (for MySQL)
+
+	// Lookup table IDs for label creation
+	speciesLabelTypeID uint  // "species" label type ID
+	avesClassID        *uint // "Aves" taxonomic class ID (optional)
+	chiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
 	// Control channels
 	pauseCh  chan struct{}
@@ -136,6 +141,11 @@ type WorkerConfig struct {
 	Timezone            *time.Location
 	MaxConsecErrors     int  // Optional: defaults to DefaultMaxConsecutiveErrors
 	UseBatchMode        bool // Use efficient batch inserts (recommended for MySQL)
+
+	// Lookup table IDs for label creation (required for V2 normalized schema)
+	SpeciesLabelTypeID uint  // "species" label type ID
+	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
+	ChiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 }
 
 // NewWorker creates a new migration worker.
@@ -166,6 +176,9 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
+	if cfg.SpeciesLabelTypeID == 0 {
+		return nil, errors.New("species label type ID is required")
+	}
 
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
@@ -188,24 +201,27 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 	}
 
 	return &Worker{
-		legacy:            cfg.Legacy,
-		v2Detection:       cfg.V2Detection,
-		labelRepo:         cfg.LabelRepo,
-		modelRepo:         cfg.ModelRepo,
-		sourceRepo:        cfg.SourceRepo,
-		stateManager:      cfg.StateManager,
-		relatedMigrator:   cfg.RelatedMigrator,
-		auxiliaryMigrator: cfg.AuxiliaryMigrator,
-		logger:            cfg.Logger,
-		batchSize:       batchSize,
-		sleepBetween:    sleepBetween,
-		timezone:        tz,
-		useBatchMode:    cfg.UseBatchMode,
-		pauseCh:         make(chan struct{}),
-		resumeCh:        make(chan struct{}),
-		stopCh:          make(chan struct{}),
-		maxConsecErrors: maxConsecErrors,
-		rateSamples:     make([]rateSample, DefaultRateWindowSize),
+		legacy:             cfg.Legacy,
+		v2Detection:        cfg.V2Detection,
+		labelRepo:          cfg.LabelRepo,
+		modelRepo:          cfg.ModelRepo,
+		sourceRepo:         cfg.SourceRepo,
+		stateManager:       cfg.StateManager,
+		relatedMigrator:    cfg.RelatedMigrator,
+		auxiliaryMigrator:  cfg.AuxiliaryMigrator,
+		logger:             cfg.Logger,
+		batchSize:          batchSize,
+		sleepBetween:       sleepBetween,
+		timezone:           tz,
+		useBatchMode:       cfg.UseBatchMode,
+		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
+		avesClassID:        cfg.AvesClassID,
+		chiropteraClassID:  cfg.ChiropteraClassID,
+		pauseCh:            make(chan struct{}),
+		resumeCh:           make(chan struct{}),
+		stopCh:             make(chan struct{}),
+		maxConsecErrors:    maxConsecErrors,
+		rateSamples:        make([]rateSample, DefaultRateWindowSize),
 	}, nil
 }
 
@@ -1304,12 +1320,20 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 
 // conversionDeps returns the dependencies for shared conversion functions.
 func (w *Worker) conversionDeps() *repository.ConversionDeps {
-	return &repository.ConversionDeps{
-		LabelRepo:  w.labelRepo,
-		ModelRepo:  w.modelRepo,
-		SourceRepo: w.sourceRepo,
-		Logger:     w.logger,
+	deps := &repository.ConversionDeps{
+		LabelRepo:          w.labelRepo,
+		ModelRepo:          w.modelRepo,
+		SourceRepo:         w.sourceRepo,
+		Logger:             w.logger,
+		SpeciesLabelTypeID: w.speciesLabelTypeID,
 	}
+	if w.avesClassID != nil {
+		deps.AvesClassID = *w.avesClassID
+	}
+	if w.chiropteraClassID != nil {
+		deps.ChiropteraClassID = *w.chiropteraClassID
+	}
+	return deps
 }
 
 // convertToV2Detection converts a domain Result to a v2 Detection entity.

@@ -1,7 +1,5 @@
 package entities
 
-import "time"
-
 // Detection represents a normalized detection record.
 // This replaces the legacy 'notes' table with a fully normalized structure.
 type Detection struct {
@@ -18,9 +16,7 @@ type Detection struct {
 	EndTime    *int64 // Milliseconds offset from source start
 
 	// Detection metadata
-	Confidence  float64 `gorm:"not null;index:idx_detection_confidence"`
-	Threshold   *float64
-	Sensitivity *float64
+	Confidence float64 `gorm:"not null;index:idx_detection_confidence"`
 
 	// Location (optional)
 	Latitude  *float64
@@ -32,10 +28,8 @@ type Detection struct {
 	// Processing metadata
 	ProcessingTimeMs *int64 // Milliseconds
 
-	// Migration reference (preserves legacy ID for lookups)
+	// Migration reference (preserves legacy ID for lookups and related data migration)
 	LegacyID *uint `gorm:"index"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime"`
 
 	// Relationships (for preloading)
 	// Note: Model and Label use FK constraints for referential integrity.

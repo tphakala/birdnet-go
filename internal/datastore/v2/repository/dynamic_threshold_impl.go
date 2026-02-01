@@ -71,23 +71,25 @@ func (r *dynamicThresholdRepository) SaveDynamicThreshold(ctx context.Context, t
 }
 
 // GetDynamicThreshold retrieves a threshold by species name (scientific name).
-// Internally resolves the species name to a label ID for the lookup.
+// Internally resolves the species name to label IDs (cross-model) for the lookup.
+// Returns the first matching threshold if multiple models have thresholds for this species.
 func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, speciesName string) (*entities.DynamicThreshold, error) {
 	if err := r.ensureLabelRepo(); err != nil {
 		return nil, err
 	}
-	// Resolve species name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	// Resolve species name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return nil, ErrDynamicThresholdNotFound
-		}
 		return nil, err
+	}
+	if len(labelIDs) == 0 {
+		return nil, ErrDynamicThresholdNotFound
 	}
 
 	var threshold entities.DynamicThreshold
 	err = r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Where("label_id = ?", label.ID).
+		Preload("Label").
+		Where("label_id IN ?", labelIDs).
 		First(&threshold).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrDynamicThresholdNotFound
@@ -96,8 +98,6 @@ func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, sp
 		return nil, err
 	}
 
-	// Attach the label for callers that need species name
-	threshold.Label = label
 	return &threshold, nil
 }
 
@@ -114,22 +114,23 @@ func (r *dynamicThresholdRepository) GetAllDynamicThresholds(ctx context.Context
 	return thresholds, err
 }
 
-// DeleteDynamicThreshold deletes a threshold by species name (scientific name).
+// DeleteDynamicThreshold deletes thresholds by species name (scientific name).
+// Deletes across all models that have thresholds for this species.
 func (r *dynamicThresholdRepository) DeleteDynamicThreshold(ctx context.Context, speciesName string) error {
 	if err := r.ensureLabelRepo(); err != nil {
 		return err
 	}
-	// Resolve species name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	// Resolve species name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return ErrDynamicThresholdNotFound
-		}
 		return err
+	}
+	if len(labelIDs) == 0 {
+		return ErrDynamicThresholdNotFound
 	}
 
 	result := r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Where("label_id = ?", label.ID).
+		Where("label_id IN ?", labelIDs).
 		Delete(&entities.DynamicThreshold{})
 	if result.Error != nil {
 		return result.Error
@@ -148,22 +149,23 @@ func (r *dynamicThresholdRepository) DeleteExpiredDynamicThresholds(ctx context.
 	return result.RowsAffected, result.Error
 }
 
-// UpdateDynamicThresholdExpiry updates the expiry time for a threshold.
+// UpdateDynamicThresholdExpiry updates the expiry time for thresholds.
+// Updates across all models that have thresholds for this species.
 func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Context, speciesName string, expiresAt time.Time) error {
 	if err := r.ensureLabelRepo(); err != nil {
 		return err
 	}
-	// Resolve species name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	// Resolve species name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return ErrDynamicThresholdNotFound
-		}
 		return err
+	}
+	if len(labelIDs) == 0 {
+		return ErrDynamicThresholdNotFound
 	}
 
 	result := r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Where("label_id = ?", label.ID).
+		Where("label_id IN ?", labelIDs).
 		Update("expires_at", expiresAt)
 	if result.Error != nil {
 		return result.Error
@@ -254,23 +256,24 @@ func (r *dynamicThresholdRepository) SaveThresholdEvent(ctx context.Context, eve
 }
 
 // GetThresholdEvents retrieves events for a species (by scientific name).
+// Retrieves events across all models that have events for this species.
 func (r *dynamicThresholdRepository) GetThresholdEvents(ctx context.Context, speciesName string, limit int) ([]entities.ThresholdEvent, error) {
 	if err := r.ensureLabelRepo(); err != nil {
 		return nil, err
 	}
-	// Resolve species name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	// Resolve species name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return []entities.ThresholdEvent{}, nil
-		}
 		return nil, err
+	}
+	if len(labelIDs) == 0 {
+		return []entities.ThresholdEvent{}, nil
 	}
 
 	var events []entities.ThresholdEvent
 	query := r.db.WithContext(ctx).Table(r.eventTable()).
 		Preload("Label").
-		Where("label_id = ?", label.ID).
+		Where("label_id IN ?", labelIDs).
 		Order("created_at DESC")
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -293,21 +296,22 @@ func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Contex
 }
 
 // DeleteThresholdEvents deletes all events for a species (by scientific name).
+// Deletes events across all models that have events for this species.
 func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, speciesName string) error {
 	if err := r.ensureLabelRepo(); err != nil {
 		return err
 	}
-	// Resolve species name to label ID
-	label, err := r.labelRepo.GetByScientificName(ctx, speciesName)
+	// Resolve species name to label IDs (cross-model lookup)
+	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
 	if err != nil {
-		if errors.Is(err, ErrLabelNotFound) {
-			return nil // Nothing to delete
-		}
 		return err
+	}
+	if len(labelIDs) == 0 {
+		return nil // Nothing to delete
 	}
 
 	return r.db.WithContext(ctx).Table(r.eventTable()).
-		Where("label_id = ?", label.ID).
+		Where("label_id IN ?", labelIDs).
 		Delete(&entities.ThresholdEvent{}).Error
 }
 

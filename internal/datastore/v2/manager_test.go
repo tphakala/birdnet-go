@@ -37,7 +37,8 @@ func TestSQLiteManager_Initialize(t *testing.T) {
 	tables := []any{
 		&entities.Label{},
 		&entities.AIModel{},
-		&entities.ModelLabel{},
+		&entities.LabelType{},
+		&entities.TaxonomicClass{},
 		&entities.AudioSource{},
 		&entities.Detection{},
 		&entities.DetectionPrediction{},
@@ -235,17 +236,23 @@ func TestSQLiteManager_CascadeDelete(t *testing.T) {
 	err = mgr.Initialize()
 	require.NoError(t, err)
 
-	// Create a label
-	label := entities.Label{
-		ScientificName: stringPtr("Turdus merula"),
-		LabelType:      entities.LabelTypeSpecies,
-	}
-	err = mgr.DB().Create(&label).Error
-	require.NoError(t, err)
-
-	// Get the BirdNET model
+	// Get the BirdNET model (seeded by Initialize)
 	var model entities.AIModel
 	err = mgr.DB().First(&model).Error
+	require.NoError(t, err)
+
+	// Get or create the species label type
+	var labelType entities.LabelType
+	err = mgr.DB().FirstOrCreate(&labelType, entities.LabelType{Name: "species"}).Error
+	require.NoError(t, err)
+
+	// Create a label
+	label := entities.Label{
+		ScientificName: "Turdus merula",
+		ModelID:        model.ID,
+		LabelTypeID:    labelType.ID,
+	}
+	err = mgr.DB().Create(&label).Error
 	require.NoError(t, err)
 
 	// Create a detection referencing the label
@@ -287,17 +294,23 @@ func TestSQLiteManager_SourceDeleteSetsNull(t *testing.T) {
 	err = mgr.Initialize()
 	require.NoError(t, err)
 
-	// Create a label
-	label := entities.Label{
-		ScientificName: stringPtr("Turdus merula"),
-		LabelType:      entities.LabelTypeSpecies,
-	}
-	err = mgr.DB().Create(&label).Error
-	require.NoError(t, err)
-
-	// Get the BirdNET model
+	// Get the BirdNET model (seeded by Initialize)
 	var model entities.AIModel
 	err = mgr.DB().First(&model).Error
+	require.NoError(t, err)
+
+	// Get or create the species label type
+	var labelType entities.LabelType
+	err = mgr.DB().FirstOrCreate(&labelType, entities.LabelType{Name: "species"}).Error
+	require.NoError(t, err)
+
+	// Create a label
+	label := entities.Label{
+		ScientificName: "Turdus merula",
+		ModelID:        model.ID,
+		LabelTypeID:    labelType.ID,
+	}
+	err = mgr.DB().Create(&label).Error
 	require.NoError(t, err)
 
 	// Create an audio source

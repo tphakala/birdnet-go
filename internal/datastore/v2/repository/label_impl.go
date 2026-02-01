@@ -15,14 +15,10 @@ import (
 type labelRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool // For MySQL: use v2_ table prefix
-	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
+	isMySQL     bool // For MySQL dialect
 }
 
 // NewLabelRepository creates a new LabelRepository.
-// Parameters:
-//   - db: GORM database connection
-//   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
-//   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
 func NewLabelRepository(db *gorm.DB, useV2Prefix, isMySQL bool) LabelRepository {
 	return &labelRepository{
 		db:          db,
@@ -40,10 +36,9 @@ func (r *labelRepository) tableName() string {
 }
 
 // GetOrCreate retrieves an existing label or creates a new one.
-// Returns an error if scientificName is empty or whitespace-only.
-// Input is normalized (trimmed) before use.
-func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string, labelType entities.LabelType) (*entities.Label, error) {
-	// Validate and normalize input - reject empty or whitespace-only names
+// Labels are unique per (scientific_name, model_id).
+func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string, modelID, labelTypeID uint, taxonomicClassID *uint) (*entities.Label, error) {
+	// Validate and normalize input
 	scientificName = strings.TrimSpace(scientificName)
 	if scientificName == "" {
 		return nil, fmt.Errorf("scientific name cannot be empty")
@@ -51,52 +46,32 @@ func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string
 
 	var label entities.Label
 
-	// For species, lookup by scientific name only
-	if labelType == entities.LabelTypeSpecies {
-		err := r.db.WithContext(ctx).Table(r.tableName()).
-			Where("scientific_name = ?", scientificName).
-			First(&label).Error
-		if err == nil {
-			return &label, nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-	} else {
-		// For non-species, lookup by scientific_name and label_type
-		err := r.db.WithContext(ctx).Table(r.tableName()).
-			Where("scientific_name = ? AND label_type = ?", scientificName, labelType).
-			First(&label).Error
-		if err == nil {
-			return &label, nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
+	// Lookup by (scientific_name, model_id)
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("scientific_name = ? AND model_id = ?", scientificName, modelID).
+		First(&label).Error
+	if err == nil {
+		return &label, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 
-	// Create new label with normalized name
+	// Create new label
 	label = entities.Label{
-		ScientificName: &scientificName,
-		LabelType:      labelType,
+		ScientificName:   scientificName,
+		ModelID:          modelID,
+		LabelTypeID:      labelTypeID,
+		TaxonomicClassID: taxonomicClassID,
 	}
 
 	createErr := r.db.WithContext(ctx).Table(r.tableName()).Create(&label).Error
 	if createErr != nil {
-		// Handle race condition - another goroutine may have created it.
-		// Try to fetch the existing record; if that also fails, return the original create error.
-		var findErr error
-		if labelType == entities.LabelTypeSpecies {
-			findErr = r.db.WithContext(ctx).Table(r.tableName()).
-				Where("scientific_name = ?", scientificName).
-				First(&label).Error
-		} else {
-			findErr = r.db.WithContext(ctx).Table(r.tableName()).
-				Where("scientific_name = ? AND label_type = ?", scientificName, labelType).
-				First(&label).Error
-		}
+		// Handle race condition - try to fetch the existing record
+		findErr := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("scientific_name = ? AND model_id = ?", scientificName, modelID).
+			First(&label).Error
 		if findErr != nil {
-			// Record doesn't exist, so creation failed for another reason
 			return nil, createErr
 		}
 	}
@@ -118,11 +93,9 @@ func (r *labelRepository) GetByID(ctx context.Context, id uint) (*entities.Label
 }
 
 // batchQuerySize is the maximum number of IDs to include in a single IN clause.
-// SQLite has a default limit of 999 parameters; we use 500 to be safe.
 const batchQuerySize = 500
 
 // GetByIDs retrieves multiple labels by their IDs.
-// Handles large ID sets by chunking to avoid SQL parameter limits.
 func (r *labelRepository) GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.Label, error) {
 	result := make(map[uint]*entities.Label)
 	if len(ids) == 0 {
@@ -148,11 +121,11 @@ func (r *labelRepository) GetByIDs(ctx context.Context, ids []uint) (map[uint]*e
 	return result, nil
 }
 
-// GetByScientificName retrieves a label by scientific name.
-func (r *labelRepository) GetByScientificName(ctx context.Context, name string) (*entities.Label, error) {
+// GetByScientificNameAndModel retrieves a label by scientific name and model ID.
+func (r *labelRepository) GetByScientificNameAndModel(ctx context.Context, name string, modelID uint) (*entities.Label, error) {
 	var label entities.Label
 	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("scientific_name = ?", name).
+		Where("scientific_name = ? AND model_id = ?", name, modelID).
 		First(&label).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrLabelNotFound
@@ -163,9 +136,8 @@ func (r *labelRepository) GetByScientificName(ctx context.Context, name string) 
 	return &label, nil
 }
 
-// GetByScientificNames retrieves multiple labels by scientific names in a single query.
-// Handles large name sets by chunking to avoid SQL parameter limits.
-func (r *labelRepository) GetByScientificNames(ctx context.Context, names []string) ([]*entities.Label, error) {
+// GetByScientificNamesAndModel retrieves multiple labels by scientific names for a specific model.
+func (r *labelRepository) GetByScientificNamesAndModel(ctx context.Context, names []string, modelID uint) ([]*entities.Label, error) {
 	if len(names) == 0 {
 		return []*entities.Label{}, nil
 	}
@@ -177,10 +149,10 @@ func (r *labelRepository) GetByScientificNames(ctx context.Context, names []stri
 
 		var labels []*entities.Label
 		err := r.db.WithContext(ctx).Table(r.tableName()).
-			Where("scientific_name IN ?", batchNames).
+			Where("scientific_name IN ? AND model_id = ?", batchNames, modelID).
 			Find(&labels).Error
 		if err != nil {
-			return nil, fmt.Errorf("batch load labels by scientific names: %w", err)
+			return nil, fmt.Errorf("batch load labels: %w", err)
 		}
 		result = append(result, labels...)
 	}
@@ -188,14 +160,12 @@ func (r *labelRepository) GetByScientificNames(ctx context.Context, names []stri
 }
 
 // BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
-// Returns a map of scientificName -> Label for all requested names.
-// Only labels matching both the scientific name AND the specified labelType are returned.
-func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames []string, labelType entities.LabelType) (map[string]*entities.Label, error) {
+func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error) {
 	if len(scientificNames) == 0 {
 		return make(map[string]*entities.Label), nil
 	}
 
-	// Deduplicate and validate input - trim whitespace and filter empty names
+	// Deduplicate and validate input
 	uniqueNames := make(map[string]struct{}, len(scientificNames))
 	for _, name := range scientificNames {
 		trimmedName := strings.TrimSpace(name)
@@ -204,7 +174,6 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 		}
 	}
 
-	// Early return if no valid names after filtering
 	if len(uniqueNames) == 0 {
 		return make(map[string]*entities.Label), nil
 	}
@@ -216,17 +185,14 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 
 	result := make(map[string]*entities.Label, len(nameList))
 
-	// Step 1: Fetch existing labels with matching type (chunked for SQL limits)
-	existing, err := r.getByScientificNamesWithType(ctx, nameList, labelType)
+	// Step 1: Fetch existing labels for this model
+	existing, err := r.GetByScientificNamesAndModel(ctx, nameList, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("batch fetch existing labels: %w", err)
 	}
 
-	// Build map of found names
 	for _, label := range existing {
-		if label.ScientificName != nil {
-			result[*label.ScientificName] = label
-		}
+		result[label.ScientificName] = label
 	}
 
 	// Step 2: Identify missing names
@@ -241,14 +207,14 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 		return result, nil
 	}
 
-	// Step 3: Bulk insert missing labels with ON CONFLICT DO NOTHING
-	// This handles concurrent inserts gracefully
+	// Step 3: Bulk insert missing labels
 	newLabels := make([]entities.Label, len(missing))
 	for i, name := range missing {
-		nameCopy := name // Avoid closure issues
 		newLabels[i] = entities.Label{
-			ScientificName: &nameCopy,
-			LabelType:      labelType,
+			ScientificName:   name,
+			ModelID:          modelID,
+			LabelTypeID:      labelTypeID,
+			TaxonomicClassID: taxonomicClassID,
 		}
 	}
 
@@ -258,54 +224,34 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 		return nil, fmt.Errorf("batch create labels: %w", err)
 	}
 
-	// Step 4: Re-fetch to get IDs (with type filter)
-	// This is necessary because:
-	// - ON CONFLICT DO NOTHING may not return IDs for conflicting rows
-	// - Some GORM drivers don't populate IDs after bulk insert with conflicts
-	// - This handles race conditions where another process inserted the same labels
-	created, err := r.getByScientificNamesWithType(ctx, missing, labelType)
+	// Step 4: Re-fetch to get IDs
+	created, err := r.GetByScientificNamesAndModel(ctx, missing, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch created labels: %w", err)
 	}
 
 	for _, label := range created {
-		if label.ScientificName != nil {
-			result[*label.ScientificName] = label
-		}
+		result[label.ScientificName] = label
 	}
 
 	return result, nil
 }
 
-// getByScientificNamesWithType retrieves labels by scientific names filtered by type.
-// This is an internal helper for BatchGetOrCreate to ensure type-safe lookups.
-func (r *labelRepository) getByScientificNamesWithType(ctx context.Context, names []string, labelType entities.LabelType) ([]*entities.Label, error) {
-	if len(names) == 0 {
-		return []*entities.Label{}, nil
-	}
-
-	var result []*entities.Label
-	for i := 0; i < len(names); i += batchQuerySize {
-		end := min(i+batchQuerySize, len(names))
-		batchNames := names[i:end]
-
-		var labels []*entities.Label
-		err := r.db.WithContext(ctx).Table(r.tableName()).
-			Where("scientific_name IN ? AND label_type = ?", batchNames, labelType).
-			Find(&labels).Error
-		if err != nil {
-			return nil, fmt.Errorf("batch load labels by scientific names with type: %w", err)
-		}
-		result = append(result, labels...)
-	}
-	return result, nil
-}
-
-// GetAllByType retrieves all labels of a specific type.
-func (r *labelRepository) GetAllByType(ctx context.Context, labelType entities.LabelType) ([]*entities.Label, error) {
+// GetAllByModel retrieves all labels for a specific model.
+func (r *labelRepository) GetAllByModel(ctx context.Context, modelID uint) ([]*entities.Label, error) {
 	var labels []*entities.Label
 	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("label_type = ?", labelType).
+		Where("model_id = ?", modelID).
+		Order("scientific_name ASC").
+		Find(&labels).Error
+	return labels, err
+}
+
+// GetAllByLabelType retrieves all labels of a specific label type.
+func (r *labelRepository) GetAllByLabelType(ctx context.Context, labelTypeID uint) ([]*entities.Label, error) {
+	var labels []*entities.Label
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("label_type_id = ?", labelTypeID).
 		Order("scientific_name ASC").
 		Find(&labels).Error
 	return labels, err
@@ -330,11 +276,11 @@ func (r *labelRepository) Count(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-// CountByType returns the count of labels for a specific type.
-func (r *labelRepository) CountByType(ctx context.Context, labelType entities.LabelType) (int64, error) {
+// CountByModel returns the count of labels for a specific model.
+func (r *labelRepository) CountByModel(ctx context.Context, modelID uint) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("label_type = ?", labelType).
+		Where("model_id = ?", modelID).
 		Count(&count).Error
 	return count, err
 }
@@ -369,87 +315,206 @@ func (r *labelRepository) Exists(ctx context.Context, id uint) (bool, error) {
 	return count > 0, err
 }
 
-// modelLabelsTable returns the appropriate model_labels table name.
-func (r *labelRepository) modelLabelsTable() string {
-	if r.useV2Prefix {
-		return tableV2ModelLabels
-	}
-	return tableModelLabels
+// GetByScientificName retrieves all labels matching a scientific name across all models.
+func (r *labelRepository) GetByScientificName(ctx context.Context, name string) ([]*entities.Label, error) {
+	var labels []*entities.Label
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("scientific_name = ?", name).
+		Find(&labels).Error
+	return labels, err
 }
 
-// GetRawLabelForLabel retrieves the raw_label from model_labels for a given model/label pair.
-func (r *labelRepository) GetRawLabelForLabel(ctx context.Context, modelID, labelID uint) (string, error) {
-	var rawLabel string
-	err := r.db.WithContext(ctx).Table(r.modelLabelsTable()).
-		Select("raw_label").
-		Where("model_id = ? AND label_id = ?", modelID, labelID).
-		Limit(1).
-		Scan(&rawLabel).Error
-	if err != nil {
-		return "", err
-	}
-	return rawLabel, nil
+// GetLabelIDsByScientificName retrieves label IDs for a scientific name across all models.
+func (r *labelRepository) GetLabelIDsByScientificName(ctx context.Context, name string) ([]uint, error) {
+	var ids []uint
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Select("id").
+		Where("scientific_name = ?", name).
+		Pluck("id", &ids).Error
+	return ids, err
 }
 
-// rawLabelBatchSize limits the number of pairs per query to stay under SQL parameter limits.
-// Each pair uses 2 parameters, so 400 pairs = 800 parameters (safely under SQLite's 999 limit).
-const rawLabelBatchSize = 400
-
-// GetRawLabelsForLabels batch retrieves raw_labels from model_labels for multiple model/label pairs.
-// Returns a map keyed by "modelID:labelID" string for efficient lookup.
-// Automatically chunks large requests to avoid SQL parameter limits.
-func (r *labelRepository) GetRawLabelsForLabels(ctx context.Context, pairs []ModelLabelPair) (map[string]string, error) {
-	result := make(map[string]string)
-	if len(pairs) == 0 {
-		return result, nil
+// GetByScientificNames retrieves all labels matching any of the scientific names.
+// Handles large name sets by chunking to avoid SQL parameter limits.
+func (r *labelRepository) GetByScientificNames(ctx context.Context, names []string) (map[string][]*entities.Label, error) {
+	if len(names) == 0 {
+		return make(map[string][]*entities.Label), nil
 	}
 
-	// Process in chunks to avoid SQL parameter limits
-	for start := 0; start < len(pairs); start += rawLabelBatchSize {
-		end := min(start+rawLabelBatchSize, len(pairs))
-		chunk := pairs[start:end]
+	result := make(map[string][]*entities.Label, len(names))
 
-		if err := r.fetchRawLabelsChunk(ctx, chunk, result); err != nil {
-			return nil, err
+	// Chunk to avoid SQL parameter limits
+	for i := 0; i < len(names); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(names))
+		batchNames := names[i:end]
+
+		var labels []*entities.Label
+		err := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("scientific_name IN ?", batchNames).
+			Find(&labels).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load labels: %w", err)
+		}
+
+		for _, label := range labels {
+			result[label.ScientificName] = append(result[label.ScientificName], label)
 		}
 	}
-
 	return result, nil
 }
 
-// fetchRawLabelsChunk fetches raw_labels for a single chunk of pairs.
-func (r *labelRepository) fetchRawLabelsChunk(ctx context.Context, pairs []ModelLabelPair, result map[string]string) error {
-	type modelLabelRaw struct {
-		ModelID  uint
-		LabelID  uint
-		RawLabel string
-	}
-	var rows []modelLabelRaw
+// labelTypeRepository implements LabelTypeRepository.
+type labelTypeRepository struct {
+	db          *gorm.DB
+	useV2Prefix bool
+}
 
-	// Build WHERE clause: (model_id = ? AND label_id = ?) OR ...
-	args := make([]any, 0, len(pairs)*2)
-	var whereBuilder strings.Builder
-	for i, pair := range pairs {
-		if i > 0 {
-			whereBuilder.WriteString(" OR ")
-		}
-		whereBuilder.WriteString("(model_id = ? AND label_id = ?)")
-		args = append(args, pair.ModelID, pair.LabelID)
+// NewLabelTypeRepository creates a new LabelTypeRepository.
+func NewLabelTypeRepository(db *gorm.DB, useV2Prefix bool) LabelTypeRepository {
+	return &labelTypeRepository{
+		db:          db,
+		useV2Prefix: useV2Prefix,
 	}
+}
 
-	err := r.db.WithContext(ctx).Table(r.modelLabelsTable()).
-		Select("model_id, label_id, raw_label").
-		Where(whereBuilder.String(), args...).
-		Scan(&rows).Error
+func (r *labelTypeRepository) tableName() string {
+	if r.useV2Prefix {
+		return tableV2LabelTypes
+	}
+	return tableLabelTypes
+}
+
+func (r *labelTypeRepository) GetByName(ctx context.Context, name string) (*entities.LabelType, error) {
+	var lt entities.LabelType
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("name = ?", name).
+		First(&lt).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrLabelTypeNotFound
+	}
 	if err != nil {
-		return err
+		return nil, err
+	}
+	return &lt, nil
+}
+
+func (r *labelTypeRepository) GetByID(ctx context.Context, id uint) (*entities.LabelType, error) {
+	var lt entities.LabelType
+	err := r.db.WithContext(ctx).Table(r.tableName()).First(&lt, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrLabelTypeNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &lt, nil
+}
+
+func (r *labelTypeRepository) GetAll(ctx context.Context) ([]*entities.LabelType, error) {
+	var types []*entities.LabelType
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Order("name ASC").
+		Find(&types).Error
+	return types, err
+}
+
+//nolint:dupl // intentional similarity with taxonomicClassRepository.GetOrCreate - different types
+func (r *labelTypeRepository) GetOrCreate(ctx context.Context, name string) (*entities.LabelType, error) {
+	var lt entities.LabelType
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("name = ?", name).
+		First(&lt).Error
+	if err == nil {
+		return &lt, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 
-	// Add to result map
-	for _, row := range rows {
-		key := fmt.Sprintf("%d:%d", row.ModelID, row.LabelID)
-		result[key] = row.RawLabel
+	lt = entities.LabelType{Name: name}
+	if err := r.db.WithContext(ctx).Table(r.tableName()).Create(&lt).Error; err != nil {
+		// Race condition - try to fetch again
+		if findErr := r.db.WithContext(ctx).Table(r.tableName()).Where("name = ?", name).First(&lt).Error; findErr != nil {
+			return nil, err
+		}
+	}
+	return &lt, nil
+}
+
+// taxonomicClassRepository implements TaxonomicClassRepository.
+type taxonomicClassRepository struct {
+	db          *gorm.DB
+	useV2Prefix bool
+}
+
+// NewTaxonomicClassRepository creates a new TaxonomicClassRepository.
+func NewTaxonomicClassRepository(db *gorm.DB, useV2Prefix bool) TaxonomicClassRepository {
+	return &taxonomicClassRepository{
+		db:          db,
+		useV2Prefix: useV2Prefix,
+	}
+}
+
+func (r *taxonomicClassRepository) tableName() string {
+	if r.useV2Prefix {
+		return tableV2TaxonomicClasses
+	}
+	return tableTaxonomicClasses
+}
+
+func (r *taxonomicClassRepository) GetByName(ctx context.Context, name string) (*entities.TaxonomicClass, error) {
+	var tc entities.TaxonomicClass
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("name = ?", name).
+		First(&tc).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTaxonomicClassNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &tc, nil
+}
+
+func (r *taxonomicClassRepository) GetByID(ctx context.Context, id uint) (*entities.TaxonomicClass, error) {
+	var tc entities.TaxonomicClass
+	err := r.db.WithContext(ctx).Table(r.tableName()).First(&tc, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTaxonomicClassNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &tc, nil
+}
+
+func (r *taxonomicClassRepository) GetAll(ctx context.Context) ([]*entities.TaxonomicClass, error) {
+	var classes []*entities.TaxonomicClass
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Order("name ASC").
+		Find(&classes).Error
+	return classes, err
+}
+
+//nolint:dupl // intentional similarity with labelTypeRepository.GetOrCreate - different types
+func (r *taxonomicClassRepository) GetOrCreate(ctx context.Context, name string) (*entities.TaxonomicClass, error) {
+	var tc entities.TaxonomicClass
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("name = ?", name).
+		First(&tc).Error
+	if err == nil {
+		return &tc, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 
-	return nil
+	tc = entities.TaxonomicClass{Name: name}
+	if err := r.db.WithContext(ctx).Table(r.tableName()).Create(&tc).Error; err != nil {
+		// Race condition - try to fetch again
+		if findErr := r.db.WithContext(ctx).Table(r.tableName()).Where("name = ?", name).First(&tc).Error; findErr != nil {
+			return nil, err
+		}
+	}
+	return &tc, nil
 }
