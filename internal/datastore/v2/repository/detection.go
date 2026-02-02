@@ -107,7 +107,8 @@ type DetectionRepository interface {
 	GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, limit int) ([]SpeciesCount, error)
 
 	// GetHourlyOccurrences returns detection counts by hour (0-23) for a label.
-	GetHourlyOccurrences(ctx context.Context, labelID uint, start, end int64) ([24]int, error)
+	// minConfidence filters detections by minimum confidence threshold.
+	GetHourlyOccurrences(ctx context.Context, labelID uint, start, end int64, minConfidence float64) ([24]int, error)
 
 	// GetDailyOccurrences returns daily detection counts for a label.
 	GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64) ([]DailyCount, error)

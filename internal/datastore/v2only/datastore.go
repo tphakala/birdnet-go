@@ -800,13 +800,19 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 	startTime := t.Unix()
 	endTime := t.Add(24 * time.Hour).Unix()
 
-	// Use the first label ID (aggregation across models if needed would be done differently)
-	result, err := ds.detection.GetHourlyOccurrences(ctx, labelIDs[0], startTime, endTime)
-	if err != nil {
-		return hourly, err
+	// Aggregate across all label IDs (multi-model support)
+	var combined [24]int
+	for _, labelID := range labelIDs {
+		result, err := ds.detection.GetHourlyOccurrences(ctx, labelID, startTime, endTime, minConfidenceNormalized)
+		if err != nil {
+			return hourly, err
+		}
+		for i := range 24 {
+			combined[i] += result[i]
+		}
 	}
 
-	return result, nil
+	return combined, nil
 }
 
 // SpeciesDetections retrieves detections for a species.
@@ -1712,6 +1718,7 @@ func (ds *Datastore) GetAllImageCaches(providerName string) ([]datastore.ImageCa
 
 // parseDateRange parses start and end date strings to Unix timestamps.
 // Returns (0, 0) if no dates provided, meaning no date filtering.
+// The end time is exclusive (start of next day) to be used with < in queries.
 func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64, err error) {
 	if startDate != "" {
 		t, parseErr := time.ParseInLocation("2006-01-02", startDate, ds.timezone)
@@ -1725,8 +1732,8 @@ func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64
 		if parseErr != nil {
 			return 0, 0, fmt.Errorf("invalid end date format: %w", parseErr)
 		}
-		// End of day for end date
-		end = t.Add(24*time.Hour - time.Second).Unix()
+		// End time is exclusive (start of next day) - use with < in queries
+		end = t.Add(24 * time.Hour).Unix()
 	}
 	return start, end, nil
 }
