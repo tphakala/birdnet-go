@@ -691,9 +691,16 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 	return results, err
 }
 
-// GetHourlyOccurrences returns detection counts by hour (0-23) for a label.
-func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelID uint, start, end int64) ([24]int, error) {
+// GetHourlyOccurrences returns detection counts by hour (0-23) for the given labels.
+// Aggregates across all provided label IDs in a single query (multi-model support).
+// minConfidence filters detections by minimum confidence threshold.
+func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) ([24]int, error) {
 	var counts [24]int
+
+	// Return zero array for empty input
+	if len(labelIDs) == 0 {
+		return counts, nil
+	}
 
 	type hourCount struct {
 		Hour  int
@@ -705,7 +712,7 @@ func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelID 
 	hourExpr := r.hourFromUnixExpr("detected_at")
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
-		Where("label_id = ? AND detected_at >= ? AND detected_at <= ?", labelID, start, end).
+		Where("label_id IN ? AND detected_at >= ? AND detected_at < ? AND confidence >= ?", labelIDs, start, end, minConfidence).
 		Group("hour").
 		Scan(&results).Error
 
@@ -1199,12 +1206,13 @@ func (r *detectionRepository) GetLocksByDetectionIDs(ctx context.Context, detect
 // ============================================================================
 
 // GetSpeciesSummary returns summary statistics for all species.
+// Groups by scientific_name to aggregate across all models for the same species.
 func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error) {
 	var results []SpeciesSummaryData
 
 	query := r.db.WithContext(ctx).Table(r.tableName()).
 		Select(fmt.Sprintf(`
-			%s.label_id,
+			MIN(%s.label_id) as label_id,
 			%s.scientific_name,
 			COUNT(*) as total_detections,
 			MIN(%s.detected_at) as first_detection,
@@ -1214,13 +1222,13 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 		`, r.tableName(), r.labelsTable(), r.tableName(), r.tableName(), r.tableName(), r.tableName())).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id",
 			r.labelsTable(), r.labelsTable(), r.tableName())).
-		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at <= ?", r.tableName(), r.tableName()), start, end)
+		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at < ?", r.tableName(), r.tableName()), start, end)
 
 	if modelID != nil {
 		query = query.Where(fmt.Sprintf("%s.model_id = ?", r.tableName()), *modelID)
 	}
 
-	err := query.Group("label_id").
+	err := query.Group(fmt.Sprintf("%s.scientific_name", r.labelsTable())).
 		Order("total_detections DESC").
 		Scan(&results).Error
 
@@ -1231,9 +1239,11 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error) {
 	var results []HourlyDistributionData
 
+	// Use hourFromUnixExpr for correct local timezone conversion
+	hourExpr := r.hourFromUnixExpr("detected_at")
 	query := r.db.WithContext(ctx).Table(r.tableName()).
-		Select("(detected_at / 3600) % 24 as hour, COUNT(*) as count").
-		Where("detected_at >= ? AND detected_at <= ?", start, end)
+		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
+		Where("detected_at >= ? AND detected_at < ?", start, end)
 
 	if labelID != nil {
 		query = query.Where("label_id = ?", *labelID)
@@ -1262,7 +1272,7 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 			COUNT(DISTINCT label_id) as unique_species,
 			AVG(confidence) as avg_confidence
 		`, dateExpr)).
-		Where("detected_at >= ? AND detected_at <= ?", start, end)
+		Where("detected_at >= ? AND detected_at < ?", start, end)
 
 	if labelID != nil {
 		query = query.Where("label_id = ?", *labelID)
@@ -1297,51 +1307,52 @@ func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period str
 }
 
 // GetNewSpecies returns species detected for the first time ever within the range.
+// Groups by scientific_name to aggregate across all models for the same species.
 // Uses MIN(id) as tie-breaker to avoid duplicates when multiple detections share the same timestamp.
 func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error) {
 	var results []NewSpeciesData
 
-	// Find species where first detection is within the range
-	// Include MIN(id) to get a unique detection per label when timestamps tie
-	subquery := r.db.WithContext(ctx).Table(r.tableName()).
-		Select("label_id, MIN(detected_at) as first_detected").
-		Group("label_id")
+	// Use raw SQL to properly group by scientific_name across all label IDs
+	// This finds species where their lifetime first detection is within the requested range.
+	//
+	// Approach: Use a derived table to compute lifetime first detection per species,
+	// then filter and join back to get detection details. This is O(n) instead of
+	// the O(n²) correlated subquery approach.
+	rawSQL := fmt.Sprintf(`
+		SELECT
+			MIN(d.label_id) as label_id,
+			species_first.scientific_name,
+			species_first.lifetime_first as first_detected,
+			MIN(d.id) as detection_id,
+			MAX(d.confidence) as confidence
+		FROM (
+			SELECT l2.scientific_name, MIN(d2.detected_at) as lifetime_first
+			FROM %s d2
+			JOIN %s l2 ON l2.id = d2.label_id
+			GROUP BY l2.scientific_name
+			HAVING MIN(d2.detected_at) >= ? AND MIN(d2.detected_at) < ?
+		) species_first
+		JOIN %s l ON l.scientific_name = species_first.scientific_name
+		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first
+		GROUP BY species_first.scientific_name, species_first.lifetime_first
+		ORDER BY first_detected DESC
+		LIMIT ? OFFSET ?
+	`, r.tableName(), r.labelsTable(), r.labelsTable(), r.tableName())
 
-	// Inner subquery to get the specific detection_id using the tie-breaker
-	detSubquery := r.db.WithContext(ctx).Table(r.tableName()).
-		Select("label_id, MIN(id) as first_detection_id, detected_at").
-		Group("label_id, detected_at")
-
-	err := r.db.WithContext(ctx).Table("(?) as firsts", subquery).
-		Select(fmt.Sprintf(`
-			DISTINCT firsts.label_id,
-			%s.scientific_name,
-			firsts.first_detected,
-			det_ids.first_detection_id as detection_id,
-			%s.confidence
-		`, r.labelsTable(), r.tableName())).
-		Joins(fmt.Sprintf("JOIN %s ON %s.id = firsts.label_id",
-			r.labelsTable(), r.labelsTable())).
-		Joins("JOIN (?) as det_ids ON det_ids.label_id = firsts.label_id AND det_ids.detected_at = firsts.first_detected", detSubquery).
-		Joins(fmt.Sprintf("JOIN %s ON %s.id = det_ids.first_detection_id",
-			r.tableName(), r.tableName())).
-		Where("firsts.first_detected >= ? AND firsts.first_detected <= ?", start, end).
-		Order("firsts.first_detected DESC").
-		Limit(limit).
-		Offset(offset).
-		Scan(&results).Error
-
+	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
 	return results, err
 }
 
 // GetSpeciesFirstDetectionInPeriod returns the first detection of each species within a date range.
+// Groups by scientific_name to aggregate across all models for the same species.
 // Uses ROW_NUMBER() window function to correctly identify the detection with the earliest timestamp
-// per label, with id as tie-breaker for deterministic results.
+// per species, with id as tie-breaker for deterministic results.
 func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	// Use window function to rank detections per label by timestamp (with id as tie-breaker)
+	// Use window function to rank detections per species (by scientific_name) by timestamp
 	// This ensures we get the actual detection_id that corresponds to the first_detected time
+	// Partitioning by scientific_name aggregates across all models for the same species
 	rawSQL := fmt.Sprintf(`
 		SELECT label_id, scientific_name, first_detected, detection_id
 		FROM (
@@ -1350,10 +1361,10 @@ func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Conte
 				l.scientific_name,
 				d.detected_at as first_detected,
 				d.id as detection_id,
-				ROW_NUMBER() OVER (PARTITION BY d.label_id ORDER BY d.detected_at ASC, d.id ASC) as rn
+				ROW_NUMBER() OVER (PARTITION BY l.scientific_name ORDER BY d.detected_at ASC, d.id ASC) as rn
 			FROM %s d
 			JOIN %s l ON l.id = d.label_id
-			WHERE d.detected_at >= ? AND d.detected_at <= ?
+			WHERE d.detected_at >= ? AND d.detected_at < ?
 		) ranked
 		WHERE rn = 1
 		ORDER BY first_detected ASC
