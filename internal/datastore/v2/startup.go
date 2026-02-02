@@ -3,12 +3,13 @@ package v2
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -57,8 +58,7 @@ func CheckMigrationStateBeforeStartup(settings *conf.Settings) StartupState {
 // checkSQLiteMigrationState checks migration state for SQLite deployments.
 func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	configuredPath := settings.Output.SQLite.Path
-	dataDir := filepath.Dir(configuredPath)
-	v2MigrationPath := filepath.Join(dataDir, "birdnet_v2.db")
+	v2MigrationPath := V2MigrationPathFromConfigured(configuredPath)
 
 	// Check if configured database exists (could be legacy OR fresh v2)
 	configuredExists := true
@@ -404,4 +404,132 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	}
 
 	return state.State == entities.MigrationStatusCompleted
+}
+
+// CheckAndConsolidateAtStartup checks for and performs database consolidation at startup.
+// This should be called BEFORE CheckMigrationStateBeforeStartup to ensure the database
+// is at the configured path after migration.
+//
+// The function handles two scenarios:
+// 1. Interrupted consolidation: Resume if state file exists
+// 2. Pending consolidation: V2 at migration path with COMPLETED status but configured path is legacy
+//
+// For SQLite only - MySQL doesn't need consolidation (uses table prefixes).
+//
+// Parameters:
+//   - configuredPath: The user's configured database path
+//   - log: Logger for progress messages
+//
+// Returns:
+//   - consolidated: true if consolidation was performed
+//   - error: any error that occurred
+func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (consolidated bool, err error) {
+	dataDir := GetDataDirFromLegacyPath(configuredPath)
+	if dataDir == "" {
+		// In-memory database, no consolidation needed
+		return false, nil
+	}
+
+	// Step 1: Check for interrupted consolidation
+	resumed, newPath, err := ResumeConsolidation(dataDir, log)
+	if err != nil {
+		return false, fmt.Errorf("failed to check/resume consolidation: %w", err)
+	}
+	if resumed {
+		log.Info("resumed interrupted consolidation",
+			logger.String("path", newPath))
+		return true, nil
+	}
+
+	// Step 2: Check if consolidation is needed
+	v2MigrationPath := V2MigrationPathFromConfigured(configuredPath)
+
+	// Check if v2 migration database exists
+	if _, err := os.Stat(v2MigrationPath); os.IsNotExist(err) {
+		// No v2 at migration path, nothing to consolidate
+		return false, nil
+	}
+
+	// Check if v2 migration database has COMPLETED status
+	if !CheckSQLiteHasV2Schema(v2MigrationPath) {
+		// V2 exists but migration not complete, no consolidation
+		return false, nil
+	}
+
+	// Check if configured path already has v2 schema (already consolidated)
+	if CheckSQLiteHasV2Schema(configuredPath) {
+		// Already consolidated, clean up orphaned migration database
+		log.Info("configured path already has v2 schema, cleaning up orphaned migration database",
+			logger.String("migration_path", v2MigrationPath))
+		// Best effort removal of orphaned v2 migration database
+		_ = os.Remove(v2MigrationPath)
+		cleanupWALFiles(v2MigrationPath)
+		return false, nil
+	}
+
+	// Step 3: Perform consolidation
+	log.Info("performing database consolidation at startup",
+		logger.String("v2_migration_path", v2MigrationPath),
+		logger.String("configured_path", configuredPath))
+
+	// Generate backup path for legacy database
+	backupPath := GenerateBackupPath(configuredPath)
+
+	// Write consolidation state file
+	state := &ConsolidationState{
+		LegacyPath:     configuredPath,
+		V2Path:         v2MigrationPath,
+		BackupPath:     backupPath,
+		ConfiguredPath: configuredPath,
+		StartedAt:      time.Now(),
+	}
+	if err := WriteConsolidationState(dataDir, state); err != nil {
+		return false, fmt.Errorf("failed to write consolidation state: %w", err)
+	}
+
+	// Clean up any WAL/SHM files (defensive)
+	cleanupWALFiles(configuredPath)
+	cleanupWALFiles(v2MigrationPath)
+
+	// Rename legacy → backup (if legacy exists)
+	if _, err := os.Stat(configuredPath); err == nil {
+		log.Debug("renaming legacy database to backup",
+			logger.String("from", configuredPath),
+			logger.String("to", backupPath))
+		if err := os.Rename(configuredPath, backupPath); err != nil {
+			_ = DeleteConsolidationState(dataDir)
+			return false, fmt.Errorf("failed to rename legacy database: %w", err)
+		}
+	}
+
+	// Rename v2 → configured path
+	log.Debug("renaming v2 database to configured path",
+		logger.String("from", v2MigrationPath),
+		logger.String("to", configuredPath))
+	if err := os.Rename(v2MigrationPath, configuredPath); err != nil {
+		// Rollback: restore legacy from backup if it existed
+		if _, statErr := os.Stat(backupPath); statErr == nil {
+			log.Warn("v2 rename failed, rolling back",
+				logger.Error(err))
+			if rollbackErr := os.Rename(backupPath, configuredPath); rollbackErr != nil {
+				log.Error("rollback failed - manual intervention required",
+					logger.Error(rollbackErr))
+				// Return without deleting state file to allow recovery on next boot
+				return false, fmt.Errorf("failed to rename v2 database (rollback also failed: %w): %w", rollbackErr, err)
+			}
+		}
+		_ = DeleteConsolidationState(dataDir)
+		return false, fmt.Errorf("failed to rename v2 database: %w", err)
+	}
+
+	// Delete consolidation state file
+	if err := DeleteConsolidationState(dataDir); err != nil {
+		log.Warn("failed to delete consolidation state file", logger.Error(err))
+	}
+
+	log.Info("database consolidation completed at startup",
+		logger.String("database_path", configuredPath),
+		logger.String("backup_path", backupPath))
+
+	return true, nil
 }

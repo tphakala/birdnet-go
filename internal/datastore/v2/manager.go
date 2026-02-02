@@ -43,17 +43,22 @@ type Manager interface {
 
 // Config holds database configuration for the v2 manager.
 type Config struct {
-	// DataDir is the directory containing database files (SQLite).
-	// Used for migration mode where database is at DataDir/birdnet_v2.db.
-	DataDir string
+	// ConfiguredPath is the user's configured database path (e.g., /data/birdnet.db).
+	// Used for migration mode to derive the v2 path (e.g., /data/birdnet_v2.db).
+	// If DirectPath is set, ConfiguredPath is ignored.
+	ConfiguredPath string
 	// DirectPath specifies the exact database path to use (for fresh installs).
-	// If set, this path is used directly instead of DataDir/birdnet_v2.db.
+	// If set, this path is used directly instead of deriving from ConfiguredPath.
 	// This allows fresh installations to use the configured path without _v2 suffix.
 	DirectPath string
 	// Debug enables verbose logging.
 	Debug bool
 	// Logger is the project logger for GORM to use.
 	Logger logger.Logger
+
+	// Deprecated: Use ConfiguredPath instead. DataDir is kept for backwards compatibility
+	// during migration. When set, it's used to construct ConfiguredPath if not provided.
+	DataDir string
 }
 
 // SQLiteManager handles the v2 normalized database for SQLite.
@@ -64,15 +69,22 @@ type SQLiteManager struct {
 
 // NewSQLiteManager creates a new v2 SQLite database manager.
 // If DirectPath is set, uses that exact path (for fresh installs).
-// Otherwise, uses DataDir/birdnet_v2.db (for migration mode).
+// Otherwise, derives the v2 migration path from ConfiguredPath (for migration mode).
 func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	var dbPath string
-	if cfg.DirectPath != "" {
-		// Fresh install: use exact path provided
+	switch {
+	case cfg.DirectPath != "":
+		// Fresh install or post-consolidation: use exact path provided
 		dbPath = cfg.DirectPath
-	} else {
-		// Migration mode: use _v2 suffix
-		dbPath = filepath.Join(cfg.DataDir, "birdnet_v2.db")
+	case cfg.ConfiguredPath != "":
+		// Migration mode: derive v2 path from configured path
+		dbPath = V2MigrationPathFromConfigured(cfg.ConfiguredPath)
+	case cfg.DataDir != "":
+		// Backwards compatibility: derive from legacy configured path pattern
+		// Assumes configured path was DataDir/birdnet.db
+		dbPath = V2MigrationPathFromConfigured(filepath.Join(cfg.DataDir, "birdnet.db"))
+	default:
+		return nil, fmt.Errorf("either DirectPath, ConfiguredPath, or DataDir must be set")
 	}
 
 	// Create GORM logger using the adapter if a logger is provided
@@ -284,12 +296,22 @@ func (m *SQLiteManager) TablePrefix() string {
 	return ""
 }
 
-// ExistsFromPath checks if a v2 database exists at the given data directory.
+// ExistsFromPath checks if a v2 migration database exists for the given configured path.
+// This derives the v2 migration path and checks if that file exists.
 // This is a helper function for detecting database state before creating a manager.
-func ExistsFromPath(dataDir string) bool {
-	dbPath := filepath.Join(dataDir, "birdnet_v2.db")
-	_, err := os.Stat(dbPath)
+func ExistsFromPath(configuredPath string) bool {
+	v2Path := V2MigrationPathFromConfigured(configuredPath)
+	_, err := os.Stat(v2Path)
 	return err == nil
+}
+
+// ExistsFromDataDir checks if a v2 migration database exists at the given data directory.
+// This is a backwards-compatible helper that assumes configured path is DataDir/birdnet.db.
+//
+// Deprecated: Use ExistsFromPath with the actual configured path instead.
+func ExistsFromDataDir(dataDir string) bool {
+	configuredPath := filepath.Join(dataDir, "birdnet.db")
+	return ExistsFromPath(configuredPath)
 }
 
 // GetDataDirFromLegacyPath extracts the data directory from a legacy database path.
