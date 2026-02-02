@@ -800,19 +800,8 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 	startTime := t.Unix()
 	endTime := t.Add(24 * time.Hour).Unix()
 
-	// Aggregate across all label IDs (multi-model support)
-	var combined [24]int
-	for _, labelID := range labelIDs {
-		result, err := ds.detection.GetHourlyOccurrences(ctx, labelID, startTime, endTime, minConfidenceNormalized)
-		if err != nil {
-			return hourly, err
-		}
-		for i := range 24 {
-			combined[i] += result[i]
-		}
-	}
-
-	return combined, nil
+	// Single query with IN clause for all label IDs (multi-model support)
+	return ds.detection.GetHourlyOccurrences(ctx, labelIDs, startTime, endTime, minConfidenceNormalized)
 }
 
 // SpeciesDetections retrieves detections for a species.

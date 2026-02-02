@@ -691,10 +691,16 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 	return results, err
 }
 
-// GetHourlyOccurrences returns detection counts by hour (0-23) for a label.
+// GetHourlyOccurrences returns detection counts by hour (0-23) for the given labels.
+// Aggregates across all provided label IDs in a single query (multi-model support).
 // minConfidence filters detections by minimum confidence threshold.
-func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelID uint, start, end int64, minConfidence float64) ([24]int, error) {
+func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) ([24]int, error) {
 	var counts [24]int
+
+	// Return zero array for empty input
+	if len(labelIDs) == 0 {
+		return counts, nil
+	}
 
 	type hourCount struct {
 		Hour  int
@@ -706,7 +712,7 @@ func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelID 
 	hourExpr := r.hourFromUnixExpr("detected_at")
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
-		Where("label_id = ? AND detected_at >= ? AND detected_at < ? AND confidence >= ?", labelID, start, end, minConfidence).
+		Where("label_id IN ? AND detected_at >= ? AND detected_at < ? AND confidence >= ?", labelIDs, start, end, minConfidence).
 		Group("hour").
 		Scan(&results).Error
 
