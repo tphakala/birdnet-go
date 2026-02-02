@@ -757,7 +757,7 @@
         "title": "Migración de base de datos",
         "description": "Migrar del esquema heredado al esquema v2 normalizado",
         "completedTitle": "Migración completada",
-        "completedNote": "Su base de datos ha sido migrada exitosamente al nuevo esquema. Su sistema está ahora listo para las próximas funciones que requieren la base de datos normalizada. Nota: La nueva base de datos es más pequeña porque almacena los datos de manera más eficiente - esto es normal y todos sus datos están preservados.",
+        "completedNote": "Su base de datos ha sido migrada exitosamente al nuevo esquema. Por favor reinicie BirdNET-Go para cambiar a la nueva base de datos. Nota: La nueva base de datos es más pequeña porque almacena los datos de manera más eficiente - esto es normal y todos sus datos están preservados.",
         "status": {
           "idle": "Listo para iniciar",
           "initializing": "Inicializando",

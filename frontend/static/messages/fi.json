@@ -757,7 +757,7 @@
         "title": "Tietokantamigraatio",
         "description": "Migroi vanhasta skeemasta normalisoituun v2-skeemaan",
         "completedTitle": "Migraatio valmis",
-        "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Järjestelmäsi on nyt valmis tulevia ominaisuuksia varten, jotka vaativat normalisoidun tietokannan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
+        "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
         "status": {
           "idle": "Valmis aloitettavaksi",
           "initializing": "Alustus",

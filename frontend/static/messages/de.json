@@ -757,7 +757,7 @@
         "title": "Datenbankmigration",
         "description": "Von Legacy-Schema zu normalisiertem v2-Schema migrieren",
         "completedTitle": "Migration abgeschlossen",
-        "completedNote": "Ihre Datenbank wurde erfolgreich auf das neue Schema migriert. Ihr System ist jetzt bereit für zukünftige Funktionen, die die normalisierte Datenbank erfordern. Hinweis: Die neue Datenbank ist kleiner, weil sie Daten effizienter speichert - das ist normal und alle Ihre Daten sind erhalten.",
+        "completedNote": "Ihre Datenbank wurde erfolgreich auf das neue Schema migriert. Bitte starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln. Hinweis: Die neue Datenbank ist kleiner, weil sie Daten effizienter speichert - das ist normal und alle Ihre Daten sind erhalten.",
         "status": {
           "idle": "Bereit zum Starten",
           "initializing": "Initialisierung",

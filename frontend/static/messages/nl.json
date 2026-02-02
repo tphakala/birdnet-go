@@ -757,7 +757,7 @@
         "title": "Databasemigratie",
         "description": "Migreer van oud schema naar genormaliseerd v2 schema",
         "completedTitle": "Migratie voltooid",
-        "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Uw systeem is nu klaar voor toekomstige functies die de genormaliseerde database vereisen. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
+        "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
         "status": {
           "idle": "Klaar om te starten",
           "initializing": "Initialiseren",

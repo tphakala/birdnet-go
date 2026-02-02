@@ -806,7 +806,7 @@
         "description": "Migrate from legacy schema to normalized v2 schema",
         "requiredNote": "Database migration is required for upcoming BirdNET-Go features that rely on the new normalized database schema. New features will not be available until migration is complete.",
         "completedTitle": "Migration Complete",
-        "completedNote": "Your database has been successfully migrated to the new schema. Your system is now ready for upcoming features that require the normalized database. Note: The new database is smaller because it stores data more efficiently - this is expected and all your data is preserved.",
+        "completedNote": "Your database has been successfully migrated to the new schema. Please restart BirdNET-Go to switch to the new database. Note: The new database is smaller because it stores data more efficiently - this is expected and all your data is preserved.",
         "starting": "Starting migration...",
         "status": {
           "idle": "Ready to Start",
