@@ -144,6 +144,19 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Print system details and configuration
 	printSystemDetails(settings)
 
+	// Check for and perform database consolidation if needed (SQLite only)
+	// This moves the v2 database from migration path to configured path after migration completes
+	if settings.Output.SQLite.Enabled {
+		datastoreLog := logger.Global().Module("datastore")
+		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
+		if err != nil {
+			datastoreLog.Error("database consolidation failed", logger.Error(err))
+			// Continue with normal startup - consolidation can be retried
+		} else if consolidated {
+			datastoreLog.Info("database consolidation completed, continuing startup")
+		}
+	}
+
 	// Check migration state before initializing database
 	// This allows us to skip the legacy database when migration is complete
 	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
@@ -1856,10 +1869,11 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	}
 
 	// Create v2 database manager
+	// Use ConfiguredPath to properly derive v2 migration path from configured filename
 	v2Manager, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
-		DataDir: dataDir,
-		Debug:   settings.Debug,
-		Logger:  log,
+		ConfiguredPath: settings.Output.SQLite.Path,
+		Debug:          settings.Debug,
+		Logger:         log,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create v2 database manager: %w", err)
@@ -1963,13 +1977,12 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	switch {
 	case settings.Output.SQLite.Enabled:
 		configuredPath := settings.Output.SQLite.Path
-		dataDir := datastoreV2.GetDataDirFromLegacyPath(configuredPath)
-		migrationPath := filepath.Join(dataDir, "birdnet_v2.db")
+		migrationPath := datastoreV2.V2MigrationPathFromConfigured(configuredPath)
 
-		// Determine if v2 schema is at configured path (fresh) or migration path
+		// Determine if v2 schema is at configured path (fresh/post-consolidation) or migration path
 		if datastoreV2.CheckSQLiteHasV2Schema(configuredPath) {
-			// Fresh install restart: use configured path directly
-			log.Debug("v2 schema found at configured path (fresh install)",
+			// Fresh install restart or post-consolidation: use configured path directly
+			log.Debug("v2 schema found at configured path",
 				logger.String("path", configuredPath))
 			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
 				DirectPath: configuredPath,
@@ -1978,13 +1991,13 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 			})
 			useV2Prefix = false
 		} else {
-			// Post-migration: use migration path
+			// Migration mode: use derived v2 migration path
 			log.Debug("using migration v2 database path",
 				logger.String("path", migrationPath))
 			v2Manager, err = datastoreV2.NewSQLiteManager(datastoreV2.Config{
-				DataDir: dataDir,
-				Debug:   settings.Debug,
-				Logger:  log,
+				ConfiguredPath: configuredPath,
+				Debug:          settings.Debug,
+				Logger:         log,
 			})
 			useV2Prefix = false
 		}

@@ -118,18 +118,19 @@ func TestSQLiteManager_Initialize_Idempotent(t *testing.T) {
 
 func TestSQLiteManager_Exists(t *testing.T) {
 	tmpDir := t.TempDir()
+	configuredPath := filepath.Join(tmpDir, "birdnet.db")
 
 	// Before creating manager, database doesn't exist
-	assert.False(t, ExistsFromPath(tmpDir))
+	assert.False(t, ExistsFromPath(configuredPath))
 
-	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	mgr, err := NewSQLiteManager(Config{ConfiguredPath: configuredPath})
 	require.NoError(t, err)
 
 	// After opening, database exists
 	assert.True(t, mgr.Exists())
 
 	require.NoError(t, mgr.Close())
-	assert.True(t, ExistsFromPath(tmpDir))
+	assert.True(t, ExistsFromPath(configuredPath))
 }
 
 func TestSQLiteManager_Delete(t *testing.T) {
