@@ -514,6 +514,8 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 			if rollbackErr := os.Rename(backupPath, configuredPath); rollbackErr != nil {
 				log.Error("rollback failed - manual intervention required",
 					logger.Error(rollbackErr))
+				// Return without deleting state file to allow recovery on next boot
+				return false, fmt.Errorf("failed to rename v2 database (rollback also failed: %w): %w", rollbackErr, err)
 			}
 		}
 		_ = DeleteConsolidationState(dataDir)

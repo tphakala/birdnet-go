@@ -3,13 +3,13 @@ package v2
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -265,9 +265,18 @@ func ResumeConsolidation(dataDir string, log logger.Logger) (resumed bool, newPa
 		logger.String("backup_path", state.BackupPath))
 
 	// Determine state based on file existence
-	configuredExists := fileExists(state.ConfiguredPath)
-	v2Exists := fileExists(state.V2Path)
-	backupExists := fileExists(state.BackupPath)
+	configuredExists, err := fileExists(state.ConfiguredPath)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to stat configured path: %w", err)
+	}
+	v2Exists, err := fileExists(state.V2Path)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to stat v2 path: %w", err)
+	}
+	backupExists, err := fileExists(state.BackupPath)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to stat backup path: %w", err)
+	}
 
 	// Check if configured path has v2 schema (consolidation completed but state file not deleted)
 	if configuredExists && CheckSQLiteHasV2Schema(state.ConfiguredPath) {
@@ -308,8 +317,14 @@ func ResumeConsolidation(dataDir string, log logger.Logger) (resumed bool, newPa
 	return false, "", nil
 }
 
-// fileExists returns true if the file exists.
-func fileExists(path string) bool {
+// fileExists checks if a file exists, distinguishing between not-found and I/O errors.
+func fileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
