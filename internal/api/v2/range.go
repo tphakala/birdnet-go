@@ -47,7 +47,7 @@ func parseTestDate(dateStr string) (time.Time, error) {
 	if dateStr == "" {
 		return time.Now(), nil
 	}
-	return time.Parse("2006-01-02", dateStr)
+	return time.Parse(time.DateOnly, dateStr)
 }
 
 // calculateWeek calculates the BirdNET week number from a date.

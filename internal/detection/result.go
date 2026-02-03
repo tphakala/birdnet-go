@@ -73,11 +73,11 @@ type AdditionalResult struct {
 // Date returns the detection date in YYYY-MM-DD format.
 // This is a convenience method for APIs that need the legacy date format.
 func (r *Result) Date() string {
-	return r.Timestamp.Format("2006-01-02")
+	return r.Timestamp.Format(time.DateOnly)
 }
 
 // Time returns the detection time in HH:MM:SS format.
 // This is a convenience method for APIs that need the legacy time format.
 func (r *Result) Time() string {
-	return r.Timestamp.Format("15:04:05")
+	return r.Timestamp.Format(time.TimeOnly)
 }

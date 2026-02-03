@@ -561,7 +561,7 @@ func (dw *DualWriteRepository) GetHourly(ctx context.Context, date, hour string,
 			return dw.legacy.GetHourly(ctx, date, hour, duration, limit, offset)
 		}
 
-		t, err := time.Parse("2006-01-02", date)
+		t, err := time.Parse(time.DateOnly, date)
 		if err != nil {
 			return dw.legacy.GetHourly(ctx, date, hour, duration, limit, offset)
 		}

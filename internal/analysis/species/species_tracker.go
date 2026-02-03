@@ -184,7 +184,7 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		logger.Int("window_days", settings.NewSpeciesWindowDays),
 		logger.Bool("yearly_enabled", settings.YearlyTracking.Enabled),
 		logger.Bool("seasonal_enabled", settings.SeasonalTracking.Enabled),
-		logger.String("current_time", now.Format("2006-01-02 15:04:05")))
+		logger.String("current_time", now.Format(time.DateTime)))
 
 	tracker := &SpeciesTracker{
 		// Lifetime tracking

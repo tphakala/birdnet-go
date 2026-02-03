@@ -49,7 +49,7 @@ func validateDateParam(dateStr, paramName string) error {
 
 	// Try parsing the date to catch invalid dates like 2023-02-30
 	// This also catches dates with timezone annotations like 2024-04-05Z
-	_, err := time.Parse("2006-01-02", dateStr)
+	_, err := time.Parse(time.DateOnly, dateStr)
 	if err != nil {
 		return fmt.Errorf("invalid date value for %s: %w", paramName, err)
 	}
@@ -1467,15 +1467,15 @@ func (c *Controller) GetDetectionTimeOfDay(ctx echo.Context) error {
 // calculateTimeOfDay determines the time of day based on the detection time and sun events
 func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
 	// Convert all times to the same format for comparison
-	detTime := detectionTime.Format("15:04:05")
-	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
-	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+	detTime := detectionTime.Format(time.TimeOnly)
+	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
+	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
 
 	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-sunEventWindowMinutes * time.Minute).Format("15:04:05")
-	sunriseEnd := sunEvents.Sunrise.Add(sunEventWindowMinutes * time.Minute).Format("15:04:05")
-	sunsetStart := sunEvents.Sunset.Add(-sunEventWindowMinutes * time.Minute).Format("15:04:05")
-	sunsetEnd := sunEvents.Sunset.Add(sunEventWindowMinutes * time.Minute).Format("15:04:05")
+	sunriseStart := sunEvents.Sunrise.Add(-sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
+	sunriseEnd := sunEvents.Sunrise.Add(sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
+	sunsetStart := sunEvents.Sunset.Add(-sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
+	sunsetEnd := sunEvents.Sunset.Add(sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
 
 	switch {
 	case detTime >= sunriseStart && detTime <= sunriseEnd:

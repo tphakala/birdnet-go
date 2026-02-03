@@ -38,20 +38,20 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	require.NoError(t, err, "Failed to calculate sun times")
 
 	// Log the calculated times for debugging
-	t.Logf("Test date: %s (timezone: %s)", testDate.Format("2006-01-02"), testDate.Location())
-	t.Logf("Calculated sunrise: %s", sunTimes.Sunrise.Format("15:04:05"))
-	t.Logf("Calculated sunset: %s", sunTimes.Sunset.Format("15:04:05"))
+	t.Logf("Test date: %s (timezone: %s)", testDate.Format(time.DateOnly), testDate.Location())
+	t.Logf("Calculated sunrise: %s", sunTimes.Sunrise.Format(time.TimeOnly))
+	t.Logf("Calculated sunset: %s", sunTimes.Sunset.Format(time.TimeOnly))
 
 	// Define the 30-minute window
 	window := 30 * time.Minute
 
 	// Log the windows for debugging
 	t.Logf("Sunrise window: %s to %s",
-		sunTimes.Sunrise.Add(-window).Format("15:04:05"),
-		sunTimes.Sunrise.Add(window).Format("15:04:05"))
+		sunTimes.Sunrise.Add(-window).Format(time.TimeOnly),
+		sunTimes.Sunrise.Add(window).Format(time.TimeOnly))
 	t.Logf("Sunset window: %s to %s",
-		sunTimes.Sunset.Add(-window).Format("15:04:05"),
-		sunTimes.Sunset.Add(window).Format("15:04:05"))
+		sunTimes.Sunset.Add(-window).Format(time.TimeOnly),
+		sunTimes.Sunset.Add(window).Format(time.TimeOnly))
 
 	// Dynamically generate test times based on calculated sunrise/sunset
 	// This makes the test work in any timezone
@@ -199,12 +199,12 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	}
 
 	// Insert test detections with dynamically calculated times
-	dateStr := testDate.Format("2006-01-02")
+	dateStr := testDate.Format(time.DateOnly)
 	insertedTimes := make(map[string]bool) // Track what we inserted
 
 	for _, tc := range testCases {
 		testTime := tc.reference.Add(tc.timeOffset)
-		timeStr := testTime.Format("15:04:05")
+		timeStr := testTime.Format(time.TimeOnly)
 
 		// Skip if we've already inserted this exact time (avoid duplicates)
 		if insertedTimes[timeStr] {
@@ -238,7 +238,7 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	// Create a map of returned timestamps for easy lookup
 	returnedTimes := make(map[string]bool)
 	for _, detection := range results {
-		timeStr := detection.Timestamp.Format("15:04:05")
+		timeStr := detection.Timestamp.Format(time.TimeOnly)
 		returnedTimes[timeStr] = true
 		t.Logf("Night filter returned: %s", timeStr)
 	}
@@ -254,7 +254,7 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	// Run subtests to verify Night filter behavior
 	for _, tc := range testCases {
 		testTime := tc.reference.Add(tc.timeOffset)
-		timeStr := testTime.Format("15:04:05")
+		timeStr := testTime.Format(time.TimeOnly)
 
 		// Skip duplicate time checks
 		if !insertedTimes[timeStr] {

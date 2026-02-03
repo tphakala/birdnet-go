@@ -61,19 +61,19 @@ func TestSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
 	// Verify it affects year calculations
 	now := time.Now()
 	start, _ := tracker.getYearDateRange(now)
-	parsedStart, _ := time.Parse("2006-01-02", start)
+	parsedStart, _ := time.Parse(time.DateOnly, start)
 	assert.Equal(t, testYear, parsedStart.Year())
 
 	// Test with different year
 	tracker.SetCurrentYearForTesting(2025)
 	start, _ = tracker.getYearDateRange(now)
-	parsedStart, _ = time.Parse("2006-01-02", start)
+	parsedStart, _ = time.Parse(time.DateOnly, start)
 	assert.Equal(t, 2025, parsedStart.Year())
 
 	// Reset to 0 should use current year
 	tracker.SetCurrentYearForTesting(0)
 	start, _ = tracker.getYearDateRange(now)
-	parsedStart, _ = time.Parse("2006-01-02", start)
+	parsedStart, _ = time.Parse(time.DateOnly, start)
 	currentYear := time.Now().Year()
 	assert.Equal(t, currentYear, parsedStart.Year())
 }
@@ -146,12 +146,12 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 			{
 				ScientificName: "Robin",
 				CommonName:     "American Robin",
-				FirstSeenDate:  time.Now().Add(-10 * 24 * time.Hour).Format("2006-01-02"),
+				FirstSeenDate:  time.Now().Add(-10 * 24 * time.Hour).Format(time.DateOnly),
 			},
 			{
 				ScientificName: "Sparrow",
 				CommonName:     "House Sparrow",
-				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"),
+				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format(time.DateOnly),
 			},
 		}
 
@@ -238,12 +238,12 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 			{
 				ScientificName: "Cardinal",
 				CommonName:     "Northern Cardinal",
-				FirstSeenDate:  time.Now().Add(-3 * 24 * time.Hour).Format("2006-01-02"),
+				FirstSeenDate:  time.Now().Add(-3 * 24 * time.Hour).Format(time.DateOnly),
 			},
 			{
 				ScientificName: "BlueJay",
 				CommonName:     "Blue Jay",
-				FirstSeenDate:  time.Now().Add(-1 * 24 * time.Hour).Format("2006-01-02"),
+				FirstSeenDate:  time.Now().Add(-1 * 24 * time.Hour).Format(time.DateOnly),
 			},
 		}
 

@@ -2,6 +2,7 @@ package suncalc
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,7 +68,7 @@ func TestCacheConsistency(t *testing.T) {
 	require.NoError(t, err, "failed to get initial sun event times")
 
 	// Verify cache entry exists
-	dateKey := date.Format("2006-01-02")
+	dateKey := date.Format(time.DateOnly)
 	sc.lock.RLock()
 	entry, exists := sc.cache[dateKey]
 	sc.lock.RUnlock()

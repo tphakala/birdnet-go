@@ -72,7 +72,7 @@ func TestTimezoneParsingBug(t *testing.T) {
 			t.Logf("Problem: %s", tc.problemDescription)
 
 			// Current problematic parsing (assumes UTC)
-			currentParsedTime, err := time.Parse("2006-01-02 15:04:05", dbTimestamp)
+			currentParsedTime, err := time.Parse(time.DateTime, dbTimestamp)
 			require.NoError(t, err, "Should parse database timestamp")
 
 			t.Logf("Current parsing treats as UTC: %s", currentParsedTime.Format(time.RFC3339))
@@ -84,7 +84,7 @@ func TestTimezoneParsingBug(t *testing.T) {
 
 			// What the user sees after timezone conversion
 			userSeesTime := currentParsedTime.In(userLoc)
-			t.Logf("User in %s sees: %s", tc.userTimezone, userSeesTime.Format("2006-01-02 15:04:05"))
+			t.Logf("User in %s sees: %s", tc.userTimezone, userSeesTime.Format(time.DateTime))
 
 			// THE BUG: User sees wrong time due to double timezone conversion
 			// Database has local time -> Parse assumes UTC -> Convert to user timezone = wrong time
@@ -93,14 +93,14 @@ func TestTimezoneParsingBug(t *testing.T) {
 			expectedTime, err := time.ParseInLocation("2006-01-02 15:04:05", dbTimestamp, userLoc)
 			require.NoError(t, err, "Should parse in user location")
 
-			t.Logf("User SHOULD see: %s", expectedTime.Format("2006-01-02 15:04:05"))
+			t.Logf("User SHOULD see: %s", expectedTime.Format(time.DateTime))
 
 			// Validate the problem exists
 			assert.NotEqual(t, expectedTime.Hour(), userSeesTime.Hour(),
 				"Current implementation causes wrong hour due to timezone conversion")
 
 			// Validate what the correct values should be
-			assert.Equal(t, tc.expectedDate, expectedTime.Format("2006-01-02"),
+			assert.Equal(t, tc.expectedDate, expectedTime.Format(time.DateOnly),
 				"Expected date should match database date")
 			assert.Equal(t, tc.expectedHour, expectedTime.Hour(),
 				"Expected hour should match database hour")
@@ -161,7 +161,7 @@ func TestTimezoneParsingFix(t *testing.T) {
 			t.Logf("Parsed as local time in %s: %s", tc.userTimezone, localTime.Format(time.RFC3339))
 
 			// Validate that the fix preserves the database time components
-			assert.Equal(t, "2024-01-15", localTime.Format("2006-01-02"), "Date should be preserved")
+			assert.Equal(t, "2024-01-15", localTime.Format(time.DateOnly), "Date should be preserved")
 			assert.Equal(t, 14, localTime.Hour(), "Hour should be preserved")
 			assert.Equal(t, 30, localTime.Minute(), "Minute should be preserved")
 
@@ -227,7 +227,7 @@ func TestTimezoneEdgeCases(t *testing.T) {
 			dbTimestamp := tc.dbDate + " " + tc.dbTime
 
 			// Current problematic approach
-			currentTime, err := time.Parse("2006-01-02 15:04:05", dbTimestamp)
+			currentTime, err := time.Parse(time.DateTime, dbTimestamp)
 			require.NoError(t, err)
 
 			// What user sees (with timezone conversion)
@@ -239,11 +239,11 @@ func TestTimezoneEdgeCases(t *testing.T) {
 
 			t.Logf("Test case: %s", tc.description)
 			t.Logf("Database: %s", dbTimestamp)
-			t.Logf("Current (wrong): User sees %s", userTime.Format("2006-01-02 15:04:05"))
-			t.Logf("Fixed (correct): User sees %s", fixedTime.Format("2006-01-02 15:04:05"))
+			t.Logf("Current (wrong): User sees %s", userTime.Format(time.DateTime))
+			t.Logf("Fixed (correct): User sees %s", fixedTime.Format(time.DateTime))
 
 			// Validate the fix preserves expected values
-			assert.Equal(t, tc.expectedDate, fixedTime.Format("2006-01-02"), "Date should be preserved")
+			assert.Equal(t, tc.expectedDate, fixedTime.Format(time.DateOnly), "Date should be preserved")
 			assert.Equal(t, tc.expectedHour, fixedTime.Hour(), "Hour should be preserved")
 
 			// Demonstrate the problem exists

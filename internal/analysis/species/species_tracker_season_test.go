@@ -180,7 +180,7 @@ func TestSeasonDateRanges(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			tracker := createTestTracker(t)
-			testTime, err := time.Parse("2006-01-02", tt.currentDate)
+			testTime, err := time.Parse(time.DateOnly, tt.currentDate)
 			require.NoError(t, err)
 			testTime = testTime.Add(17*time.Hour + 42*time.Minute + 39*time.Second)
 
@@ -228,7 +228,7 @@ func TestCurrentSeasonDetection(t *testing.T) {
 		t.Run(tt.date+"_"+tt.expectedSeason, func(t *testing.T) {
 			t.Parallel()
 			tracker := createTestTracker(t)
-			testTime, err := time.Parse("2006-01-02", tt.date)
+			testTime, err := time.Parse(time.DateOnly, tt.date)
 			require.NoError(t, err)
 			testTime = testTime.Add(12 * time.Hour) // Noon
 
@@ -288,7 +288,7 @@ func TestDateValidation(t *testing.T) {
 	}
 
 	for _, dateStr := range testDates {
-		testTime, err := time.Parse("2006-01-02", dateStr)
+		testTime, err := time.Parse(time.DateOnly, dateStr)
 		require.NoError(t, err)
 
 		for seasonName := range tracker.seasons {
@@ -300,8 +300,8 @@ func TestDateValidation(t *testing.T) {
 				seasonName, dateStr, startDate, endDate)
 
 			// Ensure dates are valid format
-			_, err1 := time.Parse("2006-01-02", startDate)
-			_, err2 := time.Parse("2006-01-02", endDate)
+			_, err1 := time.Parse(time.DateOnly, startDate)
+			_, err2 := time.Parse(time.DateOnly, endDate)
 			assert.NoError(t, err1, "Start date should be valid: %s", startDate)
 			assert.NoError(t, err2, "End date should be valid: %s", endDate)
 		}
@@ -371,7 +371,7 @@ func TestSeasonBoundariesFixed(t *testing.T) {
 
 	for _, boundary := range seasonBoundaries {
 		t.Run(boundary.description, func(t *testing.T) {
-			testTime, err := time.Parse("2006-01-02", boundary.date)
+			testTime, err := time.Parse(time.DateOnly, boundary.date)
 			require.NoError(t, err)
 			testTime = testTime.Add(12 * time.Hour)
 

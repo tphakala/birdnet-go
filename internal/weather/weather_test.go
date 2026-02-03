@@ -156,8 +156,8 @@ func TestTimezoneConversionForWeatherStorage(t *testing.T) {
 		// Document the expected behavior
 		t.Logf("UTC time: %v", utcTime.Format(time.RFC3339))
 		t.Logf("Local time: %v", localTime.Format(time.RFC3339))
-		t.Logf("UTC date: %s", utcTime.Format("2006-01-02"))
-		t.Logf("Local date: %s", localTime.Format("2006-01-02"))
+		t.Logf("UTC date: %s", utcTime.Format(time.DateOnly))
+		t.Logf("Local date: %s", localTime.Format(time.DateOnly))
 	})
 }
 
@@ -206,14 +206,14 @@ func TestTimezoneAwareWeatherQuery_BugDemonstration(t *testing.T) {
 
 		// The expected date for this weather data should be 2026-01-13
 		expectedDate := "2026-01-13"
-		actualLocalDate := localMidnight.Format("2006-01-02")
+		actualLocalDate := localMidnight.Format(time.DateOnly)
 
 		assert.Equal(t, expectedDate, actualLocalDate,
 			"Local midnight should be associated with local date, not UTC date")
 
 		// Document the UTC equivalent
 		utcTime := localMidnight.UTC()
-		utcDate := utcTime.Format("2006-01-02")
+		utcDate := utcTime.Format(time.DateOnly)
 
 		t.Logf("Local time: %v (date: %s)", localMidnight.Format(time.RFC3339), actualLocalDate)
 		t.Logf("UTC time: %v (date: %s)", utcTime.Format(time.RFC3339), utcDate)
@@ -238,8 +238,8 @@ func TestTimezoneAwareWeatherQuery_BugDemonstration(t *testing.T) {
 			localTime := time.Date(2026, 1, 13, hour, 30, 0, 0, loc)
 			utcTime := localTime.UTC()
 
-			localDate := localTime.Format("2006-01-02")
-			utcDate := utcTime.Format("2006-01-02")
+			localDate := localTime.Format(time.DateOnly)
+			utcDate := utcTime.Format(time.DateOnly)
 
 			t.Logf("Hour %02d:30 local -> UTC date: %s, Local date: %s",
 				hour, utcDate, localDate)
@@ -266,8 +266,8 @@ func TestTimezoneAwareWeatherQuery_BugDemonstration(t *testing.T) {
 			localTime := time.Date(2026, 1, 13, hour, 30, 0, 0, loc)
 			utcTime := localTime.UTC()
 
-			localDate := localTime.Format("2006-01-02")
-			utcDate := utcTime.Format("2006-01-02")
+			localDate := localTime.Format(time.DateOnly)
+			utcDate := utcTime.Format(time.DateOnly)
 
 			if hour >= 2 { // In UTC+2, hours 02:00+ should have same date
 				assert.Equal(t, localDate, utcDate,
@@ -519,7 +519,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		require.NotNil(t, capturedHW)
 
 		// Verify date is in local time format
-		assert.Equal(t, expectedLocalTime.Format("2006-01-02"), capturedDE.Date)
+		assert.Equal(t, expectedLocalTime.Format(time.DateOnly), capturedDE.Date)
 
 		// Verify time stored is local time (same instant, different zone)
 		assert.True(t, capturedHW.Time.Equal(expectedLocalTime),

@@ -175,7 +175,7 @@ func ParseDateShortcut(shortcut string) (time.Time, error) {
 		return time.Date(now.Year(), now.Month(), now.Day()-30, 0, 0, 0, 0, now.Location()), nil
 	default:
 		// Try parsing as a date
-		return time.Parse("2006-01-02", shortcut)
+		return time.Parse(time.DateOnly, shortcut)
 	}
 }
 
@@ -206,8 +206,8 @@ func applyDateRangeFilter(query *gorm.DB, dateRange *DateRange) *gorm.DB {
 		return query
 	}
 
-	startDate := dateRange.Start.Format("2006-01-02")
-	endDate := dateRange.End.Format("2006-01-02")
+	startDate := dateRange.Start.Format(time.DateOnly)
+	endDate := dateRange.End.Format(time.DateOnly)
 	return query.Where("date >= ? AND date <= ?", startDate, endDate)
 }
 

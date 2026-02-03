@@ -65,7 +65,7 @@ func TestNegativeDaysFixValidation(t *testing.T) {
 		isNew, days := tracker.CheckAndUpdateSpecies(species, testTime)
 
 		t.Logf("Test %d: time=%v, isNew=%v, days=%d",
-			i+1, testTime.Format("15:04:05"), isNew, days)
+			i+1, testTime.Format(time.TimeOnly), isNew, days)
 
 		// Critical assertion: days should never be negative
 		assert.GreaterOrEqual(t, days, 0,

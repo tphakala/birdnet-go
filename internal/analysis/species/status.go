@@ -42,7 +42,7 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 	// Log computed status for debugging
 	getLog().Debug("Species status computed",
 		logger.String("species", scientificName),
-		logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")),
+		logger.String("current_time", currentTime.Format(time.DateTime)),
 		logger.String("current_season", currentSeason),
 		logger.Bool("is_new", status.IsNew),
 		logger.Bool("is_new_this_year", status.IsNewThisYear),

@@ -243,7 +243,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 
 	// Now detect it in 2024
 	isNew := tracker.UpdateSpecies("Turdus merula", jan2024)
-	t.Logf("UpdateSpecies returned isNew=%v for detection on %s", isNew, jan2024.Format("2006-01-02"))
+	t.Logf("UpdateSpecies returned isNew=%v for detection on %s", isNew, jan2024.Format(time.DateOnly))
 
 	// Check internal state directly
 	tracker.mu.RLock()
@@ -253,7 +253,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 	tracker.mu.RUnlock()
 	yearTimeStr := testNilString
 	if inYearMap {
-		yearTimeStr = yearTime.Format("2006-01-02")
+		yearTimeStr = yearTime.Format(time.DateOnly)
 	}
 	t.Logf("After update: currentYear=%d, yearMapSize=%d, species in year map=%v, yearTime=%s", currentYear, yearMapSize, inYearMap, yearTimeStr)
 
@@ -734,7 +734,7 @@ func TestDefaultSeasonInitialization(t *testing.T) {
 		tracker.UpdateSpecies("Test species", test.date)
 		status := tracker.GetSpeciesStatus("Test species", test.date)
 		assert.Equal(t, test.season, status.CurrentSeason,
-			"Expected season '%s' for date %s", test.season, test.date.Format("2006-01-02"))
+			"Expected season '%s' for date %s", test.season, test.date.Format(time.DateOnly))
 	}
 }
 

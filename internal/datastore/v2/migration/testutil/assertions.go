@@ -28,7 +28,7 @@ func AssertDetectionMatches(t *testing.T, legacy *datastore.Note, v2 *entities.D
 
 	// Timestamp comparison (legacy Date+Time -> v2 DetectedAt Unix timestamp)
 	// The V2 DetectedAt is Unix seconds, so compare within a reasonable window
-	legacyTime, err := time.Parse("2006-01-02 15:04:05", legacy.Date+" "+legacy.Time)
+	legacyTime, err := time.Parse(time.DateTime, legacy.Date+" "+legacy.Time)
 	if err == nil {
 		assert.InDelta(t, legacyTime.Unix(), v2.DetectedAt, 1, "detected_at should match legacy date+time")
 	}

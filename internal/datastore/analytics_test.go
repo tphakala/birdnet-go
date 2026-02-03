@@ -665,7 +665,7 @@ func TestDatabasePerformance(t *testing.T) {
 		for j := range detectionsPerSpecies {
 			detectionDate := firstDetectionDate.AddDate(0, 0, j)
 			note := Note{
-				Date:           detectionDate.Format("2006-01-02"),
+				Date:           detectionDate.Format(time.DateOnly),
 				Time:           "12:00:00",
 				ScientificName: scientificName,
 				CommonName:     commonName,
