@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -1469,10 +1470,7 @@ func getActiveStreamIDs() []string {
 	hlsMgr.streamsMu.RLock()
 	defer hlsMgr.streamsMu.RUnlock()
 
-	activeStreamIDs := make([]string, 0, len(hlsMgr.streams))
-	for sourceID := range hlsMgr.streams {
-		activeStreamIDs = append(activeStreamIDs, sourceID)
-	}
+	activeStreamIDs := slices.Collect(maps.Keys(hlsMgr.streams))
 	return activeStreamIDs
 }
 

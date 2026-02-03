@@ -3,6 +3,8 @@ package migration
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -226,10 +228,7 @@ func (m *RelatedDataMigrator) migrateReviews(ctx context.Context) (migrated, bat
 		for i := range batch {
 			detectionIDSet[batch[i].NoteID] = struct{}{}
 		}
-		detectionIDs := make([]uint, 0, len(detectionIDSet))
-		for id := range detectionIDSet {
-			detectionIDs = append(detectionIDs, id)
-		}
+		detectionIDs := slices.Collect(maps.Keys(detectionIDSet))
 
 		// Filter to only IDs that exist in v2 detections table
 		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, detectionIDs)
@@ -314,10 +313,7 @@ func (m *RelatedDataMigrator) migrateComments(ctx context.Context) (migrated, ba
 		for i := range batch {
 			detectionIDSet[batch[i].NoteID] = struct{}{}
 		}
-		detectionIDs := make([]uint, 0, len(detectionIDSet))
-		for id := range detectionIDSet {
-			detectionIDs = append(detectionIDs, id)
-		}
+		detectionIDs := slices.Collect(maps.Keys(detectionIDSet))
 
 		// Filter to only IDs that exist in v2 detections table
 		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, detectionIDs)
@@ -401,10 +397,7 @@ func (m *RelatedDataMigrator) migrateLocks(ctx context.Context) (migrated, batch
 		for i := range batch {
 			detectionIDSet[batch[i].NoteID] = struct{}{}
 		}
-		detectionIDs := make([]uint, 0, len(detectionIDSet))
-		for id := range detectionIDSet {
-			detectionIDs = append(detectionIDs, id)
-		}
+		detectionIDs := slices.Collect(maps.Keys(detectionIDSet))
 
 		// Filter to only IDs that exist in v2 detections table
 		existingIDs, filterErr := m.detectionRepo.FilterExistingIDs(ctx, detectionIDs)
@@ -466,11 +459,7 @@ func collectDetectionIDs(batch []datastore.Results) []uint {
 	for i := range batch {
 		idSet[batch[i].NoteID] = struct{}{}
 	}
-	ids := make([]uint, 0, len(idSet))
-	for id := range idSet {
-		ids = append(ids, id)
-	}
-	return ids
+	return slices.Collect(maps.Keys(idSet))
 }
 
 // minPredictionConfidence is the minimum confidence threshold for migrating predictions.

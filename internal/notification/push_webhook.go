@@ -168,7 +168,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 	wp := &WebhookProvider{
 		name:      strings.TrimSpace(name),
 		enabled:   enabled,
-		endpoints: append([]WebhookEndpoint{}, endpoints...),
+		endpoints: slices.Clone(endpoints),
 		types:     make(map[string]bool),
 	}
 

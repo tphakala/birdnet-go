@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ func NewShoutrrrProvider(name string, enabled bool, urls, supportedTypes []strin
 	sp := &ShoutrrrProvider{
 		name:    strings.TrimSpace(name),
 		enabled: enabled,
-		urls:    append([]string{}, urls...),
+		urls:    slices.Clone(urls),
 		types:   map[string]bool{},
 		timeout: timeout,
 	}

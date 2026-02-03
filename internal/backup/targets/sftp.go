@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -813,10 +815,7 @@ func (t *SFTPTarget) untrackTempFile(filePath string) {
 // cleanupTempFiles attempts to clean up any tracked temporary files
 func (t *SFTPTarget) cleanupTempFiles(client *sftp.Client) {
 	t.tempFilesMu.Lock()
-	tempFiles := make([]string, 0, len(t.tempFiles))
-	for path := range t.tempFiles {
-		tempFiles = append(tempFiles, path)
-	}
+	tempFiles := slices.Collect(maps.Keys(t.tempFiles))
 	t.tempFilesMu.Unlock()
 
 	for _, path := range tempFiles {

@@ -53,7 +53,7 @@ linters:
         - performance
       settings:
         ruleguard:
-          rules: "rules/waitgroup.go"
+          rules: "rules/*.go"
     revive:
       rules:
         - name: unused-parameter

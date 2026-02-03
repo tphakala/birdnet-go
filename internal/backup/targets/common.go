@@ -3,8 +3,10 @@ package targets
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -174,10 +176,7 @@ func (t *TempFileTracker) Untrack(path string) {
 func (t *TempFileTracker) GetTracked() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	paths := make([]string, 0, len(t.files))
-	for path := range t.files {
-		paths = append(paths, path)
-	}
+	paths := slices.Collect(maps.Keys(t.files))
 	return paths
 }
 

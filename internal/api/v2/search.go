@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -311,10 +313,7 @@ func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) e
 		if _, ok := allowedSortBy[req.SortBy]; !ok {
 			c.logErrorIfEnabled("Invalid sortBy parameter", logger.String("sortBy", req.SortBy), logger.String("path", path), logger.String("ip", ip))
 			// Create a list of allowed sort options for the error message
-			allowedKeys := make([]string, 0, len(allowedSortBy))
-			for k := range allowedSortBy {
-				allowedKeys = append(allowedKeys, k)
-			}
+			allowedKeys := slices.Collect(maps.Keys(allowedSortBy))
 			return fmt.Errorf("invalid sortBy parameter '%s'. Allowed values: %v", req.SortBy, allowedKeys)
 		}
 	}

@@ -2,7 +2,7 @@ package notification
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -522,7 +522,7 @@ func formatContext(ctx map[string]any) string {
 	}
 
 	// Sort for consistent output
-	sort.Strings(parts)
+	slices.Sort(parts)
 	return strings.Join(parts, ", ")
 }
 
