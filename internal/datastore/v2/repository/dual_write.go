@@ -12,6 +12,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	apperrors "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -55,6 +56,7 @@ type DualWriteRepository struct {
 
 	reconcileTicker *time.Ticker  // Periodic dirty ID reconciliation
 	reconcileDone   chan struct{} // Signals reconciliation goroutine has exited
+	reconcileOnce   sync.Once     // Ensures StartReconciliation is called only once
 
 	// Cached lookup table IDs
 	speciesLabelTypeID uint
@@ -125,22 +127,24 @@ func (dw *DualWriteRepository) Shutdown() {
 // Legacy is used as the source of truth: if a record exists in legacy, it is
 // synced to v2; if it was deleted from legacy, the v2 ghost is removed.
 func (dw *DualWriteRepository) StartReconciliation() {
-	dw.reconcileTicker = time.NewTicker(reconcileInterval)
-	dw.reconcileDone = make(chan struct{})
+	dw.reconcileOnce.Do(func() {
+		dw.reconcileTicker = time.NewTicker(reconcileInterval)
+		dw.reconcileDone = make(chan struct{})
 
-	go func() {
-		defer close(dw.reconcileDone)
-		for {
-			select {
-			case <-dw.shutdownCh:
-				return
-			case <-dw.reconcileTicker.C:
-				dw.reconcileDirtyIDs()
+		go func() {
+			defer close(dw.reconcileDone)
+			for {
+				select {
+				case <-dw.shutdownCh:
+					return
+				case <-dw.reconcileTicker.C:
+					dw.reconcileDirtyIDs()
+				}
 			}
-		}
-	}()
+		}()
 
-	dw.logger.Info("dirty ID reconciliation started", logger.Int("interval_seconds", int(reconcileInterval.Seconds())))
+		dw.logger.Info("dirty ID reconciliation started", logger.Int("interval_seconds", int(reconcileInterval.Seconds())))
+	})
 }
 
 // reconcileDirtyIDs processes a batch of dirty IDs using legacy as source of truth.
@@ -175,8 +179,8 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 		// Fetch from legacy (source of truth)
 		result, err := dw.legacy.Get(ctx, idStr)
 		if err != nil {
-			// Record not found in legacy means it was deleted — remove v2 ghost
-			if result == nil {
+			if apperrors.IsNotFound(err) {
+				// Record genuinely deleted from legacy — remove v2 ghost
 				if delErr := dw.v2.Delete(ctx, id); delErr != nil && !errors.Is(delErr, ErrDetectionNotFound) {
 					dw.logger.Warn("reconciliation: v2 delete failed", logger.Uint64("id", uint64(id)), logger.Error(delErr))
 					cancel()
