@@ -337,35 +337,35 @@ func BenchmarkAllocationPattern(b *testing.B) {
 
 	b.Run("SingleLookup", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _, _ = db.GetGenusByScientificName("Turdus migratorius")
 		}
 	})
 
 	b.Run("TreeBuilding", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = db.GetSpeciesTree("Turdus migratorius")
 		}
 	})
 
 	b.Run("GenusSpeciesList", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = db.GetAllSpeciesInGenus("corvus")
 		}
 	})
 
 	b.Run("FamilySpeciesList", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = db.GetAllSpeciesInFamily("corvidae")
 		}
 	})
 
 	b.Run("Search", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = db.SearchGenus("corv")
 		}
 	})

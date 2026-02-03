@@ -2,7 +2,6 @@ package logger
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -314,7 +313,7 @@ func TestSlogLogger_WithContext(t *testing.T) {
 		logger := NewSlogLogger(buf, LogLevelInfo, time.UTC)
 
 		// Use WithTraceID() - the documented API for setting trace IDs
-		ctx := WithTraceID(context.Background(), "trace-123")
+		ctx := WithTraceID(t.Context(), "trace-123")
 		contextLogger := logger.WithContext(ctx)
 
 		contextLogger.Info("test message")
@@ -328,7 +327,7 @@ func TestSlogLogger_WithContext(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logger := NewSlogLogger(buf, LogLevelInfo, time.UTC)
 
-		result := logger.WithContext(context.TODO())
+		result := logger.WithContext(t.Context())
 		assert.Equal(t, logger, result)
 	})
 
@@ -336,14 +335,14 @@ func TestSlogLogger_WithContext(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logger := NewSlogLogger(buf, LogLevelInfo, time.UTC)
 
-		ctx := context.Background()
+		ctx := t.Context()
 		result := logger.WithContext(ctx)
 		assert.Equal(t, logger, result)
 	})
 
 	t.Run("nil logger WithContext returns nil", func(t *testing.T) {
 		var logger *SlogLogger
-		ctx := context.Background()
+		ctx := t.Context()
 		result := logger.WithContext(ctx)
 		assert.Nil(t, result)
 	})

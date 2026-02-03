@@ -199,7 +199,7 @@ func BenchmarkTestRecorder(b *testing.B) {
 		b.StartTimer() // Start timer after setup is complete
 
 		// Run the benchmark
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			recorder.RecordOperation("bench", "success")
 		}
 
@@ -215,7 +215,7 @@ func BenchmarkTestRecorder(b *testing.B) {
 		b.StartTimer() // Start timer after setup
 
 		// Run the benchmark
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			recorder.RecordDuration("bench", 0.123)
 		}
 
@@ -231,7 +231,7 @@ func BenchmarkTestRecorder(b *testing.B) {
 		b.StartTimer() // Start timer after setup
 
 		// Run the benchmark
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			recorder.RecordError("bench", "error")
 		}
 
@@ -248,7 +248,7 @@ func BenchmarkTestRecorder(b *testing.B) {
 		b.StartTimer() // Start timer after all setup is complete
 
 		// Run the benchmark
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = recorder.GetOperationCount("bench", "success")
 		}
 
@@ -281,7 +281,7 @@ func BenchmarkTestRecorder(b *testing.B) {
 		recorder := NewTestRecorder()
 
 		// Run the benchmark with reset
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			b.StopTimer()    // Stop timer before reset
 			recorder.Reset() // Reset state between iterations
 			b.StartTimer()   // Restart timer after reset

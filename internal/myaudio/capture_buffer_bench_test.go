@@ -253,7 +253,8 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			i := 0
+			for b.Loop() {
 				sources := make([]string, 0, cfg.numSources)
 
 				// Force GC to get clean baseline
@@ -297,6 +298,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 				for _, source := range sources {
 					_ = RemoveCaptureBuffer(source)
 				}
+				i++
 			}
 		})
 	}

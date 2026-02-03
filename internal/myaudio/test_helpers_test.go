@@ -148,7 +148,7 @@ func newTestStreamWithBuffer(t *testing.T, url string, bufferSize int) *TestStre
 // Uses t.Cleanup() to ensure the cancel function is called.
 func testContextWithTimeout(t *testing.T, timeout time.Duration) context.Context {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	t.Cleanup(cancel)
 	return ctx
 }

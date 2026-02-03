@@ -16,7 +16,8 @@ func BenchmarkRepeatedAllocationPrevention(b *testing.B) {
 	b.Run("without_fix_allows_double_alloc", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			source := fmt.Sprintf("test_double_%d", i)
 
 			// First allocation - succeeds
@@ -28,13 +29,15 @@ func BenchmarkRepeatedAllocationPrevention(b *testing.B) {
 
 			// Clean up
 			_ = RemoveCaptureBuffer(source)
+			i++
 		}
 	})
 
 	b.Run("with_fix_prevents_double_alloc", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			source := fmt.Sprintf("test_safe_%d", i)
 
 			// First allocation - succeeds
@@ -48,6 +51,7 @@ func BenchmarkRepeatedAllocationPrevention(b *testing.B) {
 
 			// Clean up
 			_ = RemoveCaptureBuffer(source)
+			i++
 		}
 	})
 }
@@ -64,7 +68,7 @@ func BenchmarkProductionScenario(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			// Simulate startup - allocate all buffers
 			for _, source := range sources {
 				_ = AllocateCaptureBufferIfNeeded(60, 48000, 2, source)

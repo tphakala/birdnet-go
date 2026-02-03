@@ -457,7 +457,7 @@ func BenchmarkReferenceOperations(b *testing.B) {
 
 	b.Run("Acquire", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := range b.N {
+		for i := range b.N { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			source := sources[i%10]
 			registry.AcquireSourceReference(source.ID)
 		}
@@ -466,24 +466,28 @@ func BenchmarkReferenceOperations(b *testing.B) {
 	b.Run("Release", func(b *testing.B) {
 		b.ReportAllocs()
 		// Pre-acquire references
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			source := sources[i%10]
 			registry.AcquireSourceReference(source.ID)
 		}
 
 		b.ResetTimer()
-		for i := range b.N {
+		i := 0
+		for b.Loop() {
 			source := sources[i%10]
 			_ = registry.ReleaseSourceReference(source.ID)
+			i++
 		}
 	})
 
 	b.Run("AcquireRelease", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := range b.N {
+		i := 0
+		for b.Loop() {
 			source := sources[i%10]
 			registry.AcquireSourceReference(source.ID)
 			_ = registry.ReleaseSourceReference(source.ID)
+			i++
 		}
 	})
 }

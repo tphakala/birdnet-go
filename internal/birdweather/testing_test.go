@@ -45,7 +45,7 @@ func TestResolveDNSWithFallback(t *testing.T) {
 
 			// Set a reasonable timeout for the test to prevent hangs on slow/flaky DNS
 			// 12s allows: system DNS (10s) + at least one fallback attempt (5s) with overhead
-			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 12*time.Second)
 			defer cancel()
 
 			start := time.Now()
@@ -82,7 +82,7 @@ func TestAPIConnectivityTimeout(t *testing.T) {
 	// Create a context with a very short timeout to test timeout behavior
 	// Use 10ms instead of 1ms to reduce flakiness while still being fast enough
 	// to trigger a timeout before any real network operation completes
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 
 	result := client.testAPIConnectivity(ctx)
@@ -219,7 +219,7 @@ func (e *testError) Error() string {
 func TestDNSLookupCancellation(t *testing.T) {
 	t.Parallel() // Safe - independent context
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	// Cancel immediately to test cancellation behavior
 	cancel()

@@ -168,7 +168,7 @@ func TestPublishBridgeDiscovery(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := publisher.publishBridgeDiscovery(ctx)
 	require.NoError(t, err, "Failed to publish bridge discovery")
@@ -216,7 +216,7 @@ func TestPublishSourceDiscovery(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	source := datastore.AudioSource{
 		ID:          "hw:0,0",
@@ -283,7 +283,7 @@ func TestPublishSourceDiscoveryWithoutSoundLevel(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	source := datastore.AudioSource{
 		ID:          "default",
@@ -330,7 +330,7 @@ func TestRemoveDiscovery(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	sources := []datastore.AudioSource{
 		{ID: "source1", DisplayName: "Source 1"},
@@ -394,7 +394,7 @@ func TestPublishDiscoveryErrorHandling(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	sources := []datastore.AudioSource{
 		{ID: "source1", DisplayName: "Source 1"},
@@ -422,7 +422,7 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	sources := []datastore.AudioSource{
 		{ID: "usb-mic", DisplayName: "USB Microphone"},
@@ -492,7 +492,7 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	source := datastore.AudioSource{
 		ID:          "test-mic",
@@ -587,7 +587,7 @@ func TestDeviceNaming_ShortDisplayNameWhenIDIsLong(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Simulate an RTSP source with a long ID and NO DisplayName
 	// This is the problematic case - without DisplayName, the full ID gets used
@@ -668,7 +668,7 @@ func TestDeviceNaming_PreservesShortDisplayName(t *testing.T) {
 	}
 
 	publisher := NewDiscoveryPublisher(mock, &config)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Source with a nice short DisplayName - should be used as-is
 	source := datastore.AudioSource{

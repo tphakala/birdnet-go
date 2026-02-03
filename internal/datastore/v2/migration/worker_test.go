@@ -80,7 +80,7 @@ func TestWorker_HandlesCutoverStateDirectly(t *testing.T) {
 	}
 
 	// Call handleCutoverState directly
-	ctx := context.Background()
+	ctx := t.Context()
 	action := w.handleCutoverState(ctx)
 
 	// Should return runActionReturn (worker should stop)
@@ -116,7 +116,7 @@ func TestWorker_ExitsWhenAlreadyCompleted(t *testing.T) {
 	}
 
 	// Call runIteration - should detect completed state and return
-	ctx := context.Background()
+	ctx := t.Context()
 	action := w.runIteration(ctx)
 
 	// Should return runActionReturn (worker should stop)
@@ -147,7 +147,7 @@ func TestWorker_CutoverStateInRunIteration(t *testing.T) {
 	}
 
 	// Call runIteration - should handle cutover state
-	ctx := context.Background()
+	ctx := t.Context()
 	action := w.runIteration(ctx)
 
 	// Should return runActionReturn (worker should stop after completing)
@@ -215,7 +215,7 @@ func TestWorker_RespondsToStopDuringCutoverBackoff(t *testing.T) {
 	var actionResult atomic.Int64
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		ctx := context.Background()
+		ctx := t.Context()
 		action := w.handleCutoverState(ctx)
 		actionResult.Store(int64(action))
 	})
@@ -242,7 +242,7 @@ func TestWorker_CutoverHandlerRetriesOnError(t *testing.T) {
 	transitionToCutover(t, sm)
 
 	// Create worker with short test timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	stopCh := make(chan struct{})
@@ -277,7 +277,7 @@ func TestWorker_CutoverBackoffRespondsToContextCancel(t *testing.T) {
 	transitionToCutover(t, sm)
 
 	// Create a cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	stopCh := make(chan struct{})
 	w := &Worker{
@@ -381,7 +381,7 @@ func TestWorker_SwitchStatementCoverage(t *testing.T) {
 				sleepBetween:    time.Millisecond, // Short sleep for test
 			}
 
-			ctx := context.Background()
+			ctx := t.Context()
 			action := w.runIteration(ctx)
 
 			assert.Equal(t, tt.expectedAction, action)

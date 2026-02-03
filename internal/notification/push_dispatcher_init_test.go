@@ -299,7 +299,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 		ep := &enhancedProvider{name: "test"}
 		notif := NewNotification(TypeInfo, PriorityLow, "Test", "Message")
 
-		result := d.acquireSemaphoreSlot(context.Background(), ep, notif)
+		result := d.acquireSemaphoreSlot(t.Context(), ep, notif)
 		assert.True(t, result)
 	})
 
@@ -313,7 +313,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 		ep := &enhancedProvider{name: "test"}
 		notif := NewNotification(TypeInfo, PriorityLow, "Test", "Message")
 
-		result := d.acquireSemaphoreSlot(context.Background(), ep, notif)
+		result := d.acquireSemaphoreSlot(t.Context(), ep, notif)
 		assert.True(t, result)
 
 		// Clean up - release the acquired slot
@@ -327,7 +327,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 		sem := semaphore.NewWeighted(1)
 
 		// Acquire the only slot
-		err := sem.Acquire(context.Background(), 1)
+		err := sem.Acquire(t.Context(), 1)
 		require.NoError(t, err)
 
 		d := &pushDispatcher{
@@ -338,7 +338,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 		notif := NewNotification(TypeInfo, PriorityLow, "Test", "Message")
 
 		// Should timeout trying to acquire (within 100ms)
-		result := d.acquireSemaphoreSlot(context.Background(), ep, notif)
+		result := d.acquireSemaphoreSlot(t.Context(), ep, notif)
 		assert.False(t, result)
 
 		// Clean up
@@ -355,7 +355,7 @@ func TestPushDispatcher_recoverFromDispatchPanic(t *testing.T) {
 
 		sem := semaphore.NewWeighted(10)
 		// Acquire a slot
-		err := sem.Acquire(context.Background(), 1)
+		err := sem.Acquire(t.Context(), 1)
 		require.NoError(t, err)
 
 		d := &pushDispatcher{
@@ -369,7 +369,7 @@ func TestPushDispatcher_recoverFromDispatchPanic(t *testing.T) {
 		d.recoverFromDispatchPanic(ep, notif)
 
 		// Verify semaphore was released - we can acquire all 10 now
-		err = sem.Acquire(context.Background(), 10)
+		err = sem.Acquire(t.Context(), 10)
 		require.NoError(t, err)
 		sem.Release(10)
 	})

@@ -144,7 +144,7 @@ func BenchmarkPooledSliceRelease(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				slice := getPooledSlice()
 				data := make([]FileInfo, cfg.size)
 				slice.SetData(data)

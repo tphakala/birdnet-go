@@ -10,28 +10,28 @@ import (
 func BenchmarkFieldCreation(b *testing.B) {
 	b.Run("String", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = String("cve_id", "CVE-2024-1234")
 		}
 	})
 
 	b.Run("Int", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = Int("count", 42)
 		}
 	})
 
 	b.Run("Int64", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = Int64("size", 1234567890)
 		}
 	})
 
 	b.Run("Bool", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = Bool("active", true)
 		}
 	})
@@ -39,7 +39,7 @@ func BenchmarkFieldCreation(b *testing.B) {
 	b.Run("Duration", func(b *testing.B) {
 		b.ReportAllocs()
 		d := 5 * time.Second
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = Duration("elapsed", d)
 		}
 	})
@@ -47,7 +47,7 @@ func BenchmarkFieldCreation(b *testing.B) {
 	b.Run("Error", func(b *testing.B) {
 		b.ReportAllocs()
 		err := io.EOF
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = Error(err)
 		}
 	})
@@ -55,7 +55,7 @@ func BenchmarkFieldCreation(b *testing.B) {
 	b.Run("Any", func(b *testing.B) {
 		b.ReportAllocs()
 		data := map[string]int{"a": 1, "b": 2}
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = Any("data", data)
 		}
 	})
@@ -65,7 +65,7 @@ func BenchmarkFieldCreation(b *testing.B) {
 func BenchmarkRepeatedKeyInterning(b *testing.B) {
 	b.Run("SameKey1000Times", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for range 1000 {
 				_ = String("cve_id", "CVE-2024-1234")
 			}
@@ -75,7 +75,7 @@ func BenchmarkRepeatedKeyInterning(b *testing.B) {
 	b.Run("DifferentKeys", func(b *testing.B) {
 		b.ReportAllocs()
 		keys := []string{"cve_id", "client_id", "task_id", "request_id", "error", "duration"}
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			for _, key := range keys {
 				_ = String(key, "value")
 			}
@@ -89,7 +89,7 @@ func BenchmarkLogInfo(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil)
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("test message")
 		}
 	})
@@ -98,7 +98,7 @@ func BenchmarkLogInfo(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil)
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("test message", String("cve_id", "CVE-2024-1234"))
 		}
 	})
@@ -107,7 +107,7 @@ func BenchmarkLogInfo(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil)
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("test message",
 				String("cve_id", "CVE-2024-1234"),
 				Int("count", 42),
@@ -119,7 +119,7 @@ func BenchmarkLogInfo(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil)
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("test message",
 				String("cve_id", "CVE-2024-1234"),
 				String("client_id", "client-123"),
@@ -137,7 +137,7 @@ func BenchmarkLogWithModule(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil).Module("analysis")
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("analyzing audio",
 				String("species", "Turdus merula"),
 				Int("confidence", 75))
@@ -148,7 +148,7 @@ func BenchmarkLogWithModule(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil).Module("analysis").Module("processor")
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("processing complete",
 				String("species", "Turdus merula"),
 				Duration("elapsed", 2*time.Second))
@@ -162,7 +162,7 @@ func BenchmarkLoggerWith(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil)
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			l := logger.With(String("request_id", "req-123"))
 			l.Info("processing")
 		}
@@ -172,7 +172,7 @@ func BenchmarkLoggerWith(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelInfo, nil)
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			l := logger.With(
 				String("request_id", "req-123"),
 				String("client_id", "client-456"),
@@ -197,7 +197,7 @@ func BenchmarkTextHandler(b *testing.B) {
 		}
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Info("test message")
 		}
 	})
@@ -213,7 +213,7 @@ func BenchmarkTextHandler(b *testing.B) {
 		}
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			logger.Info("test message",
 				String("cve_id", "CVE-2024-1234"),
 				Int("count", 42),
@@ -226,7 +226,7 @@ func BenchmarkTextHandler(b *testing.B) {
 func BenchmarkAttrPool(b *testing.B) {
 	b.Run("GetPut", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			attrs := getAttrs()
 			putAttrs(attrs)
 		}
@@ -234,7 +234,7 @@ func BenchmarkAttrPool(b *testing.B) {
 
 	b.Run("GetUseAndPut", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			attrs := getAttrs()
 			*attrs = append(*attrs,
 				fieldToAttr(String("key", "value")),
@@ -250,7 +250,7 @@ func BenchmarkLevelFiltering(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelWarn, nil) // Warn level
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 			logger.Debug("filtered message", String("key", "value")) // Debug < Warn, filtered
 		}
 	})
@@ -259,7 +259,7 @@ func BenchmarkLevelFiltering(b *testing.B) {
 		logger := NewSlogLogger(io.Discard, LogLevelDebug, nil) // Debug level
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			logger.Debug("not filtered", String("key", "value"))
 		}
 	})

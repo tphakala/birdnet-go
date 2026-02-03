@@ -275,7 +275,7 @@ func TestConfidenceFilterToMinMax(t *testing.T) {
 // =============================================================================
 
 func TestConvertAdvancedFilters(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tz := time.UTC
 
 	t.Run("nil filters returns empty SearchFilters", func(t *testing.T) {
@@ -537,7 +537,7 @@ func (m *mockAudioSourceRepository) Exists(_ context.Context, _ uint) (bool, err
 // =============================================================================
 
 func TestResolveSpeciesToLabelIDs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("empty input returns nil", func(t *testing.T) {
 		deps := &FilterLookupDeps{
@@ -604,7 +604,7 @@ func TestResolveSpeciesToLabelIDs(t *testing.T) {
 // =============================================================================
 
 func TestResolveLocationsToSourceIDs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("empty input returns nil", func(t *testing.T) {
 		deps := &FilterLookupDeps{
@@ -776,7 +776,7 @@ func TestParseDateString(t *testing.T) {
 // =============================================================================
 
 func TestConvertSearchFilters(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tz := time.UTC
 
 	t.Run("nil filters returns empty SearchFilters", func(t *testing.T) {
@@ -992,7 +992,7 @@ func (m *mockLabelRepositoryWithSearch) Search(_ context.Context, _ string, _ in
 }
 
 func TestResolveSpeciesToLabelIDsWithCommonName(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("empty species returns nil", func(t *testing.T) {
 		deps := &FilterLookupDeps{
@@ -1053,7 +1053,7 @@ func (m *mockAudioSourceRepositoryWithGetAll) GetAll(_ context.Context) ([]*enti
 }
 
 func TestResolveDeviceToSourceIDs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("empty device returns nil", func(t *testing.T) {
 		deps := &FilterLookupDeps{

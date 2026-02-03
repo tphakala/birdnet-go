@@ -137,8 +137,8 @@ func TestOAuth2Server(t *testing.T) {
 				code, err := s.GenerateAuthCode()
 				require.NoError(t, err, "should generate auth code")
 
-				// Pass context.Background() to ExchangeAuthCode
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				// Pass test context to ExchangeAuthCode
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 				defer cancel()
 				token, err := s.ExchangeAuthCode(ctx, code)
 				require.NoError(t, err, "should exchange auth code")
@@ -466,7 +466,7 @@ func TestExchangeAuthCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			token, err := server.ExchangeAuthCode(ctx, tt.code)
 
 			if tt.expectError {
@@ -507,7 +507,7 @@ func TestExchangeAuthCodeContextCancellation(t *testing.T) {
 	}
 
 	// Create a cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	token, err := server.ExchangeAuthCode(ctx, "valid_code")

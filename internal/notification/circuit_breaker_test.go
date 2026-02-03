@@ -22,7 +22,7 @@ func TestCircuitBreaker_ClosedState(t *testing.T) {
 
 	// Successful calls should keep circuit closed
 	for i := range 5 {
-		err := cb.Call(context.Background(), func(_ context.Context) error {
+		err := cb.Call(t.Context(), func(_ context.Context) error {
 			return nil
 		})
 		require.NoError(t, err, "call %d should succeed", i)
@@ -40,7 +40,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 
 	// Make failures up to threshold - 1
 	for i := 0; i < config.MaxFailures-1; i++ {
-		err := cb.Call(context.Background(), func(_ context.Context) error {
+		err := cb.Call(t.Context(), func(_ context.Context) error {
 			return testErr
 		})
 		require.ErrorIs(t, err, testErr, "call %d should return test error", i)
@@ -48,7 +48,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 	}
 
 	// One more failure should open the circuit
-	err := cb.Call(context.Background(), func(_ context.Context) error {
+	err := cb.Call(t.Context(), func(_ context.Context) error {
 		return testErr
 	})
 	require.ErrorIs(t, err, testErr)
@@ -56,7 +56,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 
 	// Subsequent calls should fail immediately with circuit breaker error
 	functionCalled := false
-	err = cb.Call(context.Background(), func(_ context.Context) error {
+	err = cb.Call(t.Context(), func(_ context.Context) error {
 		functionCalled = true
 		return nil
 	})
@@ -77,7 +77,7 @@ func TestCircuitBreaker_TransitionToHalfOpen(t *testing.T) {
 		require.NotNil(t, cb, "NewPushCircuitBreaker should return non-nil")
 
 		// Open the circuit
-		ctx := context.Background()
+		ctx := t.Context()
 		for range config.MaxFailures {
 			_ = cb.Call(ctx, func(_ context.Context) error {
 				return assert.AnError
@@ -116,7 +116,7 @@ func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
 		testErr := errors.New("test error")
 
 		// Open the circuit
-		ctx := context.Background()
+		ctx := t.Context()
 		for range config.MaxFailures {
 			_ = cb.Call(ctx, func(_ context.Context) error {
 				return assert.AnError
@@ -151,7 +151,7 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 		testErr := errors.New("test error")
 
 		// Open the circuit
-		ctx := context.Background()
+		ctx := t.Context()
 		for range config.MaxFailures {
 			_ = cb.Call(ctx, func(_ context.Context) error {
 				return assert.AnError
@@ -230,7 +230,7 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 	assert.Equal(t, 0, cb.Failures(), "failures should be 0 after reset")
 
 	// Should allow calls
-	err := cb.Call(context.Background(), func(_ context.Context) error {
+	err := cb.Call(t.Context(), func(_ context.Context) error {
 		return nil
 	})
 	require.NoError(t, err, "call should succeed after reset")
@@ -252,7 +252,7 @@ func TestCircuitBreaker_IsHealthy(t *testing.T) {
 		assert.True(t, cb.IsHealthy(), "circuit breaker health mismatch")
 
 		// Open circuit
-		ctx := context.Background()
+		ctx := t.Context()
 		for range config.MaxFailures {
 			_ = cb.Call(ctx, func(_ context.Context) error {
 				return assert.AnError
@@ -284,7 +284,7 @@ func TestCircuitBreaker_GetStats(t *testing.T) {
 
 	// Make some failures
 	for range 2 {
-		_ = cb.Call(context.Background(), func(_ context.Context) error {
+		_ = cb.Call(t.Context(), func(_ context.Context) error {
 			return testErr
 		})
 	}
@@ -309,7 +309,7 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 		require.NotNil(t, cb, "NewPushCircuitBreaker should return non-nil")
 
 		const numCalls = 100
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Run concurrent successful calls
 		var wg sync.WaitGroup
@@ -347,7 +347,7 @@ func TestCircuitBreaker_ContextCancellation(t *testing.T) {
 		cb := NewPushCircuitBreaker(DefaultCircuitBreakerTestConfig(), nil, "test-provider")
 		require.NotNil(t, cb, "NewPushCircuitBreaker should return non-nil")
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		err := cb.Call(ctx, func(ctx context.Context) error {

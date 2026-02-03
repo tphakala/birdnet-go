@@ -14,7 +14,6 @@
 package processor
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -188,7 +187,7 @@ func TestNotificationTiming_BeginTimeUsed(t *testing.T) {
 	}
 
 	// Execute the action
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err, "DatabaseAction.Execute should not return error")
 
 	// Verify the species was tracked with the correct time (BeginTime)

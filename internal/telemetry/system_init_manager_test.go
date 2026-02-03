@@ -32,7 +32,7 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 		// Cannot run in parallel - accessing shared singleton manager
 		
 		// Create an already-expired context by setting deadline in the past
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-1*time.Second))
 		defer cancel()
 		
 		// Shutdown should return context error immediately
@@ -45,7 +45,7 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 		// Note: Using same singleton manager
 		
 		// Create context with reasonable timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 		defer cancel()
 		
 		// Shutdown should complete successfully
@@ -57,7 +57,7 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 		// Note: Using same singleton manager
 		
 		// Create and immediately cancel context
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		
 		// Shutdown should return context error
@@ -74,7 +74,7 @@ func TestSystemInitManager_ShutdownTimeoutCalculation(t *testing.T) {
 	t.Run("Calculates remaining time correctly", func(t *testing.T) {
 		// Create a fixed deadline in the future
 		futureTime := time.Now().Add(5 * time.Second)
-		ctx, cancel := context.WithDeadline(context.Background(), futureTime)
+		ctx, cancel := context.WithDeadline(t.Context(), futureTime)
 		defer cancel()
 		
 		// Get deadline
@@ -102,7 +102,7 @@ func TestSystemInitManager_ShutdownTimeoutCalculation(t *testing.T) {
 	
 	t.Run("Context without deadline", func(t *testing.T) {
 		// Test with context that has no deadline
-		ctx := context.Background()
+		ctx := t.Context()
 		
 		deadline, ok := ctx.Deadline()
 		assert.False(t, ok)

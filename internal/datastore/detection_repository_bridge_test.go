@@ -6,7 +6,6 @@
 package datastore
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -62,7 +61,7 @@ func TestDetectionRepository_Save_MatchesInterfaceBehavior(t *testing.T) {
 	}
 
 	// Save through repository
-	ctx := context.Background()
+	ctx := t.Context()
 	err := repo.Save(ctx, result, additionalResults)
 	require.NoError(t, err, "Save should succeed")
 
@@ -127,7 +126,7 @@ func TestDetectionRepository_Save_IDAssignmentMatchesInterface(t *testing.T) {
 		ClipName:   "repo.wav",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err = repo.Save(ctx, result, nil)
 	require.NoError(t, err, "Repository.Save should succeed")
 	repoID := result.ID
@@ -203,7 +202,7 @@ func TestDetectionRepository_Save_AdditionalResultsMatchInterface(t *testing.T) 
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err = repo.Save(ctx, result, additionalResults)
 	require.NoError(t, err)
 
