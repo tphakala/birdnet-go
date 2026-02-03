@@ -173,55 +173,53 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 		default:
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), dw.writeTimeout)
-		idStr := strconv.FormatUint(uint64(id), 10)
+		// Wrap per-ID logic in a function so defer cancel() handles all exit paths.
+		func() {
+			ctx, cancel := context.WithTimeout(context.Background(), dw.writeTimeout)
+			defer cancel()
+			idStr := strconv.FormatUint(uint64(id), 10)
 
-		// Fetch from legacy (source of truth)
-		result, err := dw.legacy.Get(ctx, idStr)
-		if err != nil {
-			if apperrors.IsNotFound(err) {
-				// Record genuinely deleted from legacy — remove v2 ghost
-				if delErr := dw.v2.Delete(ctx, id); delErr != nil && !errors.Is(delErr, ErrDetectionNotFound) {
-					dw.logger.Warn("reconciliation: v2 delete failed", logger.Uint64("id", uint64(id)), logger.Error(delErr))
-					cancel()
-					continue
+			// Fetch from legacy (source of truth)
+			result, err := dw.legacy.Get(ctx, idStr)
+			if err != nil {
+				if apperrors.IsNotFound(err) {
+					// Record genuinely deleted from legacy — remove v2 ghost
+					if delErr := dw.v2.Delete(ctx, id); delErr != nil && !errors.Is(delErr, ErrDetectionNotFound) {
+						dw.logger.Warn("reconciliation: v2 delete failed", logger.Uint64("id", uint64(id)), logger.Error(delErr))
+						return
+					}
+					// Ghost removed (or never existed in v2) — clear dirty ID
+					if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
+						dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
+					} else {
+						reconciled++
+					}
+					return
 				}
-				// Ghost removed (or never existed in v2) — clear dirty ID
-				if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
-					dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
-				} else {
-					reconciled++
-				}
-				cancel()
-				continue
+				// Transient legacy error — skip, retry next cycle
+				dw.logger.Warn("reconciliation: legacy fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
+				return
 			}
-			// Transient legacy error — skip, retry next cycle
-			dw.logger.Warn("reconciliation: legacy fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
-			cancel()
-			continue
-		}
 
-		// Record exists in legacy — fetch additional results and sync to v2
-		additionalResults, err := dw.legacy.GetAdditionalResults(ctx, idStr)
-		if err != nil {
-			dw.logger.Warn("reconciliation: legacy additional results fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
-			cancel()
-			continue
-		}
+			// Record exists in legacy — fetch additional results and sync to v2
+			additionalResults, err := dw.legacy.GetAdditionalResults(ctx, idStr)
+			if err != nil {
+				dw.logger.Warn("reconciliation: legacy additional results fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
+				return
+			}
 
-		if syncErr := dw.syncToV2(ctx, result, additionalResults); syncErr != nil {
-			dw.logger.Warn("reconciliation: sync to v2 failed", logger.Uint64("id", uint64(id)), logger.Error(syncErr))
-			cancel()
-			continue
-		}
+			if syncErr := dw.syncToV2(ctx, result, additionalResults); syncErr != nil {
+				dw.logger.Warn("reconciliation: sync to v2 failed", logger.Uint64("id", uint64(id)), logger.Error(syncErr))
+				return
+			}
 
-		// Sync succeeded — clear dirty ID
-		if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
-			dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
-		} else {
-			reconciled++
-		}
-		cancel()
+			// Sync succeeded — clear dirty ID
+			if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
+				dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
+			} else {
+				reconciled++
+			}
+		}()
 	}
 
 	remaining := max(int(count)-reconciled, 0)
