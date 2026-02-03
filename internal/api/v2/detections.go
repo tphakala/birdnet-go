@@ -292,7 +292,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	} else if params.Hour != "" {
 		// Other query types: hour is optional, but if present must be valid (ranges OK)
 		if parseHourFilter(params.Hour) == nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid hour parameter: must be an integer between 0 and 23")
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid hour parameter: must be a valid hour (0-23) or hour range (e.g. 6-9)")
 		}
 	}
 
