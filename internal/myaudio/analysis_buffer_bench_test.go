@@ -62,7 +62,8 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 	b.ReportAllocs()
 
 	// Run benchmark
-	for i := range b.N {
+	i := 0
+	for b.Loop() {
 		// Read until we get data (might need multiple reads due to sliding window)
 		var data []byte
 		var err error
@@ -89,6 +90,7 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 		if len(data) != conf.BufferSize {
 			b.Fatalf("ReadFromAnalysisBuffer returned wrong size: got %d, want %d", len(data), conf.BufferSize)
 		}
+		i++
 	}
 
 	// Cleanup
@@ -222,7 +224,8 @@ func BenchmarkReadFromAnalysisBuffer_MemoryPressure(b *testing.B) {
 	b.ReportAllocs()
 
 	// Run benchmark with memory pressure
-	for i := range b.N {
+	i := 0
+	for b.Loop() {
 		data, err := ReadFromAnalysisBuffer(testStream)
 		if err != nil {
 			b.Fatalf("ReadFromAnalysisBuffer failed: %v", err)
@@ -238,6 +241,7 @@ func BenchmarkReadFromAnalysisBuffer_MemoryPressure(b *testing.B) {
 				pressure = pressure[50:] // Keep last 50 to maintain some pressure
 			}
 		}
+		i++
 	}
 
 	// Cleanup

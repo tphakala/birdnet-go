@@ -225,7 +225,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 			Message:  "Test message",
 		}
 
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
 		assert.Equal(t, "POST", receivedMethod)
@@ -262,7 +262,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
 		assert.Equal(t, "custom-value", receivedHeaders.Get("X-Custom-Header"))
@@ -291,7 +291,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
 		assert.Equal(t, "Bearer secret-token-123", receivedAuth)
@@ -320,7 +320,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
 		assert.True(t, strings.HasPrefix(receivedAuth, "Basic "), "expected Basic auth, got %q", receivedAuth)
@@ -349,7 +349,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
 		assert.Equal(t, "api-key-123", receivedValue)
@@ -369,7 +369,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.Error(t, err, "expected error for server error response")
 		assert.Contains(t, err.Error(), "500", "expected error to contain status code")
 	})
@@ -387,7 +387,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, "")
 		_ = provider.ValidateConfig()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		notif := &Notification{ID: "test", Type: TypeError}
@@ -413,7 +413,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.Error(t, err, "expected timeout error")
 	})
 
@@ -440,7 +440,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		_ = provider.ValidateConfig()
 
 		notif := &Notification{ID: "test", Type: TypeError}
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err, "expected no error with failover")
 
 		assert.True(t, server2Called, "expected second endpoint to be called after first failed")
@@ -468,7 +468,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 			Title: "Test Error",
 		}
 
-		err := provider.Send(context.Background(), notif)
+		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
 		expected := `{"event":"error","msg":"Test Error"}`

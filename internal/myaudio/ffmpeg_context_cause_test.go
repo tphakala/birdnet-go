@@ -45,7 +45,7 @@ func TestFFmpegStream_ContextCauseStop(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.local/stream", "tcp", audioChan)
 
 	// Start the stream in a goroutine
-	ctx := context.Background()
+	ctx := t.Context()
 	runDone := make(chan struct{})
 	go func() {
 		stream.Run(ctx)
@@ -108,7 +108,7 @@ func TestFFmpegStream_ContextCauseRunExit(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.local/stream", "tcp", audioChan)
 
 	// Create a cancellable parent context
-	parentCtx, parentCancel := context.WithCancel(context.Background())
+	parentCtx, parentCancel := context.WithCancel(t.Context())
 
 	// Start the stream in a goroutine
 	done := make(chan struct{})
@@ -167,7 +167,7 @@ ContextReady:
 func TestContextCause_WithCancelCauseFunctionality(t *testing.T) {
 	// Test 1: Basic WithCancelCause usage
 	t.Run("BasicUsage", func(t *testing.T) {
-		ctx, cancel := context.WithCancelCause(context.Background())
+		ctx, cancel := context.WithCancelCause(t.Context())
 
 		// Cancel with a specific cause
 		testErr := fmt.Errorf("test cancellation reason")
@@ -184,7 +184,7 @@ func TestContextCause_WithCancelCauseFunctionality(t *testing.T) {
 
 	// Test 2: Calling cancel multiple times with same cause is idempotent
 	t.Run("IdempotentCancel", func(t *testing.T) {
-		ctx, cancel := context.WithCancelCause(context.Background())
+		ctx, cancel := context.WithCancelCause(t.Context())
 
 		firstErr := fmt.Errorf("first cancellation")
 		secondErr := fmt.Errorf("second cancellation")
@@ -203,7 +203,7 @@ func TestContextCause_WithCancelCauseFunctionality(t *testing.T) {
 
 	// Test 3: Child context inherits parent cancellation
 	t.Run("ParentCancellation", func(t *testing.T) {
-		parentCtx, parentCancel := context.WithCancelCause(context.Background())
+		parentCtx, parentCancel := context.WithCancelCause(t.Context())
 		childCtx, childCancel := context.WithCancelCause(parentCtx)
 		defer childCancel(nil)
 

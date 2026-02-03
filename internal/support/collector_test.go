@@ -856,7 +856,7 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 	// This test will fail in environments where journalctl exists and works
 	// so we'll just verify the error type is returned
 	t.Run("journal not available", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 		defer cancel()
 		diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
 		logs, err := c.collectJournalLogs(ctx, testDuration1Hour, false, diagnostics)
@@ -1053,7 +1053,7 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 		MaxLogSize:        testSize1KB,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	bundle, err := c.Collect(ctx, opts)
 	require.NoError(t, err)
 	require.NotNil(t, bundle)

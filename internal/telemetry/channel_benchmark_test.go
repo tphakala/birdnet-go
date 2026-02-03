@@ -1,7 +1,6 @@
 package telemetry
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -127,8 +126,7 @@ func BenchmarkChannelOperations(b *testing.B) {
 func benchmarkBufferedChannel(b *testing.B, bufferSize int) {
 	b.Helper()
 	ch := make(chan ErrorEvent, bufferSize)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := b.Context()
 
 	// Consumer
 	go func() {

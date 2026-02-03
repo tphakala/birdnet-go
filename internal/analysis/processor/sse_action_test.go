@@ -8,7 +8,6 @@
 package processor
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -92,7 +91,7 @@ func TestSSEAction_Execute_UsesDetectionContextID(t *testing.T) {
 		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
 	}
 
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err, "SSEAction.Execute() should not return error")
 
 	// Verify broadcast was called
@@ -127,7 +126,7 @@ func TestSSEAction_Execute_NoBroadcaster(t *testing.T) {
 		SSEBroadcaster: nil, // No broadcaster
 	}
 
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err, "Should silently succeed without broadcaster")
 }
 
@@ -150,7 +149,7 @@ func TestSSEAction_Execute_WithoutDetectionContext(t *testing.T) {
 		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
 	}
 
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err, "Should succeed without DetectionContext")
 
 	// Verify broadcast was called
@@ -189,7 +188,7 @@ func TestSSEAction_Execute_SkipsAudioWaitOnExportFailure(t *testing.T) {
 	}
 
 	startTime := time.Now()
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	duration := time.Since(startTime)
 
 	require.NoError(t, err, "Should succeed even with nonexistent clip")
@@ -244,7 +243,7 @@ func TestSSEAction_Execute_BroadcastsCorrectData(t *testing.T) {
 		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
 	}
 
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err)
 
 	note := mockBroadcaster.GetLastNote()
@@ -280,7 +279,7 @@ func TestSSEAction_Execute_ReturnsErrorOnBroadcastFailure(t *testing.T) {
 		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
 	}
 
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.Error(t, err, "Should return error on broadcast failure")
 }
 
@@ -308,7 +307,7 @@ func TestSSEAction_Execute_NoClipNameSkipsAudioWait(t *testing.T) {
 	}
 
 	startTime := time.Now()
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	duration := time.Since(startTime)
 
 	require.NoError(t, err)

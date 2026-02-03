@@ -731,7 +731,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue task")
 
 	// Wait for the action to be executed with a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 	select {
 	case <-executionChan:
@@ -744,7 +744,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	assert.Equal(t, 1, mockAction.ExecuteCount, "Expected action to be executed once")
 
 	// Wait a bit for the job queue to update its statistics
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer waitCancel()
 	<-waitCtx.Done()
 
@@ -783,7 +783,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue failing task")
 
 	// Wait for the job queue to process the failing job
-	processCtx, processCancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	processCtx, processCancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
 	defer processCancel()
 	<-processCtx.Done()
 
@@ -900,7 +900,7 @@ func TestRetryLogic(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue task")
 
 	// Wait for the job to succeed with a timeout
-	successCtx, successCancel := context.WithTimeout(context.Background(), 5*time.Second) // Increased timeout for CI environments
+	successCtx, successCancel := context.WithTimeout(t.Context(), 5*time.Second) // Increased timeout for CI environments
 	defer successCancel()
 	select {
 	case <-successChan:
@@ -911,7 +911,7 @@ func TestRetryLogic(t *testing.T) {
 	}
 
 	// Wait a bit more to ensure all job stats are updated
-	statsCtx, statsCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	statsCtx, statsCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer statsCancel()
 	<-statsCtx.Done()
 
@@ -1002,7 +1002,7 @@ func TestRetryLogic(t *testing.T) {
 	require.NoError(t, err, "Failed to enqueue exhausting task")
 
 	// Wait for all attempts to complete with an increased timeout
-	exhaustCtx, exhaustCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exhaustCtx, exhaustCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exhaustCancel()
 	select {
 	case <-allAttemptsComplete:
@@ -1013,7 +1013,7 @@ func TestRetryLogic(t *testing.T) {
 	}
 
 	// Wait a bit more to ensure all processing is complete
-	finalCtx, finalCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	finalCtx, finalCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer finalCancel()
 	<-finalCtx.Done()
 
@@ -1190,7 +1190,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 		retryConfig := getJobQueueRetryConfig(task.Action)
 
 		// Enqueue the task to our mock queue without locking
-		_, err := mockQueue.Enqueue(context.Background(), &ActionAdapter{action: task.Action}, task.Detection, retryConfig)
+		_, err := mockQueue.Enqueue(b.Context(), &ActionAdapter{action: task.Action}, task.Detection, retryConfig)
 		return err
 	}
 

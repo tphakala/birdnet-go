@@ -88,7 +88,7 @@ func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc fun
 	setupSettings(controller)
 
 	// Create a cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	// Create request with the cancellable context
 	req := httptest.NewRequest(http.MethodPost, endpoint, http.NoBody).WithContext(ctx)
@@ -579,7 +579,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
 
 		// Create a cancellable context
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Create a test HTTP request with the cancellable context
@@ -607,7 +607,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		controller.Settings.Realtime.Birdweather.ID = "VALID_ID" // Use a valid-looking ID
 
 		// Create a cancellable context
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Create JSON request body for BirdWeather test

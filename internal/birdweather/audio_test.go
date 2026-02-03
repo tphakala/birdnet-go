@@ -18,7 +18,7 @@ import (
 func TestEncodePCMtoWAV_EmptyInput(t *testing.T) {
 	// Test with empty PCM data
 	emptyData := []byte{}
-	ctx := context.Background()
+	ctx := t.Context()
 	_, err := myaudio.EncodePCMtoWAVWithContext(ctx, emptyData)
 
 	require.Error(t, err, "EncodePCMtoWAVWithContext should return an error with empty PCM data")
@@ -38,7 +38,7 @@ func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
 	}
 
 	// Encode to WAV
-	ctx := context.Background()
+	ctx := t.Context()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
 
 	// Check for errors
@@ -92,7 +92,7 @@ func TestEncodePCMtoWAV_SmallInput(t *testing.T) {
 	// Test with very small PCM data (smaller than WAV header)
 	smallData := []byte{0x01, 0x02, 0x03, 0x04} // Just 4 bytes
 
-	ctx := context.Background()
+	ctx := t.Context()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, smallData)
 
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with small input")
@@ -118,7 +118,7 @@ func TestEncodePCMtoWAV_RecreateOriginalPCM(t *testing.T) {
 	}
 
 	// Encode to WAV
-	ctx := context.Background()
+	ctx := t.Context()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed")
 
@@ -146,7 +146,7 @@ func TestEncodePCMtoWAV_LargeInput(t *testing.T) {
 		binary.LittleEndian.PutUint16(largeData[i*2:], value)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, largeData)
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with large input")
 
@@ -164,7 +164,7 @@ func TestContextTimeout(t *testing.T) {
 	largeData := make([]byte, sampleCount*2) // 16-bit samples
 
 	// Create a context with a very short timeout (should trigger timeout)
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Nanosecond)
 	defer cancel()
 
 	// Let the context timeout before we call the function
@@ -212,7 +212,7 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 
 	// Encode PCM to FLAC with normalization
 	// Pass a background context since this test doesn't need timeout control itself
-	ctx := context.Background()
+	ctx := t.Context()
 	flacBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForTest, settings)
 	require.NoError(t, err, "encodeFlacUsingFFmpeg failed with valid input")
 	require.NotNil(t, flacBuffer, "encodeFlacUsingFFmpeg returned nil buffer")

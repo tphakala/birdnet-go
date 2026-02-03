@@ -81,7 +81,7 @@ func testMosquittoTLSConnection(t *testing.T) {
 	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), tlsTestTimeout)
 	defer cancel()
 
 	// Test connection
@@ -124,7 +124,7 @@ func testHiveMQTLSConnection(t *testing.T) {
 	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), tlsTestTimeout)
 	defer cancel()
 
 	// Test connection
@@ -174,7 +174,7 @@ func testSelfSignedCertificate(t *testing.T) {
 	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), tlsTestTimeout)
 	defer cancel()
 
 	// Test connection - should succeed with InsecureSkipVerify
@@ -331,7 +331,7 @@ func testTLSConnectionTest(t *testing.T) {
 	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), tlsTestTimeout)
 	defer cancel()
 
 	resultChan := make(chan TestResult, 10)
@@ -369,7 +369,7 @@ func runTLSConfigValidationTest(t *testing.T, tlsSettings conf.MQTTTLSSettings, 
 	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), tlsConfigValidationTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), tlsConfigValidationTimeout)
 	defer cancel()
 
 	err = client.Connect(ctx)
@@ -421,7 +421,7 @@ func benchmarkMQTTConnection(b *testing.B, settings *conf.Settings, metrics *obs
 		client, err := NewClient(settings, metrics)
 		require.NoError(b, err, "Failed to create client")
 
-		ctx, cancel := context.WithTimeout(context.Background(), benchmarkConnectionTimeout)
+		ctx, cancel := context.WithTimeout(b.Context(), benchmarkConnectionTimeout)
 		err = client.Connect(ctx)
 		if err != nil {
 			cancel()

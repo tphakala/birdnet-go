@@ -1,7 +1,6 @@
 package ebird
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -140,7 +139,7 @@ func TestDoRequest(t *testing.T) {
 			client := setupTestClient(t, server)
 
 			var result map[string]any
-			err := client.doRequest(context.Background(), tt.method, server.URL+tt.path, nil, &result)
+			err := client.doRequest(t.Context(), tt.method, server.URL+tt.path, nil, &result)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -180,7 +179,7 @@ func TestGetTaxonomy(t *testing.T) {
 
 	// Test 1: First request - cache miss
 	t.Run("cache miss", func(t *testing.T) {
-		taxonomy, err := client.GetTaxonomy(context.Background(), "")
+		taxonomy, err := client.GetTaxonomy(t.Context(), "")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 3)
 		assert.Equal(t, "Turdus migratorius", taxonomy[0].ScientificName)
@@ -189,14 +188,14 @@ func TestGetTaxonomy(t *testing.T) {
 
 	// Test 2: Second request - cache hit
 	t.Run("cache hit", func(t *testing.T) {
-		taxonomy, err := client.GetTaxonomy(context.Background(), "")
+		taxonomy, err := client.GetTaxonomy(t.Context(), "")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 3)
 	})
 
 	// Test 3: Different locale - cache miss
 	t.Run("locale variation", func(t *testing.T) {
-		taxonomy, err := client.GetTaxonomy(context.Background(), "fi")
+		taxonomy, err := client.GetTaxonomy(t.Context(), "fi")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 2)
 		assert.Equal(t, "punarintarastas", taxonomy[0].CommonName)
@@ -220,14 +219,14 @@ func TestGetSpeciesTaxonomy(t *testing.T) {
 	disableLogging(t)
 
 	t.Run("existing species", func(t *testing.T) {
-		entry, err := client.GetSpeciesTaxonomy(context.Background(), "amerob", "")
+		entry, err := client.GetSpeciesTaxonomy(t.Context(), "amerob", "")
 		require.NoError(t, err)
 		assert.Equal(t, "Turdus migratorius", entry.ScientificName)
 		assert.Equal(t, "American Robin", entry.CommonName)
 	})
 
 	t.Run("non-existent species", func(t *testing.T) {
-		_, err := client.GetSpeciesTaxonomy(context.Background(), "invalid", "")
+		_, err := client.GetSpeciesTaxonomy(t.Context(), "invalid", "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species not found")
 
@@ -252,7 +251,7 @@ func TestBuildFamilyTree(t *testing.T) {
 	client := setupTestClient(t, server)
 
 	t.Run("valid species", func(t *testing.T) {
-		tree, err := client.BuildFamilyTree(context.Background(), "Turdus migratorius")
+		tree, err := client.BuildFamilyTree(t.Context(), "Turdus migratorius")
 		require.NoError(t, err)
 
 		assert.Equal(t, "Animalia", tree.Kingdom)
@@ -268,7 +267,7 @@ func TestBuildFamilyTree(t *testing.T) {
 	})
 
 	t.Run("non-existent species", func(t *testing.T) {
-		_, err := client.BuildFamilyTree(context.Background(), "Nonexistent species")
+		_, err := client.BuildFamilyTree(t.Context(), "Nonexistent species")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species not found in eBird taxonomy")
 	})
@@ -289,18 +288,18 @@ func TestCaching(t *testing.T) {
 	disableLogging(t)
 
 	// First call - should hit API
-	_, err := client.GetTaxonomy(context.Background(), "")
+	_, err := client.GetTaxonomy(t.Context(), "")
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Second call - should use cache
-	_, err = client.GetTaxonomy(context.Background(), "")
+	_, err = client.GetTaxonomy(t.Context(), "")
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount, "Should use cached response")
 
 	// Clear cache and verify
 	client.ClearCache()
-	_, err = client.GetTaxonomy(context.Background(), "")
+	_, err = client.GetTaxonomy(t.Context(), "")
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount, "Should hit API after cache clear")
 }
@@ -327,7 +326,7 @@ func TestRateLimiting(t *testing.T) {
 
 	// Make 3 requests
 	for range 3 {
-		err := client.doRequest(context.Background(), "GET", server.URL+"/test", nil, nil)
+		err := client.doRequest(t.Context(), "GET", server.URL+"/test", nil, nil)
 		require.NoError(t, err)
 	}
 
@@ -352,7 +351,7 @@ func TestAuthenticationLogging(t *testing.T) {
 		client := setupTestClient(t, server)
 
 		// First successful request should complete without error
-		_, err := client.GetTaxonomy(context.Background(), "")
+		_, err := client.GetTaxonomy(t.Context(), "")
 		require.NoError(t, err)
 	})
 
@@ -360,7 +359,7 @@ func TestAuthenticationLogging(t *testing.T) {
 		client := setupTestClient(t, server)
 		client.config.APIKey = "" // Remove API key
 
-		_, err := client.GetTaxonomy(context.Background(), "")
+		_, err := client.GetTaxonomy(t.Context(), "")
 		require.Error(t, err)
 	})
 }
@@ -400,7 +399,7 @@ func TestParseErrors(t *testing.T) {
 			client := setupTestClient(t, server)
 
 			var result any
-			err := client.doRequest(context.Background(), "GET", server.URL+"/test", nil, &result)
+			err := client.doRequest(t.Context(), "GET", server.URL+"/test", nil, &result)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -447,7 +446,7 @@ func TestMetrics(t *testing.T) {
 	assert.Equal(t, int64(0), metrics.APIErrors)
 
 	// Make a successful API call (cache miss)
-	_, err := client.GetTaxonomy(context.Background(), "")
+	_, err := client.GetTaxonomy(t.Context(), "")
 	require.NoError(t, err)
 
 	metrics = client.GetMetrics()
@@ -459,7 +458,7 @@ func TestMetrics(t *testing.T) {
 	assert.Greater(t, metrics.AvgDuration, time.Duration(0))
 
 	// Make another call (cache hit)
-	_, err = client.GetTaxonomy(context.Background(), "")
+	_, err = client.GetTaxonomy(t.Context(), "")
 	require.NoError(t, err)
 
 	metrics = client.GetMetrics()
@@ -468,7 +467,7 @@ func TestMetrics(t *testing.T) {
 	assert.Equal(t, int64(1), metrics.CacheMisses)
 
 	// Make an error call
-	_ = client.doRequestWithRetry(context.Background(), "GET", server.URL+"/error", nil, nil)
+	_ = client.doRequestWithRetry(t.Context(), "GET", server.URL+"/error", nil, nil)
 
 	metrics = client.GetMetrics()
 	assert.Equal(t, int64(4), metrics.APICalls, "Should count all retry attempts")

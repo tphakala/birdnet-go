@@ -132,7 +132,7 @@ func TestCircuitBreakerTelemetry(t *testing.T) {
 	cb.SetTelemetry(telemetry)
 
 	// Trigger failures to open circuit breaker
-	ctx := context.Background()
+	ctx := t.Context()
 	for range 5 {
 		_ = cb.Call(ctx, func(ctx context.Context) error {
 			return assert.AnError
@@ -181,7 +181,7 @@ func TestCircuitBreakerTelemetry_Disabled(t *testing.T) {
 	cb.SetTelemetry(telemetry)
 
 	// Trigger failures
-	ctx := context.Background()
+	ctx := t.Context()
 	for range 5 {
 		_ = cb.Call(ctx, func(ctx context.Context) error {
 			return assert.AnError
@@ -215,7 +215,7 @@ func TestCircuitBreakerTelemetry_Recovery(t *testing.T) {
 		cb.SetTelemetry(telemetry)
 
 		// Trigger failures to open
-		ctx := context.Background()
+		ctx := t.Context()
 		for range 3 {
 			_ = cb.Call(ctx, func(ctx context.Context) error {
 				return assert.AnError
@@ -263,7 +263,7 @@ func TestCircuitBreakerTelemetry_NoProvider(t *testing.T) {
 	cb.SetTelemetry(telemetry)
 
 	// Trigger failures - should not panic even with nil reporter
-	ctx := context.Background()
+	ctx := t.Context()
 	for range 5 {
 		_ = cb.Call(ctx, func(ctx context.Context) error {
 			return assert.AnError
@@ -472,7 +472,7 @@ func TestTelemetryIntegration_EndToEnd(t *testing.T) {
 		return fmt.Errorf("simulated failure")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for range 3 {
 		_ = cb.Call(ctx, failingFunc)
 	}
@@ -504,7 +504,7 @@ func TestTelemetryIntegration_Debouncing(t *testing.T) {
 		cb := NewPushCircuitBreaker(cbConfig, nil, "flapping-provider")
 		cb.SetTelemetry(telemetry)
 
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Simulate flapping: closed → open → half-open → open → half-open...
 		// 1. Fail twice to open circuit

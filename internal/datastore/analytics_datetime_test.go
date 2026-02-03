@@ -3,7 +3,6 @@
 package datastore
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -72,7 +71,7 @@ func TestGetSpeciesSummaryDataDateTimeHandling(t *testing.T) {
 	}
 
 	// Test 1: Verify correct last_seen calculation for all species
-	summaries, err := ds.GetSpeciesSummaryData(context.Background(), "", "")
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err, "GetSpeciesSummaryData should not return error")
 	require.Len(t, summaries, 2, "Should have 2 species")
 
@@ -125,7 +124,7 @@ func TestGetSpeciesSummaryDataDateTimeHandling(t *testing.T) {
 	require.NoError(t, err, "Failed to insert new species")
 
 	// Re-query and verify existing species timestamps haven't changed
-	summariesAfter, err := ds.GetSpeciesSummaryData(context.Background(), "", "")
+	summariesAfter, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err, "GetSpeciesSummaryData should not return error after new species")
 	require.Len(t, summariesAfter, 3, "Should have 3 species now")
 
@@ -183,7 +182,7 @@ func TestDateTimeFunctionConsistency(t *testing.T) {
 		require.NoError(t, err, "Failed to insert edge case note")
 	}
 
-	summaries, err := ds.GetSpeciesSummaryData(context.Background(), "", "")
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err, "Should handle edge case times")
 	require.Len(t, summaries, 1, "Should have 1 species")
 
@@ -246,7 +245,7 @@ func TestGetDateTimeFormatIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that GetSpeciesSummaryData works with the datetime format
-	summaries, err := ds.GetSpeciesSummaryData(context.Background(), "", "")
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err, "Query should succeed with datetime format")
 	require.Len(t, summaries, 1, "Should return one species")
 
@@ -278,7 +277,7 @@ func TestGetSpeciesSummaryDataErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that the function handles supported databases correctly
-	summaries, err := ds.GetSpeciesSummaryData(context.Background(), "", "")
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err, "Should not error with supported database")
 	require.Len(t, summaries, 1, "Should return results")
 

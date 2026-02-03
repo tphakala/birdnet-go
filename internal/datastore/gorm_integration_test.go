@@ -7,7 +7,6 @@
 package datastore
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -259,7 +258,7 @@ func TestDetectionRepository_RoundTrip(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Save the detection
 	err := repo.Save(ctx, &original, nil)
@@ -447,7 +446,7 @@ func TestGetAdditionalResults(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Save with additional results
 	err := repo.Save(ctx, &result, additionalResults)

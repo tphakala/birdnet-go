@@ -71,21 +71,21 @@ func BenchmarkContains(b *testing.B) {
 
 	b.Run("Found", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = contains(extensions, ".mp3")
 		}
 	})
 
 	b.Run("NotFound", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = contains(extensions, ".txt")
 		}
 	})
 
 	b.Run("FirstItem", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = contains(extensions, ".wav")
 		}
 	})
@@ -128,7 +128,7 @@ func BenchmarkMemoryProfile(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
 				if err != nil {
 					b.Fatal(err)
@@ -169,7 +169,7 @@ func BenchmarkPoolEffectiveness(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
 			if err != nil {
 				b.Fatal(err)

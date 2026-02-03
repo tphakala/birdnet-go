@@ -42,7 +42,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 	sfs, err := securefs.New(tempDir)
 	require.NoError(t, err, "Failed to create SecureFS")
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	settings := &conf.Settings{}
 	settings.Realtime.Audio.Export.Path = tempDir

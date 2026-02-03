@@ -36,7 +36,7 @@ func TestService_isSubscriberCancelled(t *testing.T) {
 	t.Run("not_cancelled", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		sub := &Subscriber{
@@ -51,7 +51,7 @@ func TestService_isSubscriberCancelled(t *testing.T) {
 	t.Run("cancelled", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		sub := &Subscriber{
@@ -74,7 +74,7 @@ func TestService_sendToSubscriber(t *testing.T) {
 	t.Run("successful_send", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		sub := &Subscriber{
@@ -102,7 +102,7 @@ func TestService_sendToSubscriber(t *testing.T) {
 	t.Run("channel_full", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Create channel with 0 buffer
@@ -123,7 +123,7 @@ func TestService_sendToSubscriber(t *testing.T) {
 	t.Run("clones_notification", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		sub := &Subscriber{
@@ -161,8 +161,8 @@ func TestService_processSubscribers(t *testing.T) {
 		defer service.Stop()
 
 		// Create subscribers
-		ctx1, cancel1 := context.WithCancel(context.Background())
-		ctx2, cancel2 := context.WithCancel(context.Background())
+		ctx1, cancel1 := context.WithCancel(t.Context())
+		ctx2, cancel2 := context.WithCancel(t.Context())
 		defer cancel1()
 		defer cancel2()
 
@@ -187,8 +187,8 @@ func TestService_processSubscribers(t *testing.T) {
 		service := NewService(DefaultServiceConfig())
 		defer service.Stop()
 
-		ctx1, cancel1 := context.WithCancel(context.Background())
-		ctx2, cancel2 := context.WithCancel(context.Background())
+		ctx1, cancel1 := context.WithCancel(t.Context())
+		ctx2, cancel2 := context.WithCancel(t.Context())
 		defer cancel1()
 
 		// Cancel second subscriber
@@ -215,8 +215,8 @@ func TestService_processSubscribers(t *testing.T) {
 		service := NewService(DefaultServiceConfig())
 		defer service.Stop()
 
-		ctx1, cancel1 := context.WithCancel(context.Background())
-		ctx2, cancel2 := context.WithCancel(context.Background())
+		ctx1, cancel1 := context.WithCancel(t.Context())
+		ctx2, cancel2 := context.WithCancel(t.Context())
 		defer cancel1()
 		defer cancel2()
 

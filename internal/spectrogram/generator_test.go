@@ -107,7 +107,7 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 			audioPath := filepath.Join(tempDir, "test.wav")
 			outputPath := filepath.Join(tempDir, "test.png")
 
-			args := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, tt.width, tt.raw)
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, tt.width, tt.raw)
 			result := parseSoxSpectrogramArgs(args)
 
 			assert.Equal(t, tt.wantDuration, result.hasDuration, "duration parameter mismatch")
@@ -142,7 +142,7 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	args := gen.getSoxArgs(context.Background(), audioPath, outputPath, 800, false, SoxInputFile)
+	args := gen.getSoxArgs(t.Context(), audioPath, outputPath, 800, false, SoxInputFile)
 
 	// First argument should be the audio file path
 	require.NotEmpty(t, args, "getSoxArgs() should return args")
@@ -162,7 +162,7 @@ func TestGenerator_GenerateFromPCM_MissingBinary(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3}
 
-	err := gen.GenerateFromPCM(context.Background(), pcmData, outputPath, 400, false)
+	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false)
 	assert.Error(t, err, "GenerateFromPCM() should error when Sox binary not configured")
 }
 
@@ -180,7 +180,7 @@ func TestGenerator_GenerateFromFile_MissingBinaries(t *testing.T) {
 	err := os.WriteFile(audioPath, []byte("fake audio"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
-	err = gen.GenerateFromFile(context.Background(), audioPath, outputPath, 400, false)
+	err = gen.GenerateFromFile(t.Context(), audioPath, outputPath, 400, false)
 	assert.Error(t, err, "GenerateFromFile() should error when binaries not configured")
 }
 
@@ -260,7 +260,7 @@ func TestFFmpegFallback_GetsFreshContext(t *testing.T) {
 // This documents the fix for issue #1503.
 func TestFFmpegFallback_NotAffectedByParentContext(t *testing.T) {
 	// Create a context with very short deadline (simulating exhausted Sox timeout)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	// Sleep to consume most of the context time
@@ -300,7 +300,7 @@ func TestComputeRemainingTimeout(t *testing.T) {
 		{
 			name: "context with deadline returns remaining time",
 			setupCtx: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 10*time.Second)
+				return context.WithTimeout(t.Context(), 10*time.Second)
 			},
 			fallback:       30 * time.Second,
 			expectFallback: false,
@@ -310,7 +310,7 @@ func TestComputeRemainingTimeout(t *testing.T) {
 		{
 			name: "context without deadline returns fallback",
 			setupCtx: func() (context.Context, context.CancelFunc) {
-				return context.WithCancel(context.Background())
+				return context.WithCancel(t.Context())
 			},
 			fallback:       30 * time.Second,
 			expectFallback: true,
@@ -320,7 +320,7 @@ func TestComputeRemainingTimeout(t *testing.T) {
 		{
 			name: "expired context returns fallback",
 			setupCtx: func() (context.Context, context.CancelFunc) {
-				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				ctx, cancel := context.WithTimeout(t.Context(), 1*time.Nanosecond)
 				time.Sleep(10 * time.Millisecond) // Ensure context expires
 				return ctx, cancel
 			},
@@ -332,7 +332,7 @@ func TestComputeRemainingTimeout(t *testing.T) {
 		{
 			name: "short remaining time returns actual remaining",
 			setupCtx: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 500*time.Millisecond)
+				return context.WithTimeout(t.Context(), 500*time.Millisecond)
 			},
 			fallback:       30 * time.Second,
 			expectFallback: false,
@@ -409,7 +409,7 @@ func TestGenerateFromFile_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := gen.GenerateFromFile(context.Background(), tt.audioPath, tt.outputPath, tt.width, false)
+			err := gen.GenerateFromFile(t.Context(), tt.audioPath, tt.outputPath, tt.width, false)
 
 			if tt.wantErr {
 				require.Error(t, err, "expected error for invalid input")
@@ -488,7 +488,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := gen.GenerateFromPCM(context.Background(), tt.pcmData, tt.outputPath, tt.width, false)
+			err := gen.GenerateFromPCM(t.Context(), tt.pcmData, tt.outputPath, tt.width, false)
 
 			if tt.wantErr {
 				require.Error(t, err, "expected error for invalid input")
@@ -587,7 +587,7 @@ func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
 	err := os.WriteFile(audioPath, []byte("fake audio"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
-	err = gen.generateWithSoxDirect(context.Background(), audioPath, outputPath, 400, false)
+	err = gen.generateWithSoxDirect(t.Context(), audioPath, outputPath, 400, false)
 	require.Error(t, err, "should error when Sox binary not configured")
 	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
 }
@@ -626,7 +626,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			audioPath := filepath.Join(env.TempDir, "test.wav")
 			outputPath := filepath.Join(env.TempDir, "test.png")
 
-			err := gen.generateWithFFmpegSoxPipeline(context.Background(), audioPath, outputPath, 400, false)
+			err := gen.generateWithFFmpegSoxPipeline(t.Context(), audioPath, outputPath, 400, false)
 			require.Error(t, err, "should error when binary not configured")
 			assert.Contains(t, err.Error(), tt.errContain, "error should mention missing binary")
 		})
@@ -643,7 +643,7 @@ func TestGenerateWithFFmpeg_MissingBinary(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	err := gen.generateWithFFmpeg(context.Background(), audioPath, outputPath, 400, false)
+	err := gen.generateWithFFmpeg(t.Context(), audioPath, outputPath, 400, false)
 	require.Error(t, err, "should error when FFmpeg binary not configured")
 	assert.Contains(t, err.Error(), "ffmpeg binary not configured", "error should mention ffmpeg binary")
 }
@@ -658,7 +658,7 @@ func TestGenerateWithSoxPCM_MissingBinary(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 
-	err := gen.generateWithSoxPCM(context.Background(), pcmData, outputPath, 400, false)
+	err := gen.generateWithSoxPCM(t.Context(), pcmData, outputPath, 400, false)
 	require.Error(t, err, "should error when Sox binary not configured")
 	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
 }
@@ -673,7 +673,7 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	args := gen.getSoxArgs(context.Background(), audioPath, outputPath, 800, false, SoxInputFile)
+	args := gen.getSoxArgs(t.Context(), audioPath, outputPath, 800, false, SoxInputFile)
 
 	// First argument should be the audio file for SoxInputFile
 	require.NotEmpty(t, args, "args should not be empty")
@@ -702,12 +702,12 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// Test with raw=false
-	argsNoRaw := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, 400, false)
+	argsNoRaw := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
 	hasRaw := slices.Contains(argsNoRaw, "-r")
 	assert.False(t, hasRaw, "should not contain -r flag when raw=false")
 
 	// Test with raw=true
-	argsWithRaw := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, 400, true)
+	argsWithRaw := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, true)
 	hasRaw = slices.Contains(argsWithRaw, "-r")
 	assert.True(t, hasRaw, "should contain -r flag when raw=true")
 }
@@ -726,7 +726,7 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 
 	for _, width := range testWidths {
 		t.Run("width_"+strconv.Itoa(width), func(t *testing.T) {
-			args := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, width, false)
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, width, false)
 
 			// Find width value
 			widthStr := strconv.Itoa(width)
@@ -781,6 +781,6 @@ func TestNewGenerator_WithNilLogger(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// getSoxSpectrogramArgs uses g.logger.Warn internally
-	args := gen.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, 400, false)
+	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
 	assert.NotEmpty(t, args, "should return valid args without panic")
 }

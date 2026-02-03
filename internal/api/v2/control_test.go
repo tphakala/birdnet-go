@@ -79,7 +79,7 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Co
 	var wg sync.WaitGroup
 
 	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
 	// Launch multiple concurrent requests using Go 1.25's WaitGroup.Go()
@@ -145,7 +145,7 @@ func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Con
 	}()
 
 	// Create a context with timeout to ensure the test doesn't hang
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	// Create a request with the timeout context

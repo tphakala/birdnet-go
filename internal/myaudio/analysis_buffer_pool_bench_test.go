@@ -67,7 +67,8 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 	b.ReportAllocs()
 
 	// Run benchmark
-	for i := range b.N {
+	i := 0
+	for b.Loop() {
 		// Read until we get data (might need multiple reads due to sliding window)
 		var data []byte
 		var err error
@@ -94,6 +95,7 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 		if len(data) != conf.BufferSize {
 			b.Fatalf("ReadFromAnalysisBuffer returned wrong size: got %d, want %d", len(data), conf.BufferSize)
 		}
+		i++
 	}
 
 	// Get pool stats

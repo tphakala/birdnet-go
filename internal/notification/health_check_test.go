@@ -339,7 +339,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	provider := &mockHealthProvider{name: "test", enabled: true}
 	hc.RegisterProvider(provider, nil)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Start health checker
 	err := hc.Start(ctx)
@@ -372,7 +372,7 @@ func TestHealthChecker_StartAlreadyStarted(t *testing.T) {
 	}
 
 	hc := NewHealthChecker(config, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := hc.Start(ctx)
 	require.NoError(t, err)
@@ -522,7 +522,7 @@ func TestHealthChecker_executeHealthCheck(t *testing.T) {
 		Timeout:  5 * time.Second,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	hc := NewHealthChecker(config, nil, nil)
 	hc.baseCtx = ctx // Set base context for tests
 
@@ -577,7 +577,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 		hc.RegisterProvider(provider, nil)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := hc.Start(ctx)
 	require.NoError(t, err)
 	defer hc.Stop()
@@ -691,7 +691,7 @@ func TestHealthChecker_checkProvider_Integration(t *testing.T) {
 		Timeout:  5 * time.Second,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	hc := NewHealthChecker(config, nil, nil)
 	hc.baseCtx = ctx
 

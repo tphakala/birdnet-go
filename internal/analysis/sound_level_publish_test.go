@@ -800,7 +800,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 				return
 			case soundData := <-testSoundLevelChan:
 				// Simulate immediate MQTT publish
-				ctx := context.Background()
+				ctx := t.Context()
 				topic := testMQTTTopic
 
 				// Convert to compact format
@@ -902,7 +902,7 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 			case <-stopChan:
 				return
 			case soundData := <-testSoundLevelChan:
-				ctx := context.Background()
+				ctx := t.Context()
 				topic := testMQTTTopic
 				compactData := CompactSoundLevelData{
 					TS:   soundData.Timestamp.Format(time.RFC3339),
@@ -1193,7 +1193,7 @@ func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{}
 // publishSoundLevelData publishes sound level data via mock MQTT
 func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockProc *processor.Processor) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	topic := testMQTTTopic
 
 	compactData := convertToCompactFormat(soundData)
@@ -1286,7 +1286,7 @@ func startMockMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan <-chan st
 			case <-stopChan:
 				return
 			case soundData := <-testSoundLevelChan:
-				ctx := context.Background()
+				ctx := t.Context()
 				topic := testMQTTTopic
 				compactData := CompactSoundLevelData{
 					TS:    soundData.Timestamp.Format(time.RFC3339),
@@ -1409,7 +1409,7 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 				return
 			case soundData := <-testSoundLevelChan:
 				// The publisher publishes immediately when receiving data
-				ctx := context.Background()
+				ctx := t.Context()
 				topic := testMQTTTopic
 				compactData := CompactSoundLevelData{
 					TS:    soundData.Timestamp.Format(time.RFC3339),

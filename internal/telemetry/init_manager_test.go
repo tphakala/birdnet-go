@@ -147,7 +147,7 @@ func TestInitManager_Shutdown(t *testing.T) {
 	manager.eventBus.Store(int32(InitStateCompleted))
 
 	// Test shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	err := manager.Shutdown(ctx)

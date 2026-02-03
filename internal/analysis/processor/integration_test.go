@@ -362,7 +362,7 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 
 	t.Run("query for new species by season", func(t *testing.T) {
 		// Get new species in spring
-		springNew, err := ds.GetNewSpeciesDetections(context.Background(), "2024-03-20", "2024-06-20", 10, 0)
+		springNew, err := ds.GetNewSpeciesDetections(t.Context(), "2024-03-20", "2024-06-20", 10, 0)
 		require.NoError(t, err)
 
 		springSpeciesMap := make(map[string]bool)
@@ -374,7 +374,7 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 		assert.True(t, springSpeciesMap["Apus apus"], "Common Swift first seen in spring period")
 
 		// Get new species in summer
-		summerNew, err := ds.GetNewSpeciesDetections(context.Background(), "2024-06-21", "2024-09-21", 10, 0)
+		summerNew, err := ds.GetNewSpeciesDetections(t.Context(), "2024-06-21", "2024-09-21", 10, 0)
 		require.NoError(t, err)
 
 		summerSpeciesMap := make(map[string]bool)

@@ -910,7 +910,7 @@ func populateStaleEntries(t *testing.T, store *mockStore, count int) {
 // monitorBackgroundFetches collects fetch attempts and returns when enough are detected or timeout.
 func monitorBackgroundFetches(t *testing.T, fetchAttempts <-chan struct{}, maxExpected int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	fetchCount := 0

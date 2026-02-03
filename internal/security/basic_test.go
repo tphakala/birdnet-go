@@ -762,7 +762,7 @@ func TestExchangeCodeWithTimeoutContextCancellation(t *testing.T) {
 	}
 
 	// Create an already cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	token, err := server.exchangeCodeWithTimeout(ctx, "valid_code")
