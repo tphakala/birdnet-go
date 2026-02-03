@@ -44,10 +44,10 @@ type DualWriteRepository struct {
 	modelRepo    ModelRepository
 	sourceRepo   AudioSourceRepository
 	logger       logger.Logger
-	semaphore    chan struct{}   // Limits concurrent V2 writes
-	writeTimeout time.Duration   // Timeout for V2 write operations
-	shutdownCh   chan struct{}   // Signals shutdown to in-flight goroutines
-	shutdownOnce sync.Once       // Ensures shutdown is called only once
+	semaphore    chan struct{} // Limits concurrent V2 writes
+	writeTimeout time.Duration // Timeout for V2 write operations
+	shutdownCh   chan struct{} // Signals shutdown to in-flight goroutines
+	shutdownOnce sync.Once     // Ensures shutdown is called only once
 
 	// Cached lookup table IDs
 	speciesLabelTypeID uint
@@ -378,8 +378,14 @@ func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string,
 			offset = filters.Offset
 		}
 
-		// Use the first label ID for now - TODO: support querying by multiple label IDs
-		dets, total, err := dw.v2.GetByLabel(ctx, labelIDs[0], limit, offset)
+		// Query across all label IDs for this species (multi-model support)
+		searchFilters := &SearchFilters{
+			LabelIDs: labelIDs,
+			Limit:    limit,
+			Offset:   offset,
+			SortDesc: true,
+		}
+		dets, total, err := dw.v2.Search(ctx, searchFilters)
 		if err != nil {
 			return nil, 0, err
 		}

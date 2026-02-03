@@ -115,10 +115,10 @@ type Worker struct {
 	rateIndex   int
 
 	// Cumulative rate tracking for stable ETA calculations
-	phaseStartTime       time.Time // When current phase started
-	phaseRecordsAtStart  int64     // Records already migrated when phase started
-	cumulativeRate       float64   // Running average rate (records/second)
-	cumulativeRateSamples int      // Number of samples contributing to cumulative rate
+	phaseStartTime        time.Time // When current phase started
+	phaseRecordsAtStart   int64     // Records already migrated when phase started
+	cumulativeRate        float64   // Running average rate (records/second)
+	cumulativeRateSamples int       // Number of samples contributing to cumulative rate
 
 	// Progress logging tracking
 	lastProgressLog     time.Time
@@ -514,7 +514,7 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 			notification.TypeSystem,
 			notification.PriorityMedium,
 			"Database Migration Completed",
-			"Database migration has completed successfully. Your system is now ready for upcoming features.",
+			"Database migration has completed successfully. Please restart BirdNET-Go to switch to the new database.",
 			"database",
 		); err != nil {
 			w.logger.Warn("failed to send migration completion notification", logger.Error(err))
@@ -524,6 +524,102 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 	return runActionReturn
 }
 
+// processDirtyIDs fetches and migrates known dirty IDs from the state manager.
+// Dirty IDs are records that failed migration previously and are the most likely
+// cause of count mismatches. Iterates over batches until all dirty IDs are
+// processed or no progress is made (to avoid infinite loops on persistent errors).
+// Returns the number of records successfully migrated.
+// Returns ctx.Err() if the context is cancelled during processing.
+func (w *Worker) processDirtyIDs(ctx context.Context) (int64, error) {
+	var totalCaught int64
+	for {
+		dirtyIDs, err := w.stateManager.GetDirtyIDsBatch(w.batchSize)
+		if err != nil {
+			w.logger.Warn("failed to fetch dirty IDs for catch-up", logger.Error(err))
+			return totalCaught, nil
+		}
+		if len(dirtyIDs) == 0 {
+			break
+		}
+
+		w.logger.Info("catch-up: processing dirty IDs batch", logger.Int("count", len(dirtyIDs)))
+		batchCaught, err := w.processDirtyIDsBatch(ctx, dirtyIDs)
+		totalCaught += batchCaught
+		if err != nil {
+			return totalCaught, err
+		}
+		// Stop if no progress was made — remaining IDs have persistent errors
+		if batchCaught == 0 {
+			break
+		}
+	}
+
+	if totalCaught > 0 {
+		w.logger.Info("catch-up: dirty ID processing complete",
+			logger.Int64("records_caught", totalCaught))
+	}
+	return totalCaught, nil
+}
+
+// processDirtyIDsBatch processes a single batch of dirty IDs, migrating each
+// from legacy to v2. Returns the count of successfully migrated records.
+func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int64, error) {
+	var caught int64
+	for _, dirtyID := range dirtyIDs {
+		if dirtyID == 0 {
+			_ = w.stateManager.RemoveDirtyID(dirtyID)
+			continue
+		}
+
+		// Check for cancellation
+		select {
+		case <-ctx.Done():
+			return caught, ctx.Err()
+		default:
+		}
+
+		// Fetch legacy record using cursor pagination
+		// WithMinID returns records with ID > argument, so use dirtyID-1
+		filters := datastore.NewDetectionFilters().
+			WithMinID(dirtyID - 1).
+			WithLimit(1)
+		results, _, fetchErr := w.legacy.Search(ctx, filters)
+		if fetchErr != nil {
+			w.logger.Warn("failed to fetch legacy record for dirty ID, will retry",
+				logger.Uint64("id", uint64(dirtyID)),
+				logger.Error(fetchErr))
+			continue
+		}
+		if len(results) == 0 || results[0].ID != dirtyID {
+			w.logger.Warn("dirty ID not found in legacy, removing",
+				logger.Uint64("id", uint64(dirtyID)))
+			if removeErr := w.stateManager.RemoveDirtyID(dirtyID); removeErr != nil {
+				w.logger.Warn("failed to remove stale dirty ID",
+					logger.Uint64("id", uint64(dirtyID)),
+					logger.Error(removeErr))
+			}
+			continue
+		}
+
+		// Migrate the record
+		if migrateErr := w.migrateRecord(ctx, results[0]); migrateErr != nil {
+			w.logger.Warn("failed to migrate dirty ID during catch-up",
+				logger.Uint64("id", uint64(dirtyID)),
+				logger.Error(migrateErr))
+			continue // Leave as dirty for next attempt
+		}
+
+		// Successfully migrated — remove from dirty set
+		if removeErr := w.stateManager.RemoveDirtyID(dirtyID); removeErr != nil {
+			w.logger.Warn("failed to remove dirty ID after migration",
+				logger.Uint64("id", uint64(dirtyID)),
+				logger.Error(removeErr))
+		}
+		caught++
+	}
+	return caught, nil
+}
+
 // runCatchUp finds and migrates records that exist in legacy but not in V2.
 // Unlike processBatch which continues from LastMigratedID, this function
 // scans the entire legacy database to find actually missing records.
@@ -531,6 +627,16 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 // Has a safety limit (catchUpMaxBatches) to prevent infinite loops.
 func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 	var totalCaught int64
+
+	// Phase 1: Process known dirty IDs first — these are the most likely cause
+	// of count mismatches and can be resolved without a full scan.
+	dirtyCaught, dirtyErr := w.processDirtyIDs(ctx)
+	if dirtyErr != nil {
+		return dirtyCaught, dirtyErr
+	}
+	totalCaught += dirtyCaught
+
+	// Phase 2: Full scan for any remaining missing records.
 	var lastID uint
 	reachedEnd := false
 
@@ -651,7 +757,7 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 			notification.TypeSystem,
 			notification.PriorityMedium,
 			"Database Migration Completed",
-			"Database migration has completed successfully. Your system is now ready for upcoming features.",
+			"Database migration has completed successfully. Please restart BirdNET-Go to switch to the new database.",
 			"database",
 		); err != nil {
 			w.logger.Warn("failed to send migration completion notification", logger.Error(err))
