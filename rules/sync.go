@@ -50,5 +50,6 @@ func WaitGroupGo(m dsl.Matcher) {
 		`$wg.Add(1); go func($param $typ) { defer $param.Done(); $*body }($wg)`,
 		`$wg.Add(1); go func($param $typ) { defer $param.Done(); $*body }(&$wg)`,
 	).
+		Where(m["wg"].Type.Is("*sync.WaitGroup") || m["wg"].Type.Is("sync.WaitGroup")).
 		Report("use $wg.Go(func() { $body }) instead of manual Add/Done pattern (Go 1.25+)")
 }

@@ -85,20 +85,24 @@ func SortInts(m dsl.Matcher) {
 func SlicesClone(m dsl.Matcher) {
 	// Pattern: append([]T(nil), s...)
 	// This is a common idiom for cloning slices
+	// Exclude []byte — handled by BytesClone with bytes.Clone suggestion
 	m.Match(
 		`append([]$typ(nil), $s...)`,
 	).
+		Where(!m["s"].Type.Is("[]byte")).
 		Report("use slices.Clone($s) instead of append([]$typ(nil), $s...) (Go 1.21+)")
 
 	m.Match(
 		`append([]$typ{}, $s...)`,
 	).
+		Where(!m["s"].Type.Is("[]byte")).
 		Report("use slices.Clone($s) instead of append([]$typ{}, $s...) (Go 1.21+)")
 
 	// append(s[:0:0], s...) pattern
 	m.Match(
 		`append($s[:0:0], $s...)`,
 	).
+		Where(!m["s"].Type.Is("[]byte")).
 		Report("use slices.Clone($s) instead of append($s[:0:0], $s...) (Go 1.21+)")
 }
 
