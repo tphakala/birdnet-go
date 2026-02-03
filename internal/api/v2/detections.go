@@ -280,6 +280,22 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	}
 	params.Offset = offset
 
+	// Validate hour parameter based on query type
+	if params.QueryType == "hourly" {
+		// Hourly queries require a single valid integer hour (0-23), not a range
+		if params.Hour == "" {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "hour parameter is required for hourly query type")
+		}
+		if h, err := strconv.Atoi(params.Hour); err != nil || h < 0 || h > 23 {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid hour parameter: must be a single integer between 0 and 23")
+		}
+	} else if params.Hour != "" {
+		// Other query types: hour is optional, but if present must be valid (ranges OK)
+		if parseHourFilter(params.Hour) == nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid hour parameter: must be a valid hour (0-23) or hour range (e.g. 6-9)")
+		}
+	}
+
 	return params, nil
 }
 

@@ -341,6 +341,100 @@ func TestGetDetections(t *testing.T) {
 				assert.Contains(t, errResp["message"], "numResults exceeds maximum allowed value", "Error message mismatch in response body")
 			},
 		},
+		{
+			name: "Hourly query with invalid hour",
+			queryParams: map[string]string{
+				"queryType": "hourly",
+				"date":      "2025-03-07",
+				"hour":      "abc",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			mockSetup:      func(m *mock.Mock) {},
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				var errResp map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp["message"], "invalid hour parameter")
+			},
+		},
+		{
+			name: "Hourly query with missing hour",
+			queryParams: map[string]string{
+				"queryType": "hourly",
+				"date":      "2025-03-07",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			mockSetup:      func(m *mock.Mock) {},
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				var errResp map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp["message"], "hour parameter is required")
+			},
+		},
+		{
+			name: "Hourly query with hour range rejected",
+			queryParams: map[string]string{
+				"queryType": "hourly",
+				"date":      "2025-03-07",
+				"hour":      "6-9",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			mockSetup:      func(m *mock.Mock) {},
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				var errResp map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp["message"], "invalid hour parameter")
+			},
+		},
+		{
+			name: "Hourly query with out of range hour",
+			queryParams: map[string]string{
+				"queryType": "hourly",
+				"date":      "2025-03-07",
+				"hour":      "25",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			mockSetup:      func(m *mock.Mock) {},
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				var errResp map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp["message"], "invalid hour parameter")
+			},
+		},
+		{
+			name: "Hourly query with same-value range rejected",
+			queryParams: map[string]string{
+				"queryType": "hourly",
+				"date":      "2025-03-07",
+				"hour":      "08-08",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			mockSetup:      func(m *mock.Mock) {},
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				var errResp map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp["message"], "invalid hour parameter")
+			},
+		},
 	}
 
 	for _, tc := range testCases {
