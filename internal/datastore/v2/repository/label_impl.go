@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -178,10 +180,7 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 		return make(map[string]*entities.Label), nil
 	}
 
-	nameList := make([]string, 0, len(uniqueNames))
-	for name := range uniqueNames {
-		nameList = append(nameList, name)
-	}
+	nameList := slices.Collect(maps.Keys(uniqueNames))
 
 	result := make(map[string]*entities.Label, len(nameList))
 

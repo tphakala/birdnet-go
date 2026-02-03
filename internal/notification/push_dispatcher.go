@@ -629,7 +629,7 @@ func effectiveTypes(cfg []string) []string {
 	if len(cfg) == 0 {
 		return []string{"error", "warning", "info", "detection", "system"}
 	}
-	return append([]string{}, cfg...)
+	return slices.Clone(cfg)
 }
 
 // ----------------- helpers -----------------

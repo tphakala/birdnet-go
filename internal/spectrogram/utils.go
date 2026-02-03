@@ -4,8 +4,9 @@ package spectrogram
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -76,12 +77,9 @@ func PixelsToSize(width int) (string, error) {
 // Useful for runtime validation in web UI.
 // Returns sizes in deterministic order for consistent UI/testing.
 func GetValidSizes() []string {
-	sizes := make([]string, 0, len(validSizes))
-	for size := range validSizes {
-		sizes = append(sizes, size)
-	}
+	sizes := slices.Collect(maps.Keys(validSizes))
 	// Sort for deterministic output
-	sort.Strings(sizes)
+	slices.Sort(sizes)
 	return sizes
 }
 

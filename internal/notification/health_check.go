@@ -3,6 +3,8 @@ package notification
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -155,10 +157,7 @@ func (hc *HealthChecker) Stop() {
 // checkAll performs health checks on all registered providers.
 func (hc *HealthChecker) checkAll() {
 	hc.mu.RLock()
-	entries := make([]*healthCheckEntry, 0, len(hc.providers))
-	for _, entry := range hc.providers {
-		entries = append(entries, entry)
-	}
+	entries := slices.Collect(maps.Values(hc.providers))
 	hc.mu.RUnlock()
 
 	// Check providers concurrently
@@ -300,10 +299,7 @@ func (hc *HealthChecker) GetProviderHealth(providerName string) (ProviderHealth,
 // GetAllProviderHealth returns health status for all providers.
 func (hc *HealthChecker) GetAllProviderHealth() []ProviderHealth {
 	hc.mu.RLock()
-	entries := make([]*healthCheckEntry, 0, len(hc.providers))
-	for _, entry := range hc.providers {
-		entries = append(entries, entry)
-	}
+	entries := slices.Collect(maps.Values(hc.providers))
 	hc.mu.RUnlock()
 
 	results := make([]ProviderHealth, 0, len(entries))

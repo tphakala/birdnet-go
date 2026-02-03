@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1001,11 +1002,8 @@ var validOAuthProviders = map[string]bool{
 
 // getValidOAuthProviderNames returns sorted list of valid provider names for error messages
 func getValidOAuthProviderNames() string {
-	names := make([]string, 0, len(validOAuthProviders))
-	for name := range validOAuthProviders {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := slices.Collect(maps.Keys(validOAuthProviders))
+	slices.Sort(names)
 	return strings.Join(names, ", ")
 }
 

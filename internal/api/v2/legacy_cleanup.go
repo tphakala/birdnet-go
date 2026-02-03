@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -99,7 +100,7 @@ func NewCleanupStatus() *CleanupStatus {
 func (cs *CleanupStatus) Get() (state, errMsg string, remaining []string, reclaimed int64) {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
-	remainingCopy := append([]string(nil), cs.tablesRemaining...)
+	remainingCopy := slices.Clone(cs.tablesRemaining)
 	return cs.state, cs.errorMsg, remainingCopy, cs.spaceReclaimed
 }
 

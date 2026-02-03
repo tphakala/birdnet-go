@@ -3,9 +3,10 @@ package myaudio
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -255,13 +256,10 @@ func (r *AudioSourceRegistry) ListSources() []*AudioSource {
 	sources := make([]*AudioSource, 0, len(r.sources))
 
 	// Collect all source IDs for sorting
-	sourceIDs := make([]string, 0, len(r.sources))
-	for id := range r.sources {
-		sourceIDs = append(sourceIDs, id)
-	}
+	sourceIDs := slices.Collect(maps.Keys(r.sources))
 
 	// Sort IDs for deterministic ordering
-	sort.Strings(sourceIDs)
+	slices.Sort(sourceIDs)
 
 	// Build result in sorted order
 	for _, id := range sourceIDs {

@@ -102,14 +102,14 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 
 // walkState holds the state for directory walking operations
 type walkState struct {
-	ctx            context.Context
-	allowedExts    []string
-	lockedSet      map[string]struct{}
-	files          []FileInfo
+	ctx             context.Context
+	allowedExts     []string
+	lockedSet       map[string]struct{}
+	files           []FileInfo
 	parseErrorCount int
 	firstParseError error
-	maxParseErrors int
-	debug          bool
+	maxParseErrors  int
+	debug           bool
 }
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
@@ -202,7 +202,7 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 	}
 
 	// Normalize extensions to lowercase once for case-insensitive matching
-	allowedExts = append([]string(nil), allowedExts...)
+	allowedExts = slices.Clone(allowedExts)
 	for i := range allowedExts {
 		allowedExts[i] = strings.ToLower(allowedExts[i])
 	}
@@ -321,7 +321,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
-	
+
 	// Remove the extension for parsing
 	nameWithoutExt := strings.TrimSuffix(name, ext)
 

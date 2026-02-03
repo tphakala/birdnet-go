@@ -5,7 +5,6 @@ import (
 	_ "embed" // For embedding data
 	"encoding/json"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -49,11 +48,11 @@ type FamilyMetadata struct {
 
 // SpeciesTreeResult represents a complete taxonomic tree with related species
 type SpeciesTreeResult struct {
-	TaxonomyTree     *ebird.TaxonomyTree `json:"taxonomy_tree"`
-	RelatedInGenus   []string            `json:"related_in_genus"`
-	RelatedInFamily  []string            `json:"related_in_family,omitempty"`
-	TotalInGenus     int                 `json:"total_in_genus"`
-	TotalInFamily    int                 `json:"total_in_family"`
+	TaxonomyTree    *ebird.TaxonomyTree `json:"taxonomy_tree"`
+	RelatedInGenus  []string            `json:"related_in_genus"`
+	RelatedInFamily []string            `json:"related_in_family,omitempty"`
+	TotalInGenus    int                 `json:"total_in_genus"`
+	TotalInFamily   int                 `json:"total_in_family"`
 }
 
 // LoadTaxonomyDatabase loads the embedded genus taxonomy database
@@ -300,10 +299,10 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 
 	// Build result with related species
 	result := &SpeciesTreeResult{
-		TaxonomyTree:    tree,
-		RelatedInGenus:  slices.Clone(genusMetadata.Species), // Clone to prevent mutation
-		TotalInGenus:    len(genusMetadata.Species),
-		TotalInFamily:   familyMetadata.SpeciesCount,
+		TaxonomyTree:   tree,
+		RelatedInGenus: slices.Clone(genusMetadata.Species), // Clone to prevent mutation
+		TotalInGenus:   len(genusMetadata.Species),
+		TotalInFamily:  familyMetadata.SpeciesCount,
 	}
 
 	return result, nil
@@ -383,7 +382,7 @@ func (db *TaxonomyDatabase) SearchGenus(pattern string) []string {
 	}
 
 	// Sort results alphabetically for stable output
-	sort.Strings(matches)
+	slices.Sort(matches)
 
 	return matches
 }
@@ -404,7 +403,7 @@ func (db *TaxonomyDatabase) SearchFamily(pattern string) []string {
 	}
 
 	// Sort results alphabetically for stable output
-	sort.Strings(matches)
+	slices.Sort(matches)
 
 	return matches
 }

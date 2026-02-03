@@ -19,6 +19,8 @@ package v2only
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1466,14 +1468,8 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	}
 
 	// Convert sets to slices
-	labelIDs := make([]uint, 0, len(labelIDSet))
-	for id := range labelIDSet {
-		labelIDs = append(labelIDs, id)
-	}
-	sourceIDs := make([]uint, 0, len(sourceIDSet))
-	for id := range sourceIDSet {
-		sourceIDs = append(sourceIDs, id)
-	}
+	labelIDs := slices.Collect(maps.Keys(labelIDSet))
+	sourceIDs := slices.Collect(maps.Keys(sourceIDSet))
 
 	// Batch load all relations
 	labelMap, err := ds.label.GetByIDs(ctx, labelIDs)

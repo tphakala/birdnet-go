@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -407,11 +409,7 @@ func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, de
 }
 
 func mapKeysToSlice(m map[uint]bool) []uint {
-	result := make([]uint, 0, len(m))
-	for k := range m {
-		result = append(result, k)
-	}
-	return result
+	return slices.Collect(maps.Keys(m))
 }
 
 // GetByLabel retrieves detections for a specific label.
@@ -1429,4 +1427,3 @@ func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint)
 	}
 	return existingIDs, nil
 }
-

@@ -7,9 +7,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -31,12 +33,12 @@ const (
 
 // Backup configuration constants
 const (
-	backupJobMaxAge       = 1 * time.Hour        // Jobs expire after 1 hour
-	backupCleanupInterval = 5 * time.Minute      // Cleanup runs every 5 minutes
-	backupTempFilePrefix  = "birdnet-backup-"    // Prefix for temp files
-	backupDiskBuffer      = 100 * 1024 * 1024    // 100MB buffer for disk space check
-	backupVacuumRetries   = 3                    // Number of retries for locked database
-	backupVacuumRetryWait = 2 * time.Second      // Wait between retries
+	backupJobMaxAge       = 1 * time.Hour     // Jobs expire after 1 hour
+	backupCleanupInterval = 5 * time.Minute   // Cleanup runs every 5 minutes
+	backupTempFilePrefix  = "birdnet-backup-" // Prefix for temp files
+	backupDiskBuffer      = 100 * 1024 * 1024 // 100MB buffer for disk space check
+	backupVacuumRetries   = 3                 // Number of retries for locked database
+	backupVacuumRetryWait = 2 * time.Second   // Wait between retries
 )
 
 // BackupJob represents an async backup job.
@@ -426,9 +428,7 @@ func (c *Controller) ListBackupJobs(ctx echo.Context) error {
 	} else {
 		// Return all jobs
 		backupJobManager.mu.RLock()
-		for _, job := range backupJobManager.jobs {
-			jobs = append(jobs, job)
-		}
+		jobs = slices.Collect(maps.Values(backupJobManager.jobs))
 		backupJobManager.mu.RUnlock()
 	}
 
