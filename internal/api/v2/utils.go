@@ -138,6 +138,11 @@ func isUnsafePath(p string) bool {
 		return true
 	}
 
+	// Check for ".." anywhere in the path - dangerous after URL decoding
+	if strings.Contains(p, "..") {
+		return true
+	}
+
 	// Check for dangerous URL-encoded patterns
 	if containsDangerousEncodedPattern(strings.ToLower(p)) {
 		return true

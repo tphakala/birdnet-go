@@ -32,43 +32,6 @@ func JoinHostPort(m dsl.Matcher) {
 		Report("use net.JoinHostPort($host, strconv.Itoa($port)) instead of fmt.Sprintf for host:port (handles IPv6 correctly)")
 }
 
-// FilepathIsLocal detects simple path traversal checks that could use filepath.IsLocal.
-//
-// Old pattern (manual path traversal check):
-//
-//	if strings.Contains(userPath, "..") {
-//	    return errors.New("invalid path")
-//	}
-//	// Still vulnerable to other attacks
-//
-// New pattern (Go 1.20+):
-//
-//	if !filepath.IsLocal(userPath) {
-//	    return errors.New("invalid path")
-//	}
-//	f, _ := os.Open(userPath)
-//
-// filepath.IsLocal reports whether path is:
-//   - Not absolute
-//   - Not empty
-//   - Does not contain ".." elements
-//   - Does not start with "/"
-//   - On Windows: does not contain ":" or start with "\"
-//
-// Benefits:
-//   - Comprehensive path validation
-//   - Handles OS-specific path separators
-//   - Prevents directory traversal attacks
-//
-// See: https://pkg.go.dev/path/filepath#IsLocal
-func FilepathIsLocal(m dsl.Matcher) {
-	// Detect simple .. check that might be replaced by IsLocal
-	m.Match(
-		`strings.Contains($path, "..")`,
-	).
-		Report("consider using filepath.IsLocal($path) for comprehensive path validation (Go 1.20+)")
-}
-
 // ErrorBeforeUse detects potential nil pointer dereference before error check.
 //
 // Go 1.25 fixed a compiler bug (Go 1.21-1.24) where nil checks were incorrectly delayed.

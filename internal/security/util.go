@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -116,7 +115,7 @@ func IsSafePath(pathStr string) bool {
 	if strings.Contains(pathStr, "//") ||
 		strings.Contains(pathStr, "\\") ||
 		strings.Contains(pathStr, "://") ||
-		!filepath.IsLocal(strings.TrimPrefix(pathStr, "/")) ||
+		strings.Contains(pathStr, "..") ||
 		strings.Contains(pathStr, "\x00") {
 		return false
 	}
