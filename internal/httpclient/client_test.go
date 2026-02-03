@@ -53,10 +53,10 @@ func TestDo_BasicRequest(t *testing.T) {
 
 	client := newTestClient(t)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err, "failed to create request")
 
-	resp, err := client.Do(context.Background(), req)
+	resp, err := client.Do(t.Context(), req)
 	require.NoError(t, err, "request failed")
 	defer closeResponseBody(t, resp)
 
@@ -77,10 +77,10 @@ func TestDo_UserAgent(t *testing.T) {
 	cfg := Config{UserAgent: "CustomAgent/2.0"}
 	client := newTestClientWithConfig(t, &cfg)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err, "failed to create request")
 
-	resp, err := client.Do(context.Background(), req)
+	resp, err := client.Do(t.Context(), req)
 	require.NoError(t, err, "request failed")
 	defer closeResponseBody(t, resp)
 
@@ -95,7 +95,7 @@ func TestDo_ContextCancellation(t *testing.T) {
 
 	client := newTestClient(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err, "failed to create request")
 
@@ -118,7 +118,7 @@ func TestDo_ContextTimeout(t *testing.T) {
 	client := newTestClient(t)
 
 	// Create context with very short timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, http.NoBody)
@@ -141,11 +141,11 @@ func TestDo_DefaultTimeout(t *testing.T) {
 	cfg := Config{DefaultTimeout: 50 * time.Millisecond}
 	client := newTestClientWithConfig(t, &cfg)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err, "failed to create request")
 
 	// Context has no deadline, so default timeout should apply
-	resp, err := client.Do(context.Background(), req)
+	resp, err := client.Do(t.Context(), req)
 	defer closeResponseBody(t, resp)
 
 	require.Error(t, err, "expected timeout error")
@@ -163,7 +163,7 @@ func TestDo_ContextTimeoutOverridesDefault(t *testing.T) {
 	client := newTestClientWithConfig(t, &cfg)
 
 	// But context has longer timeout - should succeed
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, http.NoBody)
@@ -196,13 +196,13 @@ func TestDo_ConcurrentRequests(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
 			if err != nil {
 				errChan <- err
 				return
 			}
 
-			resp, err := client.Do(context.Background(), req)
+			resp, err := client.Do(t.Context(), req)
 			if err != nil {
 				errChan <- err
 				return
@@ -254,10 +254,10 @@ func TestDo_Hooks(t *testing.T) {
 		capturedErr = err
 	})
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err, "failed to create request")
 
-	resp, err := client.Do(context.Background(), req)
+	resp, err := client.Do(t.Context(), req)
 	require.NoError(t, err, "request failed")
 	defer closeResponseBody(t, resp)
 
@@ -276,7 +276,7 @@ func TestGet(t *testing.T) {
 
 	client := newTestClient(t)
 
-	resp, err := client.Get(context.Background(), server.URL)
+	resp, err := client.Get(t.Context(), server.URL)
 	require.NoError(t, err, "GET failed")
 	defer closeResponseBody(t, resp)
 
@@ -297,7 +297,7 @@ func TestPost(t *testing.T) {
 
 	client := newTestClient(t)
 
-	resp, err := client.Post(context.Background(), server.URL, "application/json", nil)
+	resp, err := client.Post(t.Context(), server.URL, "application/json", nil)
 	require.NoError(t, err, "POST failed")
 	defer closeResponseBody(t, resp)
 

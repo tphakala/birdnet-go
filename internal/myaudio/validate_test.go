@@ -65,7 +65,7 @@ func TestValidateAudioFileNoDurationCheck(t *testing.T) {
 			createTestWAVFileWithSize(t, testFile, tc.fileSize)
 
 			// Validate the file with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			t.Cleanup(cancel)
 			result, err := ValidateAudioFile(ctx, testFile)
 
@@ -186,7 +186,7 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		testFile := filepath.Join(tmpDir, "valid.wav")
 		createTestWAVFileWithSize(t, testFile, 10*1024)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 		t.Cleanup(cancel)
 		result, err := ValidateAudioFileWithRetry(ctx, testFile)
 
@@ -209,7 +209,7 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		validationDone := make(chan struct{})
 
 		// Start validation in a goroutine
-		ctx := context.Background()
+		ctx := t.Context()
 		var result *AudioValidationResult
 		var validationErr error
 

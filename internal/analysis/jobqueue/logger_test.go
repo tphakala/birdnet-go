@@ -18,7 +18,7 @@ func TestGetLog(t *testing.T) {
 
 // TestLogJobEnqueued tests job enqueue logging doesn't panic
 func TestLogJobEnqueued(t *testing.T) {
-	ctx := WithTraceID(context.Background(), "trace-123")
+	ctx := WithTraceID(t.Context(), "trace-123")
 
 	// Should not panic
 	assert.NotPanics(t, func() {
@@ -27,14 +27,14 @@ func TestLogJobEnqueued(t *testing.T) {
 
 	// Test without trace ID
 	assert.NotPanics(t, func() {
-		LogJobEnqueued(context.Background(), "job-124", "analyze", false)
+		LogJobEnqueued(t.Context(), "job-124", "analyze", false)
 	})
 }
 
 // TestLogJobStarted tests job start logging doesn't panic
 func TestLogJobStarted(t *testing.T) {
 	assert.NotPanics(t, func() {
-		LogJobStarted(context.Background(), "job-456", "analyze")
+		LogJobStarted(t.Context(), "job-456", "analyze")
 	})
 }
 
@@ -43,7 +43,7 @@ func TestLogJobCompleted(t *testing.T) {
 	duration := 150 * time.Millisecond
 
 	assert.NotPanics(t, func() {
-		LogJobCompleted(context.Background(), "job-789", "upload", duration)
+		LogJobCompleted(t.Context(), "job-789", "upload", duration)
 	})
 }
 
@@ -53,26 +53,26 @@ func TestLogJobFailed(t *testing.T) {
 
 	// Test retryable failure (attempt < maxAttempts)
 	assert.NotPanics(t, func() {
-		LogJobFailed(context.Background(), "job-999", "download", 3, 5, testErr)
+		LogJobFailed(t.Context(), "job-999", "download", 3, 5, testErr)
 	})
 
 	// Test permanent failure (attempt >= maxAttempts)
 	assert.NotPanics(t, func() {
-		LogJobFailed(context.Background(), "job-1000", "process", 5, 5, testErr)
+		LogJobFailed(t.Context(), "job-1000", "process", 5, 5, testErr)
 	})
 }
 
 // TestLogQueueStats tests queue statistics logging doesn't panic
 func TestLogQueueStats(t *testing.T) {
 	assert.NotPanics(t, func() {
-		LogQueueStats(context.Background(), 10, 3, 50, 2)
+		LogQueueStats(t.Context(), 10, 3, 50, 2)
 	})
 }
 
 // TestLogJobDropped tests job dropped logging doesn't panic
 func TestLogJobDropped(t *testing.T) {
 	assert.NotPanics(t, func() {
-		LogJobDropped(context.Background(), "job-dropped-1", "Upload to BirdWeather")
+		LogJobDropped(t.Context(), "job-dropped-1", "Upload to BirdWeather")
 	})
 }
 
@@ -80,24 +80,24 @@ func TestLogJobDropped(t *testing.T) {
 func TestLogQueueStopped(t *testing.T) {
 	// Test with key-value pairs
 	assert.NotPanics(t, func() {
-		LogQueueStopped(context.Background(), "manual shutdown", "pending_jobs", 5)
+		LogQueueStopped(t.Context(), "manual shutdown", "pending_jobs", 5)
 	})
 
 	// Test with odd number of details (edge case)
 	assert.NotPanics(t, func() {
-		LogQueueStopped(context.Background(), "error shutdown", "odd_key")
+		LogQueueStopped(t.Context(), "error shutdown", "odd_key")
 	})
 
 	// Test with no details
 	assert.NotPanics(t, func() {
-		LogQueueStopped(context.Background(), "clean shutdown")
+		LogQueueStopped(t.Context(), "clean shutdown")
 	})
 }
 
 // TestLogJobRetrying tests job retry logging doesn't panic
 func TestLogJobRetrying(t *testing.T) {
 	assert.NotPanics(t, func() {
-		LogJobRetrying(context.Background(), "job-retry-1", "Send MQTT message", 2, 5)
+		LogJobRetrying(t.Context(), "job-retry-1", "Send MQTT message", 2, 5)
 	})
 }
 
@@ -108,7 +108,7 @@ func TestLogJobRetryScheduled(t *testing.T) {
 	testErr := errors.New("connection timeout")
 
 	assert.NotPanics(t, func() {
-		LogJobRetryScheduled(context.Background(), "job-retry-sched-1", "HTTP POST request", 2, 5, delay, nextRetryAt, testErr)
+		LogJobRetryScheduled(t.Context(), "job-retry-sched-1", "HTTP POST request", 2, 5, delay, nextRetryAt, testErr)
 	})
 }
 
@@ -116,18 +116,18 @@ func TestLogJobRetryScheduled(t *testing.T) {
 func TestLogJobSuccess(t *testing.T) {
 	// Test first attempt success
 	assert.NotPanics(t, func() {
-		LogJobSuccess(context.Background(), "job-success-1", "Save to database", 1)
+		LogJobSuccess(t.Context(), "job-success-1", "Save to database", 1)
 	})
 
 	// Test retry success
 	assert.NotPanics(t, func() {
-		LogJobSuccess(context.Background(), "job-success-2", "Upload after retry", 3)
+		LogJobSuccess(t.Context(), "job-success-2", "Upload after retry", 3)
 	})
 }
 
 // TestWithTraceID tests trace ID context functions
 func TestWithTraceID(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Add trace ID
 	ctx = WithTraceID(ctx, "trace-123")
@@ -151,12 +151,12 @@ func TestExtractTraceID(t *testing.T) {
 		},
 		{
 			name:     "empty context",
-			ctx:      context.Background(),
+			ctx:      t.Context(),
 			expected: "",
 		},
 		{
 			name:     "context with trace ID",
-			ctx:      WithTraceID(context.Background(), "trace-456"),
+			ctx:      WithTraceID(t.Context(), "trace-456"),
 			expected: "trace-456",
 		},
 	}
@@ -176,7 +176,7 @@ func (s stringerID) String() string { return s.id }
 
 // TestExtractTraceIDWithStringer tests trace ID extraction with fmt.Stringer type
 func TestExtractTraceIDWithStringer(t *testing.T) {
-	ctx := context.WithValue(context.Background(), contextKeyTraceID, stringerID{"stringer-trace"})
+	ctx := context.WithValue(t.Context(), contextKeyTraceID, stringerID{"stringer-trace"})
 	result := extractTraceID(ctx)
 	assert.Equal(t, "stringer-trace", result)
 }

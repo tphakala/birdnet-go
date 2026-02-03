@@ -88,7 +88,7 @@ func (m *mockConsumer) GetEvents() []ErrorEvent {
 // waitForProcessed waits for the consumer to process n events or times out
 func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, timeout time.Duration) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(20 * time.Millisecond)
@@ -110,7 +110,7 @@ func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, time
 func createTestEventBus(t *testing.T, bufferSize, workers int) *EventBus {
 	t.Helper()
 	
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() { cancel() })
 	
 	eb := &EventBus{
@@ -333,7 +333,7 @@ func TestEventBusShutdown(t *testing.T) {
 	// Logger created in helper function
 
 	// Create event bus
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 
 	eb := &EventBus{

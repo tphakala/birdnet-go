@@ -236,7 +236,7 @@ func TestPerformanceUnderSustainedLoadRefactored(t *testing.T) {
 			species := generateSpeciesPool(config.speciesCount)
 
 			// Create context with timeout
-			ctx, cancel := context.WithTimeout(context.Background(),
+			ctx, cancel := context.WithTimeout(t.Context(),
 				time.Duration(config.durationSeconds)*time.Second+5*time.Second)
 			defer cancel()
 

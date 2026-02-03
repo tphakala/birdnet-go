@@ -65,7 +65,7 @@ func TestCleanupHLSWithTimeout(t *testing.T) {
 		// but we can test the timeout behavior of cleanupHLSWithTimeout
 
 		// Create a context that's already cancelled
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		// This should return quickly without waiting
@@ -79,7 +79,7 @@ func TestCleanupHLSWithTimeout(t *testing.T) {
 
 	t.Run("cleanup timeout behavior", func(t *testing.T) {
 		// Test with a valid context that has sufficient timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 
 		// Run cleanup - it should complete normally or timeout after 2 seconds
@@ -96,7 +96,7 @@ func TestCleanupHLSWithTimeout(t *testing.T) {
 func TestShutdownSequenceWithContext(t *testing.T) {
 	t.Run("shutdown completes within timeout", func(t *testing.T) {
 		// Create a context with a reasonable timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 
 		// Simulate shutdown steps
@@ -142,7 +142,7 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 
 	t.Run("shutdown exceeds timeout", func(t *testing.T) {
 		// Create a context with a very short timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 		defer cancel()
 
 		shutdownComplete := make(chan struct{})

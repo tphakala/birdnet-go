@@ -95,7 +95,7 @@ func testFIFOCreation(t *testing.T, sfs *SecureFS, fifoPath string) {
 	require.NoError(t, err, "Exists check failed")
 	assert.True(t, exists, "FIFO should exist after creation")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
 	// This will likely timeout since there's no reader, which is expected

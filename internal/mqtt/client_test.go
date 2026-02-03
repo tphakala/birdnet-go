@@ -97,7 +97,7 @@ func debugLog(t *testing.T, format string, args ...any) {
 
 // retryWithTimeout attempts an operation with retries until it succeeds or times out
 func retryWithTimeout(timeout time.Duration, operation func() error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout) //nolint:gocritic // non-test helper without *testing.T parameter
 	defer cancel()
 
 	backoff := 100 * time.Millisecond
@@ -177,7 +177,7 @@ func testBasicFunctionality(t *testing.T) {
 
 	mqttClient, _ := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting initial connection")
@@ -223,7 +223,7 @@ func testIncorrectBrokerAddress(t *testing.T) {
 func testInvalidBrokerConnection(t *testing.T, broker string, verifyErr func(*testing.T, error)) {
 	t.Helper()
 	mqttClient, _ := createTestClient(t, broker)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	err := mqttClient.Connect(ctx)
@@ -262,7 +262,7 @@ func testConnectionLossBeforePublish(t *testing.T) {
 	}
 	mqttClient, _ := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting initial connection")
@@ -296,7 +296,7 @@ func testPublishWhileDisconnected(t *testing.T) {
 	}
 	mqttClient, _ := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting to publish without connecting")
@@ -319,7 +319,7 @@ func testReconnectionWithBackoff(t *testing.T) {
 	mqttClient, _ := createTestClient(t, broker)
 
 	// Use longer timeout for reconnection test as it needs to connect twice
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting initial connection")
@@ -370,7 +370,7 @@ func testMetricsCollection(t *testing.T) {
 	}
 	mqttClient, metrics := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	// Connect with retries
@@ -483,7 +483,7 @@ func testConnectCancellation(t *testing.T) {
 	debugLog(t, "Starting Connect Cancellation test")
 	mqttClient, _ := createTestClient(t, "tcp://10.255.255.1:1883")
 
-	ctxConnect, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)
+	ctxConnect, cancelConnect := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancelConnect()
 
 	ctxCancel, cancelFunc := context.WithCancel(ctxConnect)
@@ -530,13 +530,13 @@ func testPublishCancellation(t *testing.T) {
 	}
 	mqttClient, _ := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 
 	err := mqttClient.Connect(ctx)
 	require.NoError(t, err, "Failed to connect to MQTT broker")
 
-	publishCtx, publishCancel := context.WithCancel(context.Background())
+	publishCtx, publishCancel := context.WithCancel(t.Context())
 	publishCancel() // Cancel immediately before publish
 
 	err = mqttClient.Publish(publishCtx, testTopic, "This should fail")
@@ -551,7 +551,7 @@ func testTimeoutHandling(t *testing.T) {
 		// Use a blackhole IP address to force a connection timeout
 		mqttClient, _ := createTestClient(t, "tcp://192.0.2.1:1883") // TEST-NET-1 address, guaranteed to be unreachable
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer cancel()
 
 		debugLog(t, "Attempting connection to unreachable address")
@@ -579,7 +579,7 @@ func testTimeoutHandling(t *testing.T) {
 		}
 		mqttClient, _ := createTestClient(t, broker)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 		defer cancel()
 
 		err := mqttClient.Connect(ctx)
@@ -589,7 +589,7 @@ func testTimeoutHandling(t *testing.T) {
 		mqttClient.Disconnect()
 
 		// Use a short context timeout for publish
-		publishCtx, publishCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		publishCtx, publishCancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer publishCancel()
 
 		start := time.Now()
@@ -607,7 +607,7 @@ func testDNSResolutionForTest(t *testing.T) {
 	t.Run("DNS Resolution Timeout", func(t *testing.T) {
 		mqttClient, _ := createTestClient(t, "tcp://very-long-non-existent-domain-name.com:1883")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 		defer cancel()
 
 		start := time.Now()
@@ -952,7 +952,7 @@ func TestPerformDNSResolution(t *testing.T) {
 			}
 
 			// Create context with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 
 			// Create logger for test
@@ -1103,7 +1103,7 @@ func runPerformConnectionAttemptTest(t *testing.T, setupConfig func(*Config), ex
 	if shortContext {
 		timeout = 50 * time.Millisecond
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
 	opts, optsErr := c.configureClientOptions(testLog)
@@ -1166,7 +1166,7 @@ func runConnectWithOptionsTest(t *testing.T, tc connectWithOptionsTestCase) {
 	c := setupConnectWithOptionsClient(broker, tc.cooldownPeriod, tc.lastAttempt)
 	defer c.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	err := c.connectWithOptions(ctx, tc.isAutoReconnect)

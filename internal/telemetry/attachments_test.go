@@ -20,27 +20,27 @@ func TestExtractTraceID_TypedContextKeys(t *testing.T) {
 	}{
 		{
 			name:     "extracts trace-id from typed key",
-			ctx:      NewTraceIDContext(context.Background(), "trace-123"),
+			ctx:      NewTraceIDContext(t.Context(), "trace-123"),
 			expected: "trace-123",
 		},
 		{
 			name:     "extracts x-trace-id from typed key",
-			ctx:      NewXTraceIDContext(context.Background(), "xtrace-456"),
+			ctx:      NewXTraceIDContext(t.Context(), "xtrace-456"),
 			expected: "xtrace-456",
 		},
 		{
 			name:     "extracts request-id from typed key",
-			ctx:      NewRequestIDContext(context.Background(), "req-789"),
+			ctx:      NewRequestIDContext(t.Context(), "req-789"),
 			expected: "req-789",
 		},
 		{
 			name:     "returns empty for missing key",
-			ctx:      context.Background(),
+			ctx:      t.Context(),
 			expected: "",
 		},
 		{
 			name:     "prefers trace-id over x-trace-id",
-			ctx:      NewTraceIDContext(NewXTraceIDContext(context.Background(), "xtrace"), "trace"),
+			ctx:      NewTraceIDContext(NewXTraceIDContext(t.Context(), "xtrace"), "trace"),
 			expected: "trace",
 		},
 	}
@@ -60,7 +60,7 @@ func TestExtractTraceID_NoCollisionWithStringKeys(t *testing.T) {
 	// Using a plain string key should NOT extract the value
 	// This ensures we don't have key collisions with other packages
 	//nolint:staticcheck // SA1029: intentionally using string key to test collision avoidance
-	ctx := context.WithValue(context.Background(), "trace-id", "should-not-match")
+	ctx := context.WithValue(t.Context(), "trace-id", "should-not-match")
 
 	result := extractTraceID(ctx)
 	assert.Empty(t, result, "extractTraceID() should not match plain string key")
@@ -96,7 +96,7 @@ func TestIsTelemetryEnabled_InTestMode(t *testing.T) {
 func TestFlushWithContext_Success(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := flushWithContext(ctx, "test_operation")
 	assert.NoError(t, err, "flushWithContext should succeed with valid context")
 }
@@ -104,7 +104,7 @@ func TestFlushWithContext_Success(t *testing.T) {
 func TestFlushWithContext_CancelledContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // Cancel immediately
 
 	err := flushWithContext(ctx, "test_operation")

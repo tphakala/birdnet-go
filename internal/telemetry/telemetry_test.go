@@ -101,13 +101,13 @@ func TestMockTransport(t *testing.T) {
 		transport.SetDelay(100 * time.Millisecond)
 
 		// Test with cancelled context
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		assert.False(t, transport.FlushWithContext(ctx), "Expected flush to fail with cancelled context")
 
 		// Test with timeout
-		ctx, cancel = context.WithTimeout(context.Background(), 200*time.Millisecond)
+		ctx, cancel = context.WithTimeout(t.Context(), 200*time.Millisecond)
 		defer cancel()
 
 		assert.True(t, transport.FlushWithContext(ctx), "Expected flush to succeed within timeout")

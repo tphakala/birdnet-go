@@ -5,7 +5,6 @@
 package processor
 
 import (
-	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -69,7 +68,7 @@ func TestCompositeAction_DatabaseToSSE_IDPropagation(t *testing.T) {
 	}
 
 	// Execute
-	err := composite.Execute(context.Background(), det)
+	err := composite.Execute(t.Context(), det)
 	require.NoError(t, err, "CompositeAction should succeed")
 
 	// Verify database saved with assigned ID
@@ -131,7 +130,7 @@ func TestCompositeAction_DatabaseToMQTT_IDPropagation(t *testing.T) {
 	}
 
 	// Execute
-	err := composite.Execute(context.Background(), det)
+	err := composite.Execute(t.Context(), det)
 	require.NoError(t, err)
 
 	// Verify database saved
@@ -205,7 +204,7 @@ func TestCompositeAction_FullPipeline_DatabaseMQTTSSE(t *testing.T) {
 	}
 
 	// Execute
-	err := composite.Execute(context.Background(), det)
+	err := composite.Execute(t.Context(), det)
 	require.NoError(t, err)
 
 	// Verify all actions executed
@@ -281,7 +280,7 @@ func TestCompositeAction_Integration_AudioExportFailedFlag(t *testing.T) {
 	}
 
 	startTime := time.Now()
-	err := composite.Execute(context.Background(), det)
+	err := composite.Execute(t.Context(), det)
 	duration := time.Since(startTime)
 
 	require.NoError(t, err)
@@ -336,7 +335,7 @@ func TestCompositeAction_SequentialExecution(t *testing.T) {
 		Description: "Sequential execution test",
 	}
 
-	err := composite.Execute(context.Background(), nil)
+	err := composite.Execute(t.Context(), nil)
 	require.NoError(t, err)
 
 	executionMu.Lock()
@@ -385,7 +384,7 @@ func TestCompositeAction_MultipleDetections(t *testing.T) {
 			Description: "Multi-detection test",
 		}
 
-		err := composite.Execute(context.Background(), det)
+		err := composite.Execute(t.Context(), det)
 		require.NoError(t, err, "Detection %d should succeed", i)
 	}
 

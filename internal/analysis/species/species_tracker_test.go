@@ -387,7 +387,7 @@ func BenchmarkSpeciesTracker_UpdateSpecies(b *testing.B) {
 
 	currentTime := time.Now()
 	species := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 		species[i] = fmt.Sprintf("Species%d", i)
 	}
 
@@ -436,7 +436,7 @@ func BenchmarkSpeciesTracker_ConcurrentOperations(b *testing.B) {
 
 	// Pre-generate new species names before benchmark to avoid string formatting overhead
 	newSpeciesNames := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 		newSpeciesNames[i] = fmt.Sprintf("NewSpecies%d", i)
 	}
 
@@ -481,7 +481,7 @@ func BenchmarkSpeciesTracker_MapMemoryUsage(b *testing.B) {
 
 	// Pre-generate all unique species names to isolate map growth measurements
 	uniqueSpeciesNames := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < b.N; i++ { //nolint:gocritic // setup loop for benchmark data, not benchmark iteration
 		uniqueSpeciesNames[i] = fmt.Sprintf("UniqueSpecies%d", i)
 	}
 

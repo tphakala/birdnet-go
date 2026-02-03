@@ -166,7 +166,7 @@ func runRetryTest(t *testing.T, tc retryTestCase) {
 		Priority: PriorityMedium,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ep := &d.providers[0]
 	d.retryLoop(ctx, notif, ep)
 

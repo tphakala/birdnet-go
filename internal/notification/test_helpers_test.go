@@ -152,7 +152,7 @@ func assertCircuitHealthy(t *testing.T, cb *PushCircuitBreaker, expected bool) {
 // openCircuitBreaker triggers failures to open the circuit breaker.
 func openCircuitBreaker(t *testing.T, cb *PushCircuitBreaker, failures int) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	for range failures {
 		_ = cb.Call(ctx, func(_ context.Context) error {
 			return assert.AnError

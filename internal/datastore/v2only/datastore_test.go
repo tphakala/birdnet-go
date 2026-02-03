@@ -1,7 +1,6 @@
 package v2only
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -44,7 +43,7 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	taxClassRepo := repository.NewTaxonomicClassRepository(db, false)
 	modelRepo := repository.NewModelRepository(db, false, false)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create required label types
 	speciesLabelType, err := labelTypeRepo.GetOrCreate(ctx, "species")
@@ -509,7 +508,7 @@ func TestV2OnlyDatastore_Optimize(t *testing.T) {
 	defer cleanup()
 
 	// Optimize should not error for SQLite
-	err := ds.Optimize(context.Background())
+	err := ds.Optimize(t.Context())
 	assert.NoError(t, err)
 }
 

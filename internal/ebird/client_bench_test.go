@@ -1,7 +1,6 @@
 package ebird
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,7 +47,7 @@ func BenchmarkBuildFamilyTree(b *testing.B) {
 
 	client := setupTestClient(b, server)
 	disableLogging(b)
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Warm up the cache
 	_, err := client.BuildFamilyTree(ctx, "Turdus migratorius")
@@ -77,7 +76,7 @@ func BenchmarkGetTaxonomyWithCache(b *testing.B) {
 
 	client := setupTestClient(b, server)
 	disableLogging(b)
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Warm up the cache
 	_, err := client.GetTaxonomy(ctx, "")

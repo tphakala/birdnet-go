@@ -48,7 +48,7 @@ func TestGetAudioDurationIntegration(t *testing.T) {
 
 	t.Logf("Testing with file: %s", testFile)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	t.Cleanup(cancel)
 
 	start := time.Now()

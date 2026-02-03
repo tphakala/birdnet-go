@@ -340,7 +340,7 @@ func BenchmarkBuildBaseURL(b *testing.B) {
 			}
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = BuildBaseURL(scenario.host, scenario.port, scenario.autoTLS)
 			}
 		})

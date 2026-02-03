@@ -192,7 +192,7 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Server, config SSETestConfig) {
 	t.Helper()
 	// Create context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	// Create HTTP client optimized for tests
 	client := createTestHTTPClient(config.testTimeout)

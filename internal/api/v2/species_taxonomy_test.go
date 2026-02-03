@@ -3,7 +3,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -337,7 +336,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the internal method directly since we need context
-			info, err := c.getDetailedTaxonomy(context.Background(), tt.scientificName, "", false, true)
+			info, err := c.getDetailedTaxonomy(t.Context(), tt.scientificName, "", false, true)
 
 			if tt.expectedStatus == http.StatusOK {
 				require.NoError(t, err, "Expected no error")
@@ -371,7 +370,7 @@ func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	}
 
 	// This should fail gracefully
-	_, err := c.getDetailedTaxonomy(context.Background(), "Turdus migratorius", "", false, true)
+	_, err := c.getDetailedTaxonomy(t.Context(), "Turdus migratorius", "", false, true)
 
 	require.Error(t, err, "Expected error when both local DB and eBird client unavailable")
 	t.Logf("Correctly returned error: %v", err)

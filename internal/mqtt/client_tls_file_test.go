@@ -55,7 +55,7 @@ func runTLSFileExistenceTest(t *testing.T, tc *tlsFileTestCase, tempDir string, 
 	require.NoError(t, err, "Failed to create MQTT client")
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 
 	err = client.Connect(ctx)

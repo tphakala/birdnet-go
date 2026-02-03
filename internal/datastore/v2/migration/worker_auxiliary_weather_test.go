@@ -121,7 +121,7 @@ func TestMigrateWeatherData_IDRemapping(t *testing.T) {
 	})
 
 	// Execute migration
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -147,7 +147,7 @@ func TestMigrateWeatherData_EmptyData(t *testing.T) {
 	})
 
 	// Execute migration
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -208,7 +208,7 @@ func TestMigrateWeatherData_OrphanRecords(t *testing.T) {
 	})
 
 	// Execute migration
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -259,7 +259,7 @@ func TestMigrateWeatherData_DateNotInV2(t *testing.T) {
 		Logger:      log,
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -278,7 +278,7 @@ func TestMigrateWeatherData_NilRepo(t *testing.T) {
 		Logger:      log,
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -368,7 +368,7 @@ func TestMigrateWeatherData_PreservesFields(t *testing.T) {
 		Logger:      log,
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -402,7 +402,7 @@ func TestMigrateWeatherData_NoHourlyWeather(t *testing.T) {
 		Logger:      log,
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -470,7 +470,7 @@ func TestMigrateWeatherData_ComplexIDMapping(t *testing.T) {
 		Logger:      log,
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	result := &AuxiliaryMigrationResult{}
 	migrator.migrateWeatherData(ctx, result)
 
@@ -493,7 +493,7 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 			Logger:      log,
 		})
 
-		ctx := context.Background()
+		ctx := t.Context()
 		result := &AuxiliaryMigrationResult{}
 		migrator.migrateWeatherData(ctx, result)
 		// Error should be captured in result (non-fatal)
@@ -518,7 +518,7 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 			Logger:      log,
 		})
 
-		ctx := context.Background()
+		ctx := t.Context()
 		result := &AuxiliaryMigrationResult{}
 		migrator.migrateWeatherData(ctx, result)
 		// Error should be captured in result (non-fatal)

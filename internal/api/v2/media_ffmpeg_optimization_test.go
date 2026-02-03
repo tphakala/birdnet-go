@@ -71,7 +71,7 @@ func checkRawFlag(t *testing.T, args []string, raw bool) {
 // This ensures correct spectrogram generation where Sox shows the full audio duration
 // rather than misinterpreting -x (width in pixels) as seconds (fixes issue #1484).
 func TestGetSoxSpectrogramArgs_DurationParameterRequired(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	absSpectrogramPath := "/tmp/test.png"
 	audioPath := "/tmp/test.flac"
 	raw := true
@@ -160,7 +160,7 @@ func TestGetSoxSpectrogramArgs_DurationParameterRequired(t *testing.T) {
 
 // TestGetSoxSpectrogramArgs_ArgumentOrder verifies that SoX arguments are in correct order
 func TestGetSoxSpectrogramArgs_ArgumentOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	settings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
@@ -189,7 +189,7 @@ func TestGetSoxSpectrogramArgs_ArgumentOrder(t *testing.T) {
 
 // BenchmarkGetSoxSpectrogramArgs_WithFFmpeg7 benchmarks the optimized path (no ffprobe call)
 func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg7(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	settings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
@@ -211,7 +211,7 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg7(b *testing.B) {
 // BenchmarkGetSoxSpectrogramArgs_WithFFmpeg5 benchmarks the non-optimized path (with ffprobe)
 // Note: This will be slower due to the ffprobe call, but it's necessary for FFmpeg 5.x
 func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg5(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	settings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
@@ -235,7 +235,7 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg5(b *testing.B) {
 
 // TestGetSoxSpectrogramArgs_NilSettings verifies safe fallback behavior with nil settings
 func TestGetSoxSpectrogramArgs_NilSettings(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// This should not panic and should use safety fallback (with duration parameter)
 	// The function signature requires non-nil settings, but if nil is passed,
@@ -262,7 +262,7 @@ func TestGetSoxSpectrogramArgs_NilSettings(t *testing.T) {
 
 // TestGetSoxSpectrogramArgs_PartialSettings verifies behavior with partially initialized settings
 func TestGetSoxSpectrogramArgs_PartialSettings(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tests := []struct {
 		name               string
