@@ -762,7 +762,7 @@ func (s *FFmpegStream) startProcess() error {
 	// Validate FFmpeg path
 	settings := conf.Setting().Realtime.Audio
 	if err := validateFFmpegPath(settings.FfmpegPath); err != nil {
-		return errors.New(fmt.Errorf("FFmpeg validation failed: %w", err)).
+		return errors.Newf("FFmpeg validation failed: %w", err).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-stream").
 			Context("operation", "start_process").
@@ -821,7 +821,7 @@ func (s *FFmpegStream) startProcess() error {
 	// Get and validate connection string
 	connStr, err := s.source.GetConnectionString()
 	if err != nil {
-		return errors.New(fmt.Errorf("failed to get connection string: %w", err)).
+		return errors.Newf("failed to get connection string: %w", err).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-stream").
 			Context("operation", "start_process").
@@ -871,7 +871,7 @@ func (s *FFmpegStream) startProcess() error {
 	// Get stdout pipe
 	s.stdout, err = s.cmd.StdoutPipe()
 	if err != nil {
-		return errors.New(fmt.Errorf("failed to create stdout pipe: %w", err)).
+		return errors.Newf("failed to create stdout pipe: %w", err).
 			Category(errors.CategorySystem).
 			Component("ffmpeg-stream").
 			Context("operation", "start_process").
@@ -881,7 +881,7 @@ func (s *FFmpegStream) startProcess() error {
 
 	// Start process
 	if err := s.cmd.Start(); err != nil {
-		return errors.New(fmt.Errorf("failed to start FFmpeg: %w", err)).
+		return errors.Newf("failed to start FFmpeg: %w", err).
 			Category(errors.CategorySystem).
 			Component("ffmpeg-stream").
 			Context("operation", "start_process").
@@ -1159,7 +1159,7 @@ func (s *FFmpegStream) processAudio() error {
 				return nil // Normal shutdown
 			}
 
-			return errors.New(fmt.Errorf("error reading from FFmpeg: %w", err)).
+			return errors.Newf("error reading from FFmpeg: %w", err).
 				Category(errors.CategoryRTSP).
 				Component("ffmpeg-stream").
 				Priority(errors.PriorityMedium).
@@ -1277,7 +1277,7 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 
 	// Write to analysis buffer using source ID
 	if err := WriteToAnalysisBuffer(s.source.ID, data); err != nil {
-		return errors.New(fmt.Errorf("failed to write to analysis buffer: %w", err)).
+		return errors.Newf("failed to write to analysis buffer: %w", err).
 			Category(errors.CategoryAudio).
 			Component("ffmpeg-stream").
 			Context("operation", "handle_audio_data").
@@ -1288,7 +1288,7 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 
 	// Write to capture buffer using source ID
 	if err := WriteToCaptureBuffer(s.source.ID, data); err != nil {
-		return errors.New(fmt.Errorf("failed to write to capture buffer: %w", err)).
+		return errors.Newf("failed to write to capture buffer: %w", err).
 			Category(errors.CategoryAudio).
 			Component("ffmpeg-stream").
 			Context("operation", "handle_audio_data").

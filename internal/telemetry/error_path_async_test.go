@@ -24,7 +24,7 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 		start := time.Now()
 
 		// Create and build an error - this triggers telemetry reporting
-		err := errors.New(fmt.Errorf("test error")).
+		err := errors.Newf("test error").
 			Component("test").
 			Category(errors.CategoryNetwork).
 			Build()
@@ -49,7 +49,7 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 
 		// Create many errors rapidly
 		for i := range 100 {
-			_ = errors.New(fmt.Errorf("error %d", i)).
+			_ = errors.Newf("error %d", i).
 				Component("batch-test").
 				Category(errors.CategoryDatabase).
 				Build()
@@ -95,7 +95,7 @@ func TestCurrentTelemetryIntegration(t *testing.T) {
 		// Create error - this should trigger telemetry
 		start := time.Now()
 
-		_ = errors.New(fmt.Errorf("test telemetry integration")).
+		_ = errors.Newf("test telemetry integration").
 			Component("test").
 			Category(errors.CategoryNetwork).
 			Build()

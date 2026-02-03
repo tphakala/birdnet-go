@@ -439,7 +439,7 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
 	// Validate the input parameter
 	if noteID == "" {
-		return errors.New(fmt.Errorf("invalid note ID: must not be empty")).
+		return errors.Newf("invalid note ID: must not be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "delete_clip_path").

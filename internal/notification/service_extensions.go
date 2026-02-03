@@ -1,8 +1,6 @@
 package notification
 
 import (
-	"fmt"
-
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -11,7 +9,7 @@ import (
 // This is useful for creating notifications that need custom metadata like toast notifications
 func (s *Service) CreateWithMetadata(notification *Notification) error {
 	if notification == nil {
-		return errors.New(fmt.Errorf("notification cannot be nil")).
+		return errors.Newf("notification cannot be nil").
 			Component("notification").
 			Category(errors.CategorySystem).
 			Build()

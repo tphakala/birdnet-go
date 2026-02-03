@@ -205,7 +205,7 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 
 	input := bn.RangeInterpreter.GetInputTensor(0)
 	if input == nil {
-		return nil, errors.New(fmt.Errorf("cannot get input tensor")).
+		return nil, errors.Newf("cannot get input tensor").
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
 			Context("interpreter_state", "initialized").

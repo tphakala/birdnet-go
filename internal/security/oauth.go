@@ -160,8 +160,7 @@ func handleWeakSessionSecret(settings *conf.Settings) {
 		logger.Bool("debug_mode", settings.WebServer.Debug),
 		logger.String("recommendation", "Consider regenerating with a stronger secret"))
 
-	_ = errors.New(
-		fmt.Errorf("session secret is potentially weak: %d characters", len(settings.Security.SessionSecret))).
+	_ = errors.Newf("session secret is potentially weak: %d characters", len(settings.Security.SessionSecret)).
 		Component("security").
 		Category(errors.CategoryConfiguration).
 		Context("current_length", len(settings.Security.SessionSecret)).

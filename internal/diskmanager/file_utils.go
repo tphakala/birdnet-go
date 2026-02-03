@@ -45,7 +45,7 @@ type Interface interface {
 func LoadPolicy(policyFile string) (*Policy, error) {
 	file, err := os.Open(policyFile) //nolint:gosec // G304: policyFile is from application settings
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to open policy file: %w", err)).
+		descriptiveErr := errors.Newf("diskmanager: failed to open policy file: %w", err).
 			Component("diskmanager").
 			Category(errors.CategoryPolicyConfig).
 			FileContext(policyFile, 0).
@@ -64,7 +64,7 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse policy CSV file: %w", err)).
+		descriptiveErr := errors.Newf("diskmanager: failed to parse policy CSV file: %w", err).
 			Component("diskmanager").
 			Category(errors.CategoryPolicyConfig).
 			FileContext(policyFile, 0).
@@ -80,7 +80,7 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 
 	for i, record := range records {
 		if len(record) != 2 {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid policy CSV format at line %d: expected 2 fields, got %d", i+1, len(record))).
+			descriptiveErr := errors.Newf("diskmanager: invalid policy CSV format at line %d: expected 2 fields, got %d", i+1, len(record)).
 				Component("diskmanager").
 				Category(errors.CategoryPolicyConfig).
 				FileContext(policyFile, 0).
@@ -230,7 +230,7 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 	// Get list of protected clips from database
 	lockedClips, err := getLockedClips(db)
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get locked clips from database: %w", err)).
+		descriptiveErr := errors.Newf("diskmanager: failed to get locked clips from database: %w", err).
 			Component("diskmanager").
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_locked_clips").
@@ -268,7 +268,7 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 			return nil, err // Return context error directly for proper handling
 		}
 
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to walk directory for audio files: %w", err)).
+		descriptiveErr := errors.Newf("diskmanager: failed to walk directory for audio files: %w", err).
 			Component("diskmanager").
 			Category(errors.CategoryFileIO).
 			Context("operation", "walk_directory").
@@ -284,7 +284,7 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 			logger.Int("max_logged", maxParseErrors))
 		// If we have no valid files at all, return an error
 		if len(state.files) == 0 && state.firstParseError != nil {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %w", state.firstParseError)).
+			descriptiveErr := errors.Newf("diskmanager: failed to parse any audio files: %w", state.firstParseError).
 				Component("diskmanager").
 				Category(errors.CategoryFileParsing).
 				Context("base_dir", baseDir).
@@ -315,7 +315,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	ext := strings.ToLower(filepath.Ext(name))
 	if !contains(allowedExts, ext) {
 		// Lightweight error with essential context
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type %s not eligible for cleanup", ext)).
+		descriptiveErr := errors.Newf("diskmanager: file type %s not eligible for cleanup", ext).
 			Component("diskmanager").
 			Context("allowed_types", allowedExts).
 			Build()
@@ -331,7 +331,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
 		// Lightweight error with format guidance
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid filename format: %s", name)).
+		descriptiveErr := errors.Newf("diskmanager: invalid filename format: %s", name).
 			Component("diskmanager").
 			Context("expected_format", "species_confidence_timestamp").
 			Build()
@@ -346,7 +346,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
 		// Lightweight error for confidence parsing
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid confidence value in %s", name)).
+		descriptiveErr := errors.Newf("diskmanager: invalid confidence value in %s", name).
 			Component("diskmanager").
 			Context("confidence_string", confidenceStr).
 			Build()
@@ -367,7 +367,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
 		if err != nil {
 			// Lightweight error for timestamp parsing
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid timestamp in %s", name)).
+			descriptiveErr := errors.Newf("diskmanager: invalid timestamp in %s", name).
 				Component("diskmanager").
 				Context("timestamp_string", timestampStr).
 				Build()

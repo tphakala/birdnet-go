@@ -16,7 +16,7 @@ func GetDiskUsage(path string) (float64, error) {
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get disk usage statistics: %w", err)).
+		descriptiveErr := errors.Newf("diskmanager: failed to get disk usage statistics: %w", err).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", path).
@@ -59,11 +59,11 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 			m.RecordDiskCheckDuration(time.Since(startTime).Seconds())
 		}
 	}()
-	
+
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get detailed disk statistics: %w", err)).
+		descriptiveErr := errors.Newf("diskmanager: failed to get detailed disk statistics: %w", err).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", path).
@@ -74,7 +74,7 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 
 	// Validate that Bsize is positive to avoid overflow when converting to uint64
 	if stat.Bsize <= 0 {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid block size %d from filesystem", stat.Bsize)).
+		descriptiveErr := errors.Newf("diskmanager: invalid block size %d from filesystem", stat.Bsize).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", path).

@@ -19,7 +19,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 
 	t.Run("error to telemetry flow", func(t *testing.T) {
 		// Create enhanced error
-		enhancedErr := errors.New(fmt.Errorf("test error")).
+		enhancedErr := errors.Newf("test error").
 			Component("test-component").
 			Category(errors.CategoryNetwork).
 			Build()
@@ -104,4 +104,3 @@ func TestE2EMessageFlow(t *testing.T) {
 		})
 	}
 }
-

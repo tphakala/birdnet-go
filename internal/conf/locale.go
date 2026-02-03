@@ -130,7 +130,7 @@ var LocaleCodes = map[string]string{
 func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 	config, exists := ModelLabelMapping[modelVersion]
 	if !exists {
-		return "", errors.New(fmt.Errorf("unsupported model version: %s", modelVersion)).
+		return "", errors.Newf("unsupported model version: %s", modelVersion).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "model-version-support").
 			Context("model_version", modelVersion).
@@ -140,7 +140,7 @@ func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 	// Get the file identifier for the locale code
 	fileLocale, exists := LocaleCodeMapping[localeCode]
 	if !exists {
-		return "", errors.New(fmt.Errorf("unsupported locale code for model %s: %s", modelVersion, localeCode)).
+		return "", errors.Newf("unsupported locale code for model %s: %s", modelVersion, localeCode).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "locale-code-support").
 			Context("model_version", modelVersion).
@@ -179,7 +179,7 @@ func NormalizeLocale(inputLocale string) (string, error) {
 	// Create detailed error with available locales for debugging
 	availableLocales := slices.Collect(maps.Keys(LocaleCodes))
 
-	return DefaultFallbackLocale, errors.New(fmt.Errorf("locale '%s' not supported, falling back to %s", originalInput, fallbackName)).
+	return DefaultFallbackLocale, errors.Newf("locale '%s' not supported, falling back to %s", originalInput, fallbackName).
 		Category(errors.CategoryValidation).
 		Context("validation_type", "locale-normalization").
 		Context("input_locale", originalInput).

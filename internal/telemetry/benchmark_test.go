@@ -49,7 +49,7 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 		b.ResetTimer()
 
 		for b.Loop() {
-			err := errors.New(fmt.Errorf("benchmark")).
+			err := errors.Newf("benchmark").
 				Component("benchmark").
 				Category(errors.CategoryNetwork).
 				Build()
@@ -96,7 +96,7 @@ func BenchmarkTelemetryEnabled(b *testing.B) {
 		b.ResetTimer()
 
 		for b.Loop() {
-			err := errors.New(fmt.Errorf("benchmark")).
+			err := errors.Newf("benchmark").
 				Component("benchmark").
 				Category(errors.CategoryNetwork).
 				Context("key", "value").
