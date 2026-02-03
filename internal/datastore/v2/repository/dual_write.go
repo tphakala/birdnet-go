@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -12,7 +11,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	apperrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -182,7 +181,7 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 			// Fetch from legacy (source of truth)
 			result, err := dw.legacy.Get(ctx, idStr)
 			if err != nil {
-				if apperrors.IsNotFound(err) {
+				if errors.IsNotFound(err) {
 					// Record genuinely deleted from legacy — remove v2 ghost
 					if delErr := dw.v2.Delete(ctx, id); delErr != nil && !errors.Is(delErr, ErrDetectionNotFound) {
 						dw.logger.Warn("reconciliation: v2 delete failed", logger.Uint64("id", uint64(id)), logger.Error(delErr))

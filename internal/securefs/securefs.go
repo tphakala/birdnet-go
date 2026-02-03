@@ -1,7 +1,6 @@
 package securefs
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -515,7 +515,7 @@ func (sfs *SecureFS) GetMaxReadFileSize() int64 {
 }
 
 // ErrFileTooLarge is returned when a file exceeds the configured size limit
-var ErrFileTooLarge = errors.New("file size exceeds maximum allowed size")
+var ErrFileTooLarge = errors.NewStd("file size exceeds maximum allowed size")
 
 // ReadFile reads a file with path validation and returns its contents.
 // If maxReadFileSize is set (> 0), files exceeding that size will return ErrFileTooLarge.

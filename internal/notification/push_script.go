@@ -3,7 +3,6 @@ package notification
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 type ScriptProvider struct {

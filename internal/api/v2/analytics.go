@@ -2,7 +2,6 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -80,14 +80,14 @@ type NewSpeciesResponse struct {
 
 // Define standard errors for date validation
 var (
-	ErrInvalidStartDate = errors.New("invalid start_date format. Use YYYY-MM-DD")
-	ErrInvalidEndDate   = errors.New("invalid end_date format. Use YYYY-MM-DD")
-	ErrDateOrder        = errors.New("start_date cannot be after end_date")
+	ErrInvalidStartDate = errors.NewStd("invalid start_date format. Use YYYY-MM-DD")
+	ErrInvalidEndDate   = errors.NewStd("invalid end_date format. Use YYYY-MM-DD")
+	ErrDateOrder        = errors.NewStd("start_date cannot be after end_date")
 )
 
 // ErrResponseHandled is a sentinel error indicating the HTTP response has already been written.
 // Callers receiving this error should return it immediately without further processing.
-var ErrResponseHandled = errors.New("response already handled")
+var ErrResponseHandled = errors.NewStd("response already handled")
 
 // dateRegex ensures YYYY-MM-DD format
 var dateRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
