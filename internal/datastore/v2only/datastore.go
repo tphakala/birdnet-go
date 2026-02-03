@@ -47,6 +47,16 @@ var (
 	ErrInvalidHour = errors.NewStd("invalid hour: must be an integer between 0 and 23")
 )
 
+const (
+	// minHour is the minimum valid hour value (midnight).
+	minHour = 0
+	// maxHour is the maximum valid hour value (11 PM).
+	maxHour = 23
+	// saveTransactionTimeout is the maximum duration for a Save transaction.
+	// This prevents indefinite lock holding during slow I/O operations.
+	saveTransactionTimeout = 30 * time.Second
+)
+
 // parseHour validates and parses an hour string to an integer.
 // Returns ErrInvalidHour if the string is not a valid integer or is outside 0-23.
 func parseHour(hour string) (int, error) {
@@ -54,15 +64,11 @@ func parseHour(hour string) (int, error) {
 	if err != nil {
 		return 0, ErrInvalidHour
 	}
-	if h < 0 || h > 23 {
+	if h < minHour || h > maxHour {
 		return 0, ErrInvalidHour
 	}
 	return h, nil
 }
-
-// saveTransactionTimeout is the maximum duration for a Save transaction.
-// This prevents indefinite lock holding during slow I/O operations.
-const saveTransactionTimeout = 30 * time.Second
 
 // parseID converts a string ID to uint.
 func parseID(id string) (uint, error) {

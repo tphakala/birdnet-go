@@ -416,6 +416,25 @@ func TestGetDetections(t *testing.T) {
 				assert.Contains(t, errResp["message"], "invalid hour parameter")
 			},
 		},
+		{
+			name: "Hourly query with same-value range rejected",
+			queryParams: map[string]string{
+				"queryType": "hourly",
+				"date":      "2025-03-07",
+				"hour":      "08-08",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			mockSetup:      func(m *mock.Mock) {},
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				var errResp map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp["message"], "invalid hour parameter")
+			},
+		},
 	}
 
 	for _, tc := range testCases {
