@@ -12,6 +12,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	apperrors "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -31,6 +32,10 @@ const (
 	defaultMaxConcurrentWrites = 10
 	// defaultWriteTimeout is the maximum time for a V2 write operation.
 	defaultWriteTimeout = 30 * time.Second
+	// reconcileInterval is how often the dirty ID reconciliation loop runs.
+	reconcileInterval = 60 * time.Second
+	// reconcileBatchSize is how many dirty IDs to process per reconciliation tick.
+	reconcileBatchSize = 50
 )
 
 // DualWriteRepository wraps legacy and v2 repositories for migration.
@@ -48,6 +53,10 @@ type DualWriteRepository struct {
 	writeTimeout time.Duration // Timeout for V2 write operations
 	shutdownCh   chan struct{} // Signals shutdown to in-flight goroutines
 	shutdownOnce sync.Once     // Ensures shutdown is called only once
+
+	reconcileTicker *time.Ticker  // Periodic dirty ID reconciliation
+	reconcileDone   chan struct{} // Signals reconciliation goroutine has exited
+	reconcileOnce   sync.Once     // Ensures StartReconciliation is called only once
 
 	// Cached lookup table IDs
 	speciesLabelTypeID uint
@@ -97,6 +106,13 @@ func NewDualWriteRepository(cfg *DualWriteConfig) *DualWriteRepository {
 func (dw *DualWriteRepository) Shutdown() {
 	dw.shutdownOnce.Do(func() {
 		close(dw.shutdownCh)
+
+		// Stop reconciliation ticker and wait for goroutine to exit
+		if dw.reconcileTicker != nil {
+			dw.reconcileTicker.Stop()
+			<-dw.reconcileDone
+		}
+
 		// Wait for all in-flight goroutines to release the semaphore
 		// by filling it completely (blocking until all slots are available)
 		for range defaultMaxConcurrentWrites {
@@ -104,6 +120,110 @@ func (dw *DualWriteRepository) Shutdown() {
 		}
 		dw.logger.Info("dual-write repository shutdown complete")
 	})
+}
+
+// StartReconciliation starts a background goroutine that periodically processes
+// dirty IDs. Dirty IDs accumulate when v2 writes fail during dual-write mode.
+// Legacy is used as the source of truth: if a record exists in legacy, it is
+// synced to v2; if it was deleted from legacy, the v2 ghost is removed.
+func (dw *DualWriteRepository) StartReconciliation() {
+	dw.reconcileOnce.Do(func() {
+		dw.reconcileTicker = time.NewTicker(reconcileInterval)
+		dw.reconcileDone = make(chan struct{})
+
+		go func() {
+			defer close(dw.reconcileDone)
+			for {
+				select {
+				case <-dw.shutdownCh:
+					return
+				case <-dw.reconcileTicker.C:
+					dw.reconcileDirtyIDs()
+				}
+			}
+		}()
+
+		dw.logger.Info("dirty ID reconciliation started", logger.Int("interval_seconds", int(reconcileInterval.Seconds())))
+	})
+}
+
+// reconcileDirtyIDs processes a batch of dirty IDs using legacy as source of truth.
+func (dw *DualWriteRepository) reconcileDirtyIDs() {
+	count, err := dw.stateManager.GetDirtyIDCount()
+	if err != nil {
+		dw.logger.Warn("reconciliation: failed to get dirty ID count", logger.Error(err))
+		return
+	}
+	if count == 0 {
+		return
+	}
+
+	ids, err := dw.stateManager.GetDirtyIDsBatch(reconcileBatchSize)
+	if err != nil {
+		dw.logger.Warn("reconciliation: failed to get dirty IDs batch", logger.Error(err))
+		return
+	}
+
+	reconciled := 0
+	for _, id := range ids {
+		// Check for shutdown between iterations
+		select {
+		case <-dw.shutdownCh:
+			return
+		default:
+		}
+
+		// Wrap per-ID logic in a function so defer cancel() handles all exit paths.
+		func() {
+			ctx, cancel := context.WithTimeout(context.Background(), dw.writeTimeout)
+			defer cancel()
+			idStr := strconv.FormatUint(uint64(id), 10)
+
+			// Fetch from legacy (source of truth)
+			result, err := dw.legacy.Get(ctx, idStr)
+			if err != nil {
+				if apperrors.IsNotFound(err) {
+					// Record genuinely deleted from legacy — remove v2 ghost
+					if delErr := dw.v2.Delete(ctx, id); delErr != nil && !errors.Is(delErr, ErrDetectionNotFound) {
+						dw.logger.Warn("reconciliation: v2 delete failed", logger.Uint64("id", uint64(id)), logger.Error(delErr))
+						return
+					}
+					// Ghost removed (or never existed in v2) — clear dirty ID
+					if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
+						dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
+					} else {
+						reconciled++
+					}
+					return
+				}
+				// Transient legacy error — skip, retry next cycle
+				dw.logger.Warn("reconciliation: legacy fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
+				return
+			}
+
+			// Record exists in legacy — fetch additional results and sync to v2
+			additionalResults, err := dw.legacy.GetAdditionalResults(ctx, idStr)
+			if err != nil {
+				dw.logger.Warn("reconciliation: legacy additional results fetch failed", logger.Uint64("id", uint64(id)), logger.Error(err))
+				return
+			}
+
+			if syncErr := dw.syncToV2(ctx, result, additionalResults); syncErr != nil {
+				dw.logger.Warn("reconciliation: sync to v2 failed", logger.Uint64("id", uint64(id)), logger.Error(syncErr))
+				return
+			}
+
+			// Sync succeeded — clear dirty ID
+			if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
+				dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
+			} else {
+				reconciled++
+			}
+		}()
+	}
+
+	remaining := max(int(count)-reconciled, 0)
+	dw.logger.Info("reconciliation complete", logger.Int("reconciled", reconciled), logger.Int("remaining", remaining))
 }
 
 // ============================================================================
@@ -169,22 +289,19 @@ func (dw *DualWriteRepository) Save(ctx context.Context, result *detection.Resul
 	return nil
 }
 
-// saveToV2 performs the v2 save asynchronously.
-func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) {
+// syncToV2 performs the core v2 save/upsert logic and returns an error on failure.
+// This is the inner logic used by both the async save path and the reconciliation loop.
+func (dw *DualWriteRepository) syncToV2(ctx context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) error {
 	// Convert domain model to v2 entity
 	det, err := dw.convertToV2Detection(ctx, result)
 	if err != nil {
-		dw.logger.Warn("v2 conversion failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
-		dw.markDirty(result.ID)
-		return
+		return fmt.Errorf("v2 conversion failed: %w", err)
 	}
 
 	// Check if detection already exists (upsert pattern)
 	exists, err := dw.v2.Exists(ctx, det.ID)
 	if err != nil {
-		dw.logger.Warn("v2 existence check failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
-		dw.markDirty(result.ID)
-		return
+		return fmt.Errorf("v2 existence check failed: %w", err)
 	}
 
 	if exists {
@@ -204,16 +321,13 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 		if err := dw.v2.Update(ctx, det.ID, updates); err != nil {
 			// ErrDetectionLocked is acceptable - record is protected
 			if !errors.Is(err, ErrDetectionLocked) {
-				dw.logger.Warn("v2 update failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
-				dw.markDirty(result.ID)
+				return fmt.Errorf("v2 update failed: %w", err)
 			}
 		}
 	} else {
 		// Save new record with preserved ID
 		if err := dw.v2.SaveWithID(ctx, det); err != nil {
-			dw.logger.Warn("v2 save failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
-			dw.markDirty(result.ID)
-			return
+			return fmt.Errorf("v2 save failed: %w", err)
 		}
 	}
 
@@ -227,12 +341,21 @@ func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.R
 
 		preds, err := dw.convertToPredictions(ctx, det.ID, det.ModelID, modelType, additionalResults)
 		if err != nil {
-			dw.logger.Warn("v2 prediction conversion failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
-			return
+			return fmt.Errorf("v2 prediction conversion failed: %w", err)
 		}
 		if err := dw.v2.SavePredictions(ctx, det.ID, preds); err != nil {
-			dw.logger.Warn("v2 predictions save failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
+			return fmt.Errorf("v2 predictions save failed: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// saveToV2 performs the v2 save asynchronously, marking dirty on failure.
+func (dw *DualWriteRepository) saveToV2(ctx context.Context, result *detection.Result, additionalResults []detection.AdditionalResult) {
+	if err := dw.syncToV2(ctx, result, additionalResults); err != nil {
+		dw.logger.Warn("v2 write failed", logger.Uint64("id", uint64(result.ID)), logger.Error(err))
+		dw.markDirty(result.ID)
 	}
 }
 
@@ -299,10 +422,8 @@ func (dw *DualWriteRepository) Delete(ctx context.Context, id string) error {
 			if err := dw.v2.Delete(ctx, uid); err != nil {
 				if !errors.Is(err, ErrDetectionNotFound) {
 					dw.logger.Warn("v2 delete failed", logger.String("id", id), logger.Error(err))
-					// Track for reconciliation - V2 record may still exist after legacy deletion
-					// TODO(#1904): Ensure reconciliation job processes dirty IDs from live writes.
-					// Current dirty ID handling is primarily for migration phase failures.
-					// May need periodic "Retry Dirty IDs" task for dual-write failures.
+					// Track for reconciliation - V2 record may still exist after legacy deletion.
+					// The reconciliation loop in StartReconciliation handles these dirty IDs.
 					dw.markDirty(uid)
 				}
 			}
