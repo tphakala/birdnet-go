@@ -1065,7 +1065,13 @@ func (ds *Datastore) GetNoteResults(noteID string) ([]datastore.Results, error) 
 
 	results := make([]datastore.Results, 0, len(preds))
 	for _, pred := range preds {
-		label, _ := ds.label.GetByID(ctx, pred.LabelID)
+		label, labelErr := ds.label.GetByID(ctx, pred.LabelID)
+		if labelErr != nil {
+			ds.log.Warn("failed to look up label for prediction",
+				logger.Uint64("label_id", uint64(pred.LabelID)),
+				logger.Uint64("prediction_id", uint64(pred.ID)),
+				logger.Error(labelErr))
+		}
 		scientificName := ""
 		if label != nil && label.ScientificName != "" {
 			scientificName = label.ScientificName
