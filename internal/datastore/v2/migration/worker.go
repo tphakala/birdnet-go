@@ -532,6 +532,7 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 	var totalCaught int64
 	var lastID uint
+	reachedEnd := false
 
 	for batch := range catchUpMaxBatches {
 		// Check for cancellation
@@ -552,6 +553,7 @@ func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 		}
 
 		if len(results) == 0 {
+			reachedEnd = true
 			break // No more records
 		}
 
@@ -607,8 +609,17 @@ func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 
 		// If we processed fewer than batch size, we're done
 		if len(results) < w.batchSize {
+			reachedEnd = true
 			break
 		}
+	}
+
+	if !reachedEnd {
+		w.logger.Warn("catch-up exhausted batch budget without completing full scan",
+			logger.Int("max_batches", catchUpMaxBatches),
+			logger.Int("batch_size", w.batchSize),
+			logger.Int64("records_caught", totalCaught),
+		)
 	}
 
 	return totalCaught, nil
