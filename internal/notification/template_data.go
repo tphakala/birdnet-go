@@ -40,8 +40,8 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 		beginTime = event.GetTimestamp()
 	}
 
-	detectionTime := beginTime.Format("15:04:05")
-	detectionDate := beginTime.Format("2006-01-02")
+	detectionTime := beginTime.Format(time.TimeOnly)
+	detectionDate := beginTime.Format(time.DateOnly)
 	if !timeAs24h {
 		detectionTime = beginTime.Format("3:04:05 PM")
 	}

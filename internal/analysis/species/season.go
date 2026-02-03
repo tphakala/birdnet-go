@@ -210,7 +210,7 @@ func (t *SpeciesTracker) calculateSeasonStartDate(seasonName string, seasonStart
 		seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 		getLog().Debug("Adjusting season to previous year",
 			logger.String("season", seasonName),
-			logger.String("adjusted_date", seasonDate.Format("2006-01-02")))
+			logger.String("adjusted_date", seasonDate.Format(time.DateOnly)))
 	}
 	return seasonDate
 }
@@ -218,7 +218,7 @@ func (t *SpeciesTracker) calculateSeasonStartDate(seasonName string, seasonStart
 // computeCurrentSeason performs the actual season calculation
 func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	getLog().Debug("Computing current season",
-		logger.String("input_time", currentTime.Format("2006-01-02 15:04:05")),
+		logger.String("input_time", currentTime.Format(time.DateTime)),
 		logger.Int("current_month", int(currentTime.Month())),
 		logger.Int("current_day", currentTime.Day()),
 		logger.Int("current_year", currentTime.Year()))
@@ -260,7 +260,7 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 
 	getLog().Debug("Computed season result",
 		logger.String("season", currentSeason),
-		logger.String("season_start_date", latestDate.Format("2006-01-02")))
+		logger.String("season_start_date", latestDate.Format(time.DateOnly)))
 
 	return currentSeason
 }
@@ -277,7 +277,7 @@ func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 		getLog().Debug("Reset yearly tracking",
 			logger.Int("old_year", oldYear),
 			logger.Int("new_year", t.currentYear),
-			logger.String("check_time", currentTime.Format("2006-01-02 15:04:05")))
+			logger.String("check_time", currentTime.Format(time.DateTime)))
 	}
 
 	// Check for seasonal reset
@@ -384,8 +384,8 @@ func (t *SpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate str
 	nextYearReset := time.Date(trackingYear+1, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
 	yearEnd := nextYearReset.AddDate(0, 0, -1)
 
-	startDate = yearStart.Format("2006-01-02")
-	endDate = yearEnd.Format("2006-01-02")
+	startDate = yearStart.Format(time.DateOnly)
+	endDate = yearEnd.Format(time.DateOnly)
 
 	return startDate, endDate
 }
@@ -416,8 +416,8 @@ func (t *SpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (s
 	// Add monthsPerSeason months, then subtract 1 day to get the last day of the final month
 	seasonEnd := seasonStart.AddDate(0, monthsPerSeason, 0).AddDate(0, 0, -1)
 
-	startDate = seasonStart.Format("2006-01-02")
-	endDate = seasonEnd.Format("2006-01-02")
+	startDate = seasonStart.Format(time.DateOnly)
+	endDate = seasonEnd.Format(time.DateOnly)
 
 	return startDate, endDate
 }

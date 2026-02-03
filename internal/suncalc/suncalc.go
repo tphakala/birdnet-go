@@ -32,10 +32,10 @@ type cacheEntry struct {
 
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
-	cache    map[string]cacheEntry      // Cache of sun event times for dates
-	lock     sync.RWMutex                // Lock for cache access
-	observer astral.Observer             // Observer for sun event calculations
-	metrics  *metrics.SunCalcMetrics     // Metrics for observability
+	cache    map[string]cacheEntry   // Cache of sun event times for dates
+	lock     sync.RWMutex            // Lock for cache access
+	observer astral.Observer         // Observer for sun event calculations
+	metrics  *metrics.SunCalcMetrics // Metrics for observability
 }
 
 // NewSunCalc creates a new SunCalc instance
@@ -56,9 +56,9 @@ func (sc *SunCalc) SetMetrics(m *metrics.SunCalcMetrics) {
 // GetSunEventTimes returns the sun event times for a given date, using cache if available
 func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	start := time.Now()
-	
+
 	// Format the date as a string key for the cache
-	dateKey := date.Format("2006-01-02")
+	dateKey := date.Format(time.DateOnly)
 
 	// Acquire a read lock and check if the date is in the cache
 	sc.lock.RLock()
@@ -103,7 +103,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	if sc.metrics != nil {
 		sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
 		sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
-		
+
 		// Update sun time gauges for current day
 		// Compare dates in the same location to handle time zone correctly
 		now := time.Now()

@@ -310,7 +310,7 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
 	// Get tomorrow's date
-	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	tomorrow := time.Now().AddDate(0, 0, 1).Format(time.DateOnly)
 
 	// Setup mock expectations to return empty data
 	mockDS.On("GetHourlyWeather", tomorrow).Return([]datastore.HourlyWeather{}, nil)

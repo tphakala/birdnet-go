@@ -17,7 +17,7 @@ func (t *SpeciesTracker) updateLifetimeTrackingLocked(scientificName string, det
 		t.speciesFirstSeen[scientificName] = detectionTime
 		getLog().Debug("New lifetime species detected",
 			logger.String("species", scientificName),
-			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05")))
+			logger.String("detection_time", detectionTime.Format(time.DateTime)))
 		return true
 	}
 
@@ -25,8 +25,8 @@ func (t *SpeciesTracker) updateLifetimeTrackingLocked(scientificName string, det
 		t.speciesFirstSeen[scientificName] = detectionTime
 		getLog().Debug("Updated lifetime first seen to earlier date",
 			logger.String("species", scientificName),
-			logger.String("old_date", firstSeen.Format("2006-01-02")),
-			logger.String("new_date", detectionTime.Format("2006-01-02")))
+			logger.String("old_date", firstSeen.Format(time.DateOnly)),
+			logger.String("new_date", detectionTime.Format(time.DateOnly)))
 	}
 	return false
 }
@@ -42,14 +42,14 @@ func (t *SpeciesTracker) updateYearlyTrackingLocked(scientificName string, detec
 		t.speciesThisYear[scientificName] = detectionTime
 		getLog().Debug("New species for this year",
 			logger.String("species", scientificName),
-			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05")),
+			logger.String("detection_time", detectionTime.Format(time.DateTime)),
 			logger.Int("current_year", t.currentYear))
 	} else if detectionTime.Before(existingTime) {
 		t.speciesThisYear[scientificName] = detectionTime
 		getLog().Debug("Updated yearly first seen to earlier date",
 			logger.String("species", scientificName),
-			logger.String("old_date", existingTime.Format("2006-01-02")),
-			logger.String("new_date", detectionTime.Format("2006-01-02")),
+			logger.String("old_date", existingTime.Format(time.DateOnly)),
+			logger.String("new_date", detectionTime.Format(time.DateOnly)),
 			logger.Int("current_year", t.currentYear))
 	}
 }
@@ -70,7 +70,7 @@ func (t *SpeciesTracker) updateSeasonalTrackingLocked(scientificName string, det
 		getLog().Debug("New species for this season",
 			logger.String("species", scientificName),
 			logger.String("season", currentSeason),
-			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05")))
+			logger.String("detection_time", detectionTime.Format(time.DateTime)))
 	}
 }
 

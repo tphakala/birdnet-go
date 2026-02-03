@@ -1553,7 +1553,7 @@ func (c *Controller) checkAudioFileExists(relAudioPath string) error {
 		getSpectrogramLogger().Debug("Audio file exists",
 			logger.String("relative_audio_path", relAudioPath),
 			logger.Int64("size_bytes", audioStat.Size()),
-			logger.String("mod_time", audioStat.ModTime().Format("2006-01-02 15:04:05")))
+			logger.String("mod_time", audioStat.ModTime().Format(time.DateTime)))
 	}
 	return nil
 }
@@ -1830,7 +1830,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		logger.String("audio_path", audioPath),
 		logger.Int("width", width),
 		logger.Bool("raw", raw),
-		logger.String("request_time", start.Format("2006-01-02 15:04:05")))
+		logger.String("request_time", start.Format(time.DateTime)))
 
 	// Step 1: Normalize and validate path
 	relAudioPath, err := c.normalizeAndValidatePath(audioPath)

@@ -23,9 +23,9 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	// Use recent dates to avoid pruning issues
-	recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")       // 5 days ago
-	olderRecentDate := time.Now().AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago
-	newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02")  // 2 days ago
+	recentDate := time.Now().AddDate(0, 0, -5).Format(time.DateOnly)       // 5 days ago
+	olderRecentDate := time.Now().AddDate(0, 0, -10).Format(time.DateOnly) // 10 days ago
+	newerRecentDate := time.Now().AddDate(0, 0, -2).Format(time.DateOnly)  // 2 days ago
 
 	tests := []struct {
 		name          string
@@ -171,8 +171,8 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 	// Use current year and recent dates
 	currentYear := time.Now().Year()
 	currentTime := time.Now()
-	recentDate := currentTime.AddDate(0, 0, -5).Format("2006-01-02")       // 5 days ago
-	olderRecentDate := currentTime.AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago
+	recentDate := currentTime.AddDate(0, 0, -5).Format(time.DateOnly)       // 5 days ago
+	olderRecentDate := currentTime.AddDate(0, 0, -10).Format(time.DateOnly) // 10 days ago
 
 	tests := []struct {
 		name          string
@@ -291,7 +291,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 				assert.True(t, isNew, "Yearly tracking should be functional after data loading")
 				assert.Equal(t, 0, days, "New species should have 0 days in new year context")
 
-				t.Logf("✓ Yearly data loading successful for time: %v", tt.currentTime.Format("2006-01-02"))
+				t.Logf("✓ Yearly data loading successful for time: %v", tt.currentTime.Format(time.DateOnly))
 			}
 
 			// Test system stability
@@ -385,8 +385,8 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			ds := mocks.NewMockInterface(t)
 
 			// Setup mock data for initial load and sync calls with recent dates
-			recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")      // 5 days ago
-			newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // 2 days ago
+			recentDate := time.Now().AddDate(0, 0, -5).Format(time.DateOnly)      // 5 days ago
+			newerRecentDate := time.Now().AddDate(0, 0, -2).Format(time.DateOnly) // 2 days ago
 
 			initialData := []datastore.NewSpeciesData{
 				{ScientificName: "Initial_Species", FirstSeenDate: recentDate},
@@ -488,7 +488,7 @@ func generateLargeDataset(count int) []datastore.NewSpeciesData {
 		speciesName := fmt.Sprintf("Large_Dataset_Species_%06d", i)
 		// Spread across 10 days instead of full year to keep all data recent
 		detectionDate := baseDate.AddDate(0, 0, i%10)
-		dateStr := detectionDate.Format("2006-01-02")
+		dateStr := detectionDate.Format(time.DateOnly)
 
 		data[i] = datastore.NewSpeciesData{
 			ScientificName: speciesName,

@@ -28,9 +28,9 @@ type TestContext struct {
 	TempDir string
 
 	// Legacy database components
-	LegacyDB   *sql.DB         // Raw SQL connection for seeding
-	LegacyGorm *gorm.DB        // GORM connection for queries
-	Seeder     *LegacySeeder   // Seeder for legacy data
+	LegacyDB   *sql.DB       // Raw SQL connection for seeding
+	LegacyGorm *gorm.DB      // GORM connection for queries
+	Seeder     *LegacySeeder // Seeder for legacy data
 
 	// V2 database components
 	V2Manager    *datastoreV2.SQLiteManager // V2 SQLite manager
@@ -485,7 +485,7 @@ func (r *testDetectionRepo) Search(_ context.Context, filters *datastore.Detecti
 // convertNoteToResult converts a legacy Note to a detection.Result.
 func convertNoteToResult(note *datastore.Note, _ []datastore.Results, review *datastore.NoteReview, comments []datastore.NoteComment, lock *datastore.NoteLock) *detection.Result {
 	// Parse date and time strings to timestamp
-	timestamp, _ := time.Parse("2006-01-02 15:04:05", note.Date+" "+note.Time)
+	timestamp, _ := time.Parse(time.DateTime, note.Date+" "+note.Time)
 
 	result := &detection.Result{
 		ID:        note.ID,
@@ -647,15 +647,15 @@ func (s *testLegacyInterface) GetAllHourlyWeather() ([]datastore.HourlyWeather, 
 // Stub implementations for unused datastore.Interface methods.
 // These are required by the interface but not used in migration tests.
 
-func (s *testLegacyInterface) Open() error                                      { return nil }
-func (s *testLegacyInterface) Close() error                                     { return nil }
+func (s *testLegacyInterface) Open() error                                         { return nil }
+func (s *testLegacyInterface) Close() error                                        { return nil }
 func (s *testLegacyInterface) Save(_ *datastore.Note, _ []datastore.Results) error { return nil }
-func (s *testLegacyInterface) Delete(_ string) error                            { return nil }
-func (s *testLegacyInterface) Get(_ string) (datastore.Note, error)             { return datastore.Note{}, nil }
-func (s *testLegacyInterface) SetMetrics(_ *datastore.Metrics)                  {}
-func (s *testLegacyInterface) SetSunCalcMetrics(_ any)                          {}
-func (s *testLegacyInterface) Optimize(_ context.Context) error                 { return nil }
-func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)           { return nil, nil }
+func (s *testLegacyInterface) Delete(_ string) error                               { return nil }
+func (s *testLegacyInterface) Get(_ string) (datastore.Note, error)                { return datastore.Note{}, nil }
+func (s *testLegacyInterface) SetMetrics(_ *datastore.Metrics)                     {}
+func (s *testLegacyInterface) SetSunCalcMetrics(_ any)                             {}
+func (s *testLegacyInterface) Optimize(_ context.Context) error                    { return nil }
+func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)              { return nil, nil }
 func (s *testLegacyInterface) GetTopBirdsData(_ string, _ float64) ([]datastore.Note, error) {
 	return nil, nil
 }
@@ -665,16 +665,16 @@ func (s *testLegacyInterface) GetHourlyOccurrences(_, _ string, _ float64) ([24]
 func (s *testLegacyInterface) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetLastDetections(_ int) ([]datastore.Note, error)   { return nil, nil }
-func (s *testLegacyInterface) GetAllDetectedSpecies() ([]datastore.Note, error)    { return nil, nil }
+func (s *testLegacyInterface) GetLastDetections(_ int) ([]datastore.Note, error) { return nil, nil }
+func (s *testLegacyInterface) GetAllDetectedSpecies() ([]datastore.Note, error)  { return nil, nil }
 func (s *testLegacyInterface) SearchNotes(_ string, _ bool, _, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (s *testLegacyInterface) SearchNotesAdvanced(_ *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	return nil, 0, nil
 }
-func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)    { return "", nil }
-func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error           { return nil }
+func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)              { return "", nil }
+func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error                     { return nil }
 func (s *testLegacyInterface) GetNoteReview(_ string) (*datastore.NoteReview, error) { return nil, nil } //nolint:nilnil // stub
 func (s *testLegacyInterface) SaveNoteReview(_ *datastore.NoteReview) error          { return nil }
 func (s *testLegacyInterface) GetNoteComments(_ string) ([]datastore.NoteComment, error) {
@@ -692,19 +692,21 @@ func (s *testLegacyInterface) SaveHourlyWeather(_ *datastore.HourlyWeather) erro
 func (s *testLegacyInterface) GetHourlyWeather(_ string) ([]datastore.HourlyWeather, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) LatestHourlyWeather() (*datastore.HourlyWeather, error) { return nil, nil } //nolint:nilnil // stub
+func (s *testLegacyInterface) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
+	return nil, nil //nolint:nilnil // stub
+}
 func (s *testLegacyInterface) GetHourlyDetections(_, _ string, _, _, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (s *testLegacyInterface) CountSpeciesDetections(_, _, _ string, _ int) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) CountSearchResults(_ string) (int64, error) { return 0, nil }
-func (s *testLegacyInterface) Transaction(_ func(tx *gorm.DB) error) error { return nil }
-func (s *testLegacyInterface) LockNote(_ string) error                    { return nil }
-func (s *testLegacyInterface) UnlockNote(_ string) error                  { return nil }
+func (s *testLegacyInterface) CountSearchResults(_ string) (int64, error)        { return 0, nil }
+func (s *testLegacyInterface) Transaction(_ func(tx *gorm.DB) error) error       { return nil }
+func (s *testLegacyInterface) LockNote(_ string) error                           { return nil }
+func (s *testLegacyInterface) UnlockNote(_ string) error                         { return nil }
 func (s *testLegacyInterface) GetNoteLock(_ string) (*datastore.NoteLock, error) { return nil, nil } //nolint:nilnil // stub
-func (s *testLegacyInterface) IsNoteLocked(_ string) (bool, error)        { return false, nil }
+func (s *testLegacyInterface) IsNoteLocked(_ string) (bool, error)               { return false, nil }
 func (s *testLegacyInterface) GetImageCache(_ datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	return nil, nil //nolint:nilnil // stub
 }
@@ -744,7 +746,7 @@ func (s *testLegacyInterface) SaveDynamicThreshold(_ *datastore.DynamicThreshold
 func (s *testLegacyInterface) GetDynamicThreshold(_ string) (*datastore.DynamicThreshold, error) {
 	return nil, nil //nolint:nilnil // stub
 }
-func (s *testLegacyInterface) DeleteDynamicThreshold(_ string) error                   { return nil }
+func (s *testLegacyInterface) DeleteDynamicThreshold(_ string) error { return nil }
 func (s *testLegacyInterface) DeleteExpiredDynamicThresholds(_ time.Time) (int64, error) {
 	return 0, nil
 }
@@ -760,8 +762,8 @@ func (s *testLegacyInterface) SaveThresholdEvent(_ *datastore.ThresholdEvent) er
 func (s *testLegacyInterface) GetRecentThresholdEvents(_ int) ([]datastore.ThresholdEvent, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) DeleteThresholdEvents(_ string) error       { return nil }
-func (s *testLegacyInterface) DeleteAllThresholdEvents() (int64, error)   { return 0, nil }
+func (s *testLegacyInterface) DeleteThresholdEvents(_ string) error     { return nil }
+func (s *testLegacyInterface) DeleteAllThresholdEvents() (int64, error) { return 0, nil }
 func (s *testLegacyInterface) SaveNotificationHistory(_ *datastore.NotificationHistory) error {
 	return nil
 }

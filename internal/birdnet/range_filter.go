@@ -44,7 +44,7 @@ func BuildRangeFilter(bn *BirdNET) error {
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryValidation).
-			Context("date", today.Format("2006-01-02")).
+			Context("date", today.Format(time.DateOnly)).
 			Context("latitude", bn.Settings.BirdNET.Latitude).
 			Context("longitude", bn.Settings.BirdNET.Longitude).
 			Timing("range-filter-build", time.Since(start)).
@@ -63,7 +63,7 @@ func BuildRangeFilter(bn *BirdNET) error {
 		debugFile := "debug_included_species.txt"
 		var content strings.Builder
 		content.WriteString(fmt.Sprintf("Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
-			time.Now().Format("2006-01-02 15:04:05"),
+			time.Now().Format(time.DateTime),
 			len(includedSpecies)))
 		for _, species := range includedSpecies {
 			content.WriteString(species + "\n")
@@ -104,7 +104,7 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryValidation).
-			Context("date", date.Format("2006-01-02")).
+			Context("date", date.Format(time.DateOnly)).
 			Context("week", week).
 			Context("model", bn.Settings.BirdNET.RangeFilter.Model).
 			Build()
@@ -369,7 +369,7 @@ func (bn *BirdNET) RunFilterProcess(dateStr string, week float32) {
 	var parsedDate time.Time
 	var err error
 	if dateStr != "" {
-		parsedDate, err = time.Parse("2006-01-02", dateStr)
+		parsedDate, err = time.Parse(time.DateOnly, dateStr)
 		if err != nil {
 			fmt.Printf("Error parsing date: %s\n", err)
 			return
@@ -394,7 +394,7 @@ func PrintSpeciesScores(date time.Time, speciesScores []SpeciesScore) {
 	lon := conf.Setting().BirdNET.Longitude
 
 	week := int(getWeekForFilter(date))
-	fmt.Printf("Included species for %v, %v on date %s, week %d, threshold %.6f\n\n", lat, lon, date.Format("2006-01-02"), week, threshold)
+	fmt.Printf("Included species for %v, %v on date %s, week %d, threshold %.6f\n\n", lat, lon, date.Format(time.DateOnly), week, threshold)
 
 	// Get number of species in speciesScores slice
 	numSpecies := len(speciesScores)

@@ -247,7 +247,7 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 			_, cacheExists := tracker.statusCache[tt.speciesName]
 			assert.False(t, cacheExists, "Cache should be invalidated after update")
 
-			t.Logf("✓ Update logic correct: isNew=%v, lifetime=%v", isNew, actualLifetime.Format("2006-01-02"))
+			t.Logf("✓ Update logic correct: isNew=%v, lifetime=%v", isNew, actualLifetime.Format(time.DateOnly))
 		})
 	}
 }

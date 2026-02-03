@@ -174,9 +174,9 @@ func TestGetYearDateRange_CriticalReliability(t *testing.T) {
 			startDate, endDate := tracker.getYearDateRange(tt.currentTime)
 
 			assert.Equal(t, tt.expectedStartDate, startDate,
-				"Start date mismatch for %s", tt.currentTime.Format("2006-01-02"))
+				"Start date mismatch for %s", tt.currentTime.Format(time.DateOnly))
 			assert.Equal(t, tt.expectedEndDate, endDate,
-				"End date mismatch for %s", tt.currentTime.Format("2006-01-02"))
+				"End date mismatch for %s", tt.currentTime.Format(time.DateOnly))
 
 			t.Logf("✓ Date range correct: %s to %s", startDate, endDate)
 		})
@@ -492,7 +492,7 @@ func TestIsWithinCurrentYear_CriticalReliability(t *testing.T) {
 			withinYear := tracker.isWithinCurrentYear(tt.detectionTime)
 
 			assert.Equal(t, tt.expectedWithin, withinYear,
-				"Within year mismatch for %s", tt.detectionTime.Format("2006-01-02"))
+				"Within year mismatch for %s", tt.detectionTime.Format(time.DateOnly))
 
 			t.Logf("✓ Correctly determined within year: %v", withinYear)
 		})
@@ -585,7 +585,7 @@ func TestShouldResetYear_CriticalReliability(t *testing.T) {
 
 			assert.Equal(t, tt.expectedReset, shouldReset,
 				"Reset mismatch for year %d at %s",
-				tt.trackerYear, tt.currentTime.Format("2006-01-02"))
+				tt.trackerYear, tt.currentTime.Format(time.DateOnly))
 
 			t.Logf("✓ Correctly determined reset: %v", shouldReset)
 		})

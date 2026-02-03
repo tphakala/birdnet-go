@@ -183,7 +183,7 @@ func (c *Controller) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path s
 	}
 
 	// Check if it's a future date
-	requestedDate, parseErr := time.Parse("2006-01-02", date)
+	requestedDate, parseErr := time.Parse(time.DateOnly, date)
 	if parseErr != nil {
 		c.logErrorIfEnabled("Invalid date format in hourly weather request", logger.String("date", date), logger.Error(parseErr), logger.String("path", path), logger.String("ip", ip))
 		emptyResponse.Message = "No weather data found for the specified date"
@@ -435,7 +435,7 @@ func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWea
 // buildHourlyWeatherResponse creates an HourlyWeatherResponse from an HourlyWeather struct
 func (c *Controller) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) HourlyWeatherResponse {
 	return HourlyWeatherResponse{
-		Time:        hw.Time.In(time.Local).Format("15:04:05"),
+		Time:        hw.Time.In(time.Local).Format(time.TimeOnly),
 		Temperature: hw.Temperature,
 		FeelsLike:   hw.FeelsLike,
 		TempMin:     hw.TempMin,
@@ -473,7 +473,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	}
 
 	// Get the date from the latest weather (convert to local time for correct date)
-	date := latestWeather.Time.In(time.Local).Format("2006-01-02")
+	date := latestWeather.Time.In(time.Local).Format(time.DateOnly)
 
 	// Build response with hourly data
 	response := struct {
@@ -516,15 +516,15 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 // calculateTimeOfDay determines the time of day based on the detection time and sun events
 func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
 	// Convert all times to the same format for comparison
-	detTime := detectionTime.Format("15:04:05")
-	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
-	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+	detTime := detectionTime.Format(time.TimeOnly)
+	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
+	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
 
 	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-weatherSunWindowMinute * time.Minute).Format("15:04:05")
-	sunriseEnd := sunEvents.Sunrise.Add(weatherSunWindowMinute * time.Minute).Format("15:04:05")
-	sunsetStart := sunEvents.Sunset.Add(-weatherSunWindowMinute * time.Minute).Format("15:04:05")
-	sunsetEnd := sunEvents.Sunset.Add(weatherSunWindowMinute * time.Minute).Format("15:04:05")
+	sunriseStart := sunEvents.Sunrise.Add(-weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
+	sunriseEnd := sunEvents.Sunrise.Add(weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
+	sunsetStart := sunEvents.Sunset.Add(-weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
+	sunsetEnd := sunEvents.Sunset.Add(weatherSunWindowMinute * time.Minute).Format(time.TimeOnly)
 
 	switch {
 	case detTime >= sunriseStart && detTime <= sunriseEnd:
@@ -560,7 +560,7 @@ func (c *Controller) GetSunTimes(ctx echo.Context) error {
 	}
 
 	// Validate date format
-	parsedDate, err := time.Parse("2006-01-02", date)
+	parsedDate, err := time.Parse(time.DateOnly, date)
 	if err != nil {
 		c.logErrorIfEnabled("Invalid date format in sun times request",
 			logger.String("date", date),

@@ -311,7 +311,7 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 
 		GetLogger().Error("Failed to get probable species for range filter",
 			logger.Error(err),
-			logger.String("date", today.Format("2006-01-02")),
+			logger.String("date", today.Format(time.DateOnly)),
 			logger.String("operation", "update_range_filter"))
 		return err
 	}
@@ -328,7 +328,7 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 	if a.Settings.Debug {
 		GetLogger().Info("Range filter updated successfully",
 			logger.Int("species_count", len(includedSpecies)),
-			logger.String("date", today.Format("2006-01-02")),
+			logger.String("date", today.Format(time.DateOnly)),
 			logger.String("operation", "update_range_filter_success"))
 	}
 

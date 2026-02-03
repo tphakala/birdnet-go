@@ -32,12 +32,12 @@ func TestSpeciesTracker_NewSpecies(t *testing.T) {
 		{
 			ScientificName: testSpeciesParusMajor,
 			CommonName:     "Great Tit",
-			FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
+			FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format(time.DateOnly),
 		},
 		{
 			ScientificName: "Turdus merula",
 			CommonName:     "Common Blackbird",
-			FirstSeenDate:  time.Now().Add(-recentSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
+			FirstSeenDate:  time.Now().Add(-recentSpeciesDays * 24 * time.Hour).Format(time.DateOnly),
 		},
 	}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -190,7 +190,7 @@ func TestSpeciesTracker_EdgeCases(t *testing.T) {
 		historicalData := []datastore.NewSpeciesData{
 			{
 				ScientificName: testSpeciesParusMajor,
-				FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format("2006-01-02"), // Exactly 14 days ago
+				FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format(time.DateOnly), // Exactly 14 days ago
 			},
 		}
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -264,15 +264,15 @@ func TestSpeciesTracker_PruneOldEntries(t *testing.T) {
 	historicalData := []datastore.NewSpeciesData{
 		{
 			ScientificName: "Very Old Species",
-			FirstSeenDate:  time.Now().Add(-11 * 365 * 24 * time.Hour).Format("2006-01-02"), // 11 years ago (should be pruned)
+			FirstSeenDate:  time.Now().Add(-11 * 365 * 24 * time.Hour).Format(time.DateOnly), // 11 years ago (should be pruned)
 		},
 		{
 			ScientificName: "Old Species",
-			FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format("2006-01-02"), // 30 days ago (should NOT be pruned)
+			FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format(time.DateOnly), // 30 days ago (should NOT be pruned)
 		},
 		{
 			ScientificName: "Recent Species",
-			FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"), // 5 days ago (should NOT be pruned)
+			FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format(time.DateOnly), // 5 days ago (should NOT be pruned)
 		},
 	}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -788,7 +788,7 @@ func TestSeasonDetection(t *testing.T) {
 			tracker.mu.Unlock()
 			assert.Equal(t, tc.expectedSeason, season,
 				"Expected season '%s' for date %s, got '%s'",
-				tc.expectedSeason, tc.date.Format("2006-01-02"), season)
+				tc.expectedSeason, tc.date.Format(time.DateOnly), season)
 		})
 	}
 }

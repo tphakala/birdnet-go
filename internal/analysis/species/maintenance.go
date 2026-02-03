@@ -104,8 +104,8 @@ func (t *SpeciesTracker) pruneYearlyEntriesLocked(now time.Time) int {
 			pruned++
 			getLog().Debug("Pruned old yearly entry",
 				logger.String("species", scientificName),
-				logger.String("first_seen", firstSeen.Format("2006-01-02")),
-				logger.String("year_start", currentYearStart.Format("2006-01-02")))
+				logger.String("first_seen", firstSeen.Format(time.DateOnly)),
+				logger.String("year_start", currentYearStart.Format(time.DateOnly)))
 		}
 	}
 	return pruned
@@ -241,7 +241,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	// Log outside the critical section to reduce lock contention
 	getLog().Debug("Recorded notification sent",
 		logger.String("species", scientificName),
-		logger.String("sent_time", sentTime.Format("2006-01-02 15:04:05")))
+		logger.String("sent_time", sentTime.Format(time.DateTime)))
 
 	// Persist to database asynchronously to avoid blocking (BG-17 fix)
 	// This ensures notification suppression state survives application restarts
@@ -272,7 +272,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 			} else {
 				getLog().Debug("Persisted notification history to database",
 					logger.String("species", scientificName),
-					logger.String("expires_at", expiresAt.Format("2006-01-02 15:04:05")))
+					logger.String("expires_at", expiresAt.Format(time.DateTime)))
 			}
 		})
 	}
@@ -297,7 +297,7 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
 		getLog().Debug("Cleaned up old notification records from memory",
 			logger.Int("removed_count", cleaned),
-			logger.String("cutoff_time", cutoffTime.Format("2006-01-02 15:04:05")))
+			logger.String("cutoff_time", cutoffTime.Format(time.DateTime)))
 	}
 
 	// Clean up database records asynchronously (BG-17 fix)
@@ -313,11 +313,11 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 			if err != nil {
 				getLog().Error("Failed to cleanup expired notification history from database",
 					logger.Error(err),
-					logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")))
+					logger.String("current_time", currentTime.Format(time.DateTime)))
 			} else if deletedCount > 0 {
 				getLog().Debug("Cleaned up expired notification history from database",
 					logger.Int64("deleted_count", deletedCount),
-					logger.String("current_time", currentTime.Format("2006-01-02 15:04:05")))
+					logger.String("current_time", currentTime.Format(time.DateTime)))
 			}
 		})
 	}
