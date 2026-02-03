@@ -83,7 +83,7 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	case "wunderground":
 		provider = NewWundergroundProvider(nil)
 	default:
-		return nil, errors.New(fmt.Errorf("invalid weather provider: %s", settings.Realtime.Weather.Provider)).
+		return nil, errors.Newf("invalid weather provider: %s", settings.Realtime.Weather.Provider).
 			Component("weather").
 			Category(errors.CategoryConfiguration).
 			Context("provider", settings.Realtime.Weather.Provider).
@@ -200,14 +200,14 @@ const absoluteZeroCelsius = -273.15
 // validateWeatherData performs basic validation on weather data
 func validateWeatherData(data *datastore.HourlyWeather) error {
 	if data.Temperature < absoluteZeroCelsius {
-		return errors.New(fmt.Errorf("temperature cannot be below absolute zero: %f", data.Temperature)).
+		return errors.Newf("temperature cannot be below absolute zero: %f", data.Temperature).
 			Component("weather").
 			Category(errors.CategoryValidation).
 			Context("temperature", fmt.Sprintf("%.2f", data.Temperature)).
 			Build()
 	}
 	if data.WindSpeed < 0 {
-		return errors.New(fmt.Errorf("wind speed cannot be negative: %f", data.WindSpeed)).
+		return errors.Newf("wind speed cannot be negative: %f", data.WindSpeed).
 			Component("weather").
 			Category(errors.CategoryValidation).
 			Context("wind_speed", fmt.Sprintf("%.2f", data.WindSpeed)).

@@ -78,7 +78,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	var err error
 	bn.ModelInfo, err = DetermineModelInfo(modelIdentifier)
 	if err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: failed to determine model information: %w", err)).
+		return nil, errors.Newf("BirdNET: failed to determine model information: %w", err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
@@ -89,7 +89,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: failed to load taxonomy data: %w", err)).
+		return nil, errors.Newf("BirdNET: failed to load taxonomy data: %w", err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("taxonomy_path", bn.TaxonomyPath).
@@ -97,7 +97,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	}
 
 	if err := bn.initializeModel(); err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize analysis model: %w", err)).
+		return nil, errors.Newf("BirdNET: failed to initialize analysis model: %w", err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
@@ -105,7 +105,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	}
 
 	if err := bn.initializeMetaModel(); err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize range filter model: %w", err)).
+		return nil, errors.Newf("BirdNET: failed to initialize range filter model: %w", err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
@@ -113,7 +113,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	}
 
 	if err := bn.loadLabels(); err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: failed to load species labels: %w", err)).
+		return nil, errors.Newf("BirdNET: failed to load species labels: %w", err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
@@ -138,7 +138,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 
 	// Validate model and labels, which will also allocate the results buffer
 	if err := bn.validateModelAndLabels(); err != nil {
-		return nil, errors.New(fmt.Errorf("BirdNET: model validation failed: %w", err)).
+		return nil, errors.Newf("BirdNET: model validation failed: %w", err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
@@ -163,7 +163,7 @@ func (bn *BirdNET) initializeModel() error {
 
 	model := tflite.NewModel(modelData)
 	if model == nil {
-		return errors.New(fmt.Errorf("cannot load TensorFlow Lite model")).
+		return errors.Newf("cannot load TensorFlow Lite model").
 			Category(errors.CategoryModelInit).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("model_size_mb", len(modelData)/1024/1024).
@@ -336,7 +336,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 
 	model := tflite.NewModel(metaModelData)
 	if model == nil {
-		return errors.New(fmt.Errorf("cannot load meta model from embedded data")).
+		return errors.Newf("cannot load meta model from embedded data").
 			Category(errors.CategoryModelLoad).
 			Context("model_type", "range_filter").
 			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
@@ -354,7 +354,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// Create and allocate the TensorFlow Lite interpreter for the meta model.
 	bn.RangeInterpreter = tflite.NewInterpreter(model, options)
 	if bn.RangeInterpreter == nil {
-		return errors.New(fmt.Errorf("cannot create meta model interpreter")).
+		return errors.Newf("cannot create meta model interpreter").
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
 			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
@@ -830,7 +830,7 @@ func (bn *BirdNET) validateModelAndLabels() error {
 	// Get the output tensor to check its dimensions
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	if outputTensor == nil {
-		return errors.New(fmt.Errorf("cannot get output tensor from model")).
+		return errors.Newf("cannot get output tensor from model").
 			Category(errors.CategoryValidation).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("interpreter_status", "failed").

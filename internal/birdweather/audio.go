@@ -26,7 +26,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 
 	// Validate input parameters
 	if buffer == nil {
-		return errors.New(fmt.Errorf("buffer is nil")).
+		return errors.Newf("buffer is nil").
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("filename", filename).

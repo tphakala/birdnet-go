@@ -47,7 +47,7 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	// Get the input tensor from the interpreter
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
 	if inputTensor == nil {
-		err := errors.New(fmt.Errorf("cannot get input tensor")).
+		err := errors.Newf("cannot get input tensor").
 			Category(errors.CategoryModelInit).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("interpreter_state", "initialized").
@@ -247,7 +247,7 @@ func applySigmoidToPredictionsReuse(predictions []float32, sensitivity float64, 
 		// This ensures correctness when model output size differs from expected buffer size.
 		return applySigmoidToPredictions(predictions, sensitivity)
 	}
-	
+
 	for i, pred := range predictions {
 		buffer[i] = float32(customSigmoid(float64(pred), sensitivity))
 	}
@@ -268,19 +268,19 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	if len(results) == 0 || k <= 0 {
 		return []datastore.Results{}
 	}
-	
+
 	if k >= len(results) {
 		// If k is greater than or equal to the number of results, sort everything
 		sortResults(results)
 		return results
 	}
-	
+
 	// Use partial sort to find top k elements
 	partialSort(results, k)
-	
+
 	// Sort the top k elements in descending order
 	sortResults(results[:k])
-	
+
 	return results[:k]
 }
 
@@ -291,14 +291,14 @@ func partialSort(results []datastore.Results, k int) {
 	if k >= n {
 		return
 	}
-	
+
 	// Use quickselect-like algorithm to partition the top k elements
 	left, right := 0, n-1
-	
+
 partitionLoop:
 	for left < right {
 		pivotIndex := partition(results, left, right)
-		
+
 		switch {
 		case pivotIndex == k-1:
 			// Perfect partition - we have exactly k elements
@@ -319,7 +319,7 @@ func partition(results []datastore.Results, left, right int) int {
 	// Use the rightmost element as pivot
 	pivot := results[right]
 	i := left - 1
-	
+
 	for j := left; j < right; j++ {
 		// Sort in descending order (higher confidence first)
 		if results[j].Confidence > pivot.Confidence {
@@ -327,7 +327,7 @@ func partition(results []datastore.Results, left, right int) int {
 			results[i], results[j] = results[j], results[i]
 		}
 	}
-	
+
 	results[i+1], results[right] = results[right], results[i+1]
 	return i + 1
 }

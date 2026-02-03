@@ -90,7 +90,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 
 	// Check if stream already exists
 	if _, exists := m.streams[url]; exists {
-		return errors.New(fmt.Errorf("stream already exists for URL: %s", url)).
+		return errors.Newf("stream already exists for URL: %s", url).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
 			Context("operation", "start_stream").
@@ -109,7 +109,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			logger.String("sourceID", stream.source.ID),
 			logger.Error(err),
 			logger.String("operation", "start_stream_buffer_init"))
-		return errors.New(fmt.Errorf("failed to initialize buffers: %w", err)).
+		return errors.Newf("failed to initialize buffers: %w", err).
 			Category(errors.CategorySystem).
 			Component("ffmpeg-manager").
 			Context("operation", "start_stream").
@@ -151,7 +151,7 @@ func (m *FFmpegManager) StopStream(url string) error {
 	stream, exists := m.streams[url]
 	if !exists {
 		m.streamsMu.Unlock()
-		return errors.New(fmt.Errorf("no stream found for URL: %s", url)).
+		return errors.Newf("no stream found for URL: %s", url).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
 			Context("operation", "stop_stream").
@@ -213,7 +213,7 @@ func (m *FFmpegManager) RestartStream(url string) error {
 	m.streamsMu.RUnlock()
 
 	if !exists {
-		return errors.New(fmt.Errorf("no stream found for URL: %s", url)).
+		return errors.Newf("no stream found for URL: %s", url).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
 			Context("operation", "restart_stream").

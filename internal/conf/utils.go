@@ -96,7 +96,7 @@ func FindConfigFile() (string, error) {
 		}
 	}
 
-	return "", errors.New(fmt.Errorf("config file not found")).
+	return "", errors.Newf("config file not found").
 		Category(errors.CategoryFileIO).
 		Context("operation", "find-config-file").
 		Build()

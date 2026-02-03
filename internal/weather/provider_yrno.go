@@ -125,7 +125,7 @@ func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bo
 			logger.String("response_body", responseBodyStr))
 
 		if isLastAttempt {
-			return nil, errors.New(fmt.Errorf("received non-OK response (%d) after %d retries", resp.StatusCode, MaxRetries)).
+			return nil, errors.Newf("received non-OK response (%d) after %d retries", resp.StatusCode, MaxRetries).
 				Component("weather").
 				Category(errors.CategoryNetwork).
 				Context("operation", "weather_api_response").

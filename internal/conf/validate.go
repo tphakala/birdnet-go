@@ -516,7 +516,7 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 		*birdnetSettings = *normalized
 	} else if !ok {
 		// Type assertion failed - this indicates a bug in ValidateBirdNETSettings
-		return errors.New(fmt.Errorf("internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized)).
+		return errors.Newf("internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "birdnet-type-assertion").
 			Build()
@@ -536,7 +536,7 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 
 	// Return errors if validation failed
 	if !result.Valid {
-		return errors.New(fmt.Errorf("birdnet settings errors: %v", result.Errors)).
+		return errors.Newf("birdnet settings errors: %v", result.Errors).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "birdnet-settings-collection").
 			Build()
@@ -556,7 +556,7 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 	if !result.Valid {
 		// Format first error with enhanced error for backward compatibility
 		firstError := result.Errors[0]
-		return errors.New(fmt.Errorf("%s", firstError)).
+		return errors.Newf("%s", firstError).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "webserver-settings").
 			Build()
@@ -570,7 +570,7 @@ func validateSecuritySettings(settings *Security) error {
 	// Check if any OAuth provider is enabled (OAuth providers require host or baseUrl for redirect URLs)
 	// Note: BasicAuth doesn't require host as it doesn't use OAuth redirects
 	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled || settings.MicrosoftAuth.Enabled) && settings.Host == "" && settings.BaseURL == "" {
-		return errors.New(fmt.Errorf("security.host or security.baseUrl must be set when using OAuth authentication providers (Google, GitHub, or Microsoft)")).
+		return errors.Newf("security.host or security.baseUrl must be set when using OAuth authentication providers (Google, GitHub, or Microsoft)").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-oauth-host").
 			Context("google_enabled", settings.GoogleAuth.Enabled).
@@ -584,7 +584,7 @@ func validateSecuritySettings(settings *Security) error {
 		// Host is required for AutoTLS (can be extracted from BaseURL)
 		hostname := settings.GetHostnameForCertificates()
 		if hostname == "" {
-			return errors.New(fmt.Errorf("security.host (or hostname in security.baseUrl) must be set when AutoTLS is enabled")).
+			return errors.Newf("security.host (or hostname in security.baseUrl) must be set when AutoTLS is enabled").
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-autotls-host").
 				Build()
@@ -615,7 +615,7 @@ func validateSecuritySettings(settings *Security) error {
 
 	// Validate session duration
 	if settings.SessionDuration <= 0 {
-		return errors.New(fmt.Errorf("security.sessionduration must be a positive duration")).
+		return errors.Newf("security.sessionduration must be a positive duration").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-session-duration").
 			Build()
@@ -628,7 +628,7 @@ func validateSecuritySettings(settings *Security) error {
 func validateRealtimeSettings(settings *RealtimeSettings) error {
 	// Check if interval is non-negative
 	if settings.Interval < 0 {
-		return errors.New(fmt.Errorf("realtime interval must be non-negative")).
+		return errors.Newf("realtime interval must be non-negative").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "realtime-interval").
 			Build()
@@ -671,7 +671,7 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 	if !result.Valid {
 		// Format first error with enhanced error for backward compatibility
 		firstError := result.Errors[0]
-		return errors.New(fmt.Errorf("%s", firstError)).
+		return errors.Newf("%s", firstError).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "mqtt-settings").
 			Build()
@@ -686,7 +686,7 @@ func validateSoundLevelSettings(settings *SoundLevelSettings) error {
 	if settings.Enabled {
 		// Check if interval is at least the minimum to avoid excessive CPU usage
 		if settings.Interval < MinSoundLevelInterval {
-			return errors.New(fmt.Errorf("sound level interval must be at least %d seconds to avoid excessive CPU usage, got %d", MinSoundLevelInterval, settings.Interval)).
+			return errors.Newf("sound level interval must be at least %d seconds to avoid excessive CPU usage, got %d", MinSoundLevelInterval, settings.Interval).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "sound-level-interval").
 				Context("interval", settings.Interval).
@@ -709,7 +709,7 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 		*settings = *normalized
 	} else if !ok {
 		// Type assertion failed - this indicates a bug in ValidateBirdweatherSettings
-		return errors.New(fmt.Errorf("internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized)).
+		return errors.Newf("internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "birdweather-type-assertion").
 			Build()
@@ -723,7 +723,7 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 	// Return errors if validation failed
 	if !result.Valid {
 		// Join errors for backward compatibility
-		return errors.New(fmt.Errorf("%s", strings.Join(result.Errors, "; "))).
+		return errors.Newf("%s", strings.Join(result.Errors, "; ")).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "birdweather-settings").
 			Build()
@@ -775,7 +775,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 	if settings.Export.Enabled {
 		// Validate capture length (10-60 seconds)
 		if settings.Export.Length < 10 || settings.Export.Length > 60 {
-			return errors.New(fmt.Errorf("audio capture length must be between 10 and 60 seconds, got %d", settings.Export.Length)).
+			return errors.Newf("audio capture length must be between 10 and 60 seconds, got %d", settings.Export.Length).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "audio-export-capture-length").
 				Context("capture_length", settings.Export.Length).
@@ -785,7 +785,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 		// Validate pre-capture (max 1/2 of capture length)
 		maxPreCapture := settings.Export.Length / 2
 		if settings.Export.PreCapture < 0 || settings.Export.PreCapture > maxPreCapture {
-			return errors.New(fmt.Errorf("audio pre-capture must be between 0 and %d seconds (1/2 of capture length), got %d", maxPreCapture, settings.Export.PreCapture)).
+			return errors.Newf("audio pre-capture must be between 0 and %d seconds (1/2 of capture length), got %d", maxPreCapture, settings.Export.PreCapture).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "audio-export-precapture").
 				Context("precapture", settings.Export.PreCapture).
@@ -796,7 +796,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 		// Validate gain setting (reasonable range for audio processing)
 		if settings.Export.Gain < MinAudioGain || settings.Export.Gain > MaxAudioGain {
-			return errors.New(fmt.Errorf("audio gain must be between %.0f and +%.0f dB, got %.1f", MinAudioGain, MaxAudioGain, settings.Export.Gain)).
+			return errors.Newf("audio gain must be between %.0f and +%.0f dB, got %.1f", MinAudioGain, MaxAudioGain, settings.Export.Gain).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "audio-export-gain").
 				Context("gain", settings.Export.Gain).
@@ -809,7 +809,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 		if settings.Export.Normalization.Enabled {
 			// Validate target LUFS (reasonable range for EBU R128)
 			if settings.Export.Normalization.TargetLUFS < MinTargetLUFS || settings.Export.Normalization.TargetLUFS > MaxTargetLUFS {
-				return errors.New(fmt.Errorf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, settings.Export.Normalization.TargetLUFS)).
+				return errors.Newf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, settings.Export.Normalization.TargetLUFS).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "audio-normalization-target").
 					Context("target_lufs", settings.Export.Normalization.TargetLUFS).
@@ -820,7 +820,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 			// Validate loudness range (dynamic range)
 			if settings.Export.Normalization.LoudnessRange < MinLoudnessRange || settings.Export.Normalization.LoudnessRange > MaxLoudnessRange {
-				return errors.New(fmt.Errorf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, settings.Export.Normalization.LoudnessRange)).
+				return errors.Newf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, settings.Export.Normalization.LoudnessRange).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "audio-normalization-range").
 					Context("loudness_range", settings.Export.Normalization.LoudnessRange).
@@ -831,7 +831,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 			// Validate true peak (headroom to prevent clipping)
 			if settings.Export.Normalization.TruePeak < MinTruePeak || settings.Export.Normalization.TruePeak > MaxTruePeak {
-				return errors.New(fmt.Errorf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, settings.Export.Normalization.TruePeak)).
+				return errors.Newf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, settings.Export.Normalization.TruePeak).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "audio-normalization-peak").
 					Context("true_peak", settings.Export.Normalization.TruePeak).
@@ -854,7 +854,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 			switch settings.Export.Type {
 			case "aac", "opus", "mp3":
 				if !strings.HasSuffix(settings.Export.Bitrate, "k") {
-					return errors.New(fmt.Errorf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", settings.Export.Type, settings.Export.Bitrate)).
+					return errors.Newf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", settings.Export.Type, settings.Export.Bitrate).
 						Category(errors.CategoryValidation).
 						Context("validation_type", "audio-export-bitrate-format").
 						Context("export_type", settings.Export.Type).
@@ -863,7 +863,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 				}
 				bitrateValue, err := strconv.Atoi(strings.TrimSuffix(settings.Export.Bitrate, "k"))
 				if err != nil {
-					return errors.New(fmt.Errorf("invalid bitrate value for %s: %s", settings.Export.Type, settings.Export.Bitrate)).
+					return errors.Newf("invalid bitrate value for %s: %s", settings.Export.Type, settings.Export.Bitrate).
 						Category(errors.CategoryValidation).
 						Context("validation_type", "audio-export-bitrate-value").
 						Context("export_type", settings.Export.Type).
@@ -871,7 +871,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 						Build()
 				}
 				if bitrateValue < 32 || bitrateValue > 320 {
-					return errors.New(fmt.Errorf("bitrate for %s must be between 32k and 320k", settings.Export.Type)).
+					return errors.Newf("bitrate for %s must be between 32k and 320k", settings.Export.Type).
 						Category(errors.CategoryValidation).
 						Context("validation_type", "audio-export-bitrate-range").
 						Context("export_type", settings.Export.Type).
@@ -880,7 +880,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 			case "wav", "flac":
 				// These formats don't use bitrate, so we'll ignore the bitrate setting
 			default:
-				return errors.New(fmt.Errorf("unsupported audio export type: %s", settings.Export.Type)).
+				return errors.Newf("unsupported audio export type: %s", settings.Export.Type).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "audio-export-type").
 					Context("export_type", settings.Export.Type).
@@ -896,7 +896,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 func validateDashboardSettings(settings *Dashboard) error {
 	// Validate SummaryLimit
 	if settings.SummaryLimit < 10 || settings.SummaryLimit > 1000 {
-		return errors.New(fmt.Errorf("Dashboard SummaryLimit must be between 10 and 1000")).
+		return errors.Newf("Dashboard SummaryLimit must be between 10 and 1000").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "dashboard-summary-limit").
 			Context("summary_limit", settings.SummaryLimit).
@@ -960,7 +960,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 func validateWeatherSettings(settings *WeatherSettings) error {
 	// Validate poll interval (minimum 15 minutes)
 	if settings.PollInterval < 15 {
-		return errors.New(fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)).
+		return errors.Newf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "weather-poll-interval").
 			Context("poll_interval", settings.PollInterval).
@@ -985,7 +985,7 @@ func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
 	if settings.Enabled {
 		// Validate window days
 		if settings.NewSpeciesWindowDays < 1 || settings.NewSpeciesWindowDays > 365 {
-			return errors.New(fmt.Errorf("species tracking window days must be between 1 and 365, got %d", settings.NewSpeciesWindowDays)).
+			return errors.Newf("species tracking window days must be between 1 and 365, got %d", settings.NewSpeciesWindowDays).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "species-tracking-window-days").
 				Context("window_days", settings.NewSpeciesWindowDays).
@@ -994,7 +994,7 @@ func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
 
 		// Validate sync interval
 		if settings.SyncIntervalMinutes < 5 || settings.SyncIntervalMinutes > 1440 {
-			return errors.New(fmt.Errorf("species tracking sync interval must be between 5 and 1440 minutes (24 hours), got %d", settings.SyncIntervalMinutes)).
+			return errors.Newf("species tracking sync interval must be between 5 and 1440 minutes (24 hours), got %d", settings.SyncIntervalMinutes).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "species-tracking-sync-interval").
 				Context("sync_interval", settings.SyncIntervalMinutes).
@@ -1003,7 +1003,7 @@ func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
 
 		// Validate notification suppression hours
 		if settings.NotificationSuppressionHours < 0 || settings.NotificationSuppressionHours > 720 {
-			return errors.New(fmt.Errorf("notification suppression hours must be between 0 and 720 (30 days), got %d", settings.NotificationSuppressionHours)).
+			return errors.Newf("notification suppression hours must be between 0 and 720 (30 days), got %d", settings.NotificationSuppressionHours).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-suppression-hours").
 				Context("suppression_hours", settings.NotificationSuppressionHours).
@@ -1027,7 +1027,7 @@ func validateYearlyTrackingSettings(settings *YearlyTrackingSettings) error {
 	if settings.Enabled {
 		// Validate reset month
 		if settings.ResetMonth < 1 || settings.ResetMonth > 12 {
-			return errors.New(fmt.Errorf("yearly tracking reset month must be between 1 and 12, got %d", settings.ResetMonth)).
+			return errors.Newf("yearly tracking reset month must be between 1 and 12, got %d", settings.ResetMonth).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "yearly-tracking-reset-month").
 				Context("reset_month", settings.ResetMonth).
@@ -1036,7 +1036,7 @@ func validateYearlyTrackingSettings(settings *YearlyTrackingSettings) error {
 		// Validate reset day - must be valid for the specified month
 		maxDaysInMonth := getMaxDaysInMonth(settings.ResetMonth)
 		if settings.ResetDay < 1 || settings.ResetDay > maxDaysInMonth {
-			return errors.New(fmt.Errorf("yearly tracking reset day must be between 1 and %d for month %d, got %d", maxDaysInMonth, settings.ResetMonth, settings.ResetDay)).
+			return errors.Newf("yearly tracking reset day must be between 1 and %d for month %d, got %d", maxDaysInMonth, settings.ResetMonth, settings.ResetDay).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "yearly-tracking-reset-day").
 				Context("reset_month", settings.ResetMonth).
@@ -1046,7 +1046,7 @@ func validateYearlyTrackingSettings(settings *YearlyTrackingSettings) error {
 		}
 		// Validate window days
 		if settings.WindowDays < 1 || settings.WindowDays > 365 {
-			return errors.New(fmt.Errorf("yearly tracking window days must be between 1 and 365, got %d", settings.WindowDays)).
+			return errors.Newf("yearly tracking window days must be between 1 and 365, got %d", settings.WindowDays).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "yearly-tracking-window-days").
 				Context("window_days", settings.WindowDays).
@@ -1060,7 +1060,7 @@ func validateSeasonalTrackingSettings(settings *SeasonalTrackingSettings) error 
 	if settings.Enabled {
 		// Validate window days
 		if settings.WindowDays < 1 || settings.WindowDays > 365 {
-			return errors.New(fmt.Errorf("seasonal tracking window days must be between 1 and 365, got %d", settings.WindowDays)).
+			return errors.Newf("seasonal tracking window days must be between 1 and 365, got %d", settings.WindowDays).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "seasonal-tracking-window-days").
 				Context("window_days", settings.WindowDays).
@@ -1068,14 +1068,14 @@ func validateSeasonalTrackingSettings(settings *SeasonalTrackingSettings) error 
 		}
 		// Validate seasons
 		if len(settings.Seasons) == 0 {
-			return errors.New(fmt.Errorf("seasonal tracking requires at least one season to be defined")).
+			return errors.Newf("seasonal tracking requires at least one season to be defined").
 				Category(errors.CategoryValidation).
 				Context("validation_type", "seasonal-tracking-seasons").
 				Build()
 		}
 		for seasonName, season := range settings.Seasons {
 			if season.StartMonth < 1 || season.StartMonth > 12 {
-				return errors.New(fmt.Errorf("season %s start month must be between 1 and 12, got %d", seasonName, season.StartMonth)).
+				return errors.Newf("season %s start month must be between 1 and 12, got %d", seasonName, season.StartMonth).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "seasonal-tracking-season-month").
 					Context("season", seasonName).
@@ -1084,7 +1084,7 @@ func validateSeasonalTrackingSettings(settings *SeasonalTrackingSettings) error 
 			}
 			maxDaysInMonth := getMaxDaysInMonth(season.StartMonth)
 			if season.StartDay < 1 || season.StartDay > maxDaysInMonth {
-				return errors.New(fmt.Errorf("season %s start day must be between 1 and %d for month %d, got %d", seasonName, maxDaysInMonth, season.StartMonth, season.StartDay)).
+				return errors.Newf("season %s start day must be between 1 and %d for month %d, got %d", seasonName, maxDaysInMonth, season.StartMonth, season.StartDay).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "seasonal-tracking-season-day").
 					Context("season", seasonName).
@@ -1116,7 +1116,7 @@ func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
 	for speciesName, config := range settings.Config {
 		// Check if interval is non-negative
 		if config.Interval < 0 {
-			return errors.New(fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)).
+			return errors.Newf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "species-config-interval").
 				Context("species_name", speciesName).
@@ -1126,7 +1126,7 @@ func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
 
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
-			return errors.New(fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)).
+			return errors.Newf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "species-config-threshold").
 				Context("species_name", speciesName).
@@ -1144,13 +1144,13 @@ func validateNotificationSettings(n *NotificationConfig) error {
 	}
 	// Basic sanity checks
 	if n.Push.MaxRetries < 0 {
-		return errors.New(fmt.Errorf("notification.push.max_retries must be >= 0")).
+		return errors.Newf("notification.push.max_retries must be >= 0").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "notification-push-max-retries").
 			Build()
 	}
 	if n.Push.DefaultTimeout < 0 || n.Push.RetryDelay < 0 {
-		return errors.New(fmt.Errorf("notification push durations must be non-negative")).
+		return errors.Newf("notification push durations must be non-negative").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "notification-push-durations").
 			Build()
@@ -1161,14 +1161,14 @@ func validateNotificationSettings(n *NotificationConfig) error {
 		switch ptype {
 		case "script":
 			if p.Enabled && strings.TrimSpace(p.Command) == "" {
-				return errors.New(fmt.Errorf("script provider requires command when enabled")).
+				return errors.Newf("script provider requires command when enabled").
 					Category(errors.CategoryValidation).
 					Context("validation_type", "notification-push-script-command").
 					Build()
 			}
 		case "shoutrrr":
 			if p.Enabled && len(p.URLs) == 0 {
-				return errors.New(fmt.Errorf("shoutrrr provider requires at least one URL when enabled")).
+				return errors.Newf("shoutrrr provider requires at least one URL when enabled").
 					Category(errors.CategoryValidation).
 					Context("validation_type", "notification-push-shoutrrr-urls").
 					Build()
@@ -1178,7 +1178,7 @@ func validateNotificationSettings(n *NotificationConfig) error {
 				return err
 			}
 		default:
-			return errors.New(fmt.Errorf("unknown push provider type: %s", p.Type)).
+			return errors.Newf("unknown push provider type: %s", p.Type).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-provider-type").
 				Build()
@@ -1199,7 +1199,7 @@ func validateWebhookProvider(p *PushProviderConfig) error {
 	if !result.Valid {
 		// Format first error with enhanced error for backward compatibility
 		firstError := result.Errors[0]
-		return errors.New(fmt.Errorf("%s", firstError)).
+		return errors.Newf("%s", firstError).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "notification-push-webhook").
 			Context("provider_name", p.Name).
@@ -1238,7 +1238,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	case "bearer":
 		// At least one of token or token_file must be provided
 		if strings.TrimSpace(auth.Token) == "" && strings.TrimSpace(auth.TokenFile) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: bearer auth requires token or token_file", providerName, endpointIndex)).
+			return errors.Newf("webhook provider '%s' endpoint %d: bearer auth requires token or token_file", providerName, endpointIndex).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-bearer").
 				Context("provider_name", providerName).
@@ -1248,7 +1248,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	case "basic":
 		// Check user/user_file
 		if strings.TrimSpace(auth.User) == "" && strings.TrimSpace(auth.UserFile) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires user or user_file", providerName, endpointIndex)).
+			return errors.Newf("webhook provider '%s' endpoint %d: basic auth requires user or user_file", providerName, endpointIndex).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-basic").
 				Context("provider_name", providerName).
@@ -1257,7 +1257,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 		}
 		// Check pass/pass_file
 		if strings.TrimSpace(auth.Pass) == "" && strings.TrimSpace(auth.PassFile) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires pass or pass_file", providerName, endpointIndex)).
+			return errors.Newf("webhook provider '%s' endpoint %d: basic auth requires pass or pass_file", providerName, endpointIndex).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-basic").
 				Context("provider_name", providerName).
@@ -1267,7 +1267,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	case "custom":
 		// Header name is always required (no file variant)
 		if strings.TrimSpace(auth.Header) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires header", providerName, endpointIndex)).
+			return errors.Newf("webhook provider '%s' endpoint %d: custom auth requires header", providerName, endpointIndex).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-custom").
 				Context("provider_name", providerName).
@@ -1276,7 +1276,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 		}
 		// Check value/value_file
 		if strings.TrimSpace(auth.Value) == "" && strings.TrimSpace(auth.ValueFile) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires value or value_file", providerName, endpointIndex)).
+			return errors.Newf("webhook provider '%s' endpoint %d: custom auth requires value or value_file", providerName, endpointIndex).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-custom").
 				Context("provider_name", providerName).
@@ -1284,7 +1284,7 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 				Build()
 		}
 	default:
-		return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: unsupported auth type: %s", providerName, endpointIndex, authType)).
+		return errors.Newf("webhook provider '%s' endpoint %d: unsupported auth type: %s", providerName, endpointIndex, authType).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "notification-push-webhook-auth-type").
 			Context("provider_name", providerName).

@@ -197,7 +197,7 @@ func handleNetworkError(err error, url string, timeout time.Duration, operation 
 	log := GetLogger()
 
 	if err == nil {
-		return errors.New(fmt.Errorf("nil error")).
+		return errors.Newf("nil error").
 			Component("birdweather").
 			Category(errors.CategoryGeneric).
 			Build()
@@ -341,7 +341,7 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 				category = errors.CategoryTimeout
 			}
 
-			return nil, errors.New(fmt.Errorf("%s failed: %s (status %d)", operation, htmlError, resp.StatusCode)).
+			return nil, errors.Newf("%s failed: %s (status %d)", operation, htmlError, resp.StatusCode).
 				Component("birdweather").
 				Category(category).
 				Context("response_type", "html").
@@ -491,8 +491,8 @@ func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath strin
 
 	customArgs := []string{
 		"-af", volumeArgs, // Simple gain adjustment filter
-		"-c:a", "flac",    // Output codec: FLAC
-		"-f", "flac",      // Output format: FLAC
+		"-c:a", "flac", // Output codec: FLAC
+		"-f", "flac", // Output format: FLAC
 	}
 
 	// Use the provided context for the final encoding operation
@@ -535,7 +535,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 	// Validate input
 	if len(pcmData) == 0 {
-		return "", errors.New(fmt.Errorf("pcmData is empty")).
+		return "", errors.Newf("pcmData is empty").
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("timestamp", timestamp).
@@ -636,7 +636,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 
 	// Simple input validation
 	if soundscapeID == "" || timestamp == "" || commonName == "" || scientificName == "" {
-		enhancedErr := errors.New(fmt.Errorf("invalid input: all string parameters must be non-empty")).
+		enhancedErr := errors.Newf("invalid input: all string parameters must be non-empty").
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("soundscape_id", soundscapeID).
@@ -768,7 +768,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 
 	// Validate input
 	if len(pcmData) == 0 {
-		return errors.New(fmt.Errorf("pcmData is empty")).
+		return errors.Newf("pcmData is empty").
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("common_name", note.CommonName).
@@ -995,7 +995,7 @@ func parseSoundscapeResponse(responseBody []byte, maskedURL string, statusCode i
 				logger.String("url", maskedURL),
 				logger.String("html_error", htmlError),
 				logger.String("response_preview", string(responseBody[:min(len(responseBody), maxResponsePreview)])))
-			return "", errors.New(fmt.Errorf("soundscape upload failed: %s", htmlError)).
+			return "", errors.Newf("soundscape upload failed: %s", htmlError).
 				Component("birdweather").
 				Category(errors.CategoryNetwork).
 				Context("response_type", "html_with_200").
