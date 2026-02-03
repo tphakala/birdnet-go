@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
@@ -27,7 +28,7 @@ func NewScriptProvider(name string, enabled bool, command string, args []string,
 		name:        strings.TrimSpace(name),
 		enabled:     enabled,
 		command:     command,
-		args:        append([]string{}, args...),
+		args:        slices.Clone(args),
 		env:         map[string]string{},
 		inputFormat: strings.ToLower(strings.TrimSpace(inputFormat)),
 		types:       map[string]bool{},

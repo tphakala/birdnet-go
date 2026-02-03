@@ -36,7 +36,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		// In the system's local timezone, convert this to see what local date it falls on
 		utcTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
 		localTime := utcTime.In(time.Local)
-		localDate := localTime.Format("2006-01-02")
+		localDate := localTime.Format(time.DateOnly)
 
 		weather := &HourlyWeather{
 			Time:        utcTime,
@@ -216,7 +216,7 @@ func TestGetHourlyWeather_TimezoneHandling(t *testing.T) {
 		// Create a date that will work in any timezone
 		// Use times that span a single local day regardless of timezone offset
 		baseDate := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)
-		localDateStr := baseDate.Format("2006-01-02")
+		localDateStr := baseDate.Format(time.DateOnly)
 
 		// Create weather records within the local day
 		weatherRecords := []HourlyWeather{
@@ -352,7 +352,7 @@ func TestGetHourlyWeather_EdgeCases(t *testing.T) {
 		// February 29, 2024 (leap year) at 12:00 UTC
 		utcTime := time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC)
 		localTime := utcTime.In(time.Local)
-		localDate := localTime.Format("2006-01-02")
+		localDate := localTime.Format(time.DateOnly)
 
 		weather := &HourlyWeather{
 			Time:        utcTime,

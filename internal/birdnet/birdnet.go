@@ -577,7 +577,7 @@ func (bn *BirdNET) clearSpeciesCache() {
 // getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
 func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
 	// Build composite cache key: date + rounded lat/lon + model
-	day := targetDate.Format("2006-01-02")
+	day := targetDate.Format(time.DateOnly)
 	cacheKey := fmt.Sprintf("%s|%.4f,%.4f|%s",
 		day,
 		bn.Settings.BirdNET.Latitude,

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -469,11 +470,10 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 
 	// Validate and build segment path
 	cleanPath := filepath.Clean("/" + decodedPath)
-	if strings.Contains(cleanPath, "..") || cleanPath == "/" {
+	safeRequestPath := cleanPath[1:] // Remove leading slash
+	if !filepath.IsLocal(safeRequestPath) {
 		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
 	}
-
-	safeRequestPath := cleanPath[1:] // Remove leading slash
 	segmentPath := filepath.Join(stream.OutputDir, safeRequestPath)
 
 	// Security check: ensure path is within stream directory
@@ -1469,10 +1469,7 @@ func getActiveStreamIDs() []string {
 	hlsMgr.streamsMu.RLock()
 	defer hlsMgr.streamsMu.RUnlock()
 
-	activeStreamIDs := make([]string, 0, len(hlsMgr.streams))
-	for sourceID := range hlsMgr.streams {
-		activeStreamIDs = append(activeStreamIDs, sourceID)
-	}
+	activeStreamIDs := slices.Collect(maps.Keys(hlsMgr.streams))
 	return activeStreamIDs
 }
 

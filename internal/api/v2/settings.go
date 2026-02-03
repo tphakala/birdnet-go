@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -280,7 +281,7 @@ func updateAllowedFieldsRecursivelyWithTracking(
 		return fmt.Errorf("both values must be structs")
 	}
 
-	for i := 0; i < currentValue.NumField(); i++ {
+	for i := range currentValue.NumField() {
 		fieldInfo := currentValue.Type().Field(i)
 		fieldName := fieldInfo.Name
 		currentField := currentValue.Field(i)
@@ -1001,11 +1002,8 @@ var validOAuthProviders = map[string]bool{
 
 // getValidOAuthProviderNames returns sorted list of valid provider names for error messages
 func getValidOAuthProviderNames() string {
-	names := make([]string, 0, len(validOAuthProviders))
-	for name := range validOAuthProviders {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := slices.Collect(maps.Keys(validOAuthProviders))
+	slices.Sort(names)
 	return strings.Join(names, ", ")
 }
 
@@ -1276,7 +1274,7 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	settingsType := settingsValue.Type()
 
 	// Check direct fields first
-	for i := 0; i < settingsType.NumField(); i++ {
+	for i := range settingsType.NumField() {
 		field := settingsType.Field(i)
 		if strings.EqualFold(field.Name, section) {
 			return settingsValue.Field(i).Interface(), nil

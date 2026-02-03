@@ -314,7 +314,7 @@ func (c *Controller) parseDailySpeciesSummaryParams(ctx echo.Context) (selectedD
 	// Parse and validate date (defaults to today if not provided)
 	selectedDate = ctx.QueryParam("date")
 	if selectedDate == "" {
-		selectedDate = time.Now().Format("2006-01-02")
+		selectedDate = time.Now().Format(time.DateOnly)
 	} else if validErr := c.validateDateFormatWithResponse(ctx, selectedDate, "date", "daily species summary"); validErr != nil {
 		err = validErr
 		return
@@ -477,7 +477,7 @@ func parseStatusTimeFromDate(selectedDate string) time.Time {
 	if selectedDate == "" {
 		return time.Now()
 	}
-	parsedDate, err := time.Parse("2006-01-02", selectedDate)
+	parsedDate, err := time.Parse(time.DateOnly, selectedDate)
 	if err != nil {
 		return time.Now()
 	}
@@ -667,7 +667,7 @@ func formatTimeIfNotZero(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format("2006-01-02 15:04:05")
+	return t.Format(time.DateTime)
 }
 
 // getThumbnailURLFromBirdImage extracts URL from BirdImage map
@@ -811,8 +811,8 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 
 	// Default end date if not provided
 	if endDate == "" {
-		startTime, _ := time.Parse("2006-01-02", startDate) // Regex ensures this parse succeeds
-		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format("2006-01-02")
+		startTime, _ := time.Parse(time.DateOnly, startDate) // Regex ensures this parse succeeds
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
 	}
 
 	c.logInfoIfEnabled("Retrieving daily analytics",
@@ -894,10 +894,10 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	speciesParam := ctx.QueryParam("species")
 
 	if startDate == "" {
-		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+		startDate = time.Now().AddDate(0, 0, -30).Format(time.DateOnly)
 	}
 	if endDate == "" {
-		endDate = time.Now().Format("2006-01-02")
+		endDate = time.Now().Format(time.DateOnly)
 	}
 
 	// Validate date formats and chronological order
@@ -1052,7 +1052,7 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 
 	// Validate start date format if provided
 	if startDateStr != "" {
-		start, err = time.Parse("2006-01-02", startDateStr)
+		start, err = time.Parse(time.DateOnly, startDateStr)
 		if err != nil {
 			// Return standard error
 			return fmt.Errorf("%w: %w", ErrInvalidStartDate, err)
@@ -1061,7 +1061,7 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 
 	// Validate end date format if provided
 	if endDateStr != "" {
-		end, err = time.Parse("2006-01-02", endDateStr)
+		end, err = time.Parse(time.DateOnly, endDateStr)
 		if err != nil {
 			// Return standard error
 			return fmt.Errorf("%w: %w", ErrInvalidEndDate, err)
@@ -1313,8 +1313,8 @@ func (c *Controller) validateBatchDailyParams(ctx echo.Context, operation string
 
 	// Default end date if not provided
 	if endDate == "" {
-		startTime, _ := time.Parse("2006-01-02", startDate)
-		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format("2006-01-02")
+		startTime, _ := time.Parse(time.DateOnly, startDate)
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
 	}
 
 	uniqueSpecies = deduplicateSpeciesList(speciesParams)

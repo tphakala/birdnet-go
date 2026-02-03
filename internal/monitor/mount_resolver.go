@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -102,7 +103,7 @@ func sortMountGroups(groups map[string]*MountGroup) []MountGroup {
 	result := make([]MountGroup, 0, len(groups))
 	for _, group := range groups {
 		// Sort paths within group for consistent output
-		sort.Strings(group.Paths)
+		slices.Sort(group.Paths)
 		result = append(result, *group)
 	}
 

@@ -3,8 +3,10 @@ package targets
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -174,10 +176,7 @@ func (t *TempFileTracker) Untrack(path string) {
 func (t *TempFileTracker) GetTracked() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	paths := make([]string, 0, len(t.files))
-	for path := range t.files {
-		paths = append(paths, path)
-	}
+	paths := slices.Collect(maps.Keys(t.files))
 	return paths
 }
 
@@ -214,8 +213,8 @@ func (v *PathValidator) Validate(path string) error {
 		return backup.NewError(backup.ErrValidation, "path cannot be empty", nil)
 	}
 
-	// Check for directory traversal
-	if strings.Contains(path, "..") {
+	// Check for directory traversal and other unsafe path patterns
+	if !filepath.IsLocal(path) {
 		return backup.NewError(backup.ErrSecurity, "path contains directory traversal", nil)
 	}
 
@@ -395,8 +394,13 @@ func ValidatePathWithOpts(pathToCheck string, opts PathValidationOpts) (string, 
 		}
 	}
 
-	// Check for directory traversal
-	if strings.Contains(clean, "..") {
+	// Check for directory traversal using filepath.IsLocal for comprehensive validation.
+	// For absolute paths (when allowed), check the path without the leading separator.
+	pathToValidate := clean
+	if opts.AllowAbsolute {
+		pathToValidate = strings.TrimPrefix(pathToValidate, "/")
+	}
+	if pathToValidate != "" && !filepath.IsLocal(pathToValidate) {
 		return "", backup.NewError(backup.ErrSecurity, "path contains directory traversal", nil)
 	}
 

@@ -674,7 +674,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	now := time.Now()
 	var detectionTime string
 	if c.Settings.Main.TimeAs24h {
-		detectionTime = now.Format("15:04:05")
+		detectionTime = now.Format(time.TimeOnly)
 	} else {
 		detectionTime = now.Format("3:04:05 PM")
 	}
@@ -686,7 +686,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		Confidence:         testNotificationConfidence,
 		ConfidencePercent:  "99",
 		DetectionTime:      detectionTime,
-		DetectionDate:      now.Format("2006-01-02"),
+		DetectionDate:      now.Format(time.DateOnly),
 		Latitude:           testNotificationLatitude,
 		Longitude:          testNotificationLongitude,
 		Location:           "Test Location (Sample Data)",

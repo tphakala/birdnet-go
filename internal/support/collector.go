@@ -1407,8 +1407,13 @@ func (c *Collector) getLogSearchPaths() []string {
 
 	// Validate and add paths safely
 	addPathIfValid := func(basePath, subPath string) {
-		// Ensure basePath is not empty and doesn't contain path traversal attempts
-		if basePath == "" || strings.Contains(basePath, "..") {
+		// Ensure basePath is not empty and doesn't contain path traversal attempts.
+		// For absolute paths, validate the path without the leading separator.
+		pathToCheck := basePath
+		if filepath.IsAbs(basePath) {
+			pathToCheck = strings.TrimPrefix(basePath, "/")
+		}
+		if basePath == "" || (pathToCheck != "" && !filepath.IsLocal(pathToCheck)) {
 			return
 		}
 

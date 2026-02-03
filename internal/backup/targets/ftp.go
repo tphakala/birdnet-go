@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -234,7 +238,7 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 	errChan := make(chan error, 1)
 
 	go func() {
-		addr := fmt.Sprintf("%s:%d", t.config.Host, t.config.Port)
+		addr := net.JoinHostPort(t.config.Host, strconv.Itoa(t.config.Port))
 		conn, err := ftp.Dial(addr, ftp.DialWithTimeout(t.config.Timeout))
 		if err != nil {
 			errChan <- backup.NewError(backup.ErrIO, "ftp: connection failed", err)
@@ -639,10 +643,7 @@ func (t *FTPTarget) untrackTempFile(filePath string) {
 // cleanupTempFiles attempts to clean up any tracked temporary files
 func (t *FTPTarget) cleanupTempFiles(conn *ftp.ServerConn) {
 	t.tempFilesMu.Lock()
-	tempFiles := make([]string, 0, len(t.tempFiles))
-	for path := range t.tempFiles {
-		tempFiles = append(tempFiles, path)
-	}
+	tempFiles := slices.Collect(maps.Keys(t.tempFiles))
 	t.tempFilesMu.Unlock()
 
 	for _, path := range tempFiles {

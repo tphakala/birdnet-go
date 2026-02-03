@@ -76,7 +76,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 	// Check for errors
 	errors := make([]error, 0, numGoroutines)
-	for err := range errChan {
+	for err := range errChan { //nolint:gocritic // channel, not map
 		errors = append(errors, err)
 	}
 	assert.Empty(t, errors, "Expected no concurrent access errors")

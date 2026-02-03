@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/bits"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,7 +38,7 @@ func NewHealthCheckHandler() *HealthCheckHandler {
 func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Use request context for potential timeout handling
 	ctx := r.Context()
-	
+
 	// Check if context is already cancelled
 	select {
 	case <-ctx.Done():
@@ -46,7 +46,7 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	
+
 	if h.coordinator == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]any{
@@ -60,7 +60,7 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := h.coordinator.HealthCheck()
-	
+
 	// Determine HTTP status code
 	httpStatus := http.StatusOK
 	if !status.Healthy {
@@ -111,7 +111,7 @@ func getOverallStatus(status HealthStatus) string {
 	if status.Healthy {
 		return "healthy"
 	}
-	
+
 	// Check if any critical components failed
 	for name, health := range status.Components {
 		if name == ComponentErrorIntegration && health.State == InitStateFailed {
@@ -121,7 +121,7 @@ func getOverallStatus(status HealthStatus) string {
 			return "degraded"
 		}
 	}
-	
+
 	return "initializing"
 }
 
@@ -167,7 +167,7 @@ func formatUnhealthyComponents(status HealthStatus) string {
 		return "none"
 	}
 	// Sort for deterministic output (map iteration order is random)
-	sort.Strings(unhealthy)
+	slices.Sort(unhealthy)
 	return strings.Join(unhealthy, " ")
 }
 

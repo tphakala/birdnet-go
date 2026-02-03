@@ -19,6 +19,8 @@ package v2only
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -494,8 +496,8 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 
 	// Convert Unix timestamp to date and time strings
 	t := time.Unix(det.DetectedAt, 0).In(ds.timezone)
-	dateStr := t.Format("2006-01-02")
-	timeStr := t.Format("15:04:05")
+	dateStr := t.Format(time.DateOnly)
+	timeStr := t.Format(time.TimeOnly)
 
 	return datastore.Note{
 		ID:             det.ID,
@@ -648,15 +650,15 @@ func (ds *Datastore) calculateTimeOfDay(timestamp time.Time, lat, lon float64) s
 	window := 30 * time.Minute
 
 	// Get detection time as string for comparison (format: "15:04:05")
-	detTime := timestamp.Format("15:04:05")
+	detTime := timestamp.Format(time.TimeOnly)
 
 	// Calculate window boundaries
-	sunriseStart := sunEvents.Sunrise.Add(-window).Format("15:04:05")
-	sunriseEnd := sunEvents.Sunrise.Add(window).Format("15:04:05")
-	sunsetStart := sunEvents.Sunset.Add(-window).Format("15:04:05")
-	sunsetEnd := sunEvents.Sunset.Add(window).Format("15:04:05")
-	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
-	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+	sunriseStart := sunEvents.Sunrise.Add(-window).Format(time.TimeOnly)
+	sunriseEnd := sunEvents.Sunrise.Add(window).Format(time.TimeOnly)
+	sunsetStart := sunEvents.Sunset.Add(-window).Format(time.TimeOnly)
+	sunsetEnd := sunEvents.Sunset.Add(window).Format(time.TimeOnly)
+	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
+	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
 
 	// Determine time of day
 	switch {
@@ -751,7 +753,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 			CommonName:     commonName,
 			Confidence:     r.MaxConfidence,
 			Date:           selectedDate,
-			Time:           latestTime.Format("15:04:05"),
+			Time:           latestTime.Format(time.TimeOnly),
 		}
 		notes = append(notes, note)
 	}
@@ -1466,14 +1468,8 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	}
 
 	// Convert sets to slices
-	labelIDs := make([]uint, 0, len(labelIDSet))
-	for id := range labelIDSet {
-		labelIDs = append(labelIDs, id)
-	}
-	sourceIDs := make([]uint, 0, len(sourceIDSet))
-	for id := range sourceIDSet {
-		sourceIDs = append(sourceIDs, id)
-	}
+	labelIDs := slices.Collect(maps.Keys(labelIDSet))
+	sourceIDs := slices.Collect(maps.Keys(sourceIDSet))
 
 	// Batch load all relations
 	labelMap, err := ds.label.GetByIDs(ctx, labelIDs)
@@ -1918,7 +1914,7 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 			commonName = cn
 		}
 
-		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format("2006-01-02")
+		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format(time.DateOnly)
 		result = append(result, datastore.NewSpeciesData{
 			ScientificName: d.ScientificName,
 			CommonName:     commonName,

@@ -499,9 +499,7 @@ func (p *soundLevelProcessor) resetIntervalBuffer() {
 
 	// Clear all measurements
 	for i := range p.intervalBuffer.secondMeasurements {
-		for k := range p.intervalBuffer.secondMeasurements[i] {
-			delete(p.intervalBuffer.secondMeasurements[i], k)
-		}
+		clear(p.intervalBuffer.secondMeasurements[i])
 	}
 }
 

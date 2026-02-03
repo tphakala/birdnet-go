@@ -23,7 +23,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 	now := time.Now()
 
 	getLog().Debug("Initializing species tracker from database",
-		logger.String("current_time", now.Format("2006-01-02 15:04:05")),
+		logger.String("current_time", now.Format(time.DateTime)),
 		logger.Bool("yearly_enabled", t.yearlyEnabled),
 		logger.Bool("seasonal_enabled", t.seasonalEnabled))
 
@@ -36,7 +36,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 			Component("new-species-tracker").
 			Category(errors.CategoryDatabase).
 			Context("operation", "load_lifetime_data").
-			Context("sync_time", now.Format("2006-01-02 15:04:05")).
+			Context("sync_time", now.Format(time.DateTime)).
 			Build()
 	}
 
@@ -93,7 +93,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 
 // loadLifetimeDataFromDatabase loads all-time first detection data
 func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
-	endDate := now.Format("2006-01-02")
+	endDate := now.Format(time.DateOnly)
 	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
 	// TODO(graceful-shutdown): Accept context parameter to enable graceful cancellation during shutdown
@@ -118,7 +118,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 		t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
 		for _, species := range newSpeciesData {
 			if species.FirstSeenDate != "" {
-				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
+				firstSeen, err := time.Parse(time.DateOnly, species.FirstSeenDate)
 				if err != nil {
 					getLog().Debug("Failed to parse first seen date",
 						logger.String("species", species.ScientificName),
@@ -171,7 +171,7 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 		t.speciesThisYear = make(map[string]time.Time, len(yearlyData))
 		for _, species := range yearlyData {
 			if species.FirstSeenDate != "" {
-				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
+				firstSeen, err := time.Parse(time.DateOnly, species.FirstSeenDate)
 				if err != nil {
 					getLog().Debug("Failed to parse yearly first seen date",
 						logger.String("species", species.ScientificName),
@@ -230,7 +230,7 @@ func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) 
 		if species.FirstSeenDate == "" {
 			continue
 		}
-		firstSeen, parseErr := time.Parse("2006-01-02", species.FirstSeenDate)
+		firstSeen, parseErr := time.Parse(time.DateOnly, species.FirstSeenDate)
 		if parseErr != nil {
 			getLog().Debug("Failed to parse seasonal first seen date",
 				logger.String("species", species.ScientificName),
@@ -304,7 +304,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 	lookbackTime := now.Add(-2 * t.notificationSuppressionWindow)
 
 	getLog().Debug("Loading notification history from database",
-		logger.String("lookback_time", lookbackTime.Format("2006-01-02 15:04:05")),
+		logger.String("lookback_time", lookbackTime.Format(time.DateTime)),
 		logger.Duration("suppression_window", t.notificationSuppressionWindow))
 
 	// Get notification history from database
@@ -314,7 +314,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 			Component("new-species-tracker").
 			Category(errors.CategoryDatabase).
 			Context("operation", "load_notification_history").
-			Context("lookback_time", lookbackTime.Format("2006-01-02 15:04:05")).
+			Context("lookback_time", lookbackTime.Format(time.DateTime)).
 			Build()
 	}
 
@@ -337,7 +337,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 
 		getLog().Debug("Loaded notification history",
 			logger.String("species", histories[i].ScientificName),
-			logger.String("last_sent", histories[i].LastSent.Format("2006-01-02 15:04:05")),
+			logger.String("last_sent", histories[i].LastSent.Format(time.DateTime)),
 			logger.String("notification_type", histories[i].NotificationType))
 	}
 

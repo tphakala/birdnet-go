@@ -354,7 +354,7 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 			actualSeason := tracker.getCurrentSeason(tt.currentTime)
 			assert.Equal(t, tt.expectedSeason, actualSeason,
 				"Season calculation incorrect for %v (expected %s, got %s)",
-				tt.currentTime.Format("2006-01-02"), tt.expectedSeason, actualSeason)
+				tt.currentTime.Format(time.DateOnly), tt.expectedSeason, actualSeason)
 
 			t.Logf("✓ Season correctly calculated: %s for %s", actualSeason, tt.currentTime.Format("2006-01-02 15:04"))
 

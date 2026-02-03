@@ -102,7 +102,7 @@ func NewFilter(name FilterName, a0, a1, a2, b0, b1, b2 float64, passes int) *Fil
 
 // ApplyBatch applies the filter to a batch of samples
 func (f *Filter) ApplyBatch(input []float64) {
-	for p := 0; p < f.passes; p++ {
+	for p := range f.passes {
 		for i := range input {
 			output := f.b0a0*input[i] + f.b1a0*f.in1[p] + f.b2a0*f.in2[p] -
 				f.a1a0*f.out1[p] - f.a2a0*f.out2[p]

@@ -19,8 +19,8 @@ func NewDetectionBuilder() *DetectionBuilder {
 		note: datastore.Note{
 			ID:             1,
 			SourceNode:     "test-node",
-			Date:           now.Format("2006-01-02"),
-			Time:           now.Format("15:04:05"),
+			Date:           now.Format(time.DateOnly),
+			Time:           now.Format(time.TimeOnly),
 			BeginTime:      now,
 			EndTime:        now.Add(3 * time.Second),
 			SpeciesCode:    "turmig",
@@ -63,8 +63,8 @@ func (b *DetectionBuilder) WithTime(t string) *DetectionBuilder {
 
 // WithTimestamp sets both date and time from a time.Time value.
 func (b *DetectionBuilder) WithTimestamp(ts time.Time) *DetectionBuilder {
-	b.note.Date = ts.Format("2006-01-02")
-	b.note.Time = ts.Format("15:04:05")
+	b.note.Date = ts.Format(time.DateOnly)
+	b.note.Time = ts.Format(time.TimeOnly)
 	b.note.BeginTime = ts
 	b.note.EndTime = ts.Add(3 * time.Second)
 	return b
@@ -410,13 +410,13 @@ func (b *LockBuilder) BuildPtr() *datastore.NoteLock {
 
 // DailyEventsBuilder provides a fluent API for building test DailyEvents data.
 type DailyEventsBuilder struct {
-	event   datastore.DailyEvents
-	hourly  []datastore.HourlyWeather
+	event  datastore.DailyEvents
+	hourly []datastore.HourlyWeather
 }
 
 // NewDailyEventsBuilder creates a new DailyEventsBuilder with sensible defaults.
 func NewDailyEventsBuilder() *DailyEventsBuilder {
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().Format(time.DateOnly)
 	return &DailyEventsBuilder{
 		event: datastore.DailyEvents{
 			ID:       1,
@@ -992,7 +992,7 @@ func GenerateDetections(count int) []datastore.Note {
 		confidence := 0.5 + (float64(i%50) / 100.0) // Vary between 0.50 and 0.99
 
 		notes[i] = NewDetectionBuilder().
-			WithID(uint(i + 1)). //nolint:gosec // G115: test data uses small values that cannot overflow
+			WithID(uint(i+1)). //nolint:gosec // G115: test data uses small values that cannot overflow
 			WithTimestamp(ts).
 			WithSpecies(species.Code, species.Scientific, species.Common).
 			WithConfidence(confidence).
@@ -1017,7 +1017,7 @@ func GenerateWeatherData(days int) ([]datastore.DailyEvents, []datastore.HourlyW
 		// Create daily events
 		dailyEvents[d] = NewDailyEventsBuilder().
 			WithID(dayID).
-			WithDate(date.Format("2006-01-02")).
+			WithDate(date.Format(time.DateOnly)).
 			WithSunrise(date.Add(6 * time.Hour).Unix()).
 			WithSunset(date.Add(18 * time.Hour).Unix()).
 			Build()
@@ -1038,7 +1038,7 @@ func GenerateWeatherData(days int) ([]datastore.DailyEvents, []datastore.HourlyW
 				WithDailyEventsID(dayID).
 				WithTime(hourTime).
 				WithTemperature(baseTemp).
-				WithFeelsLike(baseTemp - 1).
+				WithFeelsLike(baseTemp-1).
 				WithTempMinMax(baseTemp-5, baseTemp+5).
 				WithHumidity(50 + h%30).
 				Build()

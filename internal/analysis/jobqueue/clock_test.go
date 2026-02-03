@@ -122,8 +122,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	}
 
 	// Check that the execution times match the expected times
-	for i := 0; i < len(executionTimes); i++ {
-		// We can't check exact times due to jitter, but we can check that the times are close
+	for i := range len(executionTimes) {
 		timeDiff := executionTimes[i].Sub(expectedTimes[i])
 		t.Logf("Execution %d: Expected %v, Got %v, Diff %v", i+1, expectedTimes[i], executionTimes[i], timeDiff)
 

@@ -169,8 +169,13 @@ func validatePath(path string) error {
 	// Clean and normalize the path
 	cleanPath := filepath.Clean(path)
 
-	// Check for directory traversal attempts
-	if strings.Contains(cleanPath, "..") {
+	// Check for directory traversal attempts using filepath.IsLocal for comprehensive validation.
+	// For absolute paths, validate the path without the leading separator.
+	pathToCheck := cleanPath
+	if filepath.IsAbs(cleanPath) {
+		pathToCheck = strings.TrimPrefix(cleanPath, "/")
+	}
+	if pathToCheck != "" && !filepath.IsLocal(pathToCheck) {
 		return errors.Newf("path must not contain directory traversal sequences").
 			Component("backup").
 			Category(errors.CategoryValidation).

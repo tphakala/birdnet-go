@@ -8,6 +8,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -56,7 +57,7 @@ func (m *ActionMockDatastore) Save(note *datastore.Note, results []datastore.Res
 	m.savedNotes = append(m.savedNotes, &noteCopy)
 	var resultsCopy []datastore.Results
 	if results != nil {
-		resultsCopy = append([]datastore.Results(nil), results...)
+		resultsCopy = slices.Clone(results)
 	}
 	m.savedResults = append(m.savedResults, resultsCopy)
 	m.notes[note.ID] = &noteCopy
@@ -125,7 +126,7 @@ func (m *ActionMockDatastore) GetLastSavedResults() []datastore.Results {
 		return nil
 	}
 	last := m.savedResults[len(m.savedResults)-1]
-	return append([]datastore.Results(nil), last...)
+	return slices.Clone(last)
 }
 
 // SetSaveError sets an error to be returned on next Save call.

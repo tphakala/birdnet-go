@@ -3,6 +3,7 @@ package security
 import (
 	"net"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -615,7 +616,7 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 			// Should not panic
 			result := IsSafePath(input)
 			// Most malformed inputs should be rejected
-			if strings.Contains(input, "\x00") || strings.Contains(input, "..") {
+			if strings.Contains(input, "\x00") || !filepath.IsLocal(input) {
 				assert.False(t, result, "Should reject input with null/traversal")
 			}
 		})

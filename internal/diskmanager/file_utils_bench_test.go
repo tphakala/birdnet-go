@@ -109,7 +109,7 @@ func BenchmarkMemoryProfile(b *testing.B) {
 			tempDir := b.TempDir()
 
 			// Create test files
-			for i := 0; i < scenario.fileCount; i++ {
+			for range scenario.fileCount {
 				filename := filepath.Join(tempDir,
 					"species_80p_20210102T150405Z.wav")
 				err := os.WriteFile(filename, []byte("test"), 0o600)

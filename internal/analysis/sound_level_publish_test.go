@@ -434,7 +434,7 @@ func TestSoundLevelChannelFlow(t *testing.T) {
 
 	// Consumer
 	received := make([]myaudio.SoundLevelData, 0)
-	for data := range testChan {
+	for data := range testChan { //nolint:gocritic // channel, not map
 		received = append(received, data)
 	}
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -311,11 +312,7 @@ func executeFFprobe(ctx context.Context, audioPath string) (string, error) {
 // parseFFprobeLine parses a single line of FFprobe CSV output
 func parseFFprobeLine(line string, result *AudioValidationResult) {
 	// Collect fields from the CSV line using Go 1.24 iterator
-	// Pre-allocate for typical case of 3 fields (codec,sample_rate,channels or duration,bitrate)
-	fields := make([]string, 0, 3)
-	for field := range strings.SplitSeq(line, ",") {
-		fields = append(fields, field)
-	}
+	fields := slices.Collect(strings.SplitSeq(line, ","))
 
 	if len(fields) < 2 {
 		return

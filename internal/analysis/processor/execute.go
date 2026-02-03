@@ -4,6 +4,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,10 +69,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	args, err := buildSafeArguments(a.Params)
 	if err != nil {
 		// Extract parameter keys for better error context
-		var paramKeys []string
-		for key := range a.Params {
-			paramKeys = append(paramKeys, key)
-		}
+		paramKeys := slices.Collect(maps.Keys(a.Params))
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
@@ -212,10 +210,7 @@ func buildSafeArguments(params map[string]any) ([]string, error) {
 	args := make([]string, 0, len(params))
 
 	// Get sorted keys for deterministic CLI argument order
-	keys := make([]string, 0, len(params))
-	for key := range params {
-		keys = append(keys, key)
-	}
+	keys := slices.Collect(maps.Keys(params))
 	slices.Sort(keys)
 
 	for _, key := range keys {

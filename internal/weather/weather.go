@@ -114,7 +114,7 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 
 	// Create daily events data
 	dailyEvents := &datastore.DailyEvents{
-		Date:     localTime.Format("2006-01-02"),
+		Date:     localTime.Format(time.DateOnly),
 		Country:  data.Location.Country,
 		CityName: data.Location.City,
 	}

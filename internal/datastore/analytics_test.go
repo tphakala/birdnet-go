@@ -571,7 +571,7 @@ func TestGetHourlyDistribution(t *testing.T) {
 		}
 
 		for _, h := range hours {
-			for i := 0; i < h.count; i++ {
+			for i := range h.count {
 				note := Note{
 					Date:           "2024-07-15",
 					Time:           fmt.Sprintf("%02d:%02d:00", h.hour, i),
@@ -665,7 +665,7 @@ func TestDatabasePerformance(t *testing.T) {
 		for j := range detectionsPerSpecies {
 			detectionDate := firstDetectionDate.AddDate(0, 0, j)
 			note := Note{
-				Date:           detectionDate.Format("2006-01-02"),
+				Date:           detectionDate.Format(time.DateOnly),
 				Time:           "12:00:00",
 				ScientificName: scientificName,
 				CommonName:     commonName,

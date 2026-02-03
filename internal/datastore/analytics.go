@@ -415,7 +415,7 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 
 	// Only parse start date if provided
 	if startDate != "" {
-		parsedStartDate, err = time.Parse("2006-01-02", startDate)
+		parsedStartDate, err = time.Parse(time.DateOnly, startDate)
 		if err != nil {
 			return nil, errors.New(err).
 				Component("datastore").
@@ -428,7 +428,7 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 
 	// Only parse end date if provided
 	if endDate != "" {
-		parsedEndDate, err = time.Parse("2006-01-02", endDate)
+		parsedEndDate, err = time.Parse(time.DateOnly, endDate)
 		if err != nil {
 			return nil, errors.New(err).
 				Component("datastore").

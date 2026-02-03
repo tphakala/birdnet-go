@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -522,10 +524,7 @@ func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 // storeBackupInTargets stores the created backup archive in all registered targets
 func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, metadata *Metadata) error {
 	m.mu.RLock()
-	targetsToStore := make([]Target, 0, len(m.targets))
-	for _, t := range m.targets {
-		targetsToStore = append(targetsToStore, t)
-	}
+	targetsToStore := slices.Collect(maps.Values(m.targets))
 	m.mu.RUnlock()
 
 	if len(targetsToStore) == 0 {
@@ -576,7 +575,7 @@ func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, 
 
 	// Collect errors
 	storeErrors := make([]error, 0, len(targetsToStore))
-	for err := range errChan {
+	for err := range errChan { //nolint:gocritic // channel, not map
 		storeErrors = append(storeErrors, err)
 	}
 
@@ -1183,7 +1182,7 @@ func (m *Manager) cleanupOldBackups(ctx context.Context) error {
 
 	// Collect errors from retention enforcement
 	cleanupErrors := make([]error, 0, len(groupedBackups))
-	for err := range errChan {
+	for err := range errChan { //nolint:gocritic // channel, not map
 		cleanupErrors = append(cleanupErrors, err)
 	}
 
@@ -1252,7 +1251,7 @@ func (m *Manager) ListBackups(ctx context.Context) ([]BackupInfo, error) {
 
 	// Collect errors from listing
 	listErrors := make([]error, 0, len(m.targets))
-	for err := range errChan {
+	for err := range errChan { //nolint:gocritic // channel, not map
 		listErrors = append(listErrors, err)
 	}
 
@@ -1448,10 +1447,7 @@ func (m *Manager) ValidateBackupCounts(ctx context.Context) error {
 	var validationErrors []error
 
 	m.mu.RLock()
-	targetsToCheck := make([]string, 0, len(m.targets))
-	for name := range m.targets {
-		targetsToCheck = append(targetsToCheck, name)
-	}
+	targetsToCheck := slices.Collect(maps.Keys(m.targets))
 	m.mu.RUnlock()
 
 	// Check each configured target even if it has no backups yet

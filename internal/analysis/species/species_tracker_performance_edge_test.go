@@ -64,7 +64,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 
 			// Simulate large database with many species
 			lifetimeData := make([]datastore.NewSpeciesData, tt.speciesCount)
-			for i := 0; i < tt.speciesCount; i++ {
+			for i := range tt.speciesCount {
 				lifetimeData[i] = datastore.NewSpeciesData{
 					ScientificName: fmt.Sprintf("Species_%06d", i),
 					FirstSeenDate:  fmt.Sprintf("2023-%02d-%02d", (i%12)+1, (i%28)+1),
@@ -119,7 +119,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			currentTime := time.Now()
 			operationCount := 0
 
-			for i := 0; i < tt.cacheOperations; i++ {
+			for i := range tt.cacheOperations {
 				speciesName := fmt.Sprintf("Species_%06d", i%tt.speciesCount)
 
 				// Mix of operations that stress memory

@@ -138,11 +138,6 @@ func isUnsafePath(p string) bool {
 		return true
 	}
 
-	// Check for ".." anywhere in the path - dangerous after URL decoding
-	if strings.Contains(p, "..") {
-		return true
-	}
-
 	// Check for dangerous URL-encoded patterns
 	if containsDangerousEncodedPattern(strings.ToLower(p)) {
 		return true
@@ -231,7 +226,7 @@ func (c *Controller) validateDateFormatWithResponse(ctx echo.Context, dateStr, p
 	if dateStr == "" {
 		return nil // Empty is valid (optional parameter)
 	}
-	if _, err := time.Parse("2006-01-02", dateStr); err != nil {
+	if _, err := time.Parse(time.DateOnly, dateStr); err != nil {
 		c.logErrorIfEnabled("Invalid date format",
 			logger.String("parameter", paramName),
 			logger.String("value", dateStr),
@@ -402,7 +397,7 @@ func validateDateFormat(dateStr, paramName string) error {
 	if dateStr == "" {
 		return nil
 	}
-	if _, err := time.Parse("2006-01-02", dateStr); err != nil {
+	if _, err := time.Parse(time.DateOnly, dateStr); err != nil {
 		return fmt.Errorf("invalid %s format '%s', use YYYY-MM-DD", paramName, dateStr)
 	}
 	return nil
@@ -414,8 +409,8 @@ func validateDateOrder(startDate, endDate string) error {
 	if startDate == "" || endDate == "" {
 		return nil
 	}
-	start, _ := time.Parse("2006-01-02", startDate)
-	end, _ := time.Parse("2006-01-02", endDate)
+	start, _ := time.Parse(time.DateOnly, startDate)
+	end, _ := time.Parse(time.DateOnly, endDate)
 	if start.After(end) {
 		return fmt.Errorf("start date (%s) must be earlier than or equal to end date (%s)", startDate, endDate)
 	}
@@ -428,8 +423,8 @@ func (c *Controller) validateDateOrderWithResponse(ctx echo.Context, startDate, 
 	if startDate == "" || endDate == "" {
 		return nil // Empty dates are valid (handled elsewhere)
 	}
-	start, _ := time.Parse("2006-01-02", startDate)
-	end, _ := time.Parse("2006-01-02", endDate)
+	start, _ := time.Parse(time.DateOnly, startDate)
+	end, _ := time.Parse(time.DateOnly, endDate)
 	if start.After(end) {
 		c.logErrorIfEnabled("Invalid date range",
 			logger.String("start_date", startDate),
@@ -493,10 +488,10 @@ func getDefaultDateRange(startDate, endDate string, startDefault, endDefault int
 	start = startDate
 	end = endDate
 	if start == "" {
-		start = time.Now().AddDate(0, 0, startDefault).Format("2006-01-02")
+		start = time.Now().AddDate(0, 0, startDefault).Format(time.DateOnly)
 	}
 	if end == "" {
-		end = time.Now().AddDate(0, 0, endDefault).Format("2006-01-02")
+		end = time.Now().AddDate(0, 0, endDefault).Format(time.DateOnly)
 	}
 	return start, end
 }
@@ -521,7 +516,7 @@ func (c *Controller) parseCommaSeparatedDates(ctx echo.Context, paramName string
 			continue
 		}
 		// Validate date format
-		if _, err := time.Parse("2006-01-02", trimmed); err != nil {
+		if _, err := time.Parse(time.DateOnly, trimmed); err != nil {
 			return nil, fmt.Errorf("invalid date format: %s. Use YYYY-MM-DD", trimmed)
 		}
 		dates = append(dates, trimmed)
@@ -679,8 +674,8 @@ func parseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 	}
 
 	if startDate != "" && endDate != "" {
-		start, err1 := time.Parse("2006-01-02", startDate)
-		end, err2 := time.Parse("2006-01-02", endDate)
+		start, err1 := time.Parse(time.DateOnly, startDate)
+		end, err2 := time.Parse(time.DateOnly, endDate)
 		if err1 == nil && err2 == nil {
 			// Reject inverted date ranges where start is after end
 			if start.After(end) {

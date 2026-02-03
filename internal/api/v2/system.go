@@ -29,8 +29,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"golang.org/x/text/cases"
-	"gorm.io/gorm"
 	"golang.org/x/text/language"
+	"gorm.io/gorm"
 )
 
 // System info constants (file-local)
@@ -684,8 +684,8 @@ func getDeviceBaseName(device string) string {
 	base := filepath.Base(device)
 
 	// Then remove any numbers at the end (partition numbers)
-	for i := len(base) - 1; i >= 0; i-- {
-		if base[i] < '0' || base[i] > '9' {
+	for i, v := range slices.Backward([]byte(base)) {
+		if v < '0' || v > '9' {
 			if i < len(base)-1 {
 				return base[:i+1]
 			}

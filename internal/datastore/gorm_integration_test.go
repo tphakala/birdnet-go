@@ -193,7 +193,7 @@ func TestSave_ConcurrentDetections(t *testing.T) {
 
 	// Check for errors
 	allErrors := make([]error, 0, numGoroutines)
-	for err := range errors {
+	for err := range errors { //nolint:gocritic // channel, not map
 		allErrors = append(allErrors, err)
 	}
 	require.Empty(t, allErrors, "Concurrent saves should not fail: %v", allErrors)

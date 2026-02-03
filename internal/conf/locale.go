@@ -4,6 +4,8 @@ package conf
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -175,10 +177,7 @@ func NormalizeLocale(inputLocale string) (string, error) {
 	}
 
 	// Create detailed error with available locales for debugging
-	availableLocales := make([]string, 0, len(LocaleCodes))
-	for code := range LocaleCodes {
-		availableLocales = append(availableLocales, code)
-	}
+	availableLocales := slices.Collect(maps.Keys(LocaleCodes))
 
 	return DefaultFallbackLocale, errors.New(fmt.Errorf("locale '%s' not supported, falling back to %s", originalInput, fallbackName)).
 		Category(errors.CategoryValidation).

@@ -265,7 +265,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 				runtime.ReadMemStats(&memStatsBefore)
 
 				// Allocate buffers
-				for j := 0; j < cfg.numSources; j++ {
+				for j := range cfg.numSources {
 					source := fmt.Sprintf("mem_test_%d_%d", i, j)
 					sources = append(sources, source)
 					err := AllocateCaptureBuffer(cfg.duration, cfg.sampleRate, cfg.bytesPerSample, source)

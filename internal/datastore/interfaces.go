@@ -2024,35 +2024,35 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	case startDateStr == "" && endDateStr == "":
 		// Use past year instead of 90 days
 		today := time.Now()
-		endDateStr = today.Format("2006-01-02")
-		startDateStr = today.AddDate(-1, 0, 0).Format("2006-01-02") // 1 year ago
+		endDateStr = today.Format(time.DateOnly)
+		startDateStr = today.AddDate(-1, 0, 0).Format(time.DateOnly) // 1 year ago
 		GetLogger().Info("TimeOfDay filter applied without date range, defaulting to last year",
 			logger.String("start_date", startDateStr),
 			logger.String("end_date", endDateStr))
 	case startDateStr == "":
 		// If only end date is provided, use 1 year before that date as start
-		endDate, err := time.Parse("2006-01-02", endDateStr)
+		endDate, err := time.Parse(time.DateOnly, endDateStr)
 		if err == nil {
-			startDateStr = endDate.AddDate(-1, 0, 0).Format("2006-01-02")
+			startDateStr = endDate.AddDate(-1, 0, 0).Format(time.DateOnly)
 		} else {
 			startDateStr = endDateStr // Fallback if parsing fails
 		}
 	case endDateStr == "":
 		// If only start date is provided, use that date +1 year or today (whichever is earlier)
-		startDate, err := time.Parse("2006-01-02", startDateStr)
+		startDate, err := time.Parse(time.DateOnly, startDateStr)
 		if err == nil {
 			endDate := startDate.AddDate(1, 0, 0)
 			today := time.Now()
 			if endDate.After(today) {
 				endDate = today
 			}
-			endDateStr = endDate.Format("2006-01-02")
+			endDateStr = endDate.Format(time.DateOnly)
 		} else {
 			endDateStr = startDateStr // Fallback if parsing fails
 		}
 	}
 
-	startDate, err := time.Parse("2006-01-02", startDateStr)
+	startDate, err := time.Parse(time.DateOnly, startDateStr)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2061,7 +2061,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Context("start_date", startDateStr).
 			Build()
 	}
-	endDate, err := time.Parse("2006-01-02", endDateStr)
+	endDate, err := time.Parse(time.DateOnly, endDateStr)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2144,7 +2144,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 
 	// Third pass: build conditions for each date using the weekly sun times
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-		dateStr := d.Format("2006-01-02")
+		dateStr := d.Format(time.DateOnly)
 		year, week := d.ISOWeek()
 		key := fmt.Sprintf("%d-%d", year, week)
 
@@ -2162,10 +2162,10 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 
 		// Calculate all time boundaries once before the switch statement
 		// This reduces code duplication and makes maintenance easier
-		sunriseStart := sunTimes.Sunrise.Add(-window).Format("15:04:05")
-		sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
-		sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
-		sunsetEnd := sunTimes.Sunset.Add(window).Format("15:04:05")
+		sunriseStart := sunTimes.Sunrise.Add(-window).Format(time.TimeOnly)
+		sunriseEnd := sunTimes.Sunrise.Add(window).Format(time.TimeOnly)
+		sunsetStart := sunTimes.Sunset.Add(-window).Format(time.TimeOnly)
+		sunsetEnd := sunTimes.Sunset.Add(window).Format(time.TimeOnly)
 
 		var condition *gorm.DB
 		switch filters.TimeOfDay {
@@ -2312,7 +2312,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 		// Calculate week from date if needed
 		week := 0
-		if t, err := time.Parse("2006-01-02", scanned.Date); err == nil {
+		if t, err := time.Parse(time.DateOnly, scanned.Date); err == nil {
 			_, week = t.ISOWeek()
 		}
 
@@ -2326,16 +2326,16 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 			sunEvents, err := ds.getSunEventsForDate(dateStr, timestamp)
 			if err == nil {
 				// Convert all times to the same format for comparison
-				detTime := timestamp.Format("15:04:05")
-				sunriseTime := sunEvents.Sunrise.Format("15:04:05")
-				sunsetTime := sunEvents.Sunset.Format("15:04:05")
+				detTime := timestamp.Format(time.TimeOnly)
+				sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
+				sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
 
 				// Define sunrise/sunset window (using constant)
 				window := time.Duration(sunriseSetWindowMinutes) * time.Minute
-				sunriseStart := sunEvents.Sunrise.Add(-window).Format("15:04:05")
-				sunriseEnd := sunEvents.Sunrise.Add(window).Format("15:04:05")
-				sunsetStart := sunEvents.Sunset.Add(-window).Format("15:04:05")
-				sunsetEnd := sunEvents.Sunset.Add(window).Format("15:04:05")
+				sunriseStart := sunEvents.Sunrise.Add(-window).Format(time.TimeOnly)
+				sunriseEnd := sunEvents.Sunrise.Add(window).Format(time.TimeOnly)
+				sunsetStart := sunEvents.Sunset.Add(-window).Format(time.TimeOnly)
+				sunsetEnd := sunEvents.Sunset.Add(window).Format(time.TimeOnly)
 
 				switch {
 				case detTime >= sunriseStart && detTime <= sunriseEnd:

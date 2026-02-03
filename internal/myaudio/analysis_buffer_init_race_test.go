@@ -94,7 +94,7 @@ func TestAnalysisBuffer_PoolInitializedOnce(t *testing.T) {
 
 	// All successful allocations should see the same pool size (consistent initialization)
 	sizes := make([]int, 0, numGoroutines)
-	for size := range poolSizes {
+	for size := range poolSizes { //nolint:gocritic // channel, not map
 		sizes = append(sizes, size)
 	}
 

@@ -3,6 +3,8 @@ package migration
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -109,8 +111,8 @@ type AuxiliaryMigrator struct {
 	logger           logger.Logger
 
 	// Cached lookup table IDs for label creation
-	defaultModelID     uint // Model ID to use for migrated labels
-	speciesLabelTypeID uint // "species" label type ID
+	defaultModelID     uint  // Model ID to use for migrated labels
+	speciesLabelTypeID uint  // "species" label type ID
 	avesClassID        *uint // "Aves" taxonomic class ID (optional)
 }
 
@@ -216,10 +218,7 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 	for i := range legacyCaches {
 		speciesSet[legacyCaches[i].ScientificName] = struct{}{}
 	}
-	speciesNames := make([]string, 0, len(speciesSet))
-	for name := range speciesSet {
-		speciesNames = append(speciesNames, name)
-	}
+	speciesNames := slices.Collect(maps.Keys(speciesSet))
 
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
@@ -294,10 +293,7 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 	for i := range legacyThresholds {
 		speciesSet[legacyThresholds[i].ScientificName] = struct{}{}
 	}
-	speciesNames := make([]string, 0, len(speciesSet))
-	for name := range speciesSet {
-		speciesNames = append(speciesNames, name)
-	}
+	speciesNames := slices.Collect(maps.Keys(speciesSet))
 
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
@@ -417,10 +413,7 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 	for i := range legacyHistory {
 		speciesSet[legacyHistory[i].ScientificName] = struct{}{}
 	}
-	speciesNames := make([]string, 0, len(speciesSet))
-	for name := range speciesSet {
-		speciesNames = append(speciesNames, name)
-	}
+	speciesNames := slices.Collect(maps.Keys(speciesSet))
 
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {

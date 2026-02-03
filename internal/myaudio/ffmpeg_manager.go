@@ -3,6 +3,8 @@ package myaudio
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -245,10 +247,7 @@ func (m *FFmpegManager) GetActiveStreams() []string {
 	m.streamsMu.RLock()
 	defer m.streamsMu.RUnlock()
 
-	urls := make([]string, 0, len(m.streams))
-	for url := range m.streams {
-		urls = append(urls, url)
-	}
+	urls := slices.Collect(maps.Keys(m.streams))
 	return urls
 }
 
@@ -772,10 +771,7 @@ func (m *FFmpegManager) Shutdown() {
 
 	// Stop all streams
 	m.streamsMu.Lock()
-	urls := make([]string, 0, len(m.streams))
-	for url := range m.streams {
-		urls = append(urls, url)
-	}
+	urls := slices.Collect(maps.Keys(m.streams))
 	m.streamsMu.Unlock()
 
 	// Stop each stream using StopStream which handles unregistration

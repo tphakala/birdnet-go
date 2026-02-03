@@ -3,9 +3,10 @@ package myaudio
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -255,13 +256,10 @@ func (r *AudioSourceRegistry) ListSources() []*AudioSource {
 	sources := make([]*AudioSource, 0, len(r.sources))
 
 	// Collect all source IDs for sorting
-	sourceIDs := make([]string, 0, len(r.sources))
-	for id := range r.sources {
-		sourceIDs = append(sourceIDs, id)
-	}
+	sourceIDs := slices.Collect(maps.Keys(r.sources))
 
 	// Sort IDs for deterministic ordering
-	sort.Strings(sourceIDs)
+	slices.Sort(sourceIDs)
 
 	// Build result in sorted order
 	for _, id := range sourceIDs {
@@ -685,8 +683,13 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 	// Clean the path to prevent directory traversal
 	cleanPath := filepath.Clean(filePath)
 
-	// Check for directory traversal attempts
-	if strings.Contains(cleanPath, "..") {
+	// Check for directory traversal attempts using filepath.IsLocal for comprehensive validation.
+	// For absolute paths, validate the path without the leading separator.
+	pathToCheck := cleanPath
+	if filepath.IsAbs(cleanPath) {
+		pathToCheck = strings.TrimPrefix(cleanPath, "/")
+	}
+	if pathToCheck != "" && !filepath.IsLocal(pathToCheck) {
 		return errors.Newf("directory traversal detected in file path").
 			Component("myaudio").
 			Category(errors.CategoryValidation).

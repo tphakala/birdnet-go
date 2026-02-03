@@ -5,6 +5,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -118,10 +120,7 @@ func TimeOfDayToHours(periods []string) []int {
 	}
 
 	// Convert map to slice
-	hours := make([]int, 0, len(hourSet))
-	for h := range hourSet {
-		hours = append(hours, h)
-	}
+	hours := slices.Collect(maps.Keys(hourSet))
 
 	return hours
 }
