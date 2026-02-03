@@ -1,12 +1,12 @@
 package security
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"path"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/text/unicode/norm"
 )
@@ -79,7 +79,7 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 			expectedURI.Scheme, expectedURI.Hostname(), expectedPort, expectedPath)
 
 		// Construct the detailed error message first
-		mismatchErr := errors.New(mismatchDetail) // Use errors.New for a simple error string
+		mismatchErr := errors.NewStd(mismatchDetail)
 
 		// Wrap the detailed error using a constant format string
 		return fmt.Errorf("invalid redirect_uri: %w", mismatchErr)

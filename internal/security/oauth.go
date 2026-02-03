@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -30,7 +29,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	intErrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -88,8 +87,8 @@ func NewOAuth2ServerForTesting(settings *conf.Settings) *OAuth2Server {
 
 // Pre-defined errors for token validation
 var (
-	ErrTokenNotFound = errors.New("token not found")
-	ErrTokenExpired  = errors.New("token expired")
+	ErrTokenNotFound = errors.NewStd("token not found")
+	ErrTokenExpired  = errors.NewStd("token expired")
 )
 
 func NewOAuth2Server() *OAuth2Server {
@@ -144,10 +143,10 @@ func handleEmptySessionSecret(settings *conf.Settings) {
 	settings.Security.SessionSecret = tempSecret
 	GetLogger().Info("Generated temporary SessionSecret for this session")
 
-	_ = intErrors.New(
-		errors.New("session secret is empty")).
+	_ = errors.New(
+		errors.NewStd("session secret is empty")).
 		Component("security").
-		Category(intErrors.CategoryConfiguration).
+		Category(errors.CategoryConfiguration).
 		Context("debug_mode", settings.WebServer.Debug).
 		Context("action", "auto_generated_temporary_secret").
 		Build()
@@ -161,10 +160,10 @@ func handleWeakSessionSecret(settings *conf.Settings) {
 		logger.Bool("debug_mode", settings.WebServer.Debug),
 		logger.String("recommendation", "Consider regenerating with a stronger secret"))
 
-	_ = intErrors.New(
+	_ = errors.New(
 		fmt.Errorf("session secret is potentially weak: %d characters", len(settings.Security.SessionSecret))).
 		Component("security").
-		Category(intErrors.CategoryConfiguration).
+		Category(errors.CategoryConfiguration).
 		Context("current_length", len(settings.Security.SessionSecret)).
 		Context("recommended_length", MinSessionSecretLength).
 		Context("debug_mode", settings.WebServer.Debug).
@@ -614,14 +613,14 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	authCode, ok := s.authCodes[code]
 	if !ok {
 		secLog.Warn("Authorization code not found")
-		return "", errors.New("authorization code not found")
+		return "", errors.NewStd("authorization code not found")
 	}
 
 	if time.Now().After(authCode.ExpiresAt) {
 		secLog.Warn("Authorization code expired", logger.Time("expired_at", authCode.ExpiresAt))
 		delete(s.authCodes, code)     // Clean up expired code
 		go s.persistTokensIfEnabled() // Persist removal
-		return "", errors.New("authorization code expired")
+		return "", errors.NewStd("authorization code expired")
 	}
 
 	// Generate access token

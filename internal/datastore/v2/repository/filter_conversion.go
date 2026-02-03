@@ -4,7 +4,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // =============================================================================
@@ -345,7 +345,7 @@ func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, 
 
 	t, err := time.ParseInLocation("2006-01-02", dateStr, tz)
 	if err != nil {
-		return nil, errors.New("invalid date format: expected YYYY-MM-DD, got " + dateStr)
+		return nil, errors.NewStd("invalid date format: expected YYYY-MM-DD, got " + dateStr)
 	}
 
 	if endOfDay {

@@ -3,10 +3,11 @@ package security
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"

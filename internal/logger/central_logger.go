@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -18,6 +17,8 @@ import (
 	// timezone data directly in the binary (~450KB), ensuring
 	// timezone operations work consistently on Linux, macOS, and Windows.
 	_ "time/tzdata"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Constants for logger configuration
