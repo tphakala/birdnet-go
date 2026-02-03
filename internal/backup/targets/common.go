@@ -395,10 +395,11 @@ func ValidatePathWithOpts(pathToCheck string, opts PathValidationOpts) (string, 
 	}
 
 	// Check for directory traversal using filepath.IsLocal for comprehensive validation.
-	// For absolute paths (when allowed), check the path without the leading separator.
+	// For absolute paths (when allowed), strip volume name and separator to get relative portion.
 	pathToValidate := clean
 	if opts.AllowAbsolute {
-		pathToValidate = strings.TrimPrefix(pathToValidate, "/")
+		pathToValidate = clean[len(filepath.VolumeName(clean)):]
+		pathToValidate = strings.TrimLeft(pathToValidate, `/\`)
 	}
 	if pathToValidate != "" && !filepath.IsLocal(pathToValidate) {
 		return "", backup.NewError(backup.ErrSecurity, "path contains directory traversal", nil)

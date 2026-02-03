@@ -170,10 +170,11 @@ func validatePath(path string) error {
 	cleanPath := filepath.Clean(path)
 
 	// Check for directory traversal attempts using filepath.IsLocal for comprehensive validation.
-	// For absolute paths, validate the path without the leading separator.
+	// For absolute paths, strip the volume name and leading separator to get the relative portion.
 	pathToCheck := cleanPath
 	if filepath.IsAbs(cleanPath) {
-		pathToCheck = strings.TrimPrefix(cleanPath, "/")
+		pathToCheck = cleanPath[len(filepath.VolumeName(cleanPath)):]
+		pathToCheck = strings.TrimLeft(pathToCheck, `/\`)
 	}
 	if pathToCheck != "" && !filepath.IsLocal(pathToCheck) {
 		return errors.Newf("path must not contain directory traversal sequences").

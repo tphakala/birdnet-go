@@ -1408,10 +1408,11 @@ func (c *Collector) getLogSearchPaths() []string {
 	// Validate and add paths safely
 	addPathIfValid := func(basePath, subPath string) {
 		// Ensure basePath is not empty and doesn't contain path traversal attempts.
-		// For absolute paths, validate the path without the leading separator.
+		// For absolute paths, strip volume name and separator to get the relative portion.
 		pathToCheck := basePath
 		if filepath.IsAbs(basePath) {
-			pathToCheck = strings.TrimPrefix(basePath, "/")
+			pathToCheck = basePath[len(filepath.VolumeName(basePath)):]
+			pathToCheck = strings.TrimLeft(pathToCheck, `/\`)
 		}
 		if basePath == "" || (pathToCheck != "" && !filepath.IsLocal(pathToCheck)) {
 			return

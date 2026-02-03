@@ -684,10 +684,11 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 	cleanPath := filepath.Clean(filePath)
 
 	// Check for directory traversal attempts using filepath.IsLocal for comprehensive validation.
-	// For absolute paths, validate the path without the leading separator.
+	// For absolute paths, strip the volume name and leading separator to get the relative portion.
 	pathToCheck := cleanPath
 	if filepath.IsAbs(cleanPath) {
-		pathToCheck = strings.TrimPrefix(cleanPath, "/")
+		pathToCheck = cleanPath[len(filepath.VolumeName(cleanPath)):]
+		pathToCheck = strings.TrimLeft(pathToCheck, `/\`)
 	}
 	if pathToCheck != "" && !filepath.IsLocal(pathToCheck) {
 		return errors.Newf("directory traversal detected in file path").
