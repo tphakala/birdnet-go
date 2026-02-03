@@ -510,19 +510,6 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	}
 }
 
-// extractCommonName extracts the common name from a raw label string.
-// The raw_label format is typically "ScientificName_CommonName" where
-// the common name may contain underscores that should be preserved.
-func extractCommonName(rawLabel string) string {
-	// Split on underscore, but common name is everything after the first underscore
-	// (since scientific names are always two words: "Genus species")
-	parts := strings.SplitN(rawLabel, "_", 2)
-	if len(parts) >= 2 {
-		return strings.TrimSpace(parts[1])
-	}
-	return ""
-}
-
 // detectionsToNotes converts multiple detections to notes.
 // Note: Common names are currently not stored in the normalized schema.
 // They default to scientific names until a species lookup table is added.
@@ -540,33 +527,18 @@ func (ds *Datastore) detectionsToNotes(dets []*entities.Detection) []datastore.N
 	return notes
 }
 
-// buildRawLabelsMap was used for batch fetching raw_labels for common name resolution.
-// In the normalized schema, raw labels are no longer stored in a separate table.
-// This function is kept as a stub for API compatibility but returns an empty map.
-// TODO: Implement common name lookup from a species table.
-func (ds *Datastore) buildRawLabelsMap(_ context.Context, _ []*entities.Detection) map[string]string {
-	return make(map[string]string)
-}
-
 // detectionToRecord converts a v2 Detection to a DetectionRecord.
-// If rawLabelsMap is provided, it will be used to look up the common name
-// instead of making a database query (for batch efficiency).
-func (ds *Datastore) detectionToRecord(det *entities.Detection, rawLabelsMap map[string]string) datastore.DetectionRecord {
+func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.DetectionRecord {
 	// Scientific name from Label
 	scientificName := ""
 	if det.Label != nil && det.Label.ScientificName != "" {
 		scientificName = det.Label.ScientificName
 	}
 
-	// Common name from raw_label (batch lookup) or fallback to scientific name
+	// Look up common name from pre-built map, fallback to scientific name
 	commonName := scientificName
-	if det.ModelID > 0 && det.LabelID > 0 && rawLabelsMap != nil {
-		key := fmt.Sprintf("%d:%d", det.ModelID, det.LabelID)
-		if rawLabel, ok := rawLabelsMap[key]; ok && rawLabel != "" {
-			if extracted := extractCommonName(rawLabel); extracted != "" {
-				commonName = extracted
-			}
-		}
+	if cn, ok := ds.commonNameMap[scientificName]; ok {
+		commonName = cn
 	}
 
 	// Timestamp conversion
@@ -644,12 +616,9 @@ func (ds *Datastore) detectionsToRecords(dets []*entities.Detection) []datastore
 		return []datastore.DetectionRecord{}
 	}
 
-	ctx := context.Background()
-	rawLabelsMap := ds.buildRawLabelsMap(ctx, dets)
-
 	records := make([]datastore.DetectionRecord, 0, len(dets))
 	for _, det := range dets {
-		records = append(records, ds.detectionToRecord(det, rawLabelsMap))
+		records = append(records, ds.detectionToRecord(det))
 	}
 	return records
 }
