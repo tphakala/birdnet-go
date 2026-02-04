@@ -316,7 +316,7 @@ func (t *GDriveTarget) isTransientError(err error) bool {
 // withRetry executes an operation with retry logic
 func (t *GDriveTarget) withRetry(ctx context.Context, op func() error) error {
 	var lastErr error
-	for i := 0; i < t.config.MaxRetries; i++ {
+	for i := range t.config.MaxRetries {
 		select {
 		case <-ctx.Done():
 			return backup.NewError(backup.ErrCanceled, "gdrive: operation canceled", ctx.Err())

@@ -108,7 +108,7 @@ func TestCircuitBreaker_RapidFailureThresholds(t *testing.T) {
 			stream := NewFFmpegStream("rtsp://test.local/"+tc.name, "tcp", audioChan)
 
 			// Record failures up to just before threshold
-			for i := 0; i < tc.expectedThreshold-1; i++ {
+			for range tc.expectedThreshold - 1 {
 				stream.recordFailure(tc.runtime)
 				assert.False(t, stream.isCircuitOpen(),
 					"Circuit should not open before threshold")

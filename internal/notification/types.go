@@ -234,7 +234,7 @@ func deepCopyValue(v any) any {
 	case reflect.Slice:
 		// Create a new slice of the same type, length, and capacity
 		newSlice := reflect.MakeSlice(original.Type(), original.Len(), original.Cap())
-		for i := 0; i < original.Len(); i++ {
+		for i := range original.Len() {
 			elem := original.Index(i)
 			// Recursively copy the element
 			copiedElem := deepCopyValue(elem.Interface())

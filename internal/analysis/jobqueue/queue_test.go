@@ -840,7 +840,7 @@ func TestQueueOverflow(t *testing.T) {
 	// Now fill the rest of the queue with additional jobs
 	// The queue capacity is queueCapacity, and one job is already running,
 	// so we need to enqueue queueCapacity-1 jobs to fill it
-	for i := 0; i < queueCapacity-1; i++ {
+	for i := range queueCapacity - 1 {
 		jobID := fmt.Sprintf("regular-job-%d", i)
 		_, err := queue.Enqueue(t.Context(), regularAction, &TestData{ID: jobID}, RetryConfig{Enabled: false})
 		require.NoError(t, err, "Failed to enqueue regular job %d", i)

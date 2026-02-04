@@ -468,7 +468,7 @@ func detectComponentFull() string {
 		n = runtime.Callers(2, pcs)
 	}
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		pc := pcs[i]
 		fn := runtime.FuncForPC(pc)
 		if fn == nil {

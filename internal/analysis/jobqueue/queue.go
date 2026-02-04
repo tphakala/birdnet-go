@@ -62,7 +62,7 @@ func NewJobQueueWithOptions(maxJobs, maxArchivedJobs int, logAllSuccesses bool) 
 		maxArchivedJobs:    maxArchivedJobs,
 		maxJobs:            maxJobs,
 		logAllSuccesses:    logAllSuccesses,
-		allowJobDropping:   true, // Default to allowing job dropping when queue is full
+		allowJobDropping:   true,            // Default to allowing job dropping when queue is full
 		processingInterval: 1 * time.Second, // Default processing interval
 		clock:              &RealClock{},    // Use the real clock by default
 		stats: JobStats{
@@ -686,7 +686,7 @@ func (q *JobQueue) handleJobSuccess(ctx context.Context, job *Job, stats *Action
 // extractTypeNameFromKey extracts the type name from an action key.
 // Key format is "TypeName:Description" where Description may contain escaped colons.
 func extractTypeNameFromKey(key string) string {
-	for i := 0; i < len(key); i++ {
+	for i := range len(key) {
 		if key[i] == ':' && (i == 0 || key[i-1] != '\\') {
 			return key[:i]
 		}

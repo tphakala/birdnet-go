@@ -51,7 +51,7 @@ func BenchmarkLoop(m dsl.Matcher) {
 	).
 		Where(m["b"].Type.Is("*testing.B")).
 		Report("use for $b.Loop() { ... } instead of for range $b.N (Go 1.24+)").
-		Suggest("for $b.Loop() { $body }")
+		Suggest("for $b.Loop() { $*body }")
 }
 
 // TestingContext detects context.Background() or context.TODO() in test functions

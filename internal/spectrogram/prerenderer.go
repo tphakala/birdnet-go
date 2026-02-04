@@ -110,7 +110,7 @@ func (pr *PreRenderer) Start() {
 		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
 		logger.Bool("raw", pr.settings.Realtime.Dashboard.Spectrogram.Raw))
 
-	for i := 0; i < pr.workers; i++ {
+	for i := range pr.workers {
 		pr.wg.Add(1)
 		go pr.worker(i)
 	}
