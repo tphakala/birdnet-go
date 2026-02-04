@@ -88,7 +88,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			// Use Go 1.25 WaitGroup.Go() for cleaner goroutine management
 			// Note: synctest.Test() can cause deadlocks with background goroutines that use time.Sleep
 			// so we use regular concurrent testing with WaitGroup.Go() improvements
-			for i := 0; i < tt.concurrency; i++ {
+			for i := range tt.concurrency {
 				goroutineID := i
 				// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25)
 				// This eliminates the need for manual wg.Add(1) and defer wg.Done()

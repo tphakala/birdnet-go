@@ -307,7 +307,7 @@ func BenchmarkBytesToFloat64_Sizes(b *testing.B) {
 	for _, sz := range sizes {
 		bytes := make([]byte, sz.size*2)
 		// Fill with realistic audio pattern
-		for i := 0; i < sz.size; i++ {
+		for i := range sz.size {
 			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767) //nolint:gosec // G115: sin*32767 is always in int16 range
 			binary.LittleEndian.PutUint16(bytes[i*2:], uint16(val))            //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 		}
@@ -391,7 +391,7 @@ func BenchmarkApplyFilters_FullPipeline(b *testing.B) {
 
 	for _, sz := range sizes {
 		samples := make([]byte, sz.size*2)
-		for i := 0; i < sz.size; i++ {
+		for i := range sz.size {
 			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767) //nolint:gosec // G115: sin*32767 is always in int16 range
 			binary.LittleEndian.PutUint16(samples[i*2:], uint16(val))          //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 		}

@@ -251,7 +251,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 	var wg sync.WaitGroup
 	var connectionsEstablished int32
 
-	for i := 0; i < config.maxConnections; i++ {
+	for i := range config.maxConnections {
 		connID := i
 		wg.Go(func() {
 			if attemptSSEConnection(t, server.URL, config.endpoint, connID, config.testTimeout) {

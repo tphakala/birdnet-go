@@ -39,7 +39,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 	testErr := errors.New("test error")
 
 	// Make failures up to threshold - 1
-	for i := 0; i < config.MaxFailures-1; i++ {
+	for i := range config.MaxFailures - 1 {
 		err := cb.Call(t.Context(), func(_ context.Context) error {
 			return testErr
 		})
@@ -168,7 +168,7 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 		blocker := make(chan struct{})
 
 		// Launch HalfOpenMaxRequests + 1 concurrent calls
-		for i := 0; i < config.HalfOpenMaxRequests+1; i++ {
+		for range config.HalfOpenMaxRequests + 1 {
 			wg.Go(func() {
 				err := cb.Call(ctx, func(_ context.Context) error {
 					// Block to ensure concurrent execution

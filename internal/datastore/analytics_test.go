@@ -570,7 +570,7 @@ func TestGetHourlyDistribution(t *testing.T) {
 		}
 
 		for _, h := range hours {
-			for i := 0; i < h.count; i++ {
+			for i := range h.count {
 				note := Note{
 					Date:           "2024-07-15",
 					Time:           fmt.Sprintf("%02d:%02d:00", h.hour, i),
