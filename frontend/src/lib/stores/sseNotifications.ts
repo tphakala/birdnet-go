@@ -84,7 +84,7 @@ class SSENotificationManager {
 
     try {
       // Create connection to SSE endpoint
-      this.eventSource = new ReconnectingEventSource(SSE_ENDPOINT, {
+      this.eventSource = new ReconnectingEventSource(buildAppUrl(SSE_ENDPOINT), {
         max_retry_time: SSE_MAX_RETRY_MS,
         withCredentials: true, // Authentication required for notification stream
       });

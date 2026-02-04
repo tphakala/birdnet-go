@@ -3,9 +3,11 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -21,6 +23,7 @@ type AppConfigResponse struct {
 	CSRFToken string            `json:"csrfToken"`
 	Security  SecurityConfigDTO `json:"security"`
 	Version   string            `json:"version"`
+	BasePath  string            `json:"basePath"` // reverse proxy prefix for frontend URL construction
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -79,6 +82,10 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// Determine if access is currently allowed
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
 
+	// Determine the effective base path for reverse proxy support.
+	// Priority: X-Ingress-Path > X-Forwarded-Prefix > config BasePath > empty.
+	basePath := requestBasePath(ctx, c.Settings)
+
 	// Build response
 	response := AppConfigResponse{
 		CSRFToken: csrfToken,
@@ -90,7 +97,8 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 				EnabledProviders: enabledProviders,
 			},
 		},
-		Version: c.Settings.Version,
+		Version:  c.Settings.Version,
+		BasePath: basePath,
 	}
 
 	c.logDebugIfEnabled("Serving app config",
@@ -120,4 +128,25 @@ func (c *Controller) determineAccessAllowed(ctx echo.Context, securityEnabled bo
 	// Use auth service to check authentication status
 	// This checks: subnet bypass, token auth, and session auth
 	return c.authService.IsAuthenticated(ctx)
+}
+
+// requestBasePath returns the effective base path prefix for the current request.
+// Priority: X-Ingress-Path header > X-Forwarded-Prefix header > config BasePath > empty.
+func requestBasePath(c echo.Context, settings *conf.Settings) string {
+	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
+		return strings.TrimRight(p, "/")
+	}
+	if p := c.Request().Header.Get("X-Forwarded-Prefix"); isSafePathPrefix(p) {
+		return strings.TrimRight(p, "/")
+	}
+	if settings != nil && settings.WebServer.BasePath != "" {
+		return strings.TrimRight(settings.WebServer.BasePath, "/")
+	}
+	return ""
+}
+
+// isSafePathPrefix validates that a path prefix is safe for use in redirects.
+// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+func isSafePathPrefix(p string) bool {
+	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
 }

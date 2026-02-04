@@ -53,6 +53,7 @@
     disconnectAudioNodes,
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = loggers.audio;
 
@@ -206,7 +207,9 @@
   // Base URL without cache-busting parameters
   const spectrogramBaseUrl = $derived(
     showSpectrogram
-      ? `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+      ? buildAppUrl(
+          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+        )
       : null
   );
 
@@ -440,7 +443,9 @@
     // Create new AbortController for this poll request
     statusPollAbortController = new AbortController();
 
-    const statusUrl = `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`;
+    const statusUrl = buildAppUrl(
+      `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+    );
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
@@ -633,7 +638,7 @@
     try {
       // Build POST URL using URL and URLSearchParams
       const generateUrl = new URL(
-        `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/generate`,
+        buildAppUrl(`/api/v2/spectrogram/${encodeURIComponent(detectionId)}/generate`),
         window.location.origin
       );
       const params = new URLSearchParams();

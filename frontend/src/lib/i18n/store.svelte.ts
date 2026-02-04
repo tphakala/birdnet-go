@@ -3,6 +3,7 @@ import { DEFAULT_LOCALE, type Locale, isValidLocale } from './config.js';
 import { detectBrowserLocale } from './utils.js';
 import { parsePlural } from './pluralParser.js';
 import { getLogger } from '$lib/utils/logger';
+import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = getLogger('app');
 // Note: Type imports will be used when type-safe translation is implemented
@@ -115,7 +116,7 @@ async function loadMessages(locale: Locale): Promise<void> {
   try {
     // Use fetch to load JSON from the built assets directory
     // In production, these files are copied to dist/messages by Vite
-    const response = await fetch(`/ui/assets/messages/${locale}.json`);
+    const response = await fetch(buildAppUrl(`/ui/assets/messages/${locale}.json`));
     if (!response.ok) {
       throw new Error(`Failed to fetch: ${response.status}`);
     }
@@ -153,7 +154,9 @@ async function loadMessages(locale: Locale): Promise<void> {
     if (locale !== DEFAULT_LOCALE) {
       logger.info(`Falling back to ${DEFAULT_LOCALE} locale`);
       try {
-        const fallbackResponse = await fetch(`/ui/assets/messages/${DEFAULT_LOCALE}.json`);
+        const fallbackResponse = await fetch(
+          buildAppUrl(`/ui/assets/messages/${DEFAULT_LOCALE}.json`)
+        );
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
 

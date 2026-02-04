@@ -18,6 +18,7 @@
   import { t } from '$lib/i18n';
   import { getCsrfToken } from '$lib/utils/api';
   import { formatBytes } from '$lib/utils/formatters';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { Database, Download, X } from '@lucide/svelte';
 
   interface DatabaseStats {
@@ -87,11 +88,14 @@
   // Check for existing active backup job
   async function checkForActiveJob() {
     try {
-      const response = await fetch(`/api/v2/system/database/backup/jobs?type=${dbType}`, {
-        headers: {
-          'X-CSRF-Token': getCsrfToken() ?? '',
-        },
-      });
+      const response = await fetch(
+        buildAppUrl(`/api/v2/system/database/backup/jobs?type=${dbType}`),
+        {
+          headers: {
+            'X-CSRF-Token': getCsrfToken() ?? '',
+          },
+        }
+      );
 
       if (!response.ok) return;
 
@@ -122,12 +126,15 @@
     backupTotalBytes = stats?.size_bytes ?? 0;
 
     try {
-      const response = await fetch(`/api/v2/system/database/backup/jobs?type=${dbType}`, {
-        method: 'POST',
-        headers: {
-          'X-CSRF-Token': getCsrfToken() ?? '',
-        },
-      });
+      const response = await fetch(
+        buildAppUrl(`/api/v2/system/database/backup/jobs?type=${dbType}`),
+        {
+          method: 'POST',
+          headers: {
+            'X-CSRF-Token': getCsrfToken() ?? '',
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -176,11 +183,14 @@
     }
 
     try {
-      const response = await fetch(`/api/v2/system/database/backup/jobs/${backupJobId}`, {
-        headers: {
-          'X-CSRF-Token': getCsrfToken() ?? '',
-        },
-      });
+      const response = await fetch(
+        buildAppUrl(`/api/v2/system/database/backup/jobs/${backupJobId}`),
+        {
+          headers: {
+            'X-CSRF-Token': getCsrfToken() ?? '',
+          },
+        }
+      );
 
       if (!response.ok) {
         if (response.status === 404 || response.status === 410) {
@@ -225,11 +235,14 @@
     if (!backupJobId) return;
 
     try {
-      const response = await fetch(`/api/v2/system/database/backup/jobs/${backupJobId}/download`, {
-        headers: {
-          'X-CSRF-Token': getCsrfToken() ?? '',
-        },
-      });
+      const response = await fetch(
+        buildAppUrl(`/api/v2/system/database/backup/jobs/${backupJobId}/download`),
+        {
+          headers: {
+            'X-CSRF-Token': getCsrfToken() ?? '',
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error('Failed to download backup');
@@ -269,7 +282,7 @@
     stopPolling();
 
     try {
-      await fetch(`/api/v2/system/database/backup/jobs/${backupJobId}`, {
+      await fetch(buildAppUrl(`/api/v2/system/database/backup/jobs/${backupJobId}`), {
         method: 'DELETE',
         headers: {
           'X-CSRF-Token': getCsrfToken() ?? '',

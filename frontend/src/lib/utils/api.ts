@@ -11,6 +11,7 @@
 
 import { loggers } from '$lib/utils/logger';
 import { getCsrfToken as getAppStateCsrfToken } from '$lib/stores/appState.svelte';
+import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = loggers.api;
 
@@ -321,7 +322,7 @@ export async function fetchWithCSRF<T = unknown>(
 
   try {
     logger.debug(`Fetching ${finalOptions.method} ${url}`);
-    const response = await fetch(url, finalOptions);
+    const response = await fetch(buildAppUrl(url), finalOptions);
 
     clearTimeout(timeoutId);
     const result = await handleResponse<T>(response);

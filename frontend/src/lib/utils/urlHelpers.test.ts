@@ -5,6 +5,8 @@ import {
   normalizePath,
   getAppBasePath,
   buildAppUrl,
+  setBasePath,
+  resetBasePath,
 } from './urlHelpers';
 import { loggers } from './logger';
 
@@ -13,6 +15,9 @@ describe('URL Helpers', () => {
   const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
 
   afterEach(() => {
+    // Reset cached base path to null (heuristic mode) between tests
+    resetBasePath();
+
     // Restore original window.location after tests that mock it
     if (originalLocationDescriptor) {
       Object.defineProperty(window, 'location', originalLocationDescriptor);
@@ -423,6 +428,156 @@ describe('URL Helpers', () => {
       const reviewUrl = buildAppUrl(`/ui/detections/${detectionId}?tab=review`);
 
       expect(reviewUrl).toBe('/ui/detections/33518?tab=review');
+    });
+  });
+
+  describe('setBasePath and getAppBasePath cache priority', () => {
+    it('should return empty string when setBasePath is called with empty string', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/birdnet/ui/dashboard' };
+
+      // Before setBasePath, heuristic would return '/proxy/birdnet'
+      expect(getAppBasePath()).toBe('/proxy/birdnet');
+
+      // After setBasePath(''), cache takes priority over URL heuristic
+      setBasePath('');
+      expect(getAppBasePath()).toBe('');
+    });
+
+    it('should return the cached prefix when setBasePath is called with a prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+
+      // Before setBasePath, heuristic returns '' (direct access)
+      expect(getAppBasePath()).toBe('');
+
+      // After setBasePath, cached value takes priority
+      setBasePath('/api/hassio_ingress/TOKEN');
+      expect(getAppBasePath()).toBe('/api/hassio_ingress/TOKEN');
+    });
+
+    it('should fall back to URL heuristic before setBasePath is called', () => {
+      // resetBasePath() is called in afterEach, so _cachedBasePath is null here
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN/ui/dashboard',
+      };
+
+      // No setBasePath called, so heuristic should be used
+      expect(getAppBasePath()).toBe('/api/hassio_ingress/TOKEN');
+    });
+
+    it('should override heuristic even when heuristic would give a different value', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN/ui/dashboard',
+      };
+
+      // Heuristic would return '/api/hassio_ingress/TOKEN'
+      // But backend says the actual base path is different
+      setBasePath('/custom/prefix');
+      expect(getAppBasePath()).toBe('/custom/prefix');
+    });
+
+    it('should restore heuristic mode after resetBasePath', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/birdnet/ui/dashboard' };
+
+      setBasePath('/override');
+      expect(getAppBasePath()).toBe('/override');
+
+      resetBasePath();
+      expect(getAppBasePath()).toBe('/proxy/birdnet');
+    });
+  });
+
+  describe('buildAppUrl idempotency', () => {
+    it('should not double-prefix when path already starts with basePath', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      const result = buildAppUrl('/api/hassio_ingress/TOKEN/ui/dashboard');
+      expect(result).toBe('/api/hassio_ingress/TOKEN/ui/dashboard');
+    });
+
+    it('should prefix when path does not start with basePath', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      const result = buildAppUrl('/ui/dashboard');
+      expect(result).toBe('/api/hassio_ingress/TOKEN/ui/dashboard');
+    });
+
+    it('should prefix when path has basePath as non-segment-boundary substring', () => {
+      // basePath='/birdnet', path='/birdnet-extra/ui' -- "birdnet" is a prefix of
+      // "birdnet-extra" but NOT on a segment boundary, so it should still prefix
+      setBasePath('/birdnet');
+
+      const result = buildAppUrl('/birdnet-extra/ui');
+      expect(result).toBe('/birdnet/birdnet-extra/ui');
+    });
+
+    it('should not prefix when basePath is empty string', () => {
+      setBasePath('');
+
+      expect(buildAppUrl('/ui/dashboard')).toBe('/ui/dashboard');
+      expect(buildAppUrl('/api/v2/detections/123')).toBe('/api/v2/detections/123');
+    });
+
+    it('should be idempotent when called multiple times with same input', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      const firstCall = buildAppUrl('/ui/dashboard');
+      expect(firstCall).toBe('/api/hassio_ingress/TOKEN/ui/dashboard');
+
+      // Calling buildAppUrl again with the result should not double-prefix
+      const secondCall = buildAppUrl(firstCall);
+      expect(secondCall).toBe('/api/hassio_ingress/TOKEN/ui/dashboard');
+    });
+
+    it('should detect segment boundary at end of path', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      // Path is exactly the basePath with no trailing content
+      const result = buildAppUrl('/api/hassio_ingress/TOKEN');
+      expect(result).toBe('/api/hassio_ingress/TOKEN');
+    });
+  });
+
+  describe('buildAppUrl with API and asset paths', () => {
+    it('should correctly prefix API v2 paths', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      expect(buildAppUrl('/api/v2/detections/123')).toBe(
+        '/api/hassio_ingress/TOKEN/api/v2/detections/123'
+      );
+    });
+
+    it('should correctly prefix static asset paths', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      expect(buildAppUrl('/ui/assets/messages/en.json')).toBe(
+        '/api/hassio_ingress/TOKEN/ui/assets/messages/en.json'
+      );
+    });
+
+    it('should correctly prefix SSE event stream paths', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      expect(buildAppUrl('/api/v2/events')).toBe('/api/hassio_ingress/TOKEN/api/v2/events');
+    });
+
+    it('should handle API paths with query parameters', () => {
+      setBasePath('/api/hassio_ingress/TOKEN');
+
+      expect(buildAppUrl('/api/v2/detections?limit=10&offset=0')).toBe(
+        '/api/hassio_ingress/TOKEN/api/v2/detections?limit=10&offset=0'
+      );
+    });
+
+    it('should handle API paths without proxy prefix', () => {
+      setBasePath('');
+
+      expect(buildAppUrl('/api/v2/detections/123')).toBe('/api/v2/detections/123');
+      expect(buildAppUrl('/ui/assets/messages/en.json')).toBe('/ui/assets/messages/en.json');
     });
   });
 });

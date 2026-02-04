@@ -4,6 +4,7 @@
   import { Mic, CirclePlay, CircleStop, Check } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
@@ -136,7 +137,7 @@
 
     try {
       // ReconnectingEventSource with configuration
-      eventSource = new ReconnectingEventSource('/api/v2/streams/audio-level', {
+      eventSource = new ReconnectingEventSource(buildAppUrl('/api/v2/streams/audio-level'), {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
         withCredentials: false, // Set to true if you need CORS credentials
       });

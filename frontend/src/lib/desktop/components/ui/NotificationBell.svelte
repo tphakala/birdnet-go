@@ -6,6 +6,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { Bell, BellOff, XCircle, TriangleAlert, Info, Settings, Star } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import {
     type Notification,
     mergeAndDeduplicateNotifications,
@@ -263,7 +264,7 @@
   // Preload notification sound
   function preloadNotificationSound() {
     try {
-      const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
+      const audio = new globalThis.Audio(buildAppUrl(NOTIFICATION_SOUND_PATH));
       audio.volume = NOTIFICATION_VOLUME;
       audio.preload = 'auto';
 
@@ -308,7 +309,7 @@
       });
     } else {
       // Fallback to creating new Audio instance
-      const audio = new globalThis.Audio(NOTIFICATION_SOUND_PATH);
+      const audio = new globalThis.Audio(buildAppUrl(NOTIFICATION_SOUND_PATH));
       audio.volume = NOTIFICATION_VOLUME;
       audio.play().catch(error => {
         logger.debug('Could not play notification sound', error, {
@@ -325,7 +326,7 @@
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
       new globalThis.Notification(sanitizeNotificationMessage(notification.title), {
         body: sanitizeNotificationMessage(notification.message),
-        icon: NOTIFICATION_ICON_PATH,
+        icon: buildAppUrl(NOTIFICATION_ICON_PATH),
         tag: notification.id,
       });
     }

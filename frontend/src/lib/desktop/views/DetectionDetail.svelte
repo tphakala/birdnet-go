@@ -26,6 +26,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { Download } from '@lucide/svelte';
 
@@ -188,7 +189,7 @@
     detectionError = null;
 
     try {
-      const response = await fetch(`/api/v2/detections/${resolvedDetectionId}`, {
+      const response = await fetch(buildAppUrl(`/api/v2/detections/${resolvedDetectionId}`), {
         signal: detectionController.signal,
       });
 
@@ -251,7 +252,9 @@
 
     try {
       const response = await fetch(
-        `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`,
+        buildAppUrl(
+          `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`
+        ),
         { signal: speciesController.signal }
       );
       // Check if request was aborted during fetch
@@ -284,7 +287,9 @@
     isLoadingTaxonomy = true;
     try {
       const response = await fetch(
-        `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`,
+        buildAppUrl(
+          `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`
+        ),
         { signal: taxonomyController.signal }
       );
       // Check if request was aborted during fetch
@@ -544,7 +549,7 @@
               >
                 {#if detection.clipName}
                   <a
-                    href={`/api/v2/media/audio/${detection.clipName}`}
+                    href={buildAppUrl(`/api/v2/media/audio/${detection.clipName}`)}
                     download
                     class="btn btn-ghost btn-sm gap-2"
                     aria-label="Download audio clip for {detection.commonName} detection"
@@ -875,7 +880,7 @@
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
           <div class="detail-audio-container">
             <AudioPlayer
-              audioUrl={`/api/v2/audio/${detection.id}`}
+              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
               detectionId={detection.id.toString()}
               showSpectrogram={true}
               spectrogramSize="xl"

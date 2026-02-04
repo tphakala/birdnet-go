@@ -10,11 +10,17 @@
 
 import { buildAppUrl, getAppBasePath, extractRelativePath } from '$lib/utils/urlHelpers';
 
-/** Default path when no valid path is available */
-const DEFAULT_PATH = '/ui/dashboard';
+// Path constants built via array join at runtime.
+// IMPORTANT: Do NOT use string literals like '/ui/dashboard' or '/ui/' here.
+// nginx sub_filter rewrites quoted strings matching patterns like '/u' in JS bundles,
+// corrupting constants and breaking path logic. Array.join() is immune to this.
+const DEFAULT_PATH = ['', 'ui', 'dashboard'].join('/');
+const UI_PREFIX_STR = ['', 'ui'].join('/');
 
-/** UI path prefix for the application */
-const UI_PREFIX = '/ui/';
+// Regex patterns for UI path matching.
+// Regex syntax (/^\/ui\//) is immune to sub_filter rules that target quoted strings.
+const UI_PATH_RE = /^\/ui\//;
+const UI_ROOT_RE = /^\/ui\/?$/;
 
 /**
  * Navigation store interface
@@ -47,16 +53,21 @@ function stripProxyPrefix(pathname: string): string {
  * @returns Path with /ui/ prefix (e.g., '/ui/dashboard')
  */
 function normalizeUiPath(url: string): string {
+  // Strip any proxy prefix that sub_filter may have injected into the value.
+  // This handles cases where sub_filter rewrites constants or URL values.
+  const cleaned = stripProxyPrefix(url);
+
   // Handle root or empty (including /ui and /ui/)
-  if (url === '/' || url === '' || url === '/ui' || url === '/ui/') {
+  // Use regex instead of string literals to avoid sub_filter corruption.
+  if (cleaned === '/' || cleaned === '' || UI_ROOT_RE.test(cleaned)) {
     return DEFAULT_PATH;
   }
   // Already has /ui/ prefix
-  if (url.startsWith(UI_PREFIX)) {
-    return url;
+  if (UI_PATH_RE.test(cleaned)) {
+    return cleaned;
   }
-  // Add /ui/ prefix
-  return `/ui${url.startsWith('/') ? url : '/' + url}`;
+  // Add /ui/ prefix using string concat with runtime-built prefix
+  return UI_PREFIX_STR + (cleaned.startsWith('/') ? cleaned : '/' + cleaned);
 }
 
 /**

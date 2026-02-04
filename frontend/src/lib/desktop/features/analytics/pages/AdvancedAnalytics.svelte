@@ -9,6 +9,7 @@
   import type { Species, SpeciesId } from '$lib/types/species';
   import { createSpeciesId } from '$lib/types/species';
   import { getLogger } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { parseLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('advanced-analytics');
@@ -154,7 +155,7 @@
         limit: '50', // Get top 50 species
       });
 
-      const response = await fetch(`/api/v2/analytics/species/summary?${params}`, {
+      const response = await fetch(buildAppUrl(`/api/v2/analytics/species/summary?${params}`), {
         signal: speciesController.signal,
       });
       if (!response.ok) {
@@ -229,7 +230,7 @@
         }
       });
 
-      const response = await fetch(`/api/v2/analytics/time/hourly/batch?${params}`, {
+      const response = await fetch(buildAppUrl(`/api/v2/analytics/time/hourly/batch?${params}`), {
         signal: timeOfDayController.signal,
       });
       if (!response.ok) {
@@ -302,7 +303,7 @@
         }
       });
 
-      const response = await fetch(`/api/v2/analytics/time/daily/batch?${params}`, {
+      const response = await fetch(buildAppUrl(`/api/v2/analytics/time/daily/batch?${params}`), {
         signal: dailyTrendController.signal,
       });
       if (!response.ok) {

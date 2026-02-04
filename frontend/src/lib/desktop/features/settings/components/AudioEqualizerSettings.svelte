@@ -28,6 +28,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getCsrfToken } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import type { EqualizerFilterType } from '$lib/stores/settings';
 
   const logger = loggers.settings;
@@ -210,7 +211,7 @@
         headers['X-CSRF-Token'] = csrfToken;
       }
 
-      const response = await fetch('/api/v2/system/audio/equalizer/config', {
+      const response = await fetch(buildAppUrl('/api/v2/system/audio/equalizer/config'), {
         headers,
         signal: abortController.signal,
       });

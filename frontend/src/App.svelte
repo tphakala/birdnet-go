@@ -250,26 +250,38 @@
     return routeConfigs.find(r => r.route === route);
   }
 
-  // Route path to config mapping - using Map for safe lookups
+  // Build UI paths immune to nginx sub_filter text rewriting.
+  // sub_filter rewrites quoted strings like '/ui/...' but can't match array joins.
+  function uiPath(...segments: string[]): string {
+    return ['', 'ui', ...segments].join('/');
+  }
+
+  // Regex patterns for prefix matching (immune to sub_filter)
+  const UI_DETECTIONS_PREFIX_RE = /^\/ui\/detections\//;
+  const UI_SYSTEM_PREFIX_RE = /^\/ui\/system\//;
+  const UI_SETTINGS_PREFIX_RE = /^\/ui\/settings\//;
+
+  // Route path to config mapping - using Map for safe lookups.
+  // Keys use computed uiPath() to avoid sub_filter corruption.
   const pathToRouteMap = createSafeMap<RouteConfig | undefined>({
     '/': findRouteConfig('dashboard'),
-    '/ui/': findRouteConfig('dashboard'),
-    '/ui': findRouteConfig('dashboard'),
-    '/ui/dashboard': findRouteConfig('dashboard'),
-    '/ui/notifications': findRouteConfig('notifications'),
-    '/ui/analytics/species': findRouteConfig('species'),
-    '/ui/analytics/advanced': findRouteConfig('advanced-analytics'),
-    '/ui/analytics': findRouteConfig('analytics'),
-    '/ui/search': findRouteConfig('search'),
-    '/ui/detections': findRouteConfig('detections'),
-    '/ui/about': findRouteConfig('about'),
-    '/ui/system': findRouteConfig('system'),
-    '/ui/settings': findRouteConfig('settings'),
+    [uiPath() + '/']: findRouteConfig('dashboard'),
+    [uiPath()]: findRouteConfig('dashboard'),
+    [uiPath('dashboard')]: findRouteConfig('dashboard'),
+    [uiPath('notifications')]: findRouteConfig('notifications'),
+    [uiPath('analytics', 'species')]: findRouteConfig('species'),
+    [uiPath('analytics', 'advanced')]: findRouteConfig('advanced-analytics'),
+    [uiPath('analytics')]: findRouteConfig('analytics'),
+    [uiPath('search')]: findRouteConfig('search'),
+    [uiPath('detections')]: findRouteConfig('detections'),
+    [uiPath('about')]: findRouteConfig('about'),
+    [uiPath('system')]: findRouteConfig('system'),
+    [uiPath('settings')]: findRouteConfig('settings'),
   });
 
   function handleRouting(path: string): void {
     // Special handling for detection detail pages
-    if (path.startsWith('/ui/detections/') && path.split('/').length > 3) {
+    if (UI_DETECTIONS_PREFIX_RE.test(path) && path.split('/').length > 3) {
       const pathParts = path.split('/');
       const id = pathParts[3];
       if (id && !isNaN(Number(id))) {
@@ -283,7 +295,7 @@
     }
 
     // Special handling for system subpages
-    if (path.startsWith('/ui/system/')) {
+    if (UI_SYSTEM_PREFIX_RE.test(path)) {
       const systemConfig = findRouteConfig('system');
       if (systemConfig) {
         currentRoute = systemConfig.route;
@@ -312,7 +324,7 @@
     }
 
     // Special handling for settings subpages
-    if (path.startsWith('/ui/settings/')) {
+    if (UI_SETTINGS_PREFIX_RE.test(path)) {
       const settingsConfig = findRouteConfig('settings');
       if (settingsConfig) {
         currentRoute = settingsConfig.route;

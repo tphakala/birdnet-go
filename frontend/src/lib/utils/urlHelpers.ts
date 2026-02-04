@@ -6,6 +6,26 @@ import { loggers } from './logger';
 
 const logger = loggers.ui;
 
+// Module-level cache for the backend-provided base path.
+// null = not yet set (use URL heuristic), string = authoritative value from backend.
+let _cachedBasePath: string | null = null;
+
+/**
+ * Called by appState after a successful config fetch to set the authoritative base path.
+ * Once set, getAppBasePath() returns this value instead of the URL heuristic.
+ */
+export function setBasePath(basePath: string): void {
+  _cachedBasePath = basePath;
+}
+
+/**
+ * Resets the cached base path to null (unset state).
+ * Exported only for testing; production code should not call this.
+ */
+export function resetBasePath(): void {
+  _cachedBasePath = null;
+}
+
 /**
  * Extracts a relative path from a full path by removing the base path prefix.
  * Ensures the resulting path always starts with '/'.
@@ -94,9 +114,9 @@ export function normalizePath(path: unknown, addTrailingSlash = false): string {
  * Gets the base path prefix for the app (everything before /ui/).
  * Handles reverse proxy scenarios like Home Assistant Ingress.
  *
- * This is useful when the app is served behind a reverse proxy that adds
- * a prefix to all URLs, such as Home Assistant Ingress which uses paths like:
- * /api/hassio_ingress/TOKEN/ui/dashboard
+ * Uses a priority chain:
+ * 1. Backend-provided value (set after config fetch via setBasePath())
+ * 2. URL heuristic from pathname (used during bootstrapping)
  *
  * @returns The base path prefix (empty string if no prefix, or the prefix path)
  *
@@ -118,6 +138,10 @@ export function normalizePath(path: unknown, addTrailingSlash = false): string {
 export function getAppBasePath(): string {
   if (typeof window === 'undefined') return '';
 
+  // Prefer backend-provided value (set after config fetch)
+  if (_cachedBasePath !== null) return _cachedBasePath;
+
+  // Fallback: runtime detection from pathname (handles bootstrapping)
   const pathname = window.location.pathname;
 
   // Split pathname into segments and find the first exact 'ui' segment
@@ -136,11 +160,12 @@ export function getAppBasePath(): string {
 /**
  * Builds a full URL path that works with any proxy configuration.
  * Automatically detects and prepends the app's base path (if behind a proxy).
+ * Idempotent: if the path already starts with the base path, it won't be added again.
  *
  * Use this function instead of hardcoded paths like `/ui/detections/123`
  * to ensure URLs work correctly when accessed through reverse proxies.
  *
- * @param path - Path starting with /ui/ (e.g., '/ui/detections/123?tab=review')
+ * @param path - Relative path (e.g., '/api/v2/detections/123' or '/ui/dashboard')
  * @returns Full path including any proxy prefix
  *
  * @example
@@ -152,6 +177,12 @@ export function getAppBasePath(): string {
  * // Home Assistant Ingress (pathname: '/api/hassio_ingress/TOKEN/ui/dashboard')
  * buildAppUrl('/ui/detections/123?tab=review')
  * // returns '/api/hassio_ingress/TOKEN/ui/detections/123?tab=review'
+ *
+ * @example
+ * // Idempotent: already-prefixed path is not double-prefixed
+ * // basePath = '/api/hassio_ingress/TOKEN'
+ * buildAppUrl('/api/hassio_ingress/TOKEN/ui/dashboard')
+ * // returns '/api/hassio_ingress/TOKEN/ui/dashboard' (unchanged)
  */
 export function buildAppUrl(path: string): string {
   const basePath = getAppBasePath();
@@ -162,6 +193,16 @@ export function buildAppUrl(path: string): string {
     logger.error('buildAppUrl was called with a non-relative path:', path);
     // Return safe fallback to prevent open redirect
     return basePath + '/ui/dashboard';
+  }
+
+  // Idempotent: if the path already starts with the base path on a segment
+  // boundary, don't add it again. This prevents double-prefixing when
+  // sub_filter has already rewritten the URL.
+  if (basePath && path.startsWith(basePath)) {
+    // Ensure it's a segment boundary (next char is '/' or end of path)
+    if (path.length === basePath.length || path[basePath.length] === '/') {
+      return path;
+    }
   }
 
   return basePath + path;

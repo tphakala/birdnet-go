@@ -75,6 +75,27 @@ type Server struct {
 	startTime time.Time
 }
 
+// ingressPath returns the effective base path prefix for the current request.
+// Priority: X-Ingress-Path header > X-Forwarded-Prefix header > config BasePath > empty.
+func ingressPath(c echo.Context, settings *conf.Settings) string {
+	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
+		return strings.TrimRight(p, "/")
+	}
+	if p := c.Request().Header.Get("X-Forwarded-Prefix"); isSafePathPrefix(p) {
+		return strings.TrimRight(p, "/")
+	}
+	if settings != nil && settings.WebServer.BasePath != "" {
+		return strings.TrimRight(settings.WebServer.BasePath, "/")
+	}
+	return ""
+}
+
+// isSafePathPrefix validates that a path prefix is safe for use in redirects.
+// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+func isSafePathPrefix(p string) bool {
+	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
+}
+
 // ServerOption is a functional option for configuring the Server.
 type ServerOption func(*Server)
 
@@ -449,7 +470,7 @@ func (s *Server) IsDevMode() bool {
 func (s *Server) registerSPARoutes() {
 	// Redirect root path to dashboard
 	s.echo.GET("/", func(c echo.Context) error {
-		return c.Redirect(http.StatusFound, "/ui/dashboard")
+		return c.Redirect(http.StatusFound, ingressPath(c, s.settings)+"/ui/dashboard")
 	})
 
 	// Public routes (no authentication required)
@@ -578,7 +599,7 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 			logger.String("email", user.Email),
 		)
 		// User is already authenticated, redirect to dashboard
-		return c.Redirect(http.StatusFound, "/ui/dashboard")
+		return c.Redirect(http.StatusFound, ingressPath(c, s.settings)+"/ui/dashboard")
 	}
 
 	// Begin OAuth flow - this will redirect to the provider
@@ -657,7 +678,7 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	)
 
 	// Redirect to dashboard after successful authentication
-	return c.Redirect(http.StatusFound, "/ui/dashboard")
+	return c.Redirect(http.StatusFound, ingressPath(c, s.settings)+"/ui/dashboard")
 }
 
 // isValidOAuthProvider checks if the provider name is valid.
