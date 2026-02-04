@@ -1036,7 +1036,9 @@ Responsive Breakpoints:
                   {#if showThumbnails}
                     <BirdThumbnailPopup
                       thumbnailUrl={item.thumbnail_url ||
-                        `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
+                        buildAppUrl(
+                          `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`
+                        )}
                       commonName={item.common_name}
                       scientificName={item.scientific_name}
                       detectionUrl={urlBuilders.species(item)}

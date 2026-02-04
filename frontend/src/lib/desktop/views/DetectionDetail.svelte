@@ -549,7 +549,7 @@
               >
                 {#if detection.clipName}
                   <a
-                    href={`/api/v2/media/audio/${detection.clipName}`}
+                    href={buildAppUrl(`/api/v2/media/audio/${detection.clipName}`)}
                     download
                     class="btn btn-ghost btn-sm gap-2"
                     aria-label="Download audio clip for {detection.commonName} detection"
@@ -880,7 +880,7 @@
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
           <div class="detail-audio-container">
             <AudioPlayer
-              audioUrl={`/api/v2/audio/${detection.id}`}
+              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
               detectionId={detection.id.toString()}
               showSpectrogram={true}
               spectrogramSize="xl"

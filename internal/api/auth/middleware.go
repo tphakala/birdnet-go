@@ -246,14 +246,22 @@ func (m *Middleware) buildLoginRedirectURL(c echo.Context, ip string) string {
 
 // requestBasePath returns the reverse proxy base path from request headers.
 // Priority: X-Ingress-Path > X-Forwarded-Prefix > empty.
+// Note: Unlike the version in api/v2/app.go, this does not fall back to config
+// BasePath because the auth context requires matching the actual request prefix.
 func requestBasePath(c echo.Context) string {
-	if p := c.Request().Header.Get("X-Ingress-Path"); p != "" {
+	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
 		return strings.TrimRight(p, "/")
 	}
-	if p := c.Request().Header.Get("X-Forwarded-Prefix"); p != "" {
+	if p := c.Request().Header.Get("X-Forwarded-Prefix"); isSafePathPrefix(p) {
 		return strings.TrimRight(p, "/")
 	}
 	return ""
+}
+
+// isSafePathPrefix validates that a path prefix is safe for use in redirects.
+// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+func isSafePathPrefix(p string) bool {
+	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
 }
 
 // getSafeRedirectPath validates and returns a safe redirect path.

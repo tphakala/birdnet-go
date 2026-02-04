@@ -1200,7 +1200,7 @@ func buildFuzzOAuthProviders(input fuzzSecurityInput) []conf.OAuthProviderConfig
 }
 
 // verifyFuzzSecurityResponse verifies the response matches expected security configuration.
-func verifyFuzzSecurityResponse(t *testing.T, response AppConfigResponse, input fuzzSecurityInput, bodyStr string) {
+func verifyFuzzSecurityResponse(t *testing.T, response *AppConfigResponse, input fuzzSecurityInput, bodyStr string) {
 	t.Helper()
 
 	expectedEnabled := input.basicEnabled || input.googleEnabled || input.githubEnabled || input.microsoftEnabled
@@ -1217,7 +1217,7 @@ func verifyFuzzSecurityResponse(t *testing.T, response AppConfigResponse, input 
 }
 
 // verifyFuzzOAuthProviders checks that OAuth provider flags in response match input.
-func verifyFuzzOAuthProviders(t *testing.T, response AppConfigResponse, input fuzzSecurityInput) {
+func verifyFuzzOAuthProviders(t *testing.T, response *AppConfigResponse, input fuzzSecurityInput) {
 	t.Helper()
 
 	hasProvider := func(provider string) bool {
@@ -1299,6 +1299,6 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 			t.Errorf("Response is not valid JSON: %v", jsonErr)
 		}
 
-		verifyFuzzSecurityResponse(t, response, input, rec.Body.String())
+		verifyFuzzSecurityResponse(t, &response, input, rec.Body.String())
 	})
 }

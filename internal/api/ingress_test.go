@@ -105,6 +105,28 @@ func TestIngressPath(t *testing.T) {
 			basePath: "/birdnet///",
 			expected: "/birdnet",
 		},
+		// Validation: reject malicious header values
+		{
+			name:             "Protocol-relative X-Ingress-Path rejected, falls through to X-Forwarded-Prefix",
+			xIngressPath:     "//evil.com",
+			xForwardedPrefix: "/safe/prefix",
+			expected:         "/safe/prefix",
+		},
+		{
+			name:         "Protocol-relative X-Ingress-Path rejected, returns empty",
+			xIngressPath: "//evil.com",
+			expected:     "",
+		},
+		{
+			name:             "Absolute URL in X-Forwarded-Prefix rejected",
+			xForwardedPrefix: "https://evil.com/path",
+			expected:         "",
+		},
+		{
+			name:         "Non-slash X-Ingress-Path rejected",
+			xIngressPath: "relative/path",
+			expected:     "",
+		},
 	}
 
 	for _, tt := range tests {

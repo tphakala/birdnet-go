@@ -78,16 +78,22 @@ type Server struct {
 // ingressPath returns the effective base path prefix for the current request.
 // Priority: X-Ingress-Path header > X-Forwarded-Prefix header > config BasePath > empty.
 func ingressPath(c echo.Context, settings *conf.Settings) string {
-	if p := c.Request().Header.Get("X-Ingress-Path"); p != "" {
+	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
 		return strings.TrimRight(p, "/")
 	}
-	if p := c.Request().Header.Get("X-Forwarded-Prefix"); p != "" {
+	if p := c.Request().Header.Get("X-Forwarded-Prefix"); isSafePathPrefix(p) {
 		return strings.TrimRight(p, "/")
 	}
 	if settings != nil && settings.WebServer.BasePath != "" {
 		return strings.TrimRight(settings.WebServer.BasePath, "/")
 	}
 	return ""
+}
+
+// isSafePathPrefix validates that a path prefix is safe for use in redirects.
+// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+func isSafePathPrefix(p string) bool {
+	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
 }
 
 // ServerOption is a functional option for configuring the Server.
