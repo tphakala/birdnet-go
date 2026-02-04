@@ -22,6 +22,7 @@
   import { cn } from '$lib/utils/cn';
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
   import { toastActions } from '$lib/stores/toast';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
@@ -229,7 +230,7 @@
 
     try {
       // ReconnectingEventSource with configuration for automatic reconnection
-      eventSource = new ReconnectingEventSource('/api/v2/streams/health/stream', {
+      eventSource = new ReconnectingEventSource(buildAppUrl('/api/v2/streams/health/stream'), {
         withCredentials: false,
         max_retry_time: 30000,
       });

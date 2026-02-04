@@ -873,6 +873,7 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"csrfToken": true,
 		"security":  true,
 		"version":   true,
+		"basePath":  true,
 	}
 
 	for key := range rawResponse {

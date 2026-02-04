@@ -59,6 +59,7 @@ Performance Optimizations:
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
 
   const logger = getLogger('app');
@@ -215,7 +216,7 @@ Performance Optimizations:
       // Cache miss or expired - fetch from API
       logger.debug(`Daily summary cache miss for ${selectedDate}, fetching from API`);
       const response = await fetch(
-        `/api/v2/analytics/species/daily?date=${selectedDate}&limit=${summaryLimit}`
+        buildAppUrl(`/api/v2/analytics/species/daily?date=${selectedDate}&limit=${summaryLimit}`)
       );
       if (!response.ok) {
         throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
@@ -291,7 +292,9 @@ Performance Optimizations:
 
     try {
       const response = await fetch(
-        `/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true`
+        buildAppUrl(
+          `/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true`
+        )
       );
       if (!response.ok) {
         throw new Error(
@@ -460,7 +463,7 @@ Performance Optimizations:
 
     try {
       // ReconnectingEventSource with configuration
-      eventSource = new ReconnectingEventSource('/api/v2/detections/stream', {
+      eventSource = new ReconnectingEventSource(buildAppUrl('/api/v2/detections/stream'), {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
         withCredentials: false,
       });
@@ -993,7 +996,9 @@ Performance Optimizations:
     void untrack(() => {
       const datesParam = datesToPreload.join(',');
       return fetch(
-        `/api/v2/analytics/species/daily/batch?dates=${datesParam}&limit=${summaryLimit}`
+        buildAppUrl(
+          `/api/v2/analytics/species/daily/batch?dates=${datesParam}&limit=${summaryLimit}`
+        )
       )
         .then(response => {
           if (!response.ok) {
@@ -1028,7 +1033,11 @@ Performance Optimizations:
           // Fall back to individual requests if batch fails
           logger.debug('Falling back to individual preload requests');
           datesToPreload.forEach(dateString => {
-            fetch(`/api/v2/analytics/species/daily?date=${dateString}&limit=${summaryLimit}`)
+            fetch(
+              buildAppUrl(
+                `/api/v2/analytics/species/daily?date=${dateString}&limit=${summaryLimit}`
+              )
+            )
               .then(response => (response.ok ? response.json() : null))
               .then(data => {
                 if (data) {

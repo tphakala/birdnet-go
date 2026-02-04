@@ -57,6 +57,7 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
   import {
     Settings,
@@ -1363,7 +1364,7 @@
         headers.set('X-CSRF-Token', token);
       }
 
-      const response = await fetch('/api/v2/integrations/weather/test', {
+      const response = await fetch(buildAppUrl('/api/v2/integrations/weather/test'), {
         method: 'POST',
         headers,
         credentials: 'same-origin',
@@ -1478,7 +1479,7 @@
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
       });
 
-      const response = await fetch(`/api/v2/range/species/csv?${params}`, {
+      const response = await fetch(buildAppUrl(`/api/v2/range/species/csv?${params}`), {
         headers: {
           'X-CSRF-Token': getCsrfToken() || '',
           Accept: 'text/csv',

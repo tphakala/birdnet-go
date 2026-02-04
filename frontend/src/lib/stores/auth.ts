@@ -107,7 +107,7 @@ function createAuthStore() {
           headers['X-CSRF-Token'] = token;
         }
 
-        const response = await fetch('/api/v2/auth/logout', {
+        const response = await fetch(buildAppUrl('/api/v2/auth/logout'), {
           method: 'POST',
           credentials: 'include',
           headers,

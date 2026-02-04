@@ -230,15 +230,30 @@ func (m *Middleware) redirectToLogin(c echo.Context, path, ip string) error {
 }
 
 // buildLoginRedirectURL constructs the login URL with a safe redirect parameter.
+// Supports reverse proxy prefixes via X-Ingress-Path / X-Forwarded-Prefix headers.
 func (m *Middleware) buildLoginRedirectURL(c echo.Context, ip string) string {
 	const loginPath = "/login"
+
+	basePath := requestBasePath(c)
 
 	originURL := c.Request().URL
 	originPath := originURL.Path
 	originQuery := originURL.RawQuery
 
 	safeRedirectPath := m.getSafeRedirectPath(originPath, originQuery, loginPath, ip)
-	return loginPath + "?redirect=" + url.QueryEscape(safeRedirectPath)
+	return basePath + loginPath + "?redirect=" + url.QueryEscape(safeRedirectPath)
+}
+
+// requestBasePath returns the reverse proxy base path from request headers.
+// Priority: X-Ingress-Path > X-Forwarded-Prefix > empty.
+func requestBasePath(c echo.Context) string {
+	if p := c.Request().Header.Get("X-Ingress-Path"); p != "" {
+		return strings.TrimRight(p, "/")
+	}
+	if p := c.Request().Header.Get("X-Forwarded-Prefix"); p != "" {
+		return strings.TrimRight(p, "/")
+	}
+	return ""
 }
 
 // getSafeRedirectPath validates and returns a safe redirect path.

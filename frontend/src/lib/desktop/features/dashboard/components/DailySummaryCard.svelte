@@ -52,6 +52,7 @@ Responsive Breakpoints:
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { LRUCache } from '$lib/utils/LRUCache';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
@@ -224,7 +225,7 @@ Responsive Breakpoints:
   // Fetch dashboard config for temperature unit preference
   async function fetchDashboardConfig(): Promise<void> {
     try {
-      const response = await fetch('/api/v2/settings/dashboard');
+      const response = await fetch(buildAppUrl('/api/v2/settings/dashboard'));
       if (!response.ok) return;
       const config = await response.json();
       // Map config temperatureUnit to TemperatureUnit type
@@ -275,7 +276,7 @@ Responsive Breakpoints:
     }
 
     try {
-      const response = await fetch(`/api/v2/weather/sun/${date}`);
+      const response = await fetch(buildAppUrl(`/api/v2/weather/sun/${date}`));
       if (!response.ok) {
         const errorMsg = `Failed to fetch sun times: ${response.status} ${response.statusText}`;
         logger.warn(errorMsg);
@@ -329,7 +330,7 @@ Responsive Breakpoints:
     }
 
     try {
-      const response = await fetch(`/api/v2/weather/hourly/${date}`);
+      const response = await fetch(buildAppUrl(`/api/v2/weather/hourly/${date}`));
       if (!response.ok) {
         logger.warn(`Failed to fetch hourly weather: ${response.status} ${response.statusText}`);
         return [];

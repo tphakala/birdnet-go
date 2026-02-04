@@ -52,6 +52,7 @@
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { getCsrfToken } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = loggers.settings;
 
@@ -275,13 +276,16 @@
 
     isSendingDiscovery = true;
     try {
-      const response = await fetch('/api/v2/integrations/mqtt/homeassistant/discovery', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': getCsrfToken() || '',
-        },
-      });
+      const response = await fetch(
+        buildAppUrl('/api/v2/integrations/mqtt/homeassistant/discovery'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCsrfToken() || '',
+          },
+        }
+      );
 
       if (response.ok) {
         toastActions.success(t('settings.integration.mqtt.homeAssistant.discovery.success'));
@@ -350,7 +354,7 @@
 
       logger.debug('Sending BirdWeather test request with payload:', testPayload);
 
-      const response = await fetch('/api/v2/integrations/birdweather/test', {
+      const response = await fetch(buildAppUrl('/api/v2/integrations/birdweather/test'), {
         method: 'POST',
         headers,
         credentials: 'same-origin',
@@ -567,7 +571,7 @@
 
       logger.debug('Sending MQTT test request with payload:', testPayload);
 
-      const response = await fetch('/api/v2/integrations/mqtt/test', {
+      const response = await fetch(buildAppUrl('/api/v2/integrations/mqtt/test'), {
         method: 'POST',
         headers,
         credentials: 'same-origin',

@@ -2,6 +2,7 @@
   import { t } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { onMount } from 'svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
@@ -135,7 +136,9 @@
       if (endDate) params.set('end_date', endDate);
 
       // Fetch species summary data
-      const response = await fetch(`/api/v2/analytics/species/summary?${params.toString()}`);
+      const response = await fetch(
+        buildAppUrl(`/api/v2/analytics/species/summary?${params.toString()}`)
+      );
 
       if (!response.ok) {
         throw new Error(`Server responded with ${response.status}`);
@@ -283,7 +286,9 @@
         batch.forEach(name => params.append('species', name));
 
         // Fetch thumbnails for this batch
-        const response = await fetch(`/api/v2/analytics/species/thumbnails?${params.toString()}`);
+        const response = await fetch(
+          buildAppUrl(`/api/v2/analytics/species/thumbnails?${params.toString()}`)
+        );
         if (response.ok) {
           const thumbnails = await response.json();
 

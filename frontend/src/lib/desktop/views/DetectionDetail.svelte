@@ -26,6 +26,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { Download } from '@lucide/svelte';
 
@@ -188,7 +189,7 @@
     detectionError = null;
 
     try {
-      const response = await fetch(`/api/v2/detections/${resolvedDetectionId}`, {
+      const response = await fetch(buildAppUrl(`/api/v2/detections/${resolvedDetectionId}`), {
         signal: detectionController.signal,
       });
 
@@ -251,7 +252,9 @@
 
     try {
       const response = await fetch(
-        `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`,
+        buildAppUrl(
+          `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`
+        ),
         { signal: speciesController.signal }
       );
       // Check if request was aborted during fetch
@@ -284,7 +287,9 @@
     isLoadingTaxonomy = true;
     try {
       const response = await fetch(
-        `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`,
+        buildAppUrl(
+          `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`
+        ),
         { signal: taxonomyController.signal }
       );
       // Check if request was aborted during fetch

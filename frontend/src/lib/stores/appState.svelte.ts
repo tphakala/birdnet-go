@@ -25,6 +25,7 @@
 /* eslint-disable no-undef */
 import type { AuthConfig } from '../../app.d';
 import { getLogger } from '../utils/logger';
+import { buildAppUrl, setBasePath } from '../utils/urlHelpers';
 
 const logger = getLogger('appState');
 
@@ -54,6 +55,7 @@ interface AppConfigResponse {
     };
   };
   version: string;
+  basePath?: string;
 }
 
 /**
@@ -122,7 +124,7 @@ async function fetchConfig(): Promise<AppConfigResponse> {
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(CONFIG_ENDPOINT, {
+    const response = await fetch(buildAppUrl(CONFIG_ENDPOINT), {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -167,6 +169,10 @@ export async function initApp(): Promise<boolean> {
       logger.info(`Fetching app configuration (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
 
       const config = await fetchConfig();
+
+      // Set the authoritative base path from the backend before updating other state.
+      // This ensures all subsequent buildAppUrl() calls use the correct value.
+      setBasePath(config.basePath ?? '');
 
       // Update state with fetched configuration
       appState.csrfToken = config.csrfToken;
