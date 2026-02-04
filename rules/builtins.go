@@ -148,7 +148,7 @@ func RangeOverInteger(m dsl.Matcher) {
 			!m["n"].Text.Matches(`.*\.N$`), // Exclude b.N (benchmark) patterns
 		).
 		Report("use for $i := range $n instead of for $i := 0; $i < $n; $i++ (Go 1.22+)").
-		Suggest("for $i := range $n { $body }")
+		Suggest("for $i := range $n { $*body }")
 }
 
 // AppendWithoutValues detects append calls with no values which have no effect.

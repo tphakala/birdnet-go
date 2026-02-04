@@ -26,7 +26,8 @@ func ReflectTypeAssert(m dsl.Matcher) {
 		`$v.Interface().($typ)`,
 	).
 		Where(m["v"].Type.Is("reflect.Value")).
-		Report("use reflect.TypeAssert[$typ]($v) instead of $v.Interface().($typ) to avoid allocation (Go 1.25+)")
+		Report("use reflect.TypeAssert[$typ]($v) instead of $v.Interface().($typ) to avoid allocation (Go 1.25+)").
+		Suggest("reflect.TypeAssert[$typ]($v)")
 }
 
 // ReflectPtrTo detects deprecated reflect.PtrTo and suggests reflect.PointerTo.
@@ -71,7 +72,8 @@ func ReflectTypeOf(m dsl.Matcher) {
 	m.Match(
 		`reflect.TypeOf((*$typ)(nil)).Elem()`,
 	).
-		Report("use reflect.TypeFor[$typ]() instead of reflect.TypeOf((*$typ)(nil)).Elem() (Go 1.22+)")
+		Report("use reflect.TypeFor[$typ]() instead of reflect.TypeOf((*$typ)(nil)).Elem() (Go 1.22+)").
+		Suggest("reflect.TypeFor[$typ]()")
 }
 
 // DeprecatedReflectHeaders detects deprecated reflect.SliceHeader and
