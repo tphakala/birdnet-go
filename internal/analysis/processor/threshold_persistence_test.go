@@ -144,6 +144,9 @@ func (m *MockDatastore) GetNewSpeciesDetections(context.Context, string, string,
 func (m *MockDatastore) GetSpeciesFirstDetectionInPeriod(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error) {
 	return make([]datastore.NewSpeciesData, 0), nil
 }
+func (m *MockDatastore) GetSpeciesDiversityData(context.Context, string, string) ([]datastore.DailyAnalyticsData, error) {
+	return nil, nil
+}
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return make([]datastore.DetectionRecord, 0), 0, nil
 }

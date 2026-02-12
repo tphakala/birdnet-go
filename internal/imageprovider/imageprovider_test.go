@@ -287,6 +287,10 @@ func (m *mockStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startD
 	return []datastore.NewSpeciesData{}, nil
 }
 
+func (m *mockStore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+	return nil, nil
+}
+
 // BG-17 fix: Add notification history methods
 func (m *mockStore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
 	return []datastore.NotificationHistory{}, nil
