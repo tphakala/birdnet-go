@@ -26,12 +26,7 @@
     dateRange?: [Date, Date];
   }
 
-  let {
-    data = [],
-    width = 800,
-    height = 400,
-    dateRange,
-  }: Props = $props();
+  let { data = [], width = 800, height = 400, dateRange }: Props = $props();
 
   // Component state
   let tooltip: ChartTooltip | null = null;
@@ -49,8 +44,7 @@
 
     const safeDateExtent: [Date, Date] =
       dateExtent[0] && dateExtent[1] ? [dateExtent[0], dateExtent[1]] : [new Date(), new Date()];
-    const safeMaxCount =
-      countExtent[1] !== undefined ? countExtent[1] : 10;
+    const safeMaxCount = countExtent[1] !== undefined ? countExtent[1] : 10;
 
     return {
       x: safeDateExtent,
