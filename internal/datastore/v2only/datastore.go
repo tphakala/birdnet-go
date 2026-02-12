@@ -1978,7 +1978,7 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 // GetSpeciesDiversityData returns unique species count per day.
 func (ds *Datastore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
 	// TODO: Implement via v2 detection repository when available
-	return nil, nil
+	return nil, ErrNotImplemented
 }
 
 // ============================================================

@@ -169,6 +169,7 @@ type Interface interface {
 	GetHourlyDistribution(ctx context.Context, startDate, endDate string, species string) ([]HourlyDistributionData, error)
 	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
+	// GetSpeciesDiversityData returns daily unique species counts within the given date range.
 	GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)

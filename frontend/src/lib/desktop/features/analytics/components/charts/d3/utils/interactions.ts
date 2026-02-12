@@ -88,7 +88,7 @@ export class ChartTooltip {
       }
       // Prevent overflow on bottom edge
       if (top + rect.height > viewportHeight) {
-        top = data.y - rect.height - this.config.offset.x;
+        top = data.y - rect.height - this.config.offset.y;
       }
       // Prevent overflow on left/top edges
       if (left < 0) left = 0;

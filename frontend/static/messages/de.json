@@ -1083,7 +1083,9 @@
           "title": "Artenvielfalt im Zeitverlauf",
           "description": "Zeigt die Anzahl einzigartiger Arten, die pro Tag erkannt wurden",
           "noData": "Keine Diversitätsdaten verfügbar",
-          "noDataHint": "Wählen Sie einen Datumsbereich, um Artenvielfalt-Trends zu sehen"
+          "noDataHint": "Wählen Sie einen Datumsbereich, um Artenvielfalt-Trends zu sehen",
+          "axisDate": "Datum",
+          "axisUniqueSpecies": "Einzigartige Arten"
         }
       },
       "aria": {

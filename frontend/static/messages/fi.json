@@ -1079,7 +1079,9 @@
           "title": "Lajien monimuotoisuus ajan kuluessa",
           "description": "Näyttää päivittäin havaittujen eri lajien määrän kaikista havainnoista",
           "noData": "Ei monimuotoisuustietoja saatavilla",
-          "noDataHint": "Valitse päivämääräväli nähdäksesi lajien monimuotoisuustrendit"
+          "noDataHint": "Valitse päivämääräväli nähdäksesi lajien monimuotoisuustrendit",
+          "axisDate": "Päivämäärä",
+          "axisUniqueSpecies": "Yksilölliset lajit"
         }
       },
       "aria": {

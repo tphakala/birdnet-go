@@ -33,13 +33,7 @@
     onSpeciesToggle?: (_species: string, _visible: boolean) => void;
   }
 
-  let {
-    data = [],
-    width = 800,
-    height = 400,
-    selectedSpecies = [],
-    onSpeciesToggle,
-  }: Props = $props();
+  let { data = [], width = 800, height = 400, selectedSpecies = [] }: Props = $props();
 
   // Component state
   let tooltip: ChartTooltip | null = null;

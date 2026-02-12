@@ -1083,7 +1083,9 @@
           "title": "Soortendiversiteit in de tijd",
           "description": "Toont het aantal unieke soorten dat per dag is gedetecteerd over alle detecties",
           "noData": "Geen diversiteitsgegevens beschikbaar",
-          "noDataHint": "Selecteer een datumbereik om diversiteitstrends weer te geven"
+          "noDataHint": "Selecteer een datumbereik om diversiteitstrends weer te geven",
+          "axisDate": "Datum",
+          "axisUniqueSpecies": "Unieke soorten"
         }
       },
       "aria": {

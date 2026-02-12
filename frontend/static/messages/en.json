@@ -1084,7 +1084,9 @@
           "title": "Species Diversity Over Time",
           "description": "Shows the number of unique species detected per day across all detections",
           "noData": "No diversity data available",
-          "noDataHint": "Select a date range to view species diversity trends"
+          "noDataHint": "Select a date range to view species diversity trends",
+          "axisDate": "Date",
+          "axisUniqueSpecies": "Unique Species"
         }
       },
       "aria": {

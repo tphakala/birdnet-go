@@ -56,7 +56,6 @@
     showRelative = false,
     enableZoom = true,
     enableBrush = false,
-    onSpeciesToggle,
     onDateRangeChange,
   }: Props = $props();
 

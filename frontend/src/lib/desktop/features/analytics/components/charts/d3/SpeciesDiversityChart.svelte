@@ -11,8 +11,11 @@
   import { createTimeScale, createLinearScale } from './utils/scales';
   import { createAxis, styleAxis, addAxisLabel, createDateAxisFormatter } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
-  import { getCurrentTheme, type ChartTheme } from './utils/theme';
+  import { type ChartTheme } from './utils/theme';
   import { t } from '$lib/i18n';
+
+  // Module-level counter for unique clip-path IDs
+  let clipIdCounter = 0;
 
   interface DiversityDatum {
     date: Date;
@@ -68,8 +71,6 @@
     innerHeight: number;
     theme: ChartTheme;
   }) {
-    chartContext = context;
-
     if (!scales || !data.length) {
       if (context.chartGroup) {
         context.chartGroup.selectAll('*').remove();
@@ -133,7 +134,7 @@
     addAxisLabel(
       chartGroup,
       {
-        text: 'Date',
+        text: t('analytics.advanced.charts.diversity.axisDate'),
         orientation: 'bottom',
         offset: 35,
         width: innerWidth,
@@ -145,7 +146,7 @@
     addAxisLabel(
       chartGroup,
       {
-        text: 'Unique Species',
+        text: t('analytics.advanced.charts.diversity.axisUniqueSpecies'),
         orientation: 'left',
         offset: 45,
         width: innerWidth,
@@ -155,7 +156,7 @@
     );
 
     // Create clip path to constrain content within chart area
-    const clipId = `diversity-clip-${Date.now()}`;
+    const clipId = `diversity-clip-${clipIdCounter++}`;
     chartGroup
       .append('defs')
       .append('clipPath')
@@ -218,8 +219,14 @@
         tooltip?.show({
           title: t('analytics.advanced.charts.diversity.title'),
           items: [
-            { label: 'Date', value: getLocalDateString(d.date) },
-            { label: 'Unique Species', value: d.uniqueSpecies.toString() },
+            {
+              label: t('analytics.advanced.charts.diversity.axisDate'),
+              value: getLocalDateString(d.date),
+            },
+            {
+              label: t('analytics.advanced.charts.diversity.axisUniqueSpecies'),
+              value: d.uniqueSpecies.toString(),
+            },
           ],
           x: event.clientX,
           y: event.clientY,

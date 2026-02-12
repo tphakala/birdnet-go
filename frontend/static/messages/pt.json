@@ -1083,7 +1083,9 @@
           "title": "Diversidade de espécies ao longo do tempo",
           "description": "Mostra o número de espécies únicas detectadas por dia em todas as detecções",
           "noData": "Nenhum dado de diversidade disponível",
-          "noDataHint": "Selecione um intervalo de datas para visualizar tendências de diversidade de espécies"
+          "noDataHint": "Selecione um intervalo de datas para visualizar tendências de diversidade de espécies",
+          "axisDate": "Data",
+          "axisUniqueSpecies": "Espécies únicas"
         }
       },
       "aria": {
