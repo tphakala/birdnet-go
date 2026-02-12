@@ -14,7 +14,6 @@
   import { type ChartTheme } from './utils/theme';
   import { t } from '$lib/i18n';
 
-
   interface DiversityDatum {
     date: Date;
     uniqueSpecies: number;
