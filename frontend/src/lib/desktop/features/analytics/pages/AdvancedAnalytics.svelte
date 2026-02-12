@@ -469,16 +469,13 @@
     fetchAllData();
   }
 
-  // Initialize on mount
+  // Initialize default custom date inputs on mount
   onMount(() => {
-    // Set initial date range
     const today = new Date();
     const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     startDate = formatDateForAPI(monthAgo);
     endDate = formatDateForAPI(today);
-
-    fetchAllData();
   });
 
   // Watch for changes that require data refresh

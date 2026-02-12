@@ -28,6 +28,27 @@
 
   let { data = [], width = 800, height = 400, dateRange }: Props = $props();
 
+  // Chart styling constants
+  const Y_SCALE_HEADROOM = 1.1;
+  const MAX_X_TICKS = 8;
+  const TICK_SPACING_PX = 80;
+  const Y_TICK_COUNT = 6;
+  const X_AXIS_LABEL_OFFSET = 35;
+  const Y_AXIS_LABEL_OFFSET = 45;
+  const LINE_STROKE_WIDTH = 2.5;
+  const AREA_OPACITY = 0.15;
+  const LINE_OPACITY = 0.9;
+  const POINT_RADIUS = 3;
+  const POINT_HOVER_RADIUS = 6;
+  const POINT_OPACITY = 0.7;
+  const TRANSITION_DURATION_MS = 150;
+
+  // Date range thresholds (days)
+  const WEEK_THRESHOLD = 7;
+  const MONTH_THRESHOLD = 30;
+  const YEAR_THRESHOLD = 365;
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
   // Component state
   let tooltip: ChartTooltip | null = null;
   let chartContainer: HTMLDivElement | null = null;
@@ -84,7 +105,7 @@
     });
 
     const yScale = createLinearScale({
-      domain: [0, scales.yMax * 1.1],
+      domain: [0, scales.yMax * Y_SCALE_HEADROOM],
       range: [innerHeight, 0],
     });
 
@@ -95,9 +116,15 @@
 
     // Determine date format based on range
     const timeRange = xScale.domain();
-    const daysDiff = (timeRange[1].getTime() - timeRange[0].getTime()) / (1000 * 60 * 60 * 24);
+    const daysDiff = (timeRange[1].getTime() - timeRange[0].getTime()) / MS_PER_DAY;
     const dateFormat =
-      daysDiff <= 7 ? 'day' : daysDiff <= 30 ? 'week' : daysDiff <= 365 ? 'month' : 'year';
+      daysDiff <= WEEK_THRESHOLD
+        ? 'day'
+        : daysDiff <= MONTH_THRESHOLD
+          ? 'week'
+          : daysDiff <= YEAR_THRESHOLD
+            ? 'month'
+            : 'year';
 
     // Create axes
     const dateTick = createDateAxisFormatter(dateFormat);
@@ -105,13 +132,13 @@
       scale: xScale,
       orientation: 'bottom',
       tickFormat: (d: AxisDomain) => dateTick(d as Date),
-      tickCount: Math.min(8, Math.floor(innerWidth / 80)),
+      tickCount: Math.min(MAX_X_TICKS, Math.floor(innerWidth / TICK_SPACING_PX)),
     });
 
     const yAxis = createAxis({
       scale: yScale,
       orientation: 'left',
-      tickCount: 6,
+      tickCount: Y_TICK_COUNT,
     });
 
     // Draw axes
@@ -133,7 +160,7 @@
       {
         text: t('analytics.advanced.charts.diversity.axisDate'),
         orientation: 'bottom',
-        offset: 35,
+        offset: X_AXIS_LABEL_OFFSET,
         width: innerWidth,
         height: innerHeight,
       },
@@ -145,7 +172,7 @@
       {
         text: t('analytics.advanced.charts.diversity.axisUniqueSpecies'),
         orientation: 'left',
-        offset: 45,
+        offset: Y_AXIS_LABEL_OFFSET,
         width: innerWidth,
         height: innerHeight,
       },
@@ -184,7 +211,7 @@
       .attr('class', 'diversity-area')
       .attr('d', areaGenerator)
       .style('fill', theme.primary)
-      .style('opacity', 0.15)
+      .style('opacity', AREA_OPACITY)
       .style('pointer-events', 'none');
 
     // Draw line on top
@@ -195,8 +222,8 @@
       .attr('d', lineGenerator)
       .style('fill', 'none')
       .style('stroke', theme.primary)
-      .style('stroke-width', 2.5)
-      .style('opacity', 0.9);
+      .style('stroke-width', LINE_STROKE_WIDTH)
+      .style('opacity', LINE_OPACITY);
 
     // Add data points with tooltips
     chartArea
@@ -207,11 +234,15 @@
       .attr('class', 'diversity-point')
       .attr('cx', d => xScale(d.date))
       .attr('cy', d => yScale(d.uniqueSpecies))
-      .attr('r', 3)
+      .attr('r', POINT_RADIUS)
       .style('fill', theme.primary)
-      .style('opacity', 0.7)
+      .style('opacity', POINT_OPACITY)
       .on('mouseenter', function (event: MouseEvent, d: DiversityDatum) {
-        select(this).transition().duration(150).attr('r', 6).style('opacity', 1);
+        select(this)
+          .transition()
+          .duration(TRANSITION_DURATION_MS)
+          .attr('r', POINT_HOVER_RADIUS)
+          .style('opacity', 1);
 
         tooltip?.show({
           title: t('analytics.advanced.charts.diversity.title'),
@@ -230,29 +261,23 @@
         });
       })
       .on('mouseleave', function () {
-        select(this).transition().duration(150).attr('r', 3).style('opacity', 0.7);
+        select(this)
+          .transition()
+          .duration(TRANSITION_DURATION_MS)
+          .attr('r', POINT_RADIUS)
+          .style('opacity', POINT_OPACITY);
         tooltip?.hide();
       });
 
     return '';
   }
 
-  // Re-render chart when data changes
+  // Re-render chart when data, scales, or chart context change
   $effect(() => {
-    const currentData = data;
-    const chartScales = scales;
-    const ctx = chartContext;
-
-    void {
-      dataLength: currentData.length,
-      hasChartContext: !!ctx,
-      hasScales: !!chartScales,
-    };
-
-    if (ctx && currentData.length > 0 && chartScales) {
-      drawChart(ctx);
-    } else if (ctx && ctx.chartGroup && (!currentData.length || !chartScales)) {
-      ctx.chartGroup.selectAll('*').remove();
+    if (chartContext && data.length > 0 && scales) {
+      drawChart(chartContext);
+    } else if (chartContext?.chartGroup && (!data.length || !scales)) {
+      chartContext.chartGroup.selectAll('*').remove();
     }
   });
 
