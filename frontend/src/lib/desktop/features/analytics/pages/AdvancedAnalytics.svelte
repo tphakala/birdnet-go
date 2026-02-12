@@ -410,7 +410,13 @@
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = (await response.json()) as DiversityResponse;
+      const data: unknown = await response.json();
+
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('Invalid diversity response: expected an object');
+      }
+
+      const result = data as DiversityResponse;
 
       diversityData = (result.data ?? [])
         .map(item => {

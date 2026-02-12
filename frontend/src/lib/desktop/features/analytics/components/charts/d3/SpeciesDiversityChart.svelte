@@ -14,8 +14,6 @@
   import { type ChartTheme } from './utils/theme';
   import { t } from '$lib/i18n';
 
-  // Module-level counter for unique clip-path IDs
-  let clipIdCounter = 0;
 
   interface DiversityDatum {
     date: Date;
@@ -156,7 +154,7 @@
     );
 
     // Create clip path to constrain content within chart area
-    const clipId = `diversity-clip-${clipIdCounter++}`;
+    const clipId = `diversity-clip-${Math.random().toString(36).slice(2, 8)}`;
     chartGroup
       .append('defs')
       .append('clipPath')
