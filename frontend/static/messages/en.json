@@ -1079,13 +1079,20 @@
           "description": "Shows detection trends over time for selected species",
           "noData": "No trend data available",
           "noDataHint": "Select species and a date range to view trends"
+        },
+        "diversity": {
+          "title": "Species Diversity Over Time",
+          "description": "Shows the number of unique species detected per day across all detections",
+          "noData": "No diversity data available",
+          "noDataHint": "Select a date range to view species diversity trends"
         }
       },
       "aria": {
         "startDate": "Start date",
         "endDate": "End date",
         "loadingAnalytics": "Loading analytics data",
-        "loadingTrends": "Loading trend data"
+        "loadingTrends": "Loading trend data",
+        "loadingDiversity": "Loading diversity data"
       }
     }
   },

@@ -5,6 +5,7 @@
 
   import TimeOfDaySpeciesChart from '../components/charts/d3/TimeOfDaySpeciesChart.svelte';
   import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
+  import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart.svelte';
   import SpeciesSelector from '$lib/components/ui/SpeciesSelector.svelte';
   import type { Species, SpeciesId } from '$lib/types/species';
   import { createSpeciesId } from '$lib/types/species';
@@ -64,6 +65,23 @@
     total: number;
   }
 
+  interface DiversityDataItem {
+    date: string;
+    unique_species: number;
+  }
+
+  interface DiversityResponse {
+    start_date: string;
+    end_date: string;
+    data: DiversityDataItem[];
+    max_diversity: number;
+  }
+
+  interface DiversityDatum {
+    date: Date;
+    uniqueSpecies: number;
+  }
+
   // Component state
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -82,6 +100,7 @@
   let speciesController: AbortController | null = null;
   let timeOfDayController: AbortController | null = null;
   let dailyTrendController: AbortController | null = null;
+  let diversityController: AbortController | null = null;
 
   // Chart options
   let showRelativeTrends = $state(false);
@@ -91,6 +110,7 @@
   // Chart data
   let timeOfDayData = $state<TimeOfDaySpeciesData[]>([]);
   let dailyTrendData = $state<DailyTrendSpeciesData[]>([]);
+  let diversityData = $state<DiversityDatum[]>([]);
 
   // Computed date range
   const computedDateRange = $derived(
@@ -369,19 +389,57 @@
     }
   }
 
+  // Fetch species diversity data (independent of species selection)
+  async function fetchDiversityData() {
+    try {
+      if (diversityController) {
+        diversityController.abort();
+      }
+      diversityController = new AbortController();
+
+      const [start, end] = computedDateRange;
+      const params = new URLSearchParams({
+        start_date: formatDateForAPI(start),
+        end_date: formatDateForAPI(end),
+      });
+
+      const response = await fetch(buildAppUrl(`/api/v2/analytics/species/diversity?${params}`), {
+        signal: diversityController.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = (await response.json()) as DiversityResponse;
+
+      diversityData = (result.data ?? [])
+        .map(item => {
+          const date = parseLocalDateString(item.date);
+          if (!date || isNaN(date.getTime())) return null;
+          return { date, uniqueSpecies: item.unique_species };
+        })
+        .filter((item): item is DiversityDatum => item !== null);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      logger.error('Error fetching diversity data:', err);
+    }
+  }
+
   // Fetch all data
   async function fetchAllData() {
     isLoading = true;
     error = null;
 
     try {
-      // First fetch species, then fetch chart data only if species are selected
-      await fetchAvailableSpecies();
+      // Fetch species list and diversity data in parallel (diversity is species-independent)
+      await Promise.all([fetchAvailableSpecies(), fetchDiversityData()]);
 
       if (selectedSpecies.length > 0) {
         await Promise.all([fetchTimeOfDayData(), fetchDailyTrendData()]);
       } else {
-        // Clear chart data if no species selected
+        // Clear species-dependent chart data if no species selected
         timeOfDayData = [];
         dailyTrendData = [];
       }
@@ -594,7 +652,7 @@
   </div>
 
   <!-- Charts Section -->
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 gap-6">
     <!-- Time of Day Chart -->
     <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
@@ -604,7 +662,7 @@
         </p>
 
         <div class="h-96 relative">
-          <TimeOfDaySpeciesChart data={timeOfDayData} {selectedSpecies} width={600} height={384} />
+          <TimeOfDaySpeciesChart data={timeOfDayData} {selectedSpecies} width={1200} height={384} />
 
           {#if isLoading}
             <div
@@ -649,7 +707,7 @@
             {enableZoom}
             {enableBrush}
             onDateRangeChange={handleDateRangeChange}
-            width={600}
+            width={1200}
             height={384}
           />
 
@@ -676,6 +734,48 @@
             </div>
           {/if}
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Species Diversity Chart (Full Width) -->
+  <div class="card bg-base-100 shadow-xs">
+    <div class="card-body">
+      <h2 class="card-title">{t('analytics.advanced.charts.diversity.title')}</h2>
+      <p class="text-sm text-base-content opacity-70 mb-4">
+        {t('analytics.advanced.charts.diversity.description')}
+      </p>
+
+      <div class="h-96 relative">
+        <SpeciesDiversityChart
+          data={diversityData}
+          dateRange={computedDateRange}
+          width={1200}
+          height={384}
+        />
+
+        {#if isLoading}
+          <div
+            class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
+            role="status"
+            aria-busy="true"
+            aria-label={t('analytics.advanced.aria.loadingDiversity')}
+          >
+            <span class="loading loading-spinner loading-lg text-primary"></span>
+            <span class="sr-only">{t('analytics.advanced.aria.loadingDiversity')}</span>
+          </div>
+        {:else if diversityData.length === 0}
+          <div
+            class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
+            role="status"
+            aria-label={t('analytics.advanced.charts.diversity.noData')}
+          >
+            <div class="text-center">
+              <p class="text-lg mb-2">{t('analytics.advanced.charts.diversity.noData')}</p>
+              <p class="text-sm">{t('analytics.advanced.charts.diversity.noDataHint')}</p>
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
   </div>

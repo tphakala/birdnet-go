@@ -198,6 +198,7 @@
       .enter()
       .append('path')
       .attr('class', 'species-line')
+      .attr('data-species', d => d.species)
       .attr('d', d => line(d.data))
       .style('fill', 'none')
       .style('stroke', d => d.color ?? '#999999')
@@ -229,6 +230,7 @@
         .enter()
         .append('circle')
         .attr('class', `points-${species.species.replace(/\s+/g, '-')}`)
+        .attr('data-species', species.species)
         .attr('cx', d => xScale(d.hour))
         .attr('cy', d => yScale(d.count))
         .attr('r', 0)
@@ -269,14 +271,10 @@
     addCrosshair(chartGroup, {
       width: innerWidth,
       height: innerHeight,
-      onMove: (x, y) => {
+      onMove: (x, _y, event) => {
         const hour = Math.round(xScale.invert(x));
-        /* const _count = Math.round(yScale.invert(y)); */
 
         if (hour >= 0 && hour <= 23) {
-          // Track hovered hour for potential future use
-          // hoveredHour = hour;
-
           // Show crosshair tooltip with all species data at this hour
           const hourData = visibleData
             .map(species => {
@@ -299,8 +297,8 @@
                 value: item.count.toString(),
                 color: item.color,
               })),
-              x: x + 60, // Offset from chart area
-              y: y + 60,
+              x: event.clientX,
+              y: event.clientY,
             };
 
             tooltip?.show(tooltipData);
@@ -326,10 +324,13 @@
         position: { x: innerWidth - 150, y: 20 },
         itemHeight: 20,
         onToggle: (id, visible) => {
-          const species = visibleData.find(s => s.species === id);
-          if (species) {
-            onSpeciesToggle?.(species.species, visible);
-          }
+          // Toggle visibility of the corresponding line and points
+          chartGroup
+            .selectAll(`[data-species="${id}"]`)
+            .transition()
+            .duration(300)
+            .style('opacity', visible ? 0.8 : 0)
+            .style('pointer-events', visible ? 'all' : 'none');
         },
       });
     }

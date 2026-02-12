@@ -1078,13 +1078,20 @@
           "description": "Muestra las tendencias de detección a lo largo del tiempo para especies seleccionadas",
           "noData": "No hay datos de tendencias disponibles",
           "noDataHint": "Selecciona especies y un rango de fechas para ver tendencias"
+        },
+        "diversity": {
+          "title": "Diversidad de especies a lo largo del tiempo",
+          "description": "Muestra el número de especies únicas detectadas por día en todas las detecciones",
+          "noData": "No hay datos de diversidad disponibles",
+          "noDataHint": "Selecciona un rango de fechas para ver tendencias de diversidad de especies"
         }
       },
       "aria": {
         "startDate": "Fecha de inicio",
         "endDate": "Fecha de fin",
         "loadingAnalytics": "Cargando datos de análisis",
-        "loadingTrends": "Cargando datos de tendencias"
+        "loadingTrends": "Cargando datos de tendencias",
+        "loadingDiversity": "Cargando datos de diversidad"
       }
     }
   },

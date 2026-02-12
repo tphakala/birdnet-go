@@ -431,6 +431,17 @@ Performance Optimizations:
                   >
                     {t('analytics.species.title')}
                   </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.analyticsAdvanced)}
+                    class={cn(
+                      'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.analyticsAdvanced
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('analytics.advanced.title')}
+                  </button>
                 </div>
               </div>
             {/if}
@@ -480,6 +491,17 @@ Performance Optimizations:
                   )}
                 >
                   {t('analytics.species.title')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.analyticsAdvanced)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.analyticsAdvanced
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('analytics.advanced.title')}
                 </button>
               </div>
             {/if}

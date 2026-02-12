@@ -1078,13 +1078,20 @@
           "description": "Zeigt Erkennungstrends im Laufe der Zeit für ausgewählte Arten",
           "noData": "Keine Trenddaten verfügbar",
           "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Trends zu sehen"
+        },
+        "diversity": {
+          "title": "Artenvielfalt im Zeitverlauf",
+          "description": "Zeigt die Anzahl einzigartiger Arten, die pro Tag erkannt wurden",
+          "noData": "Keine Diversitätsdaten verfügbar",
+          "noDataHint": "Wählen Sie einen Datumsbereich, um Artenvielfalt-Trends zu sehen"
         }
       },
       "aria": {
         "startDate": "Startdatum",
         "endDate": "Enddatum",
         "loadingAnalytics": "Analysen werden geladen",
-        "loadingTrends": "Trenddaten werden geladen"
+        "loadingTrends": "Trenddaten werden geladen",
+        "loadingDiversity": "Diversitätsdaten werden geladen"
       }
     }
   },

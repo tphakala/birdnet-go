@@ -739,6 +739,9 @@ func (s *testLegacyInterface) GetNewSpeciesDetections(_ context.Context, _, _ st
 func (s *testLegacyInterface) GetSpeciesFirstDetectionInPeriod(_ context.Context, _, _ string, _, _ int) ([]datastore.NewSpeciesData, error) {
 	return nil, nil
 }
+func (s *testLegacyInterface) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+	return nil, nil
+}
 func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
 }

@@ -298,6 +298,7 @@
         .append('path')
         .datum(species.data)
         .attr('class', `area-${species.species.replace(/\s+/g, '-')}`)
+        .attr('data-species', species.species)
         .attr('d', areaGenerator)
         .style('fill', species.color ?? '#999999')
         .style('opacity', 0.1)
@@ -308,6 +309,7 @@
         .append('path')
         .datum(species.data)
         .attr('class', `line-${species.species.replace(/\s+/g, '-')}`)
+        .attr('data-species', species.species)
         .attr('d', lineGenerator)
         .style('fill', 'none')
         .style('stroke', species.color ?? '#999999')
@@ -317,7 +319,8 @@
       // Add data points
       const pointsGroup = linesGroup
         .append('g')
-        .attr('class', `points-${species.species.replace(/\s+/g, '-')}`);
+        .attr('class', `points-${species.species.replace(/\s+/g, '-')}`)
+        .attr('data-species', species.species);
 
       pointsGroup
         .selectAll('circle')
@@ -434,11 +437,35 @@
         position: { x: innerWidth - 150, y: 20 },
         itemHeight: 20,
         onToggle: (id, visible) => {
-          const species = processedForLegend.find(
-            (s: SpeciesTrendData) => (s.id || s.species) === id
-          );
-          if (species) {
-            onSpeciesToggle?.(species.species, visible);
+          // Toggle visibility of the corresponding line, area, and points
+          // Use chartArea (clipped group) since that's where species elements live
+          if (visible) {
+            // Restore correct opacity per element type
+            chartArea
+              .selectAll(`path[data-species="${id}"][class^="area-"]`)
+              .transition()
+              .duration(300)
+              .style('opacity', 0.1)
+              .style('pointer-events', 'all');
+            chartArea
+              .selectAll(`path[data-species="${id}"][class^="line-"]`)
+              .transition()
+              .duration(300)
+              .style('opacity', 0.8)
+              .style('pointer-events', 'all');
+            chartArea
+              .selectAll(`g[data-species="${id}"] circle`)
+              .transition()
+              .duration(300)
+              .style('opacity', 0.7)
+              .style('pointer-events', 'all');
+          } else {
+            chartArea
+              .selectAll(`[data-species="${id}"]`)
+              .transition()
+              .duration(300)
+              .style('opacity', 0)
+              .style('pointer-events', 'none');
           }
         },
       });

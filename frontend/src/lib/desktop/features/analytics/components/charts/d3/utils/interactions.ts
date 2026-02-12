@@ -32,8 +32,10 @@ export interface BrushConfig {
 export class ChartTooltip {
   private readonly tooltip: d3.Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly config: TooltipConfig;
+  private isVisible = false;
+  private lastContent = '';
 
-  constructor(container: HTMLElement, config: Partial<TooltipConfig> = {}) {
+  constructor(_container: HTMLElement, config: Partial<TooltipConfig> = {}) {
     this.config = {
       offset: { x: 10, y: -10 },
       className: 'chart-tooltip',
@@ -41,12 +43,12 @@ export class ChartTooltip {
       ...config,
     };
 
-    // Create tooltip element
+    // Append tooltip to document.body so it is never clipped by overflow:hidden containers
     this.tooltip = d3
-      .select<HTMLElement, unknown>(container)
+      .select<HTMLElement, unknown>(document.body)
       .append('div')
       .attr('class', this.config.className)
-      .style('position', 'absolute')
+      .style('position', 'fixed')
       .style('visibility', 'hidden')
       .style('background-color', 'rgba(0, 0, 0, 0.8)')
       .style('color', 'white')
@@ -62,23 +64,62 @@ export class ChartTooltip {
 
   show(data: TooltipData): void {
     const content = this.formatTooltipContent(data);
+    const contentChanged = content !== this.lastContent;
 
+    // Update content only when it changed
+    if (contentChanged) {
+      this.lastContent = content;
+      this.tooltip.html(content);
+    }
+
+    // Calculate position with viewport boundary detection
+    let left = data.x + this.config.offset.x;
+    let top = data.y + this.config.offset.y;
+
+    const node = this.tooltip.node();
+    if (node) {
+      const rect = node.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      // Prevent overflow on right edge
+      if (left + rect.width > viewportWidth) {
+        left = data.x - rect.width - this.config.offset.x;
+      }
+      // Prevent overflow on bottom edge
+      if (top + rect.height > viewportHeight) {
+        top = data.y - rect.height - this.config.offset.x;
+      }
+      // Prevent overflow on left/top edges
+      if (left < 0) left = 0;
+      if (top < 0) top = 0;
+    }
+
+    // If already visible, just update position without re-animating
+    if (this.isVisible) {
+      this.tooltip.style('left', `${left}px`).style('top', `${top}px`);
+      return;
+    }
+
+    // First show: fade in
+    this.isVisible = true;
     this.tooltip
-      .html(content)
-      .style('left', `${data.x + this.config.offset.x}px`)
-      .style('top', `${data.y + this.config.offset.y}px`)
+      .style('left', `${left}px`)
+      .style('top', `${top}px`)
       .style('visibility', 'visible')
-      .style('opacity', 0)
+      .style('opacity', '0')
       .transition()
       .duration(200)
-      .style('opacity', 1);
+      .style('opacity', '1');
   }
 
   hide(): void {
+    this.isVisible = false;
+    this.lastContent = '';
     this.tooltip
       .transition()
       .duration(200)
-      .style('opacity', 0)
+      .style('opacity', '0')
       .on('end', () => {
         this.tooltip.style('visibility', 'hidden');
       });
@@ -168,7 +209,7 @@ export function addCrosshair(
   config: {
     width: number;
     height: number;
-    onMove?: (x: number, y: number) => void;
+    onMove?: (x: number, y: number, event: MouseEvent) => void;
     onEnter?: () => void;
     onLeave?: () => void;
   }
@@ -212,13 +253,13 @@ export function addCrosshair(
       crosshair.style('display', 'none');
       config.onLeave?.();
     })
-    .on('mousemove', function (event) {
+    .on('mousemove', function (event: MouseEvent) {
       const [x, y] = d3.pointer(event, this);
 
       verticalLine.attr('x1', x).attr('x2', x);
       horizontalLine.attr('y1', y).attr('y2', y);
 
-      config.onMove?.(x, y);
+      config.onMove?.(x, y, event);
     });
 }
 
@@ -266,10 +307,10 @@ export function addHoverEffects<T>(
 export function createLegend(
   container: d3.Selection<SVGGElement, unknown, null, undefined>,
   config: {
-    items: { label: string; color: string; visible: boolean }[];
+    items: { id?: string; label: string; color: string; visible: boolean }[];
     position: { x: number; y: number };
     itemHeight: number;
-    onToggle?: (label: string, visible: boolean) => void;
+    onToggle?: (id: string, visible: boolean) => void;
   }
 ): void {
   const legend = container
@@ -298,7 +339,7 @@ export function createLegend(
         .select('text')
         .style('opacity', newVisible ? 1 : 0.5);
 
-      config.onToggle?.(d.label, newVisible);
+      config.onToggle?.(d.id ?? d.label, newVisible);
     });
 
   // Color squares

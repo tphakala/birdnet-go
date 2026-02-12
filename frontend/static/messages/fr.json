@@ -1078,13 +1078,20 @@
           "description": "Affiche les tendances de détection au fil du temps pour les espèces sélectionnées",
           "noData": "Aucune donnée de tendance disponible",
           "noDataHint": "Sélectionnez les espèces et une plage de dates pour afficher les tendances"
+        },
+        "diversity": {
+          "title": "Diversité des espèces au fil du temps",
+          "description": "Affiche le nombre d'espèces uniques détectées par jour sur l'ensemble des détections",
+          "noData": "Aucune donnée de diversité disponible",
+          "noDataHint": "Sélectionnez une plage de dates pour afficher les tendances de diversité des espèces"
         }
       },
       "aria": {
         "startDate": "Date de début",
         "endDate": "Date de fin",
         "loadingAnalytics": "Chargement des données analytiques",
-        "loadingTrends": "Chargement des données de tendance"
+        "loadingTrends": "Chargement des données de tendance",
+        "loadingDiversity": "Chargement des données de diversité"
       }
     }
   },

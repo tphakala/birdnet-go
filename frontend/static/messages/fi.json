@@ -1074,13 +1074,20 @@
           "description": "Näyttää havaintotrendit ajan kuluessa valituille lajeille",
           "noData": "Ei trenditietoja saatavilla",
           "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi trendit"
+        },
+        "diversity": {
+          "title": "Lajien monimuotoisuus ajan kuluessa",
+          "description": "Näyttää päivittäin havaittujen eri lajien määrän kaikista havainnoista",
+          "noData": "Ei monimuotoisuustietoja saatavilla",
+          "noDataHint": "Valitse päivämääräväli nähdäksesi lajien monimuotoisuustrendit"
         }
       },
       "aria": {
         "startDate": "Alkupäivämäärä",
         "endDate": "Loppupäivämäärä",
         "loadingAnalytics": "Ladataan analytiikkatietoja",
-        "loadingTrends": "Ladataan trenditietoja"
+        "loadingTrends": "Ladataan trenditietoja",
+        "loadingDiversity": "Ladataan monimuotoisuustietoja"
       },
       "speciesSelectionHint": "Hae tai klikkaa alla olevia merkkejä",
       "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",

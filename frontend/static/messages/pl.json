@@ -1078,13 +1078,20 @@
           "description": "Pokazuje trendy wykryć w czasie dla wybranych gatunków",
           "noData": "Brak dostępnych danych o trendach",
           "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić trendy"
+        },
+        "diversity": {
+          "title": "Różnorodność gatunków w czasie",
+          "description": "Pokazuje liczbę unikalnych gatunków wykrytych dziennie ze wszystkich wykryć",
+          "noData": "Brak dostępnych danych o różnorodności",
+          "noDataHint": "Wybierz zakres dat, aby wyświetlić trendy różnorodności gatunków"
         }
       },
       "aria": {
         "startDate": "Data początkowa",
         "endDate": "Data końcowa",
         "loadingAnalytics": "Ładowanie danych analitycznych",
-        "loadingTrends": "Ładowanie danych trendów"
+        "loadingTrends": "Ładowanie danych trendów",
+        "loadingDiversity": "Ładowanie danych o różnorodności"
       }
     }
   },

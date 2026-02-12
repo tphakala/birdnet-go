@@ -116,6 +116,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
 	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
 	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint
+	speciesGroup.GET("/diversity", c.GetSpeciesDiversity)          // Species diversity over time
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
@@ -876,6 +877,99 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 		logger.String("species", speciesParam),
 		logger.Int("data_points", len(response.Data)),
 		logger.Int("total", totalCount),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// GetSpeciesDiversity handles GET /api/v2/analytics/species/diversity
+// Returns the number of unique species detected per day over a date range
+func (c *Controller) GetSpeciesDiversity(ctx echo.Context) error {
+	const operation = "species diversity"
+
+	// Validate required parameter
+	if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
+		return err
+	}
+
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Validate date formats strictly using regex
+	if err := c.validateDateFormatStrictWithResponse(ctx, startDate, "start_date", operation); err != nil {
+		return err
+	}
+	if err := c.validateDateFormatStrictWithResponse(ctx, endDate, "end_date", operation); err != nil {
+		return err
+	}
+
+	// Validate date values and chronological order
+	if err := c.validateDateRangeWithResponse(ctx, startDate, endDate, operation); err != nil {
+		return err
+	}
+
+	// Default end date if not provided
+	if endDate == "" {
+		startTime, _ := time.Parse(time.DateOnly, startDate) // Regex ensures this parse succeeds
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format(time.DateOnly)
+	}
+
+	c.logInfoIfEnabled("Retrieving species diversity data",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.String("ip", ctx.RealIP()),
+		logger.String("path", ctx.Request().URL.Path),
+	)
+
+	diversityData, err := c.DS.GetSpeciesDiversityData(ctx.Request().Context(), startDate, endDate)
+	if err != nil {
+		c.logErrorIfEnabled("Failed to get species diversity data",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.Error(err),
+			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+		return c.HandleError(ctx, err, "Failed to get species diversity data", http.StatusInternalServerError)
+	}
+
+	// Build the response
+	type DiversityResponse struct {
+		Date          string `json:"date"`
+		UniqueSpecies int    `json:"unique_species"`
+	}
+
+	response := struct {
+		StartDate    string              `json:"start_date"`
+		EndDate      string              `json:"end_date"`
+		Data         []DiversityResponse `json:"data"`
+		MaxDiversity int                 `json:"max_diversity"`
+	}{
+		StartDate: startDate,
+		EndDate:   endDate,
+		Data:      make([]DiversityResponse, 0, len(diversityData)),
+	}
+
+	maxDiversity := 0
+	for i := range diversityData {
+		d := diversityData[i]
+		response.Data = append(response.Data, DiversityResponse{
+			Date:          d.Date,
+			UniqueSpecies: d.Count,
+		})
+		if d.Count > maxDiversity {
+			maxDiversity = d.Count
+		}
+	}
+	response.MaxDiversity = maxDiversity
+
+	c.logInfoIfEnabled("Species diversity data retrieved",
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
+		logger.Int("data_points", len(response.Data)),
+		logger.Int("max_diversity", maxDiversity),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
 	)

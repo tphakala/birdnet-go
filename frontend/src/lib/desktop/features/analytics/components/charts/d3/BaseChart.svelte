@@ -1,12 +1,12 @@
 <!-- Base D3 Chart Component -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { select } from 'd3-selection';
   import type { Selection } from 'd3-selection';
+  import { select } from 'd3-selection';
   import type { Snippet } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
 
-  import { ThemeStore, type ChartTheme } from './utils/theme';
   import { createResponsiveScales } from './utils/scales';
+  import { ThemeStore, type ChartTheme } from './utils/theme';
 
   interface Props {
     width?: number;
@@ -33,7 +33,7 @@
   let {
     width = 800,
     height = 400,
-    margin = { top: 20, right: 20, bottom: 40, left: 60 },
+    margin = { top: 20, right: 20, bottom: 65, left: 60 },
     className = '',
     id,
     ariaLabel,
@@ -149,10 +149,11 @@
     }
   });
 
-  // Apply theme changes to SVG
+  // Apply theme changes to SVG — use transparent background so the chart
+  // inherits the card/page background (bg-base-100) like the Chart.js graphs
   $effect(() => {
     if (svg && currentTheme) {
-      svg.style('background-color', currentTheme.background).style('color', currentTheme.text);
+      svg.style('background-color', 'transparent').style('color', currentTheme.text);
     }
   });
 

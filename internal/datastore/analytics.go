@@ -331,6 +331,40 @@ func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 	return analytics, nil
 }
 
+// GetSpeciesDiversityData retrieves the count of unique species detected per day
+func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error) {
+	var diversity []DailyAnalyticsData
+
+	// Base query - count distinct species per day
+	query := ds.DB.WithContext(ctx).Table("notes").
+		Select("date, COUNT(DISTINCT scientific_name) as count").
+		Group("date").
+		Order("date")
+
+	// Apply date range filter
+	switch {
+	case startDate != "" && endDate != "":
+		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
+	case startDate != "":
+		query = query.Where("date >= ?", startDate)
+	case endDate != "":
+		query = query.Where("date <= ?", endDate)
+	}
+
+	// Execute query
+	if err := query.Scan(&diversity).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_diversity_data").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	return diversity, nil
+}
+
 // GetDetectionTrends calculates the trend in detections over time
 func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]DailyAnalyticsData, error) {
 	var trends []DailyAnalyticsData

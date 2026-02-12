@@ -1078,13 +1078,20 @@
           "description": "Toont detectietendensen in de tijd voor geselecteerde soorten",
           "noData": "Geen trendgegevens beschikbaar",
           "noDataHint": "Selecteer soorten en een datumbereik om tendensen weer te geven"
+        },
+        "diversity": {
+          "title": "Soortendiversiteit in de tijd",
+          "description": "Toont het aantal unieke soorten dat per dag is gedetecteerd over alle detecties",
+          "noData": "Geen diversiteitsgegevens beschikbaar",
+          "noDataHint": "Selecteer een datumbereik om diversiteitstrends weer te geven"
         }
       },
       "aria": {
         "startDate": "Startdatum",
         "endDate": "Einddatum",
         "loadingAnalytics": "Analysegegevens laden",
-        "loadingTrends": "Trendgegevens laden"
+        "loadingTrends": "Trendgegevens laden",
+        "loadingDiversity": "Diversiteitsgegevens laden"
       }
     }
   },

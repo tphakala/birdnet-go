@@ -177,6 +177,61 @@ func (_c *MockInterface_CountHourlyDetections_Call) RunAndReturn(run func(string
 	return _c
 }
 
+// CountResults provides a mock function with no fields
+func (_m *MockInterface) CountResults() (int64, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountResults")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (int64, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_CountResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountResults'
+type MockInterface_CountResults_Call struct {
+	*mock.Call
+}
+
+// CountResults is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) CountResults() *MockInterface_CountResults_Call {
+	return &MockInterface_CountResults_Call{Call: _e.mock.On("CountResults")}
+}
+
+func (_c *MockInterface_CountResults_Call) Run(run func()) *MockInterface_CountResults_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_CountResults_Call) Return(_a0 int64, _a1 error) *MockInterface_CountResults_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_CountResults_Call) RunAndReturn(run func() (int64, error)) *MockInterface_CountResults_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CountSearchResults provides a mock function with given fields: query
 func (_m *MockInterface) CountSearchResults(query string) (int64, error) {
 	ret := _m.Called(query)
@@ -288,58 +343,6 @@ func (_c *MockInterface_CountSpeciesDetections_Call) Return(_a0 int64, _a1 error
 }
 
 func (_c *MockInterface_CountSpeciesDetections_Call) RunAndReturn(run func(string, string, string, int) (int64, error)) *MockInterface_CountSpeciesDetections_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// CountResults provides a mock function with no fields
-func (_m *MockInterface) CountResults() (int64, error) {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for CountResults")
-	}
-
-	var r0 int64
-	if rf, ok := ret.Get(0).(func() int64); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int64)
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockInterface_CountResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountResults'
-type MockInterface_CountResults_Call struct {
-	*mock.Call
-}
-
-// CountResults is a helper method to define mock.On call
-func (_e *MockInterface_Expecter) CountResults() *MockInterface_CountResults_Call {
-	return &MockInterface_CountResults_Call{Call: _e.mock.On("CountResults")}
-}
-
-func (_c *MockInterface_CountResults_Call) Run(run func()) *MockInterface_CountResults_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockInterface_CountResults_Call) Return(_a0 int64, _a1 error) *MockInterface_CountResults_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockInterface_CountResults_Call) RunAndReturn(run func() (int64, error)) *MockInterface_CountResults_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3098,6 +3101,66 @@ func (_c *MockInterface_GetReviewsBatch_Call) Return(_a0 []datastore.NoteReview,
 }
 
 func (_c *MockInterface_GetReviewsBatch_Call) RunAndReturn(run func(uint, int) ([]datastore.NoteReview, error)) *MockInterface_GetReviewsBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetSpeciesDiversityData provides a mock function with given fields: ctx, startDate, endDate
+func (_m *MockInterface) GetSpeciesDiversityData(ctx context.Context, startDate string, endDate string) ([]datastore.DailyAnalyticsData, error) {
+	ret := _m.Called(ctx, startDate, endDate)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSpeciesDiversityData")
+	}
+
+	var r0 []datastore.DailyAnalyticsData
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]datastore.DailyAnalyticsData, error)); ok {
+		return rf(ctx, startDate, endDate)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []datastore.DailyAnalyticsData); ok {
+		r0 = rf(ctx, startDate, endDate)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.DailyAnalyticsData)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, startDate, endDate)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetSpeciesDiversityData_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSpeciesDiversityData'
+type MockInterface_GetSpeciesDiversityData_Call struct {
+	*mock.Call
+}
+
+// GetSpeciesDiversityData is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startDate string
+//   - endDate string
+func (_e *MockInterface_Expecter) GetSpeciesDiversityData(ctx interface{}, startDate interface{}, endDate interface{}) *MockInterface_GetSpeciesDiversityData_Call {
+	return &MockInterface_GetSpeciesDiversityData_Call{Call: _e.mock.On("GetSpeciesDiversityData", ctx, startDate, endDate)}
+}
+
+func (_c *MockInterface_GetSpeciesDiversityData_Call) Run(run func(ctx context.Context, startDate string, endDate string)) *MockInterface_GetSpeciesDiversityData_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesDiversityData_Call) Return(_a0 []datastore.DailyAnalyticsData, _a1 error) *MockInterface_GetSpeciesDiversityData_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetSpeciesDiversityData_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetSpeciesDiversityData_Call {
 	_c.Call.Return(run)
 	return _c
 }
