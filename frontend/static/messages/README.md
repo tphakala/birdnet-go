@@ -11,8 +11,10 @@ Translation files are organized by language code:
 - `es.json` - Spanish
 - `fi.json` - Finnish
 - `fr.json` - French
-- `ja.json` - Japanese
+- `nl.json` - Dutch
+- `pl.json` - Polish
 - `pt.json` - Portuguese
+- `sk.json` - Slovak
 
 ## Translation Key Organization
 

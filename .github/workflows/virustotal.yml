@@ -1,0 +1,28 @@
+name: VirusTotal Scan
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    name: Scan Release Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get latest release ID
+        if: github.event_name == 'workflow_dispatch'
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/latest --jq '.id')
+          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
+      - uses: cssnr/virustotal-action@v1
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          release_id: ${{ steps.release.outputs.id || '' }}

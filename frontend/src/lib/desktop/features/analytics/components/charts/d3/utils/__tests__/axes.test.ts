@@ -183,7 +183,8 @@ describe('addAxisLabel', () => {
     // Check styles
     expect(label.style.fill).toBe('#333');
     expect(label.style.fontSize).toBe('12px');
-    expect(label.style.fontFamily).toBe('Arial');
+    // jsdom 27.4.0+ may quote font-family values, strip quotes for comparison
+    expect(label.style.fontFamily.replace(/^["']|["']$/g, '')).toBe('Arial');
     expect(label.style.fontWeight).toBe('bold');
     expect(label.style.pointerEvents).toBe('none');
   });
@@ -272,7 +273,8 @@ describe('addAxisLabel', () => {
 
     expect(label.style.fill).toBe('#ff0000');
     expect(label.style.fontSize).toBe('16px');
-    expect(label.style.fontFamily).toBe('Times New Roman');
+    // jsdom 27.4.0+ quotes font-family values with spaces, strip quotes for comparison
+    expect(label.style.fontFamily.replace(/^["']|["']$/g, '')).toBe('Times New Roman');
   });
 
   it('should be non-interactive and hidden from screen readers', () => {

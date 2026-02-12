@@ -94,7 +94,7 @@ Source: Apache-2.0
 
 ### github.com/go-chi/chi/v5
 
-License: https://github.com/go-chi/chi/blob/v5.2.3/LICENSE
+License: https://github.com/go-chi/chi/blob/v5.2.5/LICENSE
 Source: MIT
 
 ### github.com/go-logr/logr
@@ -119,7 +119,7 @@ Source: MIT
 
 ### github.com/golang-jwt/jwt/v5
 
-License: https://github.com/golang-jwt/jwt/blob/v5.3.0/LICENSE
+License: https://github.com/golang-jwt/jwt/blob/v5.3.1/LICENSE
 Source: MIT
 
 ### github.com/google/s2a-go
@@ -214,7 +214,7 @@ Source: MIT
 
 ### github.com/markbates/going/defaults
 
-License: https://github.com/markbates/going/blob/v1.0.0/LICENSE.txt
+License: https://github.com/markbates/going/blob/v1.0.3/LICENSE.txt
 Source: MIT
 
 ### github.com/markbates/goth
@@ -239,7 +239,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.33/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.34/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -289,7 +289,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.67.4/LICENSE
+License: https://github.com/prometheus/common/blob/v0.67.5/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs

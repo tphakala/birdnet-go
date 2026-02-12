@@ -1,0 +1,3028 @@
+{
+  "common": {
+    "loading": "Načítava sa...",
+    "error": "Chyba",
+    "unknown": "Neznáme",
+    "retry": "Skúsiť znova",
+    "retrying": "Opakovaný pokus",
+    "save": "Uložiť",
+    "cancel": "Zrušiť",
+    "confirm": "Potvrdiť",
+    "reset": "Resetovať",
+    "refresh": "Obnoviť",
+    "delete": "Odstrániť",
+    "edit": "Upraviť",
+    "search": "Hľadať",
+    "filter": "Filter",
+    "sort": "Zoradiť",
+    "settings": "Nastavenia",
+    "close": "Zavrieť",
+    "back": "Späť",
+    "next": "Ďalej",
+    "previous": "Späť",
+    "yes": "Áno",
+    "no": "Nie",
+    "ok": "OK",
+    "apply": "Použiť",
+    "clear": "Vymazať",
+    "done": "Hotovo",
+    "goToDashboard": "Prejsť na prehľad",
+    "reportIssue": "Nahlásiť problém",
+    "loginToViewDetails": "Prihláste sa pre podrobnosti",
+    "pageNotFound": "Stránka sa nenašla",
+    "internalServerError": "Interná chyba servera",
+    "actions": {
+      "download": "Stiahnuť",
+      "review": "Skontrolovať",
+      "play": "Prehrať",
+      "view": "Zobraziť"
+    },
+    "buttons": {
+      "save": "Uložiť zmeny",
+      "reset": "Resetovať",
+      "delete": "Odstrániť",
+      "cancel": "Zrušiť",
+      "apply": "Použiť",
+      "confirm": "Potvrdiť",
+      "edit": "Upraviť",
+      "close": "Zavrieť",
+      "back": "Späť",
+      "next": "Ďalej",
+      "previous": "Späť",
+      "yes": "Áno",
+      "no": "Nie",
+      "ok": "OK",
+      "clear": "Vymazať",
+      "edit-config": "Upraviť konfiguráciu",
+      "add-action": "Pridať akciu",
+      "learnMore": "Dozvedieť sa viac"
+    },
+    "ui": {
+      "loading": "Načítava sa...",
+      "noData": "Žiadne dáta nie sú k dispozícii",
+      "empty": "Nenašli sa žiadne položky",
+      "error": "Vyskytla sa chyba",
+      "retry": "Skúsiť znova",
+      "dismiss": "Zrušiť",
+      "showMore": "Zobraziť viac",
+      "showLess": "Zobraziť menej",
+      "selectAll": "Vybrať všetko",
+      "selectNone": "Zrušiť výber",
+      "required": "Povinné",
+      "optional": "Voliteľné",
+      "noAudioSources": "Žiadne zdroje zvuku nie sú k dispozícii",
+      "noNotifications": "Žiadne upozornenia",
+      "silent": "(ticho)",
+      "loadingSettings": "Načítavajú sa nastavenia...",
+      "settingsNotFound": "Nastavenia sa nenašli",
+      "sectionNotFound": "Požadovaná sekcia nastavení \"{section}\" sa nenašla.",
+      "loadingMap": "Načítava sa mapa...",
+      "mapZoomHelp": "Držte Ctrl (alebo Cmd na Macu) + posúvajte kolieskom pre priblíženie. Kliknutím nastavíte polohu.",
+      "mapSetLocationHelp": "Kliknite na mapu alebo potiahnite značku pre nastavenie polohy",
+      "imageNotAvailable": "Obrázok nie je k dispozícii",
+      "search": "Hľadať..."
+    },
+    "status": {
+      "success": "Úspech",
+      "error": "Chyba",
+      "warning": "Varovanie",
+      "info": "Informácia",
+      "pending": "Čaká sa",
+      "processing": "Spracováva sa",
+      "completed": "Dokončené",
+      "failed": "Zlyhalo"
+    },
+    "validation": {
+      "required": "Toto pole je povinné",
+      "invalid": "Neplatná hodnota",
+      "minLength": "Musí mať aspoň {min} znakov",
+      "maxLength": "Môže mať maximálne {max} znakov",
+      "minValue": "Musí byť aspoň {min}",
+      "maxValue": "Môže byť maximálne {max}",
+      "email": "Neplatná e-mailová adresa",
+      "url": "Neplatná URL adresa",
+      "pattern": "Neplatný formát"
+    },
+    "aria": {
+      "closeModal": "Zavrieť modálne okno",
+      "dismissAlert": "Zrušiť upozornenie",
+      "closeNotification": "Zavrieť oznámenie",
+      "toggleDropdown": "Prepnúť rozbaľovaciu ponuku",
+      "sortAscending": "Zoradiť vzostupne",
+      "selectLanguage": "Vybrať jazyk",
+      "sortDescending": "Zoradiť zostupne",
+      "expandSection": "Rozbaliť sekciu",
+      "collapseSection": "Zbaliť sekciu",
+      "playAudio": "Prehrať zvuk",
+      "pauseAudio": "Pozastaviť zvuk",
+      "loading": "Načítava sa obsah",
+      "saveChanges": "Uložiť zmeny",
+      "cancelEdit": "Zrušiť úpravy",
+      "editSpecies": "Upraviť druh",
+      "removeSpecies": "Odstrániť druh",
+      "dismissError": "Zrušiť chybu",
+      "datePickerCalendar": "Kalendár pre výber dátumu",
+      "selectDate": "Vybrať dátum",
+      "previousMonth": "Predchádzajúci mesiac",
+      "nextMonth": "Nasledujúci mesiac",
+      "selectToday": "Vybrať dnešok",
+      "dateSelected": "Vybraný dátum: {date}",
+      "calendarNavigation": "Použite šípky na navigáciu v kalendári, Enter na výber, Escape na zavretie",
+      "downloadCsv": "Stiahnuť zoznam druhov ako CSV",
+      "visitEbirdLink": "Otvoriť eBird.org v novej karte",
+      "learnEbirdTaxonomyLink": "Otvoriť taxonómiu eBird v novej karte"
+    },
+    "labels": {
+      "confidence": "Istota",
+      "github": "GitHub"
+    },
+    "values": {
+      "yes": "Áno",
+      "no": "Nie",
+      "unknown": "Neznáme"
+    },
+    "modal": {
+      "confirmAction": "Potvrdiť akciu",
+      "confirmMessage": "Naozaj chcete vykonať túto akciu?"
+    },
+    "review": {
+      "modalTitle": "Kontrola detekcie: {species}",
+      "status": {
+        "verifiedCorrect": "Overené ako správne",
+        "falsePositive": "Falošne pozitívne",
+        "notReviewed": "Neskontrolované",
+        "locked": "Uzamknuté"
+      },
+      "form": {
+        "correctDetection": "Správna detekcia",
+        "falsePositiveLabel": "Falošne pozitívne",
+        "reviewDetectionTitle": "Skontrolovať detekciu",
+        "lockDetection": "Uzamknúť túto detekciu po uložení",
+        "lockDetectionHelp": "Uzamknutie tejto detekcie zabráni jej vymazaniu počas pravidelného čistenia.",
+        "unlockDetection": "Odomknúť túto detekciu po uložení",
+        "unlockDetectionHelp": "Odomknutie umožní vymazanie tejto detekcie počas pravidelného čistenia.",
+        "ignoreSpecies": "Ignorovať tento druh",
+        "ignoreSpeciesHelp": "Ignorovanie tohto druhu zabráni budúcim detekciám tohto druhu. Existujúce detekcie nebudú odstránené.",
+        "detectionLocked": "Táto detekcia je momentálne uzamknutá.",
+        "comment": "Komentár",
+        "addComment": "Pridať komentár",
+        "hideComment": "Skryť komentár",
+        "commentPlaceholder": "Pridajte komentár k tejto detekcii...",
+        "commentCount": "({chars} znakov)",
+        "chars": "znakov",
+        "commentsLabel": "Komentáre",
+        "currentStatusTitle": "Aktuálny stav",
+        "detectionStatusTitle": "Stav detekcie",
+        "lockLabel": "Stav uzamknutia",
+        "reviewLabel": "Stav kontroly",
+        "saveReview": "Uložiť kontrolu"
+      },
+      "errors": {
+        "saveFailed": "Nepodarilo sa uložiť kontrolu. Skúste to znova.",
+        "noAudio": "Pre túto detekciu nie je k dispozícii žiadna nahrávka zvuku.",
+        "commentFailed": "Nepodarilo sa uložiť komentár. Skúste to znova.",
+        "lockStatusFailed": "Nepodarilo sa aktualizovať stav uzamknutia. Skúste to znova.",
+        "verificationFailed": "Nepodarilo sa aktualizovať stav overenia. Skúste to znova."
+      }
+    }
+  },
+  "pageTitle": {
+    "settings": "Nastavenia - BirdNET-Go",
+    "pageNotFound": "404 - Stránka sa nenašla",
+    "serverError": "500 - Interná chyba servera",
+    "componentError": "Chyba načítania komponentu",
+    "speciesAnalytics": "Analytika druhov",
+    "advancedAnalytics": "Rozšírená analytika",
+    "detectionDetails": "Podrobnosti detekcie",
+    "settingsNotAvailable": "Nastavenia nie sú k dispozícii"
+  },
+  "navigation": {
+    "dashboard": "Prehľad",
+    "detections": "Detekcie",
+    "search": "Hľadať",
+    "analytics": "Analytika",
+    "notifications": "Upozornenia",
+    "system": "Systém",
+    "settings": "Nastavenia",
+    "about": "O aplikácii",
+    "toggleSidebar": "Prepnúť bočný panel",
+    "mainNavigation": "Hlavná navigácia",
+    "closeSidebar": "Zavrieť bočný panel",
+    "analyticsSubmenu": "Podponuka analytiky",
+    "settingsSubmenu": "Podponuka nastavení",
+    "systemSubmenu": "Podponuka systému"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "Moderné rozhranie pre detekciu a klasifikáciu vtáčieho spevu v reálnom čase",
+    "logoAlt": "Logo BirdNET-Go",
+    "overview": "Prehľad",
+    "overviewText": "BirdNET-Go je implementácia založená na jazyku Go pre detekciu a klasifikáciu vtáčieho spevu v reálnom čase, postavená na základoch projektu BirdNET. Táto aplikácia poskytuje užívateľsky prívetivé rozhranie pre nepretržité monitorovanie a analýzu vtáčieho spevu.",
+    "birdnetProject": "Projekt BirdNET",
+    "birdnetDescription": "BirdNET-Go by nebol možný bez prelomovej práce projektu BirdNET. Model umelej inteligencie poháňajúci detekčné schopnosti BirdNET-Go je výsledkom inovatívneho výskumu a vývoja projektu BirdNET.",
+    "developedBy": "Vyvinuté",
+    "developersText": "K. Lisa Yang Center for Conservation Bioacoustics v Cornell Lab of Ornithology v spolupráci s Chemnitz University of Technology:",
+    "visitBirdnetAnalyzer": "Navštíviť projekt BirdNET-Analyzer",
+    "visitBirdnetAnalyzerAriaLabel": "Navštíviť GitHub repozitár BirdNET-Analyzer",
+    "contributors": "Prispievatelia",
+    "contributorsText": "BirdNET-Go rástol a zlepšoval sa vďaka spoločnému úsiliu mnohých jednotlivcov. Ich príspevky, od vylepšení kódu až po návrhy funkcií, boli neoceniteľné pri zlepšovaní tohto projektu.",
+    "mainDeveloper": "Hlavný vývojár",
+    "githubContributors": "GitHub prispievatelia",
+    "contributorsNote": "Špeciálne poďakovanie patrí týmto prispievateľom za ich cennú prácu na zlepšovaní BirdNET-Go:",
+    "communityAcknowledgment": "Poďakovanie komunite",
+    "communityText": "Radi by sme tiež vyjadrili vďaku všetkým používateľom, ktorí prispeli prostredníctvom:",
+    "bugReports": "Hlásenia chýb a sledovanie problémov",
+    "featureSuggestions": "Návrhy funkcií a spätná väzba",
+    "testing": "Testovanie a overovanie",
+    "documentation": "Vylepšenia dokumentácie",
+    "additionalCredits": "Ďalšie kredity",
+    "birdnetPiProject": "Projekt BirdNET-Pi",
+    "birdnetPiDescription": "Špeciálne poďakovanie patrí Patrickovi McGuireovi za jeho inšpiratívnu prácu na BirdNET-Pi, ktorá ovplyvnila vývoj BirdNET-Go. BirdNET-Pi ukazuje potenciál detekcie vtáčieho spevu na vstavaných zariadeniach a nastavil vysoký štandard pre komunitný vývoj.",
+    "visitBirdnetPi": "Navštíviť projekt BirdNET-Pi",
+    "labelTranslations": "Preklady štítkov BirdNET",
+    "labelTranslationsBy": "Poskytol Patrick Levin pre projekt BirdNET-Pi od Patricka McGuirea",
+    "patrickLevinGithub": "GitHub Patricka Levina",
+    "versionInformation": "Informácie o verzii",
+    "currentVersion": "Aktuálna verzia",
+    "buildDate": "Dátum zostavenia",
+    "developmentBuild": "Vývojové zostavenie",
+    "unknown": "Neznáme",
+    "licenseInformation": "Informácie o licencii",
+    "licenseText": "Model BirdNET AI aj BirdNET-Go sú licencované pod",
+    "ccLicense": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License",
+    "licenseDescription": "Táto licencia umožňuje ostatným upravovať, prispôsobovať a stavať na tomto diele nekomerčne, pokiaľ je uvedený náležitý kredit a nové výtvory sú licencované pod identickými podmienkami.",
+    "dependencyLicenses": "Licencie závislostí",
+    "taxonomyDataTitle": "Taxonomické údaje",
+    "taxonomyDataIntro": "BirdNET-Go obsahuje vložené údaje o taxonómii vtákov odvodené z eBird/Clements Checklist, čo poskytuje rýchle lokálne vyhľadávanie rodov a čeľadí.",
+    "source": "Zdroj",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Autorské práva",
+    "coverage": "Pokrytie",
+    "taxonomyCoverage": "2 374 rodov, 254 čeľadí, 11 145 druhov",
+    "visitEbird": "Navštíviť eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Dozvedieť sa o taxonómii eBird",
+    "avicommonsTitle": "Náhľady vtákov",
+    "avicommonsDescription": "BirdNET-Go používa vybrané obrázky vtákov z Avicommons, knižnice ručne vybraných, orezaných a orientovaných fotografií vtákov licencovaných pod licenciami Creative Commons.",
+    "githubStarPrompt": "Ak považujete BirdNET-Go za hodnotný, zvážte pridanie hviezdičky projektu na GitHub. Hviezdičky pomáhajú ostatným objaviť tento projekt a podporujú jeho ďalší vývoj.",
+    "viewOnGithub": "Zobraziť projekt na GitHub",
+    "visitGithubAriaLabel": "Navštíviť GitHub repozitár BirdNET-Go",
+    "visitAvicommonsGithub": "Navštíviť GitHub repozitár Avicommons"
+  },
+  "notifications": {
+    "title": "Upozornenia",
+    "subtitle": "Zobraziť a spravovať všetky systémové upozornenia",
+    "filters": {
+      "label": "Filtre",
+      "allStatus": "Všetky stavy",
+      "unread": "Neprečítané",
+      "read": "Prečítané",
+      "acknowledged": "Potvrdené",
+      "allTypes": "Všetky typy",
+      "errors": "Chyby",
+      "warnings": "Varovania",
+      "info": "Info",
+      "system": "Systém",
+      "detections": "Detekcie",
+      "allPriorities": "Všetky priority",
+      "critical": "Kritická",
+      "high": "Vysoká",
+      "medium": "Stredná",
+      "low": "Nízka"
+    },
+    "actions": {
+      "markAllRead": "Označiť všetko ako prečítané",
+      "refresh": "Obnoviť upozornenia",
+      "markAsRead": "Označiť ako prečítané",
+      "acknowledge": "Potvrdiť",
+      "delete": "Odstrániť",
+      "confirmDelete": "Potvrdiť odstránenie",
+      "deleteConfirmation": "Naozaj chcete odstrániť toto upozornenie?"
+    },
+    "aria": {
+      "filterByStatus": "Filtrovať podľa stavu",
+      "filterByType": "Filtrovať podľa typu",
+      "filterByPriority": "Filtrovať podľa priority"
+    },
+    "empty": {
+      "title": "Nenašli sa žiadne upozornenia",
+      "subtitle": "Upravte filtre alebo to skúste neskôr"
+    },
+    "errors": {
+      "loadFailed": "Nepodarilo sa načítať upozornenia. Skúste to znova.",
+      "deleteFailed": "Nepodarilo sa odstrániť upozornenie. Skúste to znova.",
+      "networkError": "Vyskytla sa sieťová chyba. Skúste to znova."
+    },
+    "timeAgo": {
+      "justNow": "Práve teraz",
+      "minutesAgo": "pred {minutes}m",
+      "hoursAgo": "pred {hours}h",
+      "daysAgo": "pred {days}d"
+    },
+    "viewMode": {
+      "label": "Režim zobrazenia",
+      "grouped": "Zoskupené zobrazenie",
+      "flat": "Ploché zobrazenie"
+    },
+    "groups": {
+      "markAllRead": "Označiť všetko ako prečítané",
+      "dismissAll": "Zrušiť všetko",
+      "unread": "{count} neprečítaných",
+      "confirmBulkDelete": "Odstrániť viacero upozornení",
+      "bulkDeleteConfirmation": "Naozaj chcete odstrániť {count} upozornení?"
+    }
+  },
+  "search": {
+    "title": "Filtre vyhľadávania",
+    "results": "Výsledky vyhľadávania",
+    "resultsCountZero": "Žiadne výsledky",
+    "resultsCountOne": "1 výsledok",
+    "resultsCountOther": "{count} výsledkov",
+    "noSearchPerformed": "Zatiaľ nebolo vykonané žiadne vyhľadávanie",
+    "noSearchPerformedHint": "Použite filtre vyhľadávania vyššie na nájdenie detekcií vtákov",
+    "loadingResults": "Načítavajú sa výsledky...",
+    "noResultsFound": "Nenašli sa žiadne výsledky",
+    "noResultsHint": "Skúste upraviť filtre vyhľadávania",
+    "fields": {
+      "species": "Druh",
+      "speciesPlaceholder": "Zadajte názov druhu",
+      "speciesHelp": "Zadajte celý alebo čiastočný názov druhu (nerozlišujú sa malé a veľké písmená)",
+      "dateRange": "Rozsah dátumov",
+      "dateRangeHelp": "Filtrovať detekcie podľa rozsahu dátumov (nechajte prázdne pre všetky dátumy)",
+      "from": "Od",
+      "to": "Do",
+      "confidenceRange": "Rozsah istoty (%)",
+      "confidenceMin": "Minimálne percento istoty",
+      "confidenceMax": "Maximálne percento istoty",
+      "verifiedStatus": "Stav overenia",
+      "lockedStatus": "Stav uzamknutia",
+      "timeOfDay": "Denná doba"
+    },
+    "advancedFilters": "Rozšírené filtre",
+    "showAdvancedFilters": "Zobraziť rozšírené filtre",
+    "hideAdvancedFilters": "Skryť rozšírené filtre",
+    "verifiedOptions": {
+      "any": "Akýkoľvek stav",
+      "verified": "Iba overené",
+      "unverified": "Iba neoverené"
+    },
+    "lockedOptions": {
+      "any": "Akýkoľvek stav",
+      "locked": "Iba uzamknuté",
+      "unlocked": "Iba odomknuté"
+    },
+    "timeOfDayOptions": {
+      "any": "Kedykoľvek",
+      "day": "Iba deň",
+      "night": "Iba noc",
+      "sunrise": "Východ slnka +/- 30min",
+      "sunset": "Západ slnka +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Dátum (od najnovšieho)",
+      "dateAsc": "Dátum (od najstaršieho)",
+      "speciesAsc": "Druh (A-Z)",
+      "confidenceDesc": "Istota (od najvyššej)"
+    },
+    "tableHeaders": {
+      "dateTime": "Dátum a čas",
+      "timeOfDay": "Denná doba",
+      "species": "Druh",
+      "confidence": "Istota",
+      "status": "Stav",
+      "actions": "Akcie"
+    },
+    "statusBadges": {
+      "verified": "Overené",
+      "false": "Falošné",
+      "unverified": "Neoverené",
+      "locked": "Uzamknuté",
+      "unlocked": "Odomknuté"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Prehrávač zvuku",
+      "expandDetails": "Rozbaliť podrobnosti pre {species}",
+      "collapseDetails": "Zbaliť podrobnosti pre {species}",
+      "playAudio": "Prehrať zvuk pre {species}",
+      "viewDetails": "Zobraziť podrobnosti pre {species}",
+      "unknownSpecies": "Neznámy druh",
+      "clickToCollapse": "Kliknutím zbalíte"
+    },
+    "errors": {
+      "searchFailed": "Vyhľadávanie zlyhalo: {error}",
+      "minMaxConfidence": "Minimálna istota nemôže byť vyššia ako maximálna istota."
+    },
+    "pagination": {
+      "page": "Strana {current} z {total}",
+      "goToPrevious": "Prejsť na predchádzajúcu stranu",
+      "goToNext": "Prejsť na nasledujúcu stranu"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Stránka sa nenašla",
+      "goToDashboard": "Prejsť na prehľad"
+    },
+    "500": {
+      "code": "500",
+      "title": "Interná chyba servera",
+      "defaultMessage": "Vyskytla sa interná chyba servera.",
+      "goToDashboard": "Prejsť na prehľad"
+    },
+    "server": {
+      "title": "Chyba pripojenia k serveru",
+      "description": "Nepodarilo sa pripojiť k serveru. Skontrolujte pripojenie a skúste to znova."
+    },
+    "generic": {
+      "errorDetails": "Podrobnosti o chybe",
+      "stackTrace": "Stack Trace",
+      "goToDashboard": "Prejsť na prehľad",
+      "reportIssue": "Nahlásiť problém",
+      "loginToViewDetails": "Prihláste sa pre podrobnosti",
+      "componentLoadError": "Chyba načítania komponentu",
+      "failedToLoadComponent": "Nepodarilo sa načítať požadovaný komponent"
+    }
+  },
+  "dashboard": {
+    "dailySummary": {
+      "title": "Denná aktivita",
+      "subtitle": "Detekcie druhov podľa hodín",
+      "columns": {
+        "species": "Druh",
+        "detections": "Detekcie"
+      },
+      "daylight": {
+        "label": "Denné svetlo",
+        "sunrise": "Východ slnka o {time}",
+        "sunset": "Západ slnka o {time}"
+      },
+      "weather": {
+        "label": "Počasie"
+      },
+      "legend": {
+        "less": "Menej",
+        "more": "Viac"
+      },
+      "navigation": {
+        "previousDay": "Predchádzajúci deň",
+        "nextDay": "Nasledujúci deň",
+        "today": "Dnes"
+      },
+      "tooltips": {
+        "viewHourly": "Zobraziť všetky detekcie pre {hour}:00",
+        "viewBiHourly": "Zobraziť všetky detekcie pre {startHour}:00-{endHour}:00",
+        "viewSixHourly": "Zobraziť všetky detekcie pre {startHour}:00-{endHour}:00",
+        "hourlyDetections": "{count} detekcií o {hour}:00 - Kliknutím zobrazíte",
+        "biHourlyDetections": "{count} detekcií od {startHour}:00 do {endHour}:00 - Kliknutím zobrazíte",
+        "sixHourlyDetections": "{count} detekcií od {startHour}:00 do {endHour}:00 - Kliknutím zobrazíte"
+      },
+      "loading": {
+        "preparing": "Pripravujú sa dáta...",
+        "fetching": "Získavajú sa detekcie...",
+        "error": "Nepodarilo sa načítať dáta",
+        "complete": "Dáta boli úspešne načítané"
+      },
+      "noSpecies": "V tento deň neboli zistené žiadne druhy"
+    },
+    "recentDetections": {
+      "title": "Nedávne detekcie",
+      "subtitle": "Najnovšie identifikované druhy",
+      "controls": {
+        "show": "Zobraziť:",
+        "refresh": "Obnoviť detekcie",
+        "refreshPaused": "Obnovovanie pozastavené počas aktívnej interakcie"
+      },
+      "headers": {
+        "dateTime": "Dátum a čas",
+        "time": "Čas",
+        "commonName": "Bežný názov",
+        "species": "Druh",
+        "weather": "Počasie",
+        "confidence": "Istota",
+        "thumbnail": "Náhľad",
+        "status": "Stav",
+        "recording": "Nahrávka",
+        "actions": "Akcie"
+      },
+      "status": {
+        "verified": "Overené",
+        "false": "Falošné",
+        "unverified": "Neoverené",
+        "locked": "Uzamknuté"
+      },
+      "modals": {
+        "showSpecies": "Zobraziť druh {species}",
+        "ignoreSpecies": "Ignorovať druh {species}",
+        "showSpeciesConfirm": "Naozaj chcete zobrazovať budúce detekcie druhu {species}?",
+        "ignoreSpeciesConfirm": "Naozaj chcete ignorovať budúce detekcie druhu {species}? Toto ovplyvní iba nové detekcie - existujúce detekcie zostanú v databáze.",
+        "unlockDetection": "Odomknúť detekciu",
+        "lockDetection": "Uzamknúť detekciu",
+        "unlockDetectionConfirm": "Naozaj chcete odomknúť túto detekciu druhu {species}? To umožní jej vymazanie počas pravidelného čistenia.",
+        "lockDetectionConfirm": "Naozaj chcete uzamknúť túto detekciu druhu {species}? To zabráni jej vymazaniu počas pravidelného čistenia.",
+        "deleteDetection": "Odstrániť detekciu druhu {species}",
+        "deleteDetectionConfirm": "Naozaj chcete odstrániť detekciu druhu {species}? Túto akciu nie je možné vrátiť späť."
+      },
+      "actions": {
+        "menuLabel": "Akcie pre {species}",
+        "review": "Skontrolovať detekciu",
+        "showSpecies": "Zobraziť druh",
+        "ignoreSpecies": "Ignorovať druh",
+        "lockDetection": "Uzamknúť detekciu",
+        "unlockDetection": "Odomknúť detekciu",
+        "deleteDetection": "Odstrániť detekciu"
+      },
+      "noDetections": "Žiadne nedávne detekcie"
+    },
+    "errors": {
+      "dailySummaryFetch": "Nepodarilo sa získať denný súhrn: {status}",
+      "dailySummaryLoad": "Nepodarilo sa načítať denný súhrn",
+      "recentDetectionsFetch": "Nepodarilo sa získať nedávne detekcie: {status}",
+      "recentDetectionsLoad": "Nepodarilo sa načítať nedávne detekcie",
+      "configFetch": "Nepodarilo sa získať konfiguráciu prehľadu: {status}"
+    }
+  },
+  "detections": {
+    "title": "Detekcie",
+    "titles": {
+      "hourly": "Hodinové výsledky pre {hour}:00 dňa {date}",
+      "hourlyRange": "Hodinové výsledky od {startHour}:00 do {endHour}:00 dňa {date}",
+      "species": "Výsledky pre druh {species} dňa {date}",
+      "search": "Výsledky vyhľadávania pre \"{query}\"",
+      "allDetections": "Všetky detekcie pre dátum {date}"
+    },
+    "headers": {
+      "dateTime": "Dátum a čas",
+      "weather": "Počasie",
+      "species": "Druh",
+      "confidence": "Istota",
+      "thumbnail": "Náhľad",
+      "status": "Stav",
+      "recording": "Nahrávka",
+      "actions": "Akcie"
+    },
+    "status": {
+      "locked": "Uzamknuté"
+    },
+    "table": {
+      "caption": "Zoznam detekcií vtákov s informáciami o dátume, druhu, istote a stave"
+    },
+    "empty": {
+      "title": "Nenašli sa žiadne detekcie",
+      "description": "Skúste upraviť filtre alebo kritériá vyhľadávania"
+    },
+    "pagination": {
+      "showing": "Zobrazuje sa {from} až {to} z {total} výsledkov"
+    },
+    "weather": {
+      "title": "Informácie o počasí",
+      "noData": "Žiadne údaje o počasí",
+      "noDataAvailable": "Žiadne údaje o počasí nie sú k dispozícii",
+      "loading": "Načítavajú sa informácie o počasí...",
+      "labels": {
+        "temperature": "Teplota",
+        "weather": "Počasie",
+        "wind": "Vietor",
+        "humidity": "Vlhkosť",
+        "pressure": "Tlak",
+        "cloudCover": "Oblačnosť"
+      },
+      "units": {
+        "temperature": "°C",
+        "temperatureFahrenheit": "°F",
+        "windSpeed": "m/s",
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
+      },
+      "conditions": {
+        "clearsky_day": "Jasno",
+        "clearsky_night": "Jasno",
+        "fair_day": "Skoro jasno",
+        "fair_night": "Skoro jasno",
+        "partlycloudy_day": "Polooblačno",
+        "partlycloudy_night": "Polooblačno",
+        "cloudy": "Zamračené",
+        "rainshowers_day": "Prehánky",
+        "rainshowers_night": "Prehánky",
+        "rain": "Dážď",
+        "thunder": "Búrka",
+        "sleet": "Dážď so snehom",
+        "snow": "Sneženie",
+        "fog": "Hmla",
+        "unknown": "Neznáme"
+      }
+    },
+    "row": {
+      "viewDetails": "Zobraziť podrobnosti pre {species}"
+    },
+    "media": {
+      "title": "Nahrávka a spektrogram"
+    },
+    "tabs": {
+      "overview": "Prehľad",
+      "taxonomy": "Taxonómia",
+      "history": "História",
+      "notes": "Poznámky"
+    },
+    "environmental": {
+      "title": "Environmentálne podmienky"
+    },
+    "metadata": {
+      "title": "Metadáta detekcie",
+      "source": "Zdroj",
+      "duration": "Trvanie",
+      "status": "Stav",
+      "locked": "Uzamknuté"
+    },
+    "history": {
+      "title": "História detekcií",
+      "comingSoon": "Sledovanie histórie bude k dispozícii čoskoro..."
+    },
+    "notes": {
+      "title": "Poznámky a komentáre",
+      "noComments": "K tejto detekcii nie sú žiadne komentáre ani poznámky."
+    },
+    "aria": {
+      "loading": "Načítavajú sa podrobnosti detekcie...",
+      "loaded": "Podrobnosti detekcie načítané pre {species}",
+      "error": "Chyba pri načítaní detekcie: {error}"
+    },
+    "errors": {
+      "notFound": "Detekcia sa nenašla. Možno bola odstránená alebo je ID nesprávne.",
+      "noPermission": "Nemáte oprávnenie na zobrazenie tejto detekcie.",
+      "loginRequired": "Prihláste sa, aby ste si mohli pozrieť túto detekciu.",
+      "serverError": "Chyba servera. Skúste to neskôr alebo kontaktujte podporu, ak problém pretrváva.",
+      "loadFailed": "Nepodarilo sa načítať detekciu (Chyba {status}). Skúste obnoviť stránku.",
+      "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Vzácnosť druhu",
+      "score": "Skóre",
+      "basedOnLocation": "Na základe polohy: {latitude}, {longitude}"
+    },
+    "taxonomy": {
+      "hierarchy": "Taxonomická klasifikácia",
+      "subspecies": "Poddruh",
+      "noData": "Žiadne taxonomické údaje nie sú k dispozícii.",
+      "labels": {
+        "kingdom": "Ríša",
+        "phylum": "Kmeň",
+        "class": "Trieda",
+        "order": "Rad",
+        "family": "Čeľaď",
+        "genus": "Rod",
+        "species": "Druh"
+      }
+    }
+  },
+  "system": {
+    "title": "Systémový prehľad",
+    "refreshData": "Obnoviť dáta",
+    "aria": {
+      "refreshData": "Obnoviť systémové dáta",
+      "dashboard": "Systémový prehľad s metrikami výkonu a informáciami"
+    },
+    "systemInfo": {
+      "title": "Informácie o systéme",
+      "os": "Operačný systém",
+      "hostname": "Hostname",
+      "uptime": "Doba prevádzky",
+      "cpus": "Procesory (CPU)",
+      "model": "Model systému",
+      "timezone": "Časové pásmo",
+      "temperature": "Teplota CPU",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Údaje o teplote nie sú k dispozícii"
+    },
+    "diskUsage": {
+      "title": "Využitie disku",
+      "emptyMessage": "Žiadne informácie o disku nie sú k dispozícii"
+    },
+    "memoryUsage": {
+      "title": "Využitie pamäte",
+      "ramUsage": "Využitie RAM",
+      "labels": {
+        "free": "Voľná",
+        "available": "Dostupná",
+        "buffCache": "Buff/Cache"
+      }
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Celkový progres",
+        "progress": "Progres"
+      }
+    },
+    "processInfo": {
+      "title": "Informácie o procesoch",
+      "loading": "Načítavajú sa informácie o procesoch...",
+      "noProcesses": "Žiadne informácie o procesoch nie sú k dispozícii",
+      "headers": {
+        "pid": "PID",
+        "name": "Názov",
+        "status": "Stav",
+        "cpu": "CPU",
+        "memory": "Pamäť",
+        "uptime": "Doba prevádzky"
+      },
+      "showAll": "Zobraziť všetky procesy",
+      "showBirdnetOnly": "Zobraziť iba BirdNET",
+      "table": {
+        "process": "Proces",
+        "status": "Stav",
+        "cpu": "CPU",
+        "memory": "Pamäť",
+        "uptime": "Doba prevádzky",
+        "showAllProcesses": "Zobraziť všetky procesy"
+      }
+    },
+    "errors": {
+      "systemInfo": "Nepodarilo sa načítať informácie o systéme: {error}",
+      "diskUsage": "Nepodarilo sa načítať využitie disku: {error}",
+      "memoryUsage": "Nepodarilo sa načítať využitie pamäte: {error}",
+      "temperature": "Nepodarilo sa načítať teplotu: {error}",
+      "processes": "Nepodarilo sa načítať informácie o procesoch: {error}"
+    },
+    "sections": {
+      "overview": "Prehľad",
+      "database": "Databáza"
+    },
+    "database": {
+      "title": "Správa databázy",
+      "description": "Spravovať migráciu schémy databázy",
+      "legacy": {
+        "title": "Pôvodná databáza",
+        "fetchFailed": "Nepodarilo sa získať stav pôvodnej databázy",
+        "cleanup": {
+          "title": "Čistenie pôvodnej databázy",
+          "description": "Táto databáza je teraz offline a už sa nepoužíva. Všetky vaše dáta boli migrované do vylepšenej databázy.",
+          "recommendation": "Odporúča sa odstrániť túto databázu, aby sa uvoľnilo miesto na disku.",
+          "location": "Umiestnenie",
+          "size": "Veľkosť",
+          "records": "Záznamy",
+          "detections": "detekcie",
+          "lastModified": "Posledná zmena",
+          "warning": "Varovanie: Túto akciu nie je možné vrátiť späť",
+          "backupReminder": "Pred odstránením pôvodnej databázy sa uistite, že máte zálohu.",
+          "deleteButton": "Odstrániť pôvodnú databázu",
+          "inProgress": "Odstraňuje sa...",
+          "success": "{size} miesta na disku bolo uvoľnených",
+          "failed": "Čistenie zlyhalo",
+          "notAvailable": "Čistenie nie je k dispozícii",
+          "confirmTitle": "Odstrániť pôvodnú databázu?",
+          "confirmMessage": "Chystáte sa natrvalo odstrániť pôvodnú databázu ({size}). Túto akciu nie je možné vrátiť späť.",
+          "confirmCheckbox": "Rozumiem, že toto natrvalo odstráni pôvodnú databázu",
+          "cancelButton": "Zrušiť",
+          "deleteConfirmButton": "Odstrániť natrvalo"
+        }
+      },
+      "v2": {
+        "title": "Vylepšená databáza"
+      },
+      "stats": {
+        "connected": "Pripojené",
+        "disconnected": "Odpojené",
+        "type": "Typ",
+        "location": "Umiestnenie",
+        "size": "Veľkosť",
+        "detections": "Detekcie",
+        "fetchFailed": "Nepodarilo sa získať štatistiky databázy"
+      },
+      "backup": {
+        "download": "Stiahnuť zálohu",
+        "downloading": "Sťahuje sa...",
+        "starting": "Spúšťa sa zálohovanie...",
+        "creating": "Vytvára sa záloha...",
+        "cancel": "Zrušiť",
+        "retry": "Skúsiť zálohovanie znova",
+        "mysqlNote": "Záloha MySQL vyžaduje externé nástroje (mysqldump)"
+      },
+      "notInitialized": "Neinicializované",
+      "migration": {
+        "title": "Migrácia databázy",
+        "description": "Migrovať z pôvodnej schémy na normalizovanú schému v2",
+        "requiredNote": "Migrácia databázy je potrebná pre nadchádzajúce funkcie BirdNET-Go, ktoré sa spoliehajú na novú normalizovanú schému databázy. Nové funkcie nebudú k dispozícii, kým sa migrácia nedokončí.",
+        "completedTitle": "Migrácia dokončená",
+        "completedNote": "Vaša databáza bola úspešne migrovaná na novú schému. Reštartujte BirdNET-Go, aby ste prepli na novú databázu. Poznámka: Nová databáza je menšia, pretože ukladá dáta efektívnejšie - je to očakávané a všetky vaše dáta sú zachované.",
+        "starting": "Spúšťa sa migrácia...",
+        "status": {
+          "idle": "Pripravené na spustenie",
+          "initializing": "Inicializuje sa",
+          "dual_write": "Aktívny duálny zápis",
+          "migrating": "Migruje sa primárna",
+          "migrating_predictions": "Migruje sa sekundárna",
+          "paused": "Pozastavené",
+          "validating": "Overuje sa",
+          "cutover": "Prebieha prepnutie",
+          "completed": "Migrácia dokončená"
+        },
+        "progress": {
+          "title": "Priebeh migrácie",
+          "records": "záznamov",
+          "paused": "Migrácia pozastavená",
+          "percent": "{percent}%",
+          "rate": "{rate} záznamov/s",
+          "rateValue": "{rate} záz./s",
+          "remaining": "Odhadovaný zostávajúci čas: {time}",
+          "eta": "Odhadovaný zostávajúci čas",
+          "dirtyIds": "{count} záznamov čaká na opätovnú synchronizáciu"
+        },
+        "phase": {
+          "indicator": "Fáza {current} z {total}: ",
+          "detections": "Migrujú sa primárne detekcie",
+          "predictions": "Migrujú sa sekundárne detekcie",
+          "reviews": "Migrujú sa kontroly",
+          "comments": "Migrujú sa komentáre",
+          "locks": "Migrujú sa zámky"
+        },
+        "notes": {
+          "inProgress": "Systém môžete naďalej normálne používať, kým migrácia prebieha na pozadí.",
+          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - všetky nové detekcie sa ukladajú do oboch databáz.",
+          "migrating": "Kopírujú sa vaše existujúce detekcie do novej databázy.",
+          "validating": "Overuje sa, či boli všetky záznamy skopírované správne. Skoro hotovo!",
+          "cutover": "Prepína sa na novú databázu. To trvá len chvíľu.",
+          "paused": "Migrácia je pozastavená. Vaše dáta sú v bezpečí. Pokračujte, keď budete pripravení."
+        },
+        "actions": {
+          "start": "Spustiť migráciu",
+          "pause": "Pozastaviť",
+          "resume": "Pokračovať",
+          "cancel": "Zrušiť",
+          "rollback": "Rollback"
+        },
+        "confirmDialog": {
+          "title": "Spustiť migráciu databázy",
+          "message": "Migrácia skopíruje vaše detekčné dáta z aktuálnej databázy do novej normalizovanej databázy. Vaša pôvodná databáza zostane nezmenená. Odporúča sa však vytvoriť zálohu pre prípad neočakávaných problémov.",
+          "checkbox": "Potvrdzujem, že som si zazálohoval databázu alebo rozumiem rizikám pokračovania bez zálohy.",
+          "note": "Zálohu si môžete stiahnuť pomocou tlačidla \"Stiahnuť zálohu\" vyššie."
+        },
+        "confirmCancel": {
+          "title": "Zrušiť migráciu?",
+          "message": "Týmto sa zastaví migrácia a vráti sa do stavu nečinnosti. Migráciu môžete bezpečne reštartovať neskôr - záznamy nebudú duplikované.",
+          "confirm": "Áno, zrušiť",
+          "dismiss": "Nie, pokračovať"
+        },
+        "confirmRollback": {
+          "title": "Rollback migrácie?",
+          "message": "Týmto sa systém vráti k pôvodnej databáze. Nové detekcie zaznamenané od migrácie budú zachované vo vylepšenej databáze, ale nebudú viditeľné, kým sa migrácia znova nespustí.",
+          "confirm": "Áno, Rollback",
+          "dismiss": "Nie, ponechať vylepšenú"
+        },
+        "errors": {
+          "startFailed": "Nepodarilo sa spustiť migráciu",
+          "pauseFailed": "Nepodarilo sa pozastaviť migráciu",
+          "resumeFailed": "Nepodarilo sa pokračovať v migrácii",
+          "cancelFailed": "Nepodarilo sa zrušiť migráciu",
+          "rollbackFailed": "Nepodarilo sa vykonať rollback migrácie",
+          "fetchFailed": "Nepodarilo sa získať stav migrácie"
+        },
+        "worker": {
+          "running": "Worker beží",
+          "paused": "Worker pozastavený",
+          "stopped": "Worker zastavený"
+        },
+        "prerequisites": {
+          "title": "Kontroly pred migráciou",
+          "rerunChecks": "Znova spustiť kontroly",
+          "critical": "Kritické",
+          "allPassed": "Všetky kontroly prešli - pripravené na migráciu",
+          "criticalIssues": "{count} kritických problémov musí byť vyriešených",
+          "warningsCount": "{count} varovaní",
+          "running": "Prebiehajú kontroly pred migráciou...",
+          "checkingStep": "Krok {current} z {total}",
+          "errors": {
+            "fetchFailed": "Nepodarilo sa získať prerekvizity"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Stav migrácie"
+            },
+            "disk_space": {
+              "name": "Miesto na disku"
+            },
+            "legacy_accessible": {
+              "name": "Pripojenie k databáze"
+            },
+            "sqlite_integrity": {
+              "name": "Integrita databázy"
+            },
+            "mysql_table_health": {
+              "name": "Stav tabuliek"
+            },
+            "write_permission": {
+              "name": "Oprávnenie na zápis"
+            },
+            "mysql_permissions": {
+              "name": "Oprávnenia MySQL"
+            },
+            "record_count": {
+              "name": "Počet záznamov"
+            },
+            "existing_v2_data": {
+              "name": "Existujúce migračné dáta"
+            },
+            "no_active_locks": {
+              "name": "Aktívne zámky"
+            },
+            "memory_available": {
+              "name": "Dostupná pamäť"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        }
+      }
+    }
+  },
+  "analytics": {
+    "title": "Prehľad",
+    "loadingError": "Nepodarilo sa načítať niektoré analytické dáta. Skúste to neskôr.",
+    "stats": {
+      "totalDetections": "Celkovo detekcií",
+      "uniqueSpecies": "Unikátne druhy",
+      "avgConfidence": "Priemerná istota",
+      "mostCommon": "Najbežnejší",
+      "none": "Žiadne",
+      "detections": "detekcie",
+      "totalSpecies": "Celkovo druhov",
+      "overallAverage": "Celkový priemer"
+    },
+    "periods": {
+      "today": "Dnes",
+      "lastWeek": "Posledných 7 dní",
+      "lastMonth": "Posledných 30 dní",
+      "last90Days": "Posledných 90 dní",
+      "lastYear": "Posledných 12 mesiacov",
+      "customRange": "Vlastný rozsah",
+      "allTime": "Celý čas"
+    },
+    "filters": {
+      "title": "Filtrovať dáta",
+      "timePeriod": "Časové obdobie",
+      "from": "Od",
+      "to": "Do",
+      "sortBy": "Zoradiť podľa",
+      "searchSpecies": "Hľadať druhy",
+      "searchPlaceholder": "Hľadať podľa názvu...",
+      "reset": "Resetovať",
+      "applyFilters": "Použiť filtre",
+      "exportCsv": "Exportovať CSV",
+      "species": "druhy",
+      "filtered": "(filtrované)"
+    },
+    "timePeriodOptions": {
+      "allTime": "Celý čas",
+      "today": "Dnes",
+      "lastWeek": "Posledných 7 dní",
+      "lastMonth": "Posledných 30 dní",
+      "last90Days": "Posledných 90 dní",
+      "lastYear": "Posledných 12 mesiacov",
+      "customRange": "Vlastný rozsah"
+    },
+    "sortOptions": {
+      "mostDetections": "Najviac detekcií",
+      "fewestDetections": "Najmenej detekcií",
+      "nameAZ": "Názov (A-Z)",
+      "nameZA": "Názov (Z-A)",
+      "recentlyFirstSeen": "Nedávno prvýkrát videné",
+      "earliestFirstSeen": "Najskôr prvýkrát videné",
+      "recentlyLastSeen": "Nedávno naposledy videné",
+      "highestConfidence": "Najvyššia istota"
+    },
+    "charts": {
+      "top10Species": "Top 10 druhov",
+      "detectionsByTimeOfDay": "Detekcie podľa dennej doby",
+      "detectionTrends": "Trendy detekcií",
+      "newSpeciesDetected": "Zistené nové druhy",
+      "noNewSpecies": "V tomto období neboli zistené žiadne nové druhy.",
+      "noDataAvailable": "Žiadne dáta nie sú k dispozícii",
+      "numberOfDetections": "Počet detekcií",
+      "detections": "Detekcie",
+      "timePeriod": "Časové obdobie",
+      "dailyDetections": "Denné detekcie",
+      "date": "Dátum",
+      "firstHeardOn": "Prvýkrát počuté",
+      "firstHeardDate": "Dátum prvého počutia",
+      "firstHeard": "Prvýkrát počuté"
+    },
+    "recentDetections": {
+      "title": "Nedávne detekcie",
+      "headers": {
+        "dateTime": "Dátum a čas",
+        "species": "Druh",
+        "confidence": "Istota",
+        "timeOfDay": "Denná doba"
+      },
+      "noRecentDetections": "Nenašli sa žiadne nedávne detekcie",
+      "unknownSpecies": "Neznáme",
+      "unknown": "Neznáme"
+    },
+    "species": {
+      "title": "Druhy",
+      "subtitle": "Kompletný zoznam všetkých vtáčích druhov, ktoré boli zistené",
+      "speciesList": "Zoznam druhov",
+      "switchToGrid": "Prepnúť na mriežku",
+      "switchToList": "Prepnúť na zoznam",
+      "noSpeciesFound": "Nenašli sa žiadne druhy zodpovedajúce vašim filtrom.",
+      "headers": {
+        "species": "Druh",
+        "detections": "Detekcie",
+        "avgConfidence": "Priemerná istota",
+        "maxConfidence": "Maximálna istota",
+        "firstDetected": "Prvýkrát zistené",
+        "lastDetected": "Naposledy zistené"
+      },
+      "card": {
+        "detections": "Detekcie:",
+        "confidence": "Istota:",
+        "first": "Prvýkrát:"
+      }
+    },
+    "advanced": {
+      "title": "Rozšírená analytika",
+      "chartControls": "Ovládanie grafu",
+      "dateRange": "Rozsah dátumov",
+      "chartOptions": "Možnosti grafu",
+      "speciesSelection": "Výber druhov ({count}/{max})",
+      "speciesSelectionHint": "Hľadajte alebo kliknite na čipy nižšie",
+      "speciesPlaceholder": "Hľadajte a vyberte druhy na analýzu...",
+      "noSpeciesFound": "Pre vybraný rozsah dátumov sa nenašli žiadne druhy",
+      "detections": "{count} detekcií",
+      "dateRangeOptions": {
+        "week": "Posledný týždeň",
+        "month": "Posledný mesiac",
+        "quarter": "Posledný štvrťrok",
+        "year": "Posledný rok",
+        "custom": "Vlastný rozsah"
+      },
+      "options": {
+        "relativeTrends": "Relatívne trendy",
+        "zoomPan": "Priblíženie a posun",
+        "brushSelection": "Výber štetcom"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Vzorce detekcií podľa dennej doby",
+          "description": "Zobrazuje priemerný počet detekcií počas dňa pre vybrané druhy",
+          "noData": "Nie sú k dispozícii žiadne dáta o dennej dobe",
+          "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie vzorcov"
+        },
+        "dailyTrend": {
+          "title": "Trendy detekcií druhov",
+          "description": "Zobrazuje trendy detekcií v čase pre vybrané druhy",
+          "noData": "Nie sú k dispozícii žiadne údaje o trendoch",
+          "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie trendov"
+        }
+      },
+      "aria": {
+        "startDate": "Dátum začiatku",
+        "endDate": "Dátum konca",
+        "loadingAnalytics": "Načítavajú sa analytické dáta",
+        "loadingTrends": "Načítavajú sa dáta trendov"
+      }
+    }
+  },
+  "settings": {
+    "title": "Nastavenia - BirdNET-Go",
+    "loading": "Načítavajú sa nastavenia...",
+    "sections": {
+      "node": "Hlavné nastavenia",
+      "userinterface": "Používateľské rozhranie",
+      "audio": "Nastavenia zvuku",
+      "filters": "Filtre detekcie",
+      "integration": "Integrácie",
+      "security": "Zabezpečenie",
+      "species": "Druhy",
+      "notifications": "Upozornenia",
+      "support": "Podpora"
+    },
+    "notFound": {
+      "title": "Nastavenia sa nenašli",
+      "message": "Požadovaná sekcia nastavení \"{section}\" sa nenašla."
+    },
+    "actions": {
+      "save": "Uložiť zmeny",
+      "saving": "Ukladá sa...",
+      "reset": "Resetovať",
+      "resetAriaLabel": "Resetovať všetky zmeny",
+      "saveAriaLabel": "Uložiť zmeny",
+      "savingAriaLabel": "Ukladajú sa zmeny...",
+      "unsavedChanges": "Neuložené zmeny",
+      "toolbar": "Akcie nastavení"
+    },
+    "card": {
+      "changed": "zmenené",
+      "changedAriaLabel": "Nastavenia zmenené"
+    },
+    "tabs": {
+      "navigation": "Navigačné karty nastavení",
+      "hasChanges": "Táto karta má neuložené zmeny",
+      "setAsDefault": "Nastaviť ako predvolené",
+      "defaultIndicator": "Predvolený zdroj vstupu"
+    },
+    "main": {
+      "tabs": {
+        "general": "Všeobecné",
+        "detection": "Detekcia",
+        "location": "Poloha",
+        "database": "Databáza"
+      },
+      "sections": {
+        "main": {
+          "title": "Hlavné nastavenia",
+          "description": "Konfigurácia hlavných nastavení aplikácie"
+        },
+        "birdnet": {
+          "title": "Nastavenia BirdNET",
+          "description": "Konfigurácia nastavení špecifických pre model BirdNET AI"
+        },
+        "ui": {
+          "title": "Nastavenia používateľského rozhrania",
+          "description": "Prispôsobenie používateľského rozhrania"
+        },
+        "customClassifier": {
+          "title": "Vlastný klasifikátor BirdNET",
+          "description": "Konfigurácia vlastného modelu BirdNET a súborov štítkov pre špecializovanú detekciu",
+          "modelPath": {
+            "label": "Cesta k modelu (vyžaduje reštart pre použitie)",
+            "placeholder": "Cesta k súboru modelu",
+            "helpText": "Cesta k externému súboru modelu BirdNET. Zadajte absolútnu alebo relatívnu cestu k binárnemu súboru birdnet-go. Nechajte prázdne pre použitie predvoleného vloženého modelu."
+          },
+          "labelPath": {
+            "label": "Cesta k štítkom (vyžaduje reštart pre použitie)",
+            "placeholder": "Cesta k súboru štítkov",
+            "helpText": "Cesta k súboru štítkov externého modelu, súbor .zip alebo .txt. Zadajte absolútnu alebo relatívnu cestu k binárnemu súboru birdnet-go. Nechajte prázdne pre použitie predvolených vložených štítkov."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Dynamický prah",
+          "description": "Automaticky upravovať citlivosť detekcie na základe predchádzajúcich pozorovaní",
+          "enable": {
+            "label": "Povoliť dynamický prah (funkcia špecifická pre BirdNET-Go)",
+            "helpText": "Povolí funkciu dynamického prahu istoty pre adaptívnejšiu detekciu vtáčieho spevu."
+          },
+          "trigger": {
+            "label": "Spúšťací prah",
+            "helpText": "Úroveň istoty, pri ktorej sa aktivuje dynamický prah. Ak je vtáčí spev detegovaný s istotou nad touto hodnotou, prah pre pozitívne zhody tohto druhu sa pre následné volania zníži."
+          },
+          "minimum": {
+            "label": "Minimálny dynamický prah",
+            "helpText": "Minimálna hodnota, na ktorú môže byť dynamický prah znížený. To zaisťuje, že prah neklesne pod neželanú úroveň."
+          },
+          "expireTime": {
+            "label": "Čas vypršania dynamického prahu (hodiny)",
+            "helpText": "Počet hodín, počas ktorých zostávajú úpravy dynamického prahu platné. Po tomto období sa dynamický prah resetuje."
+          }
+        },
+        "falsePositiveFilter": {
+          "title": "Filter falošne pozitívnych výsledkov",
+          "description": "Znížiť počet falošných detekcií vyžadovaním viacerých potvrdení naprieč prekrývajúcimi sa zvukovými segmentmi",
+          "level": {
+            "label": "Úroveň filtra"
+          },
+          "hardwareNote": "Prísne a maximálne úrovne vyžadujú vyššie nastavenia prekrytia a viac prostriedkov CPU. Pre tieto úrovne sa vyžaduje hardvér RPi 4 alebo lepší.",
+          "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
+          "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra"
+        },
+        "rangeFilter": {
+          "title": "Filter rozsahu",
+          "description": "Obmedziť detekciu na druhy pravdepodobné vo vašom geografickom regióne",
+          "stationLocation": {
+            "label": "Poloha stanice",
+            "helpText": "Poloha stanice, používaná pre údaje o počasí a na obmedzenie druhov vtákov na tie, ktoré sú v regióne pravdepodobné."
+          },
+          "latitude": {
+            "label": "Zemepisná šírka",
+            "helpText": "Zemepisná šírka stanice, používaná pre údaje o počasí a filtrovanie rozsahu druhov."
+          },
+          "longitude": {
+            "label": "Zemepisná dĺžka",
+            "helpText": "Zemepisná dĺžka stanice, používaná pre údaje o počasí a filtrovanie rozsahu druhov."
+          },
+          "model": {
+            "label": "Model filtra rozsahu",
+            "helpText": "Verzia modelu filtra rozsahu BirdNET: najnovšia (latest) alebo pôvodná (legacy)."
+          },
+          "threshold": {
+            "label": "Prah",
+            "helpText": "Riadi, ktoré druhy sú zahrnuté na základe pravdepodobnosti ich výskytu pre vašu polohu a ročnú dobu. Pre väčšinu používateľov sa odporúča predvolená hodnota (0.01). Vyššie hodnotue (0.05-0.3) zahŕňajú menej druhov s vyššou pravdepodobnosťou výskytu. Veľmi vysoké hodnoty (0.5+) zahŕňajú iba najbežnejšie druhy."
+          },
+          "speciesCount": {
+            "label": "Aktuálny počet druhov",
+            "helpText": "Počet druhov zahrnutých vo filtri rozsahu. Aktualizuje sa automaticky pri zmene prahu, zemepisnej šírky alebo dĺžky.",
+            "loading": "Načítava sa...",
+            "viewSpecies": "Zobraziť druhy"
+          },
+          "downloadTitle": "Stiahnuť zoznam druhov ako CSV",
+          "csvDownloaded": "Zoznam druhov bol úspešne stiahnutý",
+          "csvDownloadFailed": "Nepodarilo sa stiahnuť zoznam druhov. Skúste to znova.",
+          "modal": {
+            "title": "Druhy filtra rozsahu",
+            "speciesCount": "Počet druhov:",
+            "threshold": "Prah:",
+            "latitude": "Zemepisná šírka:",
+            "longitude": "Zemepisná dĺžka:",
+            "loadingSpecies": "Načítavajú sa druhy...",
+            "noSpeciesFound": "S aktuálnymi nastaveniami sa nenašli žiadne druhy",
+            "close": "Zavrieť"
+          }
+        },
+        "database": {
+          "title": "Nastavenia databázy",
+          "description": "Nastavenia databázy detekcií",
+          "type": {
+            "label": "Vyberte typ databázy",
+            "helpText": "Vyberte typ databázy, ktorý sa má použiť na ukladanie detekcií."
+          },
+          "sqlite": {
+            "title": "Konfigurácia SQLite",
+            "description": "Konfigurácia umiestnenia súboru databázy SQLite",
+            "note": "SQLite je odporúčaný typ databázy pre väčšinu používateľov.",
+            "path": {
+              "label": "Cesta k databáze SQLite",
+              "placeholder": "Zadajte cestu k databáze SQLite",
+              "helpText": "Cesta k súboru databázy SQLite relatívne k adresáru aplikácie"
+            }
+          },
+          "mysql": {
+            "title": "Konfigurácia MySQL",
+            "description": "Konfigurácia nastavení pripojenia pre databázový server MySQL",
+            "host": {
+              "label": "MySQL Host",
+              "placeholder": "Zadajte MySQL host",
+              "helpText": "Hostiteľ databázy MySQL (IP alebo hostname)"
+            },
+            "port": {
+              "label": "MySQL Port",
+              "helpText": "Port databázy MySQL (predvolené 3306/TCP)"
+            },
+            "username": {
+              "label": "MySQL Username",
+              "placeholder": "Zadajte MySQL meno používateľa",
+              "helpText": "Meno používateľa databázy MySQL"
+            },
+            "password": {
+              "label": "MySQL Password",
+              "placeholder": "Zadajte MySQL heslo",
+              "helpText": "Heslo databázy MySQL"
+            },
+            "database": {
+              "label": "MySQL Databáza",
+              "placeholder": "Zadajte názov MySQL databázy",
+              "helpText": "Názov databázy MySQL"
+            }
+          },
+          "stats": {
+            "title": "Štatistiky databázy",
+            "description": "Runtime informácie o vašej databáze",
+            "loading": "Načítavajú sa štatistiky databázy...",
+            "retry": "Skúsiť znova",
+            "refresh": "Obnoviť",
+            "noData": "Nie sú k dispozícii žiadne štatistiky databázy.",
+            "type": "Typ",
+            "status": "Stav",
+            "size": "Veľkosť",
+            "totalDetections": "Celkovo detekcií",
+            "location": "Umiestnenie",
+            "connected": "Pripojené",
+            "disconnected": "Odpojené"
+          }
+        },
+        "interface": {
+          "title": "Rozhranie",
+          "description": "Konfigurácia jazyka, preferencií zobrazenia a limitov prehľadu"
+        },
+        "visualContent": {
+          "title": "Vizuálny obsah",
+          "description": "Konfigurácia obrázkov vtákov a možností zobrazenia spektrogramu"
+        },
+        "userInterface": {
+          "title": "Nastavenia používateľského rozhrania",
+          "description": "Prispôsobenie používateľského rozhrania",
+          "interface": {
+            "title": "Nastavenia rozhrania",
+            "description": "Vyberte si preferovaný jazyk",
+            "locale": {
+              "label": "Jazyk zobrazenia",
+              "helpText": "Vyberte jazyk pre používateľské rozhranie"
+            }
+          },
+          "language": {
+            "title": "Jazyk",
+            "description": "Konfigurácia jazyka zobrazenia pre používateľské rozhranie",
+            "locale": {
+              "label": "Jazyk rozhrania",
+              "helpText": "Vyberte jazyk pre používateľské rozhranie"
+            }
+          },
+          "dashboard": {
+            "title": "Zobrazenie prehľadu",
+            "description": "Konfigurácia spôsobu zobrazovania detekcií na prehľade",
+            "displaySettings": {
+              "title": "Nastavenia zobrazenia",
+              "description": "Konfigurácia všeobecných možností zobrazenia prehľadu, ako sú limity druhov."
+            },
+            "birdImages": {
+              "title": "Obrázky vtákov",
+              "description": "Konfigurácia náhľadových obrázkov druhov vtákov pre zoznamy detekcií."
+            },
+            "spectrogramGeneration": {
+              "title": "Generovanie spektrogramu",
+              "description": "Konfigurácia toho, kedy a ako sa generujú zvukové spektrogramy pre detekcie."
+            },
+            "general": {
+              "title": "Všeobecné nastavenia"
+            },
+            "summaryLimit": {
+              "label": "Maximálny počet druhov v tabuľke denného súhrnu",
+              "helpText": "Maximálny počet druhov zobrazených v tabuľke denného súhrnu (hodnota medzi 10 a 1000)"
+            },
+            "thumbnails": {
+              "title": "Zobrazenie náhľadov",
+              "summary": {
+                "label": "Zobraziť náhľady v tabuľke denného súhrnu",
+                "helpText": "Povolte zobrazenie náhľadov zistených druhov v tabuľke denného súhrnu"
+              },
+              "recent": {
+                "label": "Zobraziť náhľady v zozname nedávnych detekcií",
+                "helpText": "Povolte zobrazenie náhľadov zistených druhov v zozname nedávnych detekcií"
+              },
+              "imageProvider": {
+                "label": "Poskytovateľ obrázkov",
+                "helpText": "Vyberte preferovaného poskytovateľa obrázkov pre náhľady vtákov"
+              },
+              "fallbackPolicy": {
+                "label": "Záložná politika",
+                "helpText": "Vyberte, čo sa stane, ak preferovaný poskytovateľ nenájde obrázok",
+                "options": {
+                  "all": "Skúsiť všetkých poskytovateľov postupne",
+                  "none": "Použiť iba vybraného poskytovateľa"
+                }
+              }
+            },
+            "spectrogram": {
+              "title": "Generovanie spektrogramu",
+              "mode": {
+                "label": "Režim generovania",
+                "auto": {
+                  "label": "Automaticky (odporúčané)",
+                  "helpText": "Spektrogramy sa generujú automaticky pri zobrazení detekcie v používateľskom rozhraní. Pri dlhom zozname detekcií môže generovanie spektrogramov trvať dlho na systémoch s obmedzenými zdrojmi CPU."
+                },
+                "prerender": {
+                  "label": "Predbežné vykreslenie na pozadí",
+                  "helpText": "Generovať spektrogramy automaticky počas ukladania zvukového klipu. Na systémoch s obmedzenými zdrojmi, ako je Raspberry Pi Zero alebo 3, to poskytuje svižnejšie používateľské rozhranie vďaka tomu, že spektrogramy sa vykresľujú na pozadí, avšak tento režim spotrebuje viac miesta na disku, pretože spektrogramy sa vytvárajú pre každú detekciu."
+                },
+                "userRequested": {
+                  "label": "Iba na žiadosť používateľa",
+                  "helpText": "Generovať spektrogramy iba po kliknutí na tlačidlo generovať. Ideálne pre systémy s obmedzenými zdrojmi (Raspberry Pi 3/Zero) - nulová automatická réžia, vy kontrolujete, kedy sa CPU používa."
+                }
+              },
+              "style": {
+                "label": "Štýl spektrogramu",
+                "helpText": "Vyberte vizuálny vzhľad generovaných spektrogramov.",
+                "preview": "Náhľad",
+                "previewAlt": "Náhľad štýlu spektrogramu",
+                "options": {
+                  "default": "Predvolený (farebný)",
+                  "scientificDark": "Vedecký (tmavý)",
+                  "highContrastDark": "Vysoký kontrast (tmavý)",
+                  "scientific": "Vedecký (svetlý)"
+                },
+                "descriptions": {
+                  "default": "Farebný spektrogram s tmavým pozadím",
+                  "scientificDark": "Stupne sivej s Dolph oknom, tmavé pozadie",
+                  "highContrastDark": "Vysoká sýtosť farieb s tmavým pozadím",
+                  "scientific": "Stupne sivej s Dolph oknom, svetlé pozadie (štýl xeno-canto)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamický rozsah",
+                "helpText": "Riadi kontrast - nižšie hodnoty zvýrazňujú slabé signály, vyššie hodnoty zobrazujú viac detailov.",
+                "options": {
+                  "highContrast": "Vysoký kontrast (80 dB)",
+                  "standard": "Štandardný (100 dB)",
+                  "extended": "Rozšírený (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Najlepšie pre slabé signály. Vtáčí spev jasne vyniká z hluku pozadia. Odporúča sa pre vedecké štýly/štýly v stupňoch sivej.",
+                  "standard": "Predvolené vyvážené nastavenie. Dobré pre väčšinu prípadov použitia.",
+                  "extended": "Viditeľných viac detailov, ale nižší kontrast. Predvolená hodnota SoX."
+                }
+              },
+              "enabled": {
+                "label": "Povoliť predbežné vykresľovanie spektrogramu",
+                "helpText": "ZASTARALÉ: Použite radšej Režim generovania. Generujte spektrogramy na pozadí pri ukladaní detekcií, aby ste eliminovali oneskorenie UI."
+              }
+            }
+          }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Názov uzla",
+          "placeholder": "Zadajte názov uzla",
+          "helpText": "Názov uzla sa používa na identifikáciu zdrojového systému v nastavení s viacerými uzlami, používa sa aj ako identifikátor pre správy MQTT."
+        },
+        "sensitivity": {
+          "label": "Citlivosť",
+          "helpText": "Citlivosť detekcie. Vyššie hodnoty vedú k vyššej citlivosti. Hodnoty medzi 0.5 a 1.5."
+        },
+        "threshold": {
+          "label": "Prah",
+          "helpText": "Minimálny prah istoty. Hodnoty medzi 0.01 a 0.99."
+        },
+        "overlap": {
+          "label": "Prekrytie",
+          "helpText": "Prekrytie segmentov predikcie. Hodnoty medzi 0.0 a 2.9."
+        },
+        "locale": {
+          "label": "Lokalizácia",
+          "helpText": "Lokalizácia pre preložené bežné názvy druhov."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU vlákna",
+          "helpText": "Počet vlákien CPU. Nastavte na 0, aby sa použili všetky dostupné vlákna."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Nepodarilo sa načítať možnosti jazyka. Používajú sa predvolené nastavenia.",
+        "providersLoadFailed": "Nepodarilo sa načítať poskytovateľov obrázkov. Používajú sa predvolené nastavenia.",
+        "rangeFilterTestFailed": "Nepodarilo sa otestovať nastavenia filtra rozsahu",
+        "rangeFilterLoadFailed": "Nepodarilo sa načítať zoznam druhov",
+        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov"
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Sledovanie chýb a telemetria",
+          "description": "Voliteľné sledovanie chýb, ktoré pomáha zlepšovať spoľahlivosť a výkon BirdNET-Go"
+        },
+        "diagnostics": {
+          "title": "Podpora a diagnostika",
+          "description": "Pomôžte vývojárom rýchlejšie vyriešiť vaše problémy poskytnutím základných diagnostických informácií"
+        }
+      },
+      "telemetry": {
+        "privacyNotice": "Oznámenie o ochrane osobných údajov",
+        "privacyPoints": {
+          "noPersonalData": "Nezbierajú sa žiadne osobné údaje",
+          "anonymousData": "Všetky telemetrické údaje sú anonymné",
+          "helpImprove": "Telemetrické údaje pomáhajú vývojárom identifikovať a opravovať problémy v BirdNET-Go"
+        },
+        "enableTracking": "Povoliť sledovanie chýb (Opt-in)"
+      },
+      "systemId": {
+        "label": "Vaše ID systému",
+        "description": "Toto ID použite pri nahlasovaní problémov",
+        "copyButton": "Kopírovať",
+        "errorLoading": "Chyba pri načítaní ID systému"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Zahrnúť nedávne logy",
+        "includeConfiguration": "Zahrnúť konfiguráciu (citlivé údaje sú odstránené)",
+        "includeSystemInfo": "Zahrnúť informácie o systéme"
+      },
+      "supportReport": {
+        "title": "Generovať správu podpory",
+        "description": {
+          "intro": "Správy o podpore sú **nevyhnutné pre riešenie problémov** a dramaticky zlepšujú našu schopnosť vyriešiť problémy, s ktorými sa stretávate. Vývojárom poskytujú kľúčový kontext o konfigurácii vášho systému, nedávne logy aplikácie a vzorce chýb, ktoré by inak nebolo možné diagnostikovať."
+        },
+        "githubRequired": {
+          "title": "Vyžaduje sa: GitHub Issue pre nahranie podpory",
+          "description": "<strong>Nahranie podpory vyžaduje číslo GitHub issue.</strong> Pred vygenerovaním správy o podpore prosím <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">vytvorte GitHub issue</a> popisujúce váš problém. Bez prepojenej issue nemôžu vývojári s vašimi údajmi o podpore pracovať."
+        },
+        "githubIssue": {
+          "label": "Číslo GitHub Issue",
+          "placeholder": "napr. 123 alebo #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Zobraziť existujúce issue</a> alebo <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">vytvoriť novú issue</a>"
+        },
+        "whatsIncluded": {
+          "title": "Čo je zahrnuté v správe:",
+          "applicationLogs": "**Logy aplikácie** - Nedávne chyby a ladiace informácie",
+          "configuration": "**Konfigurácia** - Vaše nastavenia s odstránenými citlivými údajmi",
+          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť a podrobnosti o runtime",
+          "notIncluded": "**NIE JE zahrnuté** - Audio súbory, detekcie vtákov alebo osobné údaje"
+        },
+        "userMessage": {
+          "label": "Popíšte problém",
+          "placeholder": "Popíšte problém a uveďte odkaz na GitHub issue, ak je k dispozícii (napr. #123)",
+          "githubTip": "💡 Tip: Ak máte GitHub issue, uveďte číslo issue (napr. #123) a uveďte svoje ID systému {systemId} v GitHub issue, aby ste vývojárom pomohli prepojiť vaše údaje o podpore.",
+          "labelOptional": "Ďalšie podrobnosti (voliteľné)",
+          "placeholderOptional": "Uveďte akýkoľvek ďalší kontext o probléme, ktorý nie je vo vašej GitHub issue",
+          "systemIdNote": "💡 Tip: Vaše ID systému {systemId} bude automaticky zahrnuté do nahrávania"
+        },
+        "uploadOption": {
+          "label": "Nahrať vývojárom (odporúčané)",
+          "labelWithRequirement": "Nahrať vývojárom (vyžaduje číslo GitHub issue)",
+          "details": {
+            "sentryUpload": "Dáta sú nahrávané do cloudovej služby [Sentry](https://sentry.io)",
+            "euDataCenter": "Uložené v dátovom centre v EÚ (Frankfurt, Nemecko)",
+            "privacyCompliant": "V súlade s ochranou osobných údajov, citlivé údaje sú odstránené",
+            "manualWarning": "Zrušte začiarknutie, iba ak uprednostňujete manuálnu manipuláciu so súborom podpory"
+          }
+        },
+        "generateButton": {
+          "upload": "Generovať a nahrať",
+          "download": "Generovať a stiahnuť"
+        },
+        "statusMessages": {
+          "preparing": "Pripravuje sa výpis podpory...",
+          "uploadSuccess": "Výpis podpory bol úspešne nahraný vývojárom!",
+          "uploadSuccessWithId": "Výpis podpory bol úspešne nahraný vývojárom! Referenčné ID: {dumpId}",
+          "downloadSuccess": "Výpis podpory bol úspešne vygenerovaný! Sťahuje sa...",
+          "generateSuccess": "Výpis podpory bol úspešne vygenerovaný!",
+          "generateFailed": "Nepodarilo sa vygenerovať výpis podpory: {message}",
+          "error": "Chyba: {message}",
+          "githubIssueRequired": "Zadajte číslo GitHub issue pre nahranie údajov podpory"
+        }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "testing": {
+          "title": "Testovacie upozornenia",
+          "description": "Odošlite testovacie upozornenia na overenie, či váš notifikačný systém funguje správne"
+        },
+        "info": {
+          "title": "Systémové informácie",
+          "description": "Zistite, ako zobrazovať a spravovať svoje upozornenia"
+        }
+      },
+      "templates": {
+        "title": "Šablóny upozornení",
+        "description": "Prispôsobte správy upozornení pre nové detekcie druhov pomocou premenných šablóny",
+        "newSpeciesTitle": "Šablóna upozornenia na nový druh",
+        "titleLabel": "Šablóna názvu",
+        "titlePlaceholder": "napr. Nový druh: {{.CommonName}}",
+        "messageLabel": "Šablóna správy",
+        "messagePlaceholder": "napr. Prvá detekcia druhu {{.CommonName}} ({{.ScientificName}}) s istotou {{.ConfidencePercent}}%",
+        "resetButton": "Resetovať",
+        "saveButton": "Uložiť šablóny",
+        "saveButtonUnsaved": "Uložiť šablóny *",
+        "testButton": "Test",
+        "savingButton": "Ukladá sa...",
+        "sendingButton": "Odosiela sa...",
+        "resetConfirm": "Resetovať šablóny na predvolené hodnoty? Týmto sa zahodia vaše aktuálne zmeny a obnovia sa pôvodné hodnoty šablón.",
+        "unsavedChangesWarning": "Máte neuložené zmeny v šablónach. Test použije aktuálne uložené šablóny, nie vaše úpravy. Pokračovať?",
+        "testWithUnsavedChanges": "Varovanie: Máte neuložené zmeny. Test použije uložené šablóny.",
+        "testNormal": "Odoslať testovacie upozornenie",
+        "saveSuccess": "Šablóny boli úspešne uložené!",
+        "saveError": "Chyba: {message}",
+        "availableVariables": "Dostupné premenné šablóny",
+        "variablesDescription": "Použite tieto premenné vo svojich šablónach so syntaxou",
+        "loading": "Načítava sa..."
+      },
+      "testNotification": {
+        "title": "Odoslať testovacie upozornenie na nový druh",
+        "description": "Vygenerujte testovacie upozornenie na detekciu nového druhu, aby ste overili, či váš notifikačný systém funguje",
+        "whatHappens": "Čo sa stane, keď kliknete na 'Odoslať test':",
+        "sendButton": "Odoslať test",
+        "sendingButton": "Odosiela sa...",
+        "statusMessages": {
+          "sending": "Odosiela sa testovacie upozornenie...",
+          "success": "Testovacie upozornenie bolo úspešne odoslané! Skontrolujte svoj notifikačný zvonček.",
+          "error": "Nepodarilo sa odoslať testovacie upozornenie: {message}",
+          "serviceUnavailable": "Notifikačná služba nie je k dispozícii. Skontrolujte nastavenia upozornení."
+        }
+      },
+      "statusMessages": {
+        "sending": "Odosiela sa testovacie upozornenie...",
+        "success": "Testovacie upozornenie bolo úspešne odoslané!",
+        "error": "Nepodarilo sa odoslať testovacie upozornenie: {message}",
+        "serviceUnavailable": "Notifikačná služba nie je k dispozícii. Skontrolujte nastavenia upozornení."
+      },
+      "systemInfo": {
+        "howToView": "Ako zobraziť upozornenia:",
+        "technicalDetails": "Technické podrobnosti o upozorneniach v BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Oznámenie o ochrane osobných údajov pre externé webhooky",
+        "description": "Upozornenia na detekciu môžu pri odosielaní externým službám obsahovať citlivé údaje:",
+        "gps": "GPS súradnice",
+        "gpsDetails": "Presná poloha (zemepisná šírka/dĺžka), ak je nakonfigurovaná",
+        "urls": "URL detekcií",
+        "urlsDetails": "Môže odhaliť informácie o internej sieti",
+        "species": "Údaje o druhoch",
+        "speciesDetails": "Aké vtáky boli zistené a kedy",
+        "recommendation": "Externé webhooky povoľte iba vtedy, ak dôverujete prijímajúcej službe alebo používate self-hosted/lokálne služby."
+      },
+      "push": {
+        "title": "Push upozornenia",
+        "description": "Odosielajte upozornenia externým službám ako Discord, Telegram, Slack a ďalšie",
+        "enable": "Povoliť push upozornenia",
+        "disabled": "Push upozornenia sú zakázané",
+        "enabledDescription": "Push upozornenia budú odosielané všetkým povoleným poskytovateľom nižšie",
+        "filters": {
+          "title": "Filtre detekcie",
+          "description": "Riadenie toho, ktoré detekcie vtákov spúšťajú push upozornenia",
+          "minConfidence": {
+            "label": "Minimálna istota",
+            "helpText": "Odosielať upozornenia iba pre detekcie nad touto úrovňou istoty. Nastavte na 0 pre deaktiváciu."
+          },
+          "speciesCooldown": {
+            "label": "Cooldown druhu",
+            "unit": "min",
+            "helpText": "Zabrániť opakovaným upozorneniam na rovnaký druh v rámci tohto časového okna. Nastavte na 0 pre deaktiváciu."
+          }
+        },
+        "noProviders": "Žiadni nakonfigurovaní poskytovatelia",
+        "noProvidersDescription": "Pridajte poskytovateľa, aby ste začali dostávať push upozornenia",
+        "providers": {
+          "title": "Poskytovatelia upozornení",
+          "addButton": "Pridať poskytovateľa",
+          "editButton": "Upraviť",
+          "deleteButton": "Odstrániť",
+          "enableToggle": "Povoliť poskytovateľa",
+          "urlsPreview": "{count} nakonfigurovaných URL",
+          "deleteConfirm": "Odstrániť poskytovateľa \"{name}\"? Túto akciu nie je možné vrátiť späť.",
+          "typeBadge": {
+            "shoutrrr": "Shoutrrr",
+            "webhook": "Webhook"
+          }
+        },
+        "form": {
+          "addTitle": "Pridať poskytovateľa upozornení",
+          "editTitle": "Upraviť poskytovateľa upozornení",
+          "name": {
+            "label": "Názov poskytovateľa",
+            "placeholder": "napr. Discord Alerts",
+            "helpText": "Priateľský názov na identifikáciu tohto poskytovateľa"
+          },
+          "urls": {
+            "label": "URL adresa (adresy) služby",
+            "placeholder": "discord://token@webhookid",
+            "helpText": "Zadajte jednu Shoutrrr URL adresu na riadok. Viacero adries odošle správu viacerým službám.",
+            "validation": {
+              "required": "Vyžaduje sa aspoň jedna URL adresa",
+              "invalidFormat": "Neplatný formát URL. URL adresy by mali začínať prefixom služby (napr. discord://, telegram://)"
+            }
+          },
+          "notificationTypes": {
+            "label": "Typy upozornení",
+            "helpText": "Vyberte, ktoré typy upozornení sa majú odosielať tomuto poskytovateľovi",
+            "detection": "Detekcie vtákov",
+            "error": "Chyby",
+            "warning": "Varovania",
+            "info": "Informácie",
+            "system": "Systémové udalosti"
+          },
+          "urlFormats": {
+            "title": "Bežné formáty URL",
+            "discord": "Discord",
+            "discordFormat": "discord://token@webhookid",
+            "telegram": "Telegram",
+            "telegramFormat": "telegram://token@telegram?chats=@channel",
+            "slack": "Slack",
+            "slackFormat": "slack://token-a/token-b/token-c",
+            "pushover": "Pushover",
+            "pushoverFormat": "pushover://shoutrrr:apiToken@userKey",
+            "gotify": "Gotify",
+            "gotifyFormat": "gotify://hostname/token",
+            "ntfy": "ntfy",
+            "ntfyFormat": "ntfy://ntfy.sh/mytopic",
+            "moreServices": "Zobraziť všetky podporované služby",
+            "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
+          },
+          "saveButton": "Uložiť poskytovateľa",
+          "savingButton": "Ukladá sa...",
+          "cancelButton": "Zrušiť",
+          "testButton": "Test",
+          "testingButton": "Testuje sa..."
+        },
+        "test": {
+          "button": "Testovať poskytovateľa",
+          "description": "Odošlite testovacie upozornenie na overenie, či tento poskytovateľ funguje",
+          "success": "Testovacie upozornenie bolo úspešne odoslané!",
+          "error": "Test zlyhal: {message}",
+          "requiresUrl": "Zadajte URL na testovanie",
+          "requiresEnabled": "Pre otestovanie povoľte poskytovateľa"
+        },
+        "validation": {
+          "nameRequired": "Názov poskytovateľa je povinný",
+          "urlRequired": "Vyžaduje sa aspoň jedna URL adresa",
+          "invalidUrl": "Neplatný formát URL"
+        },
+        "autoName": {
+          "discord": "Discord",
+          "telegram": "Telegram",
+          "slack": "Slack",
+          "pushover": "Pushover",
+          "gotify": "Gotify",
+          "ntfy": "ntfy",
+          "email": "Email",
+          "generic": "Shoutrrr",
+          "numbered": "{service} #{number}"
+        },
+        "services": {
+          "selectLabel": "Služba",
+          "selectHelpText": "Vyberte notifikačnú službu, ktorú chcete konfigurovať",
+          "discord": {
+            "name": "Discord",
+            "webhookUrl": {
+              "label": "Discord Webhook URL",
+              "placeholder": "https://discord.com/api/webhooks/...",
+              "helpText": "Vložte svoju plnú Discord webhook URL"
+            },
+            "invalidUrl": "Neplatná Discord webhook URL. URL by mala obsahovať discord.com/api/webhooks/"
+          },
+          "telegram": {
+            "name": "Telegram",
+            "botToken": {
+              "label": "Bot Token",
+              "placeholder": "123456789:ABCdef...",
+              "helpText": "Token od @BotFather"
+            },
+            "chatId": {
+              "label": "Chat ID",
+              "placeholder": "-1001234567890 alebo @channel",
+              "helpText": "Chat ID, ID skupiny alebo @username"
+            },
+            "incomplete": "Vyžaduje sa bot token aj chat ID"
+          },
+          "ntfy": {
+            "name": "ntfy",
+            "server": {
+              "label": "Server",
+              "placeholder": "ntfy.sh",
+              "helpText": "Nechajte ntfy.sh pre verejný server alebo zadajte svoj self-hosted server"
+            },
+            "topic": {
+              "label": "Téma",
+              "placeholder": "moje-vtacie-upozornenia",
+              "helpText": "Názov témy pre vaše upozornenia"
+            },
+            "incomplete": "Téma je povinná"
+          },
+          "gotify": {
+            "name": "Gotify",
+            "server": {
+              "label": "URL servera",
+              "placeholder": "gotify.example.com",
+              "helpText": "Hostname vášho Gotify servera (bez https://)"
+            },
+            "token": {
+              "label": "Token aplikácie",
+              "placeholder": "A...",
+              "helpText": "Token zo stránky Gotify Apps"
+            },
+            "incomplete": "Vyžaduje sa server aj token"
+          },
+          "pushover": {
+            "name": "Pushover",
+            "apiToken": {
+              "label": "API Token",
+              "placeholder": "az...",
+              "helpText": "API token aplikácie"
+            },
+            "userKey": {
+              "label": "User Key",
+              "placeholder": "u...",
+              "helpText": "Váš používateľský alebo skupinový kľúč"
+            },
+            "incomplete": "Vyžaduje sa API token aj používateľský kľúč"
+          },
+          "slack": {
+            "name": "Slack",
+            "webhookUrl": {
+              "label": "Slack Webhook URL",
+              "placeholder": "https://hooks.slack.com/services/...",
+              "helpText": "Vložte svoju plnú Slack webhook URL"
+            },
+            "invalidUrl": "Neplatná Slack webhook URL. URL by mala obsahovať hooks.slack.com/services/"
+          },
+          "ifttt": {
+            "name": "IFTTT",
+            "webhookKey": {
+              "label": "Kľúč Webhooku",
+              "placeholder": "abc123xyz...",
+              "helpText": "Váš IFTTT Webhook kľúč z nastavení Maker Webhooks"
+            },
+            "eventName": {
+              "label": "Názov udalosti",
+              "placeholder": "bird_detected",
+              "helpText": "Názov udalosti, ktorú chcete spustiť vo svojom IFTTT applete"
+            },
+            "incomplete": "Vyžaduje sa kľúč webhooku aj názov udalosti"
+          },
+          "webhook": {
+            "name": "Webhook",
+            "url": {
+              "label": "Webhook URL",
+              "placeholder": "https://api.example.com/webhook",
+              "helpText": "Koncový bod HTTP(S), na ktorý sa majú odosielať upozornenia"
+            },
+            "method": {
+              "label": "HTTP metóda",
+              "helpText": "HTTP metóda použitá pre požiadavku (predvolené: POST)"
+            },
+            "auth": {
+              "label": "Autentifikácia",
+              "none": "Žiadna",
+              "bearer": "Bearer Token",
+              "basic": "Basic Auth",
+              "helpText": "Voliteľná autentifikácia pre koncový bod webhooku"
+            },
+            "bearerToken": {
+              "label": "Bearer Token",
+              "placeholder": "vas-api-token",
+              "helpText": "Token odoslaný v hlavičke Authorization: Bearer"
+            },
+            "basicUser": {
+              "label": "Meno používateľa",
+              "placeholder": "username"
+            },
+            "basicPass": {
+              "label": "Heslo",
+              "placeholder": "password"
+            },
+            "basicAuth": {
+              "helpText": "Prihlasovacie údaje odoslané pomocou HTTP Basic Authentication"
+            },
+            "invalidUrl": "Neplatná URL. Musí začínať na http:// alebo https://",
+            "tokenRequired": "Bearer token sa vyžaduje pri použití autentifikácie Bearer",
+            "credentialsRequired": "Meno používateľa a heslo sa vyžadujú pri použití autentifikácie Basic"
+          },
+          "custom": {
+            "name": "Vlastná URL",
+            "url": {
+              "label": "Shoutrrr URL",
+              "placeholder": "service://credentials@host",
+              "helpText": "Zadajte surovú Shoutrrr URL pre akúkoľvek podporovanú službu"
+            },
+            "invalidUrl": "Neplatný formát URL. URL by mala začínať na service://"
+          }
+        }
+      }
+    },
+    "filters": {
+      "title": "Filtre",
+      "privacyFiltering": {
+        "title": "Filtrovanie súkromia",
+        "description": "Filtrovanie súkromia zabraňuje ukladaniu zvukových klipov, keď sú detegované ľudské hlasy",
+        "enable": "Povoliť filtrovanie súkromia",
+        "disabled": "Filtrovanie súkromia je vypnuté",
+        "confidenceLabel": "Prah istoty pre detekciu ľudí",
+        "confidenceHelp": "Nastavte úroveň istoty pre detekciu ľudského hlasu, nižšia hodnota robí filter citlivejším"
+      },
+      "falsePositivePrevention": {
+        "title": "Prevencia falošne pozitívnych výsledkov",
+        "description": "Konfigurácia filtrov falošných detekcií",
+        "enableDogBark": "Povoliť filter psieho štekania",
+        "disabled": "Filter psieho štekania je vypnutý",
+        "confidenceLabel": "Prah istoty",
+        "confidenceHelp": "Nastavte úroveň istoty pre detekciu psieho štekania, nižšia hodnota robí filter citlivejším",
+        "expireTimeLabel": "Čas vypršania psieho štekania (minúty)",
+        "expireTimeHelp": "Nastavte, ako dlho si má systém pamätať detegované psie štekanie",
+        "addDogBarkSpeciesLabel": "Pridať druhy so štekaním",
+        "addDogBarkSpeciesHelp": "Vyhľadajte a pridajte druhy, ktoré by sa mohli zameniť so psím štekaním",
+        "addSpeciesButton": "Pridať"
+      },
+      "speciesNamePlaceholder": "Názov druhu",
+      "typeSpeciesName": "Zadajte názov druhu...",
+      "dogBarkSpeciesList": "Zoznam druhov so štekaním",
+      "errors": {
+        "speciesLoadFailed": "Nepodarilo sa načítať zoznam druhov. Skúste to znova."
+      }
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Nahrať detekcie do BirdWeather",
+        "ffmpegWarning": {
+          "title": "FFmpeg nebol nájdený",
+          "message": "Nainštalujte FFmpeg, aby ste povolili podporu kódovania FLAC. BirdWeather nahrádza nahrávanie WAV v prospech komprimovaných zvukových súborov FLAC."
+        },
+        "enable": "Povoliť nahrávanie do BirdWeather",
+        "token": {
+          "label": "Token BirdWeather",
+          "helpText": "Váš jedinečný token BirdWeather."
+        },
+        "threshold": {
+          "label": "Prah nahrávania",
+          "helpText": "Minimálny prah istoty pre nahrávanie predikcií do BirdWeather."
+        },
+        "test": {
+          "button": "Testovať pripojenie k BirdWeather",
+          "loading": "Testuje sa...",
+          "enabledRequired": "BirdWeather musí byť povolený pre testovanie",
+          "tokenRequired": "Musí byť zadaný token BirdWeather",
+          "inProgress": "Test prebieha...",
+          "description": "Testovať pripojenie k BirdWeather"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Konfigurovať pripojenie k MQTT brokeru",
+        "enable": "Povoliť integráciu MQTT",
+        "broker": {
+          "label": "MQTT Broker",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "MQTT téma",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Autentifikácia",
+          "username": {
+            "label": "Meno používateľa"
+          },
+          "password": {
+            "label": "Heslo",
+            "helpText": "Heslo k MQTT."
+          }
+        },
+        "tls": {
+          "title": "TLS/SSL zabezpečenie",
+          "enable": "Povoliť TLS/SSL",
+          "skipVerify": "Preskočiť overenie certifikátu",
+          "configNote": "<strong>Konfigurácia TLS:</strong><br />• Štandardné TLS: Nechajte certifikáty prázdne pre verejných brokerov<br />• Self-signed certifikáty: Poskytnite CA certifikát<br />• Mutual TLS (mTLS): Poskytnite všetky tri certifikáty"
+        },
+        "homeAssistant": {
+          "title": "Automatické zisťovanie Home Assistant",
+          "enable": "Povoliť zisťovanie MQTT pre Home Assistant",
+          "description": "Keď je povolené, BirdNET-Go automaticky registruje zariadenia a senzory v Home Assistant prostredníctvom protokolu zisťovania MQTT. Zariadenia sa objavia v registri zariadení Home Assistant bez manuálnej konfigurácie YAML.",
+          "discoveryPrefix": {
+            "label": "Prefix zisťovania",
+            "helpText": "Prefix témy MQTT pre správy o zisťovaní Home Assistant. Predvolená hodnota je 'homeassistant'. Toto zmeňte iba vtedy, ak ste v Home Assistant nakonfigurovali vlastný prefix zisťovania."
+          },
+          "deviceName": {
+            "label": "Názov zariadenia",
+            "helpText": "Základný názov zariadení, ako sa zobrazujú v Home Assistant. Každý zdroj zvuku bude mať svoje vlastné zariadenie prepojené s týmto hlavným zariadením BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Vytvorené senzory:</strong> Pre každý zdroj zvuku dostane Home Assistant: Posledný druh, Istotu, Vedecký názov a Úroveň zvuku (ak je povolená). Premosťovacie zariadenie zahŕňa stav dostupnosti online/offline.",
+          "discovery": {
+            "button": "Odoslať zisťovanie",
+            "success": "Správy o zisťovaní boli odoslané do Home Assistant",
+            "error": "Nepodarilo sa odoslať správy o zisťovaní",
+            "saveFirst": "Pred odoslaním zisťovania uložte nastavenia"
+          },
+          "retain": {
+            "label": "Retain správy",
+            "note": "<strong>Odporúčané:</strong> Povoľte príznak retain, aby ste zabezpečili, že senzory MQTT zobrazia hodnoty po reštarte Home Assistant."
+          }
+        },
+        "test": {
+          "button": "Testovať pripojenie k MQTT",
+          "loading": "Testuje sa...",
+          "enabledRequired": "MQTT musí byť povolené pre testovanie",
+          "brokerRequired": "Musí byť zadaný MQTT broker",
+          "inProgress": "Test prebieha...",
+          "description": "Testovať pripojenie k MQTT"
+        }
+      },
+      "observability": {
+        "title": "Pozorovateľnosť (Observability)",
+        "description": "Monitorujte výkon BirdNET-Go a metriky detekcie vtákov prostredníctvom koncového bodu kompatibilného s Prometheus",
+        "enable": "Povoliť integráciu pozorovateľnosti",
+        "disabled": "Integrácia pozorovateľnosti nie je povolená",
+        "listenAddress": {
+          "label": "Adresa počúvania",
+          "placeholder": "0.0.0.0:8090"
+        }
+      },
+      "weather": {
+        "title": "Počasie",
+        "description": "Konfigurovať zber údajov o počasí",
+        "provider": {
+          "label": "Poskytovateľ počasia",
+          "options": {
+            "none": "Žiadny",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "apiKey": {
+            "label": "API kľúč Weather Underground",
+            "helpText": "Zadajte svoj API kľúč Weather Underground. Vyžaduje sa pre údaje o počasí."
+          },
+          "stationId": {
+            "label": "ID stanice",
+            "helpText": "Vaše ID stanice Weather Underground PWS (napr. KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "API koncový bod",
+            "helpText": "V prípade potreby prepíšte predvolený koncový bod API Weather Underground. Ak zostane prázdny, predvolene sa použije https://api.weather.com/v2/pws/observations/current."
+          },
+          "units": {
+            "label": "Jednotky",
+            "helpText": "Vyberte jednotky pre teplotu a rýchlosť vetra (m = metrické, e = imperiálne, h = UK hybridné)."
+          }
+        },
+        "notes": {
+          "none": "Nebudú sa získavať žiadne údaje o počasí.",
+          "yrno": {
+            "description": "Údaje o predpovedi počasia poskytuje Yr.no, spoločná služba Nórskeho meteorologického inštitútu (met.no) a Nórskej rozhlasovej a televíznej spoločnosti (NRK).",
+            "freeService": "Yr je bezplatná služba údajov o počasí. Pre viac informácií navštívte <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "Používanie OpenWeather vyžaduje API kľúč, zaregistrujte sa pre bezplatný API kľúč na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Vyžaduje API kľúč Weather Underground a platné ID stanice PWS. Podrobnosti nájdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+        },
+        "apiKey": {
+          "label": "API kľúč",
+          "helpText": "Váš API kľúč pre vybraného poskytovateľa počasia. Udržujte ho v tajnosti!"
+        },
+        "units": {
+          "label": "Merné jednotky",
+          "options": {
+            "standard": "Štandardné",
+            "metric": "Metrické",
+            "imperial": "Imperiálne",
+            "ukhybrid": "UK Hybrid"
+          }
+        },
+        "test": {
+          "button": "Testovať poskytovateľa počasia",
+          "loading": "Testuje sa...",
+          "noProvider": "Nie je vybraný žiadny poskytovateľ počasia",
+          "apiKeyRequired": "Musí byť zadaný API kľúč",
+          "inProgress": "Test prebieha...",
+          "description": "Testovať pripojenie k poskytovateľovi počasia"
+        },
+        "temperatureUnit": {
+          "label": "Jednotka zobrazenia teploty",
+          "helpText": "Vyberte, ako sa budú teploty zobrazovať v celej aplikácii.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
+        }
+      }
+    },
+    "audio": {
+      "loading": "Načítavajú sa zvukové zariadenia...",
+      "tabs": {
+        "soundCard": "Zvuková karta",
+        "streams": "Streamy",
+        "processing": "Spracovanie",
+        "recording": "Nahrávanie",
+        "retention": "Uchovávanie"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Neboli nájdené žiadne zvukové karty",
+          "description": "V tomto systéme neboli nájdené žiadne lokálne zvukové vstupné zariadenia. To je normálne pri nasadení v kontajneroch alebo na serveroch bez grafického rozhrania.",
+          "errorTitle": "Chyba pri načítaní zariadení",
+          "hintsTitle": "Môžete:",
+          "hints": {
+            "container": "Toto je normálne pri nasadení v kontajneroch/headless režime",
+            "streams": "Namiesto toho nakonfigurujte sieťové streamy na karte Streamy",
+            "usb": "Pripojte USB mikrofón a obnovte zoznam"
+          },
+          "refresh": "Obnoviť zariadenia",
+          "retry": "Skúsiť znova"
+        },
+        "streams": {
+          "title": "Žiadne nakonfigurované streamy",
+          "description": "Pridajte RTSP alebo sieťové zvukové streamy z IP kamier, mikrofónových serverov alebo iných streamovacích zdrojov.",
+          "hintsTitle": "Začíname:",
+          "hints": {
+            "rtsp": "Zadajte URL adresy RTSP vo formáte: rtsp://ip:port/stream",
+            "multiple": "Môžete pridať viacero streamov pre rôzne miesta",
+            "protocol": "Vyberte TCP pre spoľahlivosť alebo UDP pre nižšiu latenciu"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Zvuková karta",
+        "description": "Konfigurácia lokálneho zvukového vstupného zariadenia",
+        "audioSourceLabel": "Zdroj zvuku (vyžaduje reštart aplikácie)",
+        "audioSourceHelp": "Vyberte zvukové vstupné zariadenie pre detekciu vtáčieho spevu. Zmeny vyžadujú reštart aplikácie.",
+        "noSoundCardCapture": "Žiadne zachytávanie zvukovou kartou",
+        "empty": {
+          "title": "Neboli nájdené žiadne zvukové karty",
+          "description": "V tomto systéme neboli nájdené žiadne lokálne zvukové vstupné zariadenia. To je normálne pri nasadení v kontajneroch alebo na serveroch bez grafického rozhrania.",
+          "hintsTitle": "Môžete:",
+          "hintStream": "Nakonfigurujte sieťové streamy na karte Streamy",
+          "hintUsb": "Pripojte USB mikrofón a obnovte zoznam",
+          "goToStreams": "Prejsť na Streamy",
+          "refresh": "Obnoviť zariadenia"
+        }
+      },
+      "noSources": {
+        "warning": "Žiadne nakonfigurované zdroje zvuku",
+        "description": "BirdNET-Go potrebuje zvukový vstup na detekciu vtákov. Nakonfigurujte aspoň jeden zdroj na karte Zvuková karta alebo Streamy."
+      },
+      "audioCapture": {
+        "title": "Konfigurácia zvukovej karty",
+        "description": "Vyberte zvukové vstupné zariadenie pre detekciu vtáčieho spevu. Zmeny vyžadujú reštart aplikácie.",
+        "soundCardSource": "Zdroj zvukovej karty",
+        "audioSourceLabel": "Zdroj zvuku (vyžaduje reštart aplikácie)",
+        "audioSourceHelp": "Vyberte zvukové vstupné zariadenie pre detekciu vtáčieho spevu. Zmeny vyžadujú reštart aplikácie.",
+        "noSoundCardCapture": "Žiadne zachytávanie zvukovou kartou",
+        "noDeviceSelected": "Nie je vybrané žiadne zvukové zariadenie",
+        "refreshDevices": "Obnoviť",
+        "rtspSource": "RTSP zdroj",
+        "rtspTransportLabel": "RTSP transportný protokol",
+        "rtspTransportHelp": "TCP je spoľahlivejší, ale môže mať vyššiu latenciu. UDP je rýchlejší, ale na zlých sieťach môže dochádzať k strate paketov.",
+        "rtspUrlsLabel": "URL adresy RTSP streamov",
+        "rtspUrlsHelp": "Zadajte jednu alebo viac URL adries RTSP streamov pre sieťové zdroje zvuku. Formát: rtsp://ip:port/stream. Poznámka: Autentifikačné údaje by mali byť z bezpečnostných dôvodov nakonfigurované samostatne vo vašom RTSP serveri.",
+        "deviceSelected": "Zvuková karta vybraná a pripravená na zachytávanie",
+        "availableDevices": "Dostupné zvukové zariadenia",
+        "active": "Aktívne",
+        "streamsConfigured": "{count} nakonfigurovaných streamov"
+      },
+      "rtspStreams": {
+        "title": "Konfigurácia zvukových streamov",
+        "description": "Nakonfigurujte sieťové zvukové streamy pre vzdialené zachytávanie zvuku. Podporuje protokoly RTSP, HTTP, HLS, RTMP a UDP.",
+        "noStreamsConfigured": "Žiadne nakonfigurované streamy"
+      },
+      "streams": {
+        "streamLabel": "Stream",
+        "nameLabel": "Názov streamu",
+        "namePlaceholder": "napr. Kŕmidlo pred domom",
+        "nameHelp": "Popisný názov na identifikáciu tohto zvukového streamu",
+        "urlLabel": "URL streamu",
+        "urlHelp": "Zadajte URL streamu s voliteľnými prihlasovacími údajmi (napr. rtsp://host:port/path). Použite premenné prostredia pre prihlasovacie údaje.",
+        "typeLabel": "Typ streamu",
+        "typeHelp": "Protokol streamu - automaticky zistený z URL",
+        "transportLabel": "Protokol",
+        "summary": "{count} nakonfigurovaných streamov",
+        "healthy": "zdravý",
+        "unhealthy": "nezdravý",
+        "unknown": "neznámy",
+        "refresh": "Obnoviť",
+        "addStream": "Pridať stream",
+        "deleteConfirm": "Odstrániť tento stream?",
+        "restartCount": "Reštartované {count}-krát",
+        "healthLoadError": "Nepodarilo sa načítať stav zdravia streamu",
+        "status": {
+          "connected": "Pripojené",
+          "connecting": "Pripája sa",
+          "error": "Chyba",
+          "idle": "Nečinné",
+          "unknown": "Neznáme"
+        },
+        "emptyState": {
+          "title": "Žiadne nakonfigurované streamy",
+          "description": "Pridajte zvukové streamy z IP kamier, Icecast serverov alebo iných sieťových zdrojov.",
+          "hintsTitle": "Začíname",
+          "hints": {
+            "rtsp": "Podporuje streamy RTSP, HTTP, HLS, RTMP a UDP/RTP",
+            "credentials": "Prihlasovacie údaje môžu byť zahrnuté v URL alebo použite premenné prostredia",
+            "protocol": "TCP je spoľahlivejší pre RTSP, UDP má nižšiu latenciu"
+          }
+        },
+        "errors": {
+          "nameRequired": "Názov streamu je povinný",
+          "duplicateName": "Stream s týmto názvom už existuje",
+          "urlRequired": "URL streamu je povinná",
+          "invalidUrl": "Neplatný formát URL streamu",
+          "duplicate": "Táto URL streamu už existuje"
+        },
+        "timeline": {
+          "error": "Chyba",
+          "noHistory": "Nie je k dispozícii žiadna história stavov alebo chýb.",
+          "stateChange": "Zmena stavu",
+          "host": "Hostiteľ",
+          "troubleshooting": "Riešenie problémov",
+          "from": "Od",
+          "to": "Do",
+          "reason": "Dôvod",
+          "eventAt": "Udalosť o {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Prepnúť diagnostiku",
+          "processState": "Stav procesu",
+          "lastData": "Posledné dáta",
+          "restartCount": "Počet reštartov",
+          "connection": "Pripojenie",
+          "stateErrorHistory": "História stavov a chýb"
+        },
+        "connectionStatus": {
+          "stable": "Stabilné",
+          "degraded": "Zhoršené",
+          "failed": "Zlyhalo",
+          "unknown": "Neznáme"
+        }
+      },
+      "audioFilters": {
+        "title": "Zvukové filtre",
+        "description": "Konfigurácia filtrov spracovania zvuku",
+        "enableEqualizer": "Povoliť zvukový ekvalizér",
+        "enableEqualizerHelp": "Použite frekvenčné filtrovanie na zlepšenie detekcie vtáčieho spevu znížením nežiaduceho hluku a frekvencií.",
+        "filterType": "Typ filtra",
+        "newFilterType": "Nový typ filtra",
+        "selectFilterType": "Vyberte typ filtra",
+        "addFilter": "Pridať filter",
+        "remove": "Odstrániť",
+        "frequencyResponse": "Frekvenčná odozva",
+        "cutoffFrequency": "Deliaca frekvencia",
+        "cutoffFrequencyHelp": "Frekvencia, pri ktorej filter začína tlmíť signály. Vtáčí spev sa zvyčajne pohybuje v rozmedzí 1-10 kHz.",
+        "qFactor": "Q faktor",
+        "qFactorHelp": "Činiteľ akosti (Q faktor) riadi ostrosť filtra. Nižšie hodnoty (0.1-1) vytvárajú jemnejšie sklony, vyššie hodnoty (1-10) vytvárajú strmšie rezy.",
+        "gain": "Zisk",
+        "gainHelp": "Úroveň zosilnenia alebo útlmu v decibeloch (dB).",
+        "attenuation": "Útlm",
+        "attenuationHelp": "Rýchlosť poklesu filtra. Vyššie hodnoty poskytujú strmšie tlmenie filtrovaných frekvencií.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí."
+      },
+      "soundLevelMonitoring": {
+        "title": "Monitorovanie úrovne zvuku",
+        "description": "Monitorovanie a hlásenie úrovní hluku prostredia",
+        "enable": "Povoliť monitorovanie úrovne zvuku",
+        "enableHelp": "Sledujte hladiny hluku v okolí, aby ste porozumeli svojmu nahrávaciemu prostrediu a dali ich do súvislosti so vzorcami aktivity vtákov.",
+        "disabled": "Monitorovanie úrovne zvuku je vypnuté",
+        "intervalLabel": "Interval merania (sekundy)",
+        "intervalHelp": "Ako často sa majú merať a hlásiť úrovne zvuku. Nižšie hodnoty poskytujú podrobnejšie údaje, ale spotrebúvajú viac zdrojov. Minimálne 5 sekúnd, odporúčaných 60 sekúnd.",
+        "dataOutputTitle": "Výstup údajov o úrovni zvuku",
+        "dataOutputDescription": "Keď je povolené, merania úrovne zvuku sa zverejňujú prostredníctvom:",
+        "mqttTopic": "MQTT téma:",
+        "sseEndpoint": "SSE koncový bod:",
+        "prometheusMetrics": "Metriky Prometheus:"
+      },
+      "clipSettings": {
+        "title": "Nastavenia klipov",
+        "description": "Konfigurácia zachytávania a spracovania zvukových klipov pre identifikovaný vtáčí spev"
+      },
+      "clipRecording": {
+        "title": "Nahrávanie klipov",
+        "description": "Konfigurácia toho, kedy a ako sa zachytávajú zvukové klipy pre detegovaný vtáčí spev.",
+        "enable": "Povoliť nahrávanie klipov",
+        "enableHelp": "Ukladajte zvukové klipy detegovaného vtáčieho spevu na kontrolu, zdieľanie alebo budovanie vlastných datasetov.",
+        "disabled": "Nahrávanie klipov je vypnuté",
+        "captureSettings": "Nastavenia zachytávania",
+        "lengthLabel": "Dĺžka zachytávania",
+        "lengthHelp": "Trvanie zvuku, ktoré sa má zachytiť pre každú detekciu (10-60 sekúnd). Dlhšie klipy poskytujú viac kontextu, ale spotrebúvajú viac úložiska.",
+        "preCaptureLabel": "Buffer pred detekciou",
+        "preCaptureHelp": "Sekundy zvuku, ktoré sa majú zahrnúť pred detekciou vtáka (0-{max} sekúnd). Zabezpečuje zachytenie celého vtáčieho spevu od jeho začiatku.",
+        "gainLabel": "Zosilnenie zvuku",
+        "gainHelp": "Zosilnenie zvuku pre uložené klipy v decibeloch (0 až 20 dB). Robí uložené zvukové klipy hlasnejšími pre ľahšie počúvanie. Neovplyvňuje detekciu. 0 dB znamená žiadne zosilnenie.",
+        "normalization": "Normalizácia zvuku",
+        "normalizationEnable": "Povoliť normalizáciu hlasitosti",
+        "normalizationHelp": "Automaticky upraviť úrovne zvuku na vysielací štandard EBU R128 pre konzistentnú hlasitosť prehrávania vo všetkých klipoch.",
+        "normalizationDisabled": "Normalizácia zvuku je vypnutá",
+        "targetLUFSLabel": "Cieľová hlasitosť (LUFS)",
+        "targetLUFSHelp": "Cieľová integrovaná hlasitosť v LUFS (Loudness Units relative to Full Scale). -23 LUFS je vysielací štandard EBU R128. Rozsah: -40 až -10 LUFS.",
+        "loudnessRangeLabel": "Rozsah hlasitosti (LU)",
+        "loudnessRangeHelp": "Maximálna variácia hlasitosti v rámci klipu (0-20 LU). Nižšie hodnoty vytvárajú konzistentnejšiu hlasitosť, ale môžu znížiť dynamiku.",
+        "truePeakLabel": "Limit True Peak (dBTP)",
+        "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
+        "normalizationNote": "Štandard EBU R128",
+        "normalizationNoteDescription": "Normalizácia zvuku sa riadi vysielacím štandardom EBU R128, čo zabezpečuje konzistentné úrovne prehrávania na rôznych zariadeniach a zabraňuje orezaniu.",
+        "fileSettings": "Nastavenia súborov",
+        "pathLabel": "Priečinok s klipmi",
+        "pathHelp": "Adresár, do ktorého sa budú ukladať zvukové klipy. Relatívne cesty sú od adresára aplikácie. Príklad: 'clips/' alebo '/var/audio/birds/'",
+        "typeLabel": "Formát zvuku",
+        "typeHelp": "Formát zvuku pre uložené klipy. WAV a FLAC sú bezstratové (najlepšia kvalita, väčšie súbory). MP3, AAC a Opus sú stratové (menšie súbory, mierna strata kvality).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Bitrate kompresie zvuku pre stratové formáty. Rozsah: {min}-{max} kbps. Vyššie hodnoty poskytujú lepšiu kvalitu, ale väčšie súbory.",
+        "losslessNote": "Bezstratové formáty zachovávajú pôvodnú kvalitu zvuku bez artefaktov kompresie.",
+        "disabledInfo": "Povolte nahrávanie klipov vyššie, aby ste mohli konfigurovať nastavenia klipov, formát súboru a možnosti úložiska."
+      },
+      "fileSettings": {
+        "title": "Nastavenia súborov",
+        "description": "Konfigurácia umiestnenia úložiska a formátu zvuku pre uložené klipy.",
+        "pathLabel": "Priečinok s klipmi",
+        "pathHelp": "Adresár, do ktorého sa budú ukladať zvukové klipy. Relatívne cesty sú od adresára aplikácie. Príklad: 'clips/' alebo '/var/audio/birds/'",
+        "typeLabel": "Formát zvuku",
+        "typeHelp": "Formát zvuku pre uložené klipy. WAV a FLAC sú bezstratové (najlepšia kvalita, väčšie súbory). MP3, AAC a Opus sú stratové (menšie súbory, mierna strata kvality).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Bitrate kompresie zvuku pre stratové formáty. Rozsah: {min}-{max} kbps. Vyššie hodnoty poskytujú lepšiu kvalitu, ale väčšie súbory.",
+        "losslessNote": "Bezstratové formáty zachovávajú pôvodnú kvalitu zvuku bez artefaktov kompresie."
+      },
+      "audioNormalization": {
+        "title": "Normalizácia zvuku",
+        "description": "Upravte úrovne zvuku pre konzistentnú hlasitosť prehrávania vo všetkých klipoch.",
+        "enable": "Povoliť normalizáciu hlasitosti",
+        "enableHelp": "Automaticky upraviť úrovne zvuku na vysielací štandard EBU R128 pre konzistentnú hlasitosť prehrávania vo všetkých klipoch.",
+        "disabled": "Normalizácia zvuku je vypnutá",
+        "requiresRecording": "Pre použitie normalizácie zvuku povoľte nahrávanie klipov na karte Nahrávanie.",
+        "targetLUFSLabel": "Cieľová hlasitosť (LUFS)",
+        "targetLUFSHelp": "Cieľová integrovaná hlasitosť v LUFS (Loudness Units relative to Full Scale). -23 LUFS je vysielací štandard EBU R128. Rozsah: -40 až -10 LUFS.",
+        "loudnessRangeLabel": "Rozsah hlasitosti (LU)",
+        "loudnessRangeHelp": "Maximálna variácia hlasitosti v rámci klipu (0-20 LU). Nižšie hodnoty vytvárajú konzistentnejšiu hlasitosť, ale môžu znížiť dynamiku.",
+        "truePeakLabel": "Limit True Peak (dBTP)",
+        "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
+        "noteTitle": "Štandard EBU R128",
+        "noteDescription": "Normalizácia zvuku sa riadi vysielacím štandardom EBU R128, čo zabezpečuje konzistentné úrovne prehrávania na rôznych zariadeniach a zabraňuje orezaniu."
+      },
+      "audioClipRetention": {
+        "title": "Uchovávanie zvukových klipov",
+        "description": "Konfigurácia automatického čistenia uložených zvukových klipov",
+        "policyLabel": "Politika uchovávania",
+        "policyHelp": "Vyberte, ako sa majú zvukové klipy automaticky odstraňovať. Žiadna: ponechať všetky klipy. Vek: odstrániť klipy staršie ako zadaný čas. Využitie: odstrániť najstaršie klipy, keď využitie disku prekročí limit.",
+        "maxAgeLabel": "Maximálny vek",
+        "maxAgeHelp": "Odstrániť zvukové klipy staršie ako toto trvanie. Formát: číslo nasledované jednotkou (h=hodiny, d=dni, w=týždne, m=mesiace). Príklady: '7d' pre 7 dní, '4w' pre 4 týždne.",
+        "maxUsageLabel": "Maximálne využitie disku",
+        "maxUsageHelp": "Odstrániť najstaršie klipy, keď adresár so zvukom využíva viac ako toto percento dostupného miesta na disku.",
+        "minClipsLabel": "Minimálny počet klipov na druh",
+        "minClipsHelp": "Vždy ponechať aspoň toľkoto klipov pre každý druh vtáka bez ohľadu na vek alebo využitie disku. Pomáha zachovať vzácne nahrávky.",
+        "keepSpectrograms": "Ponechať obrázky spektrogramov",
+        "keepSpectrogramsHelp": "Ponechať obrázky spektrogramov aj po odstránení zvukových klipov. Spektrogramy zaberajú menej miesta a poskytujú vizuálnu referenciu.",
+        "policies": {
+          "none": "Žiadna - ponechať všetko",
+          "age": "Na základe veku",
+          "usage": "Na základe využitia disku"
+        },
+        "noRetentionTitle": "Všetky klipy ponechané",
+        "noRetentionDescription": "Zvukové klipy sa budú uchovávať neobmedzene. Sledujte využitie disku, aby ste predišli problémom s úložiskom.",
+        "ageRetentionTitle": "Čistenie na základe veku",
+        "ageRetentionDescription": "Klipy staršie ako zadaný vek budú automaticky odstránené, pričom sa zachová minimálny počet na druh.",
+        "usageRetentionTitle": "Čistenie na základe využitia",
+        "usageRetentionDescription": "Keď využitie disku prekročí prahovú hodnotu, najstaršie klipy budú odstraňované, kým využitie nebude v rámci limitov."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Dolnopriepustný filter (Lowpass)",
+        "highpass": "Hornopriepustný filter (Highpass)",
+        "bandpass": "Pásmová priepusť (Bandpass)",
+        "bandstop": "Pásmový zádrž (Bandstop)"
+      },
+      "errors": {
+        "devicesLoadFailed": "Nepodarilo sa načítať zvukové zariadenia. Skontrolujte systémové oprávnenia.",
+        "invalidBitrate": "Neplatná hodnota bitrate",
+        "invalidRetentionPolicy": "Neplatná politika uchovávania"
+      }
+    },
+    "security": {
+      "baseUrlLabel": "Základná URL (Base URL)",
+      "baseUrlHelp": "Úplná externá URL pre nastavenia reverzného proxy. Keď je nastavená, táto URL sa používa tak, ako je, pre upozornenia a OAuth presmerovania, pričom sa ignorujú nastavenia Host a AutoTLS.",
+      "baseUrlValidation": "Zadajte platnú URL začínajúcu na http:// alebo https:// a obsahujúcu hostname",
+      "hostLabel": "Adresa hostiteľa (Host)",
+      "allowSubnetBypassLabel": "Povoliť prístup zo subnetu na obídenie autentifikácie",
+      "allowedSubnetsLabel": "Povolené subnety",
+      "allowedSubnetsHelp": "Povolené sieťové rozsahy na obídenie prihlásenia (notácia CIDR, zoznam oddelený čiarkami)",
+      "securityWarningTitle": "Bezpečnostné varovanie:",
+      "subnetWarningText": "Zariadenia z týchto subnetov budú mať neobmedzený prístup. Zahrňte iba dôveryhodné interné siete.",
+      "httpsSettingsTitle": "Nastavenia HTTPS",
+      "httpsSettingsDescription": "Zabezpečený prístup pomocou šifrovania SSL/TLS",
+      "basicAuthTitle": "Základná autentifikácia (Basic Auth)",
+      "basicAuthDescription": "Zabezpečený prístup pomocou jednoduchého hesla",
+      "serverConfiguration": {
+        "title": "Konfigurácia servera",
+        "description": "Konfigurácia nastavení HTTPS a SSL/TLS",
+        "autoTlsLabel": "Automatická správa SSL certifikátov (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "Požiadavky AutoTLS:",
+          "domainRequired": "Vyžaduje sa registrovaný názov domény",
+          "domainPointing": "Doména musí smerovať na verejnú IP adresu tohto servera",
+          "portsAccessible": "Porty 80 a 443 musia byť prístupné z internetu"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Základná autentifikácia",
+        "description": "Zabezpečený prístup pomocou jednoduchého hesla",
+        "enableLabel": "Povoliť overenie heslom",
+        "disabled": "Overenie heslom je vypnuté",
+        "passwordLabel": "Heslo",
+        "passwordHelpText": "Obmedziť prístup k nastaveniam pomocou hesla."
+      },
+      "oauth": {
+        "title": "Sociálna autentifikácia OAuth2",
+        "description": "Jednotné prihlásenie (SSO) na prihlásenie pomocou vášho existujúceho účtu",
+        "form": {
+          "editTitle": "Upraviť poskytovateľa OAuth",
+          "addTitle": "Pridať poskytovateľa OAuth",
+          "providerLabel": "Poskytovateľ",
+          "providerHelpText": "Vyberte poskytovateľa OAuth, ktorého chcete konfigurovať",
+          "cancelButton": "Zrušiť",
+          "saveButton": "Uložiť"
+        },
+        "providers": {
+          "title": "Nakonfigurovaní poskytovatelia",
+          "addButton": "Pridať poskytovateľa",
+          "enableToggle": "Prepnúť stav povolenia poskytovateľa",
+          "editButton": "Upraviť nastavenia poskytovateľa",
+          "deleteButton": "Odstrániť poskytovateľa",
+          "deleteConfirm": "Naozaj chcete odstrániť poskytovateľa OAuth {provider}?"
+        },
+        "noProviders": "Žiadni nakonfigurovaní poskytovatelia OAuth",
+        "noProvidersDescription": "Pridajte poskytovateľa na povolenie sociálneho prihlásenia pomocou účtov Google, GitHub, Microsoft, LINE alebo Kakao.",
+        "enableProviderLabel": "Povoliť tohto poskytovateľa",
+        "getCredentialsLabel": "Získajte svoje prihlasovacie údaje od {provider}",
+        "redirectUriTitle": "Redirect URI:",
+        "clientIdLabel": "Client ID",
+        "clientIdHelpText": "OAuth 2.0 Client ID z vývojárskej konzoly vášho poskytovateľa",
+        "clientSecretLabel": "Client Secret",
+        "clientSecretHelpText": "OAuth 2.0 Client Secret z vývojárskej konzoly vášho poskytovateľa",
+        "userIdLabel": "ID používateľa (voliteľné)",
+        "userIdHelpText": "Obmedziť prístup ku konkrétnemu používateľskému účtu podľa e-mailu alebo ID",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "Povoliť prihlásenie OAuth2 cez Google",
+          "redirectUriTitle": "Redirect URI pre Google Cloud Console:",
+          "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z Google Cloud Console",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "OAuth 2.0 Client ID získané z Google Cloud Console pri nastavovaní poverení OAuth.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "OAuth 2.0 Client Secret získané z Google Cloud Console pri nastavovaní poverení OAuth.",
+          "userIdLabel": "ID používateľa"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "Povoliť prihlásenie OAuth2 cez GitHub",
+          "redirectUriTitle": "Redirect URI pre GitHub Developer Settings:",
+          "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z GitHub Developer Settings",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "OAuth 2.0 Client ID získané z GitHub Developer Settings pri nastavovaní poverení OAuth.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "OAuth 2.0 Client Secret získané z GitHub Developer Settings pri nastavovaní poverení OAuth.",
+          "userIdLabel": "ID používateľa"
+        },
+        "microsoft": {
+          "title": "Microsoft účet",
+          "enableLabel": "Povoliť prihlásenie OAuth2 cez Microsoft účet",
+          "redirectUriTitle": "Redirect URI pre Azure App Registration:",
+          "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z Azure Portal",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "Application (client) ID získané z Azure App Registration.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "Hodnota kľúča klienta (client secret) získaná z Azure App Registration.",
+          "userIdLabel": "ID používateľa"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Povoliť prihlásenie OAuth2 cez LINE",
+          "redirectUriTitle": "Redirect URI pre LINE Developers Console:",
+          "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "Channel ID získané z LINE Developers Console pri nastavovaní LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "Channel Secret získané z LINE Developers Console pri nastavovaní LINE Login.",
+          "userIdLabel": "ID používateľa"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Povoliť prihlásenie OAuth2 cez Kakao",
+          "redirectUriTitle": "Redirect URI pre Kakao Developers Console:",
+          "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "REST API kľúč získaný z Kakao Developers Console pri nastavovaní Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "Client Secret získaný z Kakao Developers Console pri nastavovaní Kakao Login.",
+          "userIdLabel": "ID používateľa"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Obídenie autentifikácie",
+        "description": "Povoliť prístup k nastaveniam bez autentifikácie",
+        "disabled": "Obídenie subnetu je vypnuté"
+      },
+      "placeholders": {
+        "baseUrl": "https://birdnet.priklad.sk:5500",
+        "host": "Napríklad localhost:8080 alebo priklad.domena.sk",
+        "allowedUsers": "Zadajte jeden alebo viac e-mailov povolených používateľov",
+        "subnet": "Zadajte CIDR subnet (napr. 192.168.1.0/24)"
+      }
+    },
+    "species": {
+      "activeSpecies": {
+        "title": "Aktívne druhy",
+        "tabLabel": "Aktívne",
+        "description": "Druhy, ktoré sa budú detegovať na základe vašej aktuálnej polohy a nastavení filtra",
+        "stats": {
+          "species": "Druhy",
+          "location": "Poloha",
+          "threshold": "Prah",
+          "updated": "Aktualizované",
+          "justNow": "Práve teraz",
+          "minutesAgo": "pred {count}m",
+          "hoursAgo": "pred {count}h"
+        },
+        "search": {
+          "placeholder": "Hľadať druhy..."
+        },
+        "badges": {
+          "included": "Zahrnuté",
+          "configured": "Nakonfigurované"
+        },
+        "empty": {
+          "title": "Nenašli sa žiadne druhy",
+          "description": "Nakonfigurujte svoju polohu v Hlavných nastaveniach, aby ste videli dostupné druhy"
+        },
+        "noResults": "Žiadne druhy nezodpovedajú vášmu vyhľadávaniu",
+        "infoNote": "Tento zoznam je založený na vašej polohe a prahu filtra rozsahu. Ručne zahrnuté druhy sú vždy pridané.",
+        "retry": "Skúsiť znova",
+        "expand": "Rozbaliť zoznam",
+        "collapse": "Zbaliť zoznam",
+        "downloadCsv": "Stiahnuť CSV",
+        "errors": {
+          "loadFailed": "Nepodarilo sa načítať zoznam aktívnych druhov"
+        },
+        "locationNotConfigured": {
+          "title": "Poloha nie je nakonfigurovaná",
+          "description": "Nastavte svoju polohu v Hlavných nastaveniach, aby ste videli druhy dostupné vo vašej oblasti. Filter rozsahu používa vašu polohu na určenie toho, ktoré druhy sa pravdepodobne nachádzajú v blízkosti.",
+          "action": "Konfigurovať polohu"
+        }
+      },
+      "alwaysInclude": {
+        "title": "Vždy zahrnúť druhy",
+        "tabLabel": "Zahrnúť",
+        "description": "Druhy v tomto zozname budú vždy zahrnuté v rozsahu detegovaných druhov",
+        "noSpeciesMessage": "Žiadne druhy neboli pridané do zoznamu zahrnutia"
+      },
+      "alwaysExclude": {
+        "title": "Vždy vylúčiť druhy",
+        "tabLabel": "Vylúčiť",
+        "description": "Druhy v tomto zozname budú vždy vylúčené z detekcie",
+        "noSpeciesMessage": "Žiadne druhy neboli pridané do zoznamu vylúčenia"
+      },
+      "customConfiguration": {
+        "title": "Vlastná konfigurácia druhov",
+        "tabLabel": "Vlastné",
+        "description": "Prahové hodnoty špecifické pre druhy, intervaly detekcie a akcie",
+        "helpText": {
+          "intro": "Konfigurácia nastavení špecifických pre druhy:",
+          "threshold": "Prah: Minimálne skóre istoty (0-1) vyžadované pre detekciu",
+          "interval": "Interval: Minimálny čas v sekundách medzi detekciami rovnakého druhu (0 = použiť globálne predvolené)",
+          "actions": "Akcie: Vlastné príkazy, ktoré sa majú vykonať, keď je tento druh zistený"
+        },
+        "columnHeaders": {
+          "species": "Druh",
+          "settings": "Nastavenia",
+          "actions": "Akcie"
+        },
+        "badges": {
+          "threshold": "Prah: {value}",
+          "interval": "Interval: {value}s",
+          "customAction": "Vlastná akcia",
+          "executeDefaults": "+Predvolené"
+        },
+        "dropdown": {
+          "editConfig": "Upraviť konfiguráciu",
+          "addAction": "Pridať akciu",
+          "remove": "Odstrániť"
+        },
+        "labels": {
+          "threshold": "Prah",
+          "interval": "Interval",
+          "intervalSeconds": "Interval (s)",
+          "addButton": "Pridať"
+        },
+        "noConfigurationsMessage": "Neboli pridané žiadne vlastné konfigurácie druhov",
+        "addForm": {
+          "speciesPlaceholder": "Názov druhu",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Pridať konfiguráciu",
+        "newConfiguration": "Nová konfigurácia",
+        "editing": "Upravuje sa: {species}",
+        "configuredCount": "{count} nakonfigurovaných",
+        "searchPlaceholder": "Písaním hľadajte...",
+        "saving": "Ukladá sa...",
+        "save": "Uložiť",
+        "cancel": "Zrušiť",
+        "configureActions": "Konfigurovať akcie",
+        "actionsConfigured": "Nakonfigurované",
+        "list": {
+          "threshold": "Prah:",
+          "interval": "Interval:",
+          "intervalNone": "Žiadny",
+          "actionBadge": "Akcia",
+          "editTitle": "Upraviť konfiguráciu",
+          "removeTitle": "Odstrániť konfiguráciu"
+        },
+        "emptyState": {
+          "title": "Zatiaľ žiadne konfigurácie.",
+          "description": "Kliknite na \"Pridať konfiguráciu\" pre prispôsobenie nastavení detekcie druhov."
+        }
+      },
+      "actionsModal": {
+        "title": "Akcie pre {species}",
+        "actionType": {
+          "label": "Typ akcie",
+          "executeCommand": "Vykonať príkaz",
+          "onlySupported": "Momentálne sú podporované iba akcie Vykonať príkaz"
+        },
+        "command": {
+          "label": "Príkaz",
+          "helpText": "Uveďte celú cestu k príkazu alebo skriptu, ktorý chcete vykonať"
+        },
+        "parameters": {
+          "label": "Parametre",
+          "helpText": "Tieto hodnoty budú odovzdané vášmu príkazu v uvedenom poradí",
+          "availableTitle": "Dostupné parametre",
+          "buttons": {
+            "commonName": "CommonName",
+            "scientificName": "ScientificName",
+            "confidence": "Confidence",
+            "time": "Time",
+            "source": "Source",
+            "clearParameters": "Vymazať parametre"
+          }
+        },
+        "executeDefaults": {
+          "label": "Spustiť aj predvolené akcie (uloženie do databázy, upozornenia atď.)",
+          "helpText": "Keď je povolené, spustí sa vaša vlastná akcia aj predvolené systémové akcie. Keď je zakázané, vykoná sa iba vaša vlastná akcia."
+        }
+      },
+      "addSpeciesToInclude": "Pridať druh na zahrnutie",
+      "addSpeciesToIncludeLabel": "Pridať nový druh na zahrnutie",
+      "addSpeciesToExclude": "Pridať druh na vylúčenie",
+      "addSpeciesToExcludeLabel": "Pridať nový druh na vylúčenie",
+      "commandPathPlaceholder": "/cesta/k/vasmu/prikazu",
+      "parametersPlaceholder": "Parametre sa zobrazia tu",
+      "errors": {
+        "speciesLoadFailed": "Nepodarilo sa načítať zoznam druhov. Skúste to znova."
+      },
+      "tracking": {
+        "title": "Sledovanie druhov",
+        "tabLabel": "Sledovanie",
+        "description": "Konfigurácia sledovania nových detekcií druhov na základe časových období",
+        "enabled": {
+          "label": "Povoliť sledovanie druhov",
+          "helpText": "Keď je povolené, systém sleduje nové detekcie druhov a môže posielať upozornenia"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Okno pre nové druhy (dni)",
+          "helpText": "Počet dní, počas ktorých sa druh považuje za 'nový' po prvej detekcii (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Interval synchronizácie (minúty)",
+          "helpText": "Ako často synchronizovať údaje o sledovaní s databázou (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Potlačenie upozornení (hodiny)",
+          "helpText": "Hodiny na potlačenie duplicitných upozornení pre ten istý druh (0-8760)"
+        },
+        "yearly": {
+          "title": "Ročné sledovanie",
+          "description": "Sledovať prvé prílety druhov každý rok",
+          "enabled": {
+            "label": "Povoliť ročné sledovanie",
+            "helpText": "Sledovať a upozorniť, keď je druh zistený prvýkrát v danom roku"
+          },
+          "resetMonth": {
+            "label": "Mesiac resetu",
+            "helpText": "Mesiac, kedy sa resetuje ročné sledovanie (1-12)"
+          },
+          "resetDay": {
+            "label": "Deň resetu",
+            "helpText": "Deň v mesiaci, kedy sa resetuje ročné sledovanie"
+          },
+          "windowDays": {
+            "label": "Okno (dni)",
+            "helpText": "Dni na zobrazenie indikátora 'nový tento rok' (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Sezónne sledovanie",
+          "description": "Sledovať prvé prílety druhov každú sezónu",
+          "enabled": {
+            "label": "Povoliť sezónne sledovanie",
+            "helpText": "Sledovať a upozorniť, keď je druh zistený prvýkrát v danej sezóne"
+          },
+          "windowDays": {
+            "label": "Okno (dni)",
+            "helpText": "Dni na zobrazenie indikátora 'nový túto sezónu' (1-365)"
+          },
+          "seasons": {
+            "title": "Definície sezón",
+            "description": "Definujte, kedy začína každá sezóna. Sezóny sa automaticky prispôsobujú na základe hemisféry vašej polohy.",
+            "spring": "Jar",
+            "summer": "Leto",
+            "fall": "Jeseň",
+            "winter": "Zima",
+            "wet1": "Obdobie dažďov 1",
+            "dry1": "Obdobie sucha 1",
+            "wet2": "Obdobie dažďov 2",
+            "dry2": "Obdobie sucha 2",
+            "startMonth": "Mesiac začiatku",
+            "startDay": "Deň začiatku",
+            "hemisphereNote": "Dátumy sezón sú automaticky konfigurované na základe vašej zemepisnej šírky. Severná hemisféra používa štandardné sezóny, južná hemisféra má posunuté dátumy a rovníkové oblasti používajú obdobia dažďov/sucha."
+          }
+        },
+        "months": {
+          "january": "Január",
+          "february": "Február",
+          "march": "Marec",
+          "april": "Apríl",
+          "may": "Máj",
+          "june": "Jún",
+          "july": "Júl",
+          "august": "August",
+          "september": "September",
+          "october": "Október",
+          "november": "November",
+          "december": "December"
+        },
+        "units": {
+          "days": "dni",
+          "min": "min",
+          "hours": "hod"
+        }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Učené",
+        "title": "Naučené prahy",
+        "description": "Táto stránka zobrazuje runtime dáta dynamického prahu. Keď je povolený v Hlavných nastaveniach → Detekcia, prahy sa automaticky upravujú na základe viacerých detekcií s vysokou istotou. Druhy zobrazené tu sa považujú za existujúce na tomto mieste.",
+        "stats": {
+          "active": "Aktívne",
+          "atMinimum": "Na minime",
+          "minThreshold": "Min. prah",
+          "validityPeriod": "Obdobie platnosti"
+        },
+        "header": {
+          "species": "Druh",
+          "threshold": "Prah",
+          "expires": "Vyprší"
+        },
+        "searchPlaceholder": "Hľadať druhy...",
+        "threshold": "Prah",
+        "level": "Úroveň",
+        "expires": "Vyprší",
+        "expired": "Vypršalo",
+        "confidence": "Istota",
+        "requiredConfidence": "Vyžadovaná istota",
+        "resetAll": "Resetovať všetko",
+        "resetSpecies": "Resetovať prah pre tento druh",
+        "noEvents": "Žiadna história zmien prahu",
+        "changeReason": {
+          "highConfidence": "Detekcia s vysokou istotou",
+          "expiry": "Platnosť prahu vypršala",
+          "manualReset": "Manuálny reset"
+        },
+        "note": "Detekcie s vysokou istotou potvrdzujú, ktoré druhy na tomto mieste existujú. Po viacerých zhoda s vysokou istotou sa prah detekcie bezpečne zníži, aby sa zachytilo viac volaní bez výrazného rizika falošne pozitívnych výsledkov. Prahy sa automaticky resetujú po uplynutí nakonfigurovaného obdobia platnosti.",
+        "empty": {
+          "title": "Žiadne naučené prahy",
+          "description": "Detekcie s vysokou istotou automaticky vytvoria naučené prahy pre druhy"
+        },
+        "resetAllConfirm": {
+          "title": "Resetovať všetky prahy",
+          "message": "Týmto sa resetuje všetkých {count} naučených prahov. Druhy budú musieť byť znova zistené s vysokou istotou, aby sa ich prahy znížili."
+        },
+        "loadError": "Nepodarilo sa načítať dynamické prahy",
+        "resetSuccess": "Prah resetovaný pre druh {species}",
+        "resetError": "Nepodarilo sa resetovať prah",
+        "resetAllSuccess": "Resetovaných {count} prahov",
+        "resetAllError": "Nepodarilo sa resetovať prahy",
+        "expand": "Zobraziť históriu udalostí",
+        "collapse": "Skryť históriu udalostí"
+      }
+    },
+    "database": {
+      "sqlitePlaceholder": "Zadajte cestu k databáze SQLite",
+      "mysqlHostPlaceholder": "Zadajte MySQL host",
+      "mysqlUsernamePlaceholder": "Zadajte MySQL meno používateľa"
+    }
+  },
+  "auth": {
+    "login": "Prihlásenie",
+    "logout": "Odhlásenie",
+    "openLoginModal": "Otvoriť okno prihlásenia",
+    "loginTitle": "Prihlásiť sa",
+    "loginSubtitle": "Prístup k vášmu BirdNET-Go prehľadu",
+    "password": "Heslo",
+    "passwordPlaceholder": "Zadajte svoje heslo",
+    "enterPassword": "Zadajte svoje heslo",
+    "continue": "Pokračovať",
+    "or": "alebo",
+    "loginWithGoogle": "Prihlásiť sa cez Google",
+    "loginWithGithub": "Prihlásiť sa cez GitHub",
+    "loginWithMicrosoft": "Prihlásiť sa cez Microsoft",
+    "continueWithGoogle": "Pokračovať cez Google",
+    "continueWithGithub": "Pokračovať cez GitHub",
+    "continueWithMicrosoft": "Pokračovať cez Microsoft",
+    "continueWithLine": "Pokračovať cez LINE",
+    "continueWithKakao": "Pokračovať cez Kakao",
+    "errors": {
+      "loginFailed": "Prihlásenie zlyhalo. Skontrolujte svoje heslo a skúste to znova.",
+      "passwordRequired": "Heslo je povinné.",
+      "passwordTooLong": "Heslo je príliš dlhé.",
+      "invalidCharacters": "Heslo obsahuje neplatné znaky.",
+      "invalidCredentials": "Neplatné meno používateľa alebo heslo.",
+      "tooManyAttempts": "Príliš veľa pokusov o prihlásenie. Skúste to neskôr.",
+      "serverError": "Vyskytla sa chyba servera. Skúste to neskôr.",
+      "rateLimited": "Príliš veľa pokusov. Počkajte {minutes} minút a skúste to znova.",
+      "configurationError": "Chyba konfigurácie autentifikácie. Kontaktujte podporu.",
+      "invalidInput": "Boli poskytnuté neplatné údaje."
+    }
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "Žiadne dáta nie sú k dispozícii",
+      "loading": "Načítavajú sa dáta...",
+      "error": "Nepodarilo sa načítať dáta",
+      "sortBy": "Zoradiť podľa {column}",
+      "rowsPerPage": "Riadkov na stranu",
+      "pageInfo": "Zobrazuje sa {from} až {to} z {total} výsledkov"
+    },
+    "pagination": {
+      "ariaLabel": "Navigácia stránkovania",
+      "previous": "Predchádzajúca",
+      "next": "Nasledujúca",
+      "page": "Strana {current} z {total}",
+      "goToPage": "Prejsť na stranu {page}",
+      "goToPreviousPage": "Prejsť na predchádzajúcu stranu",
+      "goToNextPage": "Prejsť na nasledujúcu stranu",
+      "firstPage": "Prvá strana",
+      "lastPage": "Posledná strana"
+    },
+    "stats": {
+      "total": "Celkom",
+      "average": "Priemer",
+      "min": "Minimum",
+      "max": "Maximum",
+      "count": "Počet"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Zadajte {field}",
+      "select": "Vyberte {field}",
+      "search": "Hľadať...",
+      "date": "Vyberte dátum",
+      "dateRange": "Vyberte rozsah dátumov",
+      "number": "Zadajte číslo",
+      "password": "Zadajte heslo",
+      "url": "Zadajte URL",
+      "email": "Zadajte e-mail",
+      "selectFilterType": "Vyberte typ filtra",
+      "speciesName": "Názov druhu"
+    },
+    "labels": {
+      "showPassword": "Zobraziť heslo",
+      "hidePassword": "Skryť heslo",
+      "copyToClipboard": "Kopírovať do schránky",
+      "clearSelection": "Vymazať výber",
+      "selectOption": "Vyberte možnosť"
+    },
+    "help": {
+      "passwordStrength": "Sila hesla: {strength}",
+      "charactersRemaining": "Zostáva {count} znakov",
+      "dateFormat": "Formát: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Sila hesla:",
+        "levels": {
+          "weak": "Slabé",
+          "fair": "Ujde",
+          "good": "Dobré",
+          "strong": "Silné"
+        },
+        "suggestions": {
+          "title": "Návrhy:",
+          "minLength": "Aspoň 8 znakov",
+          "mixedCase": "Kombinácia veľkých a malých písmen",
+          "number": "Aspoň jedno číslo",
+          "special": "Aspoň jeden špeciálny znak"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "Vlastnosť radioValue je povinná pre rádiové vstupy"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Dátum začiatku",
+        "endDate": "Dátum konca",
+        "quickSelect": "Rýchly výber",
+        "selected": "Vybrané: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Dnes",
+        "yesterday": "Včera",
+        "last7Days": "Posledných 7 dní",
+        "last30Days": "Posledných 30 dní",
+        "thisMonth": "Tento mesiac",
+        "lastMonth": "Minulý mesiac",
+        "thisYear": "Tento rok"
+      },
+      "errors": {
+        "invalidStartDate": "Neplatný dátum začiatku",
+        "invalidEndDate": "Neplatný dátum konca",
+        "startAfterEnd": "Dátum začiatku nemôže byť po dátume konca",
+        "endBeforeStart": "Dátum konca nemôže byť pred dátumom začiatku"
+      }
+    },
+    "species": {
+      "placeholder": "Zadajte názov druhu...",
+      "empty": "Neboli pridané žiadne druhy",
+      "maxReached": "Dosiahnutý maximálny počet {maxItems} druhov",
+      "aria": {
+        "dragToReorder": "Potiahnite pre zmenu poradia druhu {species}",
+        "edit": "Upraviť druh",
+        "remove": "Odstrániť druh"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "settings": "Nastavenia zvuku",
+      "play": "Prehrať",
+      "pause": "Pozastaviť",
+      "stop": "Zastaviť",
+      "volume": "Hlasitosť",
+      "mute": "Stlmiť",
+      "unmute": "Zrušiť stlmenie",
+      "download": "Stiahnuť zvuk",
+      "currentTime": "{current} / {total}",
+      "loading": "Načítava sa zvuk...",
+      "error": "Nepodarilo sa načítať zvuk",
+      "errorShort": "Chyba",
+      "playError": "Nepodarilo sa prehrať zvuk",
+      "volumeGain": "Ovládanie zosilnenia hlasitosti: {value} dB",
+      "filterControl": "Ovládanie filtra",
+      "highPassFilter": "Ovládanie hornopriepustného filtra: {freq} Hz",
+      "seekProgress": "Posun v nahrávke: {current} / {total} sekúnd",
+      "playbackSpeed": "Rýchlosť prehrávania",
+      "speed": "Rýchlosť"
+    },
+    "spectrogram": {
+      "notGenerated": "Spektrogram ešte nebol vygenerovaný",
+      "generate": "Generovať spektrogram",
+      "generateButton": "Generovať",
+      "generating": "Generuje sa...",
+      "generationFailed": "Nepodarilo sa vygenerovať spektrogram",
+      "generationSuccess": "Spektrogram bol úspešne vygenerovaný"
+    }
+  },
+  "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spektrogram nie je k dispozícii",
+      "spectrogramLoading": "Načítava sa spektrogram...",
+      "spectrogramLoaded": "Spektrogram bol načítaný",
+      "spectrogramLoadingAria": "Načítava sa spektrogram",
+      "spectrogramGeneratingAria": "Generuje sa spektrogram",
+      "generating": "Generuje sa...",
+      "queuePosition": "Poradie: {position}",
+      "loadError": "Nepodarilo sa načítať zvuk"
+    },
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Hodnota bola upravená na minimum ({value})",
+        "adjustedToMaximum": "Hodnota bola upravená na maximum ({value})"
+      },
+      "rtsp": {
+        "addNewStream": "Pridať nový RTSP stream",
+        "maxStreamsReached": "Dosiahnutý maximálny počet RTSP streamov ({max}).",
+        "cameraPlaceholder": "Kamera 1",
+        "urlPlaceholder": "rtsp://meno:heslo@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Dosiahnutý maximálny počet subnetov ({max})."
+      },
+      "species": {
+        "loadingSpecies": "Načítavajú sa druhy...",
+        "typePlaceholder": "Zadajte názov druhu...",
+        "suggestionsAvailable": "K dispozícii je {count} návrhov druhov. Na navigáciu použite šípky.",
+        "noSuggestions": "Žiadne návrhy druhov nie sú k dispozícii."
+      },
+      "select": {
+        "searchPlaceholder": "Hľadať...",
+        "searchOptions": "Hľadať v možnostiach",
+        "noOptions": "Nenašli sa žiadne možnosti"
+      }
+    },
+    "datePicker": {
+      "today": "Dnes",
+      "feedback": {
+        "endDateCleared": "Dátum konca bol vymazaný, aby sa zachoval platný rozsah",
+        "startDateCleared": "Dátum začiatku bol vymazaný, aby sa zachoval platný rozsah",
+        "invalidDateFormat": "Neplatný formát dátumu. Použite formát RRRR-MM-DD",
+        "dateOutOfRange": "Vybraný dátum je mimo povoleného rozsahu",
+        "futureDate": "Nemožno vybrať dátumy v budúcnosti",
+        "pastDate": "Nemožno vybrať dátumy v minulosti"
+      },
+      "aria": {
+        "dateSelected": "Dátum {date} bol vybraný",
+        "calendarOpened": "Kalendár otvorený pre výber dátumu",
+        "calendarClosed": "Kalendár zavretý",
+        "monthChanged": "Zobrazuje sa {month} {year}",
+        "dayUnavailable": "Deň {day} nie je k dispozícii na výber",
+        "todayButton": "Vybrať dnešný dátum: {today}"
+      },
+      "status": {
+        "loading": "Načítava sa kalendár...",
+        "error": "Chyba pri načítaní kalendára"
+      }
+    }
+  },
+  "detection": {
+    "actions": {
+      "back": "Späť",
+      "review": "Skontrolovať",
+      "download": "Stiahnuť"
+    }
+  }
+}
