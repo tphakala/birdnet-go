@@ -108,13 +108,18 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		}
 	}()
 
-	// Convert UTC time from weather providers to local time for storage.
-	// This ensures date-based queries using local dates work correctly.
-	localTime := data.Time.In(time.Local)
+	// Store weather time in UTC for consistent database comparisons.
+	// SQLite compares timestamps as strings, so mixing timezone offsets
+	// (e.g., +13:00 vs +00:00) produces incorrect results.
+	// The read path (buildHourlyWeatherResponse) converts to local time for display.
+	utcTime := data.Time.UTC()
+
+	// Use local time only for the date string used by DailyEvents
+	localDate := utcTime.In(time.Local).Format(time.DateOnly)
 
 	// Create daily events data
 	dailyEvents := &datastore.DailyEvents{
-		Date:     localTime.Format(time.DateOnly),
+		Date:     localDate,
 		Country:  data.Location.Country,
 		CityName: data.Location.City,
 	}
@@ -143,7 +148,7 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	// Create hourly weather data
 	hourlyWeather := &datastore.HourlyWeather{
 		DailyEventsID: dailyEvents.ID,
-		Time:          localTime,
+		Time:          utcTime,
 		Temperature:   data.Temperature.Current,
 		FeelsLike:     data.Temperature.FeelsLike,
 		TempMin:       data.Temperature.Min,
@@ -189,7 +194,7 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	}
 
 	getLogger().Debug("Successfully saved weather data to database",
-		logger.Time("time", localTime),
+		logger.Time("time", utcTime),
 		logger.String("city", data.Location.City))
 	return nil
 }

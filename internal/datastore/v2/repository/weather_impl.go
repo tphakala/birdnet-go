@@ -101,11 +101,15 @@ func (r *weatherRepository) GetHourlyWeatherInLocation(ctx context.Context, date
 	if err != nil {
 		return nil, err
 	}
-	endOfDay := startOfDay.Add(24 * time.Hour)
+	// Use AddDate instead of Add(24*time.Hour) to correctly handle DST transitions
+	// where days can be 23 hours (spring forward) or 25 hours (fall back)
+	endOfDay := startOfDay.AddDate(0, 0, 1)
 
 	var weather []entities.HourlyWeather
+	// Use strftime('%s') to convert timestamps to Unix epoch seconds for comparison.
+	// This handles legacy records stored with local timezone offsets alongside new UTC records.
 	err = r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
-		Where("time >= ? AND time < ?", startOfDay, endOfDay).
+		Where("strftime('%s', time) >= strftime('%s', ?) AND strftime('%s', time) < strftime('%s', ?)", startOfDay, endOfDay).
 		Order("time ASC").
 		Find(&weather).Error
 	return weather, err

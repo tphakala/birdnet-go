@@ -489,3 +489,182 @@ func TestGetHourlyWeather_RegressionTests(t *testing.T) {
 		assert.Len(t, results, 2, "Should find both weather records that span the local day")
 	})
 }
+
+// TestGetHourlyWeather_NonUTCStorageOffset tests queries against records stored
+// with non-UTC timezone offsets. This reproduces the original bug where
+// mattn/go-sqlite3 preserves the timezone offset in the stored string
+// (e.g., "2024-01-15 11:00:00+13:00") and SQLite's lexicographic string
+// comparison produces incorrect results when comparing against UTC-formatted
+// query boundaries (e.g., "2024-01-14 22:00:00+00:00").
+func TestGetHourlyWeather_NonUTCStorageOffset(t *testing.T) {
+	t.Run("records stored with local offset are found correctly", func(t *testing.T) {
+		t.Parallel()
+		ds := setupWeatherTestDB(t)
+
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err)
+
+		// Store records using Auckland local time (GMT+13).
+		// mattn/go-sqlite3 serialises the offset, so the DB contains strings like
+		// "2024-01-15 06:00:00+13:00" rather than the UTC equivalent.
+		weatherRecords := []HourlyWeather{
+			// 2024-01-15 06:00 NZDT = 2024-01-14 17:00 UTC
+			{Time: time.Date(2024, 1, 15, 6, 0, 0, 0, auckland), Temperature: 14.0},
+			// 2024-01-15 12:00 NZDT = 2024-01-14 23:00 UTC
+			{Time: time.Date(2024, 1, 15, 12, 0, 0, 0, auckland), Temperature: 20.0},
+			// 2024-01-15 18:00 NZDT = 2024-01-15 05:00 UTC
+			{Time: time.Date(2024, 1, 15, 18, 0, 0, 0, auckland), Temperature: 17.0},
+		}
+
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
+
+		// Query for 2024-01-15 in Auckland timezone.
+		// UTC range: 2024-01-14 11:00 to 2024-01-15 11:00.
+		// All three records fall within this range.
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
+		require.NoError(t, err)
+		require.Len(t, results, 3, "All records stored with +13:00 offset should be found")
+
+		assert.InEpsilon(t, 14.0, results[0].Temperature, 0.0001)
+		assert.InEpsilon(t, 20.0, results[1].Temperature, 0.0001)
+		assert.InEpsilon(t, 17.0, results[2].Temperature, 0.0001)
+	})
+
+	t.Run("yesterday records with local offset must not leak into today", func(t *testing.T) {
+		t.Parallel()
+		ds := setupWeatherTestDB(t)
+
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err)
+
+		// Store records for YESTERDAY (2024-01-14 local) using Auckland offset.
+		// These are stored with +13:00 offset in the DB.
+		yesterdayRecords := []HourlyWeather{
+			// 2024-01-14 12:00 NZDT = 2024-01-13 23:00 UTC
+			{Time: time.Date(2024, 1, 14, 12, 0, 0, 0, auckland), Temperature: 50.0},
+			// 2024-01-14 18:00 NZDT = 2024-01-14 05:00 UTC
+			{Time: time.Date(2024, 1, 14, 18, 0, 0, 0, auckland), Temperature: 51.0},
+			// 2024-01-14 23:00 NZDT = 2024-01-14 10:00 UTC
+			{Time: time.Date(2024, 1, 14, 23, 0, 0, 0, auckland), Temperature: 52.0},
+		}
+
+		// Store records for TODAY (2024-01-15 local) using Auckland offset.
+		todayRecords := []HourlyWeather{
+			// 2024-01-15 08:00 NZDT = 2024-01-14 19:00 UTC
+			{Time: time.Date(2024, 1, 15, 8, 0, 0, 0, auckland), Temperature: 15.0},
+			// 2024-01-15 11:00 NZDT = 2024-01-14 22:00 UTC
+			{Time: time.Date(2024, 1, 15, 11, 0, 0, 0, auckland), Temperature: 18.0},
+		}
+
+		allRecords := append(yesterdayRecords, todayRecords...)
+		err = ds.DB.Create(&allRecords).Error
+		require.NoError(t, err)
+
+		// Query for today (2024-01-15) in Auckland timezone.
+		// UTC range: 2024-01-14 11:00 to 2024-01-15 11:00.
+		// Yesterday's records (UTC: 23:00 Jan 13, 05:00 Jan 14, 10:00 Jan 14)
+		// should all fall OUTSIDE this range.
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
+		require.NoError(t, err)
+		require.Len(t, results, 2, "Only today's records should be returned, not yesterday's")
+
+		// Verify none of yesterday's sentinel temperatures leaked in.
+		for _, r := range results {
+			assert.Less(t, r.Temperature, 50.0,
+				"Yesterday's records (temp >= 50) must not appear in today's query")
+		}
+	})
+
+	t.Run("mixed UTC and local offset records coexist correctly", func(t *testing.T) {
+		t.Parallel()
+		ds := setupWeatherTestDB(t)
+
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err)
+
+		// Simulate the transition period: some records stored with local offset
+		// (legacy) and some with UTC (new code).
+		// All represent times on 2024-01-15 in Auckland.
+		weatherRecords := []HourlyWeather{
+			// Legacy record stored with +13:00 offset.
+			// 2024-01-15 09:00 NZDT = 2024-01-14 20:00 UTC
+			{Time: time.Date(2024, 1, 15, 9, 0, 0, 0, auckland), Temperature: 16.0},
+			// New record stored in UTC.
+			// 2024-01-15 01:00 UTC = 2024-01-15 14:00 NZDT
+			{Time: time.Date(2024, 1, 15, 1, 0, 0, 0, time.UTC), Temperature: 21.0},
+			// Legacy record stored with +13:00 offset.
+			// 2024-01-15 22:00 NZDT = 2024-01-15 09:00 UTC
+			{Time: time.Date(2024, 1, 15, 22, 0, 0, 0, auckland), Temperature: 13.0},
+		}
+
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
+
+		// All three records fall within 2024-01-15 Auckland time
+		// (UTC range: 2024-01-14 11:00 to 2024-01-15 11:00).
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
+		require.NoError(t, err)
+		require.Len(t, results, 3, "Should find all records regardless of stored timezone offset")
+	})
+
+	t.Run("records with negative offset are found correctly", func(t *testing.T) {
+		t.Parallel()
+		ds := setupWeatherTestDB(t)
+
+		newYork, err := time.LoadLocation("America/New_York")
+		require.NoError(t, err)
+
+		// Store records using New York local time (EDT = UTC-4 in July).
+		// mattn/go-sqlite3 serialises as e.g. "2024-07-15 10:00:00-04:00".
+		weatherRecords := []HourlyWeather{
+			// 2024-07-15 10:00 EDT = 2024-07-15 14:00 UTC
+			{Time: time.Date(2024, 7, 15, 10, 0, 0, 0, newYork), Temperature: 28.0},
+			// 2024-07-15 22:00 EDT = 2024-07-16 02:00 UTC
+			{Time: time.Date(2024, 7, 15, 22, 0, 0, 0, newYork), Temperature: 24.0},
+		}
+
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
+
+		// Query for 2024-07-15 in New York timezone.
+		// UTC range: 2024-07-15 04:00 to 2024-07-16 04:00.
+		results, err := ds.GetHourlyWeatherInLocation("2024-07-15", newYork)
+		require.NoError(t, err)
+		require.Len(t, results, 2, "Records with negative UTC offset should be found correctly")
+
+		assert.InEpsilon(t, 28.0, results[0].Temperature, 0.0001)
+		assert.InEpsilon(t, 24.0, results[1].Temperature, 0.0001)
+	})
+
+	t.Run("boundary exclusion with local offset is exact", func(t *testing.T) {
+		t.Parallel()
+		ds := setupWeatherTestDB(t)
+
+		auckland, err := time.LoadLocation("Pacific/Auckland")
+		require.NoError(t, err)
+
+		// For GMT+13, local day 2024-01-15 spans UTC: 2024-01-14 11:00 to 2024-01-15 11:00.
+		// Store boundary records with +13:00 offset to verify exact inclusion/exclusion.
+		weatherRecords := []HourlyWeather{
+			// Just before start: 2024-01-14 23:59 NZDT = 2024-01-14 10:59 UTC → OUTSIDE
+			{Time: time.Date(2024, 1, 14, 23, 59, 0, 0, auckland), Temperature: 99.0},
+			// Exact start: 2024-01-15 00:00 NZDT = 2024-01-14 11:00 UTC → INSIDE
+			{Time: time.Date(2024, 1, 15, 0, 0, 0, 0, auckland), Temperature: 10.0},
+			// Exact end: 2024-01-16 00:00 NZDT = 2024-01-15 11:00 UTC → OUTSIDE (< not <=)
+			{Time: time.Date(2024, 1, 16, 0, 0, 0, 0, auckland), Temperature: 98.0},
+			// Just before end: 2024-01-15 23:59 NZDT = 2024-01-15 10:59 UTC → INSIDE
+			{Time: time.Date(2024, 1, 15, 23, 59, 0, 0, auckland), Temperature: 20.0},
+		}
+
+		err = ds.DB.Create(&weatherRecords).Error
+		require.NoError(t, err)
+
+		results, err := ds.GetHourlyWeatherInLocation("2024-01-15", auckland)
+		require.NoError(t, err)
+		require.Len(t, results, 2, "Only records within [start, end) should be included")
+
+		assert.InEpsilon(t, 10.0, results[0].Temperature, 0.0001, "Start-of-day record should be included")
+		assert.InEpsilon(t, 20.0, results[1].Temperature, 0.0001, "End-of-day record should be included")
+	})
+}
