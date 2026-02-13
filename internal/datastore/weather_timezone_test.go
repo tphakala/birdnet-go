@@ -557,7 +557,9 @@ func TestGetHourlyWeather_NonUTCStorageOffset(t *testing.T) {
 			{Time: time.Date(2024, 1, 15, 11, 0, 0, 0, auckland), Temperature: 18.0},
 		}
 
-		allRecords := append(yesterdayRecords, todayRecords...)
+		allRecords := make([]HourlyWeather, 0, len(yesterdayRecords)+len(todayRecords))
+		allRecords = append(allRecords, yesterdayRecords...)
+		allRecords = append(allRecords, todayRecords...)
 		err = ds.DB.Create(&allRecords).Error
 		require.NoError(t, err)
 
