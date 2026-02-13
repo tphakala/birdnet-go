@@ -14,7 +14,7 @@ import (
 type weatherRepository struct {
 	db          *gorm.DB
 	useV2Prefix bool
-	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
+	isMySQL     bool // Dialect flag: true for MySQL (UNIX_TIMESTAMP), false for SQLite (strftime)
 }
 
 // NewWeatherRepository creates a new WeatherRepository.
@@ -106,10 +106,17 @@ func (r *weatherRepository) GetHourlyWeatherInLocation(ctx context.Context, date
 	endOfDay := startOfDay.AddDate(0, 0, 1)
 
 	var weather []entities.HourlyWeather
-	// Use strftime('%s') to convert timestamps to Unix epoch seconds for comparison.
+	// Convert timestamps to Unix epoch seconds for comparison.
 	// This handles legacy records stored with local timezone offsets alongside new UTC records.
+	var whereClause string
+	if r.isMySQL {
+		whereClause = "UNIX_TIMESTAMP(time) >= UNIX_TIMESTAMP(?) AND UNIX_TIMESTAMP(time) < UNIX_TIMESTAMP(?)"
+	} else {
+		whereClause = "strftime('%s', time) >= strftime('%s', ?) AND strftime('%s', time) < strftime('%s', ?)"
+	}
+
 	err = r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
-		Where("strftime('%s', time) >= strftime('%s', ?) AND strftime('%s', time) < strftime('%s', ?)", startOfDay, endOfDay).
+		Where(whereClause, startOfDay, endOfDay).
 		Order("time ASC").
 		Find(&weather).Error
 	return weather, err
