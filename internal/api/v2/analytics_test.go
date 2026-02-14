@@ -627,9 +627,16 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	rbwoTotal := 2
 
 	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", testDate, minConfidence).Return(mockNotes, nil)
-	mockDS.On("GetHourlyOccurrences", testDate, "American Crow", minConfidence).Return(expectedAmcroHourlyCounts, nil)
-	mockDS.On("GetHourlyOccurrences", testDate, "Red-bellied Woodpecker", minConfidence).Return(expectedRbwoHourlyCounts, nil)
+	mockDS.On("GetTopBirdsData", testDate, minConfidence, 0).Return(mockNotes, nil)
+	// Now using batch query instead of individual calls
+	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.MatchedBy(func(species []string) bool {
+		return len(species) == 2 &&
+			((species[0] == "American Crow" && species[1] == "Red-bellied Woodpecker") ||
+			 (species[0] == "Red-bellied Woodpecker" && species[1] == "American Crow"))
+	}), minConfidence).Return(map[string][24]int{
+		"American Crow": expectedAmcroHourlyCounts,
+		"Red-bellied Woodpecker": expectedRbwoHourlyCounts,
+	}, nil)
 
 	// Mock for image cache initialization
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
@@ -794,9 +801,11 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	expectedRbwoSingleHourly[10] = 1
 
 	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotesSingle, nil)
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroSingleHourly, nil)
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", 0.0).Return(expectedRbwoSingleHourly, nil)
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesSingle, nil)
+	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+		"American Crow": expectedAmcroSingleHourly,
+		"Red-bellied Woodpecker": expectedRbwoSingleHourly,
+	}, nil)
 
 	// Mock for image cache initialization
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
@@ -883,8 +892,8 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 
 	// Setup mock expectations using m.On()
 	// Expect GetTopBirdsData to be called and return empty slice
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return([]datastore.Note{}, nil)
-	// Expect GetHourlyOccurrences not to be called since there are no birds
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return([]datastore.Note{}, nil)
+	// Expect GetBatchHourlyOccurrences not to be called since there are no birds
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -965,8 +974,10 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	expectedAmcroTimeHourly[21] = 1
 
 	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotesTime, nil)
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroTimeHourly, nil)
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesTime, nil)
+	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+		"American Crow": expectedAmcroTimeHourly,
+	}, nil)
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -1045,12 +1056,12 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 
 	// Setup mock expectations
 	// GetTopBirdsData is called with the normalized confidence
-	mockDS.On("GetTopBirdsData", "2025-03-07", expectedMinConfidence).Return(mockNotesConfidence, nil)
-	// GetHourlyOccurrences is called for each species returned by GetTopBirdsData,
-	// *even if* the species itself is below the threshold (filtering happens later in Go code)
-	// We expect it to be called for American Crow with the filter
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", expectedMinConfidence).Return(expectedAmcroConfidenceHourly, nil)
-	// Note: No expectation is set for Red-bellied Woodpecker as it's filtered out
+	mockDS.On("GetTopBirdsData", "2025-03-07", expectedMinConfidence, 0).Return(mockNotesConfidence, nil)
+	// GetBatchHourlyOccurrences is called for all species returned by GetTopBirdsData
+	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
+		"American Crow": expectedAmcroConfidenceHourly,
+		"Red-bellied Woodpecker": [24]int{}, // Filtered out later
+	}, nil)
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -1139,12 +1150,13 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	expectedBcchLimitHourly[12] = 1
 
 	// Setup mock expectations
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotesLimit, nil)
-	// Expect GetHourlyOccurrences to be called for all species returned by GetTopBirdsData,
-	// as limiting happens *after* this step.
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroLimitHourly, nil)
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", 0.0).Return(expectedRbwoLimitHourly, nil)
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Black-capped Chickadee", 0.0).Return(expectedBcchLimitHourly, nil)
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesLimit, nil)
+	// Expect GetBatchHourlyOccurrences to be called for all species
+	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+		"American Crow": expectedAmcroLimitHourly,
+		"Red-bellied Woodpecker": expectedRbwoLimitHourly,
+		"Black-capped Chickadee": expectedBcchLimitHourly,
+	}, nil)
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -1186,7 +1198,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Override the GetTopBirdsData function to return an error
-	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
+	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
 
 	// Create a request with the date we want to test
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)

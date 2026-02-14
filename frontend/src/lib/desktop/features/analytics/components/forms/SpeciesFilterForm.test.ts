@@ -74,8 +74,9 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    // SelectDropdown renders as a button, not combobox
-    const sortSelect = screen.getByRole('button', { name: /count.*desc/i });
+    // SelectDropdown renders as a button with the translated label
+    // Default sort order is count_desc -> "Most Detections"
+    const sortSelect = screen.getByRole('button', { name: /most detections/i });
     expect(sortSelect).toBeInTheDocument();
   });
 
