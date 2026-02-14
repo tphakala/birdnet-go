@@ -51,9 +51,9 @@ func ExpandString(s string) (string, error) {
 		defaultValue := ""
 		fallbackProvided := false
 
-		if idx := strings.Index(key, ":-"); idx != -1 {
-			varName = key[:idx]
-			defaultValue = key[idx+2:]
+		if before, after, found := strings.Cut(key, ":-"); found {
+			varName = before
+			defaultValue = after
 			fallbackProvided = true
 		}
 

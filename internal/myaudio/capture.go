@@ -82,7 +82,7 @@ func broadcastAudioData(sourceID string, data []byte) {
 	if time.Since(time.Unix(0, lastLogNano)) > 5*time.Minute {
 		// Create a list of registered callback keys with DisplayNames
 		registry := GetRegistry()
-		var keys []string
+		keys := make([]string, 0, len(broadcastCallbacks))
 		for k := range broadcastCallbacks {
 			displayName := k // Default to ID if we can't get DisplayName
 			if registry != nil {

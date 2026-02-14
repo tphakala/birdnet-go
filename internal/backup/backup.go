@@ -341,7 +341,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 
 // processBackupSource handles the backup process for a single source
 func (m *Manager) processBackupSource(ctx context.Context, sourceName string, source Source, timestamp time.Time, isDaily, isWeekly bool) ([]string, error) {
-	var tempDirs []string // Track temp dirs created in this function
+	tempDirs := make([]string, 0, 1) // Track temp dirs created in this function
 
 	// 1. Perform the actual backup from the source
 	m.logger.Debug("Starting source backup", logger.String("source_name", sourceName))

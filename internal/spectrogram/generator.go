@@ -656,9 +656,9 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 // getSoxArgs builds Sox arguments for file input.
 // Used when Sox can directly read the audio file.
 func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, inputType SoxInputType) []string {
-	var args []string
+	args := make([]string, 0, 16) // Preallocate capacity for input path + spectrogram args
 	if inputType == SoxInputFile {
-		args = []string{audioPath}
+		args = append(args, audioPath)
 	}
 
 	args = append(args, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)...)

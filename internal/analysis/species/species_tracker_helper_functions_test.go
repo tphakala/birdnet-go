@@ -47,7 +47,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "detection_before_first_seen_updates_first_seen",
 			windowDays:            7,
-			existingFirstSeen:     ptrTime(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
+			existingFirstSeen:     new(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 10, 10, 0, 0, 0, time.UTC), // 5 days before
 			expectedIsNew:         true,
 			expectedDaysSince:     0,
@@ -56,7 +56,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "detection_before_first_seen_by_nanoseconds",
 			windowDays:            7,
-			existingFirstSeen:     ptrTime(time.Date(2025, 6, 15, 10, 0, 0, 100, time.UTC)),
+			existingFirstSeen:     new(time.Date(2025, 6, 15, 10, 0, 0, 100, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 15, 10, 0, 0, 50, time.UTC), // 50 nanoseconds before
 			expectedIsNew:         true,
 			expectedDaysSince:     0,
@@ -65,7 +65,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "exact_boundary_days_equals_window",
 			windowDays:            7,
-			existingFirstSeen:     ptrTime(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
+			existingFirstSeen:     new(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 8, 10, 0, 0, 0, time.UTC), // exactly 7 days
 			expectedIsNew:         true,                                         // daysSince == windowDays is still "new"
 			expectedDaysSince:     7,
@@ -74,7 +74,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "one_day_past_boundary",
 			windowDays:            7,
-			existingFirstSeen:     ptrTime(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
+			existingFirstSeen:     new(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 9, 10, 0, 0, 0, time.UTC), // 8 days
 			expectedIsNew:         false,
 			expectedDaysSince:     8,
@@ -83,7 +83,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "same_time_detection",
 			windowDays:            7,
-			existingFirstSeen:     ptrTime(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
+			existingFirstSeen:     new(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC), // exact same time
 			expectedIsNew:         true,
 			expectedDaysSince:     0,
@@ -92,7 +92,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "very_old_first_seen_large_days",
 			windowDays:            7,
-			existingFirstSeen:     ptrTime(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)),
+			existingFirstSeen:     new(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
 			expectedIsNew:         false,
 			expectedDaysSince:     1992, // ~5.5 years
@@ -101,7 +101,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 		{
 			name:                  "zero_window_days_always_not_new",
 			windowDays:            0,
-			existingFirstSeen:     ptrTime(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
+			existingFirstSeen:     new(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
 			expectedIsNew:         true, // daysSince 0 <= windowDays 0
 			expectedDaysSince:     0,
@@ -807,7 +807,3 @@ func TestAllSeasonsEmpty(t *testing.T) {
 // ============================================================================
 // Helper functions
 // ============================================================================
-
-func ptrTime(t time.Time) *time.Time {
-	return &t
-}

@@ -654,14 +654,15 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 	// Get standard input format arguments
 	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
 
-	// Build the base arguments for PCM input from stdin
-	args := []string{
+	// Build the base arguments for PCM input from stdin with preallocated capacity
+	args := make([]string, 0, 9+len(customArgs)+1)
+	args = append(args,
 		"-hide_banner",     // Suppress FFmpeg banner output for cleaner logs
 		"-f", ffmpegFormat, // Input format based on bit depth
 		"-ar", ffmpegSampleRate, // Sample rate
 		"-ac", ffmpegNumChannels, // Number of channels
 		"-i", "-", // Read from stdin
-	}
+	)
 
 	// Append the custom arguments provided by the caller (should include codec, filters, format)
 	args = append(args, customArgs...)

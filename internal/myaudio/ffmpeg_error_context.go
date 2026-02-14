@@ -84,8 +84,8 @@ func extractHostWithoutCredentials(rawURL string) string {
 			rawURL = rawURL[atIdx+1:]
 		}
 		// Remove port if present for safety
-		if colonIdx := strings.Index(rawURL, ":"); colonIdx != -1 {
-			return rawURL[:colonIdx]
+		if host, _, found := strings.Cut(rawURL, ":"); found {
+			return host
 		}
 		return rawURL
 	}

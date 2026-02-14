@@ -352,11 +352,6 @@ func TestSQLiteManager_SourceDeleteSetsNull(t *testing.T) {
 	assert.InDelta(t, det.Confidence, reloadedDet.Confidence, 0.0001)
 }
 
-// stringPtr is a helper to create string pointers for testing.
-func stringPtr(s string) *string {
-	return &s
-}
-
 func TestSQLiteManager_DirectPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	customPath := filepath.Join(tmpDir, "mydb.db")

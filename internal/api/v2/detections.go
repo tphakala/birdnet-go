@@ -1326,7 +1326,7 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 		isExcluded = false
 	} else {
 		// Add to excluded list
-		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude))
+		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude), len(settings.Realtime.Species.Exclude)+1)
 		copy(newExcludeList, settings.Realtime.Species.Exclude)
 		newExcludeList = append(newExcludeList, species)
 		settings.Realtime.Species.Exclude = newExcludeList
@@ -1362,7 +1362,7 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	// If not already excluded, add it
 	if !isExcluded {
 		// Create a copy of the current exclude list to avoid race conditions
-		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude))
+		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude), len(settings.Realtime.Species.Exclude)+1)
 		copy(newExcludeList, settings.Realtime.Species.Exclude)
 
 		// Add the new species to the list

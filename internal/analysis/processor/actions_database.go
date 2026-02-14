@@ -158,13 +158,14 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		// handleAudioExportError logs the error and signals downstream actions.
 		// This helper reduces duplication between buffer read and save failures.
 		handleAudioExportError := func(err error, extraFields ...logger.Field) {
-			fields := []logger.Field{
+			fields := make([]logger.Field, 0, 5+len(extraFields))
+			fields = append(fields,
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.Error(err),
 				logger.String("species", a.Result.Species.CommonName),
 				logger.String("operation", "audio_export_non_fatal"),
-			}
+			)
 			fields = append(fields, extraFields...)
 			GetLogger().Error("Audio export failed (continuing with detection broadcast)", fields...)
 

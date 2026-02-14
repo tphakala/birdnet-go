@@ -716,11 +716,12 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level logger.LogLevel, msg 
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
 
-	// Create base fields
-	baseFields := []logger.Field{
+	// Create base fields with preallocated capacity
+	baseFields := make([]logger.Field, 0, 2+len(fields))
+	baseFields = append(baseFields,
 		logger.String("path", path),
 		logger.String("ip", ip),
-	}
+	)
 
 	// Append specific fields to base fields
 	baseFields = append(baseFields, fields...)
