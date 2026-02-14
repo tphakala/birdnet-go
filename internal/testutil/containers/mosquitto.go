@@ -310,6 +310,10 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 			return fmt.Errorf("context cancelled while waiting for retained messages: %w", ctx.Err())
 		}
 	case <-waitCtx.Done():
+		// Check if the parent context was cancelled (not just the wait timeout)
+		if ctx.Err() != nil {
+			return fmt.Errorf("context cancelled while waiting for retained messages: %w", ctx.Err())
+		}
 		// Timeout reached with no messages - this is fine, means no retained messages exist
 	case <-ctx.Done():
 		return fmt.Errorf("context cancelled while waiting for retained messages: %w", ctx.Err())

@@ -62,20 +62,12 @@ func TestMosquittoContainer_ClearRetainedMessages(t *testing.T) {
 		require.True(t, token.WaitTimeout(5*time.Second), "subscribe timeout")
 		require.NoError(t, token.Error(), "failed to subscribe")
 
-		// Wait for retained messages
-		select {
-		case <-messagesReceived:
-			// Give time for all messages to arrive
-			time.Sleep(100 * time.Millisecond)
-		case <-time.After(2 * time.Second):
-			t.Fatal("timeout waiting for retained messages")
-		}
-
-		mu.Lock()
-		initialCount := len(receivedTopics)
-		mu.Unlock()
-
-		assert.Equal(t, len(topics), initialCount, "should receive all retained messages")
+		// Wait for all retained messages to be received
+		require.Eventually(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return len(receivedTopics) == len(topics)
+		}, 2*time.Second, 50*time.Millisecond, "timed out waiting for all retained messages")
 
 		subscriber.Disconnect(250)
 
@@ -147,6 +139,6 @@ func TestMosquittoContainer_ClearRetainedMessages_ContextCancellation(t *testing
 
 	// Try to clear with cancelled context
 	err = container.ClearRetainedMessages(cancelledCtx)
-	assert.Error(t, err, "should error with cancelled context")
+	require.Error(t, err, "should error with cancelled context")
 	assert.Contains(t, err.Error(), "context cancelled", "error should mention context cancellation")
 }
