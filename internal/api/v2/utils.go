@@ -124,8 +124,8 @@ func isWindowsAbsolutePath(p string) bool {
 }
 
 // isUnsafePath checks if a path would escape the SecureFS root.
-// Uses filepath.IsLocal for robust path validation that handles platform-specific
-// traversal patterns, reserved names, and edge cases.
+// Uses explicit ".." check for URL/HTTP paths (which are not cleaned by the OS),
+// plus filepath.IsLocal for platform-specific validation.
 // Also checks for URL-encoded attacks and null bytes.
 func isUnsafePath(p string) bool {
 	// Check for null bytes - do this first as they can bypass other checks
@@ -143,11 +143,20 @@ func isUnsafePath(p string) bool {
 		return true
 	}
 
+	// Explicit ".." check needed for URL paths since filepath.IsLocal cleans paths internally.
+	// For HTTP/URL contexts, "path/../etc" is dangerous even though it cleans to "etc".
+	// This check must come BEFORE filepath.IsLocal to catch patterns like "..../file" which
+	// contain ".." as a substring but aren't traversal after cleaning.
+	if strings.Contains(p, "..") {
+		return true
+	}
+
 	// filepath.IsLocal provides comprehensive platform-specific validation for:
-	// - Path traversal attempts (..), absolute paths, empty paths
+	// - Absolute paths, empty paths
 	// - Windows reserved names (NUL, COM1, LPT1, etc.)
 	// - Windows \??\ prefix attacks (CVE-2023-45283)
 	// - Space-padded reserved names (CVE-2023-45284)
+	// Note: The ".." check is intentionally above, not relying on IsLocal's ".." detection
 	return !filepath.IsLocal(p)
 }
 
