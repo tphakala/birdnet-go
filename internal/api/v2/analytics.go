@@ -357,9 +357,7 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 
 	hourlyCounts, err := c.DS.GetBatchHourlyOccurrences(selectedDate, speciesList, minConfidence)
 	if err != nil {
-		c.Debug("Error getting batch hourly counts: %v", err)
-		// Fall back to empty map - allow processing to continue
-		hourlyCounts = make(map[string][24]int)
+		return nil, fmt.Errorf("failed to get batch hourly occurrences: %w", err)
 	}
 
 	// Process notes with pre-fetched data

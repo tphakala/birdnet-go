@@ -1220,3 +1220,45 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	assert.Equal(t, "Failed to get daily species data", errorResponse["message"])
 	assert.InDelta(t, http.StatusInternalServerError, errorResponse["code"], 0.01)
 }
+
+// TestGetDailySpeciesSummary_BatchQueryError tests that batch query errors are properly propagated
+func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
+	t.Parallel()
+	// Setup using the proper test environment
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	testDate := "2025-03-07"
+	mockNotes := []datastore.Note{
+		{CommonName: "American Crow", ScientificName: "Corvus brachyrhynchos", Confidence: 0.85},
+	}
+
+	// Mock successful GetTopBirdsData call
+	mockDS.On("GetTopBirdsData", testDate, 0.0, 0).Return(mockNotes, nil)
+
+	// Mock GetBatchHourlyOccurrences to return an error
+	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.Anything, 0.0).Return(
+		map[string][24]int{}, errors.New("batch query failed: connection timeout"))
+
+	// Create a request
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+	require.NoError(t, err)
+
+	// Verify error response
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	var errorResponse map[string]any
+	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
+	require.NoError(t, err)
+
+	// Check that the error response contains expected fields
+	assert.Contains(t, errorResponse, "error")
+	assert.Contains(t, errorResponse["error"].(string), "batch query failed")
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
+}
