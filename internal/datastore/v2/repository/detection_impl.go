@@ -1213,7 +1213,11 @@ func (r *detectionRepository) GetLocksByDetectionIDs(ctx context.Context, detect
 func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error) {
 	var results []SpeciesSummaryData
 
-	query := r.db.WithContext(ctx).Table(r.tableName()).
+	detTable := r.tableName()
+	labTable := r.labelsTable()
+	revTable := r.reviewsTable()
+
+	query := r.db.WithContext(ctx).Table(detTable).
 		Select(fmt.Sprintf(`
 			MIN(%s.label_id) as label_id,
 			%s.scientific_name,
@@ -1222,16 +1226,17 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 			MAX(%s.detected_at) as last_detection,
 			AVG(%s.confidence) as avg_confidence,
 			MAX(%s.confidence) as max_confidence
-		`, r.tableName(), r.labelsTable(), r.tableName(), r.tableName(), r.tableName(), r.tableName())).
-		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id",
-			r.labelsTable(), r.labelsTable(), r.tableName())).
-		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at < ?", r.tableName(), r.tableName()), start, end)
+		`, detTable, labTable, detTable, detTable, detTable, detTable)).
+		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id", labTable, labTable, detTable)).
+		Joins(fmt.Sprintf("LEFT JOIN %s ON %s.id = %s.detection_id", revTable, detTable, revTable)).
+		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at < ?", detTable, detTable), start, end).
+		Where(fmt.Sprintf("(%s.verified IS NULL OR %s.verified != ?)", revTable, revTable), string(entities.VerificationFalsePositive))
 
 	if modelID != nil {
-		query = query.Where(fmt.Sprintf("%s.model_id = ?", r.tableName()), *modelID)
+		query = query.Where(fmt.Sprintf("%s.model_id = ?", detTable), *modelID)
 	}
 
-	err := query.Group(fmt.Sprintf("%s.scientific_name", r.labelsTable())).
+	err := query.Group(fmt.Sprintf("%s.scientific_name", labTable)).
 		Order("total_detections DESC").
 		Scan(&results).Error
 
