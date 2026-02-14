@@ -2232,7 +2232,12 @@
           "36db": "36dB",
           "48db": "48dB"
         },
-        "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment."
+        "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment.",
+        "graph": {
+          "flatResponse": "Flat Response (No Filters Applied)",
+          "frequency": "Frequency (Hz)",
+          "gain": "Gain (dB)"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Sound Level Monitoring",

@@ -31,6 +31,7 @@
     MAX_DB,
   } from '$lib/utils/audio/dsp';
   import type { EqualizerFilterType } from '$lib/stores/settings';
+  import { t } from '$lib/i18n';
 
   interface Filter {
     type: EqualizerFilterType;
@@ -324,7 +325,7 @@
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = colors.background === '#0d1117' ? 0.4 : 0.5; // Lower opacity in dark mode
       ctx.fillText(
-        'Flat Response (No Filters Applied)',
+        t('settings.audio.audioFilters.graph.flatResponse'),
         canvasWidth / 2,
         margins.top + plotHeight / 2 - 20
       );
@@ -362,7 +363,7 @@
     ctx.font = '12px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('Frequency (Hz)', canvasWidth / 2, canvasHeight - 10);
+    ctx.fillText(t('settings.audio.audioFilters.graph.frequency'), canvasWidth / 2, canvasHeight - 10);
 
     // Y-axis label with better positioning
     ctx.save();
@@ -370,7 +371,7 @@
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Gain (dB)', 0, 0);
+    ctx.fillText(t('settings.audio.audioFilters.graph.gain'), 0, 0);
     ctx.restore();
   }
 

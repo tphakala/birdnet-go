@@ -2232,7 +2232,12 @@
           "36db": "36dB",
           "48db": "48dB"
         },
-        "filterHelp": "Aggiungi più filtri per modellare la risposta in frequenza per rilevamento ottimale uccelli nel tuo ambiente."
+        "filterHelp": "Aggiungi più filtri per modellare la risposta in frequenza per rilevamento ottimale uccelli nel tuo ambiente.",
+        "graph": {
+          "flatResponse": "Risposta Piatta (Nessun Filtro Applicato)",
+          "frequency": "Frequenza (Hz)",
+          "gain": "Guadagno (dB)"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Monitoraggio Livello Sonoro",
