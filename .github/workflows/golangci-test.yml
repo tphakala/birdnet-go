@@ -195,8 +195,25 @@ jobs:
           path: /tmp/gotest.log
           if-no-files-found: error
 
+  testcontainer-tests:
+    needs: golangci
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Run testcontainer integration tests
+        run: |
+          # Run integration tests that use testcontainers
+          # Testcontainers will automatically manage MySQL and Mosquitto containers
+          go test -tags=integration -race -timeout 180s -v ./internal/datastore/v2/repository/... 2>&1
+        timeout-minutes: 5
+
   integration-tests:
-    needs: unit-tests
+    needs: [unit-tests, testcontainer-tests]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
