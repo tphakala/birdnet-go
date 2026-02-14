@@ -57,7 +57,8 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    const timePeriodSelect = screen.getAllByRole('combobox')[0];
+    // SelectDropdown renders as a button, not combobox
+    const timePeriodSelect = screen.getByRole('button', { name: /all time/i });
     expect(timePeriodSelect).toBeInTheDocument();
   });
 
@@ -73,7 +74,8 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    const sortSelect = screen.getAllByRole('combobox')[1];
+    // SelectDropdown renders as a button, not combobox
+    const sortSelect = screen.getByRole('button', { name: /count.*desc/i });
     expect(sortSelect).toBeInTheDocument();
   });
 
