@@ -5,12 +5,12 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
 )
 
@@ -286,10 +286,307 @@ func TestMySQL_AutoIncrement(t *testing.T) {
 	assert.Equal(t, ids[1]+1, ids[2], "IDs should be sequential")
 }
 
-// TODO: Add more comprehensive tests:
-// - Complex queries with JOINs
-// - Subqueries and aggregations
-// - Concurrent access patterns
-// - Foreign key constraints
-// - Index usage verification
+// ============================================================================
+// Complex Query Tests
+// ============================================================================
+
+func TestMySQL_Aggregation_GroupBy(t *testing.T) {
+	resetDatabase(t)
+
+	ctx := context.Background()
+
+	// Insert multiple detections with different species
+	species := []struct {
+		scientific string
+		common     string
+		count      int
+	}{
+		{"Turdus merula", "Common Blackbird", 5},
+		{"Parus major", "Great Tit", 3},
+		{"Erithacus rubecula", "European Robin", 2},
+	}
+
+	for _, s := range species {
+		for i := 0; i < s.count; i++ {
+			_, err := testDB.ExecContext(ctx,
+				"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
+				s.scientific, s.common, 0.9+float64(i)*0.01,
+			)
+			require.NoError(t, err)
+		}
+	}
+
+	// Query with GROUP BY and aggregation
+	rows, err := testDB.QueryContext(ctx, `
+		SELECT scientific_name, COUNT(*) as count, AVG(confidence) as avg_confidence
+		FROM test_detections
+		GROUP BY scientific_name
+		ORDER BY count DESC
+	`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	results := make([]struct {
+		species    string
+		count      int
+		avgConf    float64
+	}, 0)
+
+	for rows.Next() {
+		var r struct {
+			species    string
+			count      int
+			avgConf    float64
+		}
+		err := rows.Scan(&r.species, &r.count, &r.avgConf)
+		require.NoError(t, err)
+		results = append(results, r)
+	}
+
+	require.NoError(t, rows.Err())
+	assert.Len(t, results, 3, "should have 3 species")
+	assert.Equal(t, "Turdus merula", results[0].species)
+	assert.Equal(t, 5, results[0].count)
+}
+
+func TestMySQL_HAVING_Clause(t *testing.T) {
+	resetDatabase(t)
+
+	ctx := context.Background()
+
+	// Insert detections with varying confidence
+	testData := []struct {
+		species    string
+		confidence float64
+	}{
+		{"Turdus merula", 0.95},
+		{"Turdus merula", 0.85},
+		{"Turdus merula", 0.75},
+		{"Parus major", 0.92},
+		{"Parus major", 0.88},
+	}
+
+	for _, d := range testData {
+		_, err := testDB.ExecContext(ctx,
+			"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
+			d.species, "Test", d.confidence,
+		)
+		require.NoError(t, err)
+	}
+
+	// Query with HAVING clause - only species with avg confidence > 0.85
+	rows, err := testDB.QueryContext(ctx, `
+		SELECT scientific_name, AVG(confidence) as avg_conf
+		FROM test_detections
+		GROUP BY scientific_name
+		HAVING AVG(confidence) > 0.85
+	`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var species string
+		var avgConf float64
+		err := rows.Scan(&species, &avgConf)
+		require.NoError(t, err)
+		assert.Greater(t, avgConf, 0.85, "average confidence should be > 0.85")
+		count++
+	}
+
+	require.NoError(t, rows.Err())
+	assert.Equal(t, 2, count, "both species should meet criteria")
+}
+
+// ============================================================================
+// Concurrent Access Tests
+// ============================================================================
+
+func TestMySQL_ConcurrentInserts(t *testing.T) {
+	resetDatabase(t)
+
+	ctx := context.Background()
+	const numGoroutines = 10
+	const insertsPerGoroutine = 5
+
+	errChan := make(chan error, numGoroutines)
+	doneChan := make(chan bool, numGoroutines)
+
+	// Launch concurrent goroutines inserting data
+	for g := 0; g < numGoroutines; g++ {
+		go func(goroutineID int) {
+			for i := 0; i < insertsPerGoroutine; i++ {
+				_, err := testDB.ExecContext(ctx,
+					"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
+					fmt.Sprintf("Species_%d_%d", goroutineID, i),
+					fmt.Sprintf("Common_%d_%d", goroutineID, i),
+					0.9,
+				)
+				if err != nil {
+					errChan <- err
+					return
+				}
+			}
+			doneChan <- true
+		}(g)
+	}
+
+	// Wait for all goroutines to complete
+	for g := 0; g < numGoroutines; g++ {
+		select {
+		case err := <-errChan:
+			t.Fatalf("concurrent insert failed: %v", err)
+		case <-doneChan:
+			// Success
+		}
+	}
+
+	// Verify total count
+	var count int
+	err := testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM test_detections").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, numGoroutines*insertsPerGoroutine, count, "all inserts should succeed")
+}
+
+func TestMySQL_ConcurrentReadWrite(t *testing.T) {
+	resetDatabase(t)
+
+	ctx := context.Background()
+
+	// Insert initial data
+	for i := 0; i < 10; i++ {
+		_, err := testDB.ExecContext(ctx,
+			"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
+			fmt.Sprintf("Species_%d", i), "Test", 0.9,
+		)
+		require.NoError(t, err)
+	}
+
+	const numReaders = 5
+	const numWriters = 3
+	errChan := make(chan error, numReaders+numWriters)
+	doneChan := make(chan bool, numReaders+numWriters)
+
+	// Launch readers
+	for r := 0; r < numReaders; r++ {
+		go func() {
+			for i := 0; i < 10; i++ {
+				var count int
+				err := testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM test_detections").Scan(&count)
+				if err != nil {
+					errChan <- err
+					return
+				}
+			}
+			doneChan <- true
+		}()
+	}
+
+	// Launch writers
+	for w := 0; w < numWriters; w++ {
+		go func(writerID int) {
+			for i := 0; i < 5; i++ {
+				_, err := testDB.ExecContext(ctx,
+					"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
+					fmt.Sprintf("Writer_%d_%d", writerID, i), "Test", 0.9,
+				)
+				if err != nil {
+					errChan <- err
+					return
+				}
+			}
+			doneChan <- true
+		}(w)
+	}
+
+	// Wait for completion
+	for i := 0; i < numReaders+numWriters; i++ {
+		select {
+		case err := <-errChan:
+			t.Fatalf("concurrent operation failed: %v", err)
+		case <-doneChan:
+			// Success
+		}
+	}
+}
+
+// ============================================================================
+// Foreign Key Tests
+// ============================================================================
+
+func TestMySQL_ForeignKeyConstraint(t *testing.T) {
+	resetDatabase(t)
+
+	ctx := context.Background()
+
+	// Create parent and child tables with foreign key
+	_, err := testDB.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS test_species (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			scientific_name VARCHAR(255) NOT NULL UNIQUE
+		) ENGINE=InnoDB
+	`)
+	require.NoError(t, err)
+
+	_, err = testDB.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS test_observations (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			species_id BIGINT NOT NULL,
+			confidence FLOAT NOT NULL,
+			FOREIGN KEY (species_id) REFERENCES test_species(id) ON DELETE CASCADE
+		) ENGINE=InnoDB
+	`)
+	require.NoError(t, err)
+
+	// Clean up at test end
+	defer func() {
+		_, _ = testDB.ExecContext(ctx, "DROP TABLE IF EXISTS test_observations")
+		_, _ = testDB.ExecContext(ctx, "DROP TABLE IF EXISTS test_species")
+	}()
+
+	// Insert parent record
+	result, err := testDB.ExecContext(ctx,
+		"INSERT INTO test_species (scientific_name) VALUES (?)",
+		"Turdus merula",
+	)
+	require.NoError(t, err)
+	speciesID, _ := result.LastInsertId()
+
+	// Insert child record (should succeed - FK exists)
+	_, err = testDB.ExecContext(ctx,
+		"INSERT INTO test_observations (species_id, confidence) VALUES (?, ?)",
+		speciesID, 0.95,
+	)
+	assert.NoError(t, err, "insert with valid FK should succeed")
+
+	// Try to insert child with non-existent FK (should fail)
+	_, err = testDB.ExecContext(ctx,
+		"INSERT INTO test_observations (species_id, confidence) VALUES (?, ?)",
+		99999, 0.95,
+	)
+	assert.Error(t, err, "insert with invalid FK should fail")
+	assert.Contains(t, err.Error(), "foreign key constraint", "error should mention FK constraint")
+
+	// Verify CASCADE DELETE
+	var obsCount int
+	err = testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM test_observations").Scan(&obsCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, obsCount, "should have 1 observation")
+
+	// Delete parent (should cascade)
+	_, err = testDB.ExecContext(ctx, "DELETE FROM test_species WHERE id = ?", speciesID)
+	require.NoError(t, err)
+
+	// Verify child was deleted
+	err = testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM test_observations").Scan(&obsCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, obsCount, "observation should be cascade deleted")
+}
+
+// TODO: Additional test ideas for future implementation:
+// - Subquery tests with IN/EXISTS
+// - Index usage verification with EXPLAIN
 // - Deadlock detection and recovery
+// - Connection pool exhaustion scenarios
+// - JSON column operations (MySQL 5.7+)
+// - Full-text search capabilities
