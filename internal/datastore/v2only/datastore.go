@@ -719,6 +719,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// Uses Detection.LabelID/Confidence directly (primary prediction) rather than
 	// detection_predictions table (which only stores secondary predictions).
 	// Secondary sort by scientific_name ensures deterministic results when counts are equal.
+	// Excludes detections marked as false_positive.
 	db := ds.manager.DB()
 	err = db.Table("detections d").
 		Select(`
@@ -728,8 +729,10 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 			MAX(d.detected_at) as latest_time
 		`).
 		Joins("JOIN labels l ON d.label_id = l.id").
+		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
 		Where("d.confidence >= ?", minConfidenceNormalized).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
 		Group("l.scientific_name").
 		Order("count DESC, l.scientific_name ASC").
 		Limit(reportCount).
@@ -869,23 +872,26 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 	}
 
 	// Generate database-agnostic hour expression
-	// MySQL: HOUR(FROM_UNIXTIME(detected_at))
-	// SQLite: CAST(strftime('%H', datetime(detected_at, 'unixepoch', 'localtime')) AS INTEGER)
+	// MySQL: HOUR(FROM_UNIXTIME(d.detected_at))
+	// SQLite: CAST(strftime('%H', datetime(d.detected_at, 'unixepoch', 'localtime')) AS INTEGER)
 	var hourExpr string
 	if ds.manager.IsMySQL() {
-		hourExpr = "HOUR(FROM_UNIXTIME(detected_at))"
+		hourExpr = "HOUR(FROM_UNIXTIME(d.detected_at))"
 	} else {
-		hourExpr = "CAST(strftime('%H', datetime(detected_at, 'unixepoch', 'localtime')) AS INTEGER)"
+		hourExpr = "CAST(strftime('%H', datetime(d.detected_at, 'unixepoch', 'localtime')) AS INTEGER)"
 	}
 
 	var results []result
+	// Exclude detections marked as false_positive
 	err = ds.manager.DB().WithContext(ctx).
-		Table("detections").
-		Select(fmt.Sprintf("label_id, %s as hour, COUNT(*) as count", hourExpr)).
-		Where("label_id IN ?", flatLabelIDs).
-		Where("detected_at >= ? AND detected_at < ?", startOfDay, endOfDay).
-		Where("confidence >= ?", minConfidence).
-		Group(fmt.Sprintf("label_id, %s", hourExpr)).
+		Table("detections d").
+		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
+		Select(fmt.Sprintf("d.label_id as label_id, %s as hour, COUNT(*) as count", hourExpr)).
+		Where("d.label_id IN ?", flatLabelIDs).
+		Where("d.detected_at >= ? AND d.detected_at < ?", startOfDay, endOfDay).
+		Where("d.confidence >= ?", minConfidence).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
+		Group(fmt.Sprintf("d.label_id, %s", hourExpr)).
 		Scan(&results).Error
 
 	if err != nil {
@@ -2110,20 +2116,22 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	var results []datastore.DailyAnalyticsData
 
 	// Generate database-agnostic date expression
-	// MySQL: DATE(FROM_UNIXTIME(detected_at))
-	// SQLite: date(detected_at, 'unixepoch', 'localtime') - localtime for timezone-aware bucketing
+	// MySQL: DATE(FROM_UNIXTIME(d.detected_at))
+	// SQLite: date(d.detected_at, 'unixepoch', 'localtime') - localtime for timezone-aware bucketing
 	var dateExpr string
 	if ds.manager.IsMySQL() {
-		dateExpr = "DATE(FROM_UNIXTIME(detected_at))"
+		dateExpr = "DATE(FROM_UNIXTIME(d.detected_at))"
 	} else {
-		dateExpr = "date(detected_at, 'unixepoch', 'localtime')"
+		dateExpr = "date(d.detected_at, 'unixepoch', 'localtime')"
 	}
 
-	// Build query to count distinct species per day
+	// Build query to count distinct species per day, excluding false positives
 	query := ds.manager.DB().WithContext(ctx).
-		Table("detections").
-		Select(fmt.Sprintf("%s as date, COUNT(DISTINCT labels.scientific_name) as count", dateExpr)).
-		Joins("JOIN labels ON detections.label_id = labels.id").
+		Table("detections d").
+		Select(fmt.Sprintf("%s as date, COUNT(DISTINCT l.scientific_name) as count", dateExpr)).
+		Joins("JOIN labels l ON d.label_id = l.id").
+		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
+		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
 		Group(dateExpr).
 		Order("date")
 

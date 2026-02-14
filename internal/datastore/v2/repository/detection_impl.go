@@ -707,10 +707,15 @@ func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelIDs
 	var results []hourCount
 
 	// Extract hour from Unix timestamp in local timezone
-	hourExpr := r.hourFromUnixExpr("detected_at")
-	err := r.db.WithContext(ctx).Table(r.tableName()).
+	// Exclude detections marked as false_positive
+	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	detTable := r.tableName()
+	revTable := r.reviewsTable()
+	err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
-		Where("label_id IN ? AND detected_at >= ? AND detected_at < ? AND confidence >= ?", labelIDs, start, end, minConfidence).
+		Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", labelIDs, start, end, minConfidence).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
 		Group("hour").
 		Scan(&results).Error
 
@@ -1238,16 +1243,21 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 	var results []HourlyDistributionData
 
 	// Use hourFromUnixExpr for correct local timezone conversion
-	hourExpr := r.hourFromUnixExpr("detected_at")
-	query := r.db.WithContext(ctx).Table(r.tableName()).
+	// Exclude detections marked as false_positive
+	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	detTable := r.tableName()
+	revTable := r.reviewsTable()
+	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
-		Where("detected_at >= ? AND detected_at < ?", start, end)
+		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive")
 
 	if labelID != nil {
-		query = query.Where("label_id = ?", *labelID)
+		query = query.Where("d.label_id = ?", *labelID)
 	}
 	if modelID != nil {
-		query = query.Where("model_id = ?", *modelID)
+		query = query.Where("d.model_id = ?", *modelID)
 	}
 
 	err := query.Group("hour").
@@ -1262,21 +1272,26 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 	var results []DailyAnalyticsData
 
 	// Use dialect-appropriate date conversion
-	dateExpr := r.dateFromUnixExpr("detected_at")
-	query := r.db.WithContext(ctx).Table(r.tableName()).
+	// Exclude detections marked as false_positive
+	dateExpr := r.dateFromUnixExpr("d.detected_at")
+	detTable := r.tableName()
+	revTable := r.reviewsTable()
+	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
 		Select(fmt.Sprintf(`
 			%s as date,
 			COUNT(*) as total_detections,
-			COUNT(DISTINCT label_id) as unique_species,
-			AVG(confidence) as avg_confidence
+			COUNT(DISTINCT d.label_id) as unique_species,
+			AVG(d.confidence) as avg_confidence
 		`, dateExpr)).
-		Where("detected_at >= ? AND detected_at < ?", start, end)
+		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive")
 
 	if labelID != nil {
-		query = query.Where("label_id = ?", *labelID)
+		query = query.Where("d.label_id = ?", *labelID)
 	}
 	if modelID != nil {
-		query = query.Where("model_id = ?", *modelID)
+		query = query.Where("d.model_id = ?", *modelID)
 	}
 
 	err := query.Group("date").
