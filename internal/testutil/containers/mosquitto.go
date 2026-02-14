@@ -1,5 +1,6 @@
 //go:build integration
 
+//nolint:misspell // Mosquitto is the official Eclipse project name
 package containers
 
 import (
