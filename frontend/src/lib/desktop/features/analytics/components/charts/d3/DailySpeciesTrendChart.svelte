@@ -8,6 +8,7 @@
   import type { AxisDomain } from 'd3-axis';
   import type { ZoomTransform } from 'd3-zoom';
 
+  import { t } from '$lib/i18n';
   import BaseChart from './BaseChart.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import { createTimeScale, createLinearScale } from './utils/scales';
@@ -63,7 +64,6 @@
   let tooltip: ChartTooltip | null = null;
   let zoomTransform: ZoomTransform | null = null;
   let chartContainer: HTMLDivElement | null = null;
-  // let brushSelection: [Date, Date] | null = null;
 
   // Prepare data with colors
   const chartData = $derived.by(() => {
@@ -242,7 +242,7 @@
     addAxisLabel(
       chartGroup,
       {
-        text: 'Date',
+        text: t('analytics.advanced.charts.dailyTrend.axisDate'),
         orientation: 'bottom',
         offset: 35,
         width: innerWidth,
@@ -254,7 +254,9 @@
     addAxisLabel(
       chartGroup,
       {
-        text: showRelative ? 'Percentage of Total Detections' : 'Detection Count',
+        text: showRelative
+          ? t('analytics.advanced.charts.dailyTrend.axisPercentage')
+          : t('analytics.advanced.charts.dailyTrend.axisCount'),
         orientation: 'left',
         offset: 45,
         width: innerWidth,
@@ -339,9 +341,14 @@
           const tooltipData = {
             title: species.commonName,
             items: [
-              { label: 'Date', value: getLocalDateString(d.date) },
               {
-                label: showRelative ? 'Percentage' : 'Detections',
+                label: t('analytics.advanced.charts.tooltips.date'),
+                value: getLocalDateString(d.date),
+              },
+              {
+                label: showRelative
+                  ? t('analytics.advanced.charts.tooltips.percentage')
+                  : t('analytics.advanced.charts.tooltips.detections'),
                 value: showRelative ? `${d.count.toFixed(1)}%` : d.count.toString(),
               },
             ],
@@ -412,10 +419,9 @@
           if (selection) {
             const [x1, x2] = selection;
             const dateRange: [Date, Date] = [xScale.invert(x1), xScale.invert(x2)];
-            // brushSelection = dateRange;
             onDateRangeChange?.(dateRange);
           } else {
-            // brushSelection = null;
+            // Brush cleared
           }
         },
       });
@@ -479,25 +485,11 @@
   // Without these reads, the effect won't re-run when data changes.
   // This is because $derived is lazy and snippets only render once.
   $effect(() => {
-    // Force evaluation of reactive dependencies by accessing them
-    // These assignments are CRITICAL - they make the effect track these values
-    const currentData = data; // Track the data prop changes
-    const processed = processedData; // Track computed processed data
-    const chartScales = scales; // Track scale changes
-    const ctx = chartContext; // Get the D3 context from snippet
-
-    // CRITICAL: Force reactive dependency tracking without logging
-    void {
-      dataLength: currentData.length,
-      hasChartContext: !!ctx,
-      processedDataLength: processed.length,
-      hasScales: !!chartScales,
-    };
-
-    if (ctx && processed.length > 0 && chartScales) {
-      drawChart(ctx);
-    } else if (ctx && ctx.chartGroup && (!processed.length || !chartScales)) {
-      ctx.chartGroup.selectAll('*').remove();
+    // Simply access reactive values - Svelte 5 tracks automatically
+    if (chartContext && processedData.length > 0 && scales) {
+      drawChart(chartContext);
+    } else if (chartContext?.chartGroup) {
+      chartContext.chartGroup.selectAll('*').remove();
     }
   });
 

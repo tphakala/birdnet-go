@@ -177,6 +177,20 @@
     { value: 'custom', label: 'Custom URL', serviceId: 'custom' },
   ];
 
+  // Webhook method options
+  const webhookMethodOptions = $derived([
+    { value: 'POST', label: 'POST' },
+    { value: 'PUT', label: 'PUT' },
+    { value: 'PATCH', label: 'PATCH' },
+  ]);
+
+  // Webhook auth type options
+  const webhookAuthOptions = $derived([
+    { value: 'none', label: t('settings.notifications.push.services.webhook.auth.none') },
+    { value: 'bearer', label: t('settings.notifications.push.services.webhook.auth.bearer') },
+    { value: 'basic', label: t('settings.notifications.push.services.webhook.auth.basic') },
+  ]);
+
   // Generate shoutrrr URL from service-specific inputs
   function generateShoutrrrUrl(): string {
     switch (selectedService) {
@@ -1374,52 +1388,26 @@
                   </p>
 
                   <!-- HTTP Method -->
-                  <div class="">
-                    <label class="block py-1" for="webhook-method">
-                      <span class="text-sm font-semibold text-[var(--color-base-content)]"
-                        >{t('settings.notifications.push.services.webhook.method.label')}</span
-                      >
-                    </label>
-                    <select
-                      id="webhook-method"
-                      class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-                      bind:value={serviceFormData.webhookMethod}
-                    >
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="PATCH">PATCH</option>
-                    </select>
-                    <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
-                      {t('settings.notifications.push.services.webhook.method.helpText')}
-                    </p>
-                  </div>
+                  <SelectDropdown
+                    bind:value={serviceFormData.webhookMethod}
+                    options={webhookMethodOptions}
+                    label={t('settings.notifications.push.services.webhook.method.label')}
+                    helpText={t('settings.notifications.push.services.webhook.method.helpText')}
+                    variant="select"
+                    size="sm"
+                    menuSize="sm"
+                  />
 
                   <!-- Authentication Type -->
-                  <div class="">
-                    <label class="block py-1" for="webhook-auth-type">
-                      <span class="text-sm font-semibold text-[var(--color-base-content)]"
-                        >{t('settings.notifications.push.services.webhook.auth.label')}</span
-                      >
-                    </label>
-                    <select
-                      id="webhook-auth-type"
-                      class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-                      bind:value={serviceFormData.webhookAuthType}
-                    >
-                      <option value="none"
-                        >{t('settings.notifications.push.services.webhook.auth.none')}</option
-                      >
-                      <option value="bearer"
-                        >{t('settings.notifications.push.services.webhook.auth.bearer')}</option
-                      >
-                      <option value="basic"
-                        >{t('settings.notifications.push.services.webhook.auth.basic')}</option
-                      >
-                    </select>
-                    <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
-                      {t('settings.notifications.push.services.webhook.auth.helpText')}
-                    </p>
-                  </div>
+                  <SelectDropdown
+                    bind:value={serviceFormData.webhookAuthType}
+                    options={webhookAuthOptions}
+                    label={t('settings.notifications.push.services.webhook.auth.label')}
+                    helpText={t('settings.notifications.push.services.webhook.auth.helpText')}
+                    variant="select"
+                    size="sm"
+                    menuSize="sm"
+                  />
 
                   <!-- Bearer Token (conditional) -->
                   {#if serviceFormData.webhookAuthType === 'bearer'}

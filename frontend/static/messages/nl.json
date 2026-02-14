@@ -1071,13 +1071,18 @@
           "title": "Detectiepatronen per dagdeel",
           "description": "Toont gemiddelde detectieaantallen gedurende de dag voor geselecteerde soorten",
           "noData": "Geen dagdeelgegevens beschikbaar",
-          "noDataHint": "Selecteer soorten en een datumbereik om patronen weer te geven"
+          "noDataHint": "Selecteer soorten en een datumbereik om patronen weer te geven",
+          "axisTime": "Tijd van de dag",
+          "axisCount": "Aantal detecties"
         },
         "dailyTrend": {
           "title": "Soortdetectietrends",
           "description": "Toont detectietendensen in de tijd voor geselecteerde soorten",
           "noData": "Geen trendgegevens beschikbaar",
-          "noDataHint": "Selecteer soorten en een datumbereik om tendensen weer te geven"
+          "noDataHint": "Selecteer soorten en een datumbereik om tendensen weer te geven",
+          "axisDate": "Datum",
+          "axisCount": "Aantal detecties",
+          "axisPercentage": "Percentage van totale detecties"
         },
         "diversity": {
           "title": "Soortendiversiteit in de tijd",
@@ -1086,7 +1091,21 @@
           "noDataHint": "Selecteer een datumbereik om diversiteitstrends weer te geven",
           "axisDate": "Datum",
           "axisUniqueSpecies": "Unieke soorten"
+        },
+        "tooltips": {
+          "date": "Datum",
+          "percentage": "Percentage",
+          "detections": "Detecties",
+          "time": "Tijd",
+          "species": "Soort"
         }
+      },
+      "categories": {
+        "birds": "Vogels"
+      },
+      "filters": {
+        "startDate": "Startdatum",
+        "endDate": "Einddatum"
       },
       "aria": {
         "startDate": "Startdatum",

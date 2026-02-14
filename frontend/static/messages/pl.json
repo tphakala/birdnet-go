@@ -1071,13 +1071,18 @@
           "title": "Wzorce Wykryć według Pory Dnia",
           "description": "Pokazuje średnią liczbę wykryć w ciągu dnia dla wybranych gatunków",
           "noData": "Brak danych o porze dnia",
-          "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić wzorce"
+          "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić wzorce",
+          "axisTime": "Pora dnia",
+          "axisCount": "Liczba wykryć"
         },
         "dailyTrend": {
           "title": "Trendy Wykryć Gatunków",
           "description": "Pokazuje trendy wykryć w czasie dla wybranych gatunków",
           "noData": "Brak dostępnych danych o trendach",
-          "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić trendy"
+          "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić trendy",
+          "axisDate": "Data",
+          "axisCount": "Liczba wykryć",
+          "axisPercentage": "Procent wszystkich wykryć"
         },
         "diversity": {
           "title": "Różnorodność gatunków w czasie",
@@ -1086,7 +1091,21 @@
           "noDataHint": "Wybierz zakres dat, aby wyświetlić trendy różnorodności gatunków",
           "axisDate": "Data",
           "axisUniqueSpecies": "Unikalne gatunki"
+        },
+        "tooltips": {
+          "date": "Data",
+          "percentage": "Procent",
+          "detections": "Wykrycia",
+          "time": "Czas",
+          "species": "Gatunek"
         }
+      },
+      "categories": {
+        "birds": "Ptaki"
+      },
+      "filters": {
+        "startDate": "Data początkowa",
+        "endDate": "Data końcowa"
       },
       "aria": {
         "startDate": "Data początkowa",

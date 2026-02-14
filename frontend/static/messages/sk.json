@@ -1072,14 +1072,41 @@
           "title": "Vzorce detekcií podľa dennej doby",
           "description": "Zobrazuje priemerný počet detekcií počas dňa pre vybrané druhy",
           "noData": "Nie sú k dispozícii žiadne dáta o dennej dobe",
-          "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie vzorcov"
+          "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie vzorcov",
+          "axisTime": "Čas dňa",
+          "axisCount": "Počet zistení"
         },
         "dailyTrend": {
           "title": "Trendy detekcií druhov",
           "description": "Zobrazuje trendy detekcií v čase pre vybrané druhy",
           "noData": "Nie sú k dispozícii žiadne údaje o trendoch",
-          "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie trendov"
+          "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie trendov",
+          "axisDate": "Dátum",
+          "axisCount": "Počet zistení",
+          "axisPercentage": "Percento celkových zistení"
+        },
+        "diversity": {
+          "title": "Diverzita druhov v čase",
+          "description": "Zobrazuje počet jedinečných druhov zistených za deň vo všetkých detekciách",
+          "noData": "Nie sú k dispozícii žiadne údaje o diverzite",
+          "noDataHint": "Vyberte rozsah dátumov na zobrazenie trendov diverzity druhov",
+          "axisDate": "Dátum",
+          "axisUniqueSpecies": "Jedinečné druhy"
+        },
+        "tooltips": {
+          "date": "Dátum",
+          "percentage": "Percentá",
+          "detections": "Detekcie",
+          "time": "Čas",
+          "species": "Druh"
         }
+      },
+      "categories": {
+        "birds": "Vtáky"
+      },
+      "filters": {
+        "startDate": "Dátum začiatku",
+        "endDate": "Dátum konca"
       },
       "aria": {
         "startDate": "Dátum začiatku",

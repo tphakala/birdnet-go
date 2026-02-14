@@ -1,6 +1,6 @@
 <script lang="ts">
   import FormField from '$lib/desktop/components/forms/FormField.svelte';
-  import Select from '$lib/desktop/components/ui/Select.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import Input from '$lib/desktop/components/ui/Input.svelte';
   import { t } from '$lib/i18n';
 
@@ -47,7 +47,13 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Time Period Filter -->
         <FormField label={t('analytics.filters.timePeriod')} id="timePeriod">
-          <Select id="timePeriod" bind:value={filters.timePeriod} options={timePeriodOptions} />
+          <SelectDropdown
+            bind:value={filters.timePeriod}
+            options={timePeriodOptions}
+            variant="select"
+            size="sm"
+            menuSize="sm"
+          />
         </FormField>
 
         <!-- Custom Date Range -->

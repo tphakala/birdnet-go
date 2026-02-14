@@ -1067,13 +1067,18 @@
           "title": "Havaintomallityypit vuorokaudenajan mukaan",
           "description": "Näyttää keskimääräiset havaintomäärät päivän aikana valituille lajeille",
           "noData": "Ei vuorokaudenajan tietoja saatavilla",
-          "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi mallit"
+          "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi mallit",
+          "axisTime": "Vuorokaudenaika",
+          "axisCount": "Havaintojen määrä"
         },
         "dailyTrend": {
           "title": "Lajien havaintotrendit",
           "description": "Näyttää havaintotrendit ajan kuluessa valituille lajeille",
           "noData": "Ei trenditietoja saatavilla",
-          "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi trendit"
+          "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi trendit",
+          "axisDate": "Päivämäärä",
+          "axisCount": "Havaintojen määrä",
+          "axisPercentage": "Prosenttiosuus kaikista havainnoista"
         },
         "diversity": {
           "title": "Lajien monimuotoisuus ajan kuluessa",
@@ -1082,6 +1087,13 @@
           "noDataHint": "Valitse päivämääräväli nähdäksesi lajien monimuotoisuustrendit",
           "axisDate": "Päivämäärä",
           "axisUniqueSpecies": "Yksilölliset lajit"
+        },
+        "tooltips": {
+          "date": "Päivämäärä",
+          "percentage": "Prosenttiosuus",
+          "detections": "Havainnot",
+          "time": "Aika",
+          "species": "Laji"
         }
       },
       "aria": {
@@ -1090,6 +1102,13 @@
         "loadingAnalytics": "Ladataan analytiikkatietoja",
         "loadingTrends": "Ladataan trenditietoja",
         "loadingDiversity": "Ladataan monimuotoisuustietoja"
+      },
+      "categories": {
+        "birds": "Linnut"
+      },
+      "filters": {
+        "startDate": "Alkupäivämäärä",
+        "endDate": "Loppupäivämäärä"
       },
       "speciesSelectionHint": "Hae tai klikkaa alla olevia merkkejä",
       "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",

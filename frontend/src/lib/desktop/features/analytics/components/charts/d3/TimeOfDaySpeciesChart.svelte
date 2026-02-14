@@ -6,6 +6,7 @@
   import { max, scaleLinear } from 'd3';
   import type { Selection, AxisDomain } from 'd3';
 
+  import { t } from '$lib/i18n';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
@@ -153,7 +154,7 @@
     addAxisLabel(
       chartGroup,
       {
-        text: 'Time of Day',
+        text: t('analytics.advanced.charts.timeOfDay.axisTime'),
         orientation: 'bottom',
         offset: 35,
         width: innerWidth,
@@ -165,7 +166,7 @@
     addAxisLabel(
       chartGroup,
       {
-        text: 'Detection Count',
+        text: t('analytics.advanced.charts.timeOfDay.axisCount'),
         orientation: 'left',
         offset: 45,
         width: innerWidth,
@@ -238,9 +239,9 @@
           const tooltipData = {
             title: `${species.commonName}`,
             items: [
-              { label: 'Time', value: `${d.hour}:00` },
-              { label: 'Detections', value: d.count },
-              { label: 'Species', value: species.species },
+              { label: t('analytics.advanced.charts.tooltips.time'), value: `${d.hour}:00` },
+              { label: t('analytics.advanced.charts.tooltips.detections'), value: d.count },
+              { label: t('analytics.advanced.charts.tooltips.species'), value: species.species },
             ],
             x: event.clientX,
             y: event.clientY,
@@ -338,25 +339,11 @@
   // Without these reads, the effect won't re-run when data changes.
   // This is because $derived is lazy and snippets only render once.
   $effect(() => {
-    // Force evaluation of reactive dependencies by accessing them
-    // These assignments are CRITICAL - they make the effect track these values
-    const currentData = data; // Track the data prop changes
-    const visible = visibleData; // Track computed visible data
-    const chartScales = scales; // Track scale changes
-    const ctx = chartContext; // Get the D3 context from snippet
-
-    // CRITICAL: Force reactive dependency tracking without logging
-    void {
-      dataLength: currentData.length,
-      hasChartContext: !!ctx,
-      visibleDataLength: visible.length,
-      hasScales: !!chartScales,
-    };
-
-    if (ctx && visible.length > 0 && chartScales) {
-      drawChart(ctx);
-    } else if (ctx && ctx.chartGroup && (!visible.length || !chartScales)) {
-      ctx.chartGroup.selectAll('*').remove();
+    // Simply access reactive values - Svelte 5 tracks automatically
+    if (chartContext && visibleData.length > 0 && scales) {
+      drawChart(chartContext);
+    } else if (chartContext?.chartGroup) {
+      chartContext.chartGroup.selectAll('*').remove();
     }
   });
 

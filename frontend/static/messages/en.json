@@ -1072,13 +1072,18 @@
           "title": "Detection Patterns by Time of Day",
           "description": "Shows average detection counts throughout the day for selected species",
           "noData": "No time-of-day data available",
-          "noDataHint": "Select species and a date range to view patterns"
+          "noDataHint": "Select species and a date range to view patterns",
+          "axisTime": "Time of Day",
+          "axisCount": "Detection Count"
         },
         "dailyTrend": {
           "title": "Species Detection Trends",
           "description": "Shows detection trends over time for selected species",
           "noData": "No trend data available",
-          "noDataHint": "Select species and a date range to view trends"
+          "noDataHint": "Select species and a date range to view trends",
+          "axisDate": "Date",
+          "axisCount": "Detection Count",
+          "axisPercentage": "Percentage of Total Detections"
         },
         "diversity": {
           "title": "Species Diversity Over Time",
@@ -1087,7 +1092,21 @@
           "noDataHint": "Select a date range to view species diversity trends",
           "axisDate": "Date",
           "axisUniqueSpecies": "Unique Species"
+        },
+        "tooltips": {
+          "date": "Date",
+          "percentage": "Percentage",
+          "detections": "Detections",
+          "time": "Time",
+          "species": "Species"
         }
+      },
+      "categories": {
+        "birds": "Birds"
+      },
+      "filters": {
+        "startDate": "Start date",
+        "endDate": "End date"
       },
       "aria": {
         "startDate": "Start date",

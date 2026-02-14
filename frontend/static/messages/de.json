@@ -1071,13 +1071,18 @@
           "title": "Erkennungsmuster nach Tageszeit",
           "description": "Zeigt durchschnittliche Erkennungszahlen im Laufe des Tages für ausgewählte Arten",
           "noData": "Keine Tageszeitdaten verfügbar",
-          "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Muster zu sehen"
+          "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Muster zu sehen",
+          "axisTime": "Tageszeit",
+          "axisCount": "Anzahl Erkennungen"
         },
         "dailyTrend": {
           "title": "Artenerkennungstrends",
           "description": "Zeigt Erkennungstrends im Laufe der Zeit für ausgewählte Arten",
           "noData": "Keine Trenddaten verfügbar",
-          "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Trends zu sehen"
+          "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Trends zu sehen",
+          "axisDate": "Datum",
+          "axisCount": "Anzahl Erkennungen",
+          "axisPercentage": "Prozentsatz aller Erkennungen"
         },
         "diversity": {
           "title": "Artenvielfalt im Zeitverlauf",
@@ -1086,7 +1091,21 @@
           "noDataHint": "Wählen Sie einen Datumsbereich, um Artenvielfalt-Trends zu sehen",
           "axisDate": "Datum",
           "axisUniqueSpecies": "Einzigartige Arten"
+        },
+        "tooltips": {
+          "date": "Datum",
+          "percentage": "Prozentsatz",
+          "detections": "Erkennungen",
+          "time": "Zeit",
+          "species": "Art"
         }
+      },
+      "categories": {
+        "birds": "Vögel"
+      },
+      "filters": {
+        "startDate": "Startdatum",
+        "endDate": "Enddatum"
       },
       "aria": {
         "startDate": "Startdatum",

@@ -1,7 +1,7 @@
 <script lang="ts">
   import FormField from '$lib/desktop/components/forms/FormField.svelte';
   import Input from '$lib/desktop/components/ui/Input.svelte';
-  import Select from '$lib/desktop/components/ui/Select.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import { t } from '$lib/i18n';
 
   interface SpeciesFilters {
@@ -88,7 +88,13 @@
       >
         <!-- Time Period Filter -->
         <FormField label={t('analytics.filters.timePeriod')} id="timePeriod">
-          <Select id="timePeriod" bind:value={filters.timePeriod} options={timePeriodOptions} />
+          <SelectDropdown
+            bind:value={filters.timePeriod}
+            options={timePeriodOptions}
+            variant="select"
+            size="sm"
+            menuSize="sm"
+          />
         </FormField>
 
         <!-- Custom Date Range -->
@@ -104,7 +110,13 @@
 
         <!-- Sort Order -->
         <FormField label={t('analytics.filters.sortBy')} id="sortOrder">
-          <Select id="sortOrder" bind:value={filters.sortOrder} options={sortOptions} />
+          <SelectDropdown
+            bind:value={filters.sortOrder}
+            options={sortOptions}
+            variant="select"
+            size="sm"
+            menuSize="sm"
+          />
         </FormField>
 
         <!-- Search Filter - Full width on mobile -->

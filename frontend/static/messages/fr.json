@@ -1071,13 +1071,18 @@
           "title": "Modèles de détection par moment de la journée",
           "description": "Affiche le nombre moyen de détections tout au long de la journée pour les espèces sélectionnées",
           "noData": "Aucune donnée par moment de la journée disponible",
-          "noDataHint": "Sélectionnez les espèces et une plage de dates pour afficher les modèles"
+          "noDataHint": "Sélectionnez les espèces et une plage de dates pour afficher les modèles",
+          "axisTime": "Heure de la journée",
+          "axisCount": "Nombre de détections"
         },
         "dailyTrend": {
           "title": "Tendances de détection des espèces",
           "description": "Affiche les tendances de détection au fil du temps pour les espèces sélectionnées",
           "noData": "Aucune donnée de tendance disponible",
-          "noDataHint": "Sélectionnez les espèces et une plage de dates pour afficher les tendances"
+          "noDataHint": "Sélectionnez les espèces et une plage de dates pour afficher les tendances",
+          "axisDate": "Date",
+          "axisCount": "Nombre de détections",
+          "axisPercentage": "Pourcentage des détections totales"
         },
         "diversity": {
           "title": "Diversité des espèces au fil du temps",
@@ -1086,7 +1091,21 @@
           "noDataHint": "Sélectionnez une plage de dates pour afficher les tendances de diversité des espèces",
           "axisDate": "Date",
           "axisUniqueSpecies": "Espèces uniques"
+        },
+        "tooltips": {
+          "date": "Date",
+          "percentage": "Pourcentage",
+          "detections": "Détections",
+          "time": "Heure",
+          "species": "Espèce"
         }
+      },
+      "categories": {
+        "birds": "Oiseaux"
+      },
+      "filters": {
+        "startDate": "Date de début",
+        "endDate": "Date de fin"
       },
       "aria": {
         "startDate": "Date de début",

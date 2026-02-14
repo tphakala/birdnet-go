@@ -7,6 +7,9 @@
   import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
   import SpeciesDiversityChart from '../components/charts/d3/SpeciesDiversityChart.svelte';
   import SpeciesSelector from '$lib/components/ui/SpeciesSelector.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import Input from '$lib/desktop/components/ui/Input.svelte';
   import type { Species, SpeciesId } from '$lib/types/species';
   import { createSpeciesId } from '$lib/types/species';
   import { getLogger } from '$lib/utils/logger';
@@ -112,6 +115,15 @@
   let dailyTrendData = $state<DailyTrendSpeciesData[]>([]);
   let diversityData = $state<DiversityDatum[]>([]);
 
+  // Date range options for custom Select component
+  const dateRangeOptions = $derived([
+    { value: 'week', label: t('analytics.advanced.dateRangeOptions.week') },
+    { value: 'month', label: t('analytics.advanced.dateRangeOptions.month') },
+    { value: 'quarter', label: t('analytics.advanced.dateRangeOptions.quarter') },
+    { value: 'year', label: t('analytics.advanced.dateRangeOptions.year') },
+    { value: 'custom', label: t('analytics.advanced.dateRangeOptions.custom') },
+  ]);
+
   // Computed date range
   const computedDateRange = $derived(
     (() => {
@@ -197,11 +209,11 @@
                     : 'rare';
             return {
               id: createSpeciesId(item.scientific_name ?? `species-${index}`),
-              commonName: item.common_name ?? 'Unknown',
-              scientificName: item.scientific_name ?? 'Unknown',
+              commonName: item.common_name ?? t('common.unknown'),
+              scientificName: item.scientific_name ?? t('common.unknown'),
               frequency: frequency as 'very-common' | 'common' | 'uncommon' | 'rare',
-              category: 'Birds', // TODO: Add category data from API
-              description: `${count} detections`,
+              category: t('analytics.advanced.categories.birds'),
+              description: t('analytics.advanced.detections', { count }),
               count, // Keep count for backwards compatibility
             };
           })
@@ -495,7 +507,9 @@
 <div class="col-span-12 space-y-6" role="region" aria-label="Advanced Analytics">
   <!-- Error Display -->
   {#if error}
-    <div class="alert alert-error">
+    <div
+      class="p-4 bg-red-50 border border-red-300 text-red-800 rounded-lg flex items-center gap-3"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         class="stroke-current shrink-0 h-6 w-6"
@@ -514,44 +528,42 @@
   {/if}
 
   <!-- Controls Section -->
-  <div class="card bg-base-100 shadow-xs">
-    <div class="card-body overflow-visible">
-      <h2 class="card-title text-lg mb-4">{t('analytics.advanced.chartControls')}</h2>
+  <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+    <div class="p-6 overflow-visible">
+      <h2 class="text-lg font-semibold mb-4">{t('analytics.advanced.chartControls')}</h2>
 
       <!-- Top Row: Date Range and Chart Options -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
         <!-- Date Range Selection -->
         <div class="space-y-2">
-          <label class="label" for="date-range-select">
-            <span class="label-text font-medium">{t('analytics.advanced.dateRange')}</span>
-          </label>
-          <select bind:value={dateRange} class="select w-full" id="date-range-select">
-            <option value="week">{t('analytics.advanced.dateRangeOptions.week')}</option>
-            <option value="month">{t('analytics.advanced.dateRangeOptions.month')}</option>
-            <option value="quarter">{t('analytics.advanced.dateRangeOptions.quarter')}</option>
-            <option value="year">{t('analytics.advanced.dateRangeOptions.year')}</option>
-            <option value="custom">{t('analytics.advanced.dateRangeOptions.custom')}</option>
-          </select>
+          <SelectDropdown
+            bind:value={dateRange}
+            options={dateRangeOptions}
+            label={t('analytics.advanced.dateRange')}
+            variant="select"
+            size="sm"
+            menuSize="sm"
+          />
 
           {#if dateRange === 'custom'}
             <div class="grid grid-cols-2 gap-2 mt-2">
-              <label for="startDateInput" class="sr-only">Start date</label>
-              <input
+              <label for="startDateInput" class="sr-only"
+                >{t('analytics.advanced.filters.startDate')}</label
+              >
+              <Input
                 id="startDateInput"
                 type="date"
                 bind:value={startDate}
-                class="input input-sm"
                 max={endDate}
-                aria-label="Start date"
               />
-              <label for="endDateInput" class="sr-only">End date</label>
-              <input
+              <label for="endDateInput" class="sr-only"
+                >{t('analytics.advanced.filters.endDate')}</label
+              >
+              <Input
                 id="endDateInput"
                 type="date"
                 bind:value={endDate}
-                class="input input-sm"
                 min={startDate}
-                aria-label="End date"
               />
             </div>
           {/if}
@@ -564,28 +576,23 @@
           </div>
 
           <div class="flex flex-wrap gap-x-6 gap-y-2">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                bind:checked={showRelativeTrends}
-                class="checkbox checkbox-sm"
-              />
-              <span class="label-text text-sm"
-                >{t('analytics.advanced.options.relativeTrends')}</span
-              >
-            </label>
+            <Checkbox
+              bind:checked={showRelativeTrends}
+              label={t('analytics.advanced.options.relativeTrends')}
+              size="sm"
+            />
 
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" bind:checked={enableZoom} class="checkbox checkbox-sm" />
-              <span class="label-text text-sm">{t('analytics.advanced.options.zoomPan')}</span>
-            </label>
+            <Checkbox
+              bind:checked={enableZoom}
+              label={t('analytics.advanced.options.zoomPan')}
+              size="sm"
+            />
 
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" bind:checked={enableBrush} class="checkbox checkbox-sm" />
-              <span class="label-text text-sm"
-                >{t('analytics.advanced.options.brushSelection')}</span
-              >
-            </label>
+            <Checkbox
+              bind:checked={enableBrush}
+              label={t('analytics.advanced.options.brushSelection')}
+              size="sm"
+            />
           </div>
         </div>
       </div>
@@ -641,7 +648,9 @@
                     </div>
                   </div>
                   {#if species.count !== undefined}
-                    <div class="badge badge-ghost badge-sm">
+                    <div
+                      class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-base-200/50 text-base-content"
+                    >
                       {t('analytics.advanced.detections', { count: species.count ?? 0 })}
                     </div>
                   {/if}
@@ -657,9 +666,9 @@
   <!-- Charts Section -->
   <div class="grid grid-cols-1 gap-6">
     <!-- Time of Day Chart -->
-    <div class="card bg-base-100 shadow-xs">
-      <div class="card-body">
-        <h2 class="card-title">{t('analytics.advanced.charts.timeOfDay.title')}</h2>
+    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+      <div class="p-6">
+        <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.timeOfDay.title')}</h2>
         <p class="text-sm text-base-content opacity-70 mb-4">
           {t('analytics.advanced.charts.timeOfDay.description')}
         </p>
@@ -674,7 +683,9 @@
               aria-busy="true"
               aria-label={t('analytics.advanced.aria.loadingAnalytics')}
             >
-              <span class="loading loading-spinner loading-lg text-primary"></span>
+              <div
+                class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"
+              ></div>
               <span class="sr-only">{t('analytics.advanced.aria.loadingAnalytics')}</span>
             </div>
           {:else if timeOfDayData.length === 0}
@@ -694,9 +705,9 @@
     </div>
 
     <!-- Daily Trend Chart -->
-    <div class="card bg-base-100 shadow-xs">
-      <div class="card-body">
-        <h2 class="card-title">{t('analytics.advanced.charts.dailyTrend.title')}</h2>
+    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+      <div class="p-6">
+        <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.dailyTrend.title')}</h2>
         <p class="text-sm text-base-content opacity-70 mb-4">
           {t('analytics.advanced.charts.dailyTrend.description')}
         </p>
@@ -721,7 +732,9 @@
               aria-busy="true"
               aria-label={t('analytics.advanced.aria.loadingTrends')}
             >
-              <span class="loading loading-spinner loading-lg text-primary"></span>
+              <div
+                class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"
+              ></div>
               <span class="sr-only">{t('analytics.advanced.aria.loadingTrends')}</span>
             </div>
           {:else if dailyTrendData.length === 0}
@@ -742,9 +755,9 @@
   </div>
 
   <!-- Species Diversity Chart (Full Width) -->
-  <div class="card bg-base-100 shadow-xs">
-    <div class="card-body">
-      <h2 class="card-title">{t('analytics.advanced.charts.diversity.title')}</h2>
+  <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+    <div class="p-6">
+      <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.diversity.title')}</h2>
       <p class="text-sm text-base-content opacity-70 mb-4">
         {t('analytics.advanced.charts.diversity.description')}
       </p>
@@ -764,7 +777,9 @@
             aria-busy="true"
             aria-label={t('analytics.advanced.aria.loadingDiversity')}
           >
-            <span class="loading loading-spinner loading-lg text-primary"></span>
+            <div
+              class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"
+            ></div>
             <span class="sr-only">{t('analytics.advanced.aria.loadingDiversity')}</span>
           </div>
         {:else if diversityData.length === 0}
@@ -785,22 +800,8 @@
 </div>
 
 <style>
-  /* Ensure cards can expand naturally with content */
-  .card {
-    min-height: fit-content;
-  }
-
-  /* Smooth transitions for interactive elements */
-  .checkbox,
-  .select,
-  .input {
-    transition: all 0.2s ease;
-  }
-
-  /* Ensure species selector has proper spacing */
-  .card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+  /* Card-like containers */
+  .bg-base-100 {
+    transition: box-shadow 0.2s ease;
   }
 </style>

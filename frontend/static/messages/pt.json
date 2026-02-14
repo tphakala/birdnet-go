@@ -1071,13 +1071,18 @@
           "title": "Padrões de detecção por hora do dia",
           "description": "Mostra contagens médias de detecção ao longo do dia para as espécies selecionadas",
           "noData": "Nenhum dado de hora do dia disponível",
-          "noDataHint": "Selecione espécies e um intervalo de datas para visualizar padrões"
+          "noDataHint": "Selecione espécies e um intervalo de datas para visualizar padrões",
+          "axisTime": "Hora do dia",
+          "axisCount": "Contagem de detecções"
         },
         "dailyTrend": {
           "title": "Tendências de detecção de espécies",
           "description": "Mostra tendências de detecção ao longo do tempo para as espécies selecionadas",
           "noData": "Nenhum dado de tendência disponível",
-          "noDataHint": "Selecione espécies e um intervalo de datas para visualizar tendências"
+          "noDataHint": "Selecione espécies e um intervalo de datas para visualizar tendências",
+          "axisDate": "Data",
+          "axisCount": "Contagem de detecções",
+          "axisPercentage": "Porcentagem de detecções totais"
         },
         "diversity": {
           "title": "Diversidade de espécies ao longo do tempo",
@@ -1086,7 +1091,21 @@
           "noDataHint": "Selecione um intervalo de datas para visualizar tendências de diversidade de espécies",
           "axisDate": "Data",
           "axisUniqueSpecies": "Espécies únicas"
+        },
+        "tooltips": {
+          "date": "Data",
+          "percentage": "Percentagem",
+          "detections": "Detecções",
+          "time": "Hora",
+          "species": "Espécie"
         }
+      },
+      "categories": {
+        "birds": "Aves"
+      },
+      "filters": {
+        "startDate": "Data inicial",
+        "endDate": "Data final"
       },
       "aria": {
         "startDate": "Data inicial",
