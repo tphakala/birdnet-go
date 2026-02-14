@@ -20,8 +20,9 @@
 //	    if err != nil {
 //	        log.Fatal(err)
 //	    }
-//	    defer mysqlContainer.Terminate()
-//	    os.Exit(m.Run())
+//	    code := m.Run()
+//	    mysqlContainer.Terminate()
+//	    os.Exit(code)
 //	}
 //
 // Build Tags:
