@@ -6,7 +6,9 @@ package containers
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -83,7 +85,7 @@ func NewMosquittoContainer(config *MosquittoConfig) (*MosquittoContainer, error)
 			{
 				HostFilePath:      configFile,
 				ContainerFilePath: "/mosquitto-no-auth.conf",
-				FileMode:          0644,
+				FileMode:          0o644,
 			},
 		}
 	} else {
@@ -127,7 +129,7 @@ func NewMosquittoContainer(config *MosquittoConfig) (*MosquittoContainer, error)
 	}
 
 	port := mappedPort.Int()
-	brokerURL := fmt.Sprintf("tcp://%s:%d", host, port)
+	brokerURL := fmt.Sprintf("tcp://%s", net.JoinHostPort(host, strconv.Itoa(port)))
 
 	mc := &MosquittoContainer{
 		container:  container,
@@ -214,22 +216,12 @@ func (c *MosquittoContainer) HealthCheck(ctx context.Context) error {
 	client := mqtt.NewClient(opts)
 	token := client.Connect()
 
-	// Wait for connection with timeout
-	done := make(chan bool, 1)
-	go func() {
-		token.Wait()
-		done <- true
-	}()
-
-	select {
-	case <-done:
-		if token.Error() != nil {
-			return fmt.Errorf("failed to connect to broker: %w", token.Error())
-		}
-	case <-ctx.Done():
-		return fmt.Errorf("health check timeout: %w", ctx.Err())
-	case <-time.After(5 * time.Second):
+	// Wait for connection with timeout (avoids goroutine leak)
+	if !token.WaitTimeout(5 * time.Second) {
 		return fmt.Errorf("health check timeout after 5s")
+	}
+	if token.Error() != nil {
+		return fmt.Errorf("failed to connect to broker: %w", token.Error())
 	}
 
 	// Disconnect
@@ -253,8 +245,9 @@ func (c *MosquittoContainer) CreateClient(clientID string, opts ...func(*mqtt.Cl
 
 	client := mqtt.NewClient(mqttOpts)
 	token := client.Connect()
-	token.Wait()
-
+	if !token.WaitTimeout(10 * time.Second) {
+		return nil, fmt.Errorf("connect timeout for client %s", clientID)
+	}
 	if token.Error() != nil {
 		return nil, fmt.Errorf("failed to connect client: %w", token.Error())
 	}
@@ -283,7 +276,9 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 			mu.Unlock()
 		}
 	})
-	token.Wait()
+	if !token.WaitTimeout(5 * time.Second) {
+		return fmt.Errorf("subscribe timeout after 5s")
+	}
 	if token.Error() != nil {
 		return fmt.Errorf("failed to subscribe: %w", token.Error())
 	}
@@ -302,7 +297,13 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 	}
 
 	// Unsubscribe
-	client.Unsubscribe("#")
+	unsubToken := client.Unsubscribe("#")
+	if !unsubToken.WaitTimeout(5 * time.Second) {
+		return fmt.Errorf("unsubscribe timeout after 5s")
+	}
+	if unsubToken.Error() != nil {
+		return fmt.Errorf("failed to unsubscribe: %w", unsubToken.Error())
+	}
 
 	// Clear retained messages by publishing empty payloads
 	mu.Lock()
@@ -312,7 +313,9 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 
 	for _, topic := range topicsCopy {
 		token := client.Publish(topic, 0, true, nil)
-		token.Wait()
+		if !token.WaitTimeout(5 * time.Second) {
+			return fmt.Errorf("publish timeout for topic %s after 5s", topic)
+		}
 		if token.Error() != nil {
 			return fmt.Errorf("failed to clear topic %s: %w", topic, token.Error())
 		}

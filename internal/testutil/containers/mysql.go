@@ -16,6 +16,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/mysql"
 )
 
+// validTableNameRe matches valid MySQL identifier names.
+// MySQL identifier rules: letters, digits, underscore, dollar sign; must not start with a digit.
+var validTableNameRe = regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*$`)
+
 // MySQLContainer wraps a testcontainers MySQL instance with helper methods.
 type MySQLContainer struct {
 	container *mysql.MySQLContainer
@@ -82,8 +86,8 @@ func NewMySQLContainer(config *MySQLConfig) (*MySQLContainer, error) {
 		return nil, fmt.Errorf("failed to start MySQL container: %w", err)
 	}
 
-	// Get connection string
-	connStr, err := mysqlContainer.ConnectionString(ctx)
+	// Get connection string with multiStatements enabled for script execution
+	connStr, err := mysqlContainer.ConnectionString(ctx, "multiStatements=true")
 	if err != nil {
 		_ = mysqlContainer.Terminate(ctx)
 		return nil, fmt.Errorf("failed to get connection string: %w", err)
@@ -123,6 +127,13 @@ func (c *MySQLContainer) GetDB(t *testing.T) *sql.DB {
 	if c.db == nil {
 		t.Fatal("database connection is nil")
 	}
+	return c.db
+}
+
+// DB returns the database connection without requiring a *testing.T.
+// This is useful in TestMain or other setup contexts where *testing.T is not available.
+// Returns nil if the database connection was not established.
+func (c *MySQLContainer) DB() *sql.DB {
 	return c.db
 }
 
@@ -173,10 +184,7 @@ func isValidTableName(name string) bool {
 	if name == "" {
 		return false
 	}
-	// MySQL identifier rules: letters, digits, underscore, dollar sign
-	// Must not start with a digit
-	matched, _ := regexp.MatchString(`^[a-zA-Z_$][a-zA-Z0-9_$]*$`, name)
-	return matched
+	return validTableNameRe.MatchString(name)
 }
 
 // Reset truncates all tables in the database with foreign key checks disabled.

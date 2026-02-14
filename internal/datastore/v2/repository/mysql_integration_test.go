@@ -31,7 +31,11 @@ func TestMain(m *testing.M) {
 	}
 
 	// Get database connection
-	testDB = mysqlContainer.GetDB(&testing.T{}) // Pass dummy *testing.T for GetDB
+	testDB = mysqlContainer.DB()
+	if testDB == nil {
+		_ = mysqlContainer.Terminate()
+		panic("database connection is nil")
+	}
 
 	// Run migrations
 	if err := runMigrations(testDB); err != nil {
@@ -78,7 +82,12 @@ func resetDatabase(t *testing.T) {
 	t.Helper()
 
 	ctx := t.Context()
-	err := mysqlContainer.Reset(ctx, []string{"test_detections"})
+	tables := []string{
+		"test_detections",
+		"test_observations", // Foreign key test child table
+		"test_species",      // Foreign key test parent table
+	}
+	err := mysqlContainer.Reset(ctx, tables)
 	require.NoError(t, err, "failed to reset database")
 }
 
@@ -395,7 +404,7 @@ func TestMySQL_HAVING_Clause(t *testing.T) {
 	}
 
 	require.NoError(t, rows.Err())
-	assert.Equal(t, 2, count, "both species should meet criteria")
+	assert.Equal(t, 1, count, "only Parus major should meet criteria (avg > 0.85)")
 }
 
 // ============================================================================
