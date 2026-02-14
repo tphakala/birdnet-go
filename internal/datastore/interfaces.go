@@ -87,8 +87,14 @@ type Interface interface {
 	SetSunCalcMetrics(suncalcMetrics any) // Set metrics for SunCalc service
 	Optimize(ctx context.Context) error   // Perform database optimization (VACUUM, ANALYZE, etc.)
 	GetAllNotes() ([]Note, error)
-	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
+	// GetTopBirdsData returns daily detection summaries, ordered by detection count descending.
+	// The limit parameter (if > 0) restricts the number of unique species returned.
+	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
+	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+	// Returns a map of species CommonName to [24]int hourly counts.
+	// This batches multiple GetHourlyOccurrences calls into a single query for performance.
+	GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error)
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
@@ -477,7 +483,7 @@ func (ds *DataStore) GetAllNotes() ([]Note, error) {
 }
 
 // GetTopBirdsData retrieves the top bird sightings based on a selected date and minimum confidence threshold.
-func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error) {
+func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error) {
 	// Define a temporary struct to hold the query results including the count
 	type SpeciesCount struct {
 		CommonName     string
@@ -491,8 +497,11 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 
 	var results []SpeciesCount
 
-	// Get the number of species to report from the dashboard settings
-	reportCount := conf.Setting().Realtime.Dashboard.SummaryLimit
+	// Use provided limit or fall back to config value
+	reportCount := limit
+	if reportCount <= 0 {
+		reportCount = conf.Setting().Realtime.Dashboard.SummaryLimit
+	}
 
 	// First, get the count and common names
 	query := ds.DB.Table("notes").
@@ -668,6 +677,55 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 	}
 
 	return hourlyCounts, nil
+}
+
+// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
+	if len(species) == 0 {
+		return make(map[string][24]int), nil
+	}
+
+	hourFormat := ds.GetHourFormat()
+
+	var results []struct {
+		CommonName string
+		Hour       int
+		Count      int
+	}
+
+	err := ds.DB.Model(&Note{}).
+		Select(fmt.Sprintf("common_name, %s as hour, COUNT(*) as count", hourFormat)).
+		Where("common_name IN ? AND date = ? AND confidence >= ?", species, date, minConfidence).
+		Group(fmt.Sprintf("common_name, %s", hourFormat)).
+		Order("common_name, hour").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_batch_hourly_occurrences").
+			Context("date", date).
+			Context("species_count", len(species)).
+			Build()
+	}
+
+	result := make(map[string][24]int)
+
+	// Initialize all species with zero counts
+	for _, sp := range species {
+		result[sp] = [24]int{}
+	}
+
+	for _, r := range results {
+		if r.Hour >= 0 && r.Hour < 24 {
+			hourlyData := result[r.CommonName]
+			hourlyData[r.Hour] = r.Count
+			result[r.CommonName] = hourlyData
+		}
+	}
+
+	return result, nil
 }
 
 // SpeciesDetections retrieves bird species detections for a specific date and time period.

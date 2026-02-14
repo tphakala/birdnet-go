@@ -1498,6 +1498,66 @@ func (_c *MockInterface_GetAllReviews_Call) RunAndReturn(run func() ([]datastore
 	return _c
 }
 
+// GetBatchHourlyOccurrences provides a mock function with given fields: date, species, minConfidence
+func (_m *MockInterface) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
+	ret := _m.Called(date, species, minConfidence)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetBatchHourlyOccurrences")
+	}
+
+	var r0 map[string][24]int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, []string, float64) (map[string][24]int, error)); ok {
+		return rf(date, species, minConfidence)
+	}
+	if rf, ok := ret.Get(0).(func(string, []string, float64) map[string][24]int); ok {
+		r0 = rf(date, species, minConfidence)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string][24]int)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string, []string, float64) error); ok {
+		r1 = rf(date, species, minConfidence)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetBatchHourlyOccurrences_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetBatchHourlyOccurrences'
+type MockInterface_GetBatchHourlyOccurrences_Call struct {
+	*mock.Call
+}
+
+// GetBatchHourlyOccurrences is a helper method to define mock.On call
+//   - date string
+//   - species []string
+//   - minConfidence float64
+func (_e *MockInterface_Expecter) GetBatchHourlyOccurrences(date interface{}, species interface{}, minConfidence interface{}) *MockInterface_GetBatchHourlyOccurrences_Call {
+	return &MockInterface_GetBatchHourlyOccurrences_Call{Call: _e.mock.On("GetBatchHourlyOccurrences", date, species, minConfidence)}
+}
+
+func (_c *MockInterface_GetBatchHourlyOccurrences_Call) Run(run func(date string, species []string, minConfidence float64)) *MockInterface_GetBatchHourlyOccurrences_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].([]string), args[2].(float64))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetBatchHourlyOccurrences_Call) Return(_a0 map[string][24]int, _a1 error) *MockInterface_GetBatchHourlyOccurrences_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetBatchHourlyOccurrences_Call) RunAndReturn(run func(string, []string, float64) (map[string][24]int, error)) *MockInterface_GetBatchHourlyOccurrences_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetCommentsBatch provides a mock function with given fields: afterID, batchSize
 func (_m *MockInterface) GetCommentsBatch(afterID uint, batchSize int) ([]datastore.NoteComment, error) {
 	ret := _m.Called(afterID, batchSize)
@@ -3346,9 +3406,9 @@ func (_c *MockInterface_GetThresholdEvents_Call) RunAndReturn(run func(string, i
 	return _c
 }
 
-// GetTopBirdsData provides a mock function with given fields: selectedDate, minConfidenceNormalized
-func (_m *MockInterface) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-	ret := _m.Called(selectedDate, minConfidenceNormalized)
+// GetTopBirdsData provides a mock function with given fields: selectedDate, minConfidenceNormalized, limit
+func (_m *MockInterface) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]datastore.Note, error) {
+	ret := _m.Called(selectedDate, minConfidenceNormalized, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTopBirdsData")
@@ -3356,19 +3416,19 @@ func (_m *MockInterface) GetTopBirdsData(selectedDate string, minConfidenceNorma
 
 	var r0 []datastore.Note
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, float64) ([]datastore.Note, error)); ok {
-		return rf(selectedDate, minConfidenceNormalized)
+	if rf, ok := ret.Get(0).(func(string, float64, int) ([]datastore.Note, error)); ok {
+		return rf(selectedDate, minConfidenceNormalized, limit)
 	}
-	if rf, ok := ret.Get(0).(func(string, float64) []datastore.Note); ok {
-		r0 = rf(selectedDate, minConfidenceNormalized)
+	if rf, ok := ret.Get(0).(func(string, float64, int) []datastore.Note); ok {
+		r0 = rf(selectedDate, minConfidenceNormalized, limit)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.Note)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(string, float64) error); ok {
-		r1 = rf(selectedDate, minConfidenceNormalized)
+	if rf, ok := ret.Get(1).(func(string, float64, int) error); ok {
+		r1 = rf(selectedDate, minConfidenceNormalized, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -3384,13 +3444,14 @@ type MockInterface_GetTopBirdsData_Call struct {
 // GetTopBirdsData is a helper method to define mock.On call
 //   - selectedDate string
 //   - minConfidenceNormalized float64
-func (_e *MockInterface_Expecter) GetTopBirdsData(selectedDate interface{}, minConfidenceNormalized interface{}) *MockInterface_GetTopBirdsData_Call {
-	return &MockInterface_GetTopBirdsData_Call{Call: _e.mock.On("GetTopBirdsData", selectedDate, minConfidenceNormalized)}
+//   - limit int
+func (_e *MockInterface_Expecter) GetTopBirdsData(selectedDate interface{}, minConfidenceNormalized interface{}, limit interface{}) *MockInterface_GetTopBirdsData_Call {
+	return &MockInterface_GetTopBirdsData_Call{Call: _e.mock.On("GetTopBirdsData", selectedDate, minConfidenceNormalized, limit)}
 }
 
-func (_c *MockInterface_GetTopBirdsData_Call) Run(run func(selectedDate string, minConfidenceNormalized float64)) *MockInterface_GetTopBirdsData_Call {
+func (_c *MockInterface_GetTopBirdsData_Call) Run(run func(selectedDate string, minConfidenceNormalized float64, limit int)) *MockInterface_GetTopBirdsData_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(float64))
+		run(args[0].(string), args[1].(float64), args[2].(int))
 	})
 	return _c
 }
@@ -3400,7 +3461,7 @@ func (_c *MockInterface_GetTopBirdsData_Call) Return(_a0 []datastore.Note, _a1 e
 	return _c
 }
 
-func (_c *MockInterface_GetTopBirdsData_Call) RunAndReturn(run func(string, float64) ([]datastore.Note, error)) *MockInterface_GetTopBirdsData_Call {
+func (_c *MockInterface_GetTopBirdsData_Call) RunAndReturn(run func(string, float64, int) ([]datastore.Note, error)) *MockInterface_GetTopBirdsData_Call {
 	_c.Call.Return(run)
 	return _c
 }

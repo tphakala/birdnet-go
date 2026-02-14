@@ -656,11 +656,14 @@ func (s *testLegacyInterface) SetMetrics(_ *datastore.Metrics)                  
 func (s *testLegacyInterface) SetSunCalcMetrics(_ any)                             {}
 func (s *testLegacyInterface) Optimize(_ context.Context) error                    { return nil }
 func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)              { return nil, nil }
-func (s *testLegacyInterface) GetTopBirdsData(_ string, _ float64) ([]datastore.Note, error) {
+func (s *testLegacyInterface) GetTopBirdsData(_ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (s *testLegacyInterface) GetHourlyOccurrences(_, _ string, _ float64) ([24]int, error) {
 	return [24]int{}, nil
+}
+func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ string, _ []string, _ float64) (map[string][24]int, error) {
+	return nil, nil
 }
 func (s *testLegacyInterface) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
 	return nil, nil
