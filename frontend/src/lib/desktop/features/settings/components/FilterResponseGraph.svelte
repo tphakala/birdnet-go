@@ -363,7 +363,11 @@
     ctx.font = '12px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(t('settings.audio.audioFilters.graph.frequency'), canvasWidth / 2, canvasHeight - 10);
+    ctx.fillText(
+      t('settings.audio.audioFilters.graph.frequency'),
+      canvasWidth / 2,
+      canvasHeight - 10
+    );
 
     // Y-axis label with better positioning
     ctx.save();
