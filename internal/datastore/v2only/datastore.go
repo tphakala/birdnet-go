@@ -691,7 +691,7 @@ func (ds *Datastore) GetAllNotes() ([]datastore.Note, error) {
 }
 
 // GetTopBirdsData retrieves top birds data for a date.
-func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]datastore.Note, error) {
 	t, err := time.ParseInLocation("2006-01-02", selectedDate, ds.timezone)
 	if err != nil {
 		return nil, err
@@ -699,8 +699,11 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	startTime := t.Unix()
 	endTime := t.Add(24 * time.Hour).Unix()
 
-	// Get the number of species to report from the dashboard settings
-	reportCount := conf.Setting().Realtime.Dashboard.SummaryLimit
+	// Use provided limit or fall back to config value
+	reportCount := limit
+	if reportCount <= 0 {
+		reportCount = conf.Setting().Realtime.Dashboard.SummaryLimit
+	}
 
 	// Struct to hold aggregated results per species
 	type speciesAggregate struct {
@@ -794,6 +797,106 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 
 	// Single query with IN clause for all label IDs (multi-model support)
 	return ds.detection.GetHourlyOccurrences(ctx, labelIDs, startTime, endTime, minConfidenceNormalized)
+}
+
+// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
+	if len(species) == 0 {
+		return make(map[string][24]int), nil
+	}
+
+	ctx := context.Background()
+
+	// Parse date
+	targetDate, err := time.ParseInLocation(time.DateOnly, date, ds.timezone)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format: %w", err)
+	}
+
+	// Calculate Unix timestamp range for the date
+	startOfDay := targetDate.Unix()
+	endOfDay := startOfDay + 86400 // 24 hours in seconds
+
+	// Convert species common names to scientific names and collect label IDs
+	allLabelIDs := make(map[string][]uint) // map[commonName][]labelID
+	for _, commonName := range species {
+		normalized := strings.ToLower(strings.TrimSpace(commonName))
+		scientificName := commonName
+		if sci, ok := ds.speciesMap[normalized]; ok {
+			scientificName = sci
+		}
+
+		// Get label IDs for this species across all models
+		labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, scientificName)
+		if err != nil {
+			// Log error but continue with other species
+			continue
+		}
+		if len(labelIDs) > 0 {
+			allLabelIDs[commonName] = labelIDs
+		}
+	}
+
+	if len(allLabelIDs) == 0 {
+		// No matching species found in map
+		result := make(map[string][24]int)
+		for _, commonName := range species {
+			result[commonName] = [24]int{}
+		}
+		return result, nil
+	}
+
+	// Flatten all label IDs for batch query
+	var flatLabelIDs []uint
+	labelToCommonName := make(map[uint]string) // reverse map for results
+	for commonName, labelIDs := range allLabelIDs {
+		for _, labelID := range labelIDs {
+			flatLabelIDs = append(flatLabelIDs, labelID)
+			labelToCommonName[labelID] = commonName
+		}
+	}
+
+	// Query detections grouped by label_id and hour
+	type result struct {
+		LabelID uint
+		Hour    int
+		Count   int
+	}
+
+	var results []result
+	err = ds.manager.DB().WithContext(ctx).
+		Table("detections").
+		Select("label_id, CAST(strftime('%H', datetime(detected_at, 'unixepoch', 'localtime')) AS INTEGER) as hour, COUNT(*) as count").
+		Where("label_id IN ?", flatLabelIDs).
+		Where("detected_at >= ? AND detected_at < ?", startOfDay, endOfDay).
+		Where("confidence >= ?", minConfidence).
+		Group("label_id, hour").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch batch hourly occurrences: %w", err)
+	}
+
+	// Build result map with common names
+	resultMap := make(map[string][24]int)
+
+	// Initialize all requested species with zero counts
+	for _, commonName := range species {
+		resultMap[commonName] = [24]int{}
+	}
+
+	// Fill in actual counts, aggregating by common name
+	for _, r := range results {
+		if commonName, ok := labelToCommonName[r.LabelID]; ok {
+			if r.Hour >= 0 && r.Hour < 24 {
+				hourlyData := resultMap[commonName]
+				hourlyData[r.Hour] += r.Count // Accumulate counts from multiple label IDs
+				resultMap[commonName] = hourlyData
+			}
+		}
+	}
+
+	return resultMap, nil
 }
 
 // SpeciesDetections retrieves detections for a species.
@@ -1976,9 +2079,49 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 }
 
 // GetSpeciesDiversityData returns unique species count per day.
-func (ds *Datastore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
-	// TODO: Implement via v2 detection repository when available
-	return nil, ErrNotImplemented
+func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
+	var results []datastore.DailyAnalyticsData
+
+	// Generate database-agnostic date expression
+	// MySQL: DATE(FROM_UNIXTIME(detected_at))
+	// SQLite: date(detected_at, 'unixepoch')
+	var dateExpr string
+	if ds.manager.IsMySQL() {
+		dateExpr = "DATE(FROM_UNIXTIME(detected_at))"
+	} else {
+		dateExpr = "date(detected_at, 'unixepoch')"
+	}
+
+	// Build query to count distinct species per day
+	query := ds.manager.DB().WithContext(ctx).
+		Table("detections").
+		Select(fmt.Sprintf("%s as date, COUNT(DISTINCT labels.scientific_name) as count", dateExpr)).
+		Joins("JOIN labels ON detections.label_id = labels.id").
+		Group(dateExpr).
+		Order("date")
+
+	// Apply date range filters
+	switch {
+	case startDate != "" && endDate != "":
+		query = query.Where(fmt.Sprintf("%s BETWEEN ? AND ?", dateExpr), startDate, endDate)
+	case startDate != "":
+		query = query.Where(fmt.Sprintf("%s >= ?", dateExpr), startDate)
+	case endDate != "":
+		query = query.Where(fmt.Sprintf("%s <= ?", dateExpr), endDate)
+	}
+
+	// Execute query
+	if err := query.Scan(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_diversity_data").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	return results, nil
 }
 
 // ============================================================
