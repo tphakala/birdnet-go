@@ -4,7 +4,6 @@
 
 - **Go Version**: 1.26
 - **Release Notes**: [https://go.dev/doc/go1.26](https://go.dev/doc/go1.26)
-- **Build**: Requires Go 1.24.6+ for bootstrap
 
 ## Quick Reference
 
@@ -46,6 +45,7 @@ existingFirstSeen: ptr(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC))
 ### Modern Standard Library
 
 - **strings.Cut()** - replaces `strings.Index` + slicing patterns:
+
   ```go
   // ✅ Go 1.26 - cleaner and more efficient
   if host, port, found := strings.Cut(rawURL, ":"); found {
@@ -59,6 +59,7 @@ existingFirstSeen: ptr(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC))
   ```
 
 - **errors.AsType()** - type-safe version of `errors.As()`:
+
   ```go
   // ✅ Go 1.26 - type-safe
   if pathErr := errors.AsType[*fs.PathError](err); pathErr != nil {
@@ -126,6 +127,7 @@ fields = append(fields, extraFields...)
 - `t.Cleanup()` runs after all defers, providing more predictable cleanup order
 - Particularly important for tests that restore global state
 - Example:
+
   ```go
   func TestWithGlobalState(t *testing.T) {
       // ❌ Wrong - defer may run at unpredictable times
@@ -148,6 +150,7 @@ fields = append(fields, extraFields...)
   - Share mutable data structures without synchronization
   - Use shared map references without cloning
 - **Always clone shared test data** in subtests:
+
   ```go
   import "maps"
 
@@ -173,6 +176,7 @@ fields = append(fields, extraFields...)
 - Always call `b.ReportAllocs()` before `b.ResetTimer()` to track allocations
 - Use `b.Loop()` (Go 1.24+) for cleaner benchmark loops (optional)
 - Benchmark example:
+
   ```go
   func BenchmarkValidation(b *testing.B) {
       cfg := &Config{...}
@@ -381,9 +385,9 @@ data, err := jsonv2.Marshal(response)
 - `for i := range n` for loops
 - Pre-compile regex at package level
 - Store interfaces in `atomic.Value` directly
-- Use `os.Root` for filesystem sandboxing (https://go.dev/blog/osroot)
-- Use `sync.WaitGroup.Go()` for goroutines (https://pkg.go.dev/sync#WaitGroup.Go)
-- Use `testing/synctest` for concurrent tests (https://go.dev/blog/synctest)
+- Use `os.Root` for filesystem sandboxing (<https://go.dev/blog/osroot>)
+- Use `sync.WaitGroup.Go()` for goroutines (<https://pkg.go.dev/sync#WaitGroup.Go>)
+- Use `testing/synctest` for concurrent tests (<https://go.dev/blog/synctest>)
 
 ## Standard Library First
 
