@@ -789,6 +789,7 @@
           "locks": "Vergrendelingen migreren"
         },
         "notes": {
+          "inProgress": "U kunt het systeem normaal blijven gebruiken terwijl de migratie op de achtergrond draait.",
           "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
           "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
           "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",
@@ -2106,7 +2107,12 @@
           "36db": "36dB",
           "48db": "48dB"
         },
-        "filterHelp": "Voeg meerdere filters toe om de frequentie respons te vormen voor optimale vogel detectie in jouw omgeving."
+        "filterHelp": "Voeg meerdere filters toe om de frequentie respons te vormen voor optimale vogel detectie in jouw omgeving.",
+        "graph": {
+          "flatResponse": "Vlakke respons (Geen filters toegepast)",
+          "frequency": "Frequentie (Hz)",
+          "gain": "Versterking (dB)"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Geluidsniveau Monitoring",
@@ -2818,18 +2824,8 @@
   },
   "dataDisplay": {
     "table": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
+      "noData": "Geen gegevens beschikbaar",
       "loading": "Gegevens inlezen ...",
-      "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
-        "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
-      },
       "error": "Gegevens inlezen is mislukt",
       "sortBy": "Sorteer op {column}",
       "rowsPerPage": "Rijen per pagina",

@@ -2232,7 +2232,12 @@
           "36db": "36dB",
           "48db": "48dB"
         },
-        "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí."
+        "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí.",
+        "graph": {
+          "flatResponse": "Plochá odozva (Žiadne filtre nie sú použité)",
+          "frequency": "Frekvencia (Hz)",
+          "gain": "Zisk (dB)"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Monitorovanie úrovne zvuku",

@@ -789,6 +789,7 @@
           "locks": "Migriere Sperren"
         },
         "notes": {
+          "inProgress": "Sie können das System normal weiter verwenden, während die Migration im Hintergrund läuft.",
           "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
           "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
           "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
@@ -2106,6 +2107,11 @@
           "24db": "24dB",
           "36db": "36dB",
           "48db": "48dB"
+        },
+        "graph": {
+          "flatResponse": "Flache Antwort (Keine Filter angewendet)",
+          "frequency": "Frequenz (Hz)",
+          "gain": "Verstärkung (dB)"
         }
       },
       "soundLevelMonitoring": {
@@ -2818,18 +2824,8 @@
   },
   "dataDisplay": {
     "table": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
+      "noData": "Keine Daten verfügbar",
       "loading": "Daten werden geladen...",
-      "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
-        "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
-      },
       "error": "Fehler beim Laden der Daten",
       "sortBy": "Sortieren nach {column}",
       "rowsPerPage": "Zeilen pro Seite",

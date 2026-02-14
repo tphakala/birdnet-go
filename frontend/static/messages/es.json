@@ -789,6 +789,7 @@
           "locks": "Migrando bloqueos"
         },
         "notes": {
+          "inProgress": "Puede seguir utilizando el sistema normalmente mientras la migración se ejecuta en segundo plano.",
           "dual_write": "Migración en curso. Sus datos están seguros - todas las nuevas detecciones se guardan en ambas bases de datos. Puede seguir usando BirdNET-Go normalmente.",
           "migrating": "Copiando sus detecciones existentes a la nueva base de datos. Esto puede tardar un poco dependiendo de cuántas detecciones tenga. Puede pausar y reanudar en cualquier momento.",
           "validating": "Verificando que todos los registros se copiaron correctamente. ¡Casi listo!",
@@ -1939,7 +1940,12 @@
           "36db": "36dB",
           "48db": "48dB"
         },
-        "filterHelp": "Añade múltiples filtros para dar forma a la respuesta de frecuencia para una detección óptima de aves en tu entorno."
+        "filterHelp": "Añade múltiples filtros para dar forma a la respuesta de frecuencia para una detección óptima de aves en tu entorno.",
+        "graph": {
+          "flatResponse": "Respuesta plana (Sin filtros aplicados)",
+          "frequency": "Frecuencia (Hz)",
+          "gain": "Ganancia (dB)"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Monitoreo del nivel de sonido",
@@ -2818,18 +2824,8 @@
   },
   "dataDisplay": {
     "table": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
+      "noData": "No hay datos disponibles",
       "loading": "Cargando datos...",
-      "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
-        "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
-      },
       "error": "Error al cargar datos",
       "sortBy": "Ordenar por {column}",
       "rowsPerPage": "Filas por página",

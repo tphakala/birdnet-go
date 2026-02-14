@@ -789,6 +789,7 @@
           "locks": "Migroidaan lukitukset"
         },
         "notes": {
+          "inProgress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
           "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
           "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
           "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
@@ -1939,6 +1940,11 @@
           "24db": "24dB",
           "36db": "36dB",
           "48db": "48dB"
+        },
+        "graph": {
+          "flatResponse": "Tasainen vaste (Ei suodattimia käytössä)",
+          "frequency": "Taajuus (Hz)",
+          "gain": "Vahvistus (dB)"
         }
       },
       "soundLevelMonitoring": {
@@ -2818,18 +2824,8 @@
   },
   "dataDisplay": {
     "table": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
+      "noData": "Ei tietoja saatavilla",
       "loading": "Ladataan tietoja...",
-      "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
-        "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
-      },
       "error": "Tietojen lataus epäonnistui",
       "sortBy": "Lajittele {column}",
       "rowsPerPage": "Rivejä sivulla",
