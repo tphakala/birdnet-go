@@ -251,9 +251,7 @@ func (c *MySQLContainer) ExecuteScript(ctx context.Context, scriptPath string) e
 
 // Terminate stops and removes the MySQL container.
 // It also closes the database connection if open.
-func (c *MySQLContainer) Terminate() error {
-	ctx := context.Background()
-
+func (c *MySQLContainer) Terminate(ctx context.Context) error {
 	// Close database connection first
 	if c.db != nil {
 		if err := c.db.Close(); err != nil {
