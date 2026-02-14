@@ -4,6 +4,7 @@
 // during integration testing using testcontainers-go. It includes support for:
 //
 //   - MySQL 8.0 database containers
+//nolint:misspell // Mosquitto is the official Eclipse project name
 //   - Eclipse Mosquitto MQTT broker containers
 //   - nginx reverse proxy containers
 //
