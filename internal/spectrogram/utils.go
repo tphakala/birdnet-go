@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -26,6 +27,18 @@ const (
 
 	// sizeExtraLargePx is the width for maximum quality for expert review
 	sizeExtraLargePx = 1200
+)
+
+// Process termination signals - used for operational error detection
+const (
+	// signalKilledMessage is the error message substring for process kill signals
+	signalKilledMessage = "signal: killed"
+
+	// exitCodeSIGKILL is the exit code for SIGKILL (128 + 9)
+	exitCodeSIGKILL = 137
+
+	// exitCodeSIGTERM is the exit code for SIGTERM (128 + 15)
+	exitCodeSIGTERM = 143
 )
 
 // validSizes maps size strings to pixel widths (single source of truth).
@@ -108,14 +121,28 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 
 // IsOperationalError checks if an error is an expected operational event rather than
 // a genuine failure. Operational errors include context cancellation, deadline exceeded,
-// and process kills (e.g. context-triggered SIGKILL).
+// and process kills (e.g. context-triggered SIGKILL, OOM killer).
 func IsOperationalError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded) ||
-		strings.Contains(err.Error(), "signal: killed")
+
+	// Check for explicit context errors
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// Check for process termination signals via exit code (more reliable)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		exitCode := exitErr.ExitCode()
+		if exitCode == exitCodeSIGKILL || exitCode == exitCodeSIGTERM {
+			return true
+		}
+	}
+
+	// Fallback to string matching (for wrapped errors or non-exec errors)
+	return strings.Contains(err.Error(), signalKilledMessage)
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.

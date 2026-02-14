@@ -446,6 +446,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		// These are normal events during shutdown, timeout, or resource management
 		if IsOperationalError(err) {
 			// Log at Debug level for expected operational events
+			// Don't increment Failed counter for operational events
 			pr.logger.Debug("Spectrogram generation canceled or interrupted",
 				logger.Int("worker_id", workerID),
 				logger.Any("note_id", job.NoteID),
@@ -464,10 +465,11 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 				logger.Error(err),
 				logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 				logger.String("operation", "spectrogram_generation_failed"))
+			// Only increment Failed counter for genuine errors
+			pr.mu.Lock()
+			pr.stats.Failed++
+			pr.mu.Unlock()
 		}
-		pr.mu.Lock()
-		pr.stats.Failed++
-		pr.mu.Unlock()
 		return
 	}
 
