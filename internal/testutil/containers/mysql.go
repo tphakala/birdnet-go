@@ -56,13 +56,11 @@ func DefaultMySQLConfig() MySQLConfig {
 
 // NewMySQLContainer creates and starts a MySQL container with the given config.
 // If config is nil, uses DefaultMySQLConfig().
-func NewMySQLContainer(config *MySQLConfig) (*MySQLContainer, error) {
+func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContainer, error) {
 	if config == nil {
 		defaultCfg := DefaultMySQLConfig()
 		config = &defaultCfg
 	}
-
-	ctx := context.Background()
 
 	// Build container request
 	opts := []testcontainers.ContainerCustomizer{
