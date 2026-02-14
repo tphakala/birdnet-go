@@ -164,7 +164,7 @@ Source: BSD-2-Clause
 
 ### github.com/hashicorp/errwrap
 
-License: https://github.com/hashicorp/errwrap/blob/v1.0.0/LICENSE
+License: https://github.com/hashicorp/errwrap/blob/v1.1.0/LICENSE
 Source: MPL-2.0
 
 ### github.com/hashicorp/go-multierror
