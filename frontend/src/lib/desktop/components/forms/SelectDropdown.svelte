@@ -76,8 +76,9 @@
     renderSelected,
   }: Props = $props();
 
-  // Use provided id or generate unique field ID
-  let fieldId = $derived(id || `select-dropdown-${Math.random().toString(36).substring(2, 11)}`);
+  // Use provided id or generate unique field ID (only generate once)
+  let generatedId = `select-dropdown-${Math.random().toString(36).substring(2, 11)}`;
+  let fieldId = $derived(id || generatedId);
 
   // State - must be declared before derived values that use them
   let isOpen = $state(false);
