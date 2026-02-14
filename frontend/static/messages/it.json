@@ -1,0 +1,3028 @@
+{
+  "common": {
+    "loading": "Caricamento...",
+    "error": "Errore",
+    "unknown": "Sconosciuto",
+    "retry": "Riprova",
+    "retrying": "Riprovo...",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "confirm": "Conferma",
+    "reset": "Reimposta",
+    "refresh": "Aggiorna",
+    "delete": "Elimina",
+    "edit": "Modifica",
+    "search": "Cerca",
+    "filter": "Filtra",
+    "sort": "Ordina",
+    "settings": "Impostazioni",
+    "close": "Chiudi",
+    "back": "Indietro",
+    "next": "Avanti",
+    "previous": "Precedente",
+    "yes": "Sì",
+    "no": "No",
+    "ok": "OK",
+    "apply": "Applica",
+    "clear": "Pulisci",
+    "done": "Fatto",
+    "goToDashboard": "Vai alla Dashboard",
+    "reportIssue": "Segnala un problema",
+    "loginToViewDetails": "Accedi per vedere i dettagli",
+    "pageNotFound": "Pagina non trovata",
+    "internalServerError": "Errore interno del server",
+    "actions": {
+      "download": "Scarica",
+      "review": "Revisiona",
+      "play": "Riproduci",
+      "view": "Vedi"
+    },
+    "buttons": {
+      "save": "Salva modifiche",
+      "reset": "Reimposta",
+      "delete": "Elimina",
+      "cancel": "Annulla",
+      "apply": "Applica",
+      "confirm": "Conferma",
+      "edit": "Modifica",
+      "close": "Chiudi",
+      "back": "Indietro",
+      "next": "Avanti",
+      "previous": "Precedente",
+      "yes": "Sì",
+      "no": "No",
+      "ok": "OK",
+      "clear": "Pulisci",
+      "edit-config": "Modifica config.",
+      "add-action": "Aggiungi azione",
+      "learnMore": "Scopri di più"
+    },
+    "ui": {
+      "loading": "Caricamento...",
+      "noData": "Nessun dato disponibile",
+      "empty": "Nessun elemento trovato",
+      "error": "Si è verificato un errore",
+      "retry": "Riprova",
+      "dismiss": "Ignora",
+      "showMore": "Mostra altro",
+      "showLess": "Mostra meno",
+      "selectAll": "Seleziona tutto",
+      "selectNone": "Deseleziona tutto",
+      "required": "Obbligatorio",
+      "optional": "Opzionale",
+      "noAudioSources": "Nessuna sorgente audio disponibile",
+      "noNotifications": "Nessuna notifica",
+      "silent": "(silenzioso)",
+      "loadingSettings": "Caricamento impostazioni...",
+      "settingsNotFound": "Impostazioni non trovate",
+      "sectionNotFound": "La sezione richiesta \"{section}\" non è stata trovata.",
+      "loadingMap": "Caricamento mappa...",
+      "mapZoomHelp": "Tieni premuto Ctrl (o Cmd su Mac) + scorri per ingrandire. Clicca per impostare la posizione.",
+      "mapSetLocationHelp": "Clicca sulla mappa o trascina il marcatore per impostare la posizione",
+      "imageNotAvailable": "Immagine non disponibile",
+      "search": "Cerca..."
+    },
+    "status": {
+      "success": "Successo",
+      "error": "Errore",
+      "warning": "Avviso",
+      "info": "Informazione",
+      "pending": "In attesa",
+      "processing": "Elaborazione",
+      "completed": "Completato",
+      "failed": "Fallito"
+    },
+    "validation": {
+      "required": "Questo campo è obbligatorio",
+      "invalid": "Valore non valido",
+      "minLength": "Deve contenere almeno {min} caratteri",
+      "maxLength": "Non può superare {max} caratteri",
+      "minValue": "Deve essere almeno {min}",
+      "maxValue": "Non può superare {max}",
+      "email": "Indirizzo email non valido",
+      "url": "URL non valido",
+      "pattern": "Formato non valido"
+    },
+    "aria": {
+      "closeModal": "Chiudi modale",
+      "dismissAlert": "Ignora avviso",
+      "closeNotification": "Chiudi notifica",
+      "toggleDropdown": "Attiva/disattiva menu a discesa",
+      "sortAscending": "Ordina in modo crescente",
+      "selectLanguage": "Seleziona lingua",
+      "sortDescending": "Ordina in modo decrescente",
+      "expandSection": "Espandi sezione",
+      "collapseSection": "Comprimi sezione",
+      "playAudio": "Riproduci audio",
+      "pauseAudio": "Pausa audio",
+      "loading": "Caricamento contenuto",
+      "saveChanges": "Salva modifiche",
+      "cancelEdit": "Annulla modifica",
+      "editSpecies": "Modifica specie",
+      "removeSpecies": "Rimuovi specie",
+      "dismissError": "Ignora errore",
+      "datePickerCalendar": "Calendario selezione data",
+      "selectDate": "Seleziona data",
+      "previousMonth": "Mese precedente",
+      "nextMonth": "Mese successivo",
+      "selectToday": "Seleziona oggi",
+      "dateSelected": "Data selezionata: {date}",
+      "calendarNavigation": "Usa le frecce per navigare nel calendario, Invio per selezionare, Esc per chiudere",
+      "downloadCsv": "Scarica elenco specie come CSV",
+      "visitEbirdLink": "Apri eBird.org in una nuova scheda",
+      "learnEbirdTaxonomyLink": "Apri Tassonomia eBird in una nuova scheda"
+    },
+    "labels": {
+      "confidence": "Confidenza",
+      "github": "GitHub"
+    },
+    "values": {
+      "yes": "Sì",
+      "no": "No",
+      "unknown": "Sconosciuto"
+    },
+    "modal": {
+      "confirmAction": "Conferma azione",
+      "confirmMessage": "Sei sicuro di voler eseguire questa azione?"
+    },
+    "review": {
+      "modalTitle": "Revisiona rilevamento: {species}",
+      "status": {
+        "verifiedCorrect": "Verificato corretto",
+        "falsePositive": "Falso positivo",
+        "notReviewed": "Non revisionato",
+        "locked": "Bloccato"
+      },
+      "form": {
+        "correctDetection": "Rilevamento corretto",
+        "falsePositiveLabel": "Falso positivo",
+        "reviewDetectionTitle": "Revisiona rilevamento",
+        "lockDetection": "Blocca questo rilevamento dopo il salvataggio",
+        "lockDetectionHelp": "Bloccare questo rilevamento impedirà che venga eliminato durante la pulizia regolare.",
+        "unlockDetection": "Sblocca questo rilevamento dopo il salvataggio",
+        "unlockDetectionHelp": "Sbloccare permetterà che questo rilevamento venga eliminato durante la pulizia regolare.",
+        "ignoreSpecies": "Ignora questa specie",
+        "ignoreSpeciesHelp": "Ignorare questa specie impedirà futuri rilevamenti di questa specie. Questo non rimuoverà i rilevamenti esistenti.",
+        "detectionLocked": "Questo rilevamento è attualmente bloccato.",
+        "comment": "Commento",
+        "addComment": "Aggiungi commento",
+        "hideComment": "Nascondi commento",
+        "commentPlaceholder": "Aggiungi un commento su questo rilevamento...",
+        "commentCount": "({chars} caratteri)",
+        "chars": "caratteri",
+        "commentsLabel": "Commenti",
+        "currentStatusTitle": "Stato attuale",
+        "detectionStatusTitle": "Stato rilevamento",
+        "lockLabel": "Stato blocco",
+        "reviewLabel": "Stato revisione",
+        "saveReview": "Salva revisione"
+      },
+      "errors": {
+        "saveFailed": "Impossibile salvare la revisione. Riprova.",
+        "noAudio": "Nessuna registrazione audio disponibile per questo rilevamento.",
+        "commentFailed": "Impossibile salvare il commento. Riprova.",
+        "lockStatusFailed": "Impossibile aggiornare lo stato di blocco. Riprova.",
+        "verificationFailed": "Impossibile aggiornare lo stato di verifica. Riprova."
+      }
+    }
+  },
+  "pageTitle": {
+    "settings": "Impostazioni - BirdNET-Go",
+    "pageNotFound": "404 - Pagina non trovata",
+    "serverError": "500 - Errore interno del server",
+    "componentError": "Errore caricamento componente",
+    "speciesAnalytics": "Analisi specie",
+    "advancedAnalytics": "Analisi avanzate",
+    "detectionDetails": "Dettagli rilevamento",
+    "settingsNotAvailable": "Impostazioni non disponibili"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "detections": "Rilevamenti",
+    "search": "Cerca",
+    "analytics": "Analisi",
+    "notifications": "Notifiche",
+    "system": "Sistema",
+    "settings": "Impostazioni",
+    "about": "Informazioni",
+    "toggleSidebar": "Attiva/disattiva barra laterale",
+    "mainNavigation": "Navigazione principale",
+    "closeSidebar": "Chiudi barra laterale",
+    "analyticsSubmenu": "Sottomenu analisi",
+    "settingsSubmenu": "Sottomenu impostazioni",
+    "systemSubmenu": "Sottomenu sistema"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "Un'interfaccia moderna per il rilevamento e la classificazione dei suoni degli uccelli in tempo reale",
+    "logoAlt": "Logo BirdNET-Go",
+    "overview": "Panoramica",
+    "overviewText": "BirdNET-Go è un'implementazione basata su Go per il rilevamento e la classificazione dei suoni degli uccelli in tempo reale, costruita sulle fondamenta del progetto BirdNET. Questa applicazione fornisce un'interfaccia user-friendly per il monitoraggio e l'analisi continua dei suoni degli uccelli.",
+    "birdnetProject": "Progetto BirdNET",
+    "birdnetDescription": "BirdNET-Go non sarebbe possibile senza il lavoro rivoluzionario del progetto BirdNET. Il modello di intelligenza artificiale che alimenta le capacità di rilevamento di BirdNET-Go è il risultato della ricerca e dello sviluppo innovativi del progetto BirdNET.",
+    "developedBy": "Sviluppato da",
+    "developersText": "Il K. Lisa Yang Center for Conservation Bioacoustics presso il Cornell Lab of Ornithology in collaborazione con la Chemnitz University of Technology:",
+    "visitBirdnetAnalyzer": "Visita il progetto BirdNET-Analyzer",
+    "visitBirdnetAnalyzerAriaLabel": "Visita il repository GitHub di BirdNET-Analyzer",
+    "contributors": "Contributori",
+    "contributorsText": "BirdNET-Go è cresciuto e migliorato grazie agli sforzi collaborativi di molte persone. I loro contributi, dai miglioramenti del codice ai suggerimenti di funzionalità, sono stati inestimabili nel rendere questo progetto migliore.",
+    "mainDeveloper": "Sviluppatore principale",
+    "githubContributors": "Contributori GitHub",
+    "contributorsNote": "Un ringraziamento speciale a questi contributori per il loro prezioso lavoro nel migliorare BirdNET-Go:",
+    "communityAcknowledgment": "Riconoscimento della comunità",
+    "communityText": "Vorremmo anche estendere la nostra gratitudine a tutti gli utenti che hanno contribuito attraverso:",
+    "bugReports": "Segnalazioni di bug e tracciamento dei problemi",
+    "featureSuggestions": "Suggerimenti di funzionalità e feedback",
+    "testing": "Test e validazione",
+    "documentation": "Miglioramenti della documentazione",
+    "additionalCredits": "Crediti aggiuntivi",
+    "birdnetPiProject": "Progetto BirdNET-Pi",
+    "birdnetPiDescription": "Un ringraziamento speciale a Patrick McGuire per il suo lavoro stimolante su BirdNET-Pi, che ha influenzato lo sviluppo di BirdNET-Go. BirdNET-Pi dimostra il potenziale del rilevamento dei suoni degli uccelli su dispositivi embedded e ha stabilito uno standard elevato per lo sviluppo guidato dalla comunità.",
+    "visitBirdnetPi": "Visita il progetto BirdNET-Pi",
+    "labelTranslations": "Traduzioni etichette BirdNET",
+    "labelTranslationsBy": "Fornite da Patrick Levin per il progetto BirdNET-Pi di Patrick McGuire",
+    "patrickLevinGithub": "GitHub di Patrick Levin",
+    "versionInformation": "Informazioni sulla versione",
+    "currentVersion": "Versione corrente",
+    "buildDate": "Data di build",
+    "developmentBuild": "Build di sviluppo",
+    "unknown": "Sconosciuto",
+    "licenseInformation": "Informazioni sulla licenza",
+    "licenseText": "Sia il modello AI BirdNET che BirdNET-Go sono concessi in licenza sotto la",
+    "ccLicense": "Licenza Creative Commons Attribuzione-Non commerciale-Condividi allo stesso modo 4.0 Internazionale",
+    "licenseDescription": "Questa licenza consente ad altri di remixare, adattare e costruire su questo lavoro non commercialmente, a condizione che venga dato il giusto credito e che le nuove creazioni siano concesse in licenza alle stesse condizioni.",
+    "dependencyLicenses": "Licenze delle dipendenze",
+    "taxonomyDataTitle": "Dati tassonomici",
+    "taxonomyDataIntro": "BirdNET-Go include dati tassonomici degli uccelli incorporati derivati dalla eBird/Clements Checklist, fornendo ricerche locali rapide per genere e famiglia.",
+    "source": "Fonte",
+    "ebirdApiV2": "API eBird v2",
+    "copyright": "Copyright",
+    "coverage": "Copertura",
+    "taxonomyCoverage": "2.374 generi, 254 famiglie, 11.145 specie",
+    "visitEbird": "Visita eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Scopri la tassonomia eBird",
+    "avicommonsTitle": "Miniature uccelli",
+    "avicommonsDescription": "BirdNET-Go utilizza immagini di uccelli curate da Avicommons, una libreria di foto di uccelli selezionate a mano, ritagliate e orientate sotto licenze Creative Commons.",
+    "githubStarPrompt": "Se trovi utile BirdNET-Go, considera di mettere una stella al progetto su GitHub. Le stelle aiutano gli altri a scoprire questo progetto e supportano il suo continuo sviluppo.",
+    "viewOnGithub": "Vedi progetto su GitHub",
+    "visitGithubAriaLabel": "Visita il repository GitHub di BirdNET-Go",
+    "visitAvicommonsGithub": "Visita il repository GitHub di Avicommons"
+  },
+  "notifications": {
+    "title": "Notifiche",
+    "subtitle": "Visualizza e gestisci tutte le notifiche di sistema",
+    "filters": {
+      "label": "Filtri",
+      "allStatus": "Tutti gli stati",
+      "unread": "Non letto",
+      "read": "Letto",
+      "acknowledged": "Riconosciuto",
+      "allTypes": "Tutti i tipi",
+      "errors": "Errori",
+      "warnings": "Avvisi",
+      "info": "Info",
+      "system": "Sistema",
+      "detections": "Rilevamenti",
+      "allPriorities": "Tutte le priorità",
+      "critical": "Critico",
+      "high": "Alto",
+      "medium": "Medio",
+      "low": "Basso"
+    },
+    "actions": {
+      "markAllRead": "Segna tutto come letto",
+      "refresh": "Aggiorna notifiche",
+      "markAsRead": "Segna come letto",
+      "acknowledge": "Riconosci",
+      "delete": "Elimina",
+      "confirmDelete": "Conferma eliminazione",
+      "deleteConfirmation": "Sei sicuro di voler eliminare questa notifica?"
+    },
+    "aria": {
+      "filterByStatus": "Filtra per stato",
+      "filterByType": "Filtra per tipo",
+      "filterByPriority": "Filtra per priorità"
+    },
+    "empty": {
+      "title": "Nessuna notifica trovata",
+      "subtitle": "Modifica i filtri o controlla più tardi"
+    },
+    "errors": {
+      "loadFailed": "Impossibile caricare le notifiche. Riprova.",
+      "deleteFailed": "Impossibile eliminare la notifica. Riprova.",
+      "networkError": "Si è verificato un errore di rete. Riprova."
+    },
+    "timeAgo": {
+      "justNow": "Proprio ora",
+      "minutesAgo": "{minutes}m fa",
+      "hoursAgo": "{hours}h fa",
+      "daysAgo": "{days}g fa"
+    },
+    "viewMode": {
+      "label": "Modalità visualizzazione",
+      "grouped": "Vista raggruppata",
+      "flat": "Vista piatta"
+    },
+    "groups": {
+      "markAllRead": "Segna tutto come letto",
+      "dismissAll": "Ignora tutto",
+      "unread": "{count} non letti",
+      "confirmBulkDelete": "Elimina più notifiche",
+      "bulkDeleteConfirmation": "Sei sicuro di voler eliminare {count} notifiche?"
+    }
+  },
+  "search": {
+    "title": "Filtri di ricerca",
+    "results": "Risultati ricerca",
+    "resultsCountZero": "Nessun risultato",
+    "resultsCountOne": "1 risultato",
+    "resultsCountOther": "{count} risultati",
+    "noSearchPerformed": "Nessuna ricerca ancora effettuata",
+    "noSearchPerformedHint": "Usa i filtri di ricerca sopra per trovare rilevamenti di uccelli",
+    "loadingResults": "Caricamento risultati...",
+    "noResultsFound": "Nessun risultato trovato",
+    "noResultsHint": "Prova a modificare i filtri di ricerca",
+    "fields": {
+      "species": "Specie",
+      "speciesPlaceholder": "Inserisci nome specie",
+      "speciesHelp": "Inserisci il nome completo o parziale della specie (non sensibile alle maiuscole)",
+      "dateRange": "Intervallo date",
+      "dateRangeHelp": "Filtra rilevamenti per intervallo di date (lascia vuoto per tutte le date)",
+      "from": "Da",
+      "to": "A",
+      "confidenceRange": "Intervallo confidenza (%)",
+      "confidenceMin": "Percentuale minima confidenza",
+      "confidenceMax": "Percentuale massima confidenza",
+      "verifiedStatus": "Stato verifica",
+      "lockedStatus": "Stato blocco",
+      "timeOfDay": "Momento della giornata"
+    },
+    "advancedFilters": "Filtri avanzati",
+    "showAdvancedFilters": "Mostra filtri avanzati",
+    "hideAdvancedFilters": "Nascondi filtri avanzati",
+    "verifiedOptions": {
+      "any": "Qualsiasi stato",
+      "verified": "Solo verificati",
+      "unverified": "Solo non verificati"
+    },
+    "lockedOptions": {
+      "any": "Qualsiasi stato",
+      "locked": "Solo bloccati",
+      "unlocked": "Solo sbloccati"
+    },
+    "timeOfDayOptions": {
+      "any": "Qualsiasi ora",
+      "day": "Solo giorno",
+      "night": "Solo notte",
+      "sunrise": "Alba +/- 30min",
+      "sunset": "Tramonto +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Data (Più recenti prima)",
+      "dateAsc": "Data (Più vecchi prima)",
+      "speciesAsc": "Specie (A-Z)",
+      "confidenceDesc": "Confidenza (Alta-Bassa)"
+    },
+    "tableHeaders": {
+      "dateTime": "Data e Ora",
+      "timeOfDay": "Momento della giornata",
+      "species": "Specie",
+      "confidence": "Confidenza",
+      "status": "Stato",
+      "actions": "Azioni"
+    },
+    "statusBadges": {
+      "verified": "Verificato",
+      "false": "Falso",
+      "unverified": "Non verificato",
+      "locked": "Bloccato",
+      "unlocked": "Sbloccato"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Lettore Audio",
+      "expandDetails": "Espandi dettagli per {species}",
+      "collapseDetails": "Comprimi dettagli per {species}",
+      "playAudio": "Riproduci audio per {species}",
+      "viewDetails": "Vedi dettagli per {species}",
+      "unknownSpecies": "Specie sconosciuta",
+      "clickToCollapse": "Clicca per comprimere"
+    },
+    "errors": {
+      "searchFailed": "Ricerca fallita: {error}",
+      "minMaxConfidence": "La confidenza minima non può essere maggiore della confidenza massima."
+    },
+    "pagination": {
+      "page": "Pagina {current} di {total}",
+      "goToPrevious": "Vai alla pagina precedente",
+      "goToNext": "Vai alla pagina successiva"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Pagina non trovata",
+      "goToDashboard": "Vai alla Dashboard"
+    },
+    "500": {
+      "code": "500",
+      "title": "Errore interno del server",
+      "defaultMessage": "Si è verificato un errore interno del server.",
+      "goToDashboard": "Vai alla Dashboard"
+    },
+    "server": {
+      "title": "Errore connessione server",
+      "description": "Impossibile connettersi al server. Controlla la connessione e riprova."
+    },
+    "generic": {
+      "errorDetails": "Dettagli errore",
+      "stackTrace": "Stack Trace",
+      "goToDashboard": "Vai alla Dashboard",
+      "reportIssue": "Segnala problema",
+      "loginToViewDetails": "Accedi per vedere i dettagli",
+      "componentLoadError": "Errore caricamento componente",
+      "failedToLoadComponent": "Impossibile caricare il componente richiesto"
+    }
+  },
+  "dashboard": {
+    "dailySummary": {
+      "title": "Attività giornaliera",
+      "subtitle": "Rilevamenti specie per ora",
+      "columns": {
+        "species": "Specie",
+        "detections": "Rilevamenti"
+      },
+      "daylight": {
+        "label": "Luce diurna",
+        "sunrise": "Alba alle {time}",
+        "sunset": "Tramonto alle {time}"
+      },
+      "weather": {
+        "label": "Meteo"
+      },
+      "legend": {
+        "less": "Meno",
+        "more": "Più"
+      },
+      "navigation": {
+        "previousDay": "Giorno precedente",
+        "nextDay": "Giorno successivo",
+        "today": "Oggi"
+      },
+      "tooltips": {
+        "viewHourly": "Vedi tutti i rilevamenti per le {hour}:00",
+        "viewBiHourly": "Vedi tutti i rilevamenti dalle {startHour}:00 alle {endHour}:00",
+        "viewSixHourly": "Vedi tutti i rilevamenti dalle {startHour}:00 alle {endHour}:00",
+        "hourlyDetections": "{count} rilevamenti alle {hour}:00 - Clicca per vedere",
+        "biHourlyDetections": "{count} rilevamenti dalle {startHour}:00 alle {endHour}:00 - Clicca per vedere",
+        "sixHourlyDetections": "{count} rilevamenti dalle {startHour}:00 alle {endHour}:00 - Clicca per vedere"
+      },
+      "loading": {
+        "preparing": "Preparazione dati...",
+        "fetching": "Recupero rilevamenti...",
+        "error": "Caricamento dati fallito",
+        "complete": "Dati caricati con successo"
+      },
+      "noSpecies": "Nessuna specie rilevata in questa data"
+    },
+    "recentDetections": {
+      "title": "Rilevamenti recenti",
+      "subtitle": "Ultime specie identificate",
+      "controls": {
+        "show": "Mostra:",
+        "refresh": "Aggiorna rilevamenti",
+        "refreshPaused": "Aggiornamento in pausa durante l'interazione"
+      },
+      "headers": {
+        "dateTime": "Data e Ora",
+        "time": "Ora",
+        "commonName": "Nome comune",
+        "species": "Specie",
+        "weather": "Meteo",
+        "confidence": "Confidenza",
+        "thumbnail": "Miniatura",
+        "status": "Stato",
+        "recording": "Registrazione",
+        "actions": "Azioni"
+      },
+      "status": {
+        "verified": "Verificato",
+        "false": "Falso",
+        "unverified": "Non verificato",
+        "locked": "Bloccato"
+      },
+      "modals": {
+        "showSpecies": "Mostra Specie {species}",
+        "ignoreSpecies": "Ignora Specie {species}",
+        "showSpeciesConfirm": "Sei sicuro di voler mostrare i futuri rilevamenti di {species}?",
+        "ignoreSpeciesConfirm": "Sei sicuro di voler ignorare i futuri rilevamenti di {species}? Questo influenzerà solo i nuovi rilevamenti - quelli esistenti rimarranno nel database.",
+        "unlockDetection": "Sblocca Rilevamento",
+        "lockDetection": "Blocca Rilevamento",
+        "unlockDetectionConfirm": "Sei sicuro di voler sbloccare questo rilevamento di {species}? Ciò consentirà di eliminarlo durante la pulizia regolare.",
+        "lockDetectionConfirm": "Sei sicuro di voler bloccare questo rilevamento di {species}? Ciò impedirà che venga eliminato durante la pulizia regolare.",
+        "deleteDetection": "Elimina rilevamento di {species}",
+        "deleteDetectionConfirm": "Sei sicuro di voler eliminare il rilevamento di {species}? Questa azione non può essere annullata."
+      },
+      "actions": {
+        "menuLabel": "Azioni per {species}",
+        "review": "Revisiona rilevamento",
+        "showSpecies": "Mostra specie",
+        "ignoreSpecies": "Ignora specie",
+        "lockDetection": "Blocca rilevamento",
+        "unlockDetection": "Sblocca rilevamento",
+        "deleteDetection": "Elimina rilevamento"
+      },
+      "noDetections": "Nessun rilevamento recente"
+    },
+    "errors": {
+      "dailySummaryFetch": "Impossibile recuperare il riepilogo giornaliero: {status}",
+      "dailySummaryLoad": "Impossibile caricare il riepilogo giornaliero",
+      "recentDetectionsFetch": "Impossibile recuperare i rilevamenti recenti: {status}",
+      "recentDetectionsLoad": "Impossibile caricare i rilevamenti recenti",
+      "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
+    }
+  },
+  "detections": {
+    "title": "Rilevamenti",
+    "titles": {
+      "hourly": "Risultati orari per le {hour}:00 del {date}",
+      "hourlyRange": "Risultati orari dalle {startHour}:00 alle {endHour}:00 del {date}",
+      "species": "Risultati per {species} il {date}",
+      "search": "Risultati ricerca per \"{query}\"",
+      "allDetections": "Tutti i rilevamenti del {date}"
+    },
+    "headers": {
+      "dateTime": "Data e Ora",
+      "weather": "Meteo",
+      "species": "Specie",
+      "confidence": "Confidenza",
+      "thumbnail": "Miniatura",
+      "status": "Stato",
+      "recording": "Registrazione",
+      "actions": "Azioni"
+    },
+    "status": {
+      "locked": "Bloccato"
+    },
+    "table": {
+      "caption": "Elenco dei rilevamenti di uccelli con data, specie, confidenza e informazioni sullo stato"
+    },
+    "empty": {
+      "title": "Nessun rilevamento trovato",
+      "description": "Prova a modificare i filtri o i criteri di ricerca"
+    },
+    "pagination": {
+      "showing": "Visualizzati da {from} a {to} di {total} risultati"
+    },
+    "weather": {
+      "title": "Informazioni Meteo",
+      "noData": "Nessun dato meteo",
+      "noDataAvailable": "Nessun dato meteo disponibile",
+      "loading": "Caricamento informazioni meteo...",
+      "labels": {
+        "temperature": "Temperatura",
+        "weather": "Meteo",
+        "wind": "Vento",
+        "humidity": "Umidità",
+        "pressure": "Pressione",
+        "cloudCover": "Copertura nuvolosa"
+      },
+      "units": {
+        "temperature": "°C",
+        "temperatureFahrenheit": "°F",
+        "windSpeed": "m/s",
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
+      },
+      "conditions": {
+        "clearsky_day": "Cielo sereno",
+        "clearsky_night": "Cielo sereno",
+        "fair_day": "Sereno",
+        "fair_night": "Sereno",
+        "partlycloudy_day": "Parzialmente nuvoloso",
+        "partlycloudy_night": "Parzialmente nuvoloso",
+        "cloudy": "Nuvoloso",
+        "rainshowers_day": "Rovesci di pioggia",
+        "rainshowers_night": "Rovesci di pioggia",
+        "rain": "Pioggia",
+        "thunder": "Temporale",
+        "sleet": "Nevischio",
+        "snow": "Neve",
+        "fog": "Nebbia",
+        "unknown": "Sconosciuto"
+      }
+    },
+    "row": {
+      "viewDetails": "Vedi dettagli per {species}"
+    },
+    "media": {
+      "title": "Registrazione e Spettrogramma"
+    },
+    "tabs": {
+      "overview": "Panoramica",
+      "taxonomy": "Tassonomia",
+      "history": "Cronologia",
+      "notes": "Note"
+    },
+    "environmental": {
+      "title": "Condizioni Ambientali"
+    },
+    "metadata": {
+      "title": "Metadati Rilevamento",
+      "source": "Sorgente",
+      "duration": "Durata",
+      "status": "Stato",
+      "locked": "Bloccato"
+    },
+    "history": {
+      "title": "Cronologia Rilevamento",
+      "comingSoon": "Tracciamento cronologia in arrivo..."
+    },
+    "notes": {
+      "title": "Note e Commenti",
+      "noComments": "Nessun commento o nota per questo rilevamento."
+    },
+    "aria": {
+      "loading": "Caricamento dettagli rilevamento...",
+      "loaded": "Dettagli rilevamento caricati per {species}",
+      "error": "Errore caricamento rilevamento: {error}"
+    },
+    "errors": {
+      "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",
+      "noPermission": "Non hai il permesso di visualizzare questo rilevamento.",
+      "loginRequired": "Effettua il login per visualizzare questo rilevamento.",
+      "serverError": "Errore del server. Riprova più tardi o contatta il supporto se il problema persiste.",
+      "loadFailed": "Impossibile caricare il rilevamento (Errore {status}). Prova ad aggiornare la pagina.",
+      "noIdProvided": "Nessun ID di rilevamento fornito."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Rarità Specie",
+      "score": "Punteggio",
+      "basedOnLocation": "Basato sulla posizione: {latitude}, {longitude}"
+    },
+    "taxonomy": {
+      "hierarchy": "Classificazione Tassonomica",
+      "subspecies": "Sottospecie",
+      "noData": "Nessun dato tassonomico disponibile.",
+      "labels": {
+        "kingdom": "Regno",
+        "phylum": "Phylum",
+        "class": "Classe",
+        "order": "Ordine",
+        "family": "Famiglia",
+        "genus": "Genere",
+        "species": "Specie"
+      }
+    }
+  },
+  "system": {
+    "title": "Dashboard di Sistema",
+    "refreshData": "Aggiorna Dati",
+    "aria": {
+      "refreshData": "Aggiorna dati di sistema",
+      "dashboard": "Dashboard di sistema con metriche di performance e informazioni"
+    },
+    "systemInfo": {
+      "title": "Informazioni di Sistema",
+      "os": "Sistema Operativo",
+      "hostname": "Hostname",
+      "uptime": "Tempo di attività",
+      "cpus": "CPU",
+      "model": "Modello Sistema",
+      "timezone": "Fuso Orario",
+      "temperature": "Temperatura CPU",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Dati temperatura non disponibili"
+    },
+    "diskUsage": {
+      "title": "Utilizzo Disco",
+      "emptyMessage": "Nessuna informazione sul disco disponibile"
+    },
+    "memoryUsage": {
+      "title": "Utilizzo Memoria",
+      "ramUsage": "Utilizzo RAM",
+      "labels": {
+        "free": "Libera",
+        "available": "Disponibile",
+        "buffCache": "Buff/Cache"
+      }
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Progresso Complessivo",
+        "progress": "Progresso"
+      }
+    },
+    "processInfo": {
+      "title": "Informazioni Processi",
+      "loading": "Caricamento informazioni processi...",
+      "noProcesses": "Nessuna informazione sui processi disponibile",
+      "headers": {
+        "pid": "PID",
+        "name": "Nome",
+        "status": "Stato",
+        "cpu": "CPU",
+        "memory": "Memoria",
+        "uptime": "Tempo di attività"
+      },
+      "showAll": "Mostra Tutti i Processi",
+      "showBirdnetOnly": "Mostra Solo BirdNET",
+      "table": {
+        "process": "Processo",
+        "status": "Stato",
+        "cpu": "CPU",
+        "memory": "Memoria",
+        "uptime": "Tempo di attività",
+        "showAllProcesses": "Mostra tutti i processi"
+      }
+    },
+    "errors": {
+      "systemInfo": "Impossibile caricare informazioni di sistema: {error}",
+      "diskUsage": "Impossibile caricare utilizzo disco: {error}",
+      "memoryUsage": "Impossibile caricare utilizzo memoria: {error}",
+      "temperature": "Impossibile caricare temperatura: {error}",
+      "processes": "Impossibile caricare informazioni processi: {error}"
+    },
+    "sections": {
+      "overview": "Panoramica",
+      "database": "Database"
+    },
+    "database": {
+      "title": "Gestione Database",
+      "description": "Gestisci migrazione schema",
+      "legacy": {
+        "title": "Database Legacy",
+        "fetchFailed": "Impossibile recuperare lo stato del database legacy",
+        "cleanup": {
+          "title": "Pulizia Database Legacy",
+          "description": "Questo database è ora offline e non è più in uso. Tutti i tuoi dati sono stati migrati nel Database Avanzato.",
+          "recommendation": "Si consiglia di eliminare questo database per liberare spazio su disco.",
+          "location": "Posizione",
+          "size": "Dimensione",
+          "records": "Record",
+          "detections": "rilevamenti",
+          "lastModified": "Ultima modifica",
+          "warning": "Attenzione: Questa azione non può essere annullata",
+          "backupReminder": "Assicurati di avere un backup prima di eliminare il database legacy.",
+          "deleteButton": "Elimina Database Legacy",
+          "inProgress": "Eliminazione...",
+          "success": "{size} di spazio su disco sono stati recuperati",
+          "failed": "Pulizia fallita",
+          "notAvailable": "Pulizia non disponibile",
+          "confirmTitle": "Eliminare Database Legacy?",
+          "confirmMessage": "Stai per eliminare permanentemente il database legacy ({size}). Questa azione non può essere annullata.",
+          "confirmCheckbox": "Capisco che questo eliminerà permanentemente il database legacy",
+          "cancelButton": "Annulla",
+          "deleteConfirmButton": "Elimina Permanentemente"
+        }
+      },
+      "v2": {
+        "title": "Database Avanzato"
+      },
+      "stats": {
+        "connected": "Connesso",
+        "disconnected": "Disconnesso",
+        "type": "Tipo",
+        "location": "Posizione",
+        "size": "Dimensione",
+        "detections": "Rilevamenti",
+        "fetchFailed": "Impossibile recuperare statistiche database"
+      },
+      "backup": {
+        "download": "Scarica Backup",
+        "downloading": "Download in corso...",
+        "starting": "Avvio backup...",
+        "creating": "Creazione backup...",
+        "cancel": "Annulla",
+        "retry": "Riprova Backup",
+        "mysqlNote": "Il backup MySQL richiede strumenti esterni (mysqldump)"
+      },
+      "notInitialized": "Non inizializzato",
+      "migration": {
+        "title": "Migrazione Database",
+        "description": "Migra dallo schema legacy allo schema v2 normalizzato",
+        "requiredNote": "La migrazione del database è richiesta per le prossime funzionalità di BirdNET-Go che si basano sul nuovo schema di database normalizzato. Le nuove funzionalità non saranno disponibili fino al completamento della migrazione.",
+        "completedTitle": "Migrazione Completata",
+        "completedNote": "Il tuo database è stato migrato con successo al nuovo schema. Riavvia BirdNET-Go per passare al nuovo database. Nota: Il nuovo database è più piccolo perché memorizza i dati in modo più efficiente - questo è previsto e tutti i tuoi dati sono preservati.",
+        "starting": "Avvio migrazione...",
+        "status": {
+          "idle": "Pronto per Iniziare",
+          "initializing": "Inizializzazione",
+          "dual_write": "Scrittura Doppia Attiva",
+          "migrating": "Migrazione Primaria",
+          "migrating_predictions": "Migrazione Secondaria",
+          "paused": "In Pausa",
+          "validating": "Convalida",
+          "cutover": "Passaggio in Corso",
+          "completed": "Migrazione Completata"
+        },
+        "progress": {
+          "title": "Progresso Migrazione",
+          "records": "record",
+          "paused": "Migrazione In Pausa",
+          "percent": "{percent}%",
+          "rate": "{rate} record/sec",
+          "rateValue": "{rate} rec/s",
+          "remaining": "Stimato rimanente: {time}",
+          "eta": "Tempo rimanente stimato",
+          "dirtyIds": "{count} record in attesa di ri-sincronizzazione"
+        },
+        "phase": {
+          "indicator": "Fase {current} di {total}: ",
+          "detections": "Migrazione rilevamenti primari",
+          "predictions": "Migrazione rilevamenti secondari",
+          "reviews": "Migrazione Recensioni",
+          "comments": "Migrazione Commenti",
+          "locks": "Migrazione Blocchi"
+        },
+        "notes": {
+          "inProgress": "Puoi continuare a usare il sistema normalmente mentre la migrazione viene eseguita in background.",
+          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - tutti i nuovi rilevamenti vengono salvati in entrambi i database.",
+          "migrating": "Copia dei rilevamenti esistenti nel nuovo database.",
+          "validating": "Verifica che tutti i record siano stati copiati correttamente. Quasi fatto!",
+          "cutover": "Passaggio al nuovo database. Richiede solo un momento.",
+          "paused": "La migrazione è in pausa. I tuoi dati sono al sicuro. Riprendi quando sei pronto."
+        },
+        "actions": {
+          "start": "Avvia Migrazione",
+          "pause": "Pausa",
+          "resume": "Riprendi",
+          "cancel": "Annulla",
+          "rollback": "Rollback"
+        },
+        "confirmDialog": {
+          "title": "Avvia Migrazione Database",
+          "message": "La migrazione copierà i tuoi dati di rilevamento dal database attuale a un nuovo database normalizzato. Il tuo database originale rimane invariato. Tuttavia, si consiglia di creare un backup in caso di problemi imprevisti.",
+          "checkbox": "Confermo di aver eseguito il backup del mio database o comprendo i rischi di procedere senza backup.",
+          "note": "Puoi scaricare un backup utilizzando il pulsante \"Scarica Backup\" sopra."
+        },
+        "confirmCancel": {
+          "title": "Annullare Migrazione?",
+          "message": "Questo fermerà la migrazione e tornerà allo stato inattivo. Puoi riavviare la migrazione in sicurezza in seguito - i record non verranno duplicati.",
+          "confirm": "Sì, Annulla",
+          "dismiss": "No, Continua Esecuzione"
+        },
+        "confirmRollback": {
+          "title": "Rollback Migrazione?",
+          "message": "Questo ripristinerà il database legacy. I nuovi rilevamenti registrati dalla migrazione saranno preservati nel database avanzato ma non saranno visibili fino a quando la migrazione non verrà eseguita nuovamente.",
+          "confirm": "Sì, Rollback",
+          "dismiss": "No, Mantieni Avanzato"
+        },
+        "errors": {
+          "startFailed": "Impossibile avviare la migrazione",
+          "pauseFailed": "Impossibile mettere in pausa la migrazione",
+          "resumeFailed": "Impossibile riprendere la migrazione",
+          "cancelFailed": "Impossibile annullare la migrazione",
+          "rollbackFailed": "Impossibile eseguire il rollback della migrazione",
+          "fetchFailed": "Impossibile recuperare lo stato della migrazione"
+        },
+        "worker": {
+          "running": "Worker In Esecuzione",
+          "paused": "Worker In Pausa",
+          "stopped": "Worker Fermato"
+        },
+        "prerequisites": {
+          "title": "Controlli Pre-Migrazione",
+          "rerunChecks": "Riesegui Controlli",
+          "critical": "Critico",
+          "allPassed": "Tutti i controlli superati - pronto per migrare",
+          "criticalIssues": "{count} problema/i critico/i deve/ono essere risolto/i",
+          "warningsCount": "{count} avviso/i",
+          "running": "Esecuzione controlli pre-migrazione...",
+          "checkingStep": "Passo {current} di {total}",
+          "errors": {
+            "fetchFailed": "Impossibile recuperare i prerequisiti"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Stato Migrazione"
+            },
+            "disk_space": {
+              "name": "Spazio Disco"
+            },
+            "legacy_accessible": {
+              "name": "Connessione Database"
+            },
+            "sqlite_integrity": {
+              "name": "Integrità Database"
+            },
+            "mysql_table_health": {
+              "name": "Salute Tabelle"
+            },
+            "write_permission": {
+              "name": "Permesso Scrittura"
+            },
+            "mysql_permissions": {
+              "name": "Permessi MySQL"
+            },
+            "record_count": {
+              "name": "Conteggio Record"
+            },
+            "existing_v2_data": {
+              "name": "Dati Migrazione Esistenti"
+            },
+            "no_active_locks": {
+              "name": "Blocchi Attivi"
+            },
+            "memory_available": {
+              "name": "Memoria Disponibile"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        }
+      }
+    }
+  },
+  "analytics": {
+    "title": "Panoramica",
+    "loadingError": "Impossibile caricare alcuni dati analitici. Riprova più tardi.",
+    "stats": {
+      "totalDetections": "Rilevamenti Totali",
+      "uniqueSpecies": "Specie Uniche",
+      "avgConfidence": "Confidenza Media",
+      "mostCommon": "Più Comune",
+      "none": "Nessuno",
+      "detections": "rilevamenti",
+      "totalSpecies": "Totale Specie",
+      "overallAverage": "Media complessiva"
+    },
+    "periods": {
+      "today": "Oggi",
+      "lastWeek": "Ultimi 7 giorni",
+      "lastMonth": "Ultimi 30 giorni",
+      "last90Days": "Ultimi 90 giorni",
+      "lastYear": "Ultimi 12 mesi",
+      "customRange": "Intervallo personalizzato",
+      "allTime": "Tutto il tempo"
+    },
+    "filters": {
+      "title": "Filtra Dati",
+      "timePeriod": "Periodo di Tempo",
+      "from": "Da",
+      "to": "A",
+      "sortBy": "Ordina Per",
+      "searchSpecies": "Cerca Specie",
+      "searchPlaceholder": "Cerca per nome...",
+      "reset": "Reimposta",
+      "applyFilters": "Applica Filtri",
+      "exportCsv": "Esporta CSV",
+      "species": "specie",
+      "filtered": "(filtrato)"
+    },
+    "timePeriodOptions": {
+      "allTime": "Tutto il Tempo",
+      "today": "Oggi",
+      "lastWeek": "Ultimi 7 Giorni",
+      "lastMonth": "Ultimi 30 Giorni",
+      "last90Days": "Ultimi 90 Giorni",
+      "lastYear": "Ultimi 12 Mesi",
+      "customRange": "Intervallo Personalizzato"
+    },
+    "sortOptions": {
+      "mostDetections": "Più Rilevamenti",
+      "fewestDetections": "Meno Rilevamenti",
+      "nameAZ": "Nome (A-Z)",
+      "nameZA": "Nome (Z-A)",
+      "recentlyFirstSeen": "Visto per la Prima Volta Recentemente",
+      "earliestFirstSeen": "Visto per la Prima Volta Prima",
+      "recentlyLastSeen": "Visto per l'Ultima Volta Recentemente",
+      "highestConfidence": "Confidenza Più Alta"
+    },
+    "charts": {
+      "top10Species": "Top 10 Specie",
+      "detectionsByTimeOfDay": "Rilevamenti per Ora del Giorno",
+      "detectionTrends": "Trend Rilevamenti",
+      "newSpeciesDetected": "Nuove Specie Rilevate",
+      "noNewSpecies": "Nessuna nuova specie rilevata in questo periodo.",
+      "noDataAvailable": "Nessun dato disponibile",
+      "numberOfDetections": "Numero di Rilevamenti",
+      "detections": "Rilevamenti",
+      "timePeriod": "Periodo di Tempo",
+      "dailyDetections": "Rilevamenti Giornalieri",
+      "date": "Data",
+      "firstHeardOn": "Sentito per la Prima Volta il",
+      "firstHeardDate": "Data Primo Ascolto",
+      "firstHeard": "Primo Ascolto"
+    },
+    "recentDetections": {
+      "title": "Rilevamenti Recenti",
+      "headers": {
+        "dateTime": "Data e Ora",
+        "species": "Specie",
+        "confidence": "Confidenza",
+        "timeOfDay": "Momento della Giornata"
+      },
+      "noRecentDetections": "Nessun rilevamento recente trovato",
+      "unknownSpecies": "Sconosciuto",
+      "unknown": "Sconosciuto"
+    },
+    "species": {
+      "title": "Specie",
+      "subtitle": "Elenco completo di tutte le specie di uccelli che sono state rilevate",
+      "speciesList": "Elenco Specie",
+      "switchToGrid": "Passa alla vista griglia",
+      "switchToList": "Passa alla vista elenco",
+      "noSpeciesFound": "Nessuna specie trovata corrispondente ai tuoi filtri.",
+      "headers": {
+        "species": "Specie",
+        "detections": "Rilevamenti",
+        "avgConfidence": "Confidenza Media",
+        "maxConfidence": "Confidenza Max",
+        "firstDetected": "Primo Rilevamento",
+        "lastDetected": "Ultimo Rilevamento"
+      },
+      "card": {
+        "detections": "Rilevamenti:",
+        "confidence": "Confidenza:",
+        "first": "Primo:"
+      }
+    },
+    "advanced": {
+      "title": "Analisi Avanzate",
+      "chartControls": "Controlli Grafico",
+      "dateRange": "Intervallo Date",
+      "chartOptions": "Opzioni Grafico",
+      "speciesSelection": "Selezione Specie ({count}/{max})",
+      "speciesSelectionHint": "Cerca o clicca sui chip in basso",
+      "speciesPlaceholder": "Cerca e seleziona specie per l'analisi...",
+      "noSpeciesFound": "Nessuna specie trovata per l'intervallo di date selezionato",
+      "detections": "{count} rilevamenti",
+      "dateRangeOptions": {
+        "week": "Ultima Settimana",
+        "month": "Ultimo Mese",
+        "quarter": "Ultimo Trimestre",
+        "year": "Ultimo Anno",
+        "custom": "Intervallo Personalizzato"
+      },
+      "options": {
+        "relativeTrends": "Trend relativi",
+        "zoomPan": "Zoom e pan",
+        "brushSelection": "Selezione pennello"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Pattern di Rilevamento per Ora del Giorno",
+          "description": "Mostra i conteggi medi di rilevamento durante il giorno per le specie selezionate",
+          "noData": "Nessun dato sull'ora del giorno disponibile",
+          "noDataHint": "Seleziona specie e un intervallo di date per visualizzare i pattern"
+        },
+        "dailyTrend": {
+          "title": "Trend Rilevamento Specie",
+          "description": "Mostra i trend di rilevamento nel tempo per le specie selezionate",
+          "noData": "Nessun dato sui trend disponibile",
+          "noDataHint": "Seleziona specie e un intervallo di date per visualizzare i trend"
+        }
+      },
+      "aria": {
+        "startDate": "Data inizio",
+        "endDate": "Data fine",
+        "loadingAnalytics": "Caricamento dati analitici",
+        "loadingTrends": "Caricamento dati trend"
+      }
+    }
+  },
+  "settings": {
+    "title": "Impostazioni - BirdNET-Go",
+    "loading": "Caricamento impostazioni...",
+    "sections": {
+      "node": "Impostazioni Principali",
+      "userinterface": "Interfaccia Utente",
+      "audio": "Impostazioni Audio",
+      "filters": "Filtri Rilevamento",
+      "integration": "Integrazioni",
+      "security": "Sicurezza",
+      "species": "Specie",
+      "notifications": "Notifiche",
+      "support": "Supporto"
+    },
+    "notFound": {
+      "title": "Impostazioni Non Trovate",
+      "message": "La sezione delle impostazioni richiesta \"{section}\" non è stata trovata."
+    },
+    "actions": {
+      "save": "Salva Modifiche",
+      "saving": "Salvataggio...",
+      "reset": "Reimposta",
+      "resetAriaLabel": "Reimposta tutte le modifiche",
+      "saveAriaLabel": "Salva Modifiche",
+      "savingAriaLabel": "Salvataggio modifiche...",
+      "unsavedChanges": "Modifiche non salvate",
+      "toolbar": "Azioni impostazioni"
+    },
+    "card": {
+      "changed": "modificato",
+      "changedAriaLabel": "Impostazioni modificate"
+    },
+    "tabs": {
+      "navigation": "Schede navigazione impostazioni",
+      "hasChanges": "Questa scheda ha modifiche non salvate",
+      "setAsDefault": "Imposta come predefinito",
+      "defaultIndicator": "Sorgente di input predefinita"
+    },
+    "main": {
+      "tabs": {
+        "general": "Generale",
+        "detection": "Rilevamento",
+        "location": "Posizione",
+        "database": "Database"
+      },
+      "sections": {
+        "main": {
+          "title": "Impostazioni Principali",
+          "description": "Configura le impostazioni principali dell'applicazione"
+        },
+        "birdnet": {
+          "title": "Impostazioni BirdNET",
+          "description": "Configura le impostazioni specifiche del modello AI BirdNET"
+        },
+        "ui": {
+          "title": "Impostazioni Interfaccia Utente",
+          "description": "Personalizza interfaccia utente"
+        },
+        "customClassifier": {
+          "title": "Classificatore BirdNET Personalizzato",
+          "description": "Configura file modello ed etichette BirdNET personalizzati per rilevamento specializzato",
+          "modelPath": {
+            "label": "Percorso Modello (Richiede riavvio per applicare)",
+            "placeholder": "Percorso al file del modello",
+            "helpText": "Percorso al file modello BirdNET esterno. Inserisci percorso assoluto o relativo al binario birdnet-go. Lascia vuoto per usare il modello integrato predefinito."
+          },
+          "labelPath": {
+            "label": "Percorso Etichette (Richiede riavvio per applicare)",
+            "placeholder": "Percorso al file delle etichette",
+            "helpText": "Percorso al file etichette modello esterno, file .zip o .txt. Inserisci percorso assoluto o relativo al binario birdnet-go. Lascia vuoto per usare le etichette integrate predefinite."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Soglia Dinamica",
+          "description": "Regola automaticamente la sensibilità di rilevamento in base alle osservazioni precedenti",
+          "enable": {
+            "label": "Abilita Soglia Dinamica (funzione specifica BirdNET-Go)",
+            "helpText": "Abilita la funzione di soglia di confidenza dinamica per un rilevamento del richiamo degli uccelli più adattivo."
+          },
+          "trigger": {
+            "label": "Soglia di Attivazione",
+            "helpText": "Il livello di confidenza al quale si attiva la soglia dinamica. Se un richiamo di uccello viene rilevato con una confidenza superiore a questo valore, la soglia per le corrispondenze positive di quella specie verrà abbassata per i richiami successivi."
+          },
+          "minimum": {
+            "label": "Soglia Dinamica Minima",
+            "helpText": "Il valore minimo a cui la soglia dinamica può essere abbassata. Questo assicura che la soglia non scenda al di sotto di un livello indesiderato."
+          },
+          "expireTime": {
+            "label": "Tempo Scadenza Soglia Dinamica (Ore)",
+            "helpText": "Il numero di ore durante le quali gli aggiustamenti della soglia dinamica rimangono validi. Dopo questo periodo, la soglia dinamica viene reimpostata."
+          }
+        },
+        "falsePositiveFilter": {
+          "title": "Filtro Falsi Positivi",
+          "description": "Riduce i falsi rilevamenti richiedendo conferme multiple su segmenti audio sovrapposti",
+          "level": {
+            "label": "Livello Filtro"
+          },
+          "hardwareNote": "I livelli Rigoroso e Massimo richiedono impostazioni di sovrapposizione più alte e più risorse CPU. Hardware RPi 4 o migliore è richiesto per questi livelli.",
+          "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
+          "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro"
+        },
+        "rangeFilter": {
+          "title": "Filtro Intervallo",
+          "description": "Limita il rilevamento alle specie probabili nella tua regione geografica",
+          "stationLocation": {
+            "label": "Posizione Stazione",
+            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione."
+          },
+          "latitude": {
+            "label": "Latitudine",
+            "helpText": "Latitudine della stazione, usata per dati meteo e filtro intervallo specie."
+          },
+          "longitude": {
+            "label": "Longitudine",
+            "helpText": "Longitudine della stazione, usata per dati meteo e filtro intervallo specie."
+          },
+          "model": {
+            "label": "Modello Filtro Intervallo",
+            "helpText": "Versione del modello filtro intervallo BirdNET: latest o legacy."
+          },
+          "threshold": {
+            "label": "Soglia",
+            "helpText": "Controlla quali specie sono incluse in base alla loro probabilità di occorrenza per la tua posizione e periodo dell'anno. Predefinito (0.01) è raccomandato per la maggior parte degli utenti. Valori più alti (0.05-0.3) includono meno specie con probabilità di occorrenza più alta. Valori molto alti (0.5+) includono solo le specie più comuni."
+          },
+          "speciesCount": {
+            "label": "Conteggio Specie Attuale",
+            "helpText": "Numero di specie incluse nel filtro intervallo. Si aggiorna automaticamente quando cambiano soglia, latitudine o longitudine.",
+            "loading": "Caricamento...",
+            "viewSpecies": "Vedi Specie"
+          },
+          "downloadTitle": "Scarica elenco specie come CSV",
+          "csvDownloaded": "Elenco specie scaricato con successo",
+          "csvDownloadFailed": "Impossibile scaricare elenco specie. Riprova.",
+          "modal": {
+            "title": "Specie Filtro Intervallo",
+            "speciesCount": "Conteggio Specie:",
+            "threshold": "Soglia:",
+            "latitude": "Latitudine:",
+            "longitude": "Longitudine:",
+            "loadingSpecies": "Caricamento specie...",
+            "noSpeciesFound": "Nessuna specie trovata con le impostazioni attuali",
+            "close": "Chiudi"
+          }
+        },
+        "database": {
+          "title": "Impostazioni Database",
+          "description": "Impostazioni database rilevamenti",
+          "type": {
+            "label": "Seleziona Tipo Database",
+            "helpText": "Seleziona il tipo di database da usare per memorizzare i rilevamenti."
+          },
+          "sqlite": {
+            "title": "Configurazione SQLite",
+            "description": "Configura la posizione del file database SQLite",
+            "note": "SQLite è il tipo di database raccomandato per la maggior parte degli utenti.",
+            "path": {
+              "label": "Percorso Database SQLite",
+              "placeholder": "Inserisci percorso database SQLite",
+              "helpText": "Percorso file database SQLite relativo alla directory dell'applicazione"
+            }
+          },
+          "mysql": {
+            "title": "Configurazione MySQL",
+            "description": "Configura impostazioni connessione per server database MySQL",
+            "host": {
+              "label": "Host MySQL",
+              "placeholder": "Inserisci host MySQL",
+              "helpText": "Host database MySQL (IP o hostname)"
+            },
+            "port": {
+              "label": "Porta MySQL",
+              "helpText": "Porta database MySQL (predefinita 3306/TCP)"
+            },
+            "username": {
+              "label": "Nome Utente MySQL",
+              "placeholder": "Inserisci nome utente MySQL",
+              "helpText": "Nome utente database MySQL"
+            },
+            "password": {
+              "label": "Password MySQL",
+              "placeholder": "Inserisci password MySQL",
+              "helpText": "Password database MySQL"
+            },
+            "database": {
+              "label": "Database MySQL",
+              "placeholder": "Inserisci nome database MySQL",
+              "helpText": "Nome database MySQL"
+            }
+          },
+          "stats": {
+            "title": "Statistiche Database",
+            "description": "Informazioni runtime sul tuo database",
+            "loading": "Caricamento statistiche database...",
+            "retry": "Riprova",
+            "refresh": "Aggiorna",
+            "noData": "Nessuna statistica database disponibile.",
+            "type": "Tipo",
+            "status": "Stato",
+            "size": "Dimensione",
+            "totalDetections": "Rilevamenti Totali",
+            "location": "Posizione",
+            "connected": "Connesso",
+            "disconnected": "Disconnesso"
+          }
+        },
+        "interface": {
+          "title": "Interfaccia",
+          "description": "Configura lingua, preferenze di visualizzazione e limiti dashboard"
+        },
+        "visualContent": {
+          "title": "Contenuto Visivo",
+          "description": "Configura immagini uccelli e opzioni visualizzazione spettrogramma"
+        },
+        "userInterface": {
+          "title": "Impostazioni Interfaccia Utente",
+          "description": "Personalizza interfaccia utente",
+          "interface": {
+            "title": "Impostazioni Interfaccia",
+            "description": "Scegli la tua lingua preferita",
+            "locale": {
+              "label": "Lingua Visualizzazione",
+              "helpText": "Seleziona la lingua per l'interfaccia utente"
+            }
+          },
+          "language": {
+            "title": "Lingua",
+            "description": "Configura la lingua di visualizzazione per l'interfaccia utente",
+            "locale": {
+              "label": "Lingua Interfaccia",
+              "helpText": "Seleziona la lingua per l'interfaccia utente"
+            }
+          },
+          "dashboard": {
+            "title": "Visualizzazione Dashboard",
+            "description": "Configura come vengono mostrati i rilevamenti sulla dashboard",
+            "displaySettings": {
+              "title": "Impostazioni Visualizzazione",
+              "description": "Configura opzioni generali visualizzazione dashboard come limiti specie."
+            },
+            "birdImages": {
+              "title": "Immagini Uccelli",
+              "description": "Configura immagini miniatura specie uccelli per liste rilevamenti."
+            },
+            "spectrogramGeneration": {
+              "title": "Generazione Spettrogramma",
+              "description": "Configura quando e come vengono generati gli spettrogrammi audio per i rilevamenti."
+            },
+            "general": {
+              "title": "Impostazioni Generali"
+            },
+            "summaryLimit": {
+              "label": "Numero Max Specie su Tabella Riepilogo Giornaliero",
+              "helpText": "Numero max specie mostrate nella tabella riepilogo giornaliero (Valore tra 10 e 1000)"
+            },
+            "thumbnails": {
+              "title": "Visualizzazione Miniature",
+              "summary": {
+                "label": "Mostra Miniature su tabella Riepilogo Giornaliero",
+                "helpText": "Abilita per mostrare miniature delle specie rilevate nella tabella riepilogo giornaliero"
+              },
+              "recent": {
+                "label": "Mostra Miniature su lista Rilevamenti Recenti",
+                "helpText": "Abilita per mostrare miniature delle specie rilevate nella lista rilevamenti recenti"
+              },
+              "imageProvider": {
+                "label": "Fornitore Immagini",
+                "helpText": "Seleziona il fornitore immagini preferito per le miniature uccelli"
+              },
+              "fallbackPolicy": {
+                "label": "Politica di Fallback",
+                "helpText": "Seleziona cosa succede quando il fornitore preferito non trova un'immagine",
+                "options": {
+                  "all": "Prova tutti i fornitori in sequenza",
+                  "none": "Usa solo il fornitore selezionato"
+                }
+              }
+            },
+            "spectrogram": {
+              "title": "Generazione Spettrogramma",
+              "mode": {
+                "label": "Modalità Generazione",
+                "auto": {
+                  "label": "Auto (Raccomandato)",
+                  "helpText": "Gli spettrogrammi vengono generati automaticamente quando il rilevamento viene visualizzato sull'interfaccia utente. Per lunghe liste di rilevamenti la generazione dello spettrogramma può richiedere molto tempo su sistemi con risorse CPU limitate."
+                },
+                "prerender": {
+                  "label": "Pre-renderizza in Background",
+                  "helpText": "Genera spettrogrammi automaticamente durante il salvataggio della clip audio. Su sistemi con risorse limitate come Raspberry Pi Zero o 3 questo fornisce un'interfaccia utente più reattiva grazie agli spettrogrammi renderizzati in background, tuttavia questa modalità consumerà più spazio su disco poiché gli spettrogrammi vengono creati per ogni rilevamento."
+                },
+                "userRequested": {
+                  "label": "Solo su Richiesta Utente",
+                  "helpText": "Genera spettrogrammi solo quando clicchi il pulsante genera. Perfetto per sistemi con risorse limitate (Raspberry Pi 3/Zero) - zero sovraccarico automatico, controlli tu quando viene usata la CPU."
+                }
+              },
+              "style": {
+                "label": "Stile Spettrogramma",
+                "helpText": "Scegli l'aspetto visivo degli spettrogrammi generati.",
+                "preview": "Anteprima",
+                "previewAlt": "Anteprima stile spettrogramma",
+                "options": {
+                  "default": "Predefinito (Colorato)",
+                  "scientificDark": "Scientifico (Scuro)",
+                  "highContrastDark": "Alto Contrasto (Scuro)",
+                  "scientific": "Scientifico (Chiaro)"
+                },
+                "descriptions": {
+                  "default": "Spettrogramma colorato con sfondo scuro",
+                  "scientificDark": "Scala di grigi con finestra Dolph, sfondo scuro",
+                  "highContrastDark": "Alta saturazione colore con sfondo scuro",
+                  "scientific": "Scala di grigi con finestra Dolph, sfondo chiaro (stile xeno-canto)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Gamma Dinamica",
+                "helpText": "Controlla il contrasto - valori più bassi fanno risaltare meglio i segnali deboli, valori più alti mostrano più dettagli.",
+                "options": {
+                  "highContrast": "Alto Contrasto (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Esteso (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Migliore per segnali deboli. I richiami degli uccelli risaltano chiaramente dal rumore di fondo. Raccomandato per stili scientifici/scala di grigi.",
+                  "standard": "Impostazione bilanciata predefinita. Buona per la maggior parte dei casi d'uso.",
+                  "extended": "Più dettagli visibili ma contrasto inferiore. Valore predefinito SoX."
+                }
+              },
+              "enabled": {
+                "label": "Abilita Pre-renderizzazione Spettrogramma",
+                "helpText": "DEPRECATO: Usa invece Modalità Generazione. Genera spettrogrammi in background quando i rilevamenti vengono salvati per eliminare lag UI."
+              }
+            }
+          }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nome Nodo",
+          "placeholder": "Inserisci nome nodo",
+          "helpText": "Il nome del nodo viene usato per identificare il sistema sorgente in configurazioni multi nodo, usato anche come identificatore per messaggi MQTT."
+        },
+        "sensitivity": {
+          "label": "Sensibilità",
+          "helpText": "Sensibilità rilevamento. Valori più alti risultano in sensibilità più alta. Valori in 0.5, 1.5."
+        },
+        "threshold": {
+          "label": "Soglia",
+          "helpText": "Soglia minima di confidenza. Valori in 0.01, 0.99."
+        },
+        "overlap": {
+          "label": "Sovrapposizione",
+          "helpText": "Sovrapposizione segmenti predizione. Valori in 0.0, 2.9."
+        },
+        "locale": {
+          "label": "Lingua",
+          "helpText": "Lingua per nomi comuni specie tradotti."
+        },
+        "tensorflowThreads": {
+          "label": "Thread CPU TensorFlow",
+          "helpText": "Numero di thread CPU. Imposta a 0 per usare tutti i thread disponibili."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Impossibile caricare opzioni lingua. Usando predefiniti.",
+        "providersLoadFailed": "Impossibile caricare fornitori immagini. Usando predefiniti.",
+        "rangeFilterTestFailed": "Impossibile testare impostazioni filtro intervallo",
+        "rangeFilterLoadFailed": "Impossibile caricare lista specie",
+        "rangeFilterCountFailed": "Impossibile caricare conteggio specie"
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Tracciamento Errori & Telemetria",
+          "description": "Tracciamento errori opzionale per aiutare a migliorare affidabilità e prestazioni di BirdNET-Go"
+        },
+        "diagnostics": {
+          "title": "Supporto & Diagnostica",
+          "description": "Aiuta gli sviluppatori a risolvere i tuoi problemi più velocemente fornendo informazioni diagnostiche essenziali"
+        }
+      },
+      "telemetry": {
+        "privacyNotice": "Informativa Privacy",
+        "privacyPoints": {
+          "noPersonalData": "Nessun dato personale viene raccolto",
+          "anonymousData": "Tutti i dati di telemetria sono anonimi",
+          "helpImprove": "I dati di telemetria aiutano gli sviluppatori a identificare e risolvere problemi in BirdNET-Go"
+        },
+        "enableTracking": "Abilita Tracciamento Errori (Opt-in)"
+      },
+      "systemId": {
+        "label": "Il Tuo ID Sistema",
+        "description": "Usa questo ID quando segnali problemi",
+        "copyButton": "Copia",
+        "errorLoading": "Errore caricamento ID sistema"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Includi log recenti",
+        "includeConfiguration": "Includi configurazione (dati sensibili rimossi)",
+        "includeSystemInfo": "Includi informazioni sistema"
+      },
+      "supportReport": {
+        "title": "Genera Rapporto Supporto",
+        "description": {
+          "intro": "I rapporti di supporto sono **essenziali per la risoluzione dei problemi** e migliorano drasticamente la nostra capacità di risolvere i problemi che stai riscontrando. Forniscono agli sviluppatori un contesto cruciale sulla configurazione del tuo sistema, log recenti dell'applicazione e pattern di errore che sarebbero impossibili da diagnosticare altrimenti."
+        },
+        "githubRequired": {
+          "title": "Richiesto: GitHub Issue per Caricamenti Supporto",
+          "description": "<strong>I caricamenti di supporto richiedono un numero GitHub issue.</strong> Per favore <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">crea una GitHub issue</a> descrivendo il tuo problema <strong>prima</strong> di generare un rapporto di supporto. Senza una issue collegata, gli sviluppatori non possono agire sui tuoi dati di supporto."
+        },
+        "githubIssue": {
+          "label": "Numero GitHub Issue",
+          "placeholder": "es. 123 o #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Vedi issue esistenti</a> o <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">crea una nuova issue</a> prima"
+        },
+        "whatsIncluded": {
+          "title": "Cosa è incluso nel rapporto:",
+          "applicationLogs": "**Log applicazione** - Errori recenti e informazioni debug",
+          "configuration": "**Configurazione** - Le tue impostazioni con dati sensibili rimossi",
+          "systemInfo": "**Informazioni sistema** - Versione OS, memoria e dettagli runtime",
+          "notIncluded": "**NON incluso** - File audio, rilevamenti uccelli o dati personali"
+        },
+        "userMessage": {
+          "label": "Descrivi il problema",
+          "placeholder": "Per favore descrivi il problema e includi link GitHub issue se applicabile (es. #123)",
+          "githubTip": "💡 Suggerimento: Se hai una GitHub issue, per favore includi il numero issue (es. #123) e menziona il tuo ID Sistema {systemId} nella GitHub issue per aiutare gli sviluppatori a collegare i tuoi dati di supporto.",
+          "labelOptional": "Dettagli aggiuntivi (opzionale)",
+          "placeholderOptional": "Fornisci contesto aggiuntivo sul problema che non è nella tua GitHub issue",
+          "systemIdNote": "💡 Suggerimento: Il tuo ID Sistema {systemId} sarà automaticamente incluso nel caricamento"
+        },
+        "uploadOption": {
+          "label": "Carica agli sviluppatori (raccomandato)",
+          "labelWithRequirement": "Carica agli sviluppatori (richiede numero GitHub issue)",
+          "details": {
+            "sentryUpload": "I dati vengono caricati sul servizio cloud [Sentry](https://sentry.io)",
+            "euDataCenter": "Archiviati nel data center UE (Francoforte, Germania)",
+            "privacyCompliant": "Conforme alla privacy con dati sensibili rimossi",
+            "manualWarning": "Deseleziona solo se preferisci gestire il file di supporto manualmente"
+          }
+        },
+        "generateButton": {
+          "upload": "Genera & Carica",
+          "download": "Genera & Scarica"
+        },
+        "statusMessages": {
+          "preparing": "Preparazione dump supporto...",
+          "uploadSuccess": "Dump supporto caricato con successo agli sviluppatori!",
+          "uploadSuccessWithId": "Dump supporto caricato con successo agli sviluppatori! ID Riferimento: {dumpId}",
+          "downloadSuccess": "Dump supporto generato con successo! Download in corso...",
+          "generateSuccess": "Dump supporto generato con successo!",
+          "generateFailed": "Impossibile generare dump supporto: {message}",
+          "error": "Errore: {message}",
+          "githubIssueRequired": "Per favore inserisci un numero GitHub issue per caricare dati supporto"
+        }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "testing": {
+          "title": "Notifiche Test",
+          "description": "Invia notifiche di test per verificare che il tuo sistema di notifiche funzioni correttamente"
+        },
+        "info": {
+          "title": "Informazioni Sistema",
+          "description": "Impara come visualizzare e gestire le tue notifiche"
+        }
+      },
+      "templates": {
+        "title": "Modelli Notifica",
+        "description": "Personalizza messaggi notifica per rilevamenti nuove specie usando variabili modello",
+        "newSpeciesTitle": "Modello Notifica Nuova Specie",
+        "titleLabel": "Modello Titolo",
+        "titlePlaceholder": "es. Nuova Specie: {{.CommonName}}",
+        "messageLabel": "Modello Messaggio",
+        "messagePlaceholder": "es. Primo rilevamento di {{.CommonName}}  ({{.ScientificName}})  con {{.ConfidencePercent}}% confidenza",
+        "resetButton": "Reimposta",
+        "saveButton": "Salva Modelli",
+        "saveButtonUnsaved": "Salva Modelli *",
+        "testButton": "Test",
+        "savingButton": "Salvataggio...",
+        "sendingButton": "Invio...",
+        "resetConfirm": "Reimpostare modelli ai predefiniti? Questo scarterà le tue modifiche attuali e ripristinerà i valori predefiniti dei modelli.",
+        "unsavedChangesWarning": "Hai modifiche ai modelli non salvate. Il test userà i modelli salvati attualmente, non le tue modifiche. Continuare?",
+        "testWithUnsavedChanges": "Avviso: Hai modifiche non salvate. Il test userà i modelli salvati.",
+        "testNormal": "Invia una notifica di test",
+        "saveSuccess": "Modelli salvati con successo!",
+        "saveError": "Errore: {message}",
+        "availableVariables": "Variabili Modello Disponibili",
+        "variablesDescription": "Usa queste variabili nei tuoi modelli con la sintassi",
+        "loading": "Caricamento..."
+      },
+      "testNotification": {
+        "title": "Invia Notifica Test Nuova Specie",
+        "description": "Genera una notifica di test per un rilevamento di nuova specie per verificare che il tuo sistema di notifiche funzioni",
+        "whatHappens": "Cosa succede quando clicchi 'Invia Test':",
+        "sendButton": "Invia Test",
+        "sendingButton": "Invio...",
+        "statusMessages": {
+          "sending": "Invio notifica test...",
+          "success": "Notifica test inviata con successo! Controlla la tua campana notifiche.",
+          "error": "Impossibile inviare notifica test: {message}",
+          "serviceUnavailable": "Servizio notifiche non disponibile. Per favore controlla le tue impostazioni notifiche."
+        }
+      },
+      "statusMessages": {
+        "sending": "Invio notifica test...",
+        "success": "Notifica test inviata con successo!",
+        "error": "Impossibile inviare notifica test: {message}",
+        "serviceUnavailable": "Servizio notifiche non disponibile. Per favore controlla le tue impostazioni notifiche."
+      },
+      "systemInfo": {
+        "howToView": "Come visualizzare le notifiche:",
+        "technicalDetails": "Dettagli tecnici sulle notifiche in BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Informativa Privacy per Webhook Esterni",
+        "description": "Le notifiche di rilevamento possono includere dati sensibili quando inviate a servizi esterni:",
+        "gps": "Coordinate GPS",
+        "gpsDetails": "Posizione esatta (latitudine/longitudine) se configurata",
+        "urls": "URL Rilevamento",
+        "urlsDetails": "Potrebbero esporre informazioni rete interna",
+        "species": "Dati Specie",
+        "speciesDetails": "Quali uccelli sono stati rilevati e quando",
+        "recommendation": "Abilita webhook esterni solo se ti fidi del servizio ricevente o usi servizi self-hosted/locali."
+      },
+      "push": {
+        "title": "Notifiche Push",
+        "description": "Invia notifiche a servizi esterni come Discord, Telegram, Slack e altro",
+        "enable": "Abilita Notifiche Push",
+        "disabled": "Le notifiche push sono disabilitate",
+        "enabledDescription": "Le notifiche push saranno inviate a tutti i fornitori abilitati sotto",
+        "filters": {
+          "title": "Filtri Rilevamento",
+          "description": "Controlla quali rilevamenti di uccelli attivano notifiche push",
+          "minConfidence": {
+            "label": "Confidenza Minima",
+            "helpText": "Invia notifiche solo per rilevamenti sopra questo livello di confidenza. Imposta a 0 per disabilitare."
+          },
+          "speciesCooldown": {
+            "label": "Raffreddamento Specie",
+            "unit": "min",
+            "helpText": "Previene notifiche ripetute per la stessa specie entro questa finestra temporale. Imposta a 0 per disabilitare."
+          }
+        },
+        "noProviders": "Nessun fornitore configurato",
+        "noProvidersDescription": "Aggiungi un fornitore per iniziare a ricevere notifiche push",
+        "providers": {
+          "title": "Fornitori Notifiche",
+          "addButton": "Aggiungi Fornitore",
+          "editButton": "Modifica",
+          "deleteButton": "Elimina",
+          "enableToggle": "Abilita fornitore",
+          "urlsPreview": "{count} URL configurati",
+          "deleteConfirm": "Eliminare fornitore \"{name}\"? Questa azione non può essere annullata.",
+          "typeBadge": {
+            "shoutrrr": "Shoutrrr",
+            "webhook": "Webhook"
+          }
+        },
+        "form": {
+          "addTitle": "Aggiungi Fornitore Notifiche",
+          "editTitle": "Modifica Fornitore Notifiche",
+          "name": {
+            "label": "Nome Fornitore",
+            "placeholder": "es. Avvisi Discord",
+            "helpText": "Un nome amichevole per identificare questo fornitore"
+          },
+          "urls": {
+            "label": "URL Servizio",
+            "placeholder": "discord://token@webhookid",
+            "helpText": "Inserisci un URL Shoutrrr per riga. Più URL inviano a più servizi.",
+            "validation": {
+              "required": "Almeno un URL è richiesto",
+              "invalidFormat": "Formato URL non valido. Gli URL dovrebbero iniziare con un prefisso di servizio (es. discord://, telegram://)"
+            }
+          },
+          "notificationTypes": {
+            "label": "Tipi Notifica",
+            "helpText": "Seleziona quali tipi di notifiche inviare a questo fornitore",
+            "detection": "Rilevamenti uccelli",
+            "error": "Errori",
+            "warning": "Avvisi",
+            "info": "Informazioni",
+            "system": "Eventi sistema"
+          },
+          "urlFormats": {
+            "title": "Formati URL Comuni",
+            "discord": "Discord",
+            "discordFormat": "discord://token@webhookid",
+            "telegram": "Telegram",
+            "telegramFormat": "telegram://token@telegram?chats=@channel",
+            "slack": "Slack",
+            "slackFormat": "slack://token-a/token-b/token-c",
+            "pushover": "Pushover",
+            "pushoverFormat": "pushover://shoutrrr:apiToken@userKey",
+            "gotify": "Gotify",
+            "gotifyFormat": "gotify://hostname/token",
+            "ntfy": "ntfy",
+            "ntfyFormat": "ntfy://ntfy.sh/mytopic",
+            "moreServices": "Vedi tutti i servizi supportati",
+            "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
+          },
+          "saveButton": "Salva Fornitore",
+          "savingButton": "Salvataggio...",
+          "cancelButton": "Annulla",
+          "testButton": "Test",
+          "testingButton": "Test in corso..."
+        },
+        "test": {
+          "button": "Test Fornitore",
+          "description": "Invia una notifica di test per verificare che questo fornitore funzioni",
+          "success": "Notifica test inviata con successo!",
+          "error": "Test fallito: {message}",
+          "requiresUrl": "Inserisci un URL per testare",
+          "requiresEnabled": "Abilita il fornitore per testare"
+        },
+        "validation": {
+          "nameRequired": "Nome fornitore richiesto",
+          "urlRequired": "Almeno un URL richiesto",
+          "invalidUrl": "Formato URL non valido"
+        },
+        "autoName": {
+          "discord": "Discord",
+          "telegram": "Telegram",
+          "slack": "Slack",
+          "pushover": "Pushover",
+          "gotify": "Gotify",
+          "ntfy": "ntfy",
+          "email": "Email",
+          "generic": "Shoutrrr",
+          "numbered": "{service} #{number}"
+        },
+        "services": {
+          "selectLabel": "Servizio",
+          "selectHelpText": "Scegli un servizio di notifica da configurare",
+          "discord": {
+            "name": "Discord",
+            "webhookUrl": {
+              "label": "URL Webhook Discord",
+              "placeholder": "https://discord.com/api/webhooks/...",
+              "helpText": "Incolla il tuo URL webhook Discord completo"
+            },
+            "invalidUrl": "URL webhook Discord non valido. L'URL dovrebbe contenere discord.com/api/webhooks/"
+          },
+          "telegram": {
+            "name": "Telegram",
+            "botToken": {
+              "label": "Token Bot",
+              "placeholder": "123456789:ABCdef...",
+              "helpText": "Token da @BotFather"
+            },
+            "chatId": {
+              "label": "ID Chat",
+              "placeholder": "-1001234567890 o @channel",
+              "helpText": "ID Chat, ID gruppo o @username"
+            },
+            "incomplete": "Sia token bot che ID chat sono richiesti"
+          },
+          "ntfy": {
+            "name": "ntfy",
+            "server": {
+              "label": "Server",
+              "placeholder": "ntfy.sh",
+              "helpText": "Lascia come ntfy.sh per server pubblico o inserisci il tuo server self-hosted"
+            },
+            "topic": {
+              "label": "Argomento",
+              "placeholder": "miei-avvisi-uccelli",
+              "helpText": "Nome argomento per le tue notifiche"
+            },
+            "incomplete": "Argomento richiesto"
+          },
+          "gotify": {
+            "name": "Gotify",
+            "server": {
+              "label": "URL Server",
+              "placeholder": "gotify.example.com",
+              "helpText": "Il tuo hostname server Gotify (senza https://)"
+            },
+            "token": {
+              "label": "Token Applicazione",
+              "placeholder": "A...",
+              "helpText": "Token dalla pagina Apps di Gotify"
+            },
+            "incomplete": "Server e token richiesti"
+          },
+          "pushover": {
+            "name": "Pushover",
+            "apiToken": {
+              "label": "Token API",
+              "placeholder": "az...",
+              "helpText": "Token API Applicazione"
+            },
+            "userKey": {
+              "label": "Chiave Utente",
+              "placeholder": "u...",
+              "helpText": "La tua chiave utente o gruppo"
+            },
+            "incomplete": "Token API e chiave utente richiesti"
+          },
+          "slack": {
+            "name": "Slack",
+            "webhookUrl": {
+              "label": "URL Webhook Slack",
+              "placeholder": "https://hooks.slack.com/services/...",
+              "helpText": "Incolla il tuo URL webhook Slack completo"
+            },
+            "invalidUrl": "URL webhook Slack non valido. L'URL dovrebbe contenere hooks.slack.com/services/"
+          },
+          "ifttt": {
+            "name": "IFTTT",
+            "webhookKey": {
+              "label": "Chiave Webhook",
+              "placeholder": "abc123xyz...",
+              "helpText": "La tua chiave Webhook IFTTT dalle impostazioni Maker Webhooks"
+            },
+            "eventName": {
+              "label": "Nome Evento",
+              "placeholder": "uccello_rilevato",
+              "helpText": "Il nome evento da attivare nel tuo applet IFTTT"
+            },
+            "incomplete": "Chiave webhook e nome evento richiesti"
+          },
+          "webhook": {
+            "name": "Webhook",
+            "url": {
+              "label": "URL Webhook",
+              "placeholder": "https://api.example.com/webhook",
+              "helpText": "L'endpoint HTTP(S) a cui inviare notifiche"
+            },
+            "method": {
+              "label": "Metodo HTTP",
+              "helpText": "Metodo HTTP da usare per la richiesta (default: POST)"
+            },
+            "auth": {
+              "label": "Autenticazione",
+              "none": "Nessuna",
+              "bearer": "Token Bearer",
+              "basic": "Basic Auth",
+              "helpText": "Autenticazione opzionale per endpoint webhook"
+            },
+            "bearerToken": {
+              "label": "Token Bearer",
+              "placeholder": "tuo-token-api",
+              "helpText": "Token inviato nell'intestazione Authorization: Bearer"
+            },
+            "basicUser": {
+              "label": "Nome Utente",
+              "placeholder": "nomeutente"
+            },
+            "basicPass": {
+              "label": "Password",
+              "placeholder": "password"
+            },
+            "basicAuth": {
+              "helpText": "Credenziali inviate usando autenticazione HTTP Basic"
+            },
+            "invalidUrl": "URL non valido. Deve iniziare con http:// o https://",
+            "tokenRequired": "Token Bearer richiesto quando si usa autenticazione Bearer",
+            "credentialsRequired": "Nome utente e password richiesti quando si usa autenticazione Basic"
+          },
+          "custom": {
+            "name": "URL Personalizzato",
+            "url": {
+              "label": "URL Shoutrrr",
+              "placeholder": "servizio://credenziali@host",
+              "helpText": "Inserisci un URL Shoutrrr grezzo per qualsiasi servizio supportato"
+            },
+            "invalidUrl": "Formato URL non valido. L'URL dovrebbe iniziare con service://"
+          }
+        }
+      }
+    },
+    "filters": {
+      "title": "Filtri",
+      "privacyFiltering": {
+        "title": "Filtro Privacy",
+        "description": "Il filtro privacy evita di salvare clip audio quando vengono rilevate voci umane",
+        "enable": "Abilita Filtro Privacy",
+        "disabled": "Filtro privacy disabilitato",
+        "confidenceLabel": "Soglia Confidenza per Rilevamento Umano",
+        "confidenceHelp": "Imposta livello confidenza per rilevamento voce umana, valore più basso rende filtro più sensibile"
+      },
+      "falsePositivePrevention": {
+        "title": "Prevenzione Falsi Positivi",
+        "description": "Configura filtri falsi rilevamenti",
+        "enableDogBark": "Abilita Filtro Abbaio Cane",
+        "disabled": "Filtro abbaio cane disabilitato",
+        "confidenceLabel": "Soglia Confidenza",
+        "confidenceHelp": "Imposta livello confidenza per rilevamento abbaio cane, valore più basso rende filtro più sensibile",
+        "expireTimeLabel": "Tempo Scadenza Abbaio Cane (Minuti)",
+        "expireTimeHelp": "Imposta per quanto tempo ricordare un abbaio cane rilevato",
+        "addDogBarkSpeciesLabel": "Aggiungi Specie Abbaio Cane",
+        "addDogBarkSpeciesHelp": "Cerca e aggiungi specie che potrebbero essere confuse con abbai di cani",
+        "addSpeciesButton": "Aggiungi"
+      },
+      "speciesNamePlaceholder": "Nome specie",
+      "typeSpeciesName": "Digita nome specie...",
+      "dogBarkSpeciesList": "Lista Specie Abbaio Cane",
+      "errors": {
+        "speciesLoadFailed": "Impossibile caricare lista specie. Riprova."
+      }
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Carica rilevamenti su BirdWeather",
+        "ffmpegWarning": {
+          "title": "FFmpeg non rilevato",
+          "message": "Installa FFmpeg per abilitare supporto codifica FLAC, BirdWeather sta deprecando i caricamenti WAV in favore di file audio FLAC compressi."
+        },
+        "enable": "Abilita Caricamenti BirdWeather",
+        "token": {
+          "label": "Token BirdWeather",
+          "helpText": "Il tuo token BirdWeather univoco."
+        },
+        "threshold": {
+          "label": "Soglia Caricamento",
+          "helpText": "Soglia confidenza minima per caricare predizioni su BirdWeather."
+        },
+        "test": {
+          "button": "Test Connessione BirdWeather",
+          "loading": "Test...",
+          "enabledRequired": "BirdWeather deve essere abilitato per testare",
+          "tokenRequired": "Il token BirdWeather deve essere specificato",
+          "inProgress": "Test in corso...",
+          "description": "Test connessione BirdWeather"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Configura connessione broker MQTT",
+        "enable": "Abilita Integrazione MQTT",
+        "broker": {
+          "label": "Broker MQTT",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "Topic MQTT",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Autenticazione",
+          "username": {
+            "label": "Nome Utente"
+          },
+          "password": {
+            "label": "Password",
+            "helpText": "La password MQTT."
+          }
+        },
+        "tls": {
+          "title": "Sicurezza TLS/SSL",
+          "enable": "Abilita TLS/SSL",
+          "skipVerify": "Salta Verifica Certificato",
+          "configNote": "<strong>Configurazione TLS:</strong><br />• TLS Standard: Lascia certificati vuoti per broker pubblici<br />• Certificati auto-firmati: Fornisci Certificato CA<br />• Mutual TLS (mTLS): Fornisci tutti e tre i certificati"
+        },
+        "homeAssistant": {
+          "title": "Home Assistant Auto-Discovery",
+          "enable": "Abilita Home Assistant MQTT Discovery",
+          "description": "Quando abilitato, BirdNET-Go registra automaticamente dispositivi e sensori su Home Assistant tramite protocollo MQTT discovery. I dispositivi appariranno nel registro dispositivi Home Assistant senza configurazione YAML manuale.",
+          "discoveryPrefix": {
+            "label": "Prefisso Discovery",
+            "helpText": "Il prefisso topic MQTT per messaggi discovery Home Assistant. Default è 'homeassistant'. Cambia questo solo se hai configurato un prefisso discovery personalizzato in Home Assistant."
+          },
+          "deviceName": {
+            "label": "Nome Dispositivo",
+            "helpText": "Il nome base per i dispositivi come appaiono in Home Assistant. Ogni sorgente audio avrà il proprio dispositivo collegato a questo dispositivo principale BirdNET-Go."
+          },
+          "sensorsNote": "<strong>Sensori Creati:</strong> Per ogni sorgente audio, Home Assistant riceverà: Ultima Specie, Confidenza, Nome Scientifico e Livello Sonoro (se abilitato). Il dispositivo bridge include stato disponibilità online/offline.",
+          "discovery": {
+            "button": "Invia Discovery",
+            "success": "Messaggi discovery inviati a Home Assistant",
+            "error": "Impossibile inviare messaggi discovery",
+            "saveFirst": "Salva impostazioni prima di inviare discovery"
+          },
+          "retain": {
+            "label": "Conserva Messaggi",
+            "note": "<strong>Raccomandato:</strong> Abilita flag retain per assicurare che sensori MQTT mostrino valori dopo riavvio Home Assistant."
+          }
+        },
+        "test": {
+          "button": "Test Connessione MQTT",
+          "loading": "Test...",
+          "enabledRequired": "MQTT deve essere abilitato per testare",
+          "brokerRequired": "Il broker MQTT deve essere specificato",
+          "inProgress": "Test in corso...",
+          "description": "Test connessione MQTT"
+        }
+      },
+      "observability": {
+        "title": "Osservabilità",
+        "description": "Monitora prestazioni BirdNET-Go e metriche rilevamento uccelli tramite endpoint compatibile Prometheus",
+        "enable": "Abilita Integrazione Osservabilità",
+        "disabled": "Integrazione osservabilità non è abilitata",
+        "listenAddress": {
+          "label": "Indirizzo Ascolto",
+          "placeholder": "0.0.0.0:8090"
+        }
+      },
+      "weather": {
+        "title": "Meteo",
+        "description": "Configura raccolta dati meteo",
+        "provider": {
+          "label": "Fornitore Meteo",
+          "options": {
+            "none": "Nessuno",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "apiKey": {
+            "label": "Chiave API Weather Underground",
+            "helpText": "Inserisci la tua chiave API Weather Underground. Richiesta per dati meteo."
+          },
+          "stationId": {
+            "label": "ID Stazione",
+            "helpText": "Il tuo ID stazione PWS Weather Underground (es. KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "Endpoint API",
+            "helpText": "Sovrascrivi l'endpoint API predefinito di Weather Underground se necessario. Predefinito https://api.weather.com/v2/pws/observations/current se lasciato vuoto."
+          },
+          "units": {
+            "label": "Unità",
+            "helpText": "Seleziona unità per temperatura e velocità vento (m = Metrico, e = Imperiale, h = Ibrido UK)."
+          }
+        },
+        "notes": {
+          "none": "Nessun dato meteo verrà recuperato.",
+          "yrno": {
+            "description": "I dati di previsione meteo sono forniti da Yr.no, un servizio congiunto dell'Istituto Meteorologico Norvegese (met.no) e della Norwegian Broadcasting Corporation (NRK).",
+            "freeService": "Yr è un servizio dati meteo gratuito. Per maggiori informazioni, visita <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "L'uso di OpenWeather richiede una chiave API, registrati per una chiave API gratuita su <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Richiede una chiave API Weather Underground e un ID stazione PWS valido. Vedi <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> per dettagli."
+        },
+        "apiKey": {
+          "label": "Chiave API",
+          "helpText": "La tua chiave API per il fornitore meteo selezionato. Mantienila segreta!"
+        },
+        "units": {
+          "label": "Unità di Misura",
+          "options": {
+            "standard": "Standard",
+            "metric": "Metrico",
+            "imperial": "Imperiale",
+            "ukhybrid": "Ibrido UK"
+          }
+        },
+        "test": {
+          "button": "Test Fornitore Meteo",
+          "loading": "Test...",
+          "noProvider": "Nessun fornitore meteo selezionato",
+          "apiKeyRequired": "La chiave API deve essere specificata",
+          "inProgress": "Test in corso...",
+          "description": "Test connessione fornitore meteo"
+        },
+        "temperatureUnit": {
+          "label": "Unità Visualizzazione Temperatura",
+          "helpText": "Scegli come vengono visualizzate le temperature nell'applicazione.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
+        }
+      }
+    },
+    "audio": {
+      "loading": "Caricamento dispositivi audio...",
+      "tabs": {
+        "soundCard": "Scheda Audio",
+        "streams": "Flussi",
+        "processing": "Elaborazione",
+        "recording": "Registrazione",
+        "retention": "Conservazione"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Nessuna Scheda Audio Rilevata",
+          "description": "Nessun dispositivo input audio locale trovato su questo sistema. Questo è normale per distribuzioni container o server headless.",
+          "errorTitle": "Errore Caricamento Dispositivi",
+          "hintsTitle": "Puoi:",
+          "hints": {
+            "container": "Questo è normale per distribuzioni container/headless",
+            "streams": "Configura flussi di rete nella scheda Flussi invece",
+            "usb": "Collega un microfono USB e aggiorna la lista"
+          },
+          "refresh": "Aggiorna Dispositivi",
+          "retry": "Riprova"
+        },
+        "streams": {
+          "title": "Nessun Flusso Configurato",
+          "description": "Aggiungi flussi audio RTSP o di rete da telecamere IP, server microfono o altre sorgenti streaming.",
+          "hintsTitle": "Per iniziare:",
+          "hints": {
+            "rtsp": "Inserisci URL RTSP nel formato: rtsp://ip:port/stream",
+            "multiple": "Puoi aggiungere più flussi per diverse posizioni",
+            "protocol": "Scegli TCP per affidabilità o UDP per latenza inferiore"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Scheda Audio",
+        "description": "Configura dispositivo input audio locale",
+        "audioSourceLabel": "Sorgente Audio (richiede riavvio applicazione per avere effetto)",
+        "audioSourceHelp": "Seleziona il dispositivo input audio per rilevamento suoni uccelli. Le modifiche richiedono riavvio applicazione per avere effetto.",
+        "noSoundCardCapture": "Nessuna cattura scheda audio",
+        "empty": {
+          "title": "Nessuna Scheda Audio Rilevata",
+          "description": "Nessun dispositivo input audio locale trovato su questo sistema. Questo è normale per distribuzioni container o server headless.",
+          "hintsTitle": "Puoi:",
+          "hintStream": "Configura flussi di rete nella scheda Flussi",
+          "hintUsb": "Collega un microfono USB e aggiorna la lista",
+          "goToStreams": "Vai a Flussi",
+          "refresh": "Aggiorna Dispositivi"
+        }
+      },
+      "noSources": {
+        "warning": "Nessuna Sorgente Audio Configurata",
+        "description": "BirdNET-Go necessita di un input audio per rilevare uccelli. Per favore configura almeno una sorgente nella scheda Scheda Audio o Flussi."
+      },
+      "audioCapture": {
+        "title": "Configurazione Scheda Audio",
+        "description": "Seleziona il dispositivo input audio per rilevamento suoni uccelli. Le modifiche richiedono riavvio applicazione.",
+        "soundCardSource": "Sorgente Scheda Audio",
+        "audioSourceLabel": "Sorgente Audio (richiede riavvio applicazione per avere effetto)",
+        "audioSourceHelp": "Seleziona il dispositivo input audio per rilevamento suoni uccelli. Le modifiche richiedono riavvio applicazione per avere effetto.",
+        "noSoundCardCapture": "Nessuna cattura scheda audio",
+        "noDeviceSelected": "Nessun dispositivo audio selezionato",
+        "refreshDevices": "Aggiorna",
+        "rtspSource": "Sorgente RTSP",
+        "rtspTransportLabel": "Protocollo Trasporto RTSP",
+        "rtspTransportHelp": "TCP è più affidabile ma può avere latenza maggiore. UDP è più veloce ma può subire perdita pacchetti su reti scadenti.",
+        "rtspUrlsLabel": "URL Flusso RTSP",
+        "rtspUrlsHelp": "Inserisci uno o più URL flusso RTSP per sorgenti audio di rete. Formato: rtsp://ip:port/stream. Nota: Le credenziali di autenticazione dovrebbero essere configurate separatamente nelle impostazioni del server RTSP per sicurezza.",
+        "deviceSelected": "Scheda audio selezionata e pronta per cattura",
+        "availableDevices": "Dispositivi Audio Disponibili",
+        "active": "Attivo",
+        "streamsConfigured": "{count} flusso/i configurato/i"
+      },
+      "rtspStreams": {
+        "title": "Configurazione Flusso Audio",
+        "description": "Configura flussi audio di rete per cattura audio remota. Supporta protocolli RTSP, HTTP, HLS, RTMP e UDP.",
+        "noStreamsConfigured": "Nessun flusso configurato"
+      },
+      "streams": {
+        "streamLabel": "Flusso",
+        "nameLabel": "Nome Flusso",
+        "namePlaceholder": "es. Mangiatoia Cortile Anteriore",
+        "nameHelp": "Un nome descrittivo per identificare questo flusso audio",
+        "urlLabel": "URL Flusso",
+        "urlHelp": "Inserisci URL flusso con credenziali opzionali (es. rtsp://host:port/path). Usa variabili ambiente per credenziali.",
+        "typeLabel": "Tipo Flusso",
+        "typeHelp": "Protocollo flusso - rilevato automaticamente da URL",
+        "transportLabel": "Protocollo",
+        "summary": "{count} flusso/i configurato/i",
+        "healthy": "sano",
+        "unhealthy": "insalubre",
+        "unknown": "sconosciuto",
+        "refresh": "Aggiorna",
+        "addStream": "Aggiungi Flusso",
+        "deleteConfirm": "Rimuovere questo flusso?",
+        "restartCount": "Riavviato {count} volta/e",
+        "healthLoadError": "Impossibile caricare stato salute flusso",
+        "status": {
+          "connected": "Connesso",
+          "connecting": "Connessione",
+          "error": "Errore",
+          "idle": "Inattivo",
+          "unknown": "Sconosciuto"
+        },
+        "emptyState": {
+          "title": "Nessun Flusso Configurato",
+          "description": "Aggiungi flussi audio da telecamere IP, server Icecast o altre sorgenti di rete.",
+          "hintsTitle": "Per Iniziare",
+          "hints": {
+            "rtsp": "Supporta flussi RTSP, HTTP, HLS, RTMP e UDP/RTP",
+            "credentials": "Credenziali possono essere incluse nell'URL o usare variabili ambiente",
+            "protocol": "TCP è più affidabile per RTSP, UDP ha latenza inferiore"
+          }
+        },
+        "errors": {
+          "nameRequired": "Nome flusso richiesto",
+          "duplicateName": "Un flusso con questo nome esiste già",
+          "urlRequired": "URL flusso richiesto",
+          "invalidUrl": "Formato URL flusso non valido",
+          "duplicate": "Questo URL flusso esiste già"
+        },
+        "timeline": {
+          "error": "Errore",
+          "noHistory": "Nessuna cronologia stato o errori disponibile.",
+          "stateChange": "Cambio Stato",
+          "host": "Host",
+          "troubleshooting": "Risoluzione problemi",
+          "from": "Da",
+          "to": "A",
+          "reason": "Motivo",
+          "eventAt": "Evento alle {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Attiva/disattiva diagnostica",
+          "processState": "Stato Processo",
+          "lastData": "Ultimi Dati",
+          "restartCount": "Conteggio Riavvio",
+          "connection": "Connessione",
+          "stateErrorHistory": "Cronologia Stato & Errori"
+        },
+        "connectionStatus": {
+          "stable": "Stabile",
+          "degraded": "Degradato",
+          "failed": "Fallito",
+          "unknown": "Sconosciuto"
+        }
+      },
+      "audioFilters": {
+        "title": "Filtri Audio",
+        "description": "Configura filtri elaborazione audio",
+        "enableEqualizer": "Abilita Equalizzatore Audio",
+        "enableEqualizerHelp": "Applica filtraggio frequenza per migliorare rilevamento richiami uccelli riducendo rumore indesiderato e frequenze.",
+        "filterType": "Tipo Filtro",
+        "newFilterType": "Nuovo Tipo Filtro",
+        "selectFilterType": "Seleziona tipo filtro",
+        "addFilter": "Aggiungi Filtro",
+        "remove": "Rimuovi",
+        "frequencyResponse": "Risposta Frequenza",
+        "cutoffFrequency": "Frequenza Taglio",
+        "cutoffFrequencyHelp": "Frequenza alla quale il filtro inizia ad attenuare segnali. Richiami uccelli variano tipicamente da 1-10 kHz.",
+        "qFactor": "Fattore Q",
+        "qFactorHelp": "Fattore qualità controlla la nitidezza del filtro. Valori più bassi (0.1-1) creano pendenze più dolci, valori più alti (1-10) creano tagli più ripidi.",
+        "gain": "Guadagno",
+        "gainHelp": "Livello amplificazione o attenuazione in decibel (dB).",
+        "attenuation": "Attenuazione",
+        "attenuationHelp": "Tasso attenuazione filtro. Valori più alti forniscono attenuazione più ripida delle frequenze filtrate.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Aggiungi più filtri per modellare la risposta in frequenza per rilevamento ottimale uccelli nel tuo ambiente."
+      },
+      "soundLevelMonitoring": {
+        "title": "Monitoraggio Livello Sonoro",
+        "description": "Monitora e riporta livelli sonori ambientali",
+        "enable": "Abilita Monitoraggio Livello Sonoro",
+        "enableHelp": "Traccia livelli rumore ambientale per capire il tuo ambiente di registrazione e correlare con pattern attività uccelli.",
+        "disabled": "Monitoraggio livello sonoro disabilitato",
+        "intervalLabel": "Intervallo Misurazione (secondi)",
+        "intervalHelp": "Quanto spesso misurare e riportare livelli sonori. Valori più bassi forniscono dati più granulari ma usano più risorse. Minimo 5 secondi, raccomandato 60 secondi.",
+        "dataOutputTitle": "Output Dati Livello Sonoro",
+        "dataOutputDescription": "Quando abilitato, misurazioni livello sonoro vengono pubblicate via:",
+        "mqttTopic": "Topic MQTT:",
+        "sseEndpoint": "Endpoint SSE:",
+        "prometheusMetrics": "Metriche Prometheus:"
+      },
+      "clipSettings": {
+        "title": "Impostazioni Clip",
+        "description": "Configura cattura ed elaborazione clip audio per richiami uccelli identificati"
+      },
+      "clipRecording": {
+        "title": "Registrazione Clip",
+        "description": "Configura quando e come clip audio vengono catturate per richiami uccelli rilevati.",
+        "enable": "Abilita Registrazione Clip",
+        "enableHelp": "Salva clip audio di richiami uccelli rilevati per revisione, condivisione o creazione dataset personalizzati.",
+        "disabled": "Registrazione clip disabilitata",
+        "captureSettings": "Impostazioni Cattura",
+        "lengthLabel": "Lunghezza Cattura",
+        "lengthHelp": "Durata audio da catturare per ogni rilevamento (10-60 secondi). Clip più lunghe forniscono più contesto ma usano più spazio.",
+        "preCaptureLabel": "Buffer Pre-Rilevamento",
+        "preCaptureHelp": "Secondi di audio da includere prima che l'uccello fosse rilevato (0-{max} secondi). Assicura che il richiamo completo dell'uccello sia catturato dall'inizio.",
+        "gainLabel": "Guadagno Audio",
+        "gainHelp": "Amplificazione audio per clip salvate in decibel (0 a 20 dB). Rende le clip audio salvate più forti per ascolto più facile. Non influisce sul rilevamento. 0 dB significa nessuna amplificazione.",
+        "normalization": "Normalizzazione Audio",
+        "normalizationEnable": "Abilita Normalizzazione Volume",
+        "normalizationHelp": "Regola automaticamente livelli audio allo standard broadcast EBU R128 per volume riproduzione coerente su tutte le clip.",
+        "normalizationDisabled": "Normalizzazione audio disabilitata",
+        "targetLUFSLabel": "Volume Obiettivo (LUFS)",
+        "targetLUFSHelp": "Obiettivo volume integrato in LUFS (Loudness Units relative to Full Scale). -23 LUFS è lo standard broadcast EBU R128. Intervallo: -40 a -10 LUFS.",
+        "loudnessRangeLabel": "Intervallo Volume (LU)",
+        "loudnessRangeHelp": "Variazione massima volume dentro la clip (0-20 LU). Valori più bassi creano volume più coerente ma possono ridurre dinamica.",
+        "truePeakLabel": "Limite Picco Reale (dBTP)",
+        "truePeakHelp": "Livello picco reale massimo per prevenire clipping digitale (-10 a 0 dBTP). -2 dBTP fornisce margine sicurezza per la maggior parte dei sistemi riproduzione.",
+        "normalizationNote": "Standard EBU R128",
+        "normalizationNoteDescription": "La normalizzazione audio segue lo standard broadcast EBU R128, assicurando livelli riproduzione coerenti tra diversi dispositivi e prevenendo clipping.",
+        "fileSettings": "Impostazioni File",
+        "pathLabel": "Cartella Clip",
+        "pathHelp": "Directory dove clip audio saranno salvate. Percorsi relativi sono dalla directory applicazione. Esempio: 'clips/' o '/var/audio/birds/'",
+        "typeLabel": "Formato Audio",
+        "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
+        "losslessNote": "Formati lossless preservano qualità audio originale senza artefatti compressione.",
+        "disabledInfo": "Abilita registrazione clip sopra per configurare impostazioni clip, formato file e opzioni archiviazione."
+      },
+      "fileSettings": {
+        "title": "Impostazioni File",
+        "description": "Configura posizione archiviazione e formato audio per clip salvate.",
+        "pathLabel": "Cartella Clip",
+        "pathHelp": "Directory dove clip audio saranno salvate. Percorsi relativi sono dalla directory applicazione. Esempio: 'clips/' o '/var/audio/birds/'",
+        "typeLabel": "Formato Audio",
+        "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
+        "losslessNote": "Formati lossless preservano qualità audio originale senza artefatti compressione."
+      },
+      "audioNormalization": {
+        "title": "Normalizzazione Audio",
+        "description": "Regola livelli audio per volume riproduzione coerente su tutte le clip.",
+        "enable": "Abilita Normalizzazione Volume",
+        "enableHelp": "Regola automaticamente livelli audio allo standard broadcast EBU R128 per volume riproduzione coerente su tutte le clip.",
+        "disabled": "Normalizzazione audio disabilitata",
+        "requiresRecording": "Abilita registrazione clip nella scheda Registrazione per usare normalizzazione audio.",
+        "targetLUFSLabel": "Volume Obiettivo (LUFS)",
+        "targetLUFSHelp": "Obiettivo volume integrato in LUFS (Loudness Units relative to Full Scale). -23 LUFS è lo standard broadcast EBU R128. Intervallo: -40 a -10 LUFS.",
+        "loudnessRangeLabel": "Intervallo Volume (LU)",
+        "loudnessRangeHelp": "Variazione massima volume dentro la clip (0-20 LU). Valori più bassi creano volume più coerente ma possono ridurre dinamica.",
+        "truePeakLabel": "Limite Picco Reale (dBTP)",
+        "truePeakHelp": "Livello picco reale massimo per prevenire clipping digitale (-10 a 0 dBTP). -2 dBTP fornisce margine sicurezza per la maggior parte dei sistemi riproduzione.",
+        "noteTitle": "Standard EBU R128",
+        "noteDescription": "La normalizzazione audio segue lo standard broadcast EBU R128, assicurando livelli riproduzione coerenti tra diversi dispositivi e prevenendo clipping."
+      },
+      "audioClipRetention": {
+        "title": "Conservazione Clip Audio",
+        "description": "Configura pulizia automatica clip audio salvate",
+        "policyLabel": "Politica Conservazione",
+        "policyHelp": "Scegli come clip audio vengono eliminate automaticamente. Nessuna: tieni tutte le clip. Età: elimina clip più vecchie di quanto specificato. Utilizzo: elimina clip più vecchie quando utilizzo disco supera limite.",
+        "maxAgeLabel": "Età Massima",
+        "maxAgeHelp": "Elimina clip audio più vecchie di questa durata. Formato: numero seguito da unità (h=ore, d=giorni, w=settimane, m=mesi). Esempi: '7d' per 7 giorni, '4w' per 4 settimane.",
+        "maxUsageLabel": "Utilizzo Disco Massimo",
+        "maxUsageHelp": "Elimina clip più vecchie quando directory audio usa più di questa percentuale di spazio disco disponibile.",
+        "minClipsLabel": "Clip Minime per Specie",
+        "minClipsHelp": "Tieni sempre almeno queste clip per ogni specie uccello, indipendentemente da età o utilizzo disco. Aiuta a preservare registrazioni rare.",
+        "keepSpectrograms": "Tieni Immagini Spettrogramma",
+        "keepSpectrogramsHelp": "Conserva immagini spettrogramma anche quando clip audio vengono eliminate. Spettrogrammi usano meno spazio e forniscono riferimento visivo.",
+        "policies": {
+          "none": "Nessuna - Tieni Tutto",
+          "age": "Basata su Età",
+          "usage": "Basata su Utilizzo Disco"
+        },
+        "noRetentionTitle": "Tutte Clip Conservate",
+        "noRetentionDescription": "Clip audio saranno tenute indefinitamente. Monitora utilizzo disco per prevenire problemi archiviazione.",
+        "ageRetentionTitle": "Pulizia Basata su Età",
+        "ageRetentionDescription": "Clip più vecchie dell'età specificata saranno eliminate automaticamente, preservando numero minimo per specie.",
+        "usageRetentionTitle": "Pulizia Basata su Utilizzo",
+        "usageRetentionDescription": "Quando utilizzo disco supera soglia, clip più vecchie saranno eliminate finché utilizzo rientra nei limiti."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Filtro Passa Basso",
+        "highpass": "Filtro Passa Alto",
+        "bandpass": "Filtro Passa Banda",
+        "bandstop": "Filtro Elimina Banda"
+      },
+      "errors": {
+        "devicesLoadFailed": "Impossibile caricare dispositivi audio. Controlla permessi sistema.",
+        "invalidBitrate": "Valore bitrate non valido",
+        "invalidRetentionPolicy": "Politica conservazione non valida"
+      }
+    },
+    "security": {
+      "baseUrlLabel": "URL Base",
+      "baseUrlHelp": "URL esterno completo per configurazioni reverse proxy. Quando impostato, questo URL è usato così com'è per notifiche e redirect OAuth, ignorando impostazioni Host e AutoTLS.",
+      "baseUrlValidation": "Per favore inserisci un URL valido iniziando con http:// o https:// e includendo un hostname",
+      "hostLabel": "Indirizzo Host",
+      "allowSubnetBypassLabel": "Consenti Accesso da Sottorete per Bypassare Autenticazione",
+      "allowedSubnetsLabel": "Sottoreti Consentite",
+      "allowedSubnetsHelp": "Intervalli rete consentiti per bypassare login (notazione CIDR, lista separata da virgola)",
+      "securityWarningTitle": "Avviso Sicurezza:",
+      "subnetWarningText": "Dispositivi da queste sottoreti avranno accesso illimitato. Includi solo reti interne fidate.",
+      "httpsSettingsTitle": "Impostazioni HTTPS",
+      "httpsSettingsDescription": "Accesso sicuro con crittografia SSL/TLS",
+      "basicAuthTitle": "Autenticazione Base",
+      "basicAuthDescription": "Accesso sicuro con una password semplice",
+      "serverConfiguration": {
+        "title": "Configurazione Server",
+        "description": "Configura impostazioni HTTPS e SSL/TLS",
+        "autoTlsLabel": "Gestione Certificati SSL Auto (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "Requisiti AutoTLS:",
+          "domainRequired": "È richiesto un nome dominio registrato",
+          "domainPointing": "Il dominio deve puntare all'IP pubblico di questo server",
+          "portsAccessible": "Porte 80 e 443 devono essere accessibili da internet"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Autenticazione Base",
+        "description": "Accesso sicuro con una password semplice",
+        "enableLabel": "Abilita Autenticazione Password",
+        "disabled": "Autenticazione password disabilitata",
+        "passwordLabel": "Password",
+        "passwordHelpText": "Limita accesso a impostazioni con una password."
+      },
+      "oauth": {
+        "title": "Autenticazione Social OAuth2",
+        "description": "Single sign-on per accedere con il tuo account esistente",
+        "form": {
+          "editTitle": "Modifica Fornitore OAuth",
+          "addTitle": "Aggiungi Fornitore OAuth",
+          "providerLabel": "Fornitore",
+          "providerHelpText": "Seleziona il fornitore OAuth da configurare",
+          "cancelButton": "Annulla",
+          "saveButton": "Salva"
+        },
+        "providers": {
+          "title": "Fornitori Configurati",
+          "addButton": "Aggiungi Fornitore",
+          "enableToggle": "Attiva/disattiva stato abilitato fornitore",
+          "editButton": "Modifica impostazioni fornitore",
+          "deleteButton": "Elimina fornitore",
+          "deleteConfirm": "Sei sicuro di voler eliminare il fornitore OAuth {provider}?"
+        },
+        "noProviders": "Nessun fornitore OAuth configurato",
+        "noProvidersDescription": "Aggiungi un fornitore per abilitare login social con account Google, GitHub, Microsoft, LINE o Kakao.",
+        "enableProviderLabel": "Abilita questo fornitore",
+        "getCredentialsLabel": "Ottieni le tue credenziali da {provider}",
+        "redirectUriTitle": "URI Redirect:",
+        "clientIdLabel": "ID Client",
+        "clientIdHelpText": "L'ID Client OAuth 2.0 dalla console sviluppatori del tuo fornitore",
+        "clientSecretLabel": "Segreto Client",
+        "clientSecretHelpText": "Il Segreto Client OAuth 2.0 dalla console sviluppatori del tuo fornitore",
+        "userIdLabel": "ID Utente (opzionale)",
+        "userIdHelpText": "Limita accesso a specifico account utente per email o ID",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "Consenti Login OAuth2 via Google",
+          "redirectUriTitle": "URI Redirect per Google Cloud Console:",
+          "getCredentialsLabel": "Ottieni credenziali da Google Cloud Console",
+          "clientIdLabel": "ID Client",
+          "clientIdHelpText": "L'ID Client OAuth 2.0 ottenuto da Google Cloud Console durante configurazione credenziali OAuth.",
+          "clientSecretLabel": "Segreto Client",
+          "clientSecretHelpText": "Il Segreto Client OAuth 2.0 ottenuto da Google Cloud Console durante configurazione credenziali OAuth.",
+          "userIdLabel": "ID Utente"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "Consenti Login OAuth2 via GitHub",
+          "redirectUriTitle": "URI Redirect per Impostazioni Sviluppatore GitHub:",
+          "getCredentialsLabel": "Ottieni credenziali da Impostazioni Sviluppatore GitHub",
+          "clientIdLabel": "ID Client",
+          "clientIdHelpText": "L'ID Client OAuth 2.0 ottenuto da Impostazioni Sviluppatore GitHub durante configurazione credenziali OAuth.",
+          "clientSecretLabel": "Segreto Client",
+          "clientSecretHelpText": "Il Segreto Client OAuth 2.0 ottenuto da Impostazioni Sviluppatore GitHub durante configurazione credenziali OAuth.",
+          "userIdLabel": "ID Utente"
+        },
+        "microsoft": {
+          "title": "Microsoft Account",
+          "enableLabel": "Consenti Login OAuth2 via Microsoft Account",
+          "redirectUriTitle": "URI Redirect per Azure App Registration:",
+          "getCredentialsLabel": "Ottieni credenziali da Azure Portal",
+          "clientIdLabel": "ID Client",
+          "clientIdHelpText": "L'ID Applicazione (client) ottenuto da Azure App Registration.",
+          "clientSecretLabel": "Segreto Client",
+          "clientSecretHelpText": "Il valore segreto client ottenuto da Azure App Registration.",
+          "userIdLabel": "ID Utente"
+        },
+        "line": {
+          "title": "Login LINE",
+          "enableLabel": "Consenti Login OAuth2 via LINE",
+          "redirectUriTitle": "URI Redirect per LINE Developers Console:",
+          "getCredentialsLabel": "Ottieni credenziali da LINE Developers Console",
+          "clientIdLabel": "ID Canale",
+          "clientIdHelpText": "L'ID Canale ottenuto da LINE Developers Console durante configurazione Login LINE.",
+          "clientSecretLabel": "Segreto Canale",
+          "clientSecretHelpText": "Il Segreto Canale ottenuto da LINE Developers Console durante configurazione Login LINE.",
+          "userIdLabel": "ID Utente"
+        },
+        "kakao": {
+          "title": "Login Kakao",
+          "enableLabel": "Consenti Login OAuth2 via Kakao",
+          "redirectUriTitle": "URI Redirect per Kakao Developers Console:",
+          "getCredentialsLabel": "Ottieni credenziali da Kakao Developers Console",
+          "clientIdLabel": "Chiave API REST",
+          "clientIdHelpText": "La Chiave API REST ottenuta da Kakao Developers Console durante configurazione Login Kakao.",
+          "clientSecretLabel": "Segreto Client",
+          "clientSecretHelpText": "Il Segreto Client ottenuto da Kakao Developers Console durante configurazione Login Kakao.",
+          "userIdLabel": "ID Utente"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Bypassa Autenticazione",
+        "description": "Consenti accesso a impostazioni senza autenticazione",
+        "disabled": "Bypass sottorete disabilitato"
+      },
+      "placeholders": {
+        "baseUrl": "https://birdnet.esempio.com:5500",
+        "host": "Per esempio, localhost:8080 o esempio.dominio.com",
+        "allowedUsers": "Inserisci una o più email utente consentite",
+        "subnet": "Inserisci una sottorete CIDR (es. 192.168.1.0/24)"
+      }
+    },
+    "species": {
+      "activeSpecies": {
+        "title": "Specie Attive",
+        "tabLabel": "Attive",
+        "description": "Specie che saranno rilevate in base alla tua posizione attuale e impostazioni filtro",
+        "stats": {
+          "species": "Specie",
+          "location": "Posizione",
+          "threshold": "Soglia",
+          "updated": "Aggiornato",
+          "justNow": "Proprio ora",
+          "minutesAgo": "{count}m fa",
+          "hoursAgo": "{count}h fa"
+        },
+        "search": {
+          "placeholder": "Cerca specie..."
+        },
+        "badges": {
+          "included": "Incluso",
+          "configured": "Configurato"
+        },
+        "empty": {
+          "title": "Nessuna specie trovata",
+          "description": "Configura la tua posizione in Impostazioni Principali per vedere specie disponibili"
+        },
+        "noResults": "Nessuna specie corrisponde alla tua ricerca",
+        "infoNote": "Questa lista è basata sulla tua posizione e soglia filtro intervallo. Specie incluse manualmente sono sempre aggiunte.",
+        "retry": "Riprova",
+        "expand": "Espandi lista",
+        "collapse": "Comprimi lista",
+        "downloadCsv": "Scarica CSV",
+        "errors": {
+          "loadFailed": "Impossibile caricare lista specie attive"
+        },
+        "locationNotConfigured": {
+          "title": "Posizione Non Configurata",
+          "description": "Imposta la tua posizione in Impostazioni Principali per vedere specie disponibili nella tua area. Il filtro intervallo usa la tua posizione per determinare quali specie sono probabilmente presenti nelle vicinanze.",
+          "action": "Configura Posizione"
+        }
+      },
+      "alwaysInclude": {
+        "title": "Includi Sempre Specie",
+        "tabLabel": "Includi",
+        "description": "Specie in questa lista saranno sempre incluse nell'intervallo di specie rilevate",
+        "noSpeciesMessage": "Nessuna specie aggiunta alla lista inclusione"
+      },
+      "alwaysExclude": {
+        "title": "Escludi Sempre Specie",
+        "tabLabel": "Escludi",
+        "description": "Specie in questa lista saranno sempre escluse dal rilevamento",
+        "noSpeciesMessage": "Nessuna specie aggiunta alla lista esclusione"
+      },
+      "customConfiguration": {
+        "title": "Configurazione Specie Personalizzata",
+        "tabLabel": "Personalizzato",
+        "description": "Valori soglia specifici per specie, intervalli rilevamento e azioni",
+        "helpText": {
+          "intro": "Configura impostazioni specifiche per specie:",
+          "threshold": "Soglia: Punteggio confidenza minimo (0-1) richiesto per rilevamento",
+          "interval": "Intervallo: Tempo minimo in secondi tra rilevamenti della stessa specie (0 = usa default globale)",
+          "actions": "Azioni: Comandi personalizzati da eseguire quando questa specie viene rilevata"
+        },
+        "columnHeaders": {
+          "species": "Specie",
+          "settings": "Impostazioni",
+          "actions": "Azioni"
+        },
+        "badges": {
+          "threshold": "Soglia: {value}",
+          "interval": "Intervallo: {value}s",
+          "customAction": "Azione Personalizzata",
+          "executeDefaults": "+Default"
+        },
+        "dropdown": {
+          "editConfig": "Modifica Config",
+          "addAction": "Aggiungi Azione",
+          "remove": "Rimuovi"
+        },
+        "labels": {
+          "threshold": "Soglia",
+          "interval": "Intervallo",
+          "intervalSeconds": "Intervallo (s)",
+          "addButton": "Aggiungi"
+        },
+        "noConfigurationsMessage": "Nessuna configurazione specie personalizzata aggiunta",
+        "addForm": {
+          "speciesPlaceholder": "Nome specie",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Aggiungi Configurazione",
+        "newConfiguration": "Nuova Configurazione",
+        "editing": "Modifica: {species}",
+        "configuredCount": "{count} configurato",
+        "searchPlaceholder": "Digita per cercare...",
+        "saving": "Salvataggio...",
+        "save": "Salva",
+        "cancel": "Annulla",
+        "configureActions": "Configura Azioni",
+        "actionsConfigured": "Configurato",
+        "list": {
+          "threshold": "Soglia:",
+          "interval": "Intervallo:",
+          "intervalNone": "Nessuno",
+          "actionBadge": "Azione",
+          "editTitle": "Modifica configurazione",
+          "removeTitle": "Rimuovi configurazione"
+        },
+        "emptyState": {
+          "title": "Ancora nessuna configurazione.",
+          "description": "Clicca \"Aggiungi Configurazione\" per personalizzare impostazioni rilevamento specie."
+        }
+      },
+      "actionsModal": {
+        "title": "Azioni per {species}",
+        "actionType": {
+          "label": "Tipo Azione",
+          "executeCommand": "Esegui Comando",
+          "onlySupported": "Attualmente, solo azioni Esegui Comando sono supportate"
+        },
+        "command": {
+          "label": "Comando",
+          "helpText": "Fornisci il percorso completo al comando o script che vuoi eseguire"
+        },
+        "parameters": {
+          "label": "Parametri",
+          "helpText": "Questi valori saranno passati al tuo comando nell'ordine elencato",
+          "availableTitle": "Parametri Disponibili",
+          "buttons": {
+            "commonName": "NomeComune",
+            "scientificName": "NomeScientifico",
+            "confidence": "Confidenza",
+            "time": "Ora",
+            "source": "Sorgente",
+            "clearParameters": "Pulisci Parametri"
+          }
+        },
+        "executeDefaults": {
+          "label": "Esegui anche azioni predefinite (archiviazione database, notifiche, ecc.)",
+          "helpText": "Quando abilitato, sia la tua azione personalizzata che le azioni predefinite del sistema verranno eseguite. Quando disabilitato, solo la tua azione personalizzata verrà eseguita."
+        }
+      },
+      "addSpeciesToInclude": "Aggiungi specie da includere",
+      "addSpeciesToIncludeLabel": "Aggiungi Nuova Specie da Includere",
+      "addSpeciesToExclude": "Aggiungi specie da escludere",
+      "addSpeciesToExcludeLabel": "Aggiungi Nuova Specie da Escludere",
+      "commandPathPlaceholder": "/percorso/al/tuo/comando",
+      "parametersPlaceholder": "I parametri appariranno qui",
+      "errors": {
+        "speciesLoadFailed": "Impossibile caricare lista specie. Riprova."
+      },
+      "tracking": {
+        "title": "Tracciamento Specie",
+        "tabLabel": "Tracciamento",
+        "description": "Configura tracciamento per nuovi rilevamenti specie basato su periodi tempo",
+        "enabled": {
+          "label": "Abilita Tracciamento Specie",
+          "helpText": "Quando abilitato, il sistema traccia nuovi rilevamenti specie e può inviare notifiche"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Finestra Nuova Specie (giorni)",
+          "helpText": "Numero giorni una specie è considerata 'nuova' dopo primo rilevamento (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Intervallo Sincronizzazione (minuti)",
+          "helpText": "Quanto spesso sincronizzare dati tracciamento con database (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Soppressione Notifiche (ore)",
+          "helpText": "Ore per sopprimere notifiche duplicate per la stessa specie (0-8760)"
+        },
+        "yearly": {
+          "title": "Tracciamento Annuale",
+          "description": "Traccia primi arrivi specie ogni anno",
+          "enabled": {
+            "label": "Abilita Tracciamento Annuale",
+            "helpText": "Traccia e notifica quando una specie viene rilevata per la prima volta ogni anno"
+          },
+          "resetMonth": {
+            "label": "Mese Reset",
+            "helpText": "Mese quando tracciamento annuale si resetta (1-12)"
+          },
+          "resetDay": {
+            "label": "Giorno Reset",
+            "helpText": "Giorno del mese quando tracciamento annuale si resetta"
+          },
+          "windowDays": {
+            "label": "Finestra (giorni)",
+            "helpText": "Giorni per mostrare indicatore 'nuovo quest'anno' (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Tracciamento Stagionale",
+          "description": "Traccia primi arrivi specie ogni stagione",
+          "enabled": {
+            "label": "Abilita Tracciamento Stagionale",
+            "helpText": "Traccia e notifica quando una specie viene rilevata per la prima volta ogni stagione"
+          },
+          "windowDays": {
+            "label": "Finestra (giorni)",
+            "helpText": "Giorni per mostrare indicatore 'nuovo questa stagione' (1-365)"
+          },
+          "seasons": {
+            "title": "Definizioni Stagione",
+            "description": "Definisci quando inizia ogni stagione. Le stagioni sono regolate automaticamente in base all'emisfero della tua posizione.",
+            "spring": "Primavera",
+            "summer": "Estate",
+            "fall": "Autunno",
+            "winter": "Inverno",
+            "wet1": "Stagione Umida 1",
+            "dry1": "Stagione Secca 1",
+            "wet2": "Stagione Umida 2",
+            "dry2": "Stagione Secca 2",
+            "startMonth": "Mese Inizio",
+            "startDay": "Giorno Inizio",
+            "hemisphereNote": "Le date delle stagioni sono configurate automaticamente in base alla tua latitudine. Emisfero settentrionale usa stagioni standard, emisfero meridionale ha date spostate, e regioni equatoriali usano stagioni umida/secca."
+          }
+        },
+        "months": {
+          "january": "Gennaio",
+          "february": "Febbraio",
+          "march": "Marzo",
+          "april": "Aprile",
+          "may": "Maggio",
+          "june": "Giugno",
+          "july": "Luglio",
+          "august": "Agosto",
+          "september": "Settembre",
+          "october": "Ottobre",
+          "november": "Novembre",
+          "december": "Dicembre"
+        },
+        "units": {
+          "days": "giorni",
+          "min": "min",
+          "hours": "ore"
+        }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Appreso",
+        "title": "Soglie Apprese",
+        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata in Impostazioni Principali → Rilevamento, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
+        "stats": {
+          "active": "Attivo",
+          "atMinimum": "Al Minimo",
+          "minThreshold": "Soglia Min",
+          "validityPeriod": "Periodo Validità"
+        },
+        "header": {
+          "species": "Specie",
+          "threshold": "Soglia",
+          "expires": "Scade"
+        },
+        "searchPlaceholder": "Cerca specie...",
+        "threshold": "Soglia",
+        "level": "Livello",
+        "expires": "Scade",
+        "expired": "Scaduto",
+        "confidence": "Confidenza",
+        "requiredConfidence": "Confidenza richiesta",
+        "resetAll": "Reimposta Tutto",
+        "resetSpecies": "Reimposta soglia per questa specie",
+        "noEvents": "Nessuna cronologia cambi soglia",
+        "changeReason": {
+          "highConfidence": "Rilevamento alta confidenza",
+          "expiry": "Soglia scaduta",
+          "manualReset": "Reset manuale"
+        },
+        "note": "Rilevamenti alta confidenza confermano quali specie esistono in questa posizione. Dopo multiple corrispondenze alta confidenza, soglia rilevamento viene abbassata in sicurezza per catturare più richiami senza rischio significativo falsi positivi. Soglie si resettano automaticamente dopo periodo validità configurato.",
+        "empty": {
+          "title": "Nessuna soglia appresa",
+          "description": "Rilevamenti alta confidenza creeranno automaticamente soglie apprese per specie"
+        },
+        "resetAllConfirm": {
+          "title": "Reimposta Tutte Soglie",
+          "message": "Questo resetterà tutte le {count} soglie apprese. Specie dovranno essere rilevate con alta confidenza di nuovo per abbassare le loro soglie."
+        },
+        "loadError": "Impossibile caricare soglie dinamiche",
+        "resetSuccess": "Soglia resettata per {species}",
+        "resetError": "Impossibile resettare soglia",
+        "resetAllSuccess": "Resettate {count} soglie",
+        "resetAllError": "Impossibile resettare soglie",
+        "expand": "Mostra cronologia eventi",
+        "collapse": "Nascondi cronologia eventi"
+      }
+    },
+    "database": {
+      "sqlitePlaceholder": "Inserisci percorso database SQLite",
+      "mysqlHostPlaceholder": "Inserisci host MySQL",
+      "mysqlUsernamePlaceholder": "Inserisci nome utente MySQL"
+    }
+  },
+  "auth": {
+    "login": "Accedi",
+    "logout": "Esci",
+    "openLoginModal": "Apri modale login",
+    "loginTitle": "Accedi",
+    "loginSubtitle": "Accedi alla tua dashboard BirdNET-Go",
+    "password": "Password",
+    "passwordPlaceholder": "Inserisci la tua password",
+    "enterPassword": "Inserisci la tua password",
+    "continue": "Continua",
+    "or": "o",
+    "loginWithGoogle": "Accedi con Google",
+    "loginWithGithub": "Accedi con GitHub",
+    "loginWithMicrosoft": "Accedi con Microsoft",
+    "continueWithGoogle": "Continua con Google",
+    "continueWithGithub": "Continua con GitHub",
+    "continueWithMicrosoft": "Continua con Microsoft",
+    "continueWithLine": "Continua con LINE",
+    "continueWithKakao": "Continua con Kakao",
+    "errors": {
+      "loginFailed": "Login fallito. Controlla la tua password e riprova.",
+      "passwordRequired": "Password richiesta.",
+      "passwordTooLong": "Password troppo lunga.",
+      "invalidCharacters": "Password contiene caratteri non validi.",
+      "invalidCredentials": "Nome utente o password non validi.",
+      "tooManyAttempts": "Troppi tentativi di login. Riprova più tardi.",
+      "serverError": "Errore server verificato. Riprova più tardi.",
+      "rateLimited": "Troppi tentativi. Attendi {minutes} minuti prima di riprovare.",
+      "configurationError": "Errore configurazione autenticazione. Contatta supporto.",
+      "invalidInput": "Input fornito non valido."
+    }
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "Nessun dato disponibile",
+      "loading": "Caricamento dati...",
+      "error": "Caricamento dati fallito",
+      "sortBy": "Ordina per {column}",
+      "rowsPerPage": "Righe per pagina",
+      "pageInfo": "Mostrando da {from} a {to} di {total} risultati"
+    },
+    "pagination": {
+      "ariaLabel": "Navigazione Paginazione",
+      "previous": "Precedente",
+      "next": "Successivo",
+      "page": "Pagina {current} di {total}",
+      "goToPage": "Vai a pagina {page}",
+      "goToPreviousPage": "Vai a pagina precedente",
+      "goToNextPage": "Vai a pagina successiva",
+      "firstPage": "Prima pagina",
+      "lastPage": "Ultima pagina"
+    },
+    "stats": {
+      "total": "Totale",
+      "average": "Media",
+      "min": "Minimo",
+      "max": "Massimo",
+      "count": "Conteggio"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Inserisci {field}",
+      "select": "Seleziona {field}",
+      "search": "Cerca...",
+      "date": "Seleziona data",
+      "dateRange": "Seleziona intervallo date",
+      "number": "Inserisci numero",
+      "password": "Inserisci password",
+      "url": "Inserisci URL",
+      "email": "Inserisci email",
+      "selectFilterType": "Seleziona tipo filtro",
+      "speciesName": "Nome specie"
+    },
+    "labels": {
+      "showPassword": "Mostra password",
+      "hidePassword": "Nascondi password",
+      "copyToClipboard": "Copia negli appunti",
+      "clearSelection": "Pulisci selezione",
+      "selectOption": "Seleziona un'opzione"
+    },
+    "help": {
+      "passwordStrength": "Forza password: {strength}",
+      "charactersRemaining": "{count} caratteri rimanenti",
+      "dateFormat": "Formato: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Forza Password:",
+        "levels": {
+          "weak": "Debole",
+          "fair": "Discreta",
+          "good": "Buona",
+          "strong": "Forte"
+        },
+        "suggestions": {
+          "title": "Suggerimenti:",
+          "minLength": "Almeno 8 caratteri",
+          "mixedCase": "Mix di maiuscole e minuscole",
+          "number": "Almeno un numero",
+          "special": "Almeno un carattere speciale"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "radioValue prop è richiesto per input radio"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Data Inizio",
+        "endDate": "Data Fine",
+        "quickSelect": "Selezione Rapida",
+        "selected": "Selezionato: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Oggi",
+        "yesterday": "Ieri",
+        "last7Days": "Ultimi 7 giorni",
+        "last30Days": "Ultimi 30 giorni",
+        "thisMonth": "Questo mese",
+        "lastMonth": "Mese scorso",
+        "thisYear": "Quest'anno"
+      },
+      "errors": {
+        "invalidStartDate": "Data inizio non valida",
+        "invalidEndDate": "Data fine non valida",
+        "startAfterEnd": "La data di inizio non può essere successiva alla data di fine",
+        "endBeforeStart": "La data di fine non può essere precedente alla data di inizio"
+      }
+    },
+    "species": {
+      "placeholder": "Inserisci nome specie...",
+      "empty": "Nessuna specie aggiunta",
+      "maxReached": "Massimo di {maxItems} specie raggiunto",
+      "aria": {
+        "dragToReorder": "Trascina per riordinare {species}",
+        "edit": "Modifica specie",
+        "remove": "Rimuovi specie"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "settings": "Impostazioni Audio",
+      "play": "Riproduci",
+      "pause": "Pausa",
+      "stop": "Stop",
+      "volume": "Volume",
+      "mute": "Muto",
+      "unmute": "Riattiva audio",
+      "download": "Scarica audio",
+      "currentTime": "{current} / {total}",
+      "loading": "Caricamento audio...",
+      "error": "Caricamento audio fallito",
+      "errorShort": "Errore",
+      "playError": "Riproduzione audio fallita",
+      "volumeGain": "Controllo guadagno volume: {value} dB",
+      "filterControl": "Controllo filtro",
+      "highPassFilter": "Controllo filtro passa-alto: {freq} Hz",
+      "seekProgress": "Avanzamento audio: {current} / {total} secondi",
+      "playbackSpeed": "Velocità riproduzione",
+      "speed": "Velocità"
+    },
+    "spectrogram": {
+      "notGenerated": "Spettrogramma non ancora generato",
+      "generate": "Genera spettrogramma",
+      "generateButton": "Genera",
+      "generating": "Generazione...",
+      "generationFailed": "Generazione spettrogramma fallita",
+      "generationSuccess": "Spettrogramma generato con successo"
+    }
+  },
+  "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spettrogramma non disponibile",
+      "spectrogramLoading": "Caricamento spettrogramma...",
+      "spectrogramLoaded": "Spettrogramma caricato",
+      "spectrogramLoadingAria": "Caricamento spettrogramma",
+      "spectrogramGeneratingAria": "Generazione spettrogramma",
+      "generating": "Generazione...",
+      "queuePosition": "Coda: {position}",
+      "loadError": "Caricamento audio fallito"
+    },
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Valore aggiustato al minimo ({value})",
+        "adjustedToMaximum": "Valore aggiustato al massimo ({value})"
+      },
+      "rtsp": {
+        "addNewStream": "Aggiungi Nuovo Flusso RTSP",
+        "maxStreamsReached": "Numero massimo flussi RTSP ({max}) raggiunto.",
+        "cameraPlaceholder": "Camera 1",
+        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Numero massimo sottoreti ({max}) raggiunto."
+      },
+      "species": {
+        "loadingSpecies": "Caricamento specie...",
+        "typePlaceholder": "Digita nome specie...",
+        "suggestionsAvailable": "{count} suggerimenti specie disponibili. Usa frecce per navigare.",
+        "noSuggestions": "Nessun suggerimento specie disponibile."
+      },
+      "select": {
+        "searchPlaceholder": "Cerca...",
+        "searchOptions": "Opzioni ricerca",
+        "noOptions": "Nessuna opzione trovata"
+      }
+    },
+    "datePicker": {
+      "today": "Oggi",
+      "feedback": {
+        "endDateCleared": "Data fine cancellata per mantenere intervallo valido",
+        "startDateCleared": "Data inizio cancellata per mantenere intervallo valido",
+        "invalidDateFormat": "Formato data non valido. Usa formato YYYY-MM-DD",
+        "dateOutOfRange": "Data selezionata fuori intervallo consentito",
+        "futureDate": "Impossibile selezionare date future",
+        "pastDate": "Impossibile selezionare date passate"
+      },
+      "aria": {
+        "dateSelected": "Data {date} selezionata",
+        "calendarOpened": "Calendario aperto per selezione data",
+        "calendarClosed": "Calendario chiuso",
+        "monthChanged": "Mostrando {month} {year}",
+        "dayUnavailable": "Giorno {day} non disponibile per selezione",
+        "todayButton": "Seleziona data odierna: {today}"
+      },
+      "status": {
+        "loading": "Caricamento calendario...",
+        "error": "Errore caricamento calendario"
+      }
+    }
+  },
+  "detection": {
+    "actions": {
+      "back": "Indietro",
+      "review": "Revisiona",
+      "download": "Scarica"
+    }
+  }
+}

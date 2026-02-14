@@ -12,6 +12,7 @@ export const LOCALES = {
   nl: { name: 'Nederlands' },
   pl: { name: 'Polski' },
   pt: { name: 'Portugues' },
+  it: { name: 'Italiano' },
   sk: { name: 'Slovenčina' },
 } as const;
 
