@@ -6,13 +6,13 @@
 export const LOCALES = {
   en: { name: 'English' },
   de: { name: 'Deutsch' },
-  fr: { name: 'Francais' },
   es: { name: 'Espanol' },
   fi: { name: 'Suomi' },
+  fr: { name: 'Francais' },
+  it: { name: 'Italiano' },
   nl: { name: 'Nederlands' },
   pl: { name: 'Polski' },
   pt: { name: 'Portugues' },
-  it: { name: 'Italiano' },
   sk: { name: 'Slovenčina' },
 } as const;
 
