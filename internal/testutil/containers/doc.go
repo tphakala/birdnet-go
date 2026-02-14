@@ -15,13 +15,14 @@
 //	var mysqlContainer *containers.MySQLContainer
 //
 //	func TestMain(m *testing.M) {
+//	    ctx := context.Background()
 //	    var err error
-//	    mysqlContainer, err = containers.NewMySQLContainer()
+//	    mysqlContainer, err = containers.NewMySQLContainer(ctx, nil)
 //	    if err != nil {
 //	        log.Fatal(err)
 //	    }
 //	    code := m.Run()
-//	    mysqlContainer.Terminate()
+//	    mysqlContainer.Terminate(context.Background())
 //	    os.Exit(code)
 //	}
 //
