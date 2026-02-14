@@ -663,7 +663,7 @@ func (s *testLegacyInterface) GetHourlyOccurrences(_, _ string, _ float64) ([24]
 	return [24]int{}, nil
 }
 func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ string, _ []string, _ float64) (map[string][24]int, error) {
-	return nil, nil
+	return make(map[string][24]int), nil
 }
 func (s *testLegacyInterface) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
 	return nil, nil
