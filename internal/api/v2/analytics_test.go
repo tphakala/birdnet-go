@@ -1111,6 +1111,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 
 	// Expected data for GetTopBirdsData (more than the limit)
+	// Mock returns only 2 notes since limit=2 is passed to GetTopBirdsData
 	mockNotesLimit := []datastore.Note{
 		{
 			ID:             1,
@@ -1130,15 +1131,6 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 			Date:           "2025-03-07",
 			Time:           "10:20:00",
 		},
-		{
-			ID:             3,
-			SpeciesCode:    "BCCH",
-			ScientificName: "Poecile atricapillus",
-			CommonName:     "Black-capped Chickadee",
-			Confidence:     0.7,
-			Date:           "2025-03-07",
-			Time:           "12:45:00",
-		},
 	}
 
 	// Expected hourly counts for each species
@@ -1150,12 +1142,11 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	expectedBcchLimitHourly[12] = 1
 
 	// Setup mock expectations
-	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesLimit, nil)
-	// Expect GetBatchHourlyOccurrences to be called for all species
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 2).Return(mockNotesLimit, nil)
+	// Expect GetBatchHourlyOccurrences to be called for the 2 species returned
 	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
 		"American Crow": expectedAmcroLimitHourly,
 		"Red-bellied Woodpecker": expectedRbwoLimitHourly,
-		"Black-capped Chickadee": expectedBcchLimitHourly,
 	}, nil)
 
 	// Create a controller with our mock
