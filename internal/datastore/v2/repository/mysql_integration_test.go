@@ -24,8 +24,10 @@ var (
 func TestMain(m *testing.M) {
 	var err error
 
+	ctx := context.Background()
+
 	// Create MySQL container
-	mysqlContainer, err = containers.NewMySQLContainer(nil) // Use defaults
+	mysqlContainer, err = containers.NewMySQLContainer(ctx, nil) // Use defaults
 	if err != nil {
 		panic("failed to create MySQL container: " + err.Error())
 	}
@@ -33,13 +35,13 @@ func TestMain(m *testing.M) {
 	// Get database connection
 	testDB = mysqlContainer.DB()
 	if testDB == nil {
-		_ = mysqlContainer.Terminate()
+		_ = mysqlContainer.Terminate(context.Background())
 		panic("database connection is nil")
 	}
 
 	// Run migrations
 	if err := runMigrations(testDB); err != nil {
-		_ = mysqlContainer.Terminate()
+		_ = mysqlContainer.Terminate(context.Background())
 		panic("failed to run migrations: " + err.Error())
 	}
 
@@ -47,7 +49,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Cleanup
-	if err := mysqlContainer.Terminate(); err != nil {
+	if err := mysqlContainer.Terminate(context.Background()); err != nil {
 		panic("failed to terminate MySQL container: " + err.Error())
 	}
 
