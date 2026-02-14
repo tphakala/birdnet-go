@@ -4,8 +4,10 @@ package api
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -351,10 +353,7 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 	}
 
 	// Batch fetch hourly counts for all species in single query
-	speciesList := make([]string, 0, len(uniqueSpecies))
-	for species := range uniqueSpecies {
-		speciesList = append(speciesList, species)
-	}
+	speciesList := slices.Collect(maps.Keys(uniqueSpecies))
 
 	hourlyCounts, err := c.DS.GetBatchHourlyOccurrences(selectedDate, speciesList, minConfidence)
 	if err != nil {
