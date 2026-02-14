@@ -550,11 +550,23 @@
               <label for="startDateInput" class="sr-only"
                 >{t('analytics.advanced.filters.startDate')}</label
               >
-              <Input id="startDateInput" type="date" bind:value={startDate} max={endDate} />
+              <Input
+                id="startDateInput"
+                type="date"
+                bind:value={startDate}
+                max={endDate}
+                aria-label={t('analytics.advanced.filters.startDate')}
+              />
               <label for="endDateInput" class="sr-only"
                 >{t('analytics.advanced.filters.endDate')}</label
               >
-              <Input id="endDateInput" type="date" bind:value={endDate} min={startDate} />
+              <Input
+                id="endDateInput"
+                type="date"
+                bind:value={endDate}
+                min={startDate}
+                aria-label={t('analytics.advanced.filters.endDate')}
+              />
             </div>
           {/if}
         </div>

@@ -31,6 +31,8 @@
     step?: string | number;
     pattern?: string;
     maxlength?: number;
+    'aria-label'?: string;
+    'aria-describedby'?: string;
   }
 
   let {
@@ -48,6 +50,8 @@
     step,
     pattern,
     maxlength,
+    'aria-label': ariaLabel,
+    'aria-describedby': ariaDescribedby,
     ...rest
   }: Props = $props();
 </script>
@@ -66,6 +70,8 @@
   {step}
   {pattern}
   {maxlength}
+  aria-label={ariaLabel}
+  aria-describedby={ariaDescribedby}
   class={cn('input w-full', className)}
   {...rest}
 />

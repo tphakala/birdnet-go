@@ -48,6 +48,7 @@
         <!-- Time Period Filter -->
         <FormField label={t('analytics.filters.timePeriod')} id="timePeriod">
           <SelectDropdown
+            id="timePeriod"
             bind:value={filters.timePeriod}
             options={timePeriodOptions}
             variant="select"

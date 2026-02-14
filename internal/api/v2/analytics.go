@@ -26,9 +26,10 @@ const maxSpeciesBatch = 10
 
 // Analytics constants (file-local)
 const (
-	defaultConfidenceThreshold = 0.8 // Default confidence threshold for analytics
-	defaultAnalyticsDays       = 30  // Default number of days for analytics queries
-	defaultNewSpeciesLimit     = 100 // Default pagination limit for new species queries
+	defaultConfidenceThreshold = 0.8            // Default confidence threshold for analytics
+	defaultAnalyticsDays       = 30             // Default number of days for analytics queries
+	defaultNewSpeciesLimit     = 100            // Default pagination limit for new species queries
+	analyticsQueryTimeout      = 30 * time.Second // Timeout for analytics database queries
 )
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
@@ -731,7 +732,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	)
 
 	// Add timeout to prevent resource exhaustion
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
 
 	// Get hourly analytics data from the datastore
@@ -833,7 +834,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	)
 
 	// Add timeout to prevent resource exhaustion
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
 
 	// Get daily analytics data from the datastore
@@ -946,7 +947,7 @@ func (c *Controller) GetSpeciesDiversity(ctx echo.Context) error {
 	)
 
 	// Add timeout to prevent resource exhaustion
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
 
 	diversityData, err := c.DS.GetSpeciesDiversityData(ctxWithTimeout, startDate, endDate)

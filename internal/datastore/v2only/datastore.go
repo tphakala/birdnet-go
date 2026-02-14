@@ -814,8 +814,9 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 	}
 
 	// Calculate Unix timestamp range for the date
+	// Use calendar-based arithmetic to handle DST transitions correctly
 	startOfDay := targetDate.Unix()
-	endOfDay := startOfDay + 86400 // 24 hours in seconds
+	endOfDay := targetDate.AddDate(0, 0, 1).Unix()
 
 	// Convert species common names to scientific names and collect label IDs
 	allLabelIDs := make(map[string][]uint) // map[commonName][]labelID
@@ -829,7 +830,11 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 		// Get label IDs for this species across all models
 		labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, scientificName)
 		if err != nil {
-			// Log error but continue with other species
+			// Log error with context and continue with other species
+			ds.log.Warn("failed to get label IDs for species in batch query",
+				logger.String("common_name", commonName),
+				logger.String("scientific_name", scientificName),
+				logger.Error(err))
 			continue
 		}
 		if len(labelIDs) > 0 {
@@ -2090,16 +2095,28 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 
 // GetSpeciesDiversityData returns unique species count per day.
 func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
+	// Validate date formats before using in SQL
+	if startDate != "" {
+		if _, err := time.Parse(time.DateOnly, startDate); err != nil {
+			return nil, fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
+		}
+	}
+	if endDate != "" {
+		if _, err := time.Parse(time.DateOnly, endDate); err != nil {
+			return nil, fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
+		}
+	}
+
 	var results []datastore.DailyAnalyticsData
 
 	// Generate database-agnostic date expression
 	// MySQL: DATE(FROM_UNIXTIME(detected_at))
-	// SQLite: date(detected_at, 'unixepoch')
+	// SQLite: date(detected_at, 'unixepoch', 'localtime') - localtime for timezone-aware bucketing
 	var dateExpr string
 	if ds.manager.IsMySQL() {
 		dateExpr = "DATE(FROM_UNIXTIME(detected_at))"
 	} else {
-		dateExpr = "date(detected_at, 'unixepoch')"
+		dateExpr = "date(detected_at, 'unixepoch', 'localtime')"
 	}
 
 	// Build query to count distinct species per day
