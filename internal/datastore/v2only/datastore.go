@@ -863,14 +863,24 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 		Count   int
 	}
 
+	// Generate database-agnostic hour expression
+	// MySQL: HOUR(FROM_UNIXTIME(detected_at))
+	// SQLite: CAST(strftime('%H', datetime(detected_at, 'unixepoch', 'localtime')) AS INTEGER)
+	var hourExpr string
+	if ds.manager.IsMySQL() {
+		hourExpr = "HOUR(FROM_UNIXTIME(detected_at))"
+	} else {
+		hourExpr = "CAST(strftime('%H', datetime(detected_at, 'unixepoch', 'localtime')) AS INTEGER)"
+	}
+
 	var results []result
 	err = ds.manager.DB().WithContext(ctx).
 		Table("detections").
-		Select("label_id, CAST(strftime('%H', datetime(detected_at, 'unixepoch', 'localtime')) AS INTEGER) as hour, COUNT(*) as count").
+		Select(fmt.Sprintf("label_id, %s as hour, COUNT(*) as count", hourExpr)).
 		Where("label_id IN ?", flatLabelIDs).
 		Where("detected_at >= ? AND detected_at < ?", startOfDay, endOfDay).
 		Where("confidence >= ?", minConfidence).
-		Group("label_id, hour").
+		Group(fmt.Sprintf("label_id, %s", hourExpr)).
 		Scan(&results).Error
 
 	if err != nil {

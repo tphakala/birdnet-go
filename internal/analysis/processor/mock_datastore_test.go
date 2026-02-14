@@ -150,11 +150,14 @@ func (m *ActionMockDatastore) Optimize(_ context.Context) error { return nil }
 func (m *ActionMockDatastore) GetAllNotes() ([]datastore.Note, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetTopBirdsData(_ string, _ float64) ([]datastore.Note, error) {
+func (m *ActionMockDatastore) GetTopBirdsData(_ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (m *ActionMockDatastore) GetHourlyOccurrences(_, _ string, _ float64) ([24]int, error) {
 	return [24]int{}, nil
+}
+func (m *ActionMockDatastore) GetBatchHourlyOccurrences(_ string, _ []string, _ float64) (map[string][24]int, error) {
+	return make(map[string][24]int), nil
 }
 func (m *ActionMockDatastore) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
 	return nil, nil
