@@ -771,7 +771,7 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 	t.Parallel()
 
 	env := setupTestEnv(t)
-	// We need a bogus path here so `generateWithSoxPCM`` doesn't fail at the "binary not configured" check.
+	// We need a bogus path here so `generateWithSoxPCM` doesn't fail at the "binary not configured" check.
 	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
 
 	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
@@ -794,7 +794,7 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 			name: "context deadline exceeded sets PriorityLow",
 			setupCtx: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithTimeout(t.Context(), 1*time.Nanosecond)
-				time.Sleep(5 * time.Millisecond)
+				<-ctx.Done()
 				return ctx, cancel
 			},
 			wantPriority: errors.PriorityLow,
@@ -805,7 +805,7 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := tt.setupCtx()
-			defer cancel()
+			t.Cleanup(cancel)
 
 			outputPath := filepath.Join(env.TempDir, "test_"+tt.name+".png")
 			pcmData := []byte{0, 1, 2, 3}

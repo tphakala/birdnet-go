@@ -587,13 +587,24 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
-		c.logErrorIfEnabled("Spectrogram generation failed",
+		// Common log fields for both operational and genuine errors
+		logFields := []logger.Field{
 			logger.String("note_id", noteID),
 			logger.String("clip_path", clipPath),
 			logger.Error(err),
 			logger.Int64("duration_ms", generationDuration.Milliseconds()),
 			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()))
+			logger.String("ip", ctx.RealIP()),
+		}
+
+		// Check if this is an operational error (context canceled, timeout, etc.)
+		if spectrogram.IsOperationalError(err) {
+			// Log at Debug level for expected operational events
+			c.logDebugIfEnabled("Spectrogram generation canceled or interrupted", logFields...)
+		} else {
+			// Log at Error level for unexpected failures
+			c.logErrorIfEnabled("Spectrogram generation failed", logFields...)
+		}
 		return c.spectrogramHTTPError(ctx, err)
 	}
 

@@ -464,10 +464,11 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 				logger.Error(err),
 				logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 				logger.String("operation", "spectrogram_generation_failed"))
+			// Only increment failure stats for genuine errors, not operational interruptions
+			pr.mu.Lock()
+			pr.stats.Failed++
+			pr.mu.Unlock()
 		}
-		pr.mu.Lock()
-		pr.stats.Failed++
-		pr.mu.Unlock()
 		return
 	}
 

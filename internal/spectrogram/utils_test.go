@@ -2,7 +2,9 @@ package spectrogram
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -368,6 +370,59 @@ func TestIsOperationalError(t *testing.T) {
 			t.Parallel()
 			got := IsOperationalError(tt.err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsOperationalError_ExitCodes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		exitCode int
+		want     bool
+	}{
+		{
+			name:     "SIGKILL exit code 137",
+			exitCode: 137,
+			want:     true,
+		},
+		{
+			name:     "SIGTERM exit code 143",
+			exitCode: 143,
+			want:     true,
+		},
+		{
+			name:     "generic failure exit code 1",
+			exitCode: 1,
+			want:     false,
+		},
+		{
+			name:     "command not found exit code 127",
+			exitCode: 127,
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Generate a real *exec.ExitError with the specified exit code
+			// Use 'sh -c "exit N"' to produce the desired exit code
+			cmd := exec.Command("sh", "-c", fmt.Sprintf("exit %d", tt.exitCode)) // #nosec G204 - exit code is from hardcoded test table
+			err := cmd.Run()
+
+			require.Error(t, err, "command should fail with exit code %d", tt.exitCode)
+
+			// Verify it's an exec.ExitError
+			exitErr, ok := errors.AsType[*exec.ExitError](err)
+			require.True(t, ok, "error should be an *exec.ExitError")
+			require.NotNil(t, exitErr)
+
+			// Test IsOperationalError
+			got := IsOperationalError(err)
+			assert.Equal(t, tt.want, got, "IsOperationalError should return %v for exit code %d", tt.want, tt.exitCode)
 		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -26,6 +27,15 @@ const (
 
 	// sizeExtraLargePx is the width for maximum quality for expert review
 	sizeExtraLargePx = 1200
+
+	// signalKilledMessage is the error message pattern for process termination
+	signalKilledMessage = "signal: killed"
+
+	// exitCodeSIGKILL is the exit code when a process is terminated by SIGKILL (128 + 9)
+	exitCodeSIGKILL = 137
+
+	// exitCodeSIGTERM is the exit code when a process is terminated by SIGTERM (128 + 15)
+	exitCodeSIGTERM = 143
 )
 
 // validSizes maps size strings to pixel widths (single source of truth).
@@ -108,14 +118,33 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 
 // IsOperationalError checks if an error is an expected operational event rather than
 // a genuine failure. Operational errors include context cancellation, deadline exceeded,
-// and process kills (e.g. context-triggered SIGKILL).
+// and process kills (e.g. context-triggered SIGKILL/SIGTERM).
+//
+// The function checks for operational errors in this order:
+// 1. Context errors (Canceled, DeadlineExceeded)
+// 2. Process exit codes (SIGKILL=137, SIGTERM=143) - more reliable than string matching
+// 3. String matching for "signal: killed" - fallback for compatibility
 func IsOperationalError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded) ||
-		strings.Contains(err.Error(), "signal: killed")
+
+	// Check standard context errors
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// Check for process termination via exit codes (more reliable than string matching)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		code := exitErr.ExitCode()
+		if code == exitCodeSIGKILL || code == exitCodeSIGTERM {
+			return true
+		}
+	}
+
+	// Fallback to string matching for compatibility with other error types
+	return strings.Contains(err.Error(), signalKilledMessage)
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.
