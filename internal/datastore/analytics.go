@@ -95,39 +95,44 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			Build()
 	}
 
-	// Start building query
+	// Start building query - exclude detections marked as false_positive
 	queryStr := fmt.Sprintf(`
 		SELECT
-			scientific_name,
-			COALESCE(MAX(common_name), '') as common_name,
-			COALESCE(MAX(species_code), '') as species_code,
+			notes.scientific_name,
+			COALESCE(MAX(notes.common_name), '') as common_name,
+			COALESCE(MAX(notes.species_code), '') as species_code,
 			COUNT(*) as count,
 			MIN(%s) as first_seen,
 			MAX(%s) as last_seen,
-			AVG(confidence) as avg_confidence,
-			MAX(confidence) as max_confidence
+			AVG(notes.confidence) as avg_confidence,
+			MAX(notes.confidence) as max_confidence
 		FROM notes
+		LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	`, dateTimeFormat, dateTimeFormat)
 
-	// Add WHERE clause if date filters are provided
+	// Add WHERE clause for false_positive filtering and date filters
 	var whereClause string
 	var args []any
 
+	// Always exclude false positives
+	whereClause = "WHERE (note_reviews.verified IS NULL OR note_reviews.verified != 'false_positive')"
+
+	// Add date filters if provided
 	switch {
 	case startDate != "" && endDate != "":
-		whereClause = "WHERE date >= ? AND date <= ?"
+		whereClause += " AND notes.date >= ? AND notes.date <= ?"
 		args = append(args, startDate, endDate)
 	case startDate != "":
-		whereClause = "WHERE date >= ?"
+		whereClause += " AND notes.date >= ?"
 		args = append(args, startDate)
 	case endDate != "":
-		whereClause = "WHERE date <= ?"
+		whereClause += " AND notes.date <= ?"
 		args = append(args, endDate)
 	}
 
 	// Complete the query
 	queryStr += whereClause + `
-		GROUP BY scientific_name
+		GROUP BY notes.scientific_name
 		ORDER BY count DESC
 	`
 
@@ -262,19 +267,21 @@ func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 	var analytics []HourlyAnalyticsData
 	hourFormat := ds.GetHourFormat()
 
-	// Base query
+	// Base query - exclude detections marked as false_positive
 	query := ds.DB.WithContext(ctx).Table("notes").
+		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourFormat)).
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
 		Group(hourFormat).
 		Order("hour")
 
 	// Apply filters
 	if date != "" {
-		query = query.Where("date = ?", date)
+		query = query.Where("notes.date = ?", date)
 	}
 
 	if species != "" {
-		query = query.Where("scientific_name = ? OR common_name = ?", species, species)
+		query = query.Where("notes.scientific_name = ? OR notes.common_name = ?", species, species)
 	}
 
 	// Execute query
@@ -295,25 +302,27 @@ func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]DailyAnalyticsData, error) {
 	var analytics []DailyAnalyticsData
 
-	// Base query
+	// Base query - exclude detections marked as false_positive
 	query := ds.DB.WithContext(ctx).Table("notes").
-		Select("date, COUNT(*) as count").
-		Group("date").
-		Order("date")
+		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
+		Select("notes.date, COUNT(*) as count").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Group("notes.date").
+		Order("notes.date")
 
 	// Apply date range filter
 	switch {
 	case startDate != "" && endDate != "":
-		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
+		query = query.Where("notes.date >= ? AND notes.date <= ?", startDate, endDate)
 	case startDate != "":
-		query = query.Where("date >= ?", startDate)
+		query = query.Where("notes.date >= ?", startDate)
 	case endDate != "":
-		query = query.Where("date <= ?", endDate)
+		query = query.Where("notes.date <= ?", endDate)
 	}
 
 	// Apply species filter
 	if species != "" {
-		query = query.Where("scientific_name = ? OR common_name = ?", species, species)
+		query = query.Where("notes.scientific_name = ? OR notes.common_name = ?", species, species)
 	}
 
 	// Execute query
@@ -335,20 +344,22 @@ func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error) {
 	var diversity []DailyAnalyticsData
 
-	// Base query - count distinct species per day
+	// Base query - count distinct species per day, excluding false positives
 	query := ds.DB.WithContext(ctx).Table("notes").
-		Select("date, COUNT(DISTINCT scientific_name) as count").
-		Group("date").
-		Order("date")
+		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
+		Select("notes.date, COUNT(DISTINCT notes.scientific_name) as count").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Group("notes.date").
+		Order("notes.date")
 
 	// Apply date range filter
 	switch {
 	case startDate != "" && endDate != "":
-		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
+		query = query.Where("notes.date >= ? AND notes.date <= ?", startDate, endDate)
 	case startDate != "":
-		query = query.Where("date >= ?", startDate)
+		query = query.Where("notes.date >= ?", startDate)
 	case endDate != "":
-		query = query.Where("date <= ?", endDate)
+		query = query.Where("notes.date <= ?", endDate)
 	}
 
 	// Execute query
@@ -486,8 +497,10 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		}
 	}
 
-	// Prepare the SQL query
-	query := ds.DB.WithContext(ctx).Table("notes")
+	// Prepare the SQL query - exclude detections marked as false_positive
+	query := ds.DB.WithContext(ctx).Table("notes").
+		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive")
 
 	// Extract hour from the time field using database-specific hour format
 	hourExpr := ds.GetHourFormat()
@@ -496,18 +509,18 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 	// Apply date range filter conditionally
 	switch {
 	case startDate != "" && endDate != "":
-		query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
+		query = query.Where("notes.date BETWEEN ? AND ?", startDate, endDate)
 	case startDate != "":
-		query = query.Where("date >= ?", startDate)
+		query = query.Where("notes.date >= ?", startDate)
 	case endDate != "":
-		query = query.Where("date <= ?", endDate)
+		query = query.Where("notes.date <= ?", endDate)
 		// No date filter if both are empty
 	}
 
 	// Apply species filter if provided
 	if species != "" {
 		// Try to match on either common_name or scientific_name
-		query = query.Where("common_name = ? OR scientific_name = ?",
+		query = query.Where("notes.common_name = ? OR notes.scientific_name = ?",
 			species, species)
 	}
 
@@ -635,29 +648,33 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 
 	// Revised query with pagination
 	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
-	// Uses ANY_VALUE for MySQL compatibility
+	// Excludes detections marked as false_positive from both CTEs
 	query := `
 	WITH SpeciesFirstSeen AS (
-	    SELECT 
-	        scientific_name, 
-	        MIN(CASE WHEN date != '' AND date IS NOT NULL THEN date ELSE NULL END) as first_detection_date
+	    SELECT
+	        notes.scientific_name,
+	        MIN(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as first_detection_date
 	    FROM notes
-	    GROUP BY scientific_name
-	    HAVING first_detection_date IS NOT NULL AND first_detection_date != '' 
-	), 
+	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
+	    WHERE (note_reviews.verified IS NULL OR note_reviews.verified != 'false_positive')
+	    GROUP BY notes.scientific_name
+	    HAVING first_detection_date IS NOT NULL AND first_detection_date != ''
+	),
 	SpeciesInPeriod AS (
-	    SELECT 
-	        scientific_name, 
+	    SELECT
+	        notes.scientific_name,
 	        COUNT(*) as count_in_period,
-			MAX(common_name) as common_name -- Reverted from ANY_VALUE for testing
+			MAX(notes.common_name) as common_name
 	    FROM notes
-	    WHERE date BETWEEN ? AND ?
-	    GROUP BY scientific_name
+	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
+	    WHERE notes.date BETWEEN ? AND ?
+	      AND (note_reviews.verified IS NULL OR note_reviews.verified != 'false_positive')
+	    GROUP BY notes.scientific_name
 	)
-	SELECT 
-	    sfs.scientific_name, 
-	    COALESCE(sip.common_name, sfs.scientific_name) as common_name, 
-	    sfs.first_detection_date, 
+	SELECT
+	    sfs.scientific_name,
+	    COALESCE(sip.common_name, sfs.scientific_name) as common_name,
+	    sfs.first_detection_date,
 	    sip.count_in_period
 	FROM SpeciesFirstSeen sfs
 	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
