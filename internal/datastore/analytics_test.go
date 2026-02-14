@@ -20,8 +20,9 @@ func setupTestDB(t *testing.T) *DataStore {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	// Create the notes table schema
-	err = db.AutoMigrate(&Note{})
+	// Create the notes and note_reviews table schemas
+	// note_reviews is now required for analytics queries that filter out false positives
+	err = db.AutoMigrate(&Note{}, &NoteReview{})
 	require.NoError(t, err)
 
 	return &DataStore{DB: db}
