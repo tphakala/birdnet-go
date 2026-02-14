@@ -82,12 +82,9 @@ func resetDatabase(t *testing.T) {
 	t.Helper()
 
 	ctx := t.Context()
-	tables := []string{
-		"test_detections",
-		"test_observations", // Foreign key test child table
-		"test_species",      // Foreign key test parent table
-	}
-	err := mysqlContainer.Reset(ctx, tables)
+	// Only reset tables that exist for all tests
+	// Test-specific tables (test_observations, test_species) are managed within their own tests
+	err := mysqlContainer.Reset(ctx, []string{"test_detections"})
 	require.NoError(t, err, "failed to reset database")
 }
 
@@ -136,7 +133,8 @@ func TestMySQL_Update(t *testing.T) {
 		"Turdus merula", "Common Blackbird", 0.85,
 	)
 	require.NoError(t, err)
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	require.NoError(t, err)
 
 	// Update
 	_, err = testDB.ExecContext(ctx,
@@ -167,7 +165,8 @@ func TestMySQL_Delete(t *testing.T) {
 		"Turdus merula", "Common Blackbird", 0.95,
 	)
 	require.NoError(t, err)
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	require.NoError(t, err)
 
 	// Delete
 	_, err = testDB.ExecContext(ctx,
@@ -559,7 +558,8 @@ func TestMySQL_ForeignKeyConstraint(t *testing.T) {
 		"Turdus merula",
 	)
 	require.NoError(t, err)
-	speciesID, _ := result.LastInsertId()
+	speciesID, err := result.LastInsertId()
+	require.NoError(t, err)
 
 	// Insert child record (should succeed - FK exists)
 	_, err = testDB.ExecContext(ctx,
