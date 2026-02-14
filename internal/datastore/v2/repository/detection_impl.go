@@ -1238,18 +1238,13 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 	return results, err
 }
 
-// GetHourlyDistribution returns detection counts by hour.
-func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error) {
-	var results []HourlyDistributionData
-
-	// Use hourFromUnixExpr for correct local timezone conversion
-	// Exclude detections marked as false_positive
-	hourExpr := r.hourFromUnixExpr("d.detected_at")
+// buildAnalyticsBaseQuery creates a base query with JOIN and WHERE clauses for analytics.
+// This helper reduces duplication between analytics query methods.
+func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelID, modelID *uint) *gorm.DB {
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
 	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
 		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
-		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
 		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive")
 
@@ -1260,10 +1255,22 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	err := query.Group("hour").
-		Order("hour ASC").
-		Scan(&results).Error
+	return query
+}
 
+// GetHourlyDistribution returns detection counts by hour.
+func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error) {
+	var results []HourlyDistributionData
+
+	// Use hourFromUnixExpr for correct local timezone conversion
+	// Exclude detections marked as false_positive
+	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
+		Group("hour").
+		Order("hour ASC")
+
+	err := query.Scan(&results).Error
 	return results, err
 }
 
@@ -1274,30 +1281,17 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 	// Use dialect-appropriate date conversion
 	// Exclude detections marked as false_positive
 	dateExpr := r.dateFromUnixExpr("d.detected_at")
-	detTable := r.tableName()
-	revTable := r.reviewsTable()
-	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
-		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
 		Select(fmt.Sprintf(`
 			%s as date,
 			COUNT(*) as total_detections,
 			COUNT(DISTINCT d.label_id) as unique_species,
 			AVG(d.confidence) as avg_confidence
 		`, dateExpr)).
-		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive")
+		Group("date").
+		Order("date DESC")
 
-	if labelID != nil {
-		query = query.Where("d.label_id = ?", *labelID)
-	}
-	if modelID != nil {
-		query = query.Where("d.model_id = ?", *modelID)
-	}
-
-	err := query.Group("date").
-		Order("date DESC").
-		Scan(&results).Error
-
+	err := query.Scan(&results).Error
 	return results, err
 }
 
