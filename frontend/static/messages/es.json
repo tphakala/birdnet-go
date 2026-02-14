@@ -789,7 +789,7 @@
           "locks": "Migrando bloqueos"
         },
         "notes": {
-          "inProgress": "Puede seguir utilizando el sistema normalmente mientras la migración se ejecuta en segundo plano.",
+          "in_progress": "Puede seguir utilizando el sistema normalmente mientras la migración se ejecuta en segundo plano.",
           "dual_write": "Migración en curso. Sus datos están seguros - todas las nuevas detecciones se guardan en ambas bases de datos. Puede seguir usando BirdNET-Go normalmente.",
           "migrating": "Copiando sus detecciones existentes a la nueva base de datos. Esto puede tardar un poco dependiendo de cuántas detecciones tenga. Puede pausar y reanudar en cualquier momento.",
           "validating": "Verificando que todos los registros se copiaron correctamente. ¡Casi listo!",

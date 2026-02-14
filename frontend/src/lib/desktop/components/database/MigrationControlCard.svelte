@@ -265,7 +265,7 @@
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
           <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
-            {t('system.database.migration.notes.inProgress')}
+            {t('system.database.migration.notes.in_progress')}
           </p>
         </div>
 
@@ -313,7 +313,7 @@
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
           <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
-            {t('system.database.migration.notes.inProgress')}
+            {t('system.database.migration.notes.in_progress')}
           </p>
         </div>
 

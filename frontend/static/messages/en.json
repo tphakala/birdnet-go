@@ -839,7 +839,7 @@
           "locks": "Migrating Locks"
         },
         "notes": {
-          "inProgress": "You can continue using the system normally while migration runs in the background.",
+          "in_progress": "You can continue using the system normally while migration runs in the background.",
           "dual_write": "Migration in progress. Your data is safe - all new detections are being saved to both databases.",
           "migrating": "Copying your existing detections to the new database.",
           "validating": "Verifying all records were copied correctly. Almost done!",

@@ -789,7 +789,7 @@
           "locks": "Migroidaan lukitukset"
         },
         "notes": {
-          "inProgress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
+          "in_progress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
           "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
           "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
           "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",

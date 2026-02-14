@@ -789,7 +789,7 @@
           "locks": "Migrowanie blokad"
         },
         "notes": {
-          "inProgress": "Możesz normalnie korzystać z systemu, podczas gdy migracja działa w tle.",
+          "in_progress": "Możesz normalnie korzystać z systemu, podczas gdy migracja działa w tle.",
           "dual_write": "Migracja w toku. Twoje dane są bezpieczne - wszystkie nowe wykrycia są zapisywane w obu bazach danych. Możesz nadal normalnie korzystać z BirdNET-Go.",
           "migrating": "Kopiowanie istniejących wykryć do nowej bazy danych. Może to potrwać, w zależności od liczby wykryć. Możesz wstrzymać i wznowić w dowolnym momencie.",
           "validating": "Sprawdzanie, czy wszystkie rekordy zostały poprawnie skopiowane. Prawie gotowe!",
@@ -2115,7 +2115,7 @@
         },
         "filterHelp": "Dodaj wiele filtrów, aby ukształtować charakterystykę częstotliwościową dla optymalnej detekcji ptaków w twoim środowisku.",
         "graph": {
-          "flatResponse": "Płaska odpowiedź (Brak zastosowanych filtrów)",
+          "flatResponse": "Charakterystyka płaska (Brak filtrów)",
           "frequency": "Częstotliwość (Hz)",
           "gain": "Wzmocnienie (dB)"
         }

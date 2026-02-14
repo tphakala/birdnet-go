@@ -839,7 +839,7 @@
           "locks": "Migrujú sa zámky"
         },
         "notes": {
-          "inProgress": "Systém môžete naďalej normálne používať, kým migrácia prebieha na pozadí.",
+          "in_progress": "Systém môžete naďalej normálne používať, kým migrácia prebieha na pozadí.",
           "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - všetky nové detekcie sa ukladajú do oboch databáz.",
           "migrating": "Kopírujú sa vaše existujúce detekcie do novej databázy.",
           "validating": "Overuje sa, či boli všetky záznamy skopírované správne. Skoro hotovo!",

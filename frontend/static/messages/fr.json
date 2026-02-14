@@ -789,7 +789,7 @@
           "locks": "Migration des verrouillages"
         },
         "notes": {
-          "inProgress": "Vous pouvez continuer à utiliser le système normalement pendant que la migration s'exécute en arrière-plan.",
+          "in_progress": "Vous pouvez continuer à utiliser le système normalement pendant que la migration s'exécute en arrière-plan.",
           "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
           "migrating": "Copie de vos détections existantes vers la nouvelle base de données. Cela peut prendre un certain temps selon le nombre de détections. Vous pouvez mettre en pause et reprendre à tout moment.",
           "validating": "Vérification que tous les enregistrements ont été copiés correctement. Presque terminé !",

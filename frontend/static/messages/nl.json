@@ -789,7 +789,7 @@
           "locks": "Vergrendelingen migreren"
         },
         "notes": {
-          "inProgress": "U kunt het systeem normaal blijven gebruiken terwijl de migratie op de achtergrond draait.",
+          "in_progress": "U kunt het systeem normaal blijven gebruiken terwijl de migratie op de achtergrond draait.",
           "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
           "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
           "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",

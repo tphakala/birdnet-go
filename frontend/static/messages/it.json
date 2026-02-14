@@ -839,7 +839,7 @@
           "locks": "Migrazione Blocchi"
         },
         "notes": {
-          "inProgress": "Puoi continuare a usare il sistema normalmente mentre la migrazione viene eseguita in background.",
+          "in_progress": "Puoi continuare a usare il sistema normalmente mentre la migrazione viene eseguita in background.",
           "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - tutti i nuovi rilevamenti vengono salvati in entrambi i database.",
           "migrating": "Copia dei rilevamenti esistenti nel nuovo database.",
           "validating": "Verifica che tutti i record siano stati copiati correttamente. Quasi fatto!",

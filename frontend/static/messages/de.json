@@ -789,7 +789,7 @@
           "locks": "Migriere Sperren"
         },
         "notes": {
-          "inProgress": "Sie können das System normal weiter verwenden, während die Migration im Hintergrund läuft.",
+          "in_progress": "Sie können das System normal weiter verwenden, während die Migration im Hintergrund läuft.",
           "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
           "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
           "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
@@ -2109,7 +2109,7 @@
           "48db": "48dB"
         },
         "graph": {
-          "flatResponse": "Flache Antwort (Keine Filter angewendet)",
+          "flatResponse": "Flacher Frequenzgang (Keine Filter aktiv)",
           "frequency": "Frequenz (Hz)",
           "gain": "Verstärkung (dB)"
         }
