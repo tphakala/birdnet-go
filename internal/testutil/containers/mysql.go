@@ -105,7 +105,7 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	// Verify connection with health check
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		_ = mysqlContainer.Terminate(ctx)
 		return nil, fmt.Errorf("failed to ping database: %w", err)
