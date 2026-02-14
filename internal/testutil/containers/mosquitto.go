@@ -268,7 +268,8 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 
 	var mu sync.Mutex
 	retainedTopics := make([]string, 0)
-	done := make(chan bool, 1)
+	messagesReceived := make(chan struct{})
+	var receiveOnce sync.Once
 
 	// Subscribe to all topics to find retained messages
 	token := client.Subscribe("#", 0, func(client mqtt.Client, msg mqtt.Message) {
@@ -276,6 +277,11 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 			mu.Lock()
 			retainedTopics = append(retainedTopics, msg.Topic())
 			mu.Unlock()
+			// Signal that we've received at least one message
+			// Use sync.Once to ensure we only signal once
+			receiveOnce.Do(func() {
+				close(messagesReceived)
+			})
 		}
 	})
 	if !token.WaitTimeout(5 * time.Second) {
@@ -286,14 +292,25 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 	}
 
 	// Wait for retained messages with timeout
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		done <- true
-	}()
+	// Use a more generous timeout (500ms) to allow for all retained messages to arrive
+	// If no retained messages exist, this will timeout (which is expected behavior)
+	waitCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
 
 	select {
-	case <-done:
-		// Timeout reached
+	case <-messagesReceived:
+		// At least one retained message received, give a bit more time for others
+		// Use a shorter grace period (50ms) for additional messages
+		graceTimer := time.NewTimer(50 * time.Millisecond)
+		defer graceTimer.Stop()
+		select {
+		case <-graceTimer.C:
+			// Grace period elapsed, proceed with clearing
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for retained messages: %w", ctx.Err())
+		}
+	case <-waitCtx.Done():
+		// Timeout reached with no messages - this is fine, means no retained messages exist
 	case <-ctx.Done():
 		return fmt.Errorf("context cancelled while waiting for retained messages: %w", ctx.Err())
 	}
@@ -314,7 +331,7 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 	mu.Unlock()
 
 	for _, topic := range topicsCopy {
-		token := client.Publish(topic, 0, true, nil)
+		token := client.Publish(topic, 0, true, []byte{})
 		if !token.WaitTimeout(5 * time.Second) {
 			return fmt.Errorf("publish timeout for topic %s after 5s", topic)
 		}
