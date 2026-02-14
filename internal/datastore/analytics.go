@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
@@ -115,7 +116,8 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	var args []any
 
 	// Always exclude false positives
-	whereClause = "WHERE (note_reviews.verified IS NULL OR note_reviews.verified != 'false_positive')"
+	whereClause = fmt.Sprintf("WHERE (note_reviews.verified IS NULL OR note_reviews.verified != '%s')",
+		entities.VerificationFalsePositive)
 
 	// Add date filters if provided
 	switch {
@@ -271,7 +273,7 @@ func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourFormat)).
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(hourFormat).
 		Order("hour")
 
@@ -306,7 +308,7 @@ func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select("notes.date, COUNT(*) as count").
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("notes.date").
 		Order("notes.date")
 
@@ -348,7 +350,7 @@ func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select("notes.date, COUNT(DISTINCT notes.scientific_name) as count").
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("notes.date").
 		Order("notes.date")
 
@@ -500,7 +502,7 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 	// Prepare the SQL query - exclude detections marked as false_positive
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive")
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive))
 
 	// Extract hour from the time field using database-specific hour format
 	hourExpr := ds.GetHourFormat()
@@ -649,14 +651,14 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	// Revised query with pagination
 	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
 	// Excludes detections marked as false_positive from both CTEs
-	query := `
+	query := fmt.Sprintf(`
 	WITH SpeciesFirstSeen AS (
 	    SELECT
 	        notes.scientific_name,
 	        MIN(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as first_detection_date
 	    FROM notes
 	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
-	    WHERE (note_reviews.verified IS NULL OR note_reviews.verified != 'false_positive')
+	    WHERE (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
 	    GROUP BY notes.scientific_name
 	    HAVING first_detection_date IS NOT NULL AND first_detection_date != ''
 	),
@@ -668,7 +670,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	    FROM notes
 	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	    WHERE notes.date BETWEEN ? AND ?
-	      AND (note_reviews.verified IS NULL OR note_reviews.verified != 'false_positive')
+	      AND (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
 	    GROUP BY notes.scientific_name
 	)
 	SELECT
@@ -681,7 +683,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	WHERE sfs.first_detection_date BETWEEN ? AND ?
 	ORDER BY sfs.first_detection_date DESC
 	LIMIT ? OFFSET ?;
-	`
+	`, entities.VerificationFalsePositive, entities.VerificationFalsePositive)
 
 	// Execute the raw SQL query into the temporary struct
 	if err := ds.DB.WithContext(ctx).Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {

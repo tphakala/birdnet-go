@@ -732,7 +732,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
 		Where("d.confidence >= ?", minConfidenceNormalized).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("l.scientific_name").
 		Order("count DESC, l.scientific_name ASC").
 		Limit(reportCount).
@@ -890,7 +890,7 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 		Where("d.label_id IN ?", flatLabelIDs).
 		Where("d.detected_at >= ? AND d.detected_at < ?", startOfDay, endOfDay).
 		Where("d.confidence >= ?", minConfidence).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(fmt.Sprintf("d.label_id, %s", hourExpr)).
 		Scan(&results).Error
 
@@ -2131,7 +2131,7 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 		Select(fmt.Sprintf("%s as date, COUNT(DISTINCT l.scientific_name) as count", dateExpr)).
 		Joins("JOIN labels l ON d.label_id = l.id").
 		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
-		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(dateExpr).
 		Order("date")
 

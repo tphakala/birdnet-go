@@ -715,7 +715,7 @@ func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelIDs
 		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", labelIDs, start, end, minConfidence).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive").
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("hour").
 		Scan(&results).Error
 
@@ -1246,7 +1246,7 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
 		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
 		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", "false_positive")
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
 
 	if labelID != nil {
 		query = query.Where("d.label_id = ?", *labelID)

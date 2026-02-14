@@ -2,6 +2,16 @@ package entities
 
 import "time"
 
+// VerificationStatus represents the review status values.
+type VerificationStatus string
+
+const (
+	// VerificationCorrect indicates a detection is verified as correct.
+	VerificationCorrect VerificationStatus = "correct"
+	// VerificationFalsePositive indicates a detection is marked as a false positive.
+	VerificationFalsePositive VerificationStatus = "false_positive"
+)
+
 // NoteReviewEntity represents the review status of a Note.
 // Maps to the 'note_reviews' table.
 type NoteReviewEntity struct {

@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -509,7 +510,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time").
 		Where("notes.date = ? AND notes.confidence >= ?", selectedDate, minConfidenceNormalized).
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("notes.common_name, notes.scientific_name, notes.species_code, notes.date").
 		Order("count DESC").
 		Limit(reportCount)
@@ -662,7 +663,7 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourFormat)).
 		Where("notes.date = ? AND notes.common_name = ? AND notes.confidence >= ?", date, commonName, minConfidenceNormalized).
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(hourFormat).
 		Scan(&results).Error
 
@@ -704,7 +705,7 @@ func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, mi
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("notes.common_name, %s as hour, COUNT(*) as count", hourFormat)).
 		Where("notes.common_name IN ? AND notes.date = ? AND notes.confidence >= ?", species, date, minConfidence).
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", "false_positive").
+		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(fmt.Sprintf("notes.common_name, %s", hourFormat)).
 		Order("notes.common_name, hour").
 		Scan(&results).Error
@@ -2050,10 +2051,11 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 		filters.ConfidenceMin, filters.ConfidenceMax)
 
 	if filters.VerifiedOnly {
-		query = query.Where("note_reviews.verified = ?", "correct")
+		query = query.Where("note_reviews.verified = ?", string(entities.VerificationCorrect))
 	} else if filters.UnverifiedOnly {
 		// Handle NULL case explicitly for unverified
-		query = query.Where("(note_reviews.verified IS NULL OR (note_reviews.verified != ? AND note_reviews.verified != ?))", "correct", "false_positive")
+		query = query.Where("(note_reviews.verified IS NULL OR (note_reviews.verified != ? AND note_reviews.verified != ?))",
+			string(entities.VerificationCorrect), string(entities.VerificationFalsePositive))
 	}
 
 	if filters.LockedOnly {
