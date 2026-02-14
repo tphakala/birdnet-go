@@ -16,6 +16,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // MosquittoContainer wraps a testcontainers Eclipse Mosquitto MQTT broker instance.
@@ -327,23 +328,23 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 
 // Terminate stops and removes the Mosquitto container.
 // Also cleans up the temporary config file if one was created.
+// Returns combined errors if both operations fail.
 func (c *MosquittoContainer) Terminate(ctx context.Context) error {
-	var terminateErr error
+	var errs []error
 
 	// Terminate container
 	if c.container != nil {
 		if err := c.container.Terminate(ctx); err != nil {
-			terminateErr = fmt.Errorf("failed to terminate container: %w", err)
+			errs = append(errs, fmt.Errorf("failed to terminate container: %w", err))
 		}
 	}
 
 	// Clean up temp config file
 	if c.configFile != "" {
 		if err := os.Remove(c.configFile); err != nil && !os.IsNotExist(err) {
-			// Log warning but don't override container termination error
-			fmt.Printf("Warning: failed to remove temp config file %s: %v\n", c.configFile, err)
+			errs = append(errs, fmt.Errorf("failed to remove temp config file %s: %w", c.configFile, err))
 		}
 	}
 
-	return terminateErr
+	return errors.Join(errs...)
 }
