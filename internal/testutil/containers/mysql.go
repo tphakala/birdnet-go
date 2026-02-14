@@ -230,6 +230,7 @@ func (c *MySQLContainer) ExecuteScript(ctx context.Context, scriptPath string) e
 		return fmt.Errorf("database connection is nil")
 	}
 
+	//nolint:gosec // G304: File path is intentionally provided by caller for SQL script execution
 	script, err := os.ReadFile(scriptPath)
 	if err != nil {
 		return fmt.Errorf("failed to read script file: %w", err)

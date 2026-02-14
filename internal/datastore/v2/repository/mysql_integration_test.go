@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 
 	// Run migrations
 	if err := runMigrations(testDB); err != nil {
-		mysqlContainer.Terminate()
+		_ = mysqlContainer.Terminate()
 		panic("failed to run migrations: " + err.Error())
 	}
 
@@ -77,7 +77,7 @@ func runMigrations(db *sql.DB) error {
 func resetDatabase(t *testing.T) {
 	t.Helper()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := mysqlContainer.Reset(ctx, []string{"test_detections"})
 	require.NoError(t, err, "failed to reset database")
 }
@@ -89,7 +89,7 @@ func resetDatabase(t *testing.T) {
 func TestMySQL_InsertAndSelect(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert a test detection
 	result, err := testDB.ExecContext(ctx,
@@ -100,7 +100,7 @@ func TestMySQL_InsertAndSelect(t *testing.T) {
 
 	id, err := result.LastInsertId()
 	require.NoError(t, err, "failed to get last insert ID")
-	assert.Greater(t, id, int64(0), "ID should be positive")
+	assert.Positive(t, id, "ID should be positive")
 
 	// Select the inserted detection
 	var scientificName, commonName string
@@ -113,13 +113,13 @@ func TestMySQL_InsertAndSelect(t *testing.T) {
 	require.NoError(t, err, "failed to select detection")
 	assert.Equal(t, "Turdus merula", scientificName)
 	assert.Equal(t, "Common Blackbird", commonName)
-	assert.Equal(t, 0.95, confidence)
+	assert.InDelta(t, 0.95, confidence, 0.001)
 }
 
 func TestMySQL_Update(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert
 	result, err := testDB.ExecContext(ctx,
@@ -144,13 +144,13 @@ func TestMySQL_Update(t *testing.T) {
 	).Scan(&confidence)
 
 	require.NoError(t, err)
-	assert.Equal(t, 0.95, confidence)
+	assert.InDelta(t, 0.95, confidence, 0.001)
 }
 
 func TestMySQL_Delete(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert
 	result, err := testDB.ExecContext(ctx,
@@ -185,7 +185,7 @@ func TestMySQL_Delete(t *testing.T) {
 func TestMySQL_Transaction_Commit(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tx, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err, "failed to begin transaction")
@@ -215,7 +215,7 @@ func TestMySQL_Transaction_Commit(t *testing.T) {
 func TestMySQL_Transaction_Rollback(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tx, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err, "failed to begin transaction")
@@ -247,11 +247,11 @@ func TestMySQL_Transaction_Rollback(t *testing.T) {
 // ============================================================================
 
 func TestMySQL_ConnectionPool_HealthCheck(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Verify health check passes
 	err := mysqlContainer.HealthCheck(ctx)
-	assert.NoError(t, err, "health check should pass")
+	require.NoError(t, err, "health check should pass")
 
 	// Verify we can still query
 	var result int
@@ -267,11 +267,11 @@ func TestMySQL_ConnectionPool_HealthCheck(t *testing.T) {
 func TestMySQL_AutoIncrement(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert multiple records
 	ids := make([]int64, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result, err := testDB.ExecContext(ctx,
 			"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
 			"Species"+string(rune('A'+i)), "Common"+string(rune('A'+i)), 0.9,
@@ -293,7 +293,7 @@ func TestMySQL_AutoIncrement(t *testing.T) {
 func TestMySQL_Aggregation_GroupBy(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert multiple detections with different species
 	species := []struct {
@@ -307,7 +307,7 @@ func TestMySQL_Aggregation_GroupBy(t *testing.T) {
 	}
 
 	for _, s := range species {
-		for i := 0; i < s.count; i++ {
+		for i := range s.count {
 			_, err := testDB.ExecContext(ctx,
 				"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
 				s.scientific, s.common, 0.9+float64(i)*0.01,
@@ -324,7 +324,7 @@ func TestMySQL_Aggregation_GroupBy(t *testing.T) {
 		ORDER BY count DESC
 	`)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	results := make([]struct {
 		species    string
@@ -352,7 +352,7 @@ func TestMySQL_Aggregation_GroupBy(t *testing.T) {
 func TestMySQL_HAVING_Clause(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert detections with varying confidence
 	testData := []struct {
@@ -382,7 +382,7 @@ func TestMySQL_HAVING_Clause(t *testing.T) {
 		HAVING AVG(confidence) > 0.85
 	`)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	count := 0
 	for rows.Next() {
@@ -405,7 +405,7 @@ func TestMySQL_HAVING_Clause(t *testing.T) {
 func TestMySQL_ConcurrentInserts(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	const numGoroutines = 10
 	const insertsPerGoroutine = 5
 
@@ -413,9 +413,9 @@ func TestMySQL_ConcurrentInserts(t *testing.T) {
 	doneChan := make(chan bool, numGoroutines)
 
 	// Launch concurrent goroutines inserting data
-	for g := 0; g < numGoroutines; g++ {
+	for g := range numGoroutines {
 		go func(goroutineID int) {
-			for i := 0; i < insertsPerGoroutine; i++ {
+			for i := range insertsPerGoroutine {
 				_, err := testDB.ExecContext(ctx,
 					"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
 					fmt.Sprintf("Species_%d_%d", goroutineID, i),
@@ -432,7 +432,7 @@ func TestMySQL_ConcurrentInserts(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for g := 0; g < numGoroutines; g++ {
+	for range numGoroutines {
 		select {
 		case err := <-errChan:
 			t.Fatalf("concurrent insert failed: %v", err)
@@ -451,10 +451,10 @@ func TestMySQL_ConcurrentInserts(t *testing.T) {
 func TestMySQL_ConcurrentReadWrite(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Insert initial data
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err := testDB.ExecContext(ctx,
 			"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
 			fmt.Sprintf("Species_%d", i), "Test", 0.9,
@@ -468,9 +468,9 @@ func TestMySQL_ConcurrentReadWrite(t *testing.T) {
 	doneChan := make(chan bool, numReaders+numWriters)
 
 	// Launch readers
-	for r := 0; r < numReaders; r++ {
+	for range numReaders {
 		go func() {
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				var count int
 				err := testDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM test_detections").Scan(&count)
 				if err != nil {
@@ -483,9 +483,9 @@ func TestMySQL_ConcurrentReadWrite(t *testing.T) {
 	}
 
 	// Launch writers
-	for w := 0; w < numWriters; w++ {
+	for w := range numWriters {
 		go func(writerID int) {
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				_, err := testDB.ExecContext(ctx,
 					"INSERT INTO test_detections (scientific_name, common_name, confidence) VALUES (?, ?, ?)",
 					fmt.Sprintf("Writer_%d_%d", writerID, i), "Test", 0.9,
@@ -500,7 +500,7 @@ func TestMySQL_ConcurrentReadWrite(t *testing.T) {
 	}
 
 	// Wait for completion
-	for i := 0; i < numReaders+numWriters; i++ {
+	for range numReaders + numWriters {
 		select {
 		case err := <-errChan:
 			t.Fatalf("concurrent operation failed: %v", err)
@@ -517,7 +517,7 @@ func TestMySQL_ConcurrentReadWrite(t *testing.T) {
 func TestMySQL_ForeignKeyConstraint(t *testing.T) {
 	resetDatabase(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create parent and child tables with foreign key
 	_, err := testDB.ExecContext(ctx, `
@@ -557,14 +557,14 @@ func TestMySQL_ForeignKeyConstraint(t *testing.T) {
 		"INSERT INTO test_observations (species_id, confidence) VALUES (?, ?)",
 		speciesID, 0.95,
 	)
-	assert.NoError(t, err, "insert with valid FK should succeed")
+	require.NoError(t, err, "insert with valid FK should succeed")
 
 	// Try to insert child with non-existent FK (should fail)
 	_, err = testDB.ExecContext(ctx,
 		"INSERT INTO test_observations (species_id, confidence) VALUES (?, ?)",
 		99999, 0.95,
 	)
-	assert.Error(t, err, "insert with invalid FK should fail")
+	require.Error(t, err, "insert with invalid FK should fail")
 	assert.Contains(t, err.Error(), "foreign key constraint", "error should mention FK constraint")
 
 	// Verify CASCADE DELETE

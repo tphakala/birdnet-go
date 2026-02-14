@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -28,7 +29,7 @@ func WaitForHTTP(url string, timeout time.Duration) error {
 		case <-ctx.Done():
 			return fmt.Errorf("timeout waiting for HTTP endpoint %s: %w", url, ctx.Err())
 		case <-ticker.C:
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 			if err != nil {
 				continue
 			}
@@ -52,7 +53,7 @@ func WaitForTCP(host string, port int, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := net.JoinHostPort(host, strconv.Itoa(port))
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -122,6 +123,7 @@ func PortIsAvailable(port int) bool {
 // GetFreePort finds and returns an available port on the host.
 // It does this by binding to port 0 and letting the OS assign a port.
 func GetFreePort() (int, error) {
+	//nolint:gosec // G102: Binding to :0 is intentional for finding free ports
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return 0, err
