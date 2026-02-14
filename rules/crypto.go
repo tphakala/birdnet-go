@@ -150,7 +150,7 @@ func DeprecatedRSAMultiPrime(m dsl.Matcher) {
 //	plaintext, _ := rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, ciphertext, nil)
 //
 //	// OAEP with separate MGF1 hash (Go 1.26+):
-//	ciphertext, _ := rsa.EncryptOAEPWithOptions(rand.Reader, pub, plaintext, nil,
+//	ciphertext, _ := rsa.EncryptOAEPWithOptions(rand.Reader, pub, plaintext,
 //	    &rsa.OAEPOptions{Hash: crypto.SHA256, MGFHash: crypto.SHA1})
 //
 // PKCS#1 v1.5 encryption is vulnerable to Bleichenbacher's chosen-ciphertext

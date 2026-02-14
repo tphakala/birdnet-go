@@ -63,10 +63,12 @@ func JoinHostPort(m dsl.Matcher) {
 // See: https://pkg.go.dev/path/filepath#IsLocal
 func FilepathIsLocal(m dsl.Matcher) {
 	// Detect simple .. check that might be replaced by IsLocal
+	// Note: For URL paths, strings.Contains is still appropriate because filepath.IsLocal
+	// cleans paths internally (e.g., "path/../etc" → "etc" → valid).
 	m.Match(
 		`strings.Contains($path, "..")`,
 	).
-		Report("consider using filepath.IsLocal($path) for comprehensive path validation (Go 1.20+)")
+		Report("consider using filepath.IsLocal($path) for file path validation (Go 1.20+); for URL paths, strings.Contains is appropriate")
 }
 
 // DeprecatedReverseProxyDirector detects usage of httputil.ReverseProxy's

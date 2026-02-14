@@ -126,20 +126,25 @@ func BytesClone(m dsl.Matcher) {
 func SlicesClone(m dsl.Matcher) {
 	// Pattern: append([]T(nil), s...)
 	// This is a common idiom for cloning slices
+	// Note: Exclude []byte to avoid duplicate warnings with BytesClone rule
 	m.Match(
 		`append([]$typ(nil), $s...)`,
 	).
+		Where(m["typ"].Text != "byte").
 		Report("use slices.Clone($s) instead of append([]$typ(nil), $s...) (Go 1.21+)")
 
 	m.Match(
 		`append([]$typ{}, $s...)`,
 	).
+		Where(m["typ"].Text != "byte").
 		Report("use slices.Clone($s) instead of append([]$typ{}, $s...) (Go 1.21+)")
 
 	// append(s[:0:0], s...) pattern
+	// Exclude []byte slices - those are handled by BytesClone
 	m.Match(
 		`append($s[:0:0], $s...)`,
 	).
+		Where(!m["s"].Type.Is("[]byte")).
 		Report("use slices.Clone($s) instead of append($s[:0:0], $s...) (Go 1.21+)")
 }
 

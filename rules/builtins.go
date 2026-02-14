@@ -191,9 +191,11 @@ func AppendWithoutValues(m dsl.Matcher) {
 // See: https://go.dev/doc/go1.26#language
 func NewWithExpression(m dsl.Matcher) {
 	// Pattern: &[]T{v}[0] - the well-known slice hack for pointer-to-value
+	// Note: Report-only, no autofix. The replacement new($val) must preserve the type of $typ,
+	// which requires new($typ($val)) for type conversions. Since we can't reliably determine
+	// when a type conversion is needed, we report without suggesting an autofix.
 	m.Match(
 		`&[]$typ{$val}[0]`,
 	).
-		Report("use new($val) instead of &[]$typ{$val}[0] (Go 1.26+)").
-		Suggest("new($val)")
+		Report("consider using new($typ($val)) instead of &[]$typ{$val}[0] (Go 1.26+); verify type compatibility")
 }
