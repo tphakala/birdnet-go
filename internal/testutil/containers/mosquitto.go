@@ -51,13 +51,11 @@ func DefaultMosquittoConfig() MosquittoConfig {
 
 // NewMosquittoContainer creates and starts a Mosquitto MQTT broker container.
 // If config is nil, uses DefaultMosquittoConfig().
-func NewMosquittoContainer(config *MosquittoConfig) (*MosquittoContainer, error) {
+func NewMosquittoContainer(ctx context.Context, config *MosquittoConfig) (*MosquittoContainer, error) {
 	if config == nil {
 		defaultCfg := DefaultMosquittoConfig()
 		config = &defaultCfg
 	}
-
-	ctx := context.Background()
 
 	image := fmt.Sprintf("eclipse-mosquitto:%s", config.ImageTag)
 
