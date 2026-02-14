@@ -324,12 +324,11 @@ func (c *MosquittoContainer) ClearRetainedMessages(ctx context.Context) error {
 
 // Terminate stops and removes the Mosquitto container.
 // Also cleans up the temporary config file if one was created.
-func (c *MosquittoContainer) Terminate() error {
+func (c *MosquittoContainer) Terminate(ctx context.Context) error {
 	var terminateErr error
 
 	// Terminate container
 	if c.container != nil {
-		ctx := context.Background()
 		if err := c.container.Terminate(ctx); err != nil {
 			terminateErr = fmt.Errorf("failed to terminate container: %w", err)
 		}
