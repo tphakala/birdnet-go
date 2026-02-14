@@ -415,7 +415,7 @@ func TestIsOperationalError_ExitCodes(t *testing.T) {
 
 			require.Error(t, err, "command should fail with exit code %d", tt.exitCode)
 
-			// Verify it's an exec.ExitError
+			// Verify it's an exec.ExitError (using Go 1.26+ errors.AsType)
 			exitErr, ok := errors.AsType[*exec.ExitError](err)
 			require.True(t, ok, "error should be an *exec.ExitError")
 			require.NotNil(t, exitErr)
