@@ -48,8 +48,7 @@ func assertNoteCommentsResponse(t *testing.T, rec *httptest.ResponseRecorder, er
 		assert.Len(t, comments, expectedCount)
 	} else {
 		require.Error(t, err)
-		var httpErr *echo.HTTPError
-		ok := errors.As(err, &httpErr)
+		httpErr, ok := errors.AsType[*echo.HTTPError](err)
 		assert.True(t, ok)
 		assert.Equal(t, expectedStatus, httpErr.Code)
 	}

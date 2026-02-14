@@ -24,8 +24,7 @@ func ErrorFields(err error) []Field {
 	}
 
 	// Try to extract enhanced error information
-	var ee EnhancedErrorInterface
-	if stderrors.As(err, &ee) {
+	if ee, ok := stderrors.AsType[EnhancedErrorInterface](err); ok {
 		fields := []Field{
 			Error(err),
 			String("component", ee.GetComponent()),

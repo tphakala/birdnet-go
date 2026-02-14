@@ -78,8 +78,7 @@ func assertHandlerError(t *testing.T, handlerErr error, expectedStatus int) {
 	if handlerErr == nil {
 		return // Handler returned nil, response written to recorder
 	}
-	var httpErr *echo.HTTPError
-	if errors.As(handlerErr, &httpErr) {
+	if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
 		assert.Equal(t, expectedStatus, httpErr.Code)
 	}
 }
@@ -405,12 +404,8 @@ func TestServeSpectrogram(t *testing.T) {
 func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	t.Helper()
 
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "media_env_test")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		assert.NoError(t, os.RemoveAll(tempDir), "Failed to remove temp dir")
-	})
+	// Create a temporary directory for test files (auto-cleaned by testing framework)
+	tempDir := t.TempDir()
 
 	// Use the standard test setup which now initializes SFS
 	// We need the controller instance to reconfigure its SFS

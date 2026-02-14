@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -236,7 +238,8 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 	errChan := make(chan error, 1)
 
 	go func() {
-		addr := fmt.Sprintf("%s:%d", t.config.Host, t.config.Port)
+		// Use net.JoinHostPort for proper IPv6 support (handles bracketing automatically)
+		addr := net.JoinHostPort(t.config.Host, strconv.Itoa(t.config.Port))
 		conn, err := ftp.Dial(addr, ftp.DialWithTimeout(t.config.Timeout))
 		if err != nil {
 			errChan <- backup.NewError(backup.ErrIO, "ftp: connection failed", err)

@@ -169,9 +169,9 @@ func validatePath(path string) error {
 	// Clean and normalize the path
 	cleanPath := filepath.Clean(path)
 
-	// Check for directory traversal attempts
-	if strings.Contains(cleanPath, "..") {
-		return errors.Newf("path must not contain directory traversal sequences").
+	// Use filepath.IsLocal for comprehensive path validation (prevents CVE-2023-45284, CVE-2023-45283)
+	if !filepath.IsLocal(cleanPath) {
+		return errors.Newf("path is not local or contains traversal sequences").
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_path").

@@ -76,12 +76,8 @@ func TestAgeBasedCleanupFileTypeEligibility(t *testing.T) {
 	// Print the current list of allowed file types for debugging
 	t.Logf("Allowed file types: %v", allowedFileTypes)
 
-	// Create a temporary directory
-	testDir, err := os.MkdirTemp("", "age_policy_test")
-	require.NoError(t, err, "Failed to create temp directory")
-	defer func() {
-		assert.NoError(t, os.RemoveAll(testDir), "Failed to remove test directory")
-	}()
+	// Create a temporary directory (auto-cleaned by testing framework)
+	testDir := t.TempDir()
 
 	for _, tc := range testFiles {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,12 +107,8 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 	db := &MockDB{}
 	allowedTypes := []string{".wav", ".mp3", ".flac", ".aac", ".opus", ".m4a"}
 
-	// Create a temporary directory
-	testDir, err := os.MkdirTemp("", "age_filter_test")
-	require.NoError(t, err, "Failed to create temp directory")
-	defer func() {
-		assert.NoError(t, os.RemoveAll(testDir), "Failed to remove test directory")
-	}()
+	// Create a temporary directory (auto-cleaned by testing framework)
+	testDir := t.TempDir()
 
 	// Let's create files of all relevant types
 	fileTypes := []string{

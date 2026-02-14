@@ -115,7 +115,7 @@ func IsSafePath(pathStr string) bool {
 	if strings.Contains(pathStr, "//") ||
 		strings.Contains(pathStr, "\\") ||
 		strings.Contains(pathStr, "://") ||
-		strings.Contains(pathStr, "..") ||
+		strings.Contains(pathStr, "..") || //nolint:gocritic // Explicit check needed: filepath.IsLocal cleans "path/../etc" to "etc" (valid!)
 		strings.Contains(pathStr, "\x00") {
 		return false
 	}

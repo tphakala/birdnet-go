@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -724,7 +725,8 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 			// Should not panic
 			result := isValidBasePath(input)
 			// Most malformed inputs should be rejected
-			if strings.Contains(input, "\x00") || strings.Contains(input, "..") {
+			// Use filepath.IsLocal for comprehensive path validation
+			if strings.Contains(input, "\x00") || !filepath.IsLocal(strings.TrimPrefix(input, "/")) {
 				assert.False(t, result, "Should reject input with null/traversal")
 			}
 		})

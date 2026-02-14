@@ -143,8 +143,7 @@ func TestMaliciousInputData(t *testing.T) {
 			err = controller.UpdateSectionSettings(ctx)
 			if err != nil {
 				// Some malicious inputs might be rejected, which is also fine
-				var httpErr *echo.HTTPError
-				if errors.As(err, &httpErr) && httpErr.Code == http.StatusBadRequest {
+				if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusBadRequest {
 					t.Logf("Input rejected as expected: %v", err)
 					return
 				}

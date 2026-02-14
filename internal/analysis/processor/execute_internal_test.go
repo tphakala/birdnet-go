@@ -149,16 +149,14 @@ func TestValidateCommandPath_DirectoryAsCommand(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create a temporary directory
-	tmpDir, err := os.MkdirTemp("", "test_dir_*")
-	require.NoError(t, err)
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	// Create a temporary directory (auto-cleaned by testing framework)
+	tmpDir := t.TempDir()
 
 	// Directories have execute bit set but shouldn't be valid commands
 	// The current implementation checks info.Mode()&0o111 which would pass for directories
 	// This test documents current behavior - if we want to reject directories, we'd need
 	// to also check info.IsDir()
-	_, err = validateCommandPath(tmpDir)
+	_, err := validateCommandPath(tmpDir)
 	// Document behavior: directories may pass the current validation
 	// If this passes, the exec.Command will fail instead
 	_ = err // Current behavior may allow directories through

@@ -138,18 +138,16 @@ func isUnsafePath(p string) bool {
 		return true
 	}
 
-	// Check for ".." anywhere in the path - dangerous after URL decoding
-	if strings.Contains(p, "..") {
-		return true
-	}
-
 	// Check for dangerous URL-encoded patterns
 	if containsDangerousEncodedPattern(strings.ToLower(p)) {
 		return true
 	}
 
-	// filepath.IsLocal provides platform-specific validation for:
-	// - Absolute paths, empty paths, Windows reserved names (NUL, COM1, etc.)
+	// filepath.IsLocal provides comprehensive platform-specific validation for:
+	// - Path traversal attempts (..), absolute paths, empty paths
+	// - Windows reserved names (NUL, COM1, LPT1, etc.)
+	// - Windows \??\ prefix attacks (CVE-2023-45283)
+	// - Space-padded reserved names (CVE-2023-45284)
 	return !filepath.IsLocal(p)
 }
 

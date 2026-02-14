@@ -281,6 +281,7 @@ func updateAllowedFieldsRecursivelyWithTracking(
 		return fmt.Errorf("both values must be structs")
 	}
 
+	//nolint:gocritic // Need index i for getFieldInfo() and Field(i) calls
 	for i := range currentValue.NumField() {
 		fieldInfo := currentValue.Type().Field(i)
 		fieldName := fieldInfo.Name
@@ -1274,6 +1275,7 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	settingsType := settingsValue.Type()
 
 	// Check direct fields first
+	//nolint:gocritic // Need index i for settingsValue.Field(i) call
 	for i := range settingsType.NumField() {
 		field := settingsType.Field(i)
 		if strings.EqualFold(field.Name, section) {

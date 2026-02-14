@@ -133,3 +133,45 @@ func DeprecatedRSAMultiPrime(m dsl.Matcher) {
 	).
 		Report("rsa.GenerateMultiPrimeKey is deprecated; use rsa.GenerateKey for standard 2-prime RSA (Go 1.21+)")
 }
+
+// DeprecatedPKCS1v15 detects deprecated PKCS#1 v1.5 encryption functions
+// which are vulnerable to Bleichenbacher padding oracle attacks.
+//
+// Deprecated patterns (Go 1.26):
+//
+//	ciphertext, _ := rsa.EncryptPKCS1v15(rand.Reader, pub, plaintext)
+//	plaintext, _ := rsa.DecryptPKCS1v15(rand.Reader, priv, ciphertext)
+//	rsa.DecryptPKCS1v15SessionKey(rand.Reader, priv, ciphertext, key)
+//
+// Recommended alternatives:
+//
+//	// OAEP encryption (preferred):
+//	ciphertext, _ := rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, plaintext, nil)
+//	plaintext, _ := rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, ciphertext, nil)
+//
+//	// OAEP with separate MGF1 hash (Go 1.26+):
+//	ciphertext, _ := rsa.EncryptOAEPWithOptions(rand.Reader, pub, plaintext, nil,
+//	    &rsa.OAEPOptions{Hash: crypto.SHA256, MGFHash: crypto.SHA1})
+//
+// PKCS#1 v1.5 encryption is vulnerable to Bleichenbacher's chosen-ciphertext
+// attack, which can allow an attacker to decrypt ciphertexts by observing
+// padding errors. OAEP provides provable security against this class of attack.
+//
+// See: https://pkg.go.dev/crypto/rsa#EncryptOAEP
+// See: https://pkg.go.dev/crypto/rsa#EncryptOAEPWithOptions
+func DeprecatedPKCS1v15(m dsl.Matcher) {
+	m.Match(
+		`rsa.EncryptPKCS1v15($rand, $pub, $msg)`,
+	).
+		Report("rsa.EncryptPKCS1v15 is deprecated in Go 1.26: PKCS#1 v1.5 encryption is vulnerable to Bleichenbacher attacks; use rsa.EncryptOAEP instead")
+
+	m.Match(
+		`rsa.DecryptPKCS1v15($rand, $priv, $ciphertext)`,
+	).
+		Report("rsa.DecryptPKCS1v15 is deprecated in Go 1.26: PKCS#1 v1.5 encryption is vulnerable to Bleichenbacher attacks; use rsa.DecryptOAEP instead")
+
+	m.Match(
+		`rsa.DecryptPKCS1v15SessionKey($rand, $priv, $ciphertext, $key)`,
+	).
+		Report("rsa.DecryptPKCS1v15SessionKey is deprecated in Go 1.26: PKCS#1 v1.5 encryption is vulnerable to Bleichenbacher attacks; use OAEP-based encryption instead")
+}

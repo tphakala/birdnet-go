@@ -169,6 +169,18 @@ func DeferredTimeSince(m dsl.Matcher) {
 		`defer $fn($arg1, $arg2, time.Since($start))`,
 	).
 		Report("time.Since($start) is evaluated at defer time, not function exit; wrap in func() to measure actual duration")
+
+	// time.Since as second argument with trailing args
+	m.Match(
+		`defer $fn($arg, time.Since($start), $*args)`,
+	).
+		Report("time.Since($start) is evaluated at defer time, not function exit; wrap in func() to measure actual duration")
+
+	// time.Since as fourth argument (3 preceding args)
+	m.Match(
+		`defer $fn($arg1, $arg2, $arg3, time.Since($start))`,
+	).
+		Report("time.Since($start) is evaluated at defer time, not function exit; wrap in func() to measure actual duration")
 }
 
 // DeferredTimeNow detects deferred calls to time.Now which evaluate

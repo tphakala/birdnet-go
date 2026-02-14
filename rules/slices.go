@@ -63,49 +63,6 @@ func SortInts(m dsl.Matcher) {
 		Suggest("slices.IsSorted($s)")
 }
 
-// SlicesClone detects manual slice cloning patterns and suggests slices.Clone.
-//
-// Old patterns:
-//
-//	clone := make([]T, len(original))
-//	copy(clone, original)
-//
-//	clone := append([]T(nil), original...)
-//
-// New pattern (Go 1.21+):
-//
-//	clone := slices.Clone(original)
-//
-// Benefits:
-//   - More readable
-//   - Less error-prone
-//   - Single function call
-//
-// See: https://pkg.go.dev/slices#Clone
-func SlicesClone(m dsl.Matcher) {
-	// Pattern: append([]T(nil), s...)
-	// This is a common idiom for cloning slices
-	// Exclude []byte — handled by BytesClone with bytes.Clone suggestion
-	m.Match(
-		`append([]$typ(nil), $s...)`,
-	).
-		Where(!m["s"].Type.Is("[]byte")).
-		Report("use slices.Clone($s) instead of append([]$typ(nil), $s...) (Go 1.21+)")
-
-	m.Match(
-		`append([]$typ{}, $s...)`,
-	).
-		Where(!m["s"].Type.Is("[]byte")).
-		Report("use slices.Clone($s) instead of append([]$typ{}, $s...) (Go 1.21+)")
-
-	// append(s[:0:0], s...) pattern
-	m.Match(
-		`append($s[:0:0], $s...)`,
-	).
-		Where(!m["s"].Type.Is("[]byte")).
-		Report("use slices.Clone($s) instead of append($s[:0:0], $s...) (Go 1.21+)")
-}
-
 // BytesClone detects manual byte slice cloning and suggests bytes.Clone.
 //
 // Old patterns:
@@ -145,6 +102,45 @@ func BytesClone(m dsl.Matcher) {
 	).
 		Where(m["b"].Type.Is("[]byte")).
 		Report("use bytes.Clone($b) instead of append($b[:0:0], $b...) (Go 1.20+)")
+}
+
+// SlicesClone detects manual slice cloning patterns and suggests slices.Clone.
+//
+// Old patterns:
+//
+//	clone := make([]T, len(original))
+//	copy(clone, original)
+//
+//	clone := append([]T(nil), original...)
+//
+// New pattern (Go 1.21+):
+//
+//	clone := slices.Clone(original)
+//
+// Benefits:
+//   - More readable
+//   - Less error-prone
+//   - Single function call
+//
+// See: https://pkg.go.dev/slices#Clone
+func SlicesClone(m dsl.Matcher) {
+	// Pattern: append([]T(nil), s...)
+	// This is a common idiom for cloning slices
+	m.Match(
+		`append([]$typ(nil), $s...)`,
+	).
+		Report("use slices.Clone($s) instead of append([]$typ(nil), $s...) (Go 1.21+)")
+
+	m.Match(
+		`append([]$typ{}, $s...)`,
+	).
+		Report("use slices.Clone($s) instead of append([]$typ{}, $s...) (Go 1.21+)")
+
+	// append(s[:0:0], s...) pattern
+	m.Match(
+		`append($s[:0:0], $s...)`,
+	).
+		Report("use slices.Clone($s) instead of append($s[:0:0], $s...) (Go 1.21+)")
 }
 
 // BackwardIteration detects manual reverse iteration patterns and suggests slices.Backward.
@@ -204,17 +200,18 @@ func BackwardIteration(m dsl.Matcher) {
 func MapKeysCollection(m dsl.Matcher) {
 	// Pattern: for k := range m { keys = append(keys, k) }
 	// This is a common pattern for collecting map keys
+	// Type guard ensures we only match maps, not channels or iterators
 	m.Match(
 		`for $k := range $m { $keys = append($keys, $k) }`,
 	).
-		Where(m["m"].Type.Is("map[$_]$_")).
+		Where(m["m"].Type.Is("map[$k]$v")).
 		Report("use slices.Collect(maps.Keys($m)) to collect map keys (Go 1.23+)")
 
 	// Pattern with underscore for value: for k, _ := range m
 	m.Match(
 		`for $k, _ := range $m { $keys = append($keys, $k) }`,
 	).
-		Where(m["m"].Type.Is("map[$_]$_")).
+		Where(m["m"].Type.Is("map[$k]$v")).
 		Report("use slices.Collect(maps.Keys($m)) to collect map keys (Go 1.23+)")
 }
 
@@ -235,10 +232,11 @@ func MapKeysCollection(m dsl.Matcher) {
 // See: https://pkg.go.dev/slices#Collect
 func MapValuesCollection(m dsl.Matcher) {
 	// Pattern: for _, v := range m { values = append(values, v) }
+	// Type guard ensures we only match maps, not slices or other iterables
 	m.Match(
 		`for _, $v := range $m { $values = append($values, $v) }`,
 	).
-		Where(m["m"].Type.Is("map[$_]$_")).
+		Where(m["m"].Type.Is("map[$k]$v")).
 		Report("use slices.Collect(maps.Values($m)) to collect map values (Go 1.23+)")
 }
 
@@ -260,6 +258,18 @@ func SliceRepeat(m dsl.Matcher) {
 	// Pattern: for loop appending same slice multiple times
 	m.Match(
 		`for $i := 0; $i < $n; $i++ { $result = append($result, $s...) }`,
+	).
+		Report("use slices.Repeat($s, $n) instead of manual repetition loop (Go 1.23+); false positive if $s depends on the loop variable")
+
+	// Pattern: range-over-integer form (with variable)
+	m.Match(
+		`for $i := range $n { $result = append($result, $s...) }`,
+	).
+		Report("use slices.Repeat($s, $n) instead of manual repetition loop (Go 1.23+); false positive if $s depends on the loop variable")
+
+	// Pattern: range-over-integer form (without variable)
+	m.Match(
+		`for range $n { $result = append($result, $s...) }`,
 	).
 		Report("use slices.Repeat($s, $n) instead of manual repetition loop (Go 1.23+)")
 }

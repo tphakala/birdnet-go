@@ -615,6 +615,7 @@ func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
 			// Should not panic
 			result := IsSafePath(input)
 			// Most malformed inputs should be rejected
+			//nolint:gocritic // Explicit check mirrors IsSafePath logic (filepath.IsLocal not suitable here)
 			if strings.Contains(input, "\x00") || strings.Contains(input, "..") {
 				assert.False(t, result, "Should reject input with null/traversal")
 			}

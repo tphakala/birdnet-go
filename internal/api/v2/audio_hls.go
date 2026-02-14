@@ -470,7 +470,8 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 
 	// Validate and build segment path
 	cleanPath := filepath.Clean("/" + decodedPath)
-	if strings.Contains(cleanPath, "..") || cleanPath == "/" {
+	// Use filepath.IsLocal for comprehensive path validation (prevents CVE-2023-45284, CVE-2023-45283)
+	if !filepath.IsLocal(cleanPath[1:]) || cleanPath == "/" {
 		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
 	}
 

@@ -1,7 +1,6 @@
 package v2only
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -17,9 +16,8 @@ import (
 func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	t.Helper()
 
-	// Create temp directory for test
-	tempDir, err := os.MkdirTemp("", "v2only_test_*")
-	require.NoError(t, err)
+	// Create temp directory for test (auto-cleaned by testing framework)
+	tempDir := t.TempDir()
 
 	// Create a test logger
 	testLogger := logger.NewConsoleLogger("v2only_test", logger.LogLevelDebug)
@@ -88,7 +86,7 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 
 	cleanup = func() {
 		_ = ds.Close()
-		_ = os.RemoveAll(tempDir)
+		// tempDir is auto-cleaned by t.TempDir()
 	}
 
 	return ds, cleanup

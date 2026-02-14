@@ -61,15 +61,74 @@ existingFirstSeen: ptr(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC))
 - **errors.AsType()** - type-safe version of `errors.As()`:
 
   ```go
-  // ✅ Go 1.26 - type-safe
-  if pathErr := errors.AsType[*fs.PathError](err); pathErr != nil {
+  // ✅ Go 1.26 - type-safe, ~3x faster
+  if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
       // Use pathErr
   }
 
-  // ❌ Old pattern
+  // ❌ Old pattern - slower, requires pointer setup
   var pathErr *fs.PathError
   if errors.As(err, &pathErr) {
       // Use pathErr
+  }
+  ```
+
+- **filepath.IsLocal()** - comprehensive path validation (Go 1.20+):
+
+  **IMPORTANT**: `filepath.IsLocal()` cleans paths internally! Use carefully based on context:
+
+  ```go
+  // ✅ For FILE paths after cleaning - detects Windows reserved names, CVE-2023-45284/45283
+  cleanPath := filepath.Clean(userInput)
+  if !filepath.IsLocal(cleanPath) {
+      return errors.New("invalid path")
+  }
+
+  // ✅ For URL paths - explicit check needed (IsLocal cleans "path/../etc" → "etc" → valid!)
+  if strings.Contains(urlPath, "..") {
+      return errors.New("traversal attempt")
+  }
+
+  // ❌ Wrong - misses Windows reserved names
+  if strings.Contains(userPath, "..") {
+      return errors.New("invalid path")
+  }
+  ```
+
+  **What filepath.IsLocal() detects**:
+  - Windows reserved names: `COM1`, `LPT1`, `NUL`, etc.
+  - Space-padded reserved names: `COM1` with trailing space (CVE-2023-45284)
+  - Windows `\??\` prefix attacks (CVE-2023-45283)
+  - Absolute paths and empty paths
+
+  **Use cases**:
+  - File system operations AFTER cleaning
+  - Validating final destination paths
+  - NOT for detecting literal ".." in untrusted URLs
+
+- **net.JoinHostPort()** - IPv6-safe host:port formatting:
+
+  ```go
+  // ✅ Correct - handles IPv6 addresses with brackets
+  addr := net.JoinHostPort(host, strconv.Itoa(port))
+  // Result: "[2001:4860:4860::8888]:443" for IPv6
+
+  // ❌ Wrong - breaks IPv6
+  addr := fmt.Sprintf("%s:%d", host, port)
+  // Result: "2001:4860:4860::8888:443" (invalid)
+  ```
+
+- **reflect.Type.Fields()** - iterate struct fields (Go 1.26):
+
+  ```go
+  // ✅ Go 1.26 - cleaner iteration
+  for field := range structType.Fields() {
+      // field is reflect.StructField
+  }
+
+  // ❌ Old pattern
+  for i := range structType.NumField() {
+      field := structType.Field(i)
   }
   ```
 
@@ -115,11 +174,35 @@ fields = append(fields, extraFields...)
 
 - **Prefer `testing/synctest` over `time.Sleep()`** (Go 1.25)
 - `t.Parallel()` only for independent tests
-- Use `t.TempDir()` for temp files
+- **Use `t.TempDir()` for scratch space** (auto-cleanup)
+- **Use `t.ArtifactDir()` for test outputs to preserve** (Go 1.26+)
 - Test with `go test -race`
 - Table-driven tests with `t.Run()`
 - `b.ResetTimer()` after benchmark setup
 - Use `t.Attr()` for test metadata (Go 1.25)
+
+### Test Directory Guidelines (Go 1.26)
+
+- **`t.TempDir()`** - Temporary scratch space, auto-deleted after test
+- **`t.ArtifactDir()`** - Preserved test outputs (with `-artifacts` flag)
+- **Replace `os.MkdirTemp()` in tests** - use appropriate testing method
+
+```go
+// ✅ Scratch space that should be cleaned up
+func TestProcess(t *testing.T) {
+    tmpDir := t.TempDir()  // auto-deleted
+    processFiles(tmpDir)
+}
+
+// ✅ Test artifacts to preserve (logs, debug output)
+func TestAnalysis(t *testing.T) {
+    outDir := t.ArtifactDir()  // preserved with -artifacts flag
+    writeDebugLog(outDir + "/debug.log")
+}
+
+// ❌ Manual temp dirs - no auto-cleanup
+tmpDir, _ := os.MkdirTemp("", "test_*")
+```
 
 ### Test Cleanup Best Practices
 

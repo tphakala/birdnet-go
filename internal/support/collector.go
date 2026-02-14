@@ -1407,8 +1407,8 @@ func (c *Collector) getLogSearchPaths() []string {
 
 	// Validate and add paths safely
 	addPathIfValid := func(basePath, subPath string) {
-		// Ensure basePath is not empty and doesn't contain path traversal attempts
-		if basePath == "" || strings.Contains(basePath, "..") {
+		// Ensure basePath is not empty and validate with filepath.IsLocal (prevents CVE-2023-45284, CVE-2023-45283)
+		if basePath == "" || !filepath.IsLocal(basePath) {
 			return
 		}
 

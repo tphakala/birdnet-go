@@ -958,8 +958,7 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 		err := controller.GetAppConfig(c)
 		if err != nil {
 			// HTTP errors are acceptable
-			var httpErr *echo.HTTPError
-			if !errors.As(err, &httpErr) {
+			if _, ok := errors.AsType[*echo.HTTPError](err); !ok {
 				t.Errorf("Unexpected error type: %T: %v", err, err)
 			}
 		}
@@ -1021,8 +1020,7 @@ func FuzzGetAppConfig_QueryParams(f *testing.F) {
 		// Should never panic (panics from httptest.NewRequest are caught above)
 		err := controller.GetAppConfig(c)
 		if err != nil {
-			var httpErr *echo.HTTPError
-			if !errors.As(err, &httpErr) {
+			if _, ok := errors.AsType[*echo.HTTPError](err); !ok {
 				t.Errorf("Unexpected error type: %T: %v", err, err)
 			}
 		}

@@ -3,13 +3,14 @@ package targets
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -305,7 +306,8 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		}
 
 		// Connect to SSH server
-		addr := fmt.Sprintf("%s:%d", t.config.Host, t.config.Port)
+		// Use net.JoinHostPort for proper IPv6 support (handles bracketing automatically)
+		addr := net.JoinHostPort(t.config.Host, strconv.Itoa(t.config.Port))
 		sshConn, err := ssh.Dial("tcp", addr, config)
 		if err != nil {
 			resultChan <- connResult{nil, errors.New(err).

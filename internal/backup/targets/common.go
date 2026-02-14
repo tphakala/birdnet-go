@@ -213,9 +213,9 @@ func (v *PathValidator) Validate(path string) error {
 		return backup.NewError(backup.ErrValidation, "path cannot be empty", nil)
 	}
 
-	// Check for directory traversal
-	if strings.Contains(path, "..") {
-		return backup.NewError(backup.ErrSecurity, "path contains directory traversal", nil)
+	// Use filepath.IsLocal for comprehensive path validation (prevents CVE-2023-45284, CVE-2023-45283)
+	if !filepath.IsLocal(path) {
+		return backup.NewError(backup.ErrSecurity, "path is not local or contains traversal", nil)
 	}
 
 	// Check total path length
@@ -394,9 +394,9 @@ func ValidatePathWithOpts(pathToCheck string, opts PathValidationOpts) (string, 
 		}
 	}
 
-	// Check for directory traversal
-	if strings.Contains(clean, "..") {
-		return "", backup.NewError(backup.ErrSecurity, "path contains directory traversal", nil)
+	// Use filepath.IsLocal for comprehensive path validation (prevents CVE-2023-45284, CVE-2023-45283)
+	if !filepath.IsLocal(clean) {
+		return "", backup.NewError(backup.ErrSecurity, "path is not local or contains traversal", nil)
 	}
 
 	// Check total path length

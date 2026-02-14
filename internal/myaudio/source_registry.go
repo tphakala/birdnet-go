@@ -683,9 +683,9 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 	// Clean the path to prevent directory traversal
 	cleanPath := filepath.Clean(filePath)
 
-	// Check for directory traversal attempts
-	if strings.Contains(cleanPath, "..") {
-		return errors.Newf("directory traversal detected in file path").
+	// Use filepath.IsLocal for comprehensive path validation (prevents CVE-2023-45284, CVE-2023-45283)
+	if !filepath.IsLocal(cleanPath) {
+		return errors.Newf("path is not local or contains traversal sequences").
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_file_path").

@@ -168,8 +168,8 @@ func assertErrorResponse(t *testing.T, tcName string, expectedStatus int, rec *h
 	}
 
 	// Case 2: Handler returned an error value
-	var httpErr *echo.HTTPError
-	if !errors.As(handlerErr, &httpErr) {
+	httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
+	if !ok {
 		assert.Failf(t, "unexpected error type", "tc=%s: expected echo.HTTPError, got %T", tcName, handlerErr)
 		return
 	}

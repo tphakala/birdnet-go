@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"os"
 	"strings"
@@ -110,8 +110,8 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 		if err := operation(); err != nil {
 			lastErr = err
 			log.Printf("[DEBUG] Retry attempt %d failed: %v", attempts, err)
-			// Exponential backoff with jitter
-			jitter := time.Duration(rand.Int63n(int64(backoff / 2))) // #nosec G404 -- weak randomness acceptable for test backoff jitter, not security-critical
+			// Exponential backoff with jitter (Go 1.22+ math/rand/v2)
+			jitter := time.Duration(rand.Int64N(int64(backoff / 2))) // #nosec G404 -- weak randomness acceptable for test backoff jitter, not security-critical
 			sleepTime := backoff + jitter
 			log.Printf("[DEBUG] Sleeping for %v before next retry", sleepTime)
 
@@ -246,6 +246,7 @@ func verifyNetworkError(t *testing.T, err error) {
 	t.Helper()
 	var dnsErr *net.DNSError
 	var netErr net.Error
+	//nolint:gocritic // OR condition with different error types - AsType would require two separate calls
 	assert.True(t, errors.As(err, &dnsErr) || errors.As(err, &netErr),
 		"Expected either a DNS error or a net.Error, got: %v", err)
 }
