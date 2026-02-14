@@ -87,14 +87,16 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	// Get connection string with multiStatements enabled for script execution
 	connStr, err := mysqlContainer.ConnectionString(ctx, "multiStatements=true")
 	if err != nil {
-		_ = mysqlContainer.Terminate(ctx)
+		// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+		_ = mysqlContainer.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to get connection string: %w", err)
 	}
 
 	// Open database connection
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
-		_ = mysqlContainer.Terminate(ctx)
+		// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+		_ = mysqlContainer.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
@@ -107,7 +109,8 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 	// Verify connection with health check
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		_ = mysqlContainer.Terminate(ctx)
+		// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+		_ = mysqlContainer.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
