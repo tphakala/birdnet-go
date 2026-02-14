@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -764,6 +765,84 @@ func TestDefaultConstants(t *testing.T) {
 
 	maxEntries := GetMaxCacheEntries()
 	assert.Equal(t, 1000, maxEntries, "max cache entries should be 1000")
+}
+
+func TestOperationalErrors_SetLowPriority(t *testing.T) {
+	t.Parallel()
+
+	env := setupTestEnv(t)
+	// We need a bogus path here so `generateWithSoxPCM`` doesn't fail at the "binary not configured" check.
+	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	tests := []struct {
+		name         string
+		setupCtx     func() (context.Context, context.CancelFunc)
+		wantPriority string
+	}{
+		{
+			name: "context canceled sets PriorityLow",
+			setupCtx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(t.Context())
+				cancel()
+				return ctx, cancel
+			},
+			wantPriority: errors.PriorityLow,
+		},
+		{
+			name: "context deadline exceeded sets PriorityLow",
+			setupCtx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithTimeout(t.Context(), 1*time.Nanosecond)
+				time.Sleep(5 * time.Millisecond)
+				return ctx, cancel
+			},
+			wantPriority: errors.PriorityLow,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := tt.setupCtx()
+			defer cancel()
+
+			outputPath := filepath.Join(env.TempDir, "test_"+tt.name+".png")
+			pcmData := []byte{0, 1, 2, 3}
+
+			err := gen.GenerateFromPCM(ctx, pcmData, outputPath, 400, false)
+			require.Error(t, err, "expected error from cancelled/expired context")
+
+			var enhancedErr *errors.EnhancedError
+			require.True(t, errors.As(err, &enhancedErr), "error should be an EnhancedError")
+			assert.Equal(t, tt.wantPriority, enhancedErr.GetPriority(),
+				"operational error should have PriorityLow to prevent dashboard notifications")
+		})
+	}
+}
+
+func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
+	t.Parallel()
+
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.SoxPath = "/nonexistent/sox"
+
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	outputPath := filepath.Join(env.TempDir, "test_non_op.png")
+	pcmData := []byte{0, 1, 2, 3}
+
+	// Use a valid (non-cancelled) context — the error will be "exec: /nonexistent/sox: not found"
+	// which is NOT an operational error
+	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false)
+	require.Error(t, err, "expected error from missing binary execution")
+
+	var enhancedErr *errors.EnhancedError
+	require.True(t, errors.As(err, &enhancedErr), "error should be an EnhancedError")
+
+	// Non-operational errors should NOT have explicit `PriorityLow`
+	assert.NotEqual(t, errors.PriorityLow, enhancedErr.GetPriority(),
+		"non-operational error should not have PriorityLow — it should generate notifications")
 }
 
 // TestNewGenerator_WithNilLogger tests generator creation with nil logger uses default.

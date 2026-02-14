@@ -1,6 +1,8 @@
 package spectrogram
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -302,6 +304,70 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
+		})
+	}
+}
+
+func TestIsOperationalError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "context canceled",
+			err:  context.Canceled,
+			want: true,
+		},
+		{
+			name: "context deadline exceeded",
+			err:  context.DeadlineExceeded,
+			want: true,
+		},
+		{
+			name: "signal killed",
+			err:  fmt.Errorf("exit status 137: signal: killed"),
+			want: true,
+		},
+		{
+			name: "wrapped context canceled",
+			err:  fmt.Errorf("sox failed: %w", context.Canceled),
+			want: true,
+		},
+		{
+			name: "wrapped signal killed",
+			err:  fmt.Errorf("process failed: signal: killed"),
+			want: true,
+		},
+		{
+			name: "generic error",
+			err:  fmt.Errorf("disk full"),
+			want: false,
+		},
+		{
+			name: "sox binary not found",
+			err:  fmt.Errorf("exec: sox: not found"),
+			want: false,
+		},
+		{
+			name: "permission denied",
+			err:  fmt.Errorf("permission denied"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := IsOperationalError(tt.err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

@@ -376,7 +376,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	// Yield to other goroutines before/after blocking on external process
 	runtime.Gosched()
 	if err := cmd.Run(); err != nil {
-		return errors.New(err).
+		eb := errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "generate_with_sox_direct").
@@ -384,8 +384,11 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 			Context("output_path", outputPath).
 			Context("width", width).
 			Context("raw", raw).
-			Context("sox_output", output.String()).
-			Build()
+			Context("sox_output", output.String())
+		if IsOperationalError(err) {
+			eb = eb.Priority(errors.PriorityLow)
+		}
+		return eb.Build()
 	}
 	runtime.Gosched()
 
@@ -493,7 +496,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	// Run FFmpeg (producer)
 	if err := ffmpegCmd.Run(); err != nil {
 		g.killSoxProcess(soxCmd, soxPid)
-		return errors.New(err).
+		eb := errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "run_ffmpeg").
@@ -501,8 +504,11 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Context("width", width).
 			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
-			Context("sox_output", soxOutput.String()).
-			Build()
+			Context("sox_output", soxOutput.String())
+		if IsOperationalError(err) {
+			eb = eb.Priority(errors.PriorityLow)
+		}
+		return eb.Build()
 	}
 
 	// Yield after FFmpeg completes before waiting on Sox
@@ -514,7 +520,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	soxWaitDone = true
 
 	if soxWaitErr != nil {
-		return errors.New(soxWaitErr).
+		eb := errors.New(soxWaitErr).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "wait_sox").
@@ -522,8 +528,11 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Context("width", width).
 			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
-			Context("sox_output", soxOutput.String()).
-			Build()
+			Context("sox_output", soxOutput.String())
+		if IsOperationalError(soxWaitErr) {
+			eb = eb.Priority(errors.PriorityLow)
+		}
+		return eb.Build()
 	}
 	// Yield after pipeline completes to allow other work to proceed
 	runtime.Gosched()
@@ -585,7 +594,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 
 	// Run command
 	if err := cmd.Run(); err != nil {
-		return errors.New(err).
+		eb := errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "generate_with_sox_pcm").
@@ -593,8 +602,11 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 			Context("width", width).
 			Context("raw", raw).
 			Context("sox_stderr", stderr.String()).
-			Context("pcm_bytes", len(pcmData)).
-			Build()
+			Context("pcm_bytes", len(pcmData))
+		if IsOperationalError(err) {
+			eb = eb.Priority(errors.PriorityLow)
+		}
+		return eb.Build()
 	}
 
 	return nil
@@ -638,7 +650,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 	cmd.Stdout = &output
 
 	if err := cmd.Run(); err != nil {
-		return errors.New(err).
+		eb := errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "generate_with_ffmpeg").
@@ -646,8 +658,11 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 			Context("output_path", outputPath).
 			Context("width", width).
 			Context("raw", raw).
-			Context("ffmpeg_output", output.String()).
-			Build()
+			Context("ffmpeg_output", output.String())
+		if IsOperationalError(err) {
+			eb = eb.Priority(errors.PriorityLow)
+		}
+		return eb.Build()
 	}
 
 	return nil

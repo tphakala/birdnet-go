@@ -1789,11 +1789,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
-		isOperationalError := errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) ||
-			strings.Contains(err.Error(), "signal: killed")
-
-		if isOperationalError {
+		if spectrogram.IsOperationalError(err) {
 			// Log at Debug level for expected operational events
 			getSpectrogramLogger().Debug("Spectrogram generation canceled or interrupted",
 				logger.String("spectrogram_key", spectrogramKey),

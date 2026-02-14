@@ -3,6 +3,7 @@
 package spectrogram
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -103,6 +104,18 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 
 	spectrogramPath := strings.TrimSuffix(clipPath, ext) + ".png"
 	return spectrogramPath, nil
+}
+
+// IsOperationalError checks if an error is an expected operational event rather than
+// a genuine failure. Operational errors include context cancellation, deadline exceeded,
+// and process kills (e.g. context-triggered SIGKILL).
+func IsOperationalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		strings.Contains(err.Error(), "signal: killed")
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.

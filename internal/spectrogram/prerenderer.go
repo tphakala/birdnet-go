@@ -444,11 +444,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
-		isOperationalError := errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) ||
-			strings.Contains(err.Error(), "signal: killed")
-
-		if isOperationalError {
+		if IsOperationalError(err) {
 			// Log at Debug level for expected operational events
 			pr.logger.Debug("Spectrogram generation canceled or interrupted",
 				logger.Int("worker_id", workerID),
