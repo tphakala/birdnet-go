@@ -147,6 +147,7 @@ func isUnsafePath(p string) bool {
 	// For HTTP/URL contexts, "path/../etc" is dangerous even though it cleans to "etc".
 	// This check must come BEFORE filepath.IsLocal to catch patterns like "..../file" which
 	// contain ".." as a substring but aren't traversal after cleaning.
+	//nolint:gocritic // URL path context requires explicit ".." check; filepath.IsLocal would clean "path/../etc" to "etc" (valid)
 	if strings.Contains(p, "..") {
 		return true
 	}
