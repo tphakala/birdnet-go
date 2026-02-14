@@ -110,7 +110,8 @@ func NewMosquittoContainer(ctx context.Context, config *MosquittoConfig) (*Mosqu
 	// Get host and port
 	host, err := container.Host(ctx)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+		_ = container.Terminate(context.Background())
 		if configFile != "" {
 			_ = os.Remove(configFile)
 		}
@@ -119,7 +120,8 @@ func NewMosquittoContainer(ctx context.Context, config *MosquittoConfig) (*Mosqu
 
 	mappedPort, err := container.MappedPort(ctx, "1883")
 	if err != nil {
-		_ = container.Terminate(ctx)
+		// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+		_ = container.Terminate(context.Background())
 		if configFile != "" {
 			_ = os.Remove(configFile)
 		}
@@ -139,7 +141,8 @@ func NewMosquittoContainer(ctx context.Context, config *MosquittoConfig) (*Mosqu
 
 	// Verify broker is ready with health check
 	if err := mc.HealthCheck(ctx); err != nil {
-		_ = container.Terminate(ctx)
+		// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+		_ = container.Terminate(context.Background())
 		if configFile != "" {
 			_ = os.Remove(configFile)
 		}
