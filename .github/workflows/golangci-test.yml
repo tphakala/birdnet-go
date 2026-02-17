@@ -112,8 +112,8 @@ jobs:
           # Run tests with JSON output
           # Note: We must capture PIPESTATUS immediately after the pipeline
           # gotestfmt may return non-zero even when tests pass, so we only check go test's exit code
-          # Use noembed tag to skip frontend embedding requirement
-          go test -tags noembed -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+          # Use noembed,skipfrontend tags to skip model and frontend embedding requirement
+          go test -tags noembed,skipfrontend -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "::error title=Test Failure::Unit tests failed - see job summary for details"

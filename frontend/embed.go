@@ -1,4 +1,4 @@
-//go:build !noembed
+//go:build !skipfrontend
 
 package frontend
 

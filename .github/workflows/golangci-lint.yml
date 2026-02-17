@@ -56,8 +56,8 @@ jobs:
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax)
-          # Use noembed tag to skip frontend embedding requirement
-          args: --build-tags=noembed --output.checkstyle.path=golangci-lint-report.xml
+          # Use noembed,skipfrontend tags to skip model and frontend embedding requirement
+          args: --build-tags=noembed,skipfrontend --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()
