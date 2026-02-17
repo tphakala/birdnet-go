@@ -139,7 +139,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.16.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.17.0/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -494,12 +494,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.265.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.266.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/8636f8732409/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/546029d2fa20/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
