@@ -208,9 +208,12 @@
     "toggleSidebar": "Prepnúť bočný panel",
     "mainNavigation": "Hlavná navigácia",
     "closeSidebar": "Zavrieť bočný panel",
+    "collapseSidebar": "Zbaliť bočný panel",
+    "expandSidebar": "Rozbaliť bočný panel",
     "analyticsSubmenu": "Podponuka analytiky",
     "settingsSubmenu": "Podponuka nastavení",
-    "systemSubmenu": "Podponuka systému"
+    "systemSubmenu": "Podponuka systému",
+    "systemTerminal": "Terminál"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Prehľad",
-      "database": "Databáza"
+      "database": "Databáza",
+      "terminal": "Terminál"
     },
     "database": {
       "title": "Správa databázy",
@@ -2395,6 +2399,7 @@
       }
     },
     "security": {
+      "pageLabel": "Nastavenia zabezpečenia",
       "baseUrlLabel": "Základná URL (Base URL)",
       "baseUrlHelp": "Úplná externá URL pre nastavenia reverzného proxy. Keď je nastavená, táto URL sa používa tak, ako je, pre upozornenia a OAuth presmerovania, pričom sa ignorujú nastavenia Host a AutoTLS.",
       "baseUrlValidation": "Zadajte platnú URL začínajúcu na http:// alebo https:// a obsahujúcu hostname",
@@ -2523,6 +2528,13 @@
         "host": "Napríklad localhost:8080 alebo priklad.domena.sk",
         "allowedUsers": "Zadajte jeden alebo viac e-mailov povolených používateľov",
         "subnet": "Zadajte CIDR subnet (napr. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminál prehliadača",
+        "enableLabel": "Povoliť terminál prehliadača",
+        "enableHelpText": "Umožňuje prístup k shellu hostiteľského systému z ľubovoľnej overenej relácie prehliadača. Zakázať, keď sa nepoužíva.",
+        "securityWarning": "Povolenie terminálu prehliadača poskytuje priamy prístup k shellu hostiteľského operačného systému. Každý s platnými prihlasovacími údajmi môže spúšťať ľubovoľné príkazy. Povoľte túto funkciu iba v dôveryhodných sieťach. Zakážte ju, keď nie je potrebná.",
+        "confirmEnable": "Ste si istí, že chcete povoliť terminál prehliadača? Tým sa udelí prístup k shellu hostiteľského systému. Robte to iba v dôveryhodných sieťach."
       }
     },
     "species": {
@@ -3056,5 +3068,16 @@
       "review": "Skontrolovať",
       "download": "Stiahnuť"
     }
+  },
+  "terminal": {
+    "title": "Terminál",
+    "disabled": "Terminál je zakázaný",
+    "disabledDescription": "Terminál prehliadača je zakázaný. Povoľte ho v Nastavenia → Zabezpečenie pre použitie tejto funkcie.",
+    "connected": "Pripojené",
+    "disconnected": "Odpojené",
+    "connecting": "Pripájam...",
+    "connectionError": "Pripojenie zlyhalo",
+    "connectionClosed": "Pripojenie zatvorené",
+    "securityWarning": "Upozornenie: Tento terminál poskytuje priamy prístup k shellu hostiteľského systému. Povoľte iba v dôveryhodných sieťach."
   }
 }

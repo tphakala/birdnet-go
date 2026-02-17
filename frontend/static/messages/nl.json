@@ -208,9 +208,12 @@
     "toggleSidebar": "Wissel zijbalk menu",
     "mainNavigation": "Top navigatie",
     "closeSidebar": "Sluit zijbalk",
+    "collapseSidebar": "Zijbalk inklappen",
+    "expandSidebar": "Zijbalk uitklappen",
     "analyticsSubmenu": "Statistiek submenu",
     "settingsSubmenu": "Instellingen submenu",
-    "systemSubmenu": "Systeemmenu"
+    "systemSubmenu": "Systeemmenu",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Overzicht",
-      "database": "Database"
+      "database": "Database",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Databasebeheer",
@@ -2390,6 +2394,7 @@
       }
     },
     "security": {
+      "pageLabel": "Beveiligingsinstellingen",
       "baseUrlLabel": "Basis URL",
       "baseUrlHelp": "Volledige externe URL voor reverse proxy configuraties. Wanneer ingesteld, wordt deze URL ongewijzigd gebruikt voor meldingen en OAuth omleidingen, waarbij Host en AutoTLS instellingen worden genegeerd.",
       "baseUrlValidation": "Voer een geldige URL in die begint met http:// of https:// en een hostnaam bevat",
@@ -2518,6 +2523,13 @@
         "host": "Bijvoorbeeld, localhost:8080 of example.domain.com",
         "allowedUsers": "Voer een of meer toegestane gebruikers emails in",
         "subnet": "Voer een CIDR subnet in (bijv. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Browserterminal",
+        "enableLabel": "Browserterminal inschakelen",
+        "enableHelpText": "Biedt shell-toegang tot het hostsysteem vanuit elke geverifieerde browsersessie. Schakel uit wanneer niet in gebruik.",
+        "securityWarning": "Het inschakelen van de browserterminal biedt directe shell-toegang tot het hostbesturingssysteem. Iedereen met geldige inloggegevens kan willekeurige opdrachten uitvoeren. Schakel deze functie alleen in op vertrouwde netwerken. Schakel deze uit wanneer niet nodig.",
+        "confirmEnable": "Weet u zeker dat u de browserterminal wilt inschakelen? Dit geeft shell-toegang tot het hostsysteem. Doe dit alleen op vertrouwde netwerken."
       }
     },
     "species": {
@@ -3057,5 +3069,16 @@
       "review": "Beoordeling",
       "download": "Ophalen"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal uitgeschakeld",
+    "disabledDescription": "De browserterminal is uitgeschakeld. Schakel deze in via Instellingen → Beveiliging om deze functie te gebruiken.",
+    "connected": "Verbonden",
+    "disconnected": "Verbinding verbroken",
+    "connecting": "Verbinden...",
+    "connectionError": "Verbinding mislukt",
+    "connectionClosed": "Verbinding gesloten",
+    "securityWarning": "Waarschuwing: Deze terminal biedt directe shell-toegang tot het hostsysteem. Activeer alleen op vertrouwde netwerken."
   }
 }

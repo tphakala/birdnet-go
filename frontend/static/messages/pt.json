@@ -208,9 +208,12 @@
     "toggleSidebar": "Alternar barra lateral",
     "mainNavigation": "Navegação principal",
     "closeSidebar": "Fechar barra lateral",
+    "collapseSidebar": "Recolher barra lateral",
+    "expandSidebar": "Expandir barra lateral",
     "analyticsSubmenu": "Submenu de análises",
     "settingsSubmenu": "Submenu de configurações",
-    "systemSubmenu": "Submenu do sistema"
+    "systemSubmenu": "Submenu do sistema",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Visão geral",
-      "database": "Base de dados"
+      "database": "Base de dados",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Gestão da base de dados",
@@ -2676,6 +2680,7 @@
       }
     },
     "security": {
+      "pageLabel": "Configurações de segurança",
       "serverConfiguration": {
         "title": "Configuração do servidor",
         "description": "Configurar HTTPS e configurações SSL/TLS",
@@ -2804,6 +2809,13 @@
         "host": "Por exemplo, localhost:8080 ou example.domain.com",
         "allowedUsers": "Digite um ou mais e-mails de usuários permitidos",
         "subnet": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminal do Navegador",
+        "enableLabel": "Ativar terminal do navegador",
+        "enableHelpText": "Permite acesso ao shell do sistema host a partir de qualquer sessão de navegador autenticada. Desative quando não estiver em uso.",
+        "securityWarning": "Ativar o terminal do navegador fornece acesso direto ao shell do sistema operacional host. Qualquer pessoa com credenciais válidas pode executar comandos arbitrários. Ative este recurso apenas em redes confiáveis. Desative-o quando não for necessário.",
+        "confirmEnable": "Tem certeza que deseja ativar o terminal do navegador? Isso concede acesso ao shell do sistema host. Faça isso apenas em redes confiáveis."
       }
     },
     "database": {
@@ -3057,5 +3069,16 @@
       "review": "Revisar",
       "download": "Baixar"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal desativado",
+    "disabledDescription": "O terminal do navegador está desativado. Ative-o em Configurações → Segurança para usar este recurso.",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "connecting": "Conectando...",
+    "connectionError": "Falha na conexão",
+    "connectionClosed": "Conexão fechada",
+    "securityWarning": "Aviso: Este terminal fornece acesso direto ao shell do sistema host. Ative apenas em redes confiáveis."
   }
 }

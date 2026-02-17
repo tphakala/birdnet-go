@@ -208,9 +208,12 @@
     "toggleSidebar": "Attiva/disattiva barra laterale",
     "mainNavigation": "Navigazione principale",
     "closeSidebar": "Chiudi barra laterale",
+    "collapseSidebar": "Comprimi barra laterale",
+    "expandSidebar": "Espandi barra laterale",
     "analyticsSubmenu": "Sottomenu analisi",
     "settingsSubmenu": "Sottomenu impostazioni",
-    "systemSubmenu": "Sottomenu sistema"
+    "systemSubmenu": "Sottomenu sistema",
+    "systemTerminal": "Terminale"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Panoramica",
-      "database": "Database"
+      "database": "Database",
+      "terminal": "Terminale"
     },
     "database": {
       "title": "Gestione Database",
@@ -2368,6 +2372,7 @@
       }
     },
     "security": {
+      "pageLabel": "Impostazioni di sicurezza",
       "baseUrlLabel": "URL Base",
       "baseUrlHelp": "URL esterno completo per configurazioni reverse proxy. Quando impostato, questo URL è usato così com'è per notifiche e redirect OAuth, ignorando impostazioni Host e AutoTLS.",
       "baseUrlValidation": "Per favore inserisci un URL valido iniziando con http:// o https:// e includendo un hostname",
@@ -2496,6 +2501,13 @@
         "host": "Per esempio, localhost:8080 o esempio.dominio.com",
         "allowedUsers": "Inserisci una o più email utente consentite",
         "subnet": "Inserisci una sottorete CIDR (es. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminale del Browser",
+        "enableLabel": "Abilita terminale del browser",
+        "enableHelpText": "Consente l'accesso alla shell del sistema host da qualsiasi sessione del browser autenticata. Disabilitare quando non in uso.",
+        "securityWarning": "L'abilitazione del terminale del browser fornisce accesso diretto alla shell del sistema operativo host. Chiunque abbia credenziali valide può eseguire comandi arbitrari. Abilitare questa funzione solo su reti attendibili. Disabilitarla quando non necessaria.",
+        "confirmEnable": "Sei sicuro di voler abilitare il terminale del browser? Ciò concede accesso alla shell del sistema host. Farlo solo su reti attendibili."
       }
     },
     "species": {
@@ -3029,5 +3041,16 @@
       "review": "Revisiona",
       "download": "Scarica"
     }
+  },
+  "terminal": {
+    "title": "Terminale",
+    "disabled": "Terminale disabilitato",
+    "disabledDescription": "Il terminale del browser è disabilitato. Abilitarlo in Impostazioni → Sicurezza per utilizzare questa funzione.",
+    "connected": "Connesso",
+    "disconnected": "Disconnesso",
+    "connecting": "Connessione in corso...",
+    "connectionError": "Connessione non riuscita",
+    "connectionClosed": "Connessione chiusa",
+    "securityWarning": "Avviso: Questo terminale fornisce accesso diretto alla shell del sistema host. Abilitare solo su reti attendibili."
   }
 }

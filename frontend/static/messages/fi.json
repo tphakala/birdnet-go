@@ -198,9 +198,12 @@
     "toggleSidebar": "Vaihda sivupalkin tila",
     "mainNavigation": "Päänavigaatio",
     "closeSidebar": "Sulje sivupalkki",
+    "collapseSidebar": "Pienennä sivupalkki",
+    "expandSidebar": "Laajenna sivupalkki",
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
-    "systemSubmenu": "Järjestelmän alavalikko"
+    "systemSubmenu": "Järjestelmän alavalikko",
+    "systemTerminal": "Terminaali"
   },
   "pageTitle": {
     "settings": "Asetukset - BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Yleiskatsaus",
-      "database": "Tietokanta"
+      "database": "Tietokanta",
+      "terminal": "Terminaali"
     },
     "database": {
       "title": "Tietokannan hallinta",
@@ -2676,6 +2680,7 @@
       }
     },
     "security": {
+      "pageLabel": "Turva-asetukset",
       "baseUrlLabel": "Perus-URL",
       "baseUrlHelp": "Täydellinen ulkoinen URL käänteiselle välityspalvelimelle. Kun asetettu, tätä URL-osoitetta käytetään sellaisenaan ilmoituksiin ja OAuth-uudelleenohjauksiin, ohittaen isäntä- ja AutoTLS-asetukset.",
       "baseUrlValidation": "Anna kelvollinen URL, joka alkaa http:// tai https:// ja sisältää isäntänimen",
@@ -2804,6 +2809,13 @@
         "host": "Esimerkiksi localhost:8080 tai example.domain.com",
         "allowedUsers": "Syötä yksi tai useampi sallittu käyttäjän sähköposti",
         "subnet": "Syötä CIDR-aliverkko (esim. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Selainpääte",
+        "enableLabel": "Ota selainpääte käyttöön",
+        "enableHelpText": "Mahdollistaa komentotulkin käytön host-järjestelmään mistä tahansa todennetusta selainistunnosta. Poista käytöstä, kun ei käytetä.",
+        "securityWarning": "Selainpäätteen käyttöönotto tarjoaa suoran komentotulkin käytön host-käyttöjärjestelmään. Kuka tahansa voimassa olevilla tunnuksilla voi suorittaa mielivaltaisia komentoja. Ota tämä ominaisuus käyttöön vain luotetuissa verkoissa. Poista se käytöstä tarpeen tullen.",
+        "confirmEnable": "Haluatko varmasti ottaa selainpäätteen käyttöön? Tämä myöntää komentotulkin käytön host-järjestelmään. Tee tämä vain luotetuissa verkoissa."
       }
     },
     "database": {
@@ -3057,5 +3069,16 @@
       "review": "Tarkista",
       "download": "Lataa"
     }
+  },
+  "terminal": {
+    "title": "Terminaali",
+    "disabled": "Terminaali on poistettu käytöstä",
+    "disabledDescription": "Selainpääte on poistettu käytöstä. Ota se käyttöön Asetukset → Turvallisuus -kohdassa käyttääksesi tätä ominaisuutta.",
+    "connected": "Yhdistetty",
+    "disconnected": "Yhteys katkaistu",
+    "connecting": "Yhdistetään...",
+    "connectionError": "Yhteys epäonnistui",
+    "connectionClosed": "Yhteys katkaistu",
+    "securityWarning": "Varoitus: Tämä pääte tarjoaa suoran komentotulkin käytön host-järjestelmään. Ota käyttöön vain luotetuissa verkoissa."
   }
 }

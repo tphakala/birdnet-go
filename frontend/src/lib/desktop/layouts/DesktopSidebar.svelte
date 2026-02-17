@@ -190,6 +190,7 @@ Performance Optimizations:
     system: actualRoute.startsWith('/ui/system'),
     systemOverview: actualRoute === '/ui/system',
     systemDatabase: actualRoute === '/ui/system/database',
+    systemTerminal: actualRoute === '/ui/system/terminal',
     settings: actualRoute.startsWith('/ui/settings'),
     settingsMain: actualRoute === '/ui/settings/main',
     settingsAudio: actualRoute === '/ui/settings/audio',
@@ -230,6 +231,7 @@ Performance Optimizations:
     about: onNavigate ? '/about' : '/ui/about',
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
+    systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
     settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
     settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
@@ -329,8 +331,8 @@ Performance Optimizations:
           <button
             onclick={toggleSidebar}
             class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-base-content/60 hover:text-base-content hover:bg-base-content/10 transition-colors duration-150"
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
+            aria-label={t('navigation.collapseSidebar')}
+            title={t('navigation.collapseSidebar')}
           >
             <ChevronsLeft class="size-4" />
           </button>
@@ -341,8 +343,8 @@ Performance Optimizations:
         <button
           onclick={toggleSidebar}
           class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-base-content/60 hover:text-base-content hover:bg-base-content/10 transition-colors duration-150"
-          aria-label="Expand sidebar"
-          title="Expand sidebar"
+          aria-label={t('navigation.expandSidebar')}
+          title={t('navigation.expandSidebar')}
         >
           <ChevronsRight class="size-4" />
         </button>
@@ -609,6 +611,17 @@ Performance Optimizations:
                     >
                       {t('system.sections.database')}
                     </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.systemTerminal)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.systemTerminal
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('system.sections.terminal')}
+                    </button>
                   </div>
                 </div>
               {/if}
@@ -658,6 +671,17 @@ Performance Optimizations:
                     )}
                   >
                     {t('system.sections.database')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.systemTerminal)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.systemTerminal
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('system.sections.terminal')}
                   </button>
                 </div>
               {/if}

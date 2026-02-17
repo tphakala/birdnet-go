@@ -41,7 +41,7 @@
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2 } from '@lucide/svelte';
+  import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import type { Component } from 'svelte';
@@ -373,6 +373,26 @@
     });
   }
 
+  // Terminal toggle — reads from webServer section of the settings store
+  let webServerData = $derived($settingsStore.formData.webServer);
+  let enableTerminal = $derived(webServerData?.enableTerminal ?? false);
+
+  // Change detection for the save bar
+  let terminalHasChanges = $derived(
+    hasSettingsChanged(
+      { enableTerminal: $settingsStore.originalData.webServer?.enableTerminal ?? false },
+      { enableTerminal: enableTerminal }
+    )
+  );
+
+  function handleTerminalToggle(newValue: boolean) {
+    if (newValue) {
+      const confirmed = window.confirm(t('settings.security.terminal.confirmEnable'));
+      if (!confirmed) return;
+    }
+    settingsActions.updateSection('webServer', { enableTerminal: newValue });
+  }
+
   // Tab state
   let activeTab = $state('server');
 
@@ -405,6 +425,13 @@
       icon: Network,
       content: subnetTabContent,
       hasChanges: subnetBypassHasChanges,
+    },
+    {
+      id: 'terminal',
+      label: t('settings.security.terminal.title'),
+      icon: Terminal,
+      content: terminalTabContent,
+      hasChanges: terminalHasChanges,
     },
   ]);
 </script>
@@ -808,7 +835,25 @@
   </div>
 {/snippet}
 
+{#snippet terminalTabContent()}
+  <div class="space-y-6">
+    <SettingsSection title={t('settings.security.terminal.title')}>
+      <div class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] mb-4">
+        <TriangleAlert class="size-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
+        <p class="text-sm text-[var(--color-base-content)] opacity-80">{t('settings.security.terminal.securityWarning')}</p>
+      </div>
+      <Checkbox
+        label={t('settings.security.terminal.enableLabel')}
+        helpText={t('settings.security.terminal.enableHelpText')}
+        checked={enableTerminal}
+        onchange={handleTerminalToggle}
+        disabled={store.isLoading || store.isSaving}
+      />
+    </SettingsSection>
+  </div>
+{/snippet}
+
 <!-- Main Content -->
-<main class="settings-page-content" aria-label="Security settings configuration">
+<main class="settings-page-content" aria-label={t('settings.security.pageLabel')}>
   <SettingsTabs {tabs} bind:activeTab />
 </main>

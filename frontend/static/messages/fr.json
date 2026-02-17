@@ -208,9 +208,12 @@
     "toggleSidebar": "Basculer le menu latéral",
     "mainNavigation": "Navigation principale",
     "closeSidebar": "Fermer la barre latérale",
+    "collapseSidebar": "Réduire la barre latérale",
+    "expandSidebar": "Développer la barre latérale",
     "analyticsSubmenu": "Sous-menu analyses",
     "settingsSubmenu": "Sous-menu paramètres",
-    "systemSubmenu": "Sous-menu système"
+    "systemSubmenu": "Sous-menu système",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Vue d'ensemble",
-      "database": "Base de données"
+      "database": "Base de données",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Gestion de la base de données",
@@ -2390,6 +2394,7 @@
       }
     },
     "security": {
+      "pageLabel": "Paramètres de sécurité",
       "baseUrlLabel": "URL de base",
       "baseUrlHelp": "URL externe complète pour les configurations de proxy inverse. Lorsqu'elle est définie, cette URL est utilisée telle quelle pour les notifications et les redirections OAuth, ignorant les paramètres Host et AutoTLS.",
       "baseUrlValidation": "Veuillez entrer une URL valide commençant par http:// ou https:// et incluant un nom d'hôte",
@@ -2518,6 +2523,13 @@
         "host": "Par exemple, localhost:8080 ou example.domain.com",
         "allowedUsers": "Entrez un ou plusieurs e-mails d'utilisateurs autorisés",
         "subnet": "Entrez un sous-réseau CIDR (ex : 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminal navigateur",
+        "enableLabel": "Activer le terminal navigateur",
+        "enableHelpText": "Permet l'accès shell au système hôte depuis toute session navigateur authentifiée. Désactivez-le quand il n'est pas utilisé.",
+        "securityWarning": "L'activation du terminal navigateur fournit un accès shell direct au système d'exploitation hôte. Toute personne possédant des identifiants valides peut exécuter des commandes arbitraires. N'activez cette fonctionnalité que sur des réseaux de confiance. Désactivez-la lorsqu'elle n'est pas nécessaire.",
+        "confirmEnable": "Voulez-vous vraiment activer le terminal navigateur ? Cela accorde un accès shell au système hôte. Ne le faites que sur des réseaux de confiance."
       }
     },
     "species": {
@@ -3057,5 +3069,16 @@
       "review": "Réviser",
       "download": "Télécharger"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal désactivé",
+    "disabledDescription": "Le terminal navigateur est désactivé. Activez-le dans Paramètres → Sécurité pour utiliser cette fonctionnalité.",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "connecting": "Connexion en cours...",
+    "connectionError": "Échec de la connexion",
+    "connectionClosed": "Connexion fermée",
+    "securityWarning": "Avertissement : Ce terminal fournit un accès shell direct au système hôte. Ne l'activez que sur des réseaux de confiance."
   }
 }

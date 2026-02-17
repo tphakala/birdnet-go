@@ -208,9 +208,12 @@
     "toggleSidebar": "Przełącz menu boczne",
     "mainNavigation": "Główna nawigacja",
     "closeSidebar": "Zamknij menu boczne",
+    "collapseSidebar": "Zwiń pasek boczny",
+    "expandSidebar": "Rozwiń pasek boczny",
     "analyticsSubmenu": "Podmenu analityki",
     "settingsSubmenu": "Podmenu ustawień",
-    "systemSubmenu": "Podmenu systemu"
+    "systemSubmenu": "Podmenu systemu",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Przegląd",
-      "database": "Baza danych"
+      "database": "Baza danych",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Zarządzanie bazą danych",
@@ -2396,6 +2400,7 @@
       }
     },
     "security": {
+      "pageLabel": "Ustawienia zabezpieczeń",
       "baseUrlLabel": "Bazowy URL",
       "baseUrlHelp": "Pełny zewnętrzny URL dla konfiguracji reverse proxy. Po ustawieniu ten URL jest używany bez zmian dla powiadomień i przekierowań OAuth, ignorując ustawienia Host i AutoTLS.",
       "baseUrlValidation": "Wprowadź prawidłowy URL zaczynający się od http:// lub https:// i zawierający nazwę hosta",
@@ -2524,6 +2529,13 @@
         "host": "Na przykład, localhost:8080 lub example.domain.com",
         "allowedUsers": "Wprowadź jeden lub więcej dozwolonych adresów e-mail użytkowników",
         "subnet": "Wprowadź podsieć CIDR (np. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminal przeglądarki",
+        "enableLabel": "Włącz terminal przeglądarki",
+        "enableHelpText": "Umożliwia dostęp do powłoki systemu hosta z każdej uwierzytelnionej sesji przeglądarki. Wyłączaj, gdy nie jest używany.",
+        "securityWarning": "Włączenie terminala przeglądarki zapewnia bezpośredni dostęp do powłoki systemu operacyjnego hosta. Każda osoba z ważnymi danymi uwierzytelniającymi może wykonywać dowolne polecenia. Włączaj tę funkcję tylko w zaufanych sieciach. Wyłączaj ją, gdy nie jest potrzebna.",
+        "confirmEnable": "Czy na pewno chcesz włączyć terminal przeglądarki? Spowoduje to przyznanie dostępu do powłoki systemu hosta. Wykonuj to tylko w zaufanych sieciach."
       }
     },
     "species": {
@@ -3057,5 +3069,16 @@
       "review": "Przejrzyj",
       "download": "Pobierz"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal wyłączony",
+    "disabledDescription": "Terminal przeglądarki jest wyłączony. Włącz go w Ustawienia → Bezpieczeństwo, aby skorzystać z tej funkcji.",
+    "connected": "Połączono",
+    "disconnected": "Rozłączono",
+    "connecting": "Łączenie...",
+    "connectionError": "Błąd połączenia",
+    "connectionClosed": "Połączenie zamknięte",
+    "securityWarning": "Ostrzeżenie: Ten terminal zapewnia bezpośredni dostęp do powłoki systemu hosta. Włączaj tylko w zaufanych sieciach."
   }
 }

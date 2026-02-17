@@ -1018,11 +1018,12 @@ type Security struct {
 }
 
 type WebServerSettings struct {
-	Debug      bool               `json:"debug"`      // true to enable debug mode
-	Enabled    bool               `json:"enabled"`    // true to enable web server
-	Port       string             `json:"port"`       // port for web server
-	BasePath   string             `json:"basePath"`   // reverse proxy subpath prefix (e.g., "/birdnet")
-	LiveStream LiveStreamSettings `json:"liveStream"` // live stream configuration
+	Debug          bool               `json:"debug"`          // true to enable debug mode
+	Enabled        bool               `json:"enabled"`        // true to enable web server
+	Port           string             `json:"port"`           // port for web server
+	BasePath       string             `json:"basePath"`       // reverse proxy subpath prefix (e.g., "/birdnet")
+	LiveStream     LiveStreamSettings `json:"liveStream"`     // live stream configuration
+	EnableTerminal bool               `json:"enableTerminal"` // Enable browser terminal (security risk)
 }
 
 type LiveStreamSettings struct {

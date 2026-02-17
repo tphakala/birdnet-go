@@ -208,9 +208,12 @@
     "toggleSidebar": "Seitenleiste umschalten",
     "mainNavigation": "Hauptnavigation",
     "closeSidebar": "Seitenleiste schließen",
+    "collapseSidebar": "Seitenleiste einklappen",
+    "expandSidebar": "Seitenleiste ausklappen",
     "analyticsSubmenu": "Analysen-Untermenü",
     "settingsSubmenu": "Einstellungen-Untermenü",
-    "systemSubmenu": "System-Untermenü"
+    "systemSubmenu": "System-Untermenü",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Übersicht",
-      "database": "Datenbank"
+      "database": "Datenbank",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Datenbankverwaltung",
@@ -2676,6 +2680,7 @@
       }
     },
     "security": {
+      "pageLabel": "Sicherheitseinstellungen",
       "baseUrlLabel": "Basis-URL",
       "baseUrlHelp": "Vollständige externe URL für Reverse-Proxy-Setups. Wenn gesetzt, wird diese URL unverändert für Benachrichtigungen und OAuth-Weiterleitungen verwendet, wobei Host- und AutoTLS-Einstellungen ignoriert werden.",
       "baseUrlValidation": "Bitte geben Sie eine gültige URL ein, die mit http:// oder https:// beginnt und einen Hostnamen enthält",
@@ -2804,6 +2809,13 @@
         "host": "Zum Beispiel localhost:8080 oder example.domain.com",
         "allowedUsers": "Geben Sie eine oder mehrere erlaubte Benutzer-E-Mails ein",
         "subnet": "Geben Sie ein CIDR-Subnetz ein (z.B. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Browser-Terminal",
+        "enableLabel": "Browser-Terminal aktivieren",
+        "enableHelpText": "Ermöglicht Shell-Zugang zum Host-System über jede authentifizierte Browser-Sitzung. Bei Nichtgebrauch deaktivieren.",
+        "securityWarning": "Die Aktivierung des Browser-Terminals bietet direkten Shell-Zugang zum Host-Betriebssystem. Jeder mit gültigen Anmeldedaten kann beliebige Befehle ausführen. Diese Funktion nur in vertrauenswürdigen Netzwerken aktivieren. Bei Bedarf deaktivieren.",
+        "confirmEnable": "Möchten Sie das Browser-Terminal wirklich aktivieren? Dies gewährt Shell-Zugang zum Host-System. Nur in vertrauenswürdigen Netzwerken empfohlen."
       }
     },
     "database": {
@@ -3057,5 +3069,16 @@
       "review": "Überprüfen",
       "download": "Herunterladen"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal ist deaktiviert",
+    "disabledDescription": "Das Browser-Terminal ist deaktiviert. Aktivieren Sie es unter Einstellungen → Sicherheit, um diese Funktion zu nutzen.",
+    "connected": "Verbunden",
+    "disconnected": "Getrennt",
+    "connecting": "Verbinde...",
+    "connectionError": "Verbindung fehlgeschlagen",
+    "connectionClosed": "Verbindung getrennt",
+    "securityWarning": "Warnung: Dieses Terminal bietet direkten Shell-Zugang zum Host-System. Nur in vertrauenswürdigen Netzwerken aktivieren."
   }
 }

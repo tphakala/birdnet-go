@@ -208,9 +208,12 @@
     "toggleSidebar": "Alternar menú lateral",
     "mainNavigation": "Navegación principal",
     "closeSidebar": "Cerrar barra lateral",
+    "collapseSidebar": "Colapsar barra lateral",
+    "expandSidebar": "Expandir barra lateral",
     "analyticsSubmenu": "Submenú de análisis",
     "settingsSubmenu": "Submenú de configuración",
-    "systemSubmenu": "Submenú de sistema"
+    "systemSubmenu": "Submenú de sistema",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Resumen",
-      "database": "Base de datos"
+      "database": "Base de datos",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Gestión de base de datos",
@@ -2676,6 +2680,7 @@
       }
     },
     "security": {
+      "pageLabel": "Configuración de seguridad",
       "baseUrlLabel": "URL base",
       "baseUrlHelp": "URL externa completa para configuraciones de proxy inverso. Cuando se establece, esta URL se usa tal cual para notificaciones y redirecciones OAuth, ignorando la configuración de Host y AutoTLS.",
       "baseUrlValidation": "Por favor, introduce una URL válida que comience con http:// o https:// e incluya un nombre de host",
@@ -2804,6 +2809,13 @@
         "host": "Por ejemplo, localhost:8080 o example.domain.com",
         "allowedUsers": "Ingresa uno o más correos de usuarios permitidos",
         "subnet": "Ingresa una subred CIDR (ej. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminal del Navegador",
+        "enableLabel": "Habilitar terminal del navegador",
+        "enableHelpText": "Permite acceso de shell al sistema host desde cualquier sesión de navegador autenticada. Deshabilite cuando no esté en uso.",
+        "securityWarning": "Habilitar el terminal del navegador proporciona acceso de shell directo al sistema operativo host. Cualquier persona con credenciales válidas puede ejecutar comandos arbitrarios. Solo habilite esta función en redes de confianza. Deshabilítela cuando no sea necesaria.",
+        "confirmEnable": "¿Está seguro de que desea habilitar el terminal del navegador? Esto otorga acceso de shell al sistema host. Solo hágalo en redes de confianza."
       }
     },
     "database": {
@@ -3057,5 +3069,16 @@
       "review": "Revisar",
       "download": "Descargar"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal deshabilitado",
+    "disabledDescription": "El terminal del navegador está deshabilitado. Habilítelo en Configuración → Seguridad para usar esta función.",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "connecting": "Conectando...",
+    "connectionError": "Error de conexión",
+    "connectionClosed": "Conexión cerrada",
+    "securityWarning": "Advertencia: Esta terminal proporciona acceso de shell directo al sistema host. Solo habilítela en redes de confianza."
   }
 }

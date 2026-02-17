@@ -436,6 +436,7 @@ export interface WebServerSettings {
   port?: string;
   log?: LogConfig;
   liveStream?: LiveStreamSettings;
+  enableTerminal?: boolean; // Enable browser terminal (security risk - disabled by default)
 }
 
 // Dashboard settings

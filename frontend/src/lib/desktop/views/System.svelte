@@ -3,6 +3,7 @@
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
   import { DatabaseManagement } from '$lib/desktop/components/database';
+  import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import { t } from '$lib/i18n';
   import { RefreshCw } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
@@ -12,6 +13,7 @@
   let currentSubpage = $derived.by(() => {
     const path = navigation.currentPath;
     if (path === '/ui/system/database') return 'database';
+    if (path === '/ui/system/terminal') return 'terminal';
     return 'overview';
   });
 
@@ -277,7 +279,24 @@
   });
 </script>
 
-{#if currentSubpage === 'database'}
+{#if currentSubpage === 'terminal'}
+  <!-- Browser Terminal Page
+       Use explicit dvh-based height: h-full doesn't work here because the ancestor
+       grid uses grid-rows-[min-content], so h-full resolves to content height
+       instead of the viewport, causing the page to scroll.
+       Offset breakdown (mobile / desktop lg):
+         Header: p-1+h-12+p-1=56px  /  lg:p-4+h-12+lg:p-4=80px
+         Header-wrapper bottom padding: p-3=12px  /  lg:pb-0=0px
+         mainContent bottom padding: p-3=12px  /  lg:p-8=32px
+         Total: 80px  /  112px -->
+  <div
+    class="col-span-12 flex flex-col h-[calc(100dvh-80px)] lg:h-[calc(100dvh-112px)] overflow-hidden"
+    role="region"
+    aria-label={t('system.sections.terminal')}
+  >
+    <TerminalPage />
+  </div>
+{:else if currentSubpage === 'database'}
   <!-- Database Management Page -->
   <div class="col-span-12 space-y-4" role="region" aria-label={t('system.database.title')}>
     <div class="max-w-5xl mx-auto">

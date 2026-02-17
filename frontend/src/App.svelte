@@ -9,6 +9,7 @@
   import { t } from './lib/i18n';
   import { appState, initApp, MAX_RETRIES } from './lib/stores/appState.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
+  import { settingsActions } from './lib/stores/settings.js';
 
   const logger = getLogger('app');
 
@@ -128,6 +129,7 @@
   // System subpage title keys
   const systemSubpages: Record<string, string> = {
     '/database': 'system.sections.database',
+    '/terminal': 'system.sections.terminal',
   };
 
   // Dynamic import helper
@@ -413,6 +415,12 @@
     if (sseNotifications) {
       logger.debug('SSE notifications manager initialized');
     }
+
+    // Load settings at app startup so they are available on any page the user navigates to
+    // first (e.g. System → Terminal) without requiring a visit to the Settings page.
+    settingsActions.loadSettings().catch(err => {
+      logger.error('Failed to load settings on app init', err);
+    });
 
     // Initial routing is handled by the reactive $effect below when appInitialized becomes true
   });

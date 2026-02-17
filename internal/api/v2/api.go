@@ -464,6 +464,7 @@ func (c *Controller) initRoutes() {
 		{"analytics routes", c.initAnalyticsRoutes},
 		{"weather routes", c.initWeatherRoutes},
 		{"system routes", c.initSystemRoutes},
+		{"terminal routes", c.initTerminalRoutes},
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},

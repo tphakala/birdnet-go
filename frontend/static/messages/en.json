@@ -208,9 +208,12 @@
     "toggleSidebar": "Toggle sidebar menu",
     "mainNavigation": "Main navigation",
     "closeSidebar": "Close sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
     "analyticsSubmenu": "Analytics submenu",
     "settingsSubmenu": "Settings submenu",
-    "systemSubmenu": "System submenu"
+    "systemSubmenu": "System submenu",
+    "systemTerminal": "Terminal"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -748,7 +751,8 @@
     },
     "sections": {
       "overview": "Overview",
-      "database": "Database"
+      "database": "Database",
+      "terminal": "Terminal"
     },
     "database": {
       "title": "Database Management",
@@ -940,6 +944,17 @@
         }
       }
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal is disabled",
+    "disabledDescription": "The browser terminal is disabled. Enable it in Settings → Security to use this feature.",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "connectionError": "Connection failed",
+    "connectionClosed": "Connection closed",
+    "securityWarning": "Warning: This terminal provides direct shell access to the host system. Only enable it on trusted networks."
   },
   "analytics": {
     "title": "Overview",
@@ -2396,6 +2411,7 @@
       }
     },
     "security": {
+      "pageLabel": "Security settings",
       "baseUrlLabel": "Base URL",
       "baseUrlHelp": "Complete external URL for reverse proxy setups. When set, this URL is used as-is for notifications and OAuth redirects, ignoring Host and AutoTLS settings.",
       "baseUrlValidation": "Please enter a valid URL starting with http:// or https:// and including a hostname",
@@ -2524,6 +2540,13 @@
         "host": "For example, localhost:8080 or example.domain.com",
         "allowedUsers": "Enter one or more allowed user emails",
         "subnet": "Enter a CIDR subnet (e.g. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Browser Terminal",
+        "enableLabel": "Enable browser terminal",
+        "enableHelpText": "Allows shell access to the host system from any authenticated browser session. Disable when not in use.",
+        "securityWarning": "Enabling the browser terminal provides direct shell access to the host operating system. Anyone with valid credentials can run arbitrary commands. Only enable this feature on trusted networks. Disable it when not needed.",
+        "confirmEnable": "Are you sure you want to enable the browser terminal? This grants shell access to the host system. Only do this on trusted networks."
       }
     },
     "species": {
