@@ -3075,7 +3075,7 @@
     "disabledDescription": "Terminál prehliadača je zakázaný. Povoľte ho v Nastavenia → Zabezpečenie pre použitie tejto funkcie.",
     "connected": "Pripojené",
     "disconnected": "Odpojené",
-    "connecting": "Pripájam...",
+    "connecting": "Pripája sa...",
     "connectionError": "Pripojenie zlyhalo",
     "connectionClosed": "Pripojenie zatvorené",
     "securityWarning": "Upozornenie: Tento terminál poskytuje priamy prístup k shellu hostiteľského systému. Povoľte iba v dôveryhodných sieťach."

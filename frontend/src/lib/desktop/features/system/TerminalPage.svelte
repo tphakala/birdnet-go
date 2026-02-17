@@ -27,6 +27,9 @@
   // unsaved local changes and would cause a 403 if connected before saving.
   let isEnabled = $derived($settingsStore.originalData.webServer?.enableTerminal ?? false);
 
+  // Intentionally plain let (not $state): connect() and cleanup() are only
+  // called from within the $effect below, so the effect never needs to track
+  // term directly. A future "Reconnect" button would need to make term $state.
   let term: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let ws: WebSocket | null = null;

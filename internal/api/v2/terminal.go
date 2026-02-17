@@ -85,7 +85,9 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 	if err != nil {
 		c.logErrorIfEnabled("Failed to start terminal PTY", logger.Error(err))
 		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\nFailed to start shell: "+err.Error()+"\r\n"))
-		return err
+		// The WebSocket connection is already hijacked; return nil to avoid
+		// Echo's error handler writing an HTTP response to a hijacked conn.
+		return nil
 	}
 	defer func() {
 		_ = ptmx.Close()
@@ -165,11 +167,13 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 				continue
 			}
 			if _, err := ptmx.Write(msg); err != nil {
-				return err
+				// PTY write failed (shell exited); return nil because the WebSocket
+				// connection is already hijacked and Echo must not write an HTTP error.
+				return nil
 			}
 		case websocket.BinaryMessage:
 			if _, err := ptmx.Write(msg); err != nil {
-				return err
+				return nil
 			}
 		}
 	}
