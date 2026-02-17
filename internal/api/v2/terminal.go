@@ -158,13 +158,16 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 			break
 		}
 		switch msgType {
-		case websocket.BinaryMessage, websocket.TextMessage:
-			// Check for terminal resize message (JSON: {"type":"resize","cols":N,"rows":N})
-			if len(msg) > 0 && msg[0] == '{' {
-				if handled := handleResizeMessage(ptmx, msg); handled {
-					continue
-				}
+		case websocket.TextMessage:
+			// Text messages are either resize control messages (JSON) or user input.
+			// Binary messages are always raw PTY data and skip this check entirely.
+			if handled := handleResizeMessage(ptmx, msg); handled {
+				continue
 			}
+			if _, err := ptmx.Write(msg); err != nil {
+				return err
+			}
+		case websocket.BinaryMessage:
 			if _, err := ptmx.Write(msg); err != nil {
 				return err
 			}

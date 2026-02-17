@@ -63,7 +63,7 @@
     ws.onopen = () => {
       isConnected = true;
       statusMessage = t('terminal.connected');
-      sendResize();
+      fitAddon?.fit();
     };
 
     ws.onmessage = event => {
@@ -93,7 +93,7 @@
     });
 
     // Handle container resize — fitAddon.fit() triggers term.onResize which sends
-    // the resize message to the backend. Calling sendResize() here too would double-send.
+    // the resize message to the backend.
     resizeObserver = new ResizeObserver(() => {
       fitAddon?.fit();
     });
@@ -103,13 +103,6 @@
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
     });
-  }
-
-  function sendResize() {
-    if (!term || !fitAddon || !ws || ws.readyState !== WebSocket.OPEN) return;
-    fitAddon.fit();
-    const { cols, rows } = term;
-    ws.send(JSON.stringify({ type: 'resize', cols, rows }));
   }
 
   function cleanup() {
