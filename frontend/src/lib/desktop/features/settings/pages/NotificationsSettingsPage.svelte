@@ -100,6 +100,11 @@
     // ntfy
     ntfyServer: string;
     ntfyTopic: string;
+    ntfyProtocol: 'https' | 'http';
+    ntfyUsername: string;
+    ntfyPassword: string;
+    ntfyCheckHost: string; // host value at time probe was triggered (for race guard)
+    ntfyCheckStatus: 'idle' | 'checking' | 'https' | 'http' | 'unreachable';
     // Gotify
     gotifyServer: string;
     gotifyToken: string;
@@ -143,6 +148,11 @@
     telegramChatId: '',
     ntfyServer: 'ntfy.sh',
     ntfyTopic: '',
+    ntfyProtocol: 'https',
+    ntfyUsername: '',
+    ntfyPassword: '',
+    ntfyCheckHost: '',
+    ntfyCheckStatus: 'idle',
     gotifyServer: '',
     gotifyToken: '',
     pushoverApiToken: '',
@@ -191,6 +201,18 @@
     { value: 'basic', label: t('settings.notifications.push.services.webhook.auth.basic') },
   ]);
 
+  /** Wraps a bare IPv6 address in brackets for use in URLs. */
+  function normalizeNtfyHost(host: string): string {
+    const trimmed = host.trim();
+    // If it contains a colon (IPv6) but no brackets and no port colon-grouping,
+    // and doesn't already have brackets, wrap it.
+    if (trimmed.includes(':') && !trimmed.startsWith('[') && !trimmed.includes(']:')) {
+      // Bare IPv6: wrap in brackets
+      return `[${trimmed}]`;
+    }
+    return trimmed;
+  }
+
   // Generate shoutrrr URL from service-specific inputs
   function generateShoutrrrUrl(): string {
     switch (selectedService) {
@@ -213,15 +235,28 @@
         return '';
       }
       case 'ntfy': {
-        // Shoutrrr format: ntfy://{server}/{topic} or ntfy://{topic} for ntfy.sh
-        if (serviceFormData.ntfyTopic) {
-          const server = serviceFormData.ntfyServer || 'ntfy.sh';
-          if (server === 'ntfy.sh') {
-            return `ntfy://${serviceFormData.ntfyTopic}`;
-          }
-          return `ntfy://${server}/${serviceFormData.ntfyTopic}`;
+        if (!serviceFormData.ntfyTopic) return '';
+        const server = serviceFormData.ntfyServer?.trim() || 'ntfy.sh';
+        const isPublic = server === 'ntfy.sh';
+
+        // Build user info for auth (encode special chars)
+        const user = serviceFormData.ntfyUsername?.trim() || '';
+        const pass = serviceFormData.ntfyPassword?.trim() || '';
+        const auth = user
+          ? pass
+            ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@`
+            : `${encodeURIComponent(user)}@`
+          : '';
+
+        // Public ntfy.sh: always HTTPS, no scheme param, no auth fields shown in UI
+        if (isPublic) {
+          return `ntfy://${auth}${serviceFormData.ntfyTopic}`;
         }
-        return '';
+
+        // Custom server: add ?scheme=http when HTTP selected
+        const normalizedServer = normalizeNtfyHost(server);
+        const schemeParam = serviceFormData.ntfyProtocol === 'http' ? '?scheme=http' : '';
+        return `ntfy://${auth}${normalizedServer}/${serviceFormData.ntfyTopic}${schemeParam}`;
       }
       case 'gotify': {
         // Shoutrrr format: gotify://{server}/{token}
@@ -561,6 +596,11 @@
       telegramChatId: '',
       ntfyServer: 'ntfy.sh',
       ntfyTopic: '',
+      ntfyProtocol: 'https',
+      ntfyUsername: '',
+      ntfyPassword: '',
+      ntfyCheckHost: '',
+      ntfyCheckStatus: 'idle',
       gotifyServer: '',
       gotifyToken: '',
       pushoverApiToken: '',
@@ -607,20 +647,40 @@
     // so for most services we just show the raw URL in custom mode
     switch (service) {
       case 'ntfy': {
-        // ntfy://topic or ntfy://server/topic
-        // Use safeRegexTest with length limit to prevent ReDoS
-        // eslint-disable-next-line security/detect-unsafe-regex -- Protected by safeRegexTest length limit
-        const ntfyPattern = /^ntfy:\/\/([^/]+)(?:\/(.+))?$/;
+        // Handles:
+        //   ntfy://topic
+        //   ntfy://server/topic
+        //   ntfy://server/topic?scheme=http
+        //   ntfy://user:pass@server/topic?scheme=http
+        /* eslint-disable security/detect-unsafe-regex -- Protected by safeRegexTest length limit */
+        const ntfyPattern =
+          /^ntfy:\/\/(?:([^:@/?]+)(?::([^@/?]*))?@)?([^/?]+)(?:\/([^?]*))?(?:\?(.*))?$/;
+        /* eslint-enable security/detect-unsafe-regex */
         if (safeRegexTest(ntfyPattern, url, 500)) {
           // Non-null assertion safe: safeRegexTest guarantees pattern matches
           const match = url.match(ntfyPattern)!;
-          if (match[2]) {
-            serviceFormData.ntfyServer = match[1];
-            serviceFormData.ntfyTopic = match[2];
+          const [, user, pass, hostOrTopic, pathPart, queryString] = match;
+
+          serviceFormData.ntfyUsername = user ? decodeURIComponent(user) : '';
+          serviceFormData.ntfyPassword = pass ? decodeURIComponent(pass) : '';
+
+          // Parse scheme from query string
+          const params = new URLSearchParams(queryString || '');
+          const scheme = params.get('scheme');
+          serviceFormData.ntfyProtocol = scheme === 'http' ? 'http' : 'https';
+
+          // Use !== undefined (not truthiness) — empty string path means server-only URL
+          if (pathPart !== undefined) {
+            // ntfy://server/topic[?...]
+            serviceFormData.ntfyServer = hostOrTopic;
+            serviceFormData.ntfyTopic = pathPart;
           } else {
+            // ntfy://topic — public ntfy.sh shorthand
             serviceFormData.ntfyServer = 'ntfy.sh';
-            serviceFormData.ntfyTopic = match[1];
+            serviceFormData.ntfyTopic = hostOrTopic;
           }
+          serviceFormData.ntfyCheckStatus = 'idle';
+          serviceFormData.ntfyCheckHost = '';
         }
         break;
       }
