@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"regexp"
@@ -269,15 +271,36 @@ func isValidHostname(h string) bool {
 	return true
 }
 
+// isNtfyHealthResponse returns true if the HTTP response looks like an ntfy
+// /v1/health reply: HTTP 200 with a JSON body containing a "healthy" key.
+// This prevents false positives from unrelated HTTP servers (e.g. nginx)
+// that happen to respond on the probed host/port.
+func isNtfyHealthResponse(r *http.Response) bool {
+	if r.StatusCode != http.StatusOK {
+		return false
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1024))
+	if err != nil {
+		return false
+	}
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		return false
+	}
+	_, hasHealthy := result["healthy"]
+	return hasHealthy
+}
+
 // probeNtfyServer tests HTTPS then HTTP connectivity to the given host.
-// Any HTTP response (including 4xx/5xx) counts as reachable — we only care
-// that TCP+HTTP succeeded, not that the endpoint exists or auth works.
+// It validates the response is from an ntfy server by checking for the
+// /v1/health JSON response with a "healthy" key, preventing false positives
+// from unrelated HTTP servers running on the same host/port.
 func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 	resp := NtfyServerCheckResponse{Recommended: "unreachable"}
 
 	client := &http.Client{
 		Timeout: ntfyServerCheckTimeout,
-		// Don't follow redirects — a redirect response still proves reachability
+		// Don't follow redirects — ntfy health endpoint does not redirect
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -292,8 +315,8 @@ func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 		if err != nil {
 			return false
 		}
-		_ = r.Body.Close()
-		return true // any HTTP response = reachable
+		defer func() { _ = r.Body.Close() }()
+		return isNtfyHealthResponse(r)
 	}
 
 	if tryURL("https://" + host + "/v1/health") {

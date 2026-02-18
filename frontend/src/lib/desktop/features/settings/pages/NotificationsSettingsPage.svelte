@@ -201,6 +201,12 @@
     { value: 'basic', label: t('settings.notifications.push.services.webhook.auth.basic') },
   ]);
 
+  // NTFY protocol options
+  const ntfyProtocolOptions = $derived([
+    { value: 'https', label: 'HTTPS' },
+    { value: 'http', label: 'HTTP' },
+  ]);
+
   /** Wraps a bare IPv6 address in brackets for use in URLs. */
   function normalizeNtfyHost(host: string): string {
     const trimmed = host.trim();
@@ -1377,15 +1383,14 @@
                   {#if serviceFormData.ntfyServer && serviceFormData.ntfyServer !== 'ntfy.sh'}
                     <!-- Protocol selector + Test Connection button -->
                     <div class="flex items-center gap-2 mt-1 flex-wrap">
-                      <select
-                        class="select select-sm select-bordered flex-shrink-0"
+                      <SelectDropdown
                         bind:value={serviceFormData.ntfyProtocol}
-                        onchange={() => (serviceFormData.ntfyCheckStatus = 'idle')}
-                        aria-label={t('settings.notifications.push.services.ntfy.protocol.label')}
-                      >
-                        <option value="https">HTTPS</option>
-                        <option value="http">HTTP</option>
-                      </select>
+                        options={ntfyProtocolOptions}
+                        variant="select"
+                        size="sm"
+                        menuSize="sm"
+                        onChange={() => (serviceFormData.ntfyCheckStatus = 'idle')}
+                      />
                       <button
                         type="button"
                         class="btn btn-sm btn-outline"

@@ -13,9 +13,11 @@ import (
 )
 
 func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
-	// Spin up a fake HTTP server (simulates a reachable ntfy instance)
+	// Spin up a fake HTTP server that mimics the ntfy /v1/health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"healthy":true}`))
 	}))
 	defer ts.Close()
 
@@ -64,6 +66,31 @@ func TestCheckNtfyServer_InvalidHost_Unreachable(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "unreachable", resp["recommended"])
+}
+
+func TestCheckNtfyServer_NonNtfyServerNotFalsePositive(t *testing.T) {
+	// A plain HTTP server (e.g. nginx) that returns 200 with non-ntfy body
+	// must NOT be reported as reachable ntfy.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<html><body>Welcome</body></html>`))
+	}))
+	defer ts.Close()
+
+	e := echo.New()
+	ctrl := &Controller{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host="+ts.Listener.Addr().String(), http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := ctrl.CheckNtfyServer(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "unreachable", resp["recommended"], "non-ntfy HTTP server should not be reported as reachable")
 }
 
 func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
