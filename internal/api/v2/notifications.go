@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -167,6 +171,143 @@ func (c *Controller) SetupNotificationRoutes() {
 
 	// Test endpoints for notification system (authenticated)
 	notificationsGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
+
+	// NTFY server connectivity probe (authenticated)
+	notificationsGroup.GET("/check-ntfy-server", c.CheckNtfyServer)
+}
+
+// ntfyServerCheckTimeout is the per-scheme timeout for the connectivity probe.
+const ntfyServerCheckTimeout = 5 * time.Second
+
+// blockedNtfyHosts contains IP addresses that must not be probed.
+// These are cloud metadata service addresses unrelated to ntfy servers.
+var blockedNtfyHosts = []string{
+	"169.254.169.254", // AWS/GCP/Azure instance metadata service
+	"fd00:ec2::254",   // AWS IPv6 metadata service
+}
+
+// NtfyServerCheckResponse is the JSON response for the NTFY server check endpoint.
+type NtfyServerCheckResponse struct {
+	Recommended string `json:"recommended"` // "https", "http", or "unreachable"
+	HTTPS       bool   `json:"https"`
+	HTTP        bool   `json:"http"`
+}
+
+// CheckNtfyServer probes an NTFY server host for HTTPS and HTTP connectivity.
+// It tries HTTPS first; on failure it falls back to HTTP.
+// GET /api/v2/notifications/check-ntfy-server?host=<hostname[:port]>
+func (c *Controller) CheckNtfyServer(ctx echo.Context) error {
+	host := ctx.QueryParam("host")
+	if host == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "host parameter is required",
+		})
+	}
+
+	if !isValidNtfyHost(host) {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "invalid host parameter",
+		})
+	}
+
+	resp := probeNtfyServer(ctx.Request().Context(), host)
+	return ctx.JSON(http.StatusOK, resp)
+}
+
+// isValidNtfyHost returns true if host is a safe, valid hostname or IP (with optional port).
+// It uses net.SplitHostPort for port handling and net.ParseIP / hostname pattern for the host part.
+func isValidNtfyHost(host string) bool {
+	if host == "" || len(host) > 260 {
+		return false
+	}
+
+	// Strip port (if any) before comparing against blocked hosts
+	hostOnly := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostOnly = h
+	}
+	if slices.Contains(blockedNtfyHosts, hostOnly) {
+		return false
+	}
+
+	// Try parsing as host:port — if it works, validate the host part
+	if h, port, err := net.SplitHostPort(host); err == nil {
+		// Validate port is numeric
+		if _, err := strconv.Atoi(port); err != nil {
+			return false
+		}
+		return isValidHostname(h)
+	}
+
+	// No port: entire string is the host
+	return isValidHostname(host)
+}
+
+// isValidHostname validates a bare hostname or IP address (no port).
+func isValidHostname(h string) bool {
+	// IPv6 with brackets: [::1]
+	if strings.HasPrefix(h, "[") && strings.HasSuffix(h, "]") {
+		inner := h[1 : len(h)-1]
+		return net.ParseIP(inner) != nil
+	}
+	// IPv4 or bare IPv6
+	if net.ParseIP(h) != nil {
+		return true
+	}
+	// DNS hostname: labels separated by dots
+	// Each label: starts/ends with alnum, may contain hyphens, max 63 chars
+	hostnameLabelPattern := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
+	labels := strings.Split(h, ".")
+	if len(labels) == 0 {
+		return false
+	}
+	for _, label := range labels {
+		if label == "" || !hostnameLabelPattern.MatchString(label) {
+			return false
+		}
+	}
+	return true
+}
+
+// probeNtfyServer tests HTTPS then HTTP connectivity to the given host.
+// Any HTTP response (including 4xx/5xx) counts as reachable — we only care
+// that TCP+HTTP succeeded, not that the endpoint exists or auth works.
+func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
+	resp := NtfyServerCheckResponse{Recommended: "unreachable"}
+
+	client := &http.Client{
+		Timeout: ntfyServerCheckTimeout,
+		// Don't follow redirects — a redirect response still proves reachability
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	tryURL := func(rawURL string) bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
+		if err != nil {
+			return false
+		}
+		r, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		_ = r.Body.Close()
+		return true // any HTTP response = reachable
+	}
+
+	if tryURL("https://" + host + "/v1/health") {
+		resp.HTTPS = true
+		resp.Recommended = "https"
+		return resp
+	}
+
+	if tryURL("http://" + host + "/v1/health") {
+		resp.HTTP = true
+		resp.Recommended = "http"
+	}
+
+	return resp
 }
 
 // StreamNotifications handles the SSE connection for real-time notification streaming
