@@ -27,6 +27,9 @@
     Download,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { auth } from '$lib/stores/auth';
+
+  let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
 
   interface Props {
     detection: Detection;
@@ -164,41 +167,43 @@
 
   {#if isOpen}
     <ul bind:this={menuElement} class="action-menu" role="menu">
-      <li>
-        <button onclick={() => handleAction(onReview)} class="menu-item" role="menuitem">
-          <SquarePen class="size-4" />
-          <span>{t('dashboard.recentDetections.actions.review')}</span>
-          {#if detection.verified === 'correct'}
-            <span class="badge badge-success badge-sm">✓</span>
-          {:else if detection.verified === 'false_positive'}
-            <span class="badge badge-error badge-sm">✗</span>
-          {/if}
-        </button>
-      </li>
+      {#if canEdit}
+        <li>
+          <button onclick={() => handleAction(onReview)} class="menu-item" role="menuitem">
+            <SquarePen class="size-4" />
+            <span>{t('dashboard.recentDetections.actions.review')}</span>
+            {#if detection.verified === 'correct'}
+              <span class="badge badge-success badge-sm">✓</span>
+            {:else if detection.verified === 'false_positive'}
+              <span class="badge badge-error badge-sm">✗</span>
+            {/if}
+          </button>
+        </li>
 
-      <li>
-        <button onclick={() => handleAction(onToggleSpecies)} class="menu-item" role="menuitem">
-          {#if isExcluded}
-            <Eye class="size-4" />
-            <span>{t('dashboard.recentDetections.actions.showSpecies')}</span>
-          {:else}
-            <EyeOff class="size-4" />
-            <span>{t('dashboard.recentDetections.actions.ignoreSpecies')}</span>
-          {/if}
-        </button>
-      </li>
+        <li>
+          <button onclick={() => handleAction(onToggleSpecies)} class="menu-item" role="menuitem">
+            {#if isExcluded}
+              <Eye class="size-4" />
+              <span>{t('dashboard.recentDetections.actions.showSpecies')}</span>
+            {:else}
+              <EyeOff class="size-4" />
+              <span>{t('dashboard.recentDetections.actions.ignoreSpecies')}</span>
+            {/if}
+          </button>
+        </li>
 
-      <li>
-        <button onclick={() => handleAction(onToggleLock)} class="menu-item" role="menuitem">
-          {#if detection.locked}
-            <Lock class="size-4" />
-            <span>{t('dashboard.recentDetections.actions.unlockDetection')}</span>
-          {:else}
-            <LockOpen class="size-4" />
-            <span>{t('dashboard.recentDetections.actions.lockDetection')}</span>
-          {/if}
-        </button>
-      </li>
+        <li>
+          <button onclick={() => handleAction(onToggleLock)} class="menu-item" role="menuitem">
+            {#if detection.locked}
+              <Lock class="size-4" />
+              <span>{t('dashboard.recentDetections.actions.unlockDetection')}</span>
+            {:else}
+              <LockOpen class="size-4" />
+              <span>{t('dashboard.recentDetections.actions.lockDetection')}</span>
+            {/if}
+          </button>
+        </li>
+      {/if}
 
       <li>
         <button onclick={() => handleAction(onDownload)} class="menu-item" role="menuitem">
@@ -207,7 +212,7 @@
         </button>
       </li>
 
-      {#if !detection.locked}
+      {#if canEdit && !detection.locked}
         <li class="menu-separator"></li>
         <li>
           <button

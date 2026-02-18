@@ -18,6 +18,9 @@
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
   import { MoreVertical, SquarePen, Eye, EyeOff, Lock, LockOpen, Trash2 } from '@lucide/svelte';
+  import { auth } from '$lib/stores/auth';
+
+  let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
 
   interface Props {
     /** The detection object containing data for this action menu */
@@ -53,6 +56,7 @@
   }: Props = $props();
 
   let isOpen = $state(false);
+  // svelte-ignore non_reactive_update
   let buttonElement: HTMLButtonElement;
   // svelte-ignore non_reactive_update
   let menuElement: HTMLUListElement;
@@ -174,93 +178,95 @@
   });
 </script>
 
-<div class={cn('dropdown relative', className)}>
-  <button
-    bind:this={buttonElement}
-    onclick={handleOpen}
-    class="btn btn-ghost btn-sm min-h-8 h-8 w-8 p-1"
-    aria-label="Actions menu"
-    aria-haspopup="true"
-    aria-expanded={isOpen}
-  >
-    <MoreVertical class="size-5" />
-  </button>
-
-  {#if isOpen}
-    <ul
-      bind:this={menuElement}
-      class="fixed menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
-      role="menu"
+{#if canEdit}
+  <div class={cn('dropdown relative', className)}>
+    <button
+      bind:this={buttonElement}
+      onclick={handleOpen}
+      class="btn btn-ghost btn-sm min-h-8 h-8 w-8 p-1"
+      aria-label="Actions menu"
+      aria-haspopup="true"
+      aria-expanded={isOpen}
     >
-      <li>
-        <button
-          onclick={() => handleAction(onReview)}
-          class="text-sm w-full text-left"
-          role="menuitem"
-        >
-          <div class="flex items-center gap-2">
-            <SquarePen class="size-4" />
-            <span>Review detection</span>
-            {#if detection.verified === 'correct'}
-              <span class="badge badge-success badge-sm">✓</span>
-            {:else if detection.verified === 'false_positive'}
-              <span class="badge badge-error badge-sm">✗</span>
-            {/if}
-          </div>
-        </button>
-      </li>
+      <MoreVertical class="size-5" />
+    </button>
 
-      <li>
-        <button
-          onclick={() => handleAction(onToggleSpecies)}
-          class="text-sm w-full text-left"
-          role="menuitem"
-        >
-          <div class="flex items-center gap-2">
-            {#if isExcluded}
-              <Eye class="size-4" />
-            {:else}
-              <EyeOff class="size-4" />
-            {/if}
-            <span>{isExcluded ? 'Show species' : 'Ignore species'}</span>
-          </div>
-        </button>
-      </li>
-
-      <li>
-        <button
-          onclick={() => handleAction(onToggleLock)}
-          class="text-sm w-full text-left"
-          role="menuitem"
-        >
-          <div class="flex items-center gap-2">
-            {#if detection.locked}
-              <Lock class="size-4" />
-            {:else}
-              <LockOpen class="size-4" />
-            {/if}
-            <span>{detection.locked ? 'Unlock detection' : 'Lock detection'}</span>
-          </div>
-        </button>
-      </li>
-
-      {#if !detection.locked}
+    {#if isOpen}
+      <ul
+        bind:this={menuElement}
+        class="fixed menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
+        role="menu"
+      >
         <li>
           <button
-            onclick={() => handleAction(onDelete)}
-            class="text-sm w-full text-left text-error"
+            onclick={() => handleAction(onReview)}
+            class="text-sm w-full text-left"
             role="menuitem"
           >
             <div class="flex items-center gap-2">
-              <Trash2 class="size-4" />
-              <span>Delete detection</span>
+              <SquarePen class="size-4" />
+              <span>Review detection</span>
+              {#if detection.verified === 'correct'}
+                <span class="badge badge-success badge-sm">✓</span>
+              {:else if detection.verified === 'false_positive'}
+                <span class="badge badge-error badge-sm">✗</span>
+              {/if}
             </div>
           </button>
         </li>
-      {/if}
-    </ul>
-  {/if}
-</div>
+
+        <li>
+          <button
+            onclick={() => handleAction(onToggleSpecies)}
+            class="text-sm w-full text-left"
+            role="menuitem"
+          >
+            <div class="flex items-center gap-2">
+              {#if isExcluded}
+                <Eye class="size-4" />
+              {:else}
+                <EyeOff class="size-4" />
+              {/if}
+              <span>{isExcluded ? 'Show species' : 'Ignore species'}</span>
+            </div>
+          </button>
+        </li>
+
+        <li>
+          <button
+            onclick={() => handleAction(onToggleLock)}
+            class="text-sm w-full text-left"
+            role="menuitem"
+          >
+            <div class="flex items-center gap-2">
+              {#if detection.locked}
+                <Lock class="size-4" />
+              {:else}
+                <LockOpen class="size-4" />
+              {/if}
+              <span>{detection.locked ? 'Unlock detection' : 'Lock detection'}</span>
+            </div>
+          </button>
+        </li>
+
+        {#if !detection.locked}
+          <li>
+            <button
+              onclick={() => handleAction(onDelete)}
+              class="text-sm w-full text-left text-error"
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                <Trash2 class="size-4" />
+                <span>Delete detection</span>
+              </div>
+            </button>
+          </li>
+        {/if}
+      </ul>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .menu {
