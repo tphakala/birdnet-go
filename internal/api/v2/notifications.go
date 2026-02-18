@@ -188,6 +188,9 @@ var blockedNtfyHosts = []string{
 	"fd00:ec2::254",   // AWS IPv6 metadata service
 }
 
+// hostnameLabelPattern validates a single DNS hostname label (RFC 952 / RFC 1123).
+var hostnameLabelPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
+
 // NtfyServerCheckResponse is the JSON response for the NTFY server check endpoint.
 type NtfyServerCheckResponse struct {
 	Recommended string `json:"recommended"` // "https", "http", or "unreachable"
@@ -232,10 +235,10 @@ func isValidNtfyHost(host string) bool {
 		return false
 	}
 
-	// Try parsing as host:port — if it works, validate the host part
+	// Try parsing as host:port — if it works, validate both parts
 	if h, port, err := net.SplitHostPort(host); err == nil {
-		// Validate port is numeric
-		if _, err := strconv.Atoi(port); err != nil {
+		p, err := strconv.Atoi(port)
+		if err != nil || p < 1 || p > 65535 {
 			return false
 		}
 		return isValidHostname(h)
@@ -257,8 +260,6 @@ func isValidHostname(h string) bool {
 		return true
 	}
 	// DNS hostname: labels separated by dots
-	// Each label: starts/ends with alnum, may contain hyphens, max 63 chars
-	hostnameLabelPattern := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	labels := strings.Split(h, ".")
 	if len(labels) == 0 {
 		return false
@@ -271,10 +272,10 @@ func isValidHostname(h string) bool {
 	return true
 }
 
-// isNtfyHealthResponse returns true if the HTTP response looks like an ntfy
-// /v1/health reply: HTTP 200 with a JSON body containing a "healthy" key.
+// isNtfyHealthResponse returns true if the HTTP response looks like a healthy ntfy
+// /v1/health reply: HTTP 200 with a JSON body containing {"healthy": true}.
 // This prevents false positives from unrelated HTTP servers (e.g. nginx)
-// that happen to respond on the probed host/port.
+// that happen to respond on the probed host/port, and rejects unhealthy ntfy instances.
 func isNtfyHealthResponse(r *http.Response) bool {
 	if r.StatusCode != http.StatusOK {
 		return false
@@ -287,8 +288,8 @@ func isNtfyHealthResponse(r *http.Response) bool {
 	if err := json.Unmarshal(body, &result); err != nil {
 		return false
 	}
-	_, hasHealthy := result["healthy"]
-	return hasHealthy
+	healthy, ok := result["healthy"].(bool)
+	return ok && healthy
 }
 
 // probeNtfyServer tests HTTPS then HTTP connectivity to the given host.

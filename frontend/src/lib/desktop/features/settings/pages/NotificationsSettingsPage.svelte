@@ -210,10 +210,10 @@
   /** Wraps a bare IPv6 address in brackets for use in URLs. */
   function normalizeNtfyHost(host: string): string {
     const trimmed = host.trim();
-    // If it contains a colon (IPv6) but no brackets and no port colon-grouping,
-    // and doesn't already have brackets, wrap it.
-    if (trimmed.includes(':') && !trimmed.startsWith('[') && !trimmed.includes(']:')) {
-      // Bare IPv6: wrap in brackets
+    // Only wrap in brackets for bare IPv6 addresses (2+ colons).
+    // A single colon means host:port (e.g. 192.168.1.100:8080) — don't wrap.
+    const colonCount = (trimmed.match(/:/g) || []).length;
+    if (colonCount >= 2 && !trimmed.startsWith('[')) {
       return `[${trimmed}]`;
     }
     return trimmed;
