@@ -134,8 +134,10 @@ func TestIsValidNtfyHost(t *testing.T) {
 		{"", false},
 		{"evil.com/path", false},
 		{"evil.com@other.com", false},
-		{"169.254.169.254", false},       // cloud metadata
-		{"fd00:ec2::254", false},         // cloud metadata IPv6
+		{"169.254.169.254", false},         // cloud metadata
+		{"[169.254.169.254]", false},       // cloud metadata bracketed
+		{"fd00:ec2::254", false},           // cloud metadata IPv6
+		{"[fd00:ec2::254]", false},         // cloud metadata IPv6 bracketed
 		{"192.168.1.100:0", false},       // port 0 out of range
 		{"192.168.1.100:99999", false},   // port > 65535
 		{"192.168.1.100:-1", false},      // negative port

@@ -231,11 +231,13 @@ func isValidNtfyHost(host string) bool {
 		return false
 	}
 
-	// Strip port (if any) before comparing against blocked hosts
+	// Strip port and brackets (if any) before comparing against blocked hosts
 	hostOnly := host
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		hostOnly = h
 	}
+	// Strip brackets from bare IPv6 (e.g. [fd00:ec2::254] → fd00:ec2::254)
+	hostOnly = strings.TrimPrefix(strings.TrimSuffix(hostOnly, "]"), "[")
 	if slices.Contains(blockedNtfyHosts, hostOnly) {
 		return false
 	}
@@ -304,6 +306,15 @@ func isNtfyHealthResponse(r *http.Response) bool {
 func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 	resp := NtfyServerCheckResponse{Recommended: "unreachable"}
 
+	// Normalize bare IPv6 addresses (e.g. ::1 → [::1]) for RFC 3986 URL compliance.
+	// Addresses already bracketed or with ports (handled by SplitHostPort) pass through.
+	hostForURL := host
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+			hostForURL = "[" + host + "]"
+		}
+	}
+
 	client := &http.Client{
 		Timeout: ntfyServerCheckTimeout,
 		// Don't follow redirects — ntfy health endpoint does not redirect
@@ -325,13 +336,13 @@ func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 		return isNtfyHealthResponse(r)
 	}
 
-	if tryURL("https://" + host + "/v1/health") {
+	if tryURL("https://" + hostForURL + "/v1/health") {
 		resp.HTTPS = true
 		resp.Recommended = "https"
 		return resp
 	}
 
-	if tryURL("http://" + host + "/v1/health") {
+	if tryURL("http://" + hostForURL + "/v1/health") {
 		resp.HTTP = true
 		resp.Recommended = "http"
 	}

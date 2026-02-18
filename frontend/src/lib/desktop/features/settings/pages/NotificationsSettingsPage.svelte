@@ -1440,6 +1440,7 @@
                         />
                         <TextInput
                           id="ntfy-password"
+                          type="password"
                           value={serviceFormData.ntfyPassword}
                           label={t('settings.notifications.push.services.ntfy.auth.password.label')}
                           placeholder={t(
