@@ -1758,6 +1758,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Lascia come ntfy.sh per server pubblico o inserisci il tuo server self-hosted"
             },
+            "protocol": {
+              "label": "Protocollo"
+            },
+            "testConnection": "Testa connessione",
+            "connectionOk": {
+              "https": "HTTPS funziona",
+              "http": "HTTP funziona — il server non usa HTTPS"
+            },
+            "connectionFailed": "Impossibile connettersi — controlla hostname e stato del server",
+            "auth": {
+              "label": "Autenticazione (opzionale)",
+              "username": {
+                "label": "Nome utente",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Password / Token di accesso",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Argomento",
               "placeholder": "miei-avvisi-uccelli",

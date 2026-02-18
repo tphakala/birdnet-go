@@ -1797,6 +1797,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
             },
+            "protocol": {
+              "label": "Protocol"
+            },
+            "testConnection": "Test Connection",
+            "connectionOk": {
+              "https": "HTTPS works",
+              "http": "HTTP works — server is not using HTTPS"
+            },
+            "connectionFailed": "Could not connect — check hostname and server status",
+            "auth": {
+              "label": "Authentication (optional)",
+              "username": {
+                "label": "Username",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Password / Access Token",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Topic",
               "placeholder": "my-bird-alerts",

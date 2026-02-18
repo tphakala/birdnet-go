@@ -1746,6 +1746,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Deixe como ntfy.sh para servidor público ou digite seu servidor auto-hospedado"
             },
+            "protocol": {
+              "label": "Protocolo"
+            },
+            "testConnection": "Testar ligação",
+            "connectionOk": {
+              "https": "HTTPS funciona",
+              "http": "HTTP funciona — o servidor não usa HTTPS"
+            },
+            "connectionFailed": "Não foi possível ligar — verifique o nome do host e o estado do servidor",
+            "auth": {
+              "label": "Autenticação (opcional)",
+              "username": {
+                "label": "Nome de utilizador",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Palavra-passe / Token de acesso",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Tópico",
               "placeholder": "meus-alertas-de-passaros",

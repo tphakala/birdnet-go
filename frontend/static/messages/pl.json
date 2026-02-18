@@ -1752,6 +1752,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
             },
+            "protocol": {
+              "label": "Protokół"
+            },
+            "testConnection": "Testuj połączenie",
+            "connectionOk": {
+              "https": "HTTPS działa",
+              "http": "HTTP działa — serwer nie używa HTTPS"
+            },
+            "connectionFailed": "Nie można połączyć — sprawdź nazwę hosta i stan serwera",
+            "auth": {
+              "label": "Uwierzytelnianie (opcjonalne)",
+              "username": {
+                "label": "Nazwa użytkownika",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Hasło / Token dostępu",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Topic",
               "placeholder": "my-bird-alerts",

@@ -1785,6 +1785,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Nechajte ntfy.sh pre verejný server alebo zadajte svoj self-hosted server"
             },
+            "protocol": {
+              "label": "Protokol"
+            },
+            "testConnection": "Otestovať pripojenie",
+            "connectionOk": {
+              "https": "HTTPS funguje",
+              "http": "HTTP funguje — server nepoužíva HTTPS"
+            },
+            "connectionFailed": "Nedá sa pripojiť — skontrolujte názov hostiteľa a stav servera",
+            "auth": {
+              "label": "Autentifikácia (voliteľné)",
+              "username": {
+                "label": "Používateľské meno",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Heslo / Prístupový token",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Téma",
               "placeholder": "moje-vtacie-upozornenia",

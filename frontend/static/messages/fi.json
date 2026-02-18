@@ -1746,6 +1746,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
             },
+            "protocol": {
+              "label": "Protokolla"
+            },
+            "testConnection": "Testaa yhteys",
+            "connectionOk": {
+              "https": "HTTPS toimii",
+              "http": "HTTP toimii — palvelin ei käytä HTTPS:ää"
+            },
+            "connectionFailed": "Yhteys epäonnistui — tarkista isäntänimi ja palvelimen tila",
+            "auth": {
+              "label": "Todennus (valinnainen)",
+              "username": {
+                "label": "Käyttäjänimi",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Salasana / Pääsytunnus",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Topic",
               "placeholder": "my-bird-alerts",

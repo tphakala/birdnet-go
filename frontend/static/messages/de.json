@@ -1780,6 +1780,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Als ntfy.sh für öffentlichen Server belassen oder eigenen selbst gehosteten Server eingeben"
             },
+            "protocol": {
+              "label": "Protokoll"
+            },
+            "testConnection": "Verbindung testen",
+            "connectionOk": {
+              "https": "HTTPS funktioniert",
+              "http": "HTTP funktioniert — Server verwendet kein HTTPS"
+            },
+            "connectionFailed": "Verbindung fehlgeschlagen — Hostname und Serverstatus prüfen",
+            "auth": {
+              "label": "Authentifizierung (optional)",
+              "username": {
+                "label": "Benutzername",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Passwort / Zugriffstoken",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Thema",
               "placeholder": "meine-vogel-benachrichtigungen",

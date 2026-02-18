@@ -1746,6 +1746,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Laissez ntfy.sh pour le serveur public ou entrez votre serveur auto-hébergé"
             },
+            "protocol": {
+              "label": "Protocole"
+            },
+            "testConnection": "Tester la connexion",
+            "connectionOk": {
+              "https": "HTTPS fonctionne",
+              "http": "HTTP fonctionne — le serveur n'utilise pas HTTPS"
+            },
+            "connectionFailed": "Impossible de se connecter — vérifiez le nom d'hôte et l'état du serveur",
+            "auth": {
+              "label": "Authentification (facultatif)",
+              "username": {
+                "label": "Nom d'utilisateur",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Mot de passe / Jeton d'accès",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Sujet",
               "placeholder": "mes-alertes-oiseaux",

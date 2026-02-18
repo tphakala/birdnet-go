@@ -1746,6 +1746,26 @@
               "placeholder": "ntfy.sh",
               "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
             },
+            "protocol": {
+              "label": "Protocol"
+            },
+            "testConnection": "Verbinding testen",
+            "connectionOk": {
+              "https": "HTTPS werkt",
+              "http": "HTTP werkt — server gebruikt geen HTTPS"
+            },
+            "connectionFailed": "Kan geen verbinding maken — controleer hostnaam en serverstatus",
+            "auth": {
+              "label": "Authenticatie (optioneel)",
+              "username": {
+                "label": "Gebruikersnaam",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Wachtwoord / Toegangstoken",
+                "placeholder": ""
+              }
+            },
             "topic": {
               "label": "Topic",
               "placeholder": "my-bird-alerts",
