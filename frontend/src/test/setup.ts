@@ -114,6 +114,13 @@ const translations: Record<string, string> = {
     'Use arrow keys to navigate calendar, Enter to select, Escape to close',
   'common.validation.invalid': 'Invalid value',
   'forms.placeholders.date': 'Select date',
+  // Detection action menu translations
+  'dashboard.recentDetections.actions.review': 'Review detection',
+  'dashboard.recentDetections.actions.showSpecies': 'Show species',
+  'dashboard.recentDetections.actions.ignoreSpecies': 'Ignore species',
+  'dashboard.recentDetections.actions.lockDetection': 'Lock detection',
+  'dashboard.recentDetections.actions.unlockDetection': 'Unlock detection',
+  'dashboard.recentDetections.actions.deleteDetection': 'Delete detection',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
   'settings.audio.audioCapture.description': 'Configure audio capture settings',
