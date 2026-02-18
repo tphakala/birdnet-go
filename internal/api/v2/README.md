@@ -98,17 +98,17 @@ routeInitializers := []struct {
 
 ### Detections (`detections.go`)
 
-| Method | Route                         | Handler                 | Auth | Description                 |
-| ------ | ----------------------------- | ----------------------- | ---- | --------------------------- |
-| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections        |
-| GET    | `/detections/:id`             | `GetDetection`          | ❌   | Get specific detection      |
-| GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections           |
-| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay` | ❌   | Detection time context      |
-| DELETE | `/detections/:id`             | `DeleteDetection`       | ✅   | Delete detection record     |
-| POST   | `/detections/:id/review`      | `ReviewDetection`       | ✅   | Review/verify detection     |
-| POST   | `/detections/:id/lock`        | `LockDetection`         | ✅   | Lock detection from changes |
+| Method | Route                         | Handler                 | Auth | Description                                |
+| ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
+| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections                       |
+| GET    | `/detections/:id`             | `GetDetection`          | ❌   | Get specific detection                     |
+| GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections                          |
+| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay` | ❌   | Detection time context                     |
+| DELETE | `/detections/:id`             | `DeleteDetection`       | ✅   | Delete detection record                    |
+| POST   | `/detections/:id/review`      | `ReviewDetection`       | ✅   | Review/verify detection                    |
+| POST   | `/detections/:id/lock`        | `LockDetection`         | ✅   | Lock detection from changes                |
 | POST   | `/detections/ignore`          | `IgnoreSpecies`         | ✅   | Toggle species in ignore list (add/remove) |
-| GET    | `/detections/ignored`         | `GetExcludedSpecies`    | ✅   | Get list of excluded species |
+| GET    | `/detections/ignored`         | `GetExcludedSpecies`    | ✅   | Get list of excluded species               |
 
 ### Integrations (`integrations.go`)
 
@@ -133,15 +133,17 @@ routeInitializers := []struct {
 
 ### Notifications (`notifications.go`)
 
-| Method | Route                            | Handler                        | Auth | Description                                     |
-| ------ | -------------------------------- | ------------------------------ | ---- | ----------------------------------------------- |
-| GET    | `/notifications/stream`          | `StreamNotifications`          | ✅⚡ | SSE notification & toast stream (authenticated) |
-| GET    | `/notifications`                 | `GetNotifications`             | ❌   | List notifications                              |
-| GET    | `/notifications/:id`             | `GetNotification`              | ❌   | Get specific notification                       |
-| PUT    | `/notifications/:id/read`        | `MarkNotificationRead`         | ❌   | Mark notification as read                       |
-| PUT    | `/notifications/:id/acknowledge` | `MarkNotificationAcknowledged` | ❌   | Acknowledge notification                        |
-| DELETE | `/notifications/:id`             | `DeleteNotification`           | ❌   | Delete notification                             |
-| GET    | `/notifications/unread/count`    | `GetUnreadCount`               | ❌   | Count unread notifications                      |
+| Method | Route                              | Handler                            | Auth | Description                                                                                                                                                   |
+| ------ | ---------------------------------- | ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/notifications/stream`            | `StreamNotifications`              | ✅⚡ | SSE notification & toast stream (authenticated)                                                                                                               |
+| GET    | `/notifications`                   | `GetNotifications`                 | ❌   | List notifications                                                                                                                                            |
+| GET    | `/notifications/:id`               | `GetNotification`                  | ❌   | Get specific notification                                                                                                                                     |
+| PUT    | `/notifications/:id/read`          | `MarkNotificationRead`             | ❌   | Mark notification as read                                                                                                                                     |
+| PUT    | `/notifications/:id/acknowledge`   | `MarkNotificationAcknowledged`     | ❌   | Acknowledge notification                                                                                                                                      |
+| DELETE | `/notifications/:id`               | `DeleteNotification`               | ❌   | Delete notification                                                                                                                                           |
+| GET    | `/notifications/unread/count`      | `GetUnreadCount`                   | ❌   | Count unread notifications                                                                                                                                    |
+| POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                                                          |
+| GET    | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity. Query: `host=<hostname[:port]>`. Response: `{"recommended":"https\|http\|unreachable","https":bool,"http":bool}` |
 
 ### Range Filter (`range.go`)
 
@@ -195,8 +197,8 @@ routeInitializers := []struct {
 
 ### Audio Level SSE (`audio_level.go`)
 
-| Method | Route                  | Handler            | Auth | Description             |
-| ------ | ---------------------- | ------------------ | ---- | ----------------------- |
+| Method | Route                  | Handler            | Auth | Description               |
+| ------ | ---------------------- | ------------------ | ---- | ------------------------- |
 | GET    | `/streams/audio-level` | `StreamAudioLevel` | ❌   | Real-time audio level SSE |
 
 **Features:**
