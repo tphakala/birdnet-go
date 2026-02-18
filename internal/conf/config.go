@@ -287,7 +287,7 @@ type NewSpeciesTemplate struct {
 // PushSettings controls global push delivery and provider list.
 type PushSettings struct {
 	Enabled        bool                 `json:"enabled"`
-	DefaultTimeout Duration              `json:"default_timeout" mapstructure:"default_timeout"`
+	DefaultTimeout Duration             `json:"default_timeout" mapstructure:"default_timeout"`
 	MaxRetries     int                  `json:"max_retries" mapstructure:"max_retries"`
 	RetryDelay     Duration             `json:"retry_delay" mapstructure:"retry_delay"`
 	CircuitBreaker CircuitBreakerConfig `json:"circuit_breaker" mapstructure:"circuit_breaker"`
@@ -343,10 +343,10 @@ type PushProviderConfig struct {
 // WebhookEndpointConfig configures a single webhook endpoint.
 type WebhookEndpointConfig struct {
 	URL     string            `json:"url"`
-	Method  string            `json:"method"`  // POST, PUT, PATCH (default: POST)
-	Headers map[string]string `json:"headers"` // Custom HTTP headers
+	Method  string            `json:"method"`                         // POST, PUT, PATCH (default: POST)
+	Headers map[string]string `json:"headers"`                        // Custom HTTP headers
 	Timeout Duration          `json:"timeout" mapstructure:"timeout"` // Per-endpoint timeout (default: use provider timeout)
-	Auth    WebhookAuthConfig `json:"auth"`    // Authentication configuration
+	Auth    WebhookAuthConfig `json:"auth"`                           // Authentication configuration
 }
 
 // WebhookAuthConfig configures authentication for webhook requests.

@@ -560,7 +560,7 @@ function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null 
   const method = validMethods.includes(rawMethod) ? rawMethod : 'POST';
 
   const coercedEndpoint: WebhookEndpointConfig = {
-    ...(e as unknown as WebhookEndpointConfig), // Preserve backend-only fields
+    ...(e as WebhookEndpointConfig), // Preserve backend-only fields
     url,
     method,
   };

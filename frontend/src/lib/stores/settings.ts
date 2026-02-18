@@ -570,6 +570,7 @@ export interface WebhookEndpointConfig {
   headers?: Record<string, string>;
   timeout?: string; // Duration string, e.g. "30s"
   auth?: WebhookAuthConfig;
+  [key: string]: unknown; // passthrough for backend-only fields
 }
 
 // Push provider configuration (shoutrrr type for user-friendly UI)
