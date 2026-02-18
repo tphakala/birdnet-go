@@ -2085,7 +2085,7 @@ notification:
 Each service has its own URL format. Common examples:
 
 - **Telegram**: `telegram://<bot_token>@telegram?chats=<chat_id>`
-- **Discord**: `discord://<webhook_token>@<webhook_id>`
+- **Discord**: `discord://<webhook_token>@<webhook_id>` (add `?splitLines=No` if using a custom multi-line message template to prevent each line from becoming a separate embed)
 - **Slack**: `slack://token-a/token-b/token-c`
 - **Email**: `smtp://username:password@host:port/?from=sender@example.com&to=recipient@example.com`
 - **Pushover**: `pushover://shoutrrr:<api_token>@<user_key>`
