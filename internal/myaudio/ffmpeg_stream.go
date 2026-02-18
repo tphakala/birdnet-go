@@ -773,13 +773,8 @@ func (s *FFmpegStream) startProcess() error {
 	// Get FFmpeg format settings
 	sampleRate, numChannels, format := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
 
-	// Get RTSP settings for custom FFmpeg parameters
-	rtspSettings := conf.Setting().Realtime.RTSP
-
-	// Build FFmpeg command arguments (protocol-aware)
-	args := s.buildFFmpegInputArgs(rtspSettings.FFmpegParameters)
-
-	// Validate input source before building command to prevent empty input errors
+	// Validate input source before building command to prevent nil dereference in
+	// buildFFmpegInputArgs (which accesses s.source.SafeString and s.source.Type).
 	if s.source == nil {
 		return errors.Newf("FFmpeg source is nil, cannot start process").
 			Category(errors.CategoryValidation).
@@ -787,6 +782,12 @@ func (s *FFmpegStream) startProcess() error {
 			Context("operation", "start_process").
 			Build()
 	}
+
+	// Get RTSP settings for custom FFmpeg parameters
+	rtspSettings := conf.Setting().Realtime.RTSP
+
+	// Build FFmpeg command arguments (protocol-aware)
+	args := s.buildFFmpegInputArgs(rtspSettings.FFmpegParameters)
 
 	// Get and validate connection string
 	connStr, err := s.source.GetConnectionString()
