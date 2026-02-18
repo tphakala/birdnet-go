@@ -287,9 +287,9 @@ type NewSpeciesTemplate struct {
 // PushSettings controls global push delivery and provider list.
 type PushSettings struct {
 	Enabled        bool                 `json:"enabled"`
-	DefaultTimeout time.Duration        `json:"default_timeout" mapstructure:"default_timeout"`
+	DefaultTimeout Duration              `json:"default_timeout" mapstructure:"default_timeout"`
 	MaxRetries     int                  `json:"max_retries" mapstructure:"max_retries"`
-	RetryDelay     time.Duration        `json:"retry_delay" mapstructure:"retry_delay"`
+	RetryDelay     Duration             `json:"retry_delay" mapstructure:"retry_delay"`
 	CircuitBreaker CircuitBreakerConfig `json:"circuit_breaker" mapstructure:"circuit_breaker"`
 	HealthCheck    HealthCheckConfig    `json:"health_check" mapstructure:"health_check"`
 	RateLimiting   RateLimitingConfig   `json:"rate_limiting" mapstructure:"rate_limiting"`
@@ -301,17 +301,17 @@ type PushSettings struct {
 
 // CircuitBreakerConfig holds circuit breaker configuration.
 type CircuitBreakerConfig struct {
-	Enabled             bool          `json:"enabled"`
-	MaxFailures         int           `json:"max_failures" mapstructure:"max_failures"`
-	Timeout             time.Duration `json:"timeout"`
-	HalfOpenMaxRequests int           `json:"half_open_max_requests" mapstructure:"half_open_max_requests"`
+	Enabled             bool     `json:"enabled" mapstructure:"enabled"`
+	MaxFailures         int      `json:"max_failures" mapstructure:"max_failures"`
+	Timeout             Duration `json:"timeout" mapstructure:"timeout"`
+	HalfOpenMaxRequests int      `json:"half_open_max_requests" mapstructure:"half_open_max_requests"`
 }
 
 // HealthCheckConfig holds health check configuration.
 type HealthCheckConfig struct {
-	Enabled  bool          `json:"enabled"`
-	Interval time.Duration `json:"interval"`
-	Timeout  time.Duration `json:"timeout"`
+	Enabled  bool     `json:"enabled" mapstructure:"enabled"`
+	Interval Duration `json:"interval" mapstructure:"interval"`
+	Timeout  Duration `json:"timeout" mapstructure:"timeout"`
 }
 
 // RateLimitingConfig holds rate limiting configuration.
@@ -328,8 +328,8 @@ type PushProviderConfig struct {
 	Name    string           `json:"name"`
 	Filter  PushFilterConfig `json:"filter"`
 	// Shoutrrr-specific
-	URLs    []string      `json:"urls"`
-	Timeout time.Duration `json:"timeout"`
+	URLs    []string `json:"urls"`
+	Timeout Duration `json:"timeout" mapstructure:"timeout"`
 	// Script-specific
 	Command     string            `json:"command"`
 	Args        []string          `json:"args"`
@@ -345,7 +345,7 @@ type WebhookEndpointConfig struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`  // POST, PUT, PATCH (default: POST)
 	Headers map[string]string `json:"headers"` // Custom HTTP headers
-	Timeout time.Duration     `json:"timeout"` // Per-endpoint timeout (default: use provider timeout)
+	Timeout Duration          `json:"timeout" mapstructure:"timeout"` // Per-endpoint timeout (default: use provider timeout)
 	Auth    WebhookAuthConfig `json:"auth"`    // Authentication configuration
 }
 
@@ -1274,8 +1274,8 @@ func Load() (*Settings, error) {
 			Build()
 	}
 
-	// Unmarshal the config into settings
-	if err := viper.Unmarshal(settings); err != nil {
+	// Unmarshal the config into settings, with custom Duration decode hook
+	if err := viper.Unmarshal(settings, viper.DecodeHook(DurationDecodeHook())); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").

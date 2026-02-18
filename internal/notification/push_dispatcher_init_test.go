@@ -670,8 +670,8 @@ func TestCreateHealthCheckerIfEnabled(t *testing.T) {
 				Push: conf.PushSettings{
 					HealthCheck: conf.HealthCheckConfig{
 						Enabled:  true,
-						Interval: 60 * time.Second,
-						Timeout:  10 * time.Second,
+						Interval: conf.Duration(60 * time.Second),
+						Timeout:  conf.Duration(10 * time.Second),
 					},
 				},
 			},

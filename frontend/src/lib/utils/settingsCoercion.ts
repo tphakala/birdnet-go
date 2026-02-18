@@ -560,9 +560,9 @@ function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null 
   const method = validMethods.includes(rawMethod) ? rawMethod : 'POST';
 
   const coercedEndpoint: WebhookEndpointConfig = {
+    ...(e as unknown as WebhookEndpointConfig), // Preserve backend-only fields
     url,
     method,
-    timeout: e.timeout !== undefined ? coerceNumber(e.timeout, 1, 300, 30) : undefined,
   };
 
   // Coerce headers if present - validate each value is a string
@@ -625,10 +625,10 @@ function coercePushProvider(provider: unknown): PushProviderConfig | null {
   const normalizedType = validTypes.includes(providerType) ? providerType : 'shoutrrr';
 
   const coercedProvider: PushProviderConfig = {
+    ...(p as PushProviderConfig), // Preserve backend-only fields (command, args, environment, template, etc.)
     type: normalizedType as PushProviderConfig['type'],
     enabled: coerceBoolean(p.enabled, false),
     name: coerceString(p.name, ''),
-    timeout: p.timeout !== undefined ? coerceNumber(p.timeout, 1, 300, 30) : undefined,
   };
 
   // Coerce URLs only for shoutrrr providers
@@ -690,6 +690,7 @@ function coercePushSettings(settings: unknown): PushSettings {
   const s = settings as UnknownSettings;
 
   return {
+    ...(s as PushSettings), // Preserve backend-only fields (default_timeout, circuit_breaker, health_check, etc.)
     enabled: coerceBoolean(s.enabled, false),
     providers: coerceArray(s.providers, [])
       .map(coercePushProvider)

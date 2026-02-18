@@ -113,8 +113,8 @@ func createPushDispatcher(settings *conf.Settings, notificationMetrics *metrics.
 		log:               GetLogger(),
 		enabled:           settings.Notification.Push.Enabled,
 		maxRetries:        settings.Notification.Push.MaxRetries,
-		retryDelay:        settings.Notification.Push.RetryDelay,
-		defaultTimeout:    settings.Notification.Push.DefaultTimeout,
+		retryDelay:        settings.Notification.Push.RetryDelay.Std(),
+		defaultTimeout:    settings.Notification.Push.DefaultTimeout.Std(),
 		metrics:           notificationMetrics,
 		concurrencySem:    semaphore.NewWeighted(maxConcurrentJobs),
 		maxConcurrentJobs: maxConcurrentJobs,
@@ -140,8 +140,8 @@ func createHealthCheckerIfEnabled(settings *conf.Settings, log logger.Logger, no
 	}
 	hcConfig := HealthCheckConfig{
 		Enabled:  settings.Notification.Push.HealthCheck.Enabled,
-		Interval: settings.Notification.Push.HealthCheck.Interval,
-		Timeout:  settings.Notification.Push.HealthCheck.Timeout,
+		Interval: settings.Notification.Push.HealthCheck.Interval.Std(),
+		Timeout:  settings.Notification.Push.HealthCheck.Timeout.Std(),
 	}
 	return NewHealthChecker(hcConfig, log, notificationMetrics)
 }
@@ -600,7 +600,7 @@ func buildProvider(pc *conf.PushProviderConfig, log logger.Logger) Provider {
 	case "script":
 		return NewScriptProvider(orDefault(pc.Name, "script"), pc.Enabled, pc.Command, pc.Args, pc.Environment, pc.InputFormat, types)
 	case "shoutrrr":
-		return NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout)
+		return NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout.Std())
 	case "webhook":
 		endpoints, err := convertWebhookEndpoints(pc.Endpoints, log)
 		if err != nil {
@@ -993,7 +993,7 @@ func (d *pushDispatcher) getCircuitBreakerConfig(settings *conf.Settings) Circui
 	}
 
 	cbConfig.MaxFailures = settings.Notification.Push.CircuitBreaker.MaxFailures
-	cbConfig.Timeout = settings.Notification.Push.CircuitBreaker.Timeout
+	cbConfig.Timeout = settings.Notification.Push.CircuitBreaker.Timeout.Std()
 	cbConfig.HalfOpenMaxRequests = settings.Notification.Push.CircuitBreaker.HalfOpenMaxRequests
 
 	if err := cbConfig.Validate(); err != nil {
@@ -1183,7 +1183,7 @@ func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log logg
 			URL:     cfg.URL,
 			Method:  cfg.Method,
 			Headers: cfg.Headers,
-			Timeout: cfg.Timeout,
+			Timeout: cfg.Timeout.Std(),
 			Auth:    *auth,
 		})
 	}

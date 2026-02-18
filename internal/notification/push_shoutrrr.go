@@ -15,6 +15,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// shoutrrrDefaultTimeout is applied when no per-provider timeout is configured,
+// preventing indefinite hangs on unresponsive servers.
+const shoutrrrDefaultTimeout = 30 * time.Second
+
 // ShoutrrrProvider sends via nicholas-fedor/shoutrrr
 // Creates a single sender for multiple URLs.
 type ShoutrrrProvider struct {
@@ -69,9 +73,11 @@ func (s *ShoutrrrProvider) ValidateConfig() error {
 		return privacy.WrapError(err)
 	}
 	s.sender = sender
-	// Apply configured timeout and quiet logger
+	// Apply configured timeout; fall back to a sane default to prevent indefinite hangs
 	if s.timeout > 0 {
 		s.sender.Timeout = s.timeout
+	} else {
+		s.sender.Timeout = shoutrrrDefaultTimeout
 	}
 	s.sender.SetLogger(log.New(io.Discard, "", 0))
 	return nil
