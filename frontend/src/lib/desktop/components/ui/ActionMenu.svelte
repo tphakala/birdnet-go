@@ -19,6 +19,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { MoreVertical, SquarePen, Eye, EyeOff, Lock, LockOpen, Trash2 } from '@lucide/svelte';
   import { auth } from '$lib/stores/auth';
+  import { t } from '$lib/i18n';
 
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
 
@@ -205,7 +206,7 @@
           >
             <div class="flex items-center gap-2">
               <SquarePen class="size-4" />
-              <span>Review detection</span>
+              <span>{t('dashboard.recentDetections.actions.review')}</span>
               {#if detection.verified === 'correct'}
                 <span class="badge badge-success badge-sm">✓</span>
               {:else if detection.verified === 'false_positive'}
@@ -227,7 +228,11 @@
               {:else}
                 <EyeOff class="size-4" />
               {/if}
-              <span>{isExcluded ? 'Show species' : 'Ignore species'}</span>
+              {#if isExcluded}
+                <span>{t('dashboard.recentDetections.actions.showSpecies')}</span>
+              {:else}
+                <span>{t('dashboard.recentDetections.actions.ignoreSpecies')}</span>
+              {/if}
             </div>
           </button>
         </li>
@@ -244,7 +249,11 @@
               {:else}
                 <LockOpen class="size-4" />
               {/if}
-              <span>{detection.locked ? 'Unlock detection' : 'Lock detection'}</span>
+              {#if detection.locked}
+                <span>{t('dashboard.recentDetections.actions.unlockDetection')}</span>
+              {:else}
+                <span>{t('dashboard.recentDetections.actions.lockDetection')}</span>
+              {/if}
             </div>
           </button>
         </li>
@@ -258,7 +267,7 @@
             >
               <div class="flex items-center gap-2">
                 <Trash2 class="size-4" />
-                <span>Delete detection</span>
+                <span>{t('dashboard.recentDetections.actions.deleteDetection')}</span>
               </div>
             </button>
           </li>
