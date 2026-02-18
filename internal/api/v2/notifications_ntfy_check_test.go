@@ -139,7 +139,9 @@ func TestIsValidNtfyHost(t *testing.T) {
 		{"192.168.1.100:0", false},       // port 0 out of range
 		{"192.168.1.100:99999", false},   // port > 65535
 		{"192.168.1.100:-1", false},      // negative port
-		{"192.168.1.100:notaport", false}, // non-numeric port
+		{"192.168.1.100:notaport", false},    // non-numeric port
+		{"http://ntfy.sh", false},            // scheme not allowed
+		{"https://192.168.1.100:8080", false}, // scheme not allowed
 	}
 	for _, tt := range tests {
 		t.Run(tt.host, func(t *testing.T) {

@@ -226,6 +226,11 @@ func isValidNtfyHost(host string) bool {
 		return false
 	}
 
+	// Reject if a scheme is included — we expect a bare host or host:port
+	if strings.Contains(host, "://") {
+		return false
+	}
+
 	// Strip port (if any) before comparing against blocked hosts
 	hostOnly := host
 	if h, _, err := net.SplitHostPort(host); err == nil {

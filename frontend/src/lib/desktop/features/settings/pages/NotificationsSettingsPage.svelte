@@ -254,9 +254,9 @@
             : `${encodeURIComponent(user)}@`
           : '';
 
-        // Public ntfy.sh: always HTTPS, no scheme param, no auth fields shown in UI
+        // Public ntfy.sh: always HTTPS, no scheme param, never include auth
         if (isPublic) {
-          return `ntfy://${auth}${serviceFormData.ntfyTopic}`;
+          return `ntfy://${serviceFormData.ntfyTopic}`;
         }
 
         // Custom server: add ?scheme=http when HTTP selected
@@ -1374,6 +1374,10 @@
                       serviceFormData.ntfyServer = value;
                       serviceFormData.ntfyCheckStatus = 'idle';
                       serviceFormData.ntfyCheckHost = '';
+                      // Clear credentials when switching servers to prevent leaking
+                      // auth from a private server to a different host
+                      serviceFormData.ntfyUsername = '';
+                      serviceFormData.ntfyPassword = '';
                     }}
                   />
                   <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
