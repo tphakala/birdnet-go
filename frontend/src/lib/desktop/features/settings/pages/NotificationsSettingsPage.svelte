@@ -904,6 +904,36 @@
     }
   }
 
+  async function checkNtfyServer() {
+    const host = normalizeNtfyHost(serviceFormData.ntfyServer?.trim() || '');
+    if (!host || host === 'ntfy.sh') return;
+
+    // Record which host this probe is for (race guard)
+    serviceFormData.ntfyCheckHost = host;
+    serviceFormData.ntfyCheckStatus = 'checking';
+
+    try {
+      const result = await api.get<{ recommended: string; https: boolean; http: boolean }>(
+        `/api/v2/notifications/check-ntfy-server?host=${encodeURIComponent(host)}`
+      );
+
+      // Discard result if host changed while probe was in flight
+      if (serviceFormData.ntfyCheckHost !== host) return;
+
+      const rec = result.recommended;
+      if (rec === 'https' || rec === 'http') {
+        serviceFormData.ntfyProtocol = rec;
+        serviceFormData.ntfyCheckStatus = rec;
+      } else {
+        serviceFormData.ntfyCheckStatus = 'unreachable';
+      }
+    } catch {
+      if (serviceFormData.ntfyCheckHost === host) {
+        serviceFormData.ntfyCheckStatus = 'unreachable';
+      }
+    }
+  }
+
   function toggleFilterType(type: string) {
     const index = providerFormData.filterTypes.indexOf(type);
     if (index === -1) {
@@ -1334,11 +1364,84 @@
                     value={serviceFormData.ntfyServer}
                     label={t('settings.notifications.push.services.ntfy.server.label')}
                     placeholder={t('settings.notifications.push.services.ntfy.server.placeholder')}
-                    onchange={value => (serviceFormData.ntfyServer = value)}
+                    onchange={value => {
+                      serviceFormData.ntfyServer = value;
+                      serviceFormData.ntfyCheckStatus = 'idle';
+                      serviceFormData.ntfyCheckHost = '';
+                    }}
                   />
                   <p class="text-xs text-[var(--color-base-content)] opacity-60 -mt-2">
                     {t('settings.notifications.push.services.ntfy.server.helpText')}
                   </p>
+
+                  {#if serviceFormData.ntfyServer && serviceFormData.ntfyServer !== 'ntfy.sh'}
+                    <!-- Protocol selector + Test Connection button -->
+                    <div class="flex items-center gap-2 mt-1 flex-wrap">
+                      <select
+                        class="select select-sm select-bordered flex-shrink-0"
+                        bind:value={serviceFormData.ntfyProtocol}
+                        onchange={() => (serviceFormData.ntfyCheckStatus = 'idle')}
+                        aria-label={t('settings.notifications.push.services.ntfy.protocol.label')}
+                      >
+                        <option value="https">HTTPS</option>
+                        <option value="http">HTTP</option>
+                      </select>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline"
+                        disabled={serviceFormData.ntfyCheckStatus === 'checking'}
+                        onclick={checkNtfyServer}
+                      >
+                        {#if serviceFormData.ntfyCheckStatus === 'checking'}
+                          <span class="loading loading-spinner loading-xs"></span>
+                        {/if}
+                        {t('settings.notifications.push.services.ntfy.testConnection')}
+                      </button>
+                      {#if serviceFormData.ntfyCheckStatus === 'https'}
+                        <span class="text-xs text-success"
+                          >{t('settings.notifications.push.services.ntfy.connectionOk.https')}</span
+                        >
+                      {:else if serviceFormData.ntfyCheckStatus === 'http'}
+                        <span class="text-xs text-warning"
+                          >{t('settings.notifications.push.services.ntfy.connectionOk.http')}</span
+                        >
+                      {:else if serviceFormData.ntfyCheckStatus === 'unreachable'}
+                        <span class="text-xs text-error"
+                          >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
+                        >
+                      {/if}
+                    </div>
+
+                    <!-- Optional authentication -->
+                    <details class="mt-2">
+                      <summary
+                        class="text-sm cursor-pointer opacity-70 hover:opacity-100 select-none"
+                      >
+                        {t('settings.notifications.push.services.ntfy.auth.label')}
+                      </summary>
+                      <div class="mt-2 space-y-2">
+                        <TextInput
+                          id="ntfy-username"
+                          value={serviceFormData.ntfyUsername}
+                          label={t('settings.notifications.push.services.ntfy.auth.username.label')}
+                          placeholder={t(
+                            'settings.notifications.push.services.ntfy.auth.username.placeholder'
+                          )}
+                          onchange={value => (serviceFormData.ntfyUsername = value)}
+                        />
+                        <TextInput
+                          id="ntfy-password"
+                          value={serviceFormData.ntfyPassword}
+                          label={t('settings.notifications.push.services.ntfy.auth.password.label')}
+                          placeholder={t(
+                            'settings.notifications.push.services.ntfy.auth.password.placeholder'
+                          )}
+                          onchange={value => (serviceFormData.ntfyPassword = value)}
+                        />
+                      </div>
+                    </details>
+                  {/if}
+
                   <TextInput
                     id="ntfy-topic"
                     value={serviceFormData.ntfyTopic}
