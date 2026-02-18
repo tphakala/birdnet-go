@@ -743,6 +743,50 @@ func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 	}
 }
 
+// TestBuildFFmpegInputArgs_InvalidTimeout verifies that an invalid user-provided timeout
+// is filtered out and replaced by the default, not passed through to FFmpeg alongside it.
+// Regression test for: https://github.com/tphakala/birdnet-go/pull/1990
+func TestBuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 1)
+	defer close(audioChan)
+	stream := NewFFmpegStream("rtsp://192.168.1.100/stream", "tcp", audioChan)
+	require.NotNil(t, stream)
+
+	// User-provided params with an invalid timeout value ("abc")
+	params := []string{"-timeout", "abc", "-loglevel", "debug"}
+	args := stream.buildFFmpegInputArgs(params)
+
+	// The default timeout must be present
+	timeoutIdx := -1
+	for i, a := range args {
+		if a == ffmpegTimeoutFlag {
+			timeoutIdx = i
+			break
+		}
+	}
+	require.NotEqual(t, -1, timeoutIdx, "-timeout flag must be present")
+
+	// The value after -timeout must NOT be "abc" (invalid was replaced by default)
+	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a following value")
+	assert.NotEqual(t, "abc", args[timeoutIdx+1],
+		"invalid timeout value must not reach FFmpeg; got value %q", args[timeoutIdx+1])
+
+	// -timeout must appear only ONCE (no duplicate from invalid param leaking through)
+	count := 0
+	for _, a := range args {
+		if a == ffmpegTimeoutFlag {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "-timeout must appear exactly once; got %d occurrences in %v", count, args)
+
+	// Other user params (non-timeout) must still be present
+	assert.Contains(t, args, "-loglevel")
+	assert.Contains(t, args, "debug")
+}
+
 // TestDetectUserTimeout tests the helper function for detecting user timeouts
 func TestDetectUserTimeout(t *testing.T) {
 	t.Parallel()

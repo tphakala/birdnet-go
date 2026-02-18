@@ -920,22 +920,39 @@ func (s *FFmpegStream) buildFFmpegInputArgs(ffmpegParameters []string) []string 
 
 	// Add custom FFmpeg parameters from configuration (before input)
 	if len(ffmpegParameters) > 0 {
-		// Validate user timeout if provided
 		if hasUserTimeout {
 			if err := s.validateUserTimeout(userTimeoutValue); err != nil {
-				// Log warning but continue - prefer working stream with default timeout
-				// over failing completely due to user configuration error
+				// Invalid user timeout: log warning, use default, and filter out the bad flag.
+				// Do NOT append the original parameters unmodified — the invalid -timeout value
+				// would override the default we just added, causing FFmpeg to fail.
 				getStreamLogger().Warn("invalid user timeout, using default",
 					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
 					logger.String("user_timeout", userTimeoutValue),
 					logger.Error(err),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "validate_timeout"))
-				// Add default timeout before user parameters
 				args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
+				// Append all params except the invalid -timeout flag and its value.
+				// Use a skip flag to drop both the flag name and the following value.
+				skipNext := false
+				for _, param := range ffmpegParameters {
+					if skipNext {
+						skipNext = false
+						continue
+					}
+					if param == "-timeout" {
+						skipNext = true
+						continue
+					}
+					args = append(args, param)
+				}
+			} else {
+				// Valid user timeout: append everything as-is
+				args = append(args, ffmpegParameters...)
 			}
+		} else {
+			args = append(args, ffmpegParameters...)
 		}
-		args = append(args, ffmpegParameters...)
 	}
 
 	return args
