@@ -141,15 +141,15 @@ export async function setup(): Promise<void> {
   const projectRoot = resolve(currentDir, '../../..');
   const nginxConfigDir = resolve(currentDir, 'nginx');
 
-  // Create temp dir for templated configs
-  tmpDir = mkdtempSync(join(tmpdir(), 'birdnet-nginx-test-'));
-
-  // Check if Docker is available
+  // Check if Docker is available (before allocating temp resources)
   try {
     execSync('docker info', { stdio: 'ignore', timeout: 5000 });
   } catch {
     throw new Error('Docker is not available. Reverse proxy tests require Docker.');
   }
+
+  // Create temp dir for templated configs
+  tmpDir = mkdtempSync(join(tmpdir(), 'birdnet-nginx-test-'));
 
   // Pull nginx image if not present
   console.log('📦 Ensuring nginx image is available...');

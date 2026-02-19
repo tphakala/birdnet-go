@@ -149,5 +149,6 @@ Testing both root and subpath proxy catches different bug classes:
 ### Templated nginx configs
 
 The nginx config files use `BACKEND_HOST` / `BACKEND_PORT` placeholders
-that are replaced at runtime. This allows the configs to work on both
-Linux (bridge gateway IP) and Docker Desktop (host.docker.internal).
+that are replaced at runtime with `host.docker.internal`, which resolves
+on all platforms via the `--add-host=host.docker.internal:host-gateway`
+Docker flag.
