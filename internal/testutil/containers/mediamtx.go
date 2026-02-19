@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/docker/go-connections/nat"
@@ -35,7 +34,7 @@ type MediaMTXConfig struct {
 // DefaultMediaMTXConfig returns a MediaMTXConfig with sensible defaults.
 func DefaultMediaMTXConfig() MediaMTXConfig {
 	return MediaMTXConfig{
-		ImageTag: "latest",
+		ImageTag: "1.16.1",
 	}
 }
 
@@ -159,8 +158,7 @@ func (c *MediaMTXContainer) GetRTSPPort() int {
 }
 
 // GetRTSPAddress returns the host:port for RTSP connections.
-func (c *MediaMTXContainer) GetRTSPAddress(t *testing.T) string {
-	t.Helper()
+func (c *MediaMTXContainer) GetRTSPAddress() string {
 	return net.JoinHostPort(c.host, strconv.Itoa(c.rtspPort))
 }
 
