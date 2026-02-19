@@ -39,6 +39,17 @@ const (
 // Pi value is used as the default pi value in this package.
 const Pi = 3.1415926535897932384626433
 
+const (
+	// minFrequencyHz is the minimum allowed center frequency for filters.
+	minFrequencyHz = 1.0
+	// minBandEdgeHz is the minimum allowed lower band edge frequency,
+	// used to prevent division by zero in bandwidth calculations.
+	minBandEdgeHz = 0.01
+	// minHalfWidthHz is the minimum half-width fallback when the requested
+	// bandwidth exceeds the center frequency.
+	minHalfWidthHz = 0.01
+)
+
 var (
 	p = Pi
 )
@@ -54,16 +65,16 @@ var (
 func hzToOctaves(centerFreq, widthHz float64) float64 {
 	halfWidth := widthHz / 2.0
 	// Clamp so lower edge doesn't go below 1 Hz
-	if halfWidth >= centerFreq-1.0 {
-		halfWidth = centerFreq - 1.0
+	if halfWidth >= centerFreq-minFrequencyHz {
+		halfWidth = centerFreq - minFrequencyHz
 	}
 	if halfWidth <= 0 {
-		halfWidth = 0.01
+		halfWidth = minHalfWidthHz
 	}
 	// Guard against sub-Hz center frequencies producing non-positive denominator
 	lower := centerFreq - halfWidth
 	if lower <= 0 {
-		lower = 0.01
+		lower = minBandEdgeHz
 	}
 	return math.Log2((centerFreq + halfWidth) / lower)
 }
@@ -245,6 +256,12 @@ func NewBandPass(sampleRate, frequency, widthHz float64, passes int) (*Filter, e
 	if passes < 1 {
 		return nil, fmt.Errorf("passes must be 1 or greater")
 	}
+	if frequency <= 0 {
+		return nil, fmt.Errorf("frequency must be greater than 0")
+	}
+	if widthHz <= 0 {
+		return nil, fmt.Errorf("widthHz must be greater than 0")
+	}
 
 	w0 := 2.0 * p * frequency / sampleRate
 	bwOctaves := hzToOctaves(frequency, widthHz)
@@ -275,6 +292,12 @@ func NewBandPass(sampleRate, frequency, widthHz float64, passes int) (*Filter, e
 func NewBandReject(sampleRate, frequency, widthHz float64, passes int) (*Filter, error) {
 	if passes < 1 {
 		return nil, fmt.Errorf("passes must be 1 or greater")
+	}
+	if frequency <= 0 {
+		return nil, fmt.Errorf("frequency must be greater than 0")
+	}
+	if widthHz <= 0 {
+		return nil, fmt.Errorf("widthHz must be greater than 0")
 	}
 
 	w0 := 2.0 * p * frequency / sampleRate
@@ -369,6 +392,12 @@ func NewHighShelf(sampleRate, frequency, q, gain float64, passes int) (*Filter, 
 func NewPeaking(sampleRate, frequency, widthHz, gain float64, passes int) (*Filter, error) {
 	if passes < 1 {
 		return nil, fmt.Errorf("filter passes must be 1 or greater")
+	}
+	if frequency <= 0 {
+		return nil, fmt.Errorf("frequency must be greater than 0")
+	}
+	if widthHz <= 0 {
+		return nil, fmt.Errorf("widthHz must be greater than 0")
 	}
 
 	w0 := 2.0 * p * frequency / sampleRate

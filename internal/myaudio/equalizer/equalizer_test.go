@@ -154,17 +154,61 @@ func TestNewHighPass(t *testing.T) {
 }
 
 func TestNewBandPass(t *testing.T) {
-	f, err := NewBandPass(48000, 1000, 200, 1) // 200 Hz bandwidth
-	require.NoError(t, err)
-	assert.NotNil(t, f)
-	assert.Equal(t, BandPass, f.name)
+	t.Run("valid_params", func(t *testing.T) {
+		f, err := NewBandPass(48000, 1000, 200, 1) // 200 Hz bandwidth
+		require.NoError(t, err)
+		assert.NotNil(t, f)
+		assert.Equal(t, BandPass, f.name)
+	})
+
+	t.Run("zero_frequency", func(t *testing.T) {
+		f, err := NewBandPass(48000, 0, 200, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+		assert.ErrorContains(t, err, "frequency")
+	})
+
+	t.Run("negative_frequency", func(t *testing.T) {
+		f, err := NewBandPass(48000, -100, 200, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+	})
+
+	t.Run("zero_widthHz", func(t *testing.T) {
+		f, err := NewBandPass(48000, 1000, 0, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+		assert.ErrorContains(t, err, "widthHz")
+	})
+
+	t.Run("negative_widthHz", func(t *testing.T) {
+		f, err := NewBandPass(48000, 1000, -100, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+	})
 }
 
 func TestNewPeaking(t *testing.T) {
-	f, err := NewPeaking(48000, 1000, 200, 6.0, 1) // 200 Hz bandwidth, +6dB boost
-	require.NoError(t, err)
-	assert.NotNil(t, f)
-	assert.Equal(t, Peaking, f.name)
+	t.Run("valid_params", func(t *testing.T) {
+		f, err := NewPeaking(48000, 1000, 200, 6.0, 1) // 200 Hz bandwidth, +6dB boost
+		require.NoError(t, err)
+		assert.NotNil(t, f)
+		assert.Equal(t, Peaking, f.name)
+	})
+
+	t.Run("zero_frequency", func(t *testing.T) {
+		f, err := NewPeaking(48000, 0, 200, 6.0, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+		assert.ErrorContains(t, err, "frequency")
+	})
+
+	t.Run("zero_widthHz", func(t *testing.T) {
+		f, err := NewPeaking(48000, 1000, 0, 6.0, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+		assert.ErrorContains(t, err, "widthHz")
+	})
 }
 
 func TestHzToOctaves(t *testing.T) {
@@ -241,6 +285,20 @@ func TestNewBandReject(t *testing.T) {
 		f, err := NewBandReject(48000, 1000, 500, 0)
 		require.Error(t, err)
 		assert.Nil(t, f)
+	})
+
+	t.Run("zero_frequency", func(t *testing.T) {
+		f, err := NewBandReject(48000, 0, 500, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+		assert.ErrorContains(t, err, "frequency")
+	})
+
+	t.Run("zero_widthHz", func(t *testing.T) {
+		f, err := NewBandReject(48000, 1000, 0, 1)
+		require.Error(t, err)
+		assert.Nil(t, f)
+		assert.ErrorContains(t, err, "widthHz")
 	})
 }
 
