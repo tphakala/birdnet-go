@@ -2,7 +2,7 @@
   DetectionsList.svelte
 
   A container component that orchestrates the display of multiple bird detection records.
-  Manages pagination, loading states, and provides a consistent layout for detection data.
+  Manages pagination, loading states, sorting, and view mode switching.
 
   Usage:
   - Main detection pages
@@ -11,11 +11,12 @@
   - Administrative detection management interfaces
 
   Features:
-  - Paginated detection display
+  - Paginated detection display with sortable columns
+  - Toggle between table and card views (persisted in localStorage)
   - Loading and error state handling
   - Empty state with helpful messaging
-  - Responsive card-based layout
-  - Integration with DetectionRow components
+  - Responsive layout (table on desktop, cards on mobile)
+  - Integration with DetectionRow and DetectionCard components
   - Refresh functionality
 
   Props:
@@ -25,6 +26,7 @@
   - onPageChange?: (page: number) => void - Pagination handler
   - onDetailsClick?: (id: number) => void - Detail view handler
   - onRefresh?: () => void - Data refresh handler
+  - onNumResultsChange?: (numResults: number) => void - Results per page handler
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
@@ -32,13 +34,19 @@
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import ViewToggle from '$lib/desktop/components/ui/ViewToggle.svelte';
   import { t } from '$lib/i18n';
-  import type { DetectionsListData } from '$lib/types/detection.types';
+  import type { Detection, DetectionsListData } from '$lib/types/detection.types';
   import { cn } from '$lib/utils/cn';
   import { XCircle } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import DetectionCardMobile from './DetectionCardMobile.svelte';
   import DetectionRow from './DetectionRow.svelte';
+  import DetectionsCardView from './DetectionsCardView.svelte';
+
+  type SortField = 'dateTime' | 'species' | 'confidence' | 'status';
+  type SortDirection = 'asc' | 'desc';
 
   interface Props {
     data: DetectionsListData | null;
@@ -112,7 +120,86 @@
 
   // State for number of results - captures initial value without creating dependency
   // Uses untrack() to explicitly capture initial value only (local state is independent after init)
-  let selectedNumResults = $state(untrack(() => String(data?.numResults || 25)));
+  let selectedNumResults = $state(untrack(() => String(data?.numResults ?? 25)));
+
+  // --- View mode state (persisted in localStorage) ---
+  const VIEW_STORAGE_KEY = 'detectionsViewMode';
+
+  function loadViewMode(): 'table' | 'cards' {
+    if (typeof window === 'undefined') return 'table';
+    try {
+      const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (stored === 'cards') return 'cards';
+    } catch {
+      // localStorage unavailable
+    }
+    return 'table';
+  }
+
+  let viewMode = $state<'table' | 'cards'>(loadViewMode());
+
+  function handleViewChange(mode: 'table' | 'cards') {
+    viewMode = mode;
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, mode);
+    } catch {
+      // localStorage unavailable
+    }
+  }
+
+  // --- Sort state ---
+  let sortField = $state<SortField>('dateTime');
+  let sortDirection = $state<SortDirection>('desc');
+
+  function handleSort(field: string) {
+    const typedField = field as SortField;
+    if (sortField === typedField) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = typedField;
+      sortDirection = typedField === 'dateTime' ? 'desc' : 'asc';
+    }
+  }
+
+  /** Verification status sort order: correct > unverified > false_positive */
+  const STATUS_ORDER: Record<string, number> = {
+    correct: 0,
+    unverified: 1,
+    false_positive: 2,
+  };
+
+  /** Sort detections client-side within the current page */
+  const sortedDetections = $derived.by(() => {
+    if (!data) return [];
+    const items = [...data.notes];
+
+    items.sort((a: Detection, b: Detection) => {
+      let cmp = 0;
+
+      switch (sortField) {
+        case 'dateTime': {
+          // Compare date+time as string (YYYY-MM-DD HH:MM:SS sorts lexicographically)
+          const aKey = `${a.date} ${a.time}`;
+          const bKey = `${b.date} ${b.time}`;
+          cmp = aKey.localeCompare(bKey);
+          break;
+        }
+        case 'species':
+          cmp = a.commonName.localeCompare(b.commonName);
+          break;
+        case 'confidence':
+          cmp = a.confidence - b.confidence;
+          break;
+        case 'status':
+          cmp = (STATUS_ORDER[a.verified] ?? 1) - (STATUS_ORDER[b.verified] ?? 1);
+          break;
+      }
+
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+    return items;
+  });
 
   // Mobile audio player state
   let showMobilePlayer = $state(false);
@@ -147,20 +234,27 @@
         {title}
       </span>
 
-      <!-- Number of results selector -->
-      <div class="flex items-center gap-2">
-        <label for="num-results" class="text-sm font-medium">Results:</label>
-        <select
-          id="num-results"
-          class="select select-sm w-20"
-          bind:value={selectedNumResults}
-          onchange={handleNumResultsChange}
-        >
-          <option value="10">10</option>
-          <option value="25">25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
+      <!-- Controls: view toggle + results selector -->
+      <div class="flex items-center gap-3">
+        <!-- View toggle (hidden on mobile - always shows mobile cards) -->
+        <div class="hidden md:block">
+          <ViewToggle view={viewMode} onViewChange={handleViewChange} />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label for="num-results" class="text-sm font-medium">Results:</label>
+          <select
+            id="num-results"
+            class="select select-sm w-20"
+            bind:value={selectedNumResults}
+            onchange={handleNumResultsChange}
+          >
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
       </div>
     </div>
   </div>
@@ -202,37 +296,68 @@
         className="py-8"
       />
     {:else}
-      <!-- Desktop/tablet: table layout -->
-      <table class="w-full hidden md:table">
-        <caption class="sr-only">{t('detections.table.caption')}</caption>
-        <thead>
-          <tr class="detection-header-list">
-            <th scope="col">{t('detections.headers.dateTime')}</th>
-            <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
-            <th scope="col">{t('detections.headers.species')}</th>
-            <th scope="col">{t('detections.headers.confidence')}</th>
-            <th scope="col">{t('detections.headers.status')}</th>
-            <th scope="col" class="hidden md:table-cell">{t('detections.headers.recording')}</th>
-            <th scope="col">{t('detections.headers.actions')}</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-base-200">
-          {#each data.notes as detection (detection.id)}
-            <tr>
-              <DetectionRow
-                {detection}
-                {onDetailsClick}
-                {onRefresh}
-                onPlayMobileAudio={handlePlayMobileAudio}
-              />
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <!-- Desktop/tablet: table or card view -->
+      <div class="hidden md:block">
+        {#if viewMode === 'table'}
+          <table class="w-full">
+            <caption class="sr-only">{t('detections.table.caption')}</caption>
+            <thead>
+              <tr class="detection-header-list">
+                <SortableHeader
+                  label={t('detections.headers.dateTime')}
+                  field="dateTime"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
+                <SortableHeader
+                  label={t('detections.headers.species')}
+                  field="species"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label={t('detections.headers.confidence')}
+                  field="confidence"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label={t('detections.headers.status')}
+                  field="status"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <th scope="col" class="hidden md:table-cell">{t('detections.headers.recording')}</th
+                >
+                <th scope="col">{t('detections.headers.actions')}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-base-200">
+              {#each sortedDetections as detection (detection.id)}
+                <tr>
+                  <DetectionRow
+                    {detection}
+                    {onDetailsClick}
+                    {onRefresh}
+                    onPlayMobileAudio={handlePlayMobileAudio}
+                  />
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else}
+          <DetectionsCardView detections={sortedDetections} {onRefresh} />
+        {/if}
+      </div>
 
-      <!-- Mobile: card layout -->
+      <!-- Mobile: card layout (always mobile cards on small screens) -->
       <div class="md:hidden space-y-2">
-        {#each data.notes as detection (detection.id)}
+        {#each sortedDetections as detection (detection.id)}
           <DetectionCardMobile
             {detection}
             {onDetailsClick}

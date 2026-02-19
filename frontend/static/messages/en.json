@@ -564,6 +564,11 @@
       "recording": "Recording",
       "actions": "Actions"
     },
+    "viewToggle": {
+      "label": "View mode",
+      "table": "Table view",
+      "cards": "Card view"
+    },
     "status": {
       "locked": "Locked"
     },
