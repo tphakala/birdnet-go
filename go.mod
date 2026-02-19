@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/antonholmquist/jason v1.0.0
 	github.com/creack/pty v1.1.24
+	github.com/docker/go-connections v0.6.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gen2brain/malgo v0.11.24
 	github.com/getsentry/sentry-go v0.42.0
@@ -50,7 +51,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -62,7 +63,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/docker v28.5.1+incompatible // indirect
-	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/eaburns/bit v0.0.0-20131029213740-7bd5cd37375d // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
