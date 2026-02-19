@@ -11,6 +11,7 @@ services:
       - TZ=${TZ:-UTC}
       - BIRDNET_UID=${BIRDNET_UID:-1000}
       - BIRDNET_GID=${BIRDNET_GID:-1000}
+      # - SKIP_CHOWN=true                            # Skip ownership changes at startup (for NFS mounts)
       # Optional: uncomment to configure via environment variables
       # BirdNET Configuration
       # - BIRDNET_LOCALE=en-us                      # Locale code (2-10 chars, e.g., "en" or "en-us")
