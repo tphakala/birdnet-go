@@ -23,22 +23,35 @@
 <script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
   import { Star, Github, Globe, Info, Clock, FileText, CircleCheck, User } from '@lucide/svelte';
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
-  // TypeScript interface for version settings
   interface VersionSettings {
     version: string;
     buildDate: string;
   }
 
-  // PERFORMANCE OPTIMIZATION: Removed unnecessary $effect() that called empty fetchVersionInfo()
-  // In Svelte 5, $effect() runs on every component mount and when dependencies change.
-  // Calling empty functions creates unnecessary reactive overhead.
-
-  // Settings data (version info) - will use fallback translations for now
   let settings = $state<VersionSettings>({
     version: '',
     buildDate: '',
+  });
+
+  async function fetchVersionInfo() {
+    try {
+      const response = await fetch(buildAppUrl('/api/v2/health'));
+      if (response.ok) {
+        const data = await response.json();
+        settings.version = data.version || '';
+        settings.buildDate = data.build_date || '';
+      }
+    } catch {
+      // Version info is non-critical; fallback translations will display
+    }
+  }
+
+  onMount(() => {
+    fetchVersionInfo();
   });
 </script>
 
