@@ -352,9 +352,8 @@ func TestSwapRangeFilterSettingsBlocksSettingsReads(t *testing.T) {
 			lon := controller.Settings.BirdNET.Longitude
 			controller.settingsMutex.RUnlock()
 
-			// The read should see EITHER the original OR the test values,
-			// but never a mix. With the fix, reads are blocked during swap,
-			// so we should only ever see the original values.
+			// The read should see either the original or the test values atomically,
+			// but never a partial/mixed state. Both consistent states are acceptable.
 			isOriginal := lat == originalLat && lon == originalLon
 			isTest := lat == testLat && lon == testLon
 			if !isOriginal && !isTest {

@@ -410,8 +410,10 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Failed to get species list", http.StatusInternalServerError)
 		}
 	} else {
-		// Acquire read lock to prevent reading temporarily swapped values
+		// Acquire read lock to prevent reading temporarily swapped values.
+		// Using defer for safety against future early returns in this branch.
 		c.settingsMutex.RLock()
+		defer c.settingsMutex.RUnlock()
 
 		// Use current range filter settings
 		includedSpecies := c.Settings.GetIncludedSpecies()
@@ -436,8 +438,6 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			Longitude: c.Settings.BirdNET.Longitude,
 		}
 		threshold = c.Settings.BirdNET.RangeFilter.Threshold
-
-		c.settingsMutex.RUnlock()
 	}
 
 	// Generate CSV content
