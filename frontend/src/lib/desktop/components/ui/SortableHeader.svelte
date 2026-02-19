@@ -4,18 +4,22 @@
   A reusable sortable table header cell. Renders a <th> with click-to-sort
   behavior and visual sort direction indicators.
 
+  Matches the sort UI pattern from DataTable.svelte: ChevronUp/ChevronDown
+  icons only when actively sorted, empty w-4 spacer when inactive.
+
   Props:
   - label: string - Column header text
   - field: string - Field identifier for sort state
   - activeField: string - Currently active sort field
   - direction: 'asc' | 'desc' - Current sort direction
   - onSort: (field: string) => void - Sort toggle callback
-  - className?: string - Additional CSS classes
+  - className?: string - Additional CSS classes on <th>
   - srOnly?: string - Screen reader text override
 -->
 <script lang="ts">
-  import { ArrowUp, ArrowDown, ArrowUpDown } from '@lucide/svelte';
+  import { ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
+  import { t } from '$lib/i18n';
 
   interface Props {
     label: string;
@@ -34,63 +38,27 @@
 
 <th
   scope="col"
-  class={cn('sortable-header', className)}
+  class={cn(className)}
   aria-sort={isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
 >
   <button
     type="button"
-    class="sortable-header-btn"
+    class="inline-flex items-center gap-1 hover:text-primary transition-colors"
     onclick={() => onSort(field)}
-    aria-label={srOnly ?? `Sort by ${label}`}
+    aria-label={srOnly ?? t('dataDisplay.table.sortBy', { column: label })}
+    data-testid={`sort-${field}`}
   >
-    <span>{label}</span>
-    {#if isActive}
-      {#if direction === 'asc'}
-        <ArrowUp class="sort-icon sort-icon-active" />
+    {label}
+    <span class="inline-block w-4" aria-hidden="true">
+      {#if isActive}
+        {#if direction === 'asc'}
+          <ChevronUp class="size-4" />
+        {:else}
+          <ChevronDown class="size-4" />
+        {/if}
       {:else}
-        <ArrowDown class="sort-icon sort-icon-active" />
+        <ChevronsUpDown class="size-3 opacity-30" />
       {/if}
-    {:else}
-      <ArrowUpDown class="sort-icon sort-icon-inactive" />
-    {/if}
+    </span>
   </button>
 </th>
-
-<style>
-  .sortable-header {
-    user-select: none;
-  }
-
-  .sortable-header-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: inherit;
-    white-space: nowrap;
-  }
-
-  .sortable-header-btn:hover :global(.sort-icon-inactive) {
-    opacity: 0.7;
-  }
-
-  .sort-icon {
-    width: 0.875rem;
-    height: 0.875rem;
-    flex-shrink: 0;
-  }
-
-  .sort-icon-active {
-    opacity: 1;
-    color: oklch(var(--p));
-  }
-
-  .sort-icon-inactive {
-    opacity: 0.35;
-    transition: opacity 150ms ease;
-  }
-</style>

@@ -30,6 +30,7 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
@@ -102,20 +103,18 @@
     }
   }
 
-  function handleNumResultsChange(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    const numResults = parseInt(target.value);
+  const RESULTS_OPTIONS = [
+    { value: '10', label: '10' },
+    { value: '25', label: '25' },
+    { value: '50', label: '50' },
+    { value: '100', label: '100' },
+  ];
 
-    // Validate the parsed value
-    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) {
-      // Reset to current valid value if invalid
-      target.value = selectedNumResults;
-      return;
-    }
-
-    if (onNumResultsChange) {
-      onNumResultsChange(numResults);
-    }
+  function handleNumResultsChange(value: string | string[]) {
+    const numResults = parseInt(value as string);
+    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) return;
+    selectedNumResults = String(numResults);
+    onNumResultsChange?.(numResults);
   }
 
   // State for number of results - captures initial value without creating dependency
@@ -241,20 +240,15 @@
           <ViewToggle view={viewMode} onViewChange={handleViewChange} />
         </div>
 
-        <div class="flex items-center gap-2">
-          <label for="num-results" class="text-sm font-medium">Results:</label>
-          <select
-            id="num-results"
-            class="select select-sm w-20"
-            bind:value={selectedNumResults}
-            onchange={handleNumResultsChange}
-          >
-            <option value="10">10</option>
-            <option value="25">25</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
-        </div>
+        <SelectDropdown
+          options={RESULTS_OPTIONS}
+          value={selectedNumResults}
+          size="xs"
+          menuSize="sm"
+          variant="button"
+          className="w-16"
+          onChange={handleNumResultsChange}
+        />
       </div>
     </div>
   </div>
