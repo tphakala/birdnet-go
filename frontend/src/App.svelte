@@ -299,7 +299,7 @@
       pageTitleKey = config.titleKey;
 
       for (const [subpath, titleKey] of Object.entries(subpagesMap)) {
-        if (path.includes(subpath)) {
+        if (path.endsWith(subpath)) {
           pageTitleKey = titleKey;
           break;
         }
