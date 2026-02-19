@@ -478,6 +478,11 @@ func TestGetAllSpecies(t *testing.T) {
 				assert.Equal(t, "Turdus migratorius_American Robin", response.Species[0].Label)
 				assert.Equal(t, "Turdus migratorius", response.Species[0].ScientificName)
 				assert.Equal(t, "American Robin", response.Species[0].CommonName)
+
+				// Verify order is preserved
+				assert.Equal(t, "Cyanocitta cristata_Blue Jay", response.Species[1].Label)
+				assert.Equal(t, "Cyanocitta cristata", response.Species[1].ScientificName)
+				assert.Equal(t, "Blue Jay", response.Species[1].CommonName)
 			}
 		})
 	}

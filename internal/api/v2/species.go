@@ -120,6 +120,13 @@ type AllSpeciesResponse struct {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/species/all [get]
 func (c *Controller) GetAllSpecies(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	c.logDebugIfEnabled("Retrieving all BirdNET species labels",
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
+
 	labels := c.Settings.BirdNET.Labels
 	speciesList := make([]RangeFilterSpecies, 0, len(labels))
 
@@ -131,6 +138,12 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 			CommonName:     sp.CommonName,
 		})
 	}
+
+	c.logInfoIfEnabled("All species labels retrieved successfully",
+		logger.Int("count", len(speciesList)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
 
 	return ctx.JSON(http.StatusOK, AllSpeciesResponse{
 		Species: speciesList,
