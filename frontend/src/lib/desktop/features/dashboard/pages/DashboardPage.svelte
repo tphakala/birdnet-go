@@ -589,15 +589,18 @@ Performance Optimizations:
       persistDate(selectedDate);
     }
 
-    fetchDailySummary();
+    // Load dashboard config first so summaryLimit is set before fetching daily summary
+    // and adjacent date preloads. Uses .then() instead of async/await because onMount
+    // must return a sync cleanup function.
+    fetchDashboardConfig().then(() => {
+      fetchDailySummary();
+      // Preload adjacent dates after config is loaded so the correct limit is used
+      triggerAdjacentPreload(selectedDate);
+    });
     fetchRecentDetections();
-    fetchDashboardConfig();
 
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
-
-    // Initial preload of adjacent dates (reactive effect will handle subsequent preloads)
-    triggerAdjacentPreload(selectedDate);
 
     // Handle browser navigation (back/forward)
     const handlePopState = () => {
