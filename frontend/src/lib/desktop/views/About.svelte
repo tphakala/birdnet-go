@@ -32,6 +32,8 @@
     buildDate: string;
   }
 
+  const HEALTH_ENDPOINT = '/api/v2/health';
+
   let settings = $state<VersionSettings>({
     version: '',
     buildDate: '',
@@ -39,7 +41,7 @@
 
   async function fetchVersionInfo() {
     try {
-      const response = await fetch(buildAppUrl('/api/v2/health'));
+      const response = await fetch(buildAppUrl(HEALTH_ENDPOINT));
       if (response.ok) {
         const data = await response.json();
         settings.version = data.version || '';
