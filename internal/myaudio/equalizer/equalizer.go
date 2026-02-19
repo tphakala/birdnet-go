@@ -43,6 +43,26 @@ var (
 	p = Pi
 )
 
+// hzToOctaves converts a bandwidth in Hz to octaves for a given center frequency.
+// This is needed because the RBJ cookbook formulas expect bandwidth in octaves,
+// but the UI presents bandwidth in Hz.
+//
+// Formula: octaves = log2((freq + widthHz/2) / (freq - widthHz/2))
+//
+// The bandwidth is clamped so the lower band edge stays above 1 Hz to avoid
+// division by zero or negative frequencies.
+func hzToOctaves(centerFreq, widthHz float64) float64 {
+	halfWidth := widthHz / 2.0
+	// Clamp so lower edge doesn't go below 1 Hz
+	if halfWidth >= centerFreq-1.0 {
+		halfWidth = centerFreq - 1.0
+	}
+	if halfWidth <= 0 {
+		halfWidth = 0.01
+	}
+	return math.Log2((centerFreq + halfWidth) / (centerFreq - halfWidth))
+}
+
 // Filter holds the digital filter parameters.
 type Filter struct {
 	name FilterName
@@ -211,17 +231,19 @@ func NewAllPass(sampleRate, frequency, q float64, passes int) (*Filter, error) {
 // Parameters:
 //
 //   - sampleRate ... sample rate in Hz. e.g. 44100.0
-//   - frequency ... Cut off frequency in Hz.
-//   - width ... Band width.
+//   - frequency ... Center frequency in Hz.
+//   - widthHz ... Band width in Hz.
+//   - passes ... Number of passes (1 = 12dB/oct, 2 = 24dB/oct, 4 = 48dB/oct)
 //
-// NOTE: width must be greater than 0. passes must be 1, 2, or 4.
-func NewBandPass(sampleRate, frequency, width float64, passes int) (*Filter, error) {
+// NOTE: widthHz must be greater than 0. passes must be 1, 2, or 4.
+func NewBandPass(sampleRate, frequency, widthHz float64, passes int) (*Filter, error) {
 	if passes < 1 {
 		return nil, fmt.Errorf("passes must be 1 or greater")
 	}
 
 	w0 := 2.0 * p * frequency / sampleRate
-	alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*width*w0/math.Sin(w0))
+	bwOctaves := hzToOctaves(frequency, widthHz)
+	alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*bwOctaves*w0/math.Sin(w0))
 
 	return NewFilter(
 		BandPass,
@@ -240,17 +262,19 @@ func NewBandPass(sampleRate, frequency, width float64, passes int) (*Filter, err
 // Parameters:
 //
 //   - sampleRate ... sample rate in Hz. e.g. 44100.0
-//   - frequency ... Cut off frequency in Hz.
-//   - width ... Band width.
+//   - frequency ... Center frequency in Hz.
+//   - widthHz ... Band width in Hz.
+//   - passes ... Number of passes (1 = 12dB/oct, 2 = 24dB/oct, 4 = 48dB/oct)
 //
-// NOTE: width must be greater than 0. passes must be 1, 2, or 4.
-func NewBandReject(sampleRate, frequency, width float64, passes int) (*Filter, error) {
+// NOTE: widthHz must be greater than 0. passes must be 1, 2, or 4.
+func NewBandReject(sampleRate, frequency, widthHz float64, passes int) (*Filter, error) {
 	if passes < 1 {
 		return nil, fmt.Errorf("passes must be 1 or greater")
 	}
 
 	w0 := 2.0 * p * frequency / sampleRate
-	alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*width*w0/math.Sin(w0))
+	bwOctaves := hzToOctaves(frequency, widthHz)
+	alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*bwOctaves*w0/math.Sin(w0))
 
 	return NewFilter(
 		BandReject,
@@ -331,18 +355,20 @@ func NewHighShelf(sampleRate, frequency, q, gain float64, passes int) (*Filter, 
 // Parameters:
 //
 //   - sampleRate ... sample rate in Hz. e.g. 44100.0
-//   - frequency ... Cut off frequency in Hz.
-//   - width ... Width value.
+//   - frequency ... Center frequency in Hz.
+//   - widthHz ... Width in Hz.
 //   - gain ... Gain value in dB.
+//   - passes ... Number of passes (1 = 12dB/oct, 2 = 24dB/oct, 4 = 48dB/oct)
 //
-// NOTE: width must be greater than 0. passes must be 1, 2, or 4.
-func NewPeaking(sampleRate, frequency, width, gain float64, passes int) (*Filter, error) {
+// NOTE: widthHz must be greater than 0. passes must be 1, 2, or 4.
+func NewPeaking(sampleRate, frequency, widthHz, gain float64, passes int) (*Filter, error) {
 	if passes < 1 {
 		return nil, fmt.Errorf("filter passes must be 1 or greater")
 	}
 
 	w0 := 2.0 * p * frequency / sampleRate
-	alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*width*w0/math.Sin(w0))
+	bwOctaves := hzToOctaves(frequency, widthHz)
+	alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*bwOctaves*w0/math.Sin(w0))
 	a := math.Pow(10.0, (gain / 40.0))
 
 	return NewFilter(

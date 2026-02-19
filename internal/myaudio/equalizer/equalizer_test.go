@@ -154,17 +154,156 @@ func TestNewHighPass(t *testing.T) {
 }
 
 func TestNewBandPass(t *testing.T) {
-	f, err := NewBandPass(48000, 1000, 1.0, 1)
+	f, err := NewBandPass(48000, 1000, 200, 1) // 200 Hz bandwidth
 	require.NoError(t, err)
 	assert.NotNil(t, f)
 	assert.Equal(t, BandPass, f.name)
 }
 
 func TestNewPeaking(t *testing.T) {
-	f, err := NewPeaking(48000, 1000, 1.0, 6.0, 1) // +6dB boost
+	f, err := NewPeaking(48000, 1000, 200, 6.0, 1) // 200 Hz bandwidth, +6dB boost
 	require.NoError(t, err)
 	assert.NotNil(t, f)
 	assert.Equal(t, Peaking, f.name)
+}
+
+func TestHzToOctaves(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		centerFreq float64
+		widthHz    float64
+		wantMin    float64
+		wantMax    float64
+	}{
+		{
+			name:       "100Hz_bandwidth_at_1000Hz",
+			centerFreq: 1000,
+			widthHz:    100,
+			// log2((1050)/(950)) ≈ 0.1442
+			wantMin: 0.14,
+			wantMax: 0.15,
+		},
+		{
+			name:       "500Hz_bandwidth_at_1000Hz",
+			centerFreq: 1000,
+			widthHz:    500,
+			// log2((1250)/(750)) ≈ 0.7370
+			wantMin: 0.73,
+			wantMax: 0.74,
+		},
+		{
+			name:       "1000Hz_bandwidth_at_1000Hz_approx_1_octave",
+			centerFreq: 1000,
+			widthHz:    1000,
+			// log2((1500)/(500)) ≈ 1.585
+			wantMin: 1.58,
+			wantMax: 1.59,
+		},
+		{
+			name:       "very_narrow_1Hz_at_1000Hz",
+			centerFreq: 1000,
+			widthHz:    1,
+			wantMin: 0.001,
+			wantMax: 0.002,
+		},
+		{
+			name:       "bandwidth_clamped_near_center_freq",
+			centerFreq: 100,
+			widthHz:    10000, // Much wider than center freq
+			wantMin: 0.0,     // Should be clamped, not panic
+			wantMax: 15.0,    // Just sanity check
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := hzToOctaves(tt.centerFreq, tt.widthHz)
+			assert.False(t, math.IsNaN(result), "result should not be NaN")
+			assert.False(t, math.IsInf(result, 0), "result should not be Inf")
+			assert.GreaterOrEqual(t, result, tt.wantMin, "result should be >= %f", tt.wantMin)
+			assert.LessOrEqual(t, result, tt.wantMax, "result should be <= %f", tt.wantMax)
+		})
+	}
+}
+
+func TestNewBandReject(t *testing.T) {
+	t.Run("valid_params", func(t *testing.T) {
+		f, err := NewBandReject(48000, 1000, 500, 1)
+		require.NoError(t, err)
+		assert.NotNil(t, f)
+		assert.Equal(t, BandReject, f.name)
+	})
+
+	t.Run("invalid_passes", func(t *testing.T) {
+		f, err := NewBandReject(48000, 1000, 500, 0)
+		require.Error(t, err)
+		assert.Nil(t, f)
+	})
+}
+
+// TestBandReject_DoesNotSilenceAudio verifies the fix for issue #1939.
+// Before the fix, entering a bandwidth in Hz (e.g., 500) was treated as
+// octaves by the RBJ cookbook formula, producing an astronomically large
+// alpha that zeroed all coefficients — resulting in complete silence.
+func TestBandReject_DoesNotSilenceAudio(t *testing.T) {
+	sampleRate := 48000.0
+	centerFreq := 1000.0
+	bandwidthHz := 500.0 // This is the value that caused silence before the fix
+
+	f, err := NewBandReject(sampleRate, centerFreq, bandwidthHz, 1)
+	require.NoError(t, err)
+
+	// Verify coefficients are not all near zero (the original bug symptom)
+	assert.False(t, math.Abs(f.b0a0) < 1e-10 && math.Abs(f.b1a0) < 1e-10 && math.Abs(f.b2a0) < 1e-10,
+		"filter coefficients should not all be near zero")
+
+	// Generate a sine wave at a frequency OUTSIDE the reject band (200 Hz)
+	// This frequency should pass through largely unaffected
+	passFreq := 200.0
+	input := make([]float64, 48000)
+	for i := range input {
+		input[i] = math.Sin(2 * math.Pi * passFreq * float64(i) / sampleRate)
+	}
+	rmsBefore := calculateRMSFloat64(input)
+
+	f.ApplyBatch(input)
+
+	rmsAfter := calculateRMSFloat64(input[2000:]) // Skip transient
+	ratio := rmsAfter / rmsBefore
+
+	// Signal outside the reject band should retain most of its energy
+	assert.Greater(t, ratio, 0.5,
+		"signal outside reject band should not be silenced (ratio=%.4f)", ratio)
+}
+
+// TestBandReject_AttenuatesTargetFrequency verifies that the band-reject
+// filter actually attenuates the center frequency.
+func TestBandReject_AttenuatesTargetFrequency(t *testing.T) {
+	sampleRate := 48000.0
+	centerFreq := 1000.0
+	bandwidthHz := 500.0
+
+	f, err := NewBandReject(sampleRate, centerFreq, bandwidthHz, 1)
+	require.NoError(t, err)
+
+	// Generate a sine wave AT the center frequency
+	input := make([]float64, 48000)
+	for i := range input {
+		input[i] = math.Sin(2 * math.Pi * centerFreq * float64(i) / sampleRate)
+	}
+	rmsBefore := calculateRMSFloat64(input)
+
+	f.ApplyBatch(input)
+
+	rmsAfter := calculateRMSFloat64(input[2000:]) // Skip transient
+	attenuation := rmsBefore / rmsAfter
+
+	// Center frequency should be significantly attenuated
+	assert.Greater(t, attenuation, 3.0,
+		"center frequency should be attenuated (attenuation=%.2fx)", attenuation)
 }
 
 func TestFilterChain_Empty(t *testing.T) {
