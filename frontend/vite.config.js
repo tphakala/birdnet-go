@@ -109,7 +109,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts}'],
     // Explicitly exclude node_modules and other non-test directories from file search
     // Integration tests are excluded - run them separately with npm run test:integration
-    exclude: ['node_modules', 'dist', 'build', '.svelte-kit', 'coverage', '**/*.integration.{test,spec}.{js,ts}'],
+    exclude: ['node_modules', 'dist', 'build', '.svelte-kit', 'coverage', '**/*.integration.{test,spec}.{js,ts}', '**/*.reverse-proxy.{test,spec}.{js,ts}'],
     // Performance optimizations - Vitest 4.x removed poolOptions, use top-level options
     pool: 'threads', // Faster than default 'forks' for many small tests
     minWorkers: 2, // Keep minimum threads warm (renamed from poolOptions.threads.minThreads)
