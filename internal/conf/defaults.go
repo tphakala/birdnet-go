@@ -158,6 +158,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dynamicthreshold.min", 0.20)
 	viper.SetDefault("realtime.dynamicthreshold.validhours", 24)
 
+	// Log deduplication configuration
+	viper.SetDefault("realtime.logdeduplication.enabled", true)
+	viper.SetDefault("realtime.logdeduplication.healthcheckintervalseconds", 60)
+
 	// False positive filter configuration
 	// Level 0 = Off (no filtering, backward compatible default)
 	// Level 1 = Lenient, Level 2 = Moderate, Level 3 = Balanced (original behavior)
