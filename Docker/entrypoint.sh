@@ -110,21 +110,7 @@ fi
 # Only chown clips directory if running as root and any subdirectories have wrong ownership
 if [ "$RUNNING_AS_ROOT" = true ]; then
     if [ "$SKIP_CHOWN" != "true" ]; then
-        NEEDS_CHOWN=false
-        if [ -d "/data/clips" ] && [ "$(ls -A /data/clips)" ]; then
-            for subdir in /data/clips/*/; do
-                if [ -d "$subdir" ]; then
-                    CURRENT_OWNER_UID=$(stat -c %u "$subdir" 2>/dev/null || echo "0")
-                    CURRENT_OWNER_GID=$(stat -c %g "$subdir" 2>/dev/null || echo "0")
-                    if [ "$CURRENT_OWNER_UID" != "$APP_UID" ] || [ "$CURRENT_OWNER_GID" != "$APP_GID" ]; then
-                        NEEDS_CHOWN=true
-                        break
-                    fi
-                fi
-            done
-        fi
-
-        if [ "$NEEDS_CHOWN" = true ]; then
+        if [ -d "/data/clips" ] && [ -n "$(find /data/clips -mindepth 1 -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -print -quit)" ]; then
             echo "Fixing ownership of clips directory..."
             chown -R "$APP_UID":"$APP_GID" /data/clips
         fi
@@ -134,7 +120,7 @@ if [ "$RUNNING_AS_ROOT" = true ]; then
     USER_HOME=$(getent passwd "$APP_UID" | cut -d: -f6)
     mkdir -p "$USER_HOME/.config"
     if [ "$SKIP_CHOWN" != "true" ]; then
-        chown "$APP_UID":"$APP_GID" "$USER_HOME/.config"
+        check_and_chown "$USER_HOME/.config"
     fi
     if [ ! -L "$USER_HOME/.config/birdnet-go" ]; then
         gosu "$USER_NAME" ln -sf /config "$USER_HOME/.config/birdnet-go"
