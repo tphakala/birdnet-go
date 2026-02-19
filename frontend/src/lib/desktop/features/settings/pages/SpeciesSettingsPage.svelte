@@ -510,7 +510,7 @@
       interface SpeciesListResponse {
         species?: Array<{ commonName?: string; label: string }>;
       }
-      const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
+      const data = await api.get<SpeciesListResponse>('/api/v2/species/all');
       speciesListState.data =
         data.species?.map((s: { commonName?: string; label: string }) => s.commonName || s.label) ||
         [];
