@@ -27,7 +27,7 @@ check_and_chown() {
     if [ "$recursive" = true ]; then
         # For recursive mode, check the entire tree for any ownership mismatch
         if [ -n "$(find "$target" -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -print -quit)" ]; then
-            chown -R "$APP_UID":"$APP_GID" -- "$target"
+            chown -hR "$APP_UID":"$APP_GID" -- "$target"
         fi
     else
         local CURRENT_OWNER_UID CURRENT_OWNER_GID
@@ -35,7 +35,7 @@ check_and_chown() {
         CURRENT_OWNER_GID=$(stat -c %g -- "$target" 2>/dev/null || echo "")
 
         if [ "$CURRENT_OWNER_UID" != "$APP_UID" ] || [ "$CURRENT_OWNER_GID" != "$APP_GID" ]; then
-            chown "$APP_UID":"$APP_GID" -- "$target"
+            chown -h "$APP_UID":"$APP_GID" -- "$target"
         fi
     fi
 }
@@ -88,12 +88,9 @@ if [ ! -z "$BIRDNET_MODELPATH" ]; then
     fi
 fi
 
-# Only chown clips directory if any subdirectories have wrong ownership
+# Only chown clips directory if ownership differs
 if [ "$SKIP_CHOWN" != "true" ]; then
-    if [ -d "/data/clips" ] && [ -n "$(find /data/clips -mindepth 1 -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -print -quit)" ]; then
-        echo "Fixing ownership of clips directory..."
-        chown -R "$APP_UID":"$APP_GID" /data/clips
-    fi
+    check_and_chown -R /data/clips
 fi
 
 # Create config directory and symlink for the user
