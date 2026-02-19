@@ -21,8 +21,8 @@ check_and_chown() {
     fi
     local target="$1"
 
-    # Skip if path doesn't exist
-    [ -e "$target" ] || return 0
+    # Skip if path doesn't exist (also handle dangling symlinks for chown -h)
+    [ -e "$target" ] || [ -L "$target" ] || return 0
 
     if [ "$recursive" = true ]; then
         # Chown only files/dirs with mismatched ownership, avoiding redundant operations
