@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestCalculateRarityStatus tests the calculateRarityStatus helper function.
@@ -410,4 +411,79 @@ func TestTaxonomyInfoJSONSerialization(t *testing.T) {
 	subspecies, ok := parsed["subspecies"].([]any)
 	require.True(t, ok)
 	assert.Len(t, subspecies, 1)
+}
+
+// TestGetAllSpecies tests the GetAllSpecies endpoint returns all BirdNET labels.
+func TestGetAllSpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "all-species-list")
+
+	tests := []struct {
+		name           string
+		labels         []string
+		expectedCount  int
+		expectedStatus int
+	}{
+		{
+			name:           "returns all labels",
+			labels:         []string{"Turdus migratorius_American Robin", "Cyanocitta cristata_Blue Jay", "Corvus brachyrhynchos_American Crow"},
+			expectedCount:  3,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "empty labels",
+			labels:         []string{},
+			expectedCount:  0,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "nil labels",
+			labels:         nil,
+			expectedCount:  0,
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e := echo.New()
+			settings := &conf.Settings{}
+			settings.BirdNET.Labels = tt.labels
+
+			controller := &Controller{
+				Echo:     e,
+				Group:    e.Group("/api/v2"),
+				Settings: settings,
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/species/all", http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+
+			err := controller.GetAllSpecies(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, rec.Code)
+
+			var response AllSpeciesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.Equal(t, tt.expectedCount, response.Count)
+			assert.Len(t, response.Species, tt.expectedCount)
+
+			if tt.expectedCount > 0 {
+				// Verify first species is parsed correctly
+				assert.Equal(t, "Turdus migratorius_American Robin", response.Species[0].Label)
+				assert.Equal(t, "Turdus migratorius", response.Species[0].ScientificName)
+				assert.Equal(t, "American Robin", response.Species[0].CommonName)
+
+				// Verify order is preserved
+				assert.Equal(t, "Cyanocitta cristata_Blue Jay", response.Species[1].Label)
+				assert.Equal(t, "Cyanocitta cristata", response.Species[1].ScientificName)
+				assert.Equal(t, "Blue Jay", response.Species[1].CommonName)
+			}
+		})
+	}
 }

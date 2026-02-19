@@ -91,6 +91,7 @@ func (c *Controller) lookupTaxonomyTree(ctx context.Context, scientificName stri
 func (c *Controller) initSpeciesRoutes() {
 	// Public endpoints for species information
 	c.Group.GET("/species", c.GetSpeciesInfo)
+	c.Group.GET("/species/all", c.GetAllSpecies)
 	c.Group.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
 
 	// RESTful thumbnail endpoint - uses species code from path
@@ -100,6 +101,54 @@ func (c *Controller) initSpeciesRoutes() {
 	c.Group.GET("/taxonomy/genus/:genus", c.GetGenusSpecies)
 	c.Group.GET("/taxonomy/family/:family", c.GetFamilySpecies)
 	c.Group.GET("/taxonomy/tree/:scientific_name", c.GetSpeciesTree)
+}
+
+// AllSpeciesResponse represents the response for the all species endpoint
+type AllSpeciesResponse struct {
+	Species []RangeFilterSpecies `json:"species"`
+	Count   int                  `json:"count"`
+}
+
+// GetAllSpecies returns all known BirdNET species labels regardless of location or range filter.
+// This is used for species include/exclude search where users need to find any species,
+// not just those matching the current location's range filter.
+// @Summary Get all BirdNET species
+// @Description Returns all species from the loaded BirdNET labels, independent of range filter
+// @Tags species
+// @Produce json
+// @Success 200 {object} AllSpeciesResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v2/species/all [get]
+func (c *Controller) GetAllSpecies(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	c.logDebugIfEnabled("Retrieving all BirdNET species labels",
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
+
+	labels := c.Settings.BirdNET.Labels
+	speciesList := make([]RangeFilterSpecies, 0, len(labels))
+
+	for _, label := range labels {
+		sp := detection.ParseSpeciesString(label)
+		speciesList = append(speciesList, RangeFilterSpecies{
+			Label:          label,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
+		})
+	}
+
+	c.logInfoIfEnabled("All species labels retrieved successfully",
+		logger.Int("count", len(speciesList)),
+		logger.String("ip", ip),
+		logger.String("path", path),
+	)
+
+	return ctx.JSON(http.StatusOK, AllSpeciesResponse{
+		Species: speciesList,
+		Count:   len(speciesList),
+	})
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
