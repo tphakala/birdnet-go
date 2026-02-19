@@ -25,16 +25,12 @@ check_and_chown() {
     [ -e "$target" ] || return 0
 
     if [ "$recursive" = true ]; then
-        # For recursive mode, check the entire tree for any ownership mismatch
-        if [ -n "$(find "$target" -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -print -quit)" ]; then
-            chown -hR "$APP_UID":"$APP_GID" -- "$target"
-        fi
+        # Chown only files/dirs with mismatched ownership, avoiding redundant operations
+        find "$target" -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -exec chown -h "$APP_UID":"$APP_GID" -- {} +
     else
-        local CURRENT_OWNER_UID CURRENT_OWNER_GID
-        CURRENT_OWNER_UID=$(stat -c %u -- "$target" 2>/dev/null || echo "")
-        CURRENT_OWNER_GID=$(stat -c %g -- "$target" 2>/dev/null || echo "")
-
-        if [ "$CURRENT_OWNER_UID" != "$APP_UID" ] || [ "$CURRENT_OWNER_GID" != "$APP_GID" ]; then
+        local owner
+        owner=$(stat -c "%u:%g" -- "$target" 2>/dev/null) || return 0
+        if [ "$owner" != "$APP_UID:$APP_GID" ]; then
             chown -h "$APP_UID":"$APP_GID" -- "$target"
         fi
     fi
@@ -75,9 +71,8 @@ if [ "$RUNNING_AS_ROOT" = true ]; then
     else
         check_and_chown -R /config
         check_and_chown /data
-        for item in /data/*; do
-            check_and_chown "$item"
-        done
+        # Chown items in /data one level deep, only those with mismatched ownership
+        find /data -mindepth 1 -maxdepth 1 -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -exec chown -h "$APP_UID":"$APP_GID" -- {} +
     fi
 else
     # Running in rootless mode (already running as target user)
