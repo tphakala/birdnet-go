@@ -1,0 +1,141 @@
+name: Reverse Proxy Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'internal/api/**'
+      - '.github/workflows/reverse-proxy-test.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'internal/api/**'
+      - '.github/workflows/reverse-proxy-test.yml'
+
+concurrency:
+  group: reverse-proxy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  reverse-proxy-tests:
+    name: Nginx Reverse Proxy Route Validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # --- Go backend setup ---
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Cache TensorFlow headers
+        uses: actions/cache@v5
+        with:
+          path: ~/src/tensorflow
+          key: ${{ runner.os }}-tensorflow-v2.17.1
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install TensorFlow headers
+        run: task check-tensorflow
+
+      - name: Cache TensorFlow Lite library
+        id: cache-tflite
+        uses: actions/cache@v5
+        with:
+          path: /usr/lib/libtensorflowlite_c.so*
+          key: ${{ runner.os }}-tflite-v2.17.1
+
+      - name: Download tflite_c
+        if: steps.cache-tflite.outputs.cache-hit != 'true'
+        run: |
+          TFLITE_VERSION=v2.17.1
+          wget -q https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -P ./
+          tar -xzf tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -C .
+          sudo mv libtensorflowlite_c.so.2.17.1 /usr/lib/libtensorflowlite_c.so
+          rm -f tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz
+
+      - name: Set CGO environment variables
+        run: |
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
+          echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
+
+      # --- Node.js setup ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # --- Build frontend (needed for backend dev mode serving) ---
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # --- Build backend (skipfrontend tag: uses stub embed, serves from disk) ---
+      - name: Build backend
+        run: |
+          go build -trimpath -tags skipfrontend \
+            -ldflags "-s -w" \
+            -o bin/birdnet-go
+
+      # --- Start backend ---
+      - name: Start backend
+        run: |
+          # Start backend in background
+          ./bin/birdnet-go realtime &
+          BACKEND_PID=$!
+          echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
+
+          # Wait for backend to be ready
+          echo "Waiting for backend health endpoint..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/api/v2/health > /dev/null 2>&1; then
+              echo "Backend is ready (attempt $i)"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend failed to start within 60 seconds"
+              exit 1
+            fi
+            sleep 1
+          done
+
+      # --- Pull nginx image ---
+      - name: Pull nginx image
+        run: docker pull nginx:1.27-alpine
+
+      # --- Run reverse proxy tests ---
+      - name: Run reverse proxy tests
+        working-directory: frontend
+        env:
+          BACKEND_URL: http://localhost:8080
+        run: npm run test:reverse-proxy
+
+      # --- Cleanup ---
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -n "$BACKEND_PID" ]; then
+            kill $BACKEND_PID 2>/dev/null || true
+          fi
+          # Clean up any nginx test containers
+          docker rm -f birdnet-test-root-proxy birdnet-test-subpath-proxy 2>/dev/null || true
