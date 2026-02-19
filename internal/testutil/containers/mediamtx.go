@@ -76,27 +76,31 @@ func NewMediaMTXContainer(ctx context.Context, config *MediaMTXConfig) (*MediaMT
 		return nil, fmt.Errorf("failed to start MediaMTX container: %w", err)
 	}
 
+	// Ensure container is cleaned up if any subsequent step fails.
+	var successful bool
+	defer func() {
+		if !successful {
+			_ = container.Terminate(context.Background()) //nolint:gocritic // no *testing.T available
+		}
+	}()
+
 	host, err := container.Host(ctx)
 	if err != nil {
-		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to get container host: %w", err)
 	}
 
 	rtspPort, err := mappedPortInt(ctx, container, "8554")
 	if err != nil {
-		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to get RTSP port: %w", err)
 	}
 
 	rtmpPort, err := mappedPortInt(ctx, container, "1935")
 	if err != nil {
-		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to get RTMP port: %w", err)
 	}
 
 	hlsPort, err := mappedPortInt(ctx, container, "8888")
 	if err != nil {
-		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("failed to get HLS port: %w", err)
 	}
 
@@ -110,10 +114,10 @@ func NewMediaMTXContainer(ctx context.Context, config *MediaMTXConfig) (*MediaMT
 
 	// Verify RTSP port is accepting connections
 	if err := WaitForTCP(host, rtspPort, 10*time.Second); err != nil {
-		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("RTSP port health check failed: %w", err)
 	}
 
+	successful = true
 	return mc, nil
 }
 
