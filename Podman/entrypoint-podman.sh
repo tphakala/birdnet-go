@@ -7,7 +7,7 @@ APP_GID=${BIRDNET_GID:-1000}
 APP_USER="birdnet"
 
 # SKIP_CHOWN: set to "true" to skip all ownership changes (useful for NFS mounts)
-SKIP_CHOWN="${SKIP_CHOWN:-false}"
+SKIP_CHOWN="$(echo "${SKIP_CHOWN:-false}" | tr '[:upper:]' '[:lower:]')"
 
 echo "Starting BirdNET-Go with UID:$APP_UID, GID:$APP_GID"
 
@@ -24,15 +24,18 @@ check_and_chown() {
     # Skip if path doesn't exist
     [ -e "$target" ] || return 0
 
-    local CURRENT_OWNER_UID CURRENT_OWNER_GID
-    CURRENT_OWNER_UID=$(stat -c %u "$target" 2>/dev/null || echo "")
-    CURRENT_OWNER_GID=$(stat -c %g "$target" 2>/dev/null || echo "")
+    if [ "$recursive" = true ]; then
+        # For recursive mode, check the entire tree for any ownership mismatch
+        if [ -n "$(find "$target" -not \( -uid "$APP_UID" -a -gid "$APP_GID" \) -print -quit)" ]; then
+            chown -R "$APP_UID":"$APP_GID" -- "$target"
+        fi
+    else
+        local CURRENT_OWNER_UID CURRENT_OWNER_GID
+        CURRENT_OWNER_UID=$(stat -c %u -- "$target" 2>/dev/null || echo "")
+        CURRENT_OWNER_GID=$(stat -c %g -- "$target" 2>/dev/null || echo "")
 
-    if [ "$CURRENT_OWNER_UID" != "$APP_UID" ] || [ "$CURRENT_OWNER_GID" != "$APP_GID" ]; then
-        if [ "$recursive" = true ]; then
-            chown -R "$APP_UID":"$APP_GID" "$target"
-        else
-            chown "$APP_UID":"$APP_GID" "$target"
+        if [ "$CURRENT_OWNER_UID" != "$APP_UID" ] || [ "$CURRENT_OWNER_GID" != "$APP_GID" ]; then
+            chown "$APP_UID":"$APP_GID" -- "$target"
         fi
     fi
 }
