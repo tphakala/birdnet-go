@@ -3456,13 +3456,13 @@ generate_systemd_service_content() {
     # Check for /dev/snd/
     local audio_env_line=""
     if check_directory_exists "/dev/snd/"; then
-        audio_env_line="--device /dev/snd \\"
+        audio_env_line="--device /dev/snd"
     fi
 
     # Check for /sys/class/thermal, used for Raspberry Pi temperature reporting in system dashboard
     local thermal_volume_line=""
     if check_directory_exists "/sys/class/thermal"; then
-        thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal \\"
+        thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal"
     fi
 
     # Check if running on Raspberry Pi and add WiFi power save disable script
@@ -3488,8 +3488,8 @@ ExecStartPre=-/usr/bin/docker rm -f birdnet-go
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
 # Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
 ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
-${wifi_power_save_script}
-ExecStart=/usr/bin/docker run --rm \\
+${wifi_power_save_script:+${wifi_power_save_script}
+}ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
     -p 80:80 \\
@@ -3498,11 +3498,11 @@ ExecStart=/usr/bin/docker run --rm \\
     --env TZ="${TZ}" \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
-    ${audio_env_line}
-    -v ${CONFIG_DIR}:/config \\
+${audio_env_line:+    ${audio_env_line} \\
+}    -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
-    ${thermal_volume_line}
-    ${BIRDNET_GO_IMAGE}
+${thermal_volume_line:+    ${thermal_volume_line} \\
+}    ${BIRDNET_GO_IMAGE}
 # Cleanup tasks on stop
 ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
 ExecStopPost=-/usr/bin/docker rm -f birdnet-go
