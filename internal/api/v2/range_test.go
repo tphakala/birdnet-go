@@ -430,11 +430,13 @@ func TestGetRangeFilterSpeciesCountDuringSwap(t *testing.T) {
 
 			err := controller.GetRangeFilterSpeciesCount(c)
 			if err != nil {
+				t.Errorf("GetRangeFilterSpeciesCount returned error: %v", err)
 				return
 			}
 
 			var response RangeFilterSpeciesCount
-			if json.Unmarshal(rec.Body.Bytes(), &response) != nil {
+			if unmarshalErr := json.Unmarshal(rec.Body.Bytes(), &response); unmarshalErr != nil {
+				t.Errorf("Failed to unmarshal response: %v", unmarshalErr)
 				return
 			}
 

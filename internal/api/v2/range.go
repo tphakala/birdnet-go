@@ -617,14 +617,17 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
 	}
 
-	// Get the updated count
+	// Get the updated count under read lock for consistency with other endpoints.
+	c.settingsMutex.RLock()
 	includedSpecies := c.Settings.GetIncludedSpecies()
+	lastUpdated := c.Settings.BirdNET.RangeFilter.LastUpdated
+	c.settingsMutex.RUnlock()
 
 	response := map[string]any{
 		"success":     true,
 		"message":     "Range filter rebuilt successfully",
 		"count":       len(includedSpecies),
-		"lastUpdated": c.Settings.BirdNET.RangeFilter.LastUpdated,
+		"lastUpdated": lastUpdated,
 	}
 
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter rebuilt successfully", logger.Int("species_count", len(includedSpecies)))
