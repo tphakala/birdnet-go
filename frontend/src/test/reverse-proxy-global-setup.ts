@@ -70,24 +70,11 @@ async function isBackendRunning(): Promise<boolean> {
 }
 
 /**
- * Get the host IP that Docker containers can use to reach the host.
- * On Linux, host.docker.internal may not be available, so we detect it.
+ * Docker host address for container-to-host communication.
+ * host.docker.internal works on Mac/Windows natively, and on Linux
+ * via the --add-host=host.docker.internal:host-gateway flag (Docker 20.10+).
  */
-function getDockerHostIP(): string {
-  try {
-    // Try to get the docker bridge gateway IP (works on Linux)
-    const result = execSync(
-      "docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'",
-      { encoding: 'utf-8', timeout: 5000 }
-    ).trim();
-    if (result) return result;
-  } catch {
-    // Fallback
-  }
-
-  // On Docker Desktop (Mac/Windows), host.docker.internal works
-  return 'host.docker.internal';
-}
+const DOCKER_HOST = 'host.docker.internal';
 
 /**
  * Start an nginx container with the given config.
@@ -109,6 +96,13 @@ function startNginxContainer(
   }
   const templatedPath = join(tmpDir, `${name}.conf`);
   writeFileSync(templatedPath, config);
+
+  // Remove stale container from a previous crashed run (ignore errors if absent)
+  try {
+    execSync(`docker rm -f birdnet-test-${name}`, { stdio: 'ignore', timeout: 10000 });
+  } catch {
+    // No stale container — expected
+  }
 
   // Start nginx container
   const containerId = execSync(
@@ -211,9 +205,8 @@ export async function setup(): Promise<void> {
     console.log('✅ Backend is ready');
   }
 
-  // Step 2: Determine Docker host address
-  const dockerHost = getDockerHostIP();
-  console.log(`🐳 Docker host: ${dockerHost}`);
+  // Step 2: Docker host address
+  console.log(`🐳 Docker host: ${DOCKER_HOST}`);
 
   // Step 3: Start nginx containers
   console.log('🚀 Starting nginx reverse proxy containers...');
@@ -223,14 +216,14 @@ export async function setup(): Promise<void> {
       join(nginxConfigDir, 'root-proxy.conf'),
       NGINX_ROOT_PORT,
       'root-proxy',
-      dockerHost
+      DOCKER_HOST
     );
 
     subpathProxyContainerId = startNginxContainer(
       join(nginxConfigDir, 'subpath-proxy.conf'),
       NGINX_SUBPATH_PORT,
       'subpath-proxy',
-      dockerHost
+      DOCKER_HOST
     );
   } catch (err) {
     console.error('❌ Failed to start nginx containers:', err);
@@ -307,23 +300,23 @@ export async function teardown(): Promise<void> {
   // Stop backend
   if (backendProcess !== null) {
     console.log('  Stopping backend...');
+    const pid = backendProcess.pid;
     try {
-      if (backendProcess.pid !== undefined) {
-        process.kill(-backendProcess.pid, 'SIGTERM');
+      if (pid !== undefined) {
+        process.kill(-pid, 'SIGTERM');
       }
     } catch {
       // Process may have already exited
     }
     await new Promise(r => setTimeout(r, 1000));
-    // Force kill if still running
-    if (!backendProcess.killed) {
-      try {
-        if (backendProcess.pid !== undefined) {
-          process.kill(-backendProcess.pid, 'SIGKILL');
-        }
-      } catch {
-        // Already dead
+    // Force kill if still running — use captured pid since backendProcess
+    // may have been set to null by the 'exit' handler during the await
+    try {
+      if (pid !== undefined) {
+        process.kill(-pid, 'SIGKILL');
       }
+    } catch {
+      // Already dead
     }
     backendProcess = null;
   }

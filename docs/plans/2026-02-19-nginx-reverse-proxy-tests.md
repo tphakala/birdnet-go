@@ -30,7 +30,7 @@ after deployment.
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ Vitest (Node.js)                                        │
 │                                                          │
@@ -108,25 +108,19 @@ For each route, in both proxy configurations:
 
 | File | Change |
 |------|--------|
-| `frontend/package.json` | Added `test:reverse-proxy` and `test:reverse-proxy:auto` scripts |
+| `frontend/package.json` | Added `test:reverse-proxy` script |
 
 ## Usage
 
 ```bash
 cd frontend
-
-# Manual mode (start backend yourself first)
 npm run test:reverse-proxy
-
-# Auto mode (starts backend + nginx automatically)
-npm run test:reverse-proxy:auto
 ```
 
 ## Prerequisites
 
 - Docker running (for nginx containers)
-- Backend available on port 8080 (or use auto mode)
-- `air` CLI available (for auto backend start)
+- Backend running on port 8080, or setup will start it automatically via `air`
 
 ## Design Decisions
 
