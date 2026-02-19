@@ -2,7 +2,6 @@
   ViewToggle.svelte
 
   A reusable toggle for switching between table (list) and card (grid) views.
-  Persists the selected view in localStorage under a configurable key.
 
   Props:
   - view: 'table' | 'cards' - Current view mode
