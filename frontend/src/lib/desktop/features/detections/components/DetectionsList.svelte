@@ -150,13 +150,19 @@
   let sortField = $state<SortField>('dateTime');
   let sortDirection = $state<SortDirection>('desc');
 
+  const SORT_FIELDS: Set<string> = new Set<string>(['dateTime', 'species', 'confidence', 'status']);
+
+  function isSortField(field: string): field is SortField {
+    return SORT_FIELDS.has(field);
+  }
+
   function handleSort(field: string) {
-    const typedField = field as SortField;
-    if (sortField === typedField) {
+    if (!isSortField(field)) return;
+    if (sortField === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-      sortField = typedField;
-      sortDirection = typedField === 'dateTime' ? 'desc' : 'asc';
+      sortField = field;
+      sortDirection = field === 'dateTime' ? 'desc' : 'asc';
     }
   }
 

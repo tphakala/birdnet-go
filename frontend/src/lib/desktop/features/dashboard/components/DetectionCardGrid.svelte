@@ -25,14 +25,13 @@
   import { untrack } from 'svelte';
   import DetectionCard from './DetectionCard.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
-  import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
   import { RefreshCw, XCircle, ChevronDown, Check } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
-  import { navigation } from '$lib/stores/navigation.svelte';
+  import { useDetectionActions } from '$lib/desktop/features/detections/composables/useDetectionActions.svelte';
 
   const logger = loggers.ui;
 
@@ -70,13 +69,25 @@
   let selectedLimit = $state(untrack(() => limit));
 
   // Track excluded species by common name (session-local tracking)
-  // Note: In production, this could be fetched from the API on mount for persistence
   let excludedSpecies = $state(new Set<string>());
 
-  // Helper to check if a species is excluded
   function isSpeciesExcluded(commonName: string): boolean {
     return excludedSpecies.has(commonName);
   }
+
+  // Shared action handlers (review, delete, lock, ignore species)
+  const actions = useDetectionActions({
+    onRefresh: () => onRefresh(),
+    isSpeciesExcluded,
+    onToggleExclusion: (name, exclude) => {
+      if (exclude) {
+        excludedSpecies.add(name);
+      } else {
+        excludedSpecies.delete(name);
+      }
+      excludedSpecies = new Set(excludedSpecies);
+    },
+  });
 
   // Custom dropdown state
   let showLimitDropdown = $state(false);
@@ -162,114 +173,6 @@
     if (onLimitChange) {
       onLimitChange(newLimit);
     }
-  }
-
-  // Modal states
-  let showConfirmModal = $state(false);
-  let selectedDetection = $state<Detection | null>(null);
-  let confirmModalConfig = $state({
-    title: '',
-    message: '',
-    confirmLabel: 'Confirm',
-    onConfirm: async () => {},
-  });
-
-  // Action handlers
-  function handleReview(detection: Detection) {
-    navigation.navigate(`/ui/detections/${detection.id}?tab=review`);
-  }
-
-  function handleToggleSpecies(detection: Detection) {
-    const isExcluded = isSpeciesExcluded(detection.commonName);
-    confirmModalConfig = {
-      title: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpecies', { species: detection.commonName })
-        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: detection.commonName }),
-      message: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', {
-            species: detection.commonName,
-          }),
-      confirmLabel: t('common.buttons.confirm'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF('/api/v2/detections/ignore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ common_name: detection.commonName }),
-          });
-          // Toggle local exclusion state
-          if (isExcluded) {
-            excludedSpecies.delete(detection.commonName);
-          } else {
-            excludedSpecies.add(detection.commonName);
-          }
-          // Trigger reactivity by reassigning
-          excludedSpecies = new Set(excludedSpecies);
-          onRefresh();
-        } catch (err) {
-          logger.error('Error toggling species exclusion:', err);
-        }
-      },
-    };
-    selectedDetection = detection;
-    showConfirmModal = true;
-  }
-
-  function handleToggleLock(detection: Detection) {
-    confirmModalConfig = {
-      title: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetection')
-        : t('dashboard.recentDetections.modals.lockDetection'),
-      message: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', {
-            species: detection.commonName,
-          })
-        : t('dashboard.recentDetections.modals.lockDetectionConfirm', {
-            species: detection.commonName,
-          }),
-      confirmLabel: t('common.buttons.confirm'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}/lock`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locked: !detection.locked }),
-          });
-          onRefresh();
-        } catch (err) {
-          logger.error('Error toggling lock status:', err);
-        }
-      },
-    };
-    selectedDetection = detection;
-    showConfirmModal = true;
-  }
-
-  function handleDelete(detection: Detection) {
-    confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', {
-        species: detection.commonName,
-      }),
-      message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', {
-        species: detection.commonName,
-      }),
-      confirmLabel: t('common.buttons.delete'),
-      onConfirm: async () => {
-        try {
-          await fetchWithCSRF(`/api/v2/detections/${detection.id}`, {
-            method: 'DELETE',
-          });
-          onRefresh();
-        } catch (err) {
-          logger.error('Error deleting detection:', err);
-        }
-      },
-    };
-    selectedDetection = detection;
-    showConfirmModal = true;
   }
 </script>
 
@@ -376,10 +279,10 @@
               isExcluded={isSpeciesExcluded(detection.commonName)}
               {onFreezeStart}
               {onFreezeEnd}
-              onReview={() => handleReview(detection)}
-              onToggleSpecies={() => handleToggleSpecies(detection)}
-              onToggleLock={() => handleToggleLock(detection)}
-              onDelete={() => handleDelete(detection)}
+              onReview={() => actions.handleReview(detection)}
+              onToggleSpecies={() => actions.handleToggleSpecies(detection)}
+              onToggleLock={() => actions.handleToggleLock(detection)}
+              onDelete={() => actions.handleDelete(detection)}
             />
           {/each}
         </div>
@@ -395,24 +298,14 @@
 </section>
 
 <!-- Modals -->
-{#if selectedDetection}
+{#if actions.selectedDetection}
   <ConfirmModal
-    isOpen={showConfirmModal}
-    title={confirmModalConfig.title}
-    message={confirmModalConfig.message}
-    confirmLabel={confirmModalConfig.confirmLabel}
-    onClose={() => {
-      showConfirmModal = false;
-      selectedDetection = null;
-    }}
-    onConfirm={async () => {
-      try {
-        await confirmModalConfig.onConfirm();
-      } finally {
-        showConfirmModal = false;
-        selectedDetection = null;
-      }
-    }}
+    isOpen={actions.showConfirmModal}
+    title={actions.confirmModalConfig.title}
+    message={actions.confirmModalConfig.message}
+    confirmLabel={actions.confirmModalConfig.confirmLabel}
+    onClose={actions.closeModal}
+    onConfirm={actions.confirmModal}
   />
 {/if}
 
