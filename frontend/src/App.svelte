@@ -281,6 +281,41 @@
     [uiPath('settings')]: findRouteConfig('settings'),
   });
 
+  /**
+   * Handles routing for sections with subpages (e.g., system, settings).
+   * Finds the route config, sets the current route/page/title, and loads the component.
+   * Falls back to a 404 error page if the route config is not found.
+   */
+  function handleSubpageRouting(
+    path: string,
+    routeName: string,
+    subpagesMap: Record<string, string>,
+    errorTitleKey: string
+  ): void {
+    const config = findRouteConfig(routeName);
+    if (config) {
+      currentRoute = config.route;
+      currentPage = config.page;
+      pageTitleKey = config.titleKey;
+
+      for (const [subpath, titleKey] of Object.entries(subpagesMap)) {
+        if (path.includes(subpath)) {
+          pageTitleKey = titleKey;
+          break;
+        }
+      }
+
+      if (config.component) {
+        loadComponent(config.component);
+      }
+    } else {
+      currentRoute = 'error-404';
+      currentPage = 'error-404';
+      pageTitleKey = errorTitleKey;
+      loadComponent('error-404');
+    }
+  }
+
   function handleRouting(path: string): void {
     // Special handling for detection detail pages
     if (UI_DETECTIONS_PREFIX_RE.test(path) && path.split('/').length > 3) {
@@ -296,61 +331,14 @@
       }
     }
 
-    // Special handling for system subpages
+    // Handle system and settings subpages
     if (UI_SYSTEM_PREFIX_RE.test(path)) {
-      const systemConfig = findRouteConfig('system');
-      if (systemConfig) {
-        currentRoute = systemConfig.route;
-        currentPage = systemConfig.page;
-        pageTitleKey = systemConfig.titleKey;
-
-        // Update title based on specific system page
-        for (const [subpath, titleKey] of Object.entries(systemSubpages)) {
-          if (path.includes(subpath)) {
-            pageTitleKey = titleKey;
-            break;
-          }
-        }
-
-        if (systemConfig.component) {
-          loadComponent(systemConfig.component);
-        }
-      } else {
-        // System config not found, redirect to error page
-        currentRoute = 'error-404';
-        currentPage = 'error-404';
-        pageTitleKey = 'pageTitle.systemNotAvailable';
-        loadComponent('error-404');
-      }
+      handleSubpageRouting(path, 'system', systemSubpages, 'pageTitle.systemNotAvailable');
       return;
     }
 
-    // Special handling for settings subpages
     if (UI_SETTINGS_PREFIX_RE.test(path)) {
-      const settingsConfig = findRouteConfig('settings');
-      if (settingsConfig) {
-        currentRoute = settingsConfig.route;
-        currentPage = settingsConfig.page;
-        pageTitleKey = settingsConfig.titleKey;
-
-        // Update title based on specific settings page
-        for (const [subpath, titleKey] of Object.entries(settingsSubpages)) {
-          if (path.includes(subpath)) {
-            pageTitleKey = titleKey;
-            break;
-          }
-        }
-
-        if (settingsConfig.component) {
-          loadComponent(settingsConfig.component);
-        }
-      } else {
-        // Settings config not found, redirect to error page
-        currentRoute = 'error-404';
-        currentPage = 'error-404';
-        pageTitleKey = 'pageTitle.settingsNotAvailable';
-        loadComponent('error-404');
-      }
+      handleSubpageRouting(path, 'settings', settingsSubpages, 'pageTitle.settingsNotAvailable');
       return;
     }
 
