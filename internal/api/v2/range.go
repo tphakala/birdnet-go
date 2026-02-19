@@ -73,7 +73,13 @@ func (c *Controller) getBirdNETInstance() (*birdnet.BirdNET, error) {
 }
 
 // swapRangeFilterSettings temporarily sets range filter settings and returns a restore function.
+// It acquires settingsMutex (write lock) to prevent concurrent settings reads from seeing
+// the temporary test values. This fixes a race condition where GetAllSettings could return
+// temporarily swapped coordinates during a range filter test (see #1940).
+// The caller MUST call the returned restore function to release the lock.
 func (c *Controller) swapRangeFilterSettings(lat, lon float64, threshold float32) func() {
+	c.settingsMutex.Lock()
+
 	originalLat := c.Settings.BirdNET.Latitude
 	originalLon := c.Settings.BirdNET.Longitude
 	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
@@ -86,6 +92,7 @@ func (c *Controller) swapRangeFilterSettings(lat, lon float64, threshold float32
 		c.Settings.BirdNET.Latitude = originalLat
 		c.Settings.BirdNET.Longitude = originalLon
 		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
+		c.settingsMutex.Unlock()
 	}
 }
 
@@ -165,6 +172,11 @@ func (c *Controller) initRangeRoutes() {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
+	// Acquire read lock to prevent reading temporarily swapped values
+	// during a concurrent range filter test (see #1940).
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
 	// Get current included species
 	includedSpecies := c.Settings.GetIncludedSpecies()
 
@@ -190,6 +202,11 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
 func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
+	// Acquire read lock to prevent reading temporarily swapped values
+	// during a concurrent range filter test (see #1940).
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
 	// Get current included species
 	includedSpecies := c.Settings.GetIncludedSpecies()
 
@@ -345,10 +362,12 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// Parse custom parameters
 		var testReq RangeFilterTestRequest
 
-		// Use current settings as defaults
+		// Read current settings under lock for defaults
+		c.settingsMutex.RLock()
 		testReq.Latitude = c.Settings.BirdNET.Latitude
 		testReq.Longitude = c.Settings.BirdNET.Longitude
 		testReq.Threshold = c.Settings.BirdNET.RangeFilter.Threshold
+		c.settingsMutex.RUnlock()
 
 		// Override with custom values if provided
 		if customLat != "" {
@@ -391,6 +410,9 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Failed to get species list", http.StatusInternalServerError)
 		}
 	} else {
+		// Acquire read lock to prevent reading temporarily swapped values
+		c.settingsMutex.RLock()
+
 		// Use current range filter settings
 		includedSpecies := c.Settings.GetIncludedSpecies()
 
@@ -414,6 +436,8 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			Longitude: c.Settings.BirdNET.Longitude,
 		}
 		threshold = c.Settings.BirdNET.RangeFilter.Threshold
+
+		c.settingsMutex.RUnlock()
 	}
 
 	// Generate CSV content
