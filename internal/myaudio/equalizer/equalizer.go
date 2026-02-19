@@ -60,7 +60,12 @@ func hzToOctaves(centerFreq, widthHz float64) float64 {
 	if halfWidth <= 0 {
 		halfWidth = 0.01
 	}
-	return math.Log2((centerFreq + halfWidth) / (centerFreq - halfWidth))
+	// Guard against sub-Hz center frequencies producing non-positive denominator
+	lower := centerFreq - halfWidth
+	if lower <= 0 {
+		lower = 0.01
+	}
+	return math.Log2((centerFreq + halfWidth) / lower)
 }
 
 // Filter holds the digital filter parameters.
