@@ -119,6 +119,7 @@ Performance Optimizations:
   let detectionsError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
+  let configLoaded = $state(false); // Gates reactive preloading until config is loaded
 
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -350,6 +351,8 @@ Performance Optimizations:
     } catch (error) {
       logger.error('Error fetching dashboard config:', error);
       // Keep default values on error
+    } finally {
+      configLoaded = true;
     }
   }
 
@@ -594,8 +597,7 @@ Performance Optimizations:
     // must return a sync cleanup function.
     fetchDashboardConfig().then(() => {
       fetchDailySummary();
-      // Preload adjacent dates after config is loaded so the correct limit is used
-      triggerAdjacentPreload(selectedDate);
+      // Adjacent date preloading is handled by the $effect gated on configLoaded
     });
     fetchRecentDetections();
 
@@ -1085,10 +1087,10 @@ Performance Optimizations:
     }, 150); // Wait 150ms for settling
   }
 
-  // Reactive preloading - triggers when selectedDate changes
+  // Reactive preloading - triggers when selectedDate changes or config finishes loading
   $effect(() => {
-    // Only preload if we have a valid selectedDate and not during initial load
-    if (selectedDate) {
+    // Gate on configLoaded to prevent preloading with default summaryLimit before config is fetched
+    if (selectedDate && configLoaded) {
       triggerAdjacentPreload(selectedDate);
     }
   });
