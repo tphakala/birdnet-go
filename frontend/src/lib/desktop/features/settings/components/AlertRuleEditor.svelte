@@ -376,11 +376,30 @@
         {t('settings.alerts.editor.actionsSection')}
       </h4>
       {#each actionTargets as target (target.value)}
-        <Checkbox
-          label={target.label}
-          checked={isActionSelected(target.value)}
-          onchange={() => toggleAction(target.value)}
-        />
+        <div>
+          <Checkbox
+            label={target.label}
+            checked={isActionSelected(target.value)}
+            onchange={() => toggleAction(target.value)}
+          />
+          {#if isActionSelected(target.value)}
+            {@const action = actions.find(a => a.target === target.value)}
+            {#if action}
+              <div class="ml-6 mt-2 space-y-2">
+                <TextInput
+                  label={t('settings.alerts.editor.templateTitle')}
+                  bind:value={action.template_title}
+                  placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
+                />
+                <TextInput
+                  label={t('settings.alerts.editor.templateMessage')}
+                  bind:value={action.template_message}
+                  placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
+                />
+              </div>
+            {/if}
+          {/if}
+        </div>
       {/each}
     </div>
 

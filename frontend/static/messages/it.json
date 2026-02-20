@@ -2923,7 +2923,11 @@
         "actionBell": "In-app notification",
         "actionPush": "Push notification",
         "optionsSection": "Options",
-        "cooldownMinutes": "Cooldown (minutes)"
+        "cooldownMinutes": "Cooldown (minutes)",
+        "templateTitle": "Title Template",
+        "templateTitlePlaceholder": "Leave empty for default",
+        "templateMessage": "Message Template",
+        "templateMessagePlaceholder": "Leave empty for default"
       },
       "export": "Export",
       "import": "Import",
