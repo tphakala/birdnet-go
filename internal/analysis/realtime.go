@@ -14,6 +14,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/backup"
@@ -404,6 +405,13 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 
+	// Publish application started alert event
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeApplication,
+		EventName:  alerting.EventApplicationStarted,
+		Properties: map[string]any{},
+	})
+
 	// Sound level monitoring is now managed by the control monitor for hot reload support.
 	// The control monitor will start sound level monitoring if enabled in settings.
 
@@ -445,6 +453,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		select {
 		case <-quitChan:
 			log := GetLogger()
+
+			// Publish application stopped alert event
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeApplication,
+				EventName:  alerting.EventApplicationStopped,
+				Properties: map[string]any{},
+			})
+
 			log.Info("initiating graceful shutdown sequence",
 				logger.Float64("shutdown_timeout_seconds", shutdownTimeout.Seconds()),
 				logger.String("operation", "graceful_shutdown"))
