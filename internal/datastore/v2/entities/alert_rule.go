@@ -8,7 +8,7 @@ type AlertRule struct {
 	ID          uint             `gorm:"primaryKey"`
 	Name        string           `gorm:"size:255;not null"`
 	Description string           `gorm:"size:1000;default:''"`
-	Enabled     bool             `gorm:"not null;default:true;index"`
+	Enabled     bool             `gorm:"not null;index"`
 	BuiltIn     bool             `gorm:"not null;default:false"`
 	ObjectType  string           `gorm:"size:50;not null;index"`
 	TriggerType string           `gorm:"size:10;not null"`
