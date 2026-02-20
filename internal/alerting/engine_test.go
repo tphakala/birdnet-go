@@ -414,3 +414,45 @@ func TestEngine_NoCooldownMeansAlwaysFires(t *testing.T) {
 
 	assert.Equal(t, 3, fireCount, "with 0 cooldown, rule should fire every time")
 }
+
+func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
+	// Two rules targeting the same metric — metric sample should be recorded once per event.
+	rule1 := entities.AlertRule{
+		ID:          1,
+		Enabled:     true,
+		ObjectType:  ObjectTypeSystem,
+		TriggerType: TriggerTypeMetric,
+		MetricName:  MetricCPUUsage,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "80", DurationSec: 300},
+		},
+	}
+	rule2 := entities.AlertRule{
+		ID:          2,
+		Enabled:     true,
+		ObjectType:  ObjectTypeSystem,
+		TriggerType: TriggerTypeMetric,
+		MetricName:  MetricCPUUsage,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90", DurationSec: 300},
+		},
+	}
+	repo := newMockRepo(rule1, rule2)
+
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {}, testLogger())
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	now := time.Now()
+	engine.HandleEvent(&AlertEvent{
+		ObjectType: ObjectTypeSystem,
+		MetricName: MetricCPUUsage,
+		Properties: map[string]any{PropertyValue: 95.0},
+		Timestamp:  now,
+	})
+
+	// Verify tracker has exactly 1 sample, not 2
+	engine.metricTracker.mu.RLock()
+	samples := engine.metricTracker.buffers[MetricCPUUsage]
+	engine.metricTracker.mu.RUnlock()
+	assert.Len(t, samples, 1, "metric should be recorded once per event, not once per rule")
+}

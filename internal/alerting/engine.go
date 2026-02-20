@@ -56,6 +56,16 @@ func (e *Engine) RefreshRules(ctx context.Context) error {
 
 // HandleEvent evaluates an event against all enabled rules.
 func (e *Engine) HandleEvent(event *AlertEvent) {
+	// Record metric sample once before rule iteration to avoid duplicates
+	// when multiple rules target the same metric.
+	if event.MetricName != "" {
+		if val, ok := event.Properties[PropertyValue]; ok {
+			if floatVal, err := toFloat64(val); err == nil {
+				e.metricTracker.Record(event.MetricName, floatVal, event.Timestamp)
+			}
+		}
+	}
+
 	e.rulesMu.RLock()
 	rules := make([]entities.AlertRule, len(e.rules))
 	copy(rules, e.rules)
@@ -99,14 +109,7 @@ func (e *Engine) ruleMatches(rule *entities.AlertRule, event *AlertEvent) bool {
 }
 
 func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *AlertEvent) bool {
-	// Record the metric sample
-	if val, ok := event.Properties[PropertyValue]; ok {
-		if floatVal, err := toFloat64(val); err == nil {
-			e.metricTracker.Record(rule.MetricName, floatVal, event.Timestamp)
-		}
-	}
-
-	// Evaluate each condition
+	// Evaluate each condition (metric sample already recorded in HandleEvent)
 	for i := range rule.Conditions {
 		cond := &rule.Conditions[i]
 		if cond.DurationSec > 0 {
