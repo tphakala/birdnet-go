@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -826,6 +827,13 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 		log.Error("Publish failed: Error during soundscape upload",
 			logger.String("timestamp", timestamp),
 			logger.Error(err))
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeIntegration,
+			EventName:  alerting.EventBirdWeatherFailed,
+			Properties: map[string]any{
+				alerting.PropertyError: err.Error(),
+			},
+		})
 		return fmt.Errorf("failed to upload soundscape to Birdweather: %w", err)
 	}
 	log.Debug("UploadSoundscape completed",
