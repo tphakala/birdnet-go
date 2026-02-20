@@ -17,6 +17,38 @@ type AlertEvent struct {
 // AlertEventHandler processes alert events.
 type AlertEventHandler func(event *AlertEvent)
 
+// Package-level singleton for the alert event bus.
+var (
+	globalAlertBus *AlertEventBus
+	alertBusMu     sync.RWMutex
+)
+
+// SetGlobalBus sets the package-level alert event bus singleton.
+// Called during initialization.
+func SetGlobalBus(bus *AlertEventBus) {
+	alertBusMu.Lock()
+	defer alertBusMu.Unlock()
+	globalAlertBus = bus
+}
+
+// GetGlobalBus returns the package-level alert event bus, or nil if not initialized.
+func GetGlobalBus() *AlertEventBus {
+	alertBusMu.RLock()
+	defer alertBusMu.RUnlock()
+	return globalAlertBus
+}
+
+// TryPublish publishes an event to the global alert bus if initialized.
+// Returns false if the bus is not yet available.
+func TryPublish(event *AlertEvent) bool {
+	bus := GetGlobalBus()
+	if bus == nil {
+		return false
+	}
+	bus.Publish(event)
+	return true
+}
+
 // AlertEventBus is a simple pub/sub for alert events.
 type AlertEventBus struct {
 	handlers []AlertEventHandler

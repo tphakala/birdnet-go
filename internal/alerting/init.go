@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -46,8 +47,18 @@ func Initialize(
 		return nil, err
 	}
 
-	// Subscribe engine to the event bus
+	// Subscribe engine to the event bus and set global singleton
 	eventBus.Subscribe(engine.HandleEvent)
+	SetGlobalBus(eventBus)
+
+	// Register detection bridge with the global event bus so detection events
+	// flow into the alerting engine.
+	if eventBusInstance := events.GetEventBus(); eventBusInstance != nil {
+		bridge := NewDetectionAlertBridge(log)
+		if err := eventBusInstance.RegisterConsumer(bridge); err != nil {
+			log.Warn("failed to register detection alert bridge", logger.Error(err))
+		}
+	}
 
 	log.Info("alerting engine initialized",
 		logger.Int("rules_loaded", len(engine.rules)))
