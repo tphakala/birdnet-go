@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
+	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -132,8 +133,8 @@ func (c *NtfyContainer) AddUser(ctx context.Context, username, password string) 
 	}
 
 	exitCode, output, err := c.container.Exec(ctx, []string{
-		"sh", "-c", fmt.Sprintf("NTFY_PASSWORD='%s' ntfy user add %s", password, username),
-	})
+		"ntfy", "user", "add", username,
+	}, tcexec.WithEnv([]string{fmt.Sprintf("NTFY_PASSWORD=%s", password)}))
 	if err != nil {
 		return fmt.Errorf("failed to exec user add command: %w", err)
 	}

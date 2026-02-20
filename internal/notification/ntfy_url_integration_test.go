@@ -26,7 +26,6 @@ func TestNtfyURLPatterns_MatchFrontend(t *testing.T) {
 	const (
 		authUser    = "testuser"
 		authPass    = "testpass"
-		specialUser = "testuser"
 		specialPass = "p@ss:w#rd"
 	)
 

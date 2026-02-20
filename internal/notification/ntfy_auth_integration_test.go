@@ -30,12 +30,16 @@ func setupNtfyAuthContainer(t *testing.T, username, password string) *containers
 }
 
 // shoutrrrNtfyAuthURL builds a shoutrrr ntfy URL with Basic Auth credentials.
+// Uses url.UserPassword for correct percent-encoding of both username and password.
 func shoutrrrNtfyAuthURL(username, password, host, topic string) string {
-	return fmt.Sprintf("ntfy://%s:%s@%s/%s?scheme=http",
-		url.User(username).String(),
-		url.User(password).String(),
-		host, topic,
-	)
+	u := &url.URL{
+		Scheme:   "ntfy",
+		User:     url.UserPassword(username, password),
+		Host:     host,
+		Path:     "/" + topic,
+		RawQuery: "scheme=http",
+	}
+	return u.String()
 }
 
 func TestNtfyShoutrrrDelivery_BasicAuth(t *testing.T) {
