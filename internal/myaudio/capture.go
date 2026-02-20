@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/gen2brain/malgo"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -712,6 +713,13 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 		log.Debug("Attempting to restart audio device")
 		if err := captureDevice.Start(); err != nil {
 			log.Error("failed to restart audio device", logger.Error(err))
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeDevice,
+				EventName:  alerting.EventDeviceError,
+				Properties: map[string]any{
+					alerting.PropertyError: err.Error(),
+				},
+			})
 			log.Info("attempting full audio context restart in 1 second")
 			time.Sleep(1 * time.Second)
 			// Before sending the signal, check if we are already quitting.
@@ -828,6 +836,14 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
 		log.Error("Device initialization failed", logger.Error(err))
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeDevice,
+			EventName:  alerting.EventDeviceError,
+			Properties: map[string]any{
+				alerting.PropertyDeviceName: source.Name,
+				alerting.PropertyError:      err.Error(),
+			},
+		})
 		conf.PrintUserInfo()
 		return
 	}
@@ -844,6 +860,14 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	err = captureDevice.Start()
 	if err != nil {
 		log.Error("Device start failed", logger.Error(err))
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeDevice,
+			EventName:  alerting.EventDeviceError,
+			Properties: map[string]any{
+				alerting.PropertyDeviceName: source.Name,
+				alerting.PropertyError:      err.Error(),
+			},
+		})
 		return
 	}
 	defer captureDevice.Stop() //nolint:errcheck // We handle errors in the caller
@@ -852,11 +876,27 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 		logger.String("name", source.Name),
 		logger.String("id", source.ID))
 
+	// Publish device started alert event
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeDevice,
+		EventName:  alerting.EventDeviceStarted,
+		Properties: map[string]any{
+			alerting.PropertyDeviceName: source.Name,
+		},
+	})
+
 	// Loop until quit or restart signal
 	for {
 		select {
 		case <-quitChan:
 			log.Info("Stopping audio capture due to quit signal")
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeDevice,
+				EventName:  alerting.EventDeviceStopped,
+				Properties: map[string]any{
+					alerting.PropertyDeviceName: source.Name,
+				},
+			})
 			time.Sleep(100 * time.Millisecond) // Allow Stop() to execute
 			return
 		case <-restartChan:
