@@ -149,8 +149,16 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 	e.cooldownsMu.Unlock()
 
 	// Record history
-	eventJSON, _ := json.Marshal(event.Properties)
-	actionsJSON, _ := json.Marshal(rule.Actions)
+	eventJSON, err := json.Marshal(event.Properties)
+	if err != nil {
+		e.log.Error("failed to marshal event properties", logger.Error(err))
+		eventJSON = []byte("{}")
+	}
+	actionsJSON, err := json.Marshal(rule.Actions)
+	if err != nil {
+		e.log.Error("failed to marshal rule actions", logger.Error(err))
+		actionsJSON = []byte("[]")
+	}
 	history := &entities.AlertHistory{
 		RuleID:    rule.ID,
 		FiredAt:   time.Now(),

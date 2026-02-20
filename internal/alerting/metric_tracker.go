@@ -91,8 +91,9 @@ func (t *MetricTracker) IsSustained(metricName, operator, value string, duration
 
 	// The earliest sample must be at or near the window start
 	// to confirm the condition has been sustained for the full duration.
-	// Allow a 10% grace period for sample frequency.
-	grace := duration / 10
+	// Allow a 20% grace period to accommodate typical collection intervals
+	// (e.g., 60s intervals with a 5m duration need at least 60s grace).
+	grace := duration / 5
 	if inWindow[0].timestamp.After(windowStart.Add(grace)) {
 		return false
 	}
