@@ -8,20 +8,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// notificationAdapter wraps notification.Service to implement NotificationCreator.
-type notificationAdapter struct {
-	svc *notification.Service
-}
+// notificationAdapter lazily resolves the notification service to implement
+// NotificationCreator. This avoids hard initialization ordering between the
+// alerting and notification subsystems.
+type notificationAdapter struct{}
 
 func (a *notificationAdapter) CreateAndBroadcast(title, message string) error {
-	_, err := a.svc.Create(notification.TypeSystem, notification.PriorityHigh, title, message)
+	svc := notification.GetService()
+	if svc == nil {
+		return nil // notification service not yet initialized
+	}
+	_, err := svc.Create(notification.TypeSystem, notification.PriorityHigh, title, message)
 	return err
 }
 
 // Initialize creates and starts the alerting engine.
 // It seeds default rules if none exist, creates the engine with the
 // action dispatcher, subscribes to the event bus, and loads rules.
-// Returns nil engine if the notification service is not initialized.
 func Initialize(
 	repo repository.AlertRuleRepository,
 	eventBus *AlertEventBus,
@@ -34,14 +37,8 @@ func Initialize(
 		return nil, err
 	}
 
-	// Build the notification adapter (may be nil if notification service not ready)
-	var notifCreator NotificationCreator
-	if notification.IsInitialized() {
-		notifCreator = &notificationAdapter{svc: notification.GetService()}
-	}
-
-	// Create dispatcher and engine
-	dispatcher := NewActionDispatcher(notifCreator, log)
+	// Create dispatcher and engine (adapter lazily resolves notification service)
+	dispatcher := NewActionDispatcher(&notificationAdapter{}, log)
 	engine := NewEngine(repo, dispatcher.Dispatch, log)
 
 	// Load rules from database

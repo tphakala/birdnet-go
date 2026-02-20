@@ -63,19 +63,16 @@ func renderTemplate(tmpl string, rule *entities.AlertRule, event *AlertEvent) st
 	if tmpl == "" {
 		return defaultTemplate(rule, event)
 	}
-	r := strings.NewReplacer(
+	pairs := []string{
 		"{{rule_name}}", rule.Name,
 		"{{event_name}}", event.EventName,
 		"{{metric_name}}", event.MetricName,
 		"{{object_type}}", event.ObjectType,
-	)
-	// Also substitute any event properties
-	for k, v := range event.Properties {
-		r = strings.NewReplacer(
-			fmt.Sprintf("{{%s}}", k), fmt.Sprintf("%v", v),
-		)
 	}
-	return r.Replace(tmpl)
+	for k, v := range event.Properties {
+		pairs = append(pairs, fmt.Sprintf("{{%s}}", k), fmt.Sprintf("%v", v))
+	}
+	return strings.NewReplacer(pairs...).Replace(tmpl)
 }
 
 func defaultTemplate(rule *entities.AlertRule, event *AlertEvent) string {

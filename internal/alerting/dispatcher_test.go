@@ -144,3 +144,20 @@ func TestRenderTemplate_WithVariables(t *testing.T) {
 	result := renderTemplate("Rule {{rule_name}} fired on {{event_name}}", rule, event)
 	assert.Equal(t, "Rule My Rule fired on stream.disconnected", result)
 }
+
+func TestRenderTemplate_WithProperties(t *testing.T) {
+	rule := &entities.AlertRule{Name: "Stream Alert"}
+	event := &AlertEvent{
+		EventName: "stream.disconnected",
+		Properties: map[string]any{
+			"stream_name": "backyard",
+			"stream_url":  "rtsp://cam.local/feed",
+		},
+	}
+
+	result := renderTemplate(
+		"{{rule_name}}: {{stream_name}} ({{stream_url}}) - {{event_name}}",
+		rule, event,
+	)
+	assert.Equal(t, "Stream Alert: backyard (rtsp://cam.local/feed) - stream.disconnected", result)
+}
