@@ -348,7 +348,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | GET    | `/alerts/schema`                 | `GetAlertSchema`         | ❌   | Alert schema for UI            |
 | GET    | `/alerts/rules`                  | `ListAlertRules`         | ❌   | List rules (filterable)        |
 | GET    | `/alerts/rules/:id`              | `GetAlertRule`           | ❌   | Get single rule                |
-| GET    | `/alerts/rules/export`           | `ExportAlertRules`       | ❌   | Export rules as JSON           |
+| GET    | `/alerts/rules/export`           | `ExportAlertRules`       | ✅   | Export rules as JSON           |
 | GET    | `/alerts/history`                | `ListAlertHistory`       | ❌   | List history (paginated)       |
 | POST   | `/alerts/rules`                  | `CreateAlertRule`        | ✅   | Create rule                    |
 | PUT    | `/alerts/rules/:id`              | `UpdateAlertRule`        | ✅   | Replace rule                   |

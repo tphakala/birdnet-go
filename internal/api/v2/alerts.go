@@ -29,11 +29,11 @@ func (c *Controller) initAlertRoutes() {
 	alerts.GET("/schema", c.GetAlertSchema)
 	alerts.GET("/rules", c.ListAlertRules)
 	alerts.GET("/rules/:id", c.GetAlertRule)
-	alerts.GET("/rules/export", c.ExportAlertRules)
 	alerts.GET("/history", c.ListAlertHistory)
 
-	// Protected write endpoints
+	// Protected endpoints
 	protected := alerts.Group("", c.authMiddleware)
+	protected.GET("/rules/export", c.ExportAlertRules)
 	protected.POST("/rules", c.CreateAlertRule)
 	protected.PUT("/rules/:id", c.UpdateAlertRule)
 	protected.PATCH("/rules/:id/toggle", c.ToggleAlertRule)
