@@ -55,7 +55,8 @@
       "clear": "Tyhjennä",
       "edit-config": "Muokkaa asetuksia",
       "add-action": "Lisää toiminto",
-      "learnMore": "Lue lisää"
+      "learnMore": "Lue lisää",
+      "create": "Luo"
     },
     "ui": {
       "loading": "Ladataan...",
@@ -1133,7 +1134,8 @@
       "notifications": "Ilmoitukset",
       "security": "Turvallisuus",
       "species": "Lajit",
-      "support": "Tuki"
+      "support": "Tuki",
+      "alertrules": "Hälytyssäännöt"
     },
     "notFound": {
       "title": "Asetuksia ei löytynyt",
@@ -2848,6 +2850,105 @@
       "hasChanges": "Tällä välilehdellä on tallentamattomia muutoksia",
       "setAsDefault": "Aseta oletukseksi",
       "defaultIndicator": "Oletuslähde"
+    },
+    "alerts": {
+      "tabs": {
+        "rules": "Rules",
+        "history": "History"
+      },
+      "sections": {
+        "rules": {
+          "title": "Alert Rules",
+          "description": "Configure rules that trigger notifications based on events and metrics."
+        },
+        "history": {
+          "title": "Alert History",
+          "description": "View past alert events and their outcomes."
+        }
+      },
+      "filters": {
+        "objectType": "Object Type",
+        "status": "Status",
+        "allTypes": "All Types",
+        "allStates": "All States",
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "builtIn": "Built-in",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "trigger": "Trigger",
+      "conditions": "Conditions",
+      "actions": "Actions",
+      "cooldown": "Cooldown",
+      "noConditions": "No conditions",
+      "noActions": "No actions",
+      "noRules": "No alert rules configured.",
+      "noMatchingRules": "No rules match the current filters.",
+      "noHistory": "No alert history.",
+      "newRule": "New Rule",
+      "resetDefaults": "Reset Defaults",
+      "resetting": "Resetting...",
+      "clearHistory": "Clear History",
+      "clearing": "Clearing...",
+      "historyCount": "{total} total entries",
+      "actionsExecuted": "Actions executed",
+      "actionLabels": {
+        "edit": "Edit rule",
+        "enable": "Enable rule",
+        "disable": "Disable rule",
+        "test": "Test rule",
+        "delete": "Delete rule"
+      },
+      "status": {
+        "enabled": "Rule enabled",
+        "disabled": "Rule disabled",
+        "deleted": "Rule deleted",
+        "testFired": "Test alert fired",
+        "defaultsReset": "Defaults reset",
+        "historyCleared": "History cleared",
+        "created": "Rule created",
+        "updated": "Rule updated"
+      },
+      "errors": {
+        "loadFailed": "Failed to load alert rules",
+        "historyFailed": "Failed to load alert history",
+        "toggleFailed": "Failed to toggle rule",
+        "deleteFailed": "Failed to delete rule",
+        "testFailed": "Failed to test rule",
+        "resetFailed": "Failed to reset defaults",
+        "clearHistoryFailed": "Failed to clear history",
+        "saveFailed": "Failed to save rule"
+      },
+      "editor": {
+        "createTitle": "Create Alert Rule",
+        "editTitle": "Edit Alert Rule",
+        "name": "Name",
+        "namePlaceholder": "Enter rule name",
+        "description": "Description",
+        "descriptionPlaceholder": "Optional description",
+        "enabled": "Enabled",
+        "triggerSection": "Trigger",
+        "objectType": "Object Type",
+        "triggerType": "Trigger Type",
+        "triggerEvent": "Event",
+        "triggerMetric": "Metric",
+        "event": "Event",
+        "metric": "Metric",
+        "conditionsSection": "Conditions",
+        "property": "Property",
+        "operator": "Operator",
+        "value": "Value",
+        "valuePlaceholder": "Enter value",
+        "duration": "Duration (s)",
+        "addCondition": "Add Condition",
+        "removeCondition": "Remove condition",
+        "actionsSection": "Actions",
+        "actionBell": "In-app notification",
+        "actionPush": "Push notification",
+        "optionsSection": "Options",
+        "cooldownMinutes": "Cooldown (minutes)"
+      }
     }
   },
   "auth": {

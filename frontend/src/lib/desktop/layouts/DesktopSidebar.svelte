@@ -197,6 +197,7 @@ Performance Optimizations:
     settingsSpecies: actualRoute === '/ui/settings/species',
     settingsFilters: actualRoute.startsWith('/ui/settings/detectionfilters'),
     settingsNotifications: actualRoute === '/ui/settings/notifications',
+    settingsAlertRules: actualRoute === '/ui/settings/alertrules',
     settingsIntegrations: actualRoute === '/ui/settings/integrations',
     settingsSecurity: actualRoute === '/ui/settings/security',
     settingsSupport: actualRoute === '/ui/settings/support',
@@ -237,6 +238,7 @@ Performance Optimizations:
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
     settingsFilters: onNavigate ? '/settings/detectionfilters' : '/ui/settings/detectionfilters',
     settingsNotifications: onNavigate ? '/settings/notifications' : '/ui/settings/notifications',
+    settingsAlertRules: onNavigate ? '/settings/alertrules' : '/ui/settings/alertrules',
     settingsIntegrations: onNavigate ? '/settings/integrations' : '/ui/settings/integrations',
     settingsSecurity: onNavigate ? '/settings/security' : '/ui/settings/security',
     settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
@@ -780,6 +782,17 @@ Performance Optimizations:
                       {t('settings.sections.notifications')}
                     </button>
                     <button
+                      onclick={() => navigate(navigationUrls.settingsAlertRules)}
+                      class={cn(
+                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsAlertRules
+                          ? 'menu-subitem-active'
+                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      )}
+                    >
+                      {t('settings.sections.alertrules')}
+                    </button>
+                    <button
                       onclick={() => navigate(navigationUrls.settingsIntegrations)}
                       class={cn(
                         'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
@@ -894,6 +907,17 @@ Performance Optimizations:
                     )}
                   >
                     {t('settings.sections.notifications')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsAlertRules)}
+                    class={cn(
+                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsAlertRules
+                        ? 'menu-subitem-active'
+                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                    )}
+                  >
+                    {t('settings.sections.alertrules')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsIntegrations)}
