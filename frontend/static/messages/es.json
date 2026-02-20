@@ -2886,6 +2886,7 @@
       "noRules": "No hay reglas de alerta configuradas.",
       "noMatchingRules": "Ninguna regla coincide con los filtros actuales.",
       "noHistory": "Sin historial de alertas.",
+      "confirmDelete": "¿Está seguro de que desea eliminar la regla \"{name}\"?",
       "newRule": "Nueva regla",
       "resetDefaults": "Restablecer valores predeterminados",
       "resetting": "Restableciendo...",

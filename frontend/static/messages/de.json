@@ -2886,6 +2886,7 @@
       "noRules": "Keine Alarmregeln konfiguriert.",
       "noMatchingRules": "Keine Regeln entsprechen den aktuellen Filtern.",
       "noHistory": "Kein Alarmverlauf.",
+      "confirmDelete": "Möchten Sie die Regel \"{name}\" wirklich löschen?",
       "newRule": "Neue Regel",
       "resetDefaults": "Standardwerte zurücksetzen",
       "resetting": "Zurücksetzen...",

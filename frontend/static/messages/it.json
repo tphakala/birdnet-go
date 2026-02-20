@@ -2858,6 +2858,7 @@
       "noRules": "Nessuna regola di allerta configurata.",
       "noMatchingRules": "Nessuna regola corrisponde ai filtri correnti.",
       "noHistory": "Nessuna cronologia allerte.",
+      "confirmDelete": "Sei sicuro di voler eliminare la regola \"{name}\"?",
       "newRule": "Nuova regola",
       "resetDefaults": "Ripristina predefiniti",
       "resetting": "Ripristino...",

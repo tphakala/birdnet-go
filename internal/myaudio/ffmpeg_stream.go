@@ -587,7 +587,7 @@ func (s *FFmpegStream) publishAlertEvent(from, to ProcessState, reason string) {
 			EventName:  alerting.EventStreamConnected,
 			Properties: props,
 		})
-	case (to == StateBackoff || to == StateStopped) && from == StateRunning:
+	case (to == StateBackoff || to == StateCircuitOpen || to == StateStopped) && from == StateRunning:
 		alerting.TryPublish(&alerting.AlertEvent{
 			ObjectType: alerting.ObjectTypeStream,
 			EventName:  alerting.EventStreamDisconnected,

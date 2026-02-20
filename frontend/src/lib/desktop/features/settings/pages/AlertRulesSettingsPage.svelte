@@ -59,6 +59,7 @@
   } from '$lib/api/alerts';
   import type { AlertRule, AlertHistory as AlertHistoryType, AlertSchema } from '$lib/api/alerts';
   import AlertRuleEditor from '$lib/desktop/features/settings/components/AlertRuleEditor.svelte';
+  import { formatLocalDateTime } from '$lib/utils/date';
 
   const logger = loggers.settings;
 
@@ -239,6 +240,7 @@
   }
 
   async function handleDelete(rule: AlertRule) {
+    if (!window.confirm(t('settings.alerts.confirmDelete', { name: rule.name }))) return;
     deletingId = rule.id;
     try {
       await deleteAlertRule(rule.id);
@@ -618,7 +620,7 @@
                 {entry.rule?.name ?? `Rule #${entry.rule_id}`}
               </span>
               <span class="text-xs text-gray-500 dark:text-gray-400">
-                {new Date(entry.fired_at).toLocaleString()}
+                {formatLocalDateTime(new Date(entry.fired_at), false)}
               </span>
             </div>
             {#if entry.actions}

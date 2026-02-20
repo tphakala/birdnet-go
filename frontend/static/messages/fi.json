@@ -2886,6 +2886,7 @@
       "noRules": "Hälytyssääntöjä ei ole määritetty.",
       "noMatchingRules": "Yksikään sääntö ei vastaa nykyisiä suodattimia.",
       "noHistory": "Ei hälytysten historiaa.",
+      "confirmDelete": "Haluatko varmasti poistaa säännön \"{name}\"?",
       "newRule": "Uusi sääntö",
       "resetDefaults": "Palauta oletukset",
       "resetting": "Palautetaan...",

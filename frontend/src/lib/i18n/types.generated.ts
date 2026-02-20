@@ -2003,6 +2003,7 @@ export type TranslationKey =
   | 'settings.alerts.noRules'
   | 'settings.alerts.noMatchingRules'
   | 'settings.alerts.noHistory'
+  | 'settings.alerts.confirmDelete' // params: name
   | 'settings.alerts.newRule'
   | 'settings.alerts.resetDefaults'
   | 'settings.alerts.resetting'
@@ -2374,6 +2375,7 @@ export type TranslationParams = {
   'settings.species.dynamicThreshold.resetAllConfirm.message': { count: string | number };
   'settings.species.dynamicThreshold.resetSuccess': { species: string | number };
   'settings.species.dynamicThreshold.resetAllSuccess': { count: string | number };
+  'settings.alerts.confirmDelete': { name: string | number };
   'settings.alerts.historyCount': { total: string | number };
   'settings.alerts.status.imported': { imported: string | number; total: string | number };
   'auth.errors.rateLimited': { minutes: string | number };

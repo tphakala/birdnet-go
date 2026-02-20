@@ -2902,6 +2902,7 @@
       "noRules": "No alert rules configured.",
       "noMatchingRules": "No rules match the current filters.",
       "noHistory": "No alert history.",
+      "confirmDelete": "Are you sure you want to delete the rule \"{name}\"?",
       "newRule": "New Rule",
       "resetDefaults": "Reset Defaults",
       "resetting": "Resetting...",

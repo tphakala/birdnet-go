@@ -2885,6 +2885,7 @@
       "noRules": "Žiadne pravidlá upozornení nie sú nakonfigurované.",
       "noMatchingRules": "Žiadne pravidlá nezodpovedajú aktuálnym filtrom.",
       "noHistory": "Žiadna história upozornení.",
+      "confirmDelete": "Ste si istí, že chcete odstrániť pravidlo \"{name}\"?",
       "newRule": "Nové pravidlo",
       "resetDefaults": "Obnoviť predvolené",
       "resetting": "Obnovovanie...",

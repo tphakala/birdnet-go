@@ -200,7 +200,10 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	}
 	// Stop any existing cleanup goroutine before starting a new one.
 	e.stopCleanup()
+	e.rulesMu.Lock()
 	e.cleanupStop = make(chan struct{})
+	stopCh := e.cleanupStop
+	e.rulesMu.Unlock()
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
@@ -218,19 +221,23 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 						logger.Int64("deleted", deleted),
 						logger.Int("retention_days", retentionDays))
 				}
-			case <-e.cleanupStop:
+			case <-stopCh:
 				return
 			}
 		}
 	}()
 }
 
-// stopCleanup signals the cleanup goroutine to exit and nils out the channel
-// so it is safe to call multiple times.
+// stopCleanup signals the cleanup goroutine to exit. Uses rulesMu to make
+// the nil-check-then-close atomic, preventing double-close panics when
+// Stop() and StartHistoryCleanup() race.
 func (e *Engine) stopCleanup() {
-	if e.cleanupStop != nil {
-		close(e.cleanupStop)
-		e.cleanupStop = nil
+	e.rulesMu.Lock()
+	ch := e.cleanupStop
+	e.cleanupStop = nil
+	e.rulesMu.Unlock()
+	if ch != nil {
+		close(ch)
 	}
 }
 

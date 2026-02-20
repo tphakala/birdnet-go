@@ -2886,6 +2886,7 @@
       "noRules": "Geen waarschuwingsregels geconfigureerd.",
       "noMatchingRules": "Geen regels komen overeen met de huidige filters.",
       "noHistory": "Geen waarschuwingsgeschiedenis.",
+      "confirmDelete": "Weet u zeker dat u de regel \"{name}\" wilt verwijderen?",
       "newRule": "Nieuwe regel",
       "resetDefaults": "Standaardwaarden herstellen",
       "resetting": "Herstellen...",
