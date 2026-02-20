@@ -67,4 +67,7 @@ var (
 
 	// ErrNotificationHistoryNotFound indicates no notification history exists.
 	ErrNotificationHistoryNotFound = errors.NewStd("notification history not found")
+
+	// ErrAlertRuleNotFound indicates the requested alert rule does not exist.
+	ErrAlertRuleNotFound = errors.NewStd("alert rule not found")
 )

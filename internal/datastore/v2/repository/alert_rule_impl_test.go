@@ -172,6 +172,41 @@ func TestAlertRuleRepository_UpdateRule(t *testing.T) {
 	assert.Equal(t, "discord", got.Actions[0].Target)
 }
 
+func TestAlertRuleRepository_UpdateRule_WithExistingIDs(t *testing.T) {
+	db := setupAlertTestDB(t)
+	repo := NewAlertRuleRepository(db)
+	ctx := t.Context()
+
+	rule := createTestRule(t, repo, "IDTest", "detection", "event", "detection.occurred")
+
+	// Simulate a GET→modify→PUT cycle where conditions have non-zero IDs
+	got, err := repo.GetRule(ctx, rule.ID)
+	require.NoError(t, err)
+	require.Len(t, got.Conditions, 1)
+	require.NotZero(t, got.Conditions[0].ID, "condition should have an ID after creation")
+
+	// Modify the fetched rule (keeping existing condition IDs)
+	got.Name = "Updated with IDs"
+	got.Conditions = []entities.AlertCondition{
+		{ID: got.Conditions[0].ID, RuleID: got.ID, Property: "confidence", Operator: "greater_than", Value: "0.80", SortOrder: 0},
+	}
+	got.Actions = []entities.AlertAction{
+		{ID: got.Actions[0].ID, RuleID: got.ID, Target: "discord", SortOrder: 0},
+	}
+
+	err = repo.UpdateRule(ctx, got)
+	require.NoError(t, err)
+
+	updated, err := repo.GetRule(ctx, rule.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated with IDs", updated.Name)
+	assert.Len(t, updated.Conditions, 1)
+	assert.Equal(t, "confidence", updated.Conditions[0].Property)
+	assert.Equal(t, "0.80", updated.Conditions[0].Value)
+	assert.Len(t, updated.Actions, 1)
+	assert.Equal(t, "discord", updated.Actions[0].Target)
+}
+
 func TestAlertRuleRepository_DeleteRule(t *testing.T) {
 	db := setupAlertTestDB(t)
 	repo := NewAlertRuleRepository(db)
@@ -183,7 +218,7 @@ func TestAlertRuleRepository_DeleteRule(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = repo.GetRule(ctx, rule.ID)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrAlertRuleNotFound)
 
 	// Verify cascade deleted conditions and actions
 	var condCount int64

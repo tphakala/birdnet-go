@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
 
@@ -44,9 +45,13 @@ func (r *alertRuleRepository) ListRules(ctx context.Context, filter AlertRuleFil
 }
 
 // GetRule returns a single alert rule by ID with its conditions and actions.
+// Returns ErrAlertRuleNotFound if the rule does not exist.
 func (r *alertRuleRepository) GetRule(ctx context.Context, id uint) (*entities.AlertRule, error) {
 	var rule entities.AlertRule
 	if err := r.db.WithContext(ctx).Preload("Conditions").Preload("Actions").First(&rule, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAlertRuleNotFound
+		}
 		return nil, fmt.Errorf("failed to get alert rule %d: %w", id, err)
 	}
 	return &rule, nil
@@ -68,6 +73,13 @@ func (r *alertRuleRepository) UpdateRule(ctx context.Context, rule *entities.Ale
 		}
 		if err := tx.Where("rule_id = ?", rule.ID).Delete(&entities.AlertAction{}).Error; err != nil {
 			return fmt.Errorf("failed to delete old actions: %w", err)
+		}
+		// Zero out IDs so GORM inserts new rows instead of trying to update deleted ones
+		for i := range rule.Conditions {
+			rule.Conditions[i].ID = 0
+		}
+		for i := range rule.Actions {
+			rule.Actions[i].ID = 0
 		}
 		if err := tx.Save(rule).Error; err != nil {
 			return fmt.Errorf("failed to update alert rule: %w", err)
