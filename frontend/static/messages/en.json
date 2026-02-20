@@ -2924,7 +2924,9 @@
         "defaultsReset": "Defaults reset",
         "historyCleared": "History cleared",
         "created": "Rule created",
-        "updated": "Rule updated"
+        "updated": "Rule updated",
+        "exported": "Rules exported",
+        "imported": "{imported} of {total} rules imported"
       },
       "errors": {
         "loadFailed": "Failed to load alert rules",
@@ -2934,7 +2936,9 @@
         "testFailed": "Failed to test rule",
         "resetFailed": "Failed to reset defaults",
         "clearHistoryFailed": "Failed to clear history",
-        "saveFailed": "Failed to save rule"
+        "saveFailed": "Failed to save rule",
+        "exportFailed": "Failed to export rules",
+        "importFailed": "Failed to import rules"
       },
       "editor": {
         "createTitle": "Create Alert Rule",
@@ -2964,7 +2968,11 @@
         "actionPush": "Push notification",
         "optionsSection": "Options",
         "cooldownMinutes": "Cooldown (minutes)"
-      }
+      },
+      "export": "Export",
+      "import": "Import",
+      "exporting": "Exporting...",
+      "importing": "Importing..."
     }
   },
   "auth": {

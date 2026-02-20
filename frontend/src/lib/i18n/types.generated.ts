@@ -2023,6 +2023,8 @@ export type TranslationKey =
   | 'settings.alerts.status.historyCleared'
   | 'settings.alerts.status.created'
   | 'settings.alerts.status.updated'
+  | 'settings.alerts.status.exported'
+  | 'settings.alerts.status.imported' // params: imported, total
   | 'settings.alerts.errors.loadFailed'
   | 'settings.alerts.errors.historyFailed'
   | 'settings.alerts.errors.toggleFailed'
@@ -2031,6 +2033,8 @@ export type TranslationKey =
   | 'settings.alerts.errors.resetFailed'
   | 'settings.alerts.errors.clearHistoryFailed'
   | 'settings.alerts.errors.saveFailed'
+  | 'settings.alerts.errors.exportFailed'
+  | 'settings.alerts.errors.importFailed'
   | 'settings.alerts.editor.createTitle'
   | 'settings.alerts.editor.editTitle'
   | 'settings.alerts.editor.name'
@@ -2058,6 +2062,10 @@ export type TranslationKey =
   | 'settings.alerts.editor.actionPush'
   | 'settings.alerts.editor.optionsSection'
   | 'settings.alerts.editor.cooldownMinutes'
+  | 'settings.alerts.export'
+  | 'settings.alerts.import'
+  | 'settings.alerts.exporting'
+  | 'settings.alerts.importing'
   | 'auth.login'
   | 'auth.logout'
   | 'auth.openLoginModal'
@@ -2363,6 +2371,7 @@ export type TranslationParams = {
   'settings.species.dynamicThreshold.resetSuccess': { species: string | number };
   'settings.species.dynamicThreshold.resetAllSuccess': { count: string | number };
   'settings.alerts.historyCount': { total: string | number };
+  'settings.alerts.status.imported': { imported: string | number; total: string | number };
   'auth.errors.rateLimited': { minutes: string | number };
   'dataDisplay.table.sortBy': { column: string | number };
   'dataDisplay.table.pageInfo': {

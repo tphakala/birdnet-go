@@ -37,6 +37,8 @@
     XCircle,
     Info,
     Shield,
+    Download,
+    Upload,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -52,6 +54,8 @@
     fetchAlertHistory,
     clearAlertHistory,
     fetchAlertSchema,
+    exportAlertRules,
+    importAlertRules,
   } from '$lib/api/alerts';
   import type { AlertRule, AlertHistory as AlertHistoryType, AlertSchema } from '$lib/api/alerts';
   import AlertRuleEditor from '$lib/desktop/features/settings/components/AlertRuleEditor.svelte';
@@ -85,6 +89,8 @@
   let testingId = $state<number | null>(null);
   let resetting = $state(false);
   let clearingHistory = $state(false);
+  let exporting = $state(false);
+  let importing = $state(false);
 
   // Editor state
   let editorOpen = $state(false);
@@ -319,6 +325,56 @@
     }
   }
 
+  async function handleExport() {
+    exporting = true;
+    try {
+      const data = await exportAlertRules();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'alert-rules.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus(t('settings.alerts.status.exported'), 'success');
+    } catch (err) {
+      logger.error('Failed to export rules', err, { component: 'AlertRulesSettingsPage' });
+      showStatus(t('settings.alerts.errors.exportFailed'), 'error');
+    } finally {
+      exporting = false;
+    }
+  }
+
+  function handleImport() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      importing = true;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const result = await importAlertRules(data.rules ?? [], data.version ?? 1);
+        await loadRules();
+        showStatus(
+          t('settings.alerts.status.imported', {
+            imported: String(result.imported),
+            total: String(result.total),
+          }),
+          'success'
+        );
+      } catch (err) {
+        logger.error('Failed to import rules', err, { component: 'AlertRulesSettingsPage' });
+        showStatus(t('settings.alerts.errors.importFailed'), 'error');
+      } finally {
+        importing = false;
+      }
+    };
+    input.click();
+  }
+
   onMount(() => {
     loadSchema();
     loadRules();
@@ -465,6 +521,24 @@
         />
       </div>
       <div class="ml-auto flex items-center gap-2">
+        <SettingsButton
+          variant="secondary"
+          onclick={handleExport}
+          loading={exporting}
+          loadingText={t('settings.alerts.exporting')}
+        >
+          <Download class="mr-1.5 h-4 w-4" />
+          {t('settings.alerts.export')}
+        </SettingsButton>
+        <SettingsButton
+          variant="secondary"
+          onclick={handleImport}
+          loading={importing}
+          loadingText={t('settings.alerts.importing')}
+        >
+          <Upload class="mr-1.5 h-4 w-4" />
+          {t('settings.alerts.import')}
+        </SettingsButton>
         <SettingsButton
           variant="secondary"
           onclick={handleResetDefaults}
