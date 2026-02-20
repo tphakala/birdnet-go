@@ -74,6 +74,7 @@
   let rules = $state<AlertRule[]>([]);
   let loadingRules = $state(false);
   let schema = $state<AlertSchema | null>(null);
+  let v2Available = $state(true);
 
   // Filter state
   let filterObjectType = $state('');
@@ -192,10 +193,15 @@
 
   // Data loading
   async function loadRules() {
+    if (!v2Available) return;
     loadingRules = true;
     try {
       rules = await fetchAlertRules();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        v2Available = false;
+        return;
+      }
       logger.error('Failed to load alert rules', err, { component: 'AlertRulesSettingsPage' });
       showStatus(t('settings.alerts.errors.loadFailed'), 'error');
     } finally {
@@ -207,11 +213,16 @@
     try {
       schema = await fetchAlertSchema();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        v2Available = false;
+        return;
+      }
       logger.error('Failed to load alert schema', err, { component: 'AlertRulesSettingsPage' });
     }
   }
 
   async function loadHistory() {
+    if (!v2Available) return;
     loadingHistory = true;
     try {
       const resp = await fetchAlertHistory({ limit: HISTORY_FETCH_LIMIT });
@@ -385,8 +396,8 @@
     input.click();
   }
 
-  onMount(() => {
-    loadSchema();
+  onMount(async () => {
+    await loadSchema();
     loadRules();
     loadHistory();
   });
@@ -507,7 +518,20 @@
   </div>
 {/snippet}
 
+{#snippet v2RequiredBanner()}
+  {#if !v2Available}
+    <div
+      class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+      role="status"
+    >
+      <Info class="h-4 w-4 shrink-0" />
+      <span>{t('settings.alerts.v2Required')}</span>
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet rulesTabContent()}
+  {@render v2RequiredBanner()}
   {@render statusBanner()}
   <SettingsSection
     title={t('settings.alerts.sections.rules.title')}
@@ -536,6 +560,7 @@
           onclick={handleExport}
           loading={exporting}
           loadingText={t('settings.alerts.exporting')}
+          disabled={!v2Available}
         >
           <Download class="mr-1.5 h-4 w-4" />
           {t('settings.alerts.export')}
@@ -545,6 +570,7 @@
           onclick={handleImport}
           loading={importing}
           loadingText={t('settings.alerts.importing')}
+          disabled={!v2Available}
         >
           <Upload class="mr-1.5 h-4 w-4" />
           {t('settings.alerts.import')}
@@ -554,11 +580,12 @@
           onclick={handleResetDefaults}
           loading={resetting}
           loadingText={t('settings.alerts.resetting')}
+          disabled={!v2Available}
         >
           <RotateCcw class="mr-1.5 h-4 w-4" />
           {t('settings.alerts.resetDefaults')}
         </SettingsButton>
-        <SettingsButton variant="primary" onclick={() => openEditor()}>
+        <SettingsButton variant="primary" onclick={() => openEditor()} disabled={!v2Available}>
           <Plus class="mr-1.5 h-4 w-4" />
           {t('settings.alerts.newRule')}
         </SettingsButton>
@@ -588,6 +615,7 @@
 {/snippet}
 
 {#snippet historyTabContent()}
+  {@render v2RequiredBanner()}
   {@render statusBanner()}
   <SettingsSection
     title={t('settings.alerts.sections.history.title')}
@@ -603,7 +631,7 @@
         onclick={handleClearHistory}
         loading={clearingHistory}
         loadingText={t('settings.alerts.clearing')}
-        disabled={history.length === 0}
+        disabled={!v2Available || history.length === 0}
       >
         <Trash2 class="mr-1.5 h-4 w-4" />
         {t('settings.alerts.clearHistory')}

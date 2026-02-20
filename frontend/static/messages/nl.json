@@ -2962,7 +2962,8 @@
       "export": "Exporteren",
       "import": "Importeren",
       "exporting": "Exporteren...",
-      "importing": "Importeren..."
+      "importing": "Importeren...",
+      "v2Required": "Het uitgebreide databaseschema is vereist voor waarschuwingsregels. Werk uw database bij in de hoofdinstellingen om deze functie in te schakelen."
     }
   },
   "auth": {

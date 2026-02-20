@@ -2962,7 +2962,8 @@
       "export": "Exportar",
       "import": "Importar",
       "exporting": "Exportando...",
-      "importing": "Importando..."
+      "importing": "Importando...",
+      "v2Required": "O esquema de banco de dados aprimorado é necessário para regras de alerta. Atualize seu banco de dados nas configurações principais para ativar este recurso."
     }
   },
   "auth": {

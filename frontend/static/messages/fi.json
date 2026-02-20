@@ -2962,7 +2962,8 @@
       "export": "Vie",
       "import": "Tuo",
       "exporting": "Viedään...",
-      "importing": "Tuodaan..."
+      "importing": "Tuodaan...",
+      "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Päivitä tietokanta pääasetuksissa ottaaksesi tämän ominaisuuden käyttöön."
     }
   },
   "auth": {

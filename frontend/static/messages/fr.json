@@ -2962,7 +2962,8 @@
       "export": "Exporter",
       "import": "Importer",
       "exporting": "Exportation...",
-      "importing": "Importation..."
+      "importing": "Importation...",
+      "v2Required": "Le schéma de base de données amélioré est requis pour les règles d'alerte. Veuillez mettre à jour votre base de données dans les paramètres principaux pour activer cette fonctionnalité."
     }
   },
   "auth": {

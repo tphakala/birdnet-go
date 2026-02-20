@@ -2962,7 +2962,8 @@
       "export": "Eksportuj",
       "import": "Importuj",
       "exporting": "Eksportowanie...",
-      "importing": "Importowanie..."
+      "importing": "Importowanie...",
+      "v2Required": "Rozszerzony schemat bazy danych jest wymagany dla reguł alertów. Zaktualizuj bazę danych w ustawieniach głównych, aby włączyć tę funkcję."
     }
   },
   "auth": {

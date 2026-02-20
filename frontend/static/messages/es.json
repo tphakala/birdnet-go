@@ -2962,7 +2962,8 @@
       "export": "Exportar",
       "import": "Importar",
       "exporting": "Exportando...",
-      "importing": "Importando..."
+      "importing": "Importando...",
+      "v2Required": "Se requiere el esquema de base de datos mejorado para las reglas de alerta. Actualice su base de datos en la configuración principal para habilitar esta función."
     }
   },
   "auth": {

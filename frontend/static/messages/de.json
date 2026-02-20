@@ -2962,7 +2962,8 @@
       "export": "Exportieren",
       "import": "Importieren",
       "exporting": "Exportieren...",
-      "importing": "Importieren..."
+      "importing": "Importieren...",
+      "v2Required": "Für Alarmregeln ist das erweiterte Datenbankschema erforderlich. Bitte aktualisieren Sie Ihre Datenbank in den Haupteinstellungen, um diese Funktion zu aktivieren."
     }
   },
   "auth": {

@@ -2072,6 +2072,7 @@ export type TranslationKey =
   | 'settings.alerts.import'
   | 'settings.alerts.exporting'
   | 'settings.alerts.importing'
+  | 'settings.alerts.v2Required'
   | 'auth.login'
   | 'auth.logout'
   | 'auth.openLoginModal'

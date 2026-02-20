@@ -2961,7 +2961,8 @@
       "export": "Exportovať",
       "import": "Importovať",
       "exporting": "Exportovanie...",
-      "importing": "Importovanie..."
+      "importing": "Importovanie...",
+      "v2Required": "Pre pravidlá upozornení je potrebná rozšírená schéma databázy. Aktualizujte databázu v hlavných nastaveniach, aby ste túto funkciu povolili."
     }
   },
   "auth": {

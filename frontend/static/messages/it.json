@@ -2934,7 +2934,8 @@
       "export": "Esporta",
       "import": "Importa",
       "exporting": "Esportazione...",
-      "importing": "Importazione..."
+      "importing": "Importazione...",
+      "v2Required": "Lo schema del database avanzato è necessario per le regole di allerta. Aggiorna il database nelle impostazioni principali per abilitare questa funzionalità."
     }
   },
   "auth": {

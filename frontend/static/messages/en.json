@@ -2978,7 +2978,8 @@
       "export": "Export",
       "import": "Import",
       "exporting": "Exporting...",
-      "importing": "Importing..."
+      "importing": "Importing...",
+      "v2Required": "The enhanced database schema is required for alert rules. Please update your database in the main settings to enable this feature."
     }
   },
   "auth": {
