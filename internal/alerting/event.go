@@ -49,17 +49,32 @@ func TryPublish(event *AlertEvent) bool {
 	return true
 }
 
-// AlertEventBus is a simple pub/sub for alert events.
+const (
+	// eventBusBufferSize is the capacity of the async event channel.
+	// Events are dropped if the buffer is full to avoid blocking callers.
+	eventBusBufferSize = 1000
+)
+
+// AlertEventBus is an async pub/sub for alert events. Publish is non-blocking:
+// events are sent to a buffered channel and processed by a worker goroutine,
+// so callers (stream managers, monitors) are never blocked by DB writes or
+// notification dispatch.
 type AlertEventBus struct {
 	handlers []AlertEventHandler
 	mu       sync.RWMutex
+	eventCh  chan *AlertEvent
+	stopCh   chan struct{}
 }
 
-// NewAlertEventBus creates a new alert event bus.
+// NewAlertEventBus creates a new alert event bus and starts its worker.
 func NewAlertEventBus() *AlertEventBus {
-	return &AlertEventBus{
+	b := &AlertEventBus{
 		handlers: make([]AlertEventHandler, 0),
+		eventCh:  make(chan *AlertEvent, eventBusBufferSize),
+		stopCh:   make(chan struct{}),
 	}
+	go b.processLoop()
+	return b
 }
 
 // Subscribe registers a handler for alert events.
@@ -69,12 +84,46 @@ func (b *AlertEventBus) Subscribe(handler AlertEventHandler) {
 	b.handlers = append(b.handlers, handler)
 }
 
-// Publish sends an event to all registered handlers.
+// Publish enqueues an event for async processing. Non-blocking: if the buffer
+// is full the event is dropped to protect callers on hot paths.
 func (b *AlertEventBus) Publish(event *AlertEvent) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
 
+	select {
+	case b.eventCh <- event:
+	default:
+		// Buffer full — drop event to avoid blocking callers
+	}
+}
+
+// Stop shuts down the worker goroutine.
+func (b *AlertEventBus) Stop() {
+	close(b.stopCh)
+}
+
+// processLoop drains the event channel and dispatches to handlers.
+func (b *AlertEventBus) processLoop() {
+	for {
+		select {
+		case event := <-b.eventCh:
+			b.dispatch(event)
+		case <-b.stopCh:
+			// Drain remaining events before exiting
+			for {
+				select {
+				case event := <-b.eventCh:
+					b.dispatch(event)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+func (b *AlertEventBus) dispatch(event *AlertEvent) {
 	b.mu.RLock()
 	handlers := make([]AlertEventHandler, len(b.handlers))
 	copy(handlers, b.handlers)

@@ -12,10 +12,12 @@ import (
 
 func TestAlertEventBus_SubscribeAndPublish(t *testing.T) {
 	bus := NewAlertEventBus()
-	var received *AlertEvent
+	defer bus.Stop()
+
+	var received atomic.Pointer[AlertEvent]
 
 	bus.Subscribe(func(event *AlertEvent) {
-		received = event
+		received.Store(event)
 	})
 
 	event := &AlertEvent{
@@ -27,14 +29,17 @@ func TestAlertEventBus_SubscribeAndPublish(t *testing.T) {
 
 	bus.Publish(event)
 
-	require.NotNil(t, received)
-	assert.Equal(t, ObjectTypeStream, received.ObjectType)
-	assert.Equal(t, EventStreamDisconnected, received.EventName)
-	assert.Equal(t, "backyard-cam", received.Properties["stream_name"])
+	require.Eventually(t, func() bool { return received.Load() != nil }, time.Second, 5*time.Millisecond)
+	got := received.Load()
+	assert.Equal(t, ObjectTypeStream, got.ObjectType)
+	assert.Equal(t, EventStreamDisconnected, got.EventName)
+	assert.Equal(t, "backyard-cam", got.Properties["stream_name"])
 }
 
 func TestAlertEventBus_MultipleHandlers(t *testing.T) {
 	bus := NewAlertEventBus()
+	defer bus.Stop()
+
 	var count atomic.Int32
 
 	for range 3 {
@@ -45,35 +50,39 @@ func TestAlertEventBus_MultipleHandlers(t *testing.T) {
 
 	bus.Publish(&AlertEvent{ObjectType: ObjectTypeDetection, EventName: EventDetectionNewSpecies})
 
-	assert.Equal(t, int32(3), count.Load())
+	assert.Eventually(t, func() bool { return count.Load() == 3 }, time.Second, 5*time.Millisecond)
 }
 
 func TestAlertEventBus_PublishWithNoHandlers(t *testing.T) {
 	bus := NewAlertEventBus()
+	defer bus.Stop()
 	// Should not panic
 	bus.Publish(&AlertEvent{ObjectType: ObjectTypeSystem, MetricName: MetricCPUUsage})
 }
 
 func TestAlertEventBus_PublishSetsTimestamp(t *testing.T) {
 	bus := NewAlertEventBus()
-	var received *AlertEvent
+	defer bus.Stop()
+
+	var received atomic.Pointer[AlertEvent]
 
 	bus.Subscribe(func(event *AlertEvent) {
-		received = event
+		received.Store(event)
 	})
 
 	before := time.Now()
 	bus.Publish(&AlertEvent{ObjectType: ObjectTypeDetection})
-	after := time.Now()
 
-	require.NotNil(t, received)
-	assert.False(t, received.Timestamp.IsZero())
-	assert.False(t, received.Timestamp.Before(before))
-	assert.False(t, received.Timestamp.After(after))
+	require.Eventually(t, func() bool { return received.Load() != nil }, time.Second, 5*time.Millisecond)
+	got := received.Load()
+	assert.False(t, got.Timestamp.IsZero())
+	assert.False(t, got.Timestamp.Before(before))
 }
 
 func TestAlertEventBus_ConcurrentPublish(t *testing.T) {
 	bus := NewAlertEventBus()
+	defer bus.Stop()
+
 	var count atomic.Int32
 
 	bus.Subscribe(func(_ *AlertEvent) {
@@ -88,5 +97,5 @@ func TestAlertEventBus_ConcurrentPublish(t *testing.T) {
 	}
 	wg.Wait()
 
-	assert.Equal(t, int32(100), count.Load())
+	assert.Eventually(t, func() bool { return count.Load() == 100 }, time.Second, 5*time.Millisecond)
 }

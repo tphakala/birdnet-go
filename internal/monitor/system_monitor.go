@@ -347,6 +347,13 @@ func (m *SystemMonitor) checkDiskGroup(group MountGroup) {
 		logger.String("critical_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Critical)),
 	)
 
+	// Publish disk metric to alert engine for sustained threshold detection
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeSystem,
+		MetricName: alerting.MetricDiskUsage,
+		Properties: map[string]any{alerting.PropertyValue: usage.UsedPercent},
+	})
+
 	m.checkThresholdsWithGroup(ResourceDisk, usage.UsedPercent,
 		m.config.Realtime.Monitoring.Disk.Warning,
 		m.config.Realtime.Monitoring.Disk.Critical, group)
