@@ -229,6 +229,10 @@
       history = resp.history;
       historyTotal = resp.total;
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        v2Available = false;
+        return;
+      }
       logger.error('Failed to load alert history', err, { component: 'AlertRulesSettingsPage' });
       showStatus(t('settings.alerts.errors.historyFailed'), 'error');
     } finally {
