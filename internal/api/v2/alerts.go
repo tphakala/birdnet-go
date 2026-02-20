@@ -267,17 +267,9 @@ func (c *Controller) TestAlertRule(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
 
-	// Fire the rule's actions through the engine if available
+	// Fire the rule's actions directly, bypassing condition evaluation
 	if c.alertEngine != nil {
-		c.alertEngine.HandleEvent(&alerting.AlertEvent{
-			ObjectType: rule.ObjectType,
-			EventName:  rule.EventName,
-			MetricName: rule.MetricName,
-			Properties: map[string]any{
-				"test":    true,
-				"rule_id": rule.ID,
-			},
-		})
+		c.alertEngine.TestFireRule(rule)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "test fired"})

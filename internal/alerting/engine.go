@@ -169,6 +169,19 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 	}
 }
 
+// TestFireRule fires a rule's actions directly, bypassing condition evaluation
+// and cooldown checks. Used by the test endpoint.
+func (e *Engine) TestFireRule(rule *entities.AlertRule) {
+	event := &AlertEvent{
+		ObjectType: rule.ObjectType,
+		EventName:  rule.EventName,
+		MetricName: rule.MetricName,
+		Properties: map[string]any{"test": true},
+		Timestamp:  time.Now(),
+	}
+	e.fireRule(rule, event)
+}
+
 // StartHistoryCleanup starts a background goroutine that periodically deletes
 // alert history entries older than retentionDays. A value of 0 disables cleanup.
 func (e *Engine) StartHistoryCleanup(retentionDays int) {
@@ -176,9 +189,7 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 		return
 	}
 	// Stop any existing cleanup goroutine before starting a new one.
-	if e.cleanupStop != nil {
-		close(e.cleanupStop)
-	}
+	e.stopCleanup()
 	e.cleanupStop = make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
@@ -202,9 +213,16 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	}()
 }
 
-// Stop shuts down background goroutines (history cleanup).
-func (e *Engine) Stop() {
+// stopCleanup signals the cleanup goroutine to exit and nils out the channel
+// so it is safe to call multiple times.
+func (e *Engine) stopCleanup() {
 	if e.cleanupStop != nil {
 		close(e.cleanupStop)
+		e.cleanupStop = nil
 	}
+}
+
+// Stop shuts down background goroutines (history cleanup).
+func (e *Engine) Stop() {
+	e.stopCleanup()
 }
