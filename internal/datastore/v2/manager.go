@@ -136,6 +136,11 @@ func (m *SQLiteManager) Initialize() error {
 		&entities.DynamicThreshold{},
 		&entities.ThresholdEvent{},
 		&entities.NotificationHistory{},
+		// Alert rules engine
+		&entities.AlertRule{},
+		&entities.AlertCondition{},
+		&entities.AlertAction{},
+		&entities.AlertHistory{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
