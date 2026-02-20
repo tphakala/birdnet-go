@@ -13,6 +13,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -784,6 +785,15 @@ func (c *client) onConnect(client mqtt.Client) {
 		logger.String("client_id", c.config.ClientID))
 	c.metrics.UpdateConnectionStatus(true)
 
+	// Publish MQTT connected alert event
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeIntegration,
+		EventName:  alerting.EventMQTTConnected,
+		Properties: map[string]any{
+			alerting.PropertyBroker: c.config.Broker,
+		},
+	})
+
 	// Publish online status if LWT is enabled
 	if c.config.LWT.Enabled && c.config.LWT.Topic != "" {
 		token := client.Publish(c.config.LWT.Topic, c.config.LWT.QoS, true, "online")
@@ -835,6 +845,15 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 		logger.Error(enhancedErr))
 	c.metrics.UpdateConnectionStatus(false)
 	c.metrics.IncrementErrorsWithCategory("mqtt-connection", "connection_lost")
+
+	// Publish MQTT disconnected alert event
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeIntegration,
+		EventName:  alerting.EventMQTTDisconnected,
+		Properties: map[string]any{
+			alerting.PropertyBroker: c.config.Broker,
+		},
+	})
 
 	// Send notification for connection lost
 	notification.NotifyIntegrationFailure("MQTT", enhancedErr)
