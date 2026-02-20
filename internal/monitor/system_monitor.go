@@ -11,6 +11,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -231,6 +232,14 @@ func (m *SystemMonitor) checkCPU() {
 	}
 
 	usage := cpuPercent[0]
+
+	// Publish CPU metric to alert engine for sustained threshold detection
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeSystem,
+		MetricName: alerting.MetricCPUUsage,
+		Properties: map[string]any{alerting.PropertyValue: usage},
+	})
+
 	m.checkThresholds(ResourceCPU, usage,
 		m.config.Realtime.Monitoring.CPU.Warning,
 		m.config.Realtime.Monitoring.CPU.Critical)
@@ -244,6 +253,13 @@ func (m *SystemMonitor) checkMemory() {
 		m.log.Error("Failed to get memory info", logger.Error(err))
 		return
 	}
+
+	// Publish memory metric to alert engine for sustained threshold detection
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeSystem,
+		MetricName: alerting.MetricMemoryUsage,
+		Properties: map[string]any{alerting.PropertyValue: memInfo.UsedPercent},
+	})
 
 	m.checkThresholds(ResourceMemory, memInfo.UsedPercent,
 		m.config.Realtime.Monitoring.Memory.Warning,
@@ -381,6 +397,13 @@ func (m *SystemMonitor) checkDiskPath(path string) {
 		logger.String("warning_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Warning)),
 		logger.String("critical_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Critical)),
 	)
+
+	// Publish disk metric to alert engine for sustained threshold detection
+	alerting.TryPublish(&alerting.AlertEvent{
+		ObjectType: alerting.ObjectTypeSystem,
+		MetricName: alerting.MetricDiskUsage,
+		Properties: map[string]any{alerting.PropertyValue: usage.UsedPercent},
+	})
 
 	m.checkThresholdsWithPath(ResourceDisk, usage.UsedPercent,
 		m.config.Realtime.Monitoring.Disk.Warning,
