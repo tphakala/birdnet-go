@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -566,6 +567,48 @@ func (s *FFmpegStream) transitionState(to ProcessState, reason string) {
 		logger.String("reason", reason),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "state_transition"))
+
+	// Publish alert events for key state transitions
+	s.publishAlertEvent(from, to, reason)
+}
+
+// publishAlertEvent publishes alert events for key stream state transitions.
+func (s *FFmpegStream) publishAlertEvent(from, to ProcessState, reason string) {
+	props := map[string]any{
+		alerting.PropertyStreamName: s.source.DisplayName,
+		alerting.PropertyStreamURL:  privacy.SanitizeStreamUrl(s.source.SafeString),
+	}
+
+	switch {
+	case to == StateRunning && from == StateStarting:
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeStream,
+			EventName:  alerting.EventStreamConnected,
+			Properties: props,
+		})
+	case (to == StateBackoff || to == StateStopped) && from == StateRunning:
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeStream,
+			EventName:  alerting.EventStreamDisconnected,
+			Properties: props,
+		})
+	case to == StateStopped && from != StateRunning:
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeStream,
+			EventName:  alerting.EventStreamDisconnected,
+			Properties: props,
+		})
+	}
+
+	// If the reason looks like an error, also publish a stream error event
+	if to == StateBackoff || to == StateCircuitOpen {
+		props[alerting.PropertyError] = reason
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeStream,
+			EventName:  alerting.EventStreamError,
+			Properties: props,
+		})
+	}
 }
 
 // GetProcessState returns the current process state (thread-safe)
