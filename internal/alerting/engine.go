@@ -11,6 +11,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+const (
+	// saveHistoryTimeout is the context deadline for persisting alert history.
+	saveHistoryTimeout = 3 * time.Second
+	// cleanupTimeout is the context deadline for the periodic history deletion.
+	cleanupTimeout = 5 * time.Second
+	// cleanupInterval is how often the history cleanup goroutine runs.
+	cleanupInterval = 1 * time.Hour
+)
+
 // ActionFunc is called when a rule fires. Receives the rule and triggering event.
 type ActionFunc func(rule *entities.AlertRule, event *AlertEvent)
 
@@ -165,7 +174,7 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 		EventData: string(eventJSON),
 		Actions:   string(actionsJSON),
 	}
-	saveCtx, saveCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	saveCtx, saveCancel := context.WithTimeout(context.Background(), saveHistoryTimeout)
 	defer saveCancel()
 	if err := e.repo.SaveHistory(saveCtx, history); err != nil {
 		e.log.Error("failed to save alert history",
@@ -205,13 +214,13 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	stopCh := e.cleanupStop
 	e.rulesMu.Unlock()
 	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
+		ticker := time.NewTicker(cleanupInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				cutoff := time.Now().AddDate(0, 0, -retentionDays)
-				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
 				deleted, err := e.repo.DeleteHistoryBefore(cleanupCtx, cutoff)
 				cleanupCancel()
 				if err != nil {

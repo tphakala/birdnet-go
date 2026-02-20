@@ -124,7 +124,10 @@ func (r *alertRuleRepository) GetEnabledRules(ctx context.Context) ([]entities.A
 // DeleteBuiltInRules deletes all built-in alert rules.
 func (r *alertRuleRepository) DeleteBuiltInRules(ctx context.Context) (int64, error) {
 	result := r.db.WithContext(ctx).Where("built_in = ?", true).Delete(&entities.AlertRule{})
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to delete built-in alert rules: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 // SaveHistory saves an alert history entry.
@@ -167,13 +170,19 @@ func (r *alertRuleRepository) ListHistory(ctx context.Context, filter AlertHisto
 // DeleteHistory deletes all alert history entries.
 func (r *alertRuleRepository) DeleteHistory(ctx context.Context) (int64, error) {
 	result := r.db.WithContext(ctx).Where("1 = 1").Delete(&entities.AlertHistory{})
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to delete alert history: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 // DeleteHistoryBefore deletes alert history entries older than the given time.
 func (r *alertRuleRepository) DeleteHistoryBefore(ctx context.Context, before time.Time) (int64, error) {
 	result := r.db.WithContext(ctx).Where("fired_at < ?", before).Delete(&entities.AlertHistory{})
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to delete alert history before %v: %w", before, result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 // CountRulesByName returns the number of rules with the given name.

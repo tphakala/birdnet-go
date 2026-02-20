@@ -150,7 +150,7 @@ func (b *AlertEventBus) safeCall(handler AlertEventHandler, event *AlertEvent) {
 	defer func() {
 		// Swallow panics to keep the bus alive. There is no logger
 		// available at this level; the handler should do its own logging.
-		recover() //nolint:errcheck // intentionally swallowed
+		recover() //nolint:errcheck // intentionally swallowed to keep bus alive
 	}()
 	handler(event)
 }

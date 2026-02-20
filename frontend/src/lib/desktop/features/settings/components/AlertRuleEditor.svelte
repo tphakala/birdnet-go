@@ -353,6 +353,7 @@
                 <input
                   id="condition-duration-{index}"
                   type="number"
+                  min="0"
                   class="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                   value={condition.duration_sec ?? 0}
                   onchange={e => {

@@ -63,6 +63,10 @@
 
   const logger = loggers.settings;
 
+  const SECONDS_PER_MINUTE = 60;
+  const STATUS_DISMISS_MS = 3000;
+  const HISTORY_FETCH_LIMIT = 50;
+
   // Tab state
   let activeTab = $state('rules');
 
@@ -173,8 +177,8 @@
 
   // Helper: format cooldown
   function formatCooldown(seconds: number): string {
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
+    if (seconds < SECONDS_PER_MINUTE) return `${seconds}s`;
+    const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
     return `${minutes}m`;
   }
 
@@ -183,7 +187,7 @@
     statusType = type;
     setTimeout(() => {
       statusMessage = '';
-    }, 3000);
+    }, STATUS_DISMISS_MS);
   }
 
   // Data loading
@@ -210,7 +214,7 @@
   async function loadHistory() {
     loadingHistory = true;
     try {
-      const resp = await fetchAlertHistory({ limit: 50 });
+      const resp = await fetchAlertHistory({ limit: HISTORY_FETCH_LIMIT });
       history = resp.history;
       historyTotal = resp.total;
     } catch (err) {
