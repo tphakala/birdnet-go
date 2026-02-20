@@ -26,6 +26,8 @@
   import {
     Bell,
     History,
+    Plus,
+    Pencil,
     Trash2,
     ToggleLeft,
     ToggleRight,
@@ -41,6 +43,8 @@
   import { ApiError } from '$lib/utils/api';
   import {
     fetchAlertRules,
+    createAlertRule,
+    updateAlertRule,
     toggleAlertRule,
     deleteAlertRule,
     testAlertRule,
@@ -50,6 +54,7 @@
     fetchAlertSchema,
   } from '$lib/api/alerts';
   import type { AlertRule, AlertHistory as AlertHistoryType, AlertSchema } from '$lib/api/alerts';
+  import AlertRuleEditor from '$lib/desktop/features/settings/components/AlertRuleEditor.svelte';
 
   const logger = loggers.settings;
 
@@ -80,6 +85,10 @@
   let testingId = $state<number | null>(null);
   let resetting = $state(false);
   let clearingHistory = $state(false);
+
+  // Editor state
+  let editorOpen = $state(false);
+  let editingRule = $state<AlertRule | null>(null);
 
   // Schema-based filter options
   let objectTypeOptions = $derived<SelectOption[]>([
@@ -283,6 +292,33 @@
     }
   }
 
+  function openEditor(rule: AlertRule | null = null) {
+    editingRule = rule;
+    editorOpen = true;
+  }
+
+  function closeEditor() {
+    editorOpen = false;
+    editingRule = null;
+  }
+
+  async function handleEditorSave(data: Partial<AlertRule>) {
+    try {
+      if (data.id) {
+        await updateAlertRule(data.id, data);
+        showStatus(t('settings.alerts.status.updated'), 'success');
+      } else {
+        await createAlertRule(data);
+        showStatus(t('settings.alerts.status.created'), 'success');
+      }
+      closeEditor();
+      await loadRules();
+    } catch (err) {
+      logger.error('Failed to save alert rule', err, { component: 'AlertRulesSettingsPage' });
+      showStatus(t('settings.alerts.errors.saveFailed'), 'error');
+    }
+  }
+
   onMount(() => {
     loadSchema();
     loadRules();
@@ -365,6 +401,13 @@
       <div class="flex shrink-0 items-center gap-1">
         <button
           class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+          aria-label={t('settings.alerts.actionLabels.edit')}
+          onclick={() => openEditor(rule)}
+        >
+          <Pencil class="h-4 w-4" />
+        </button>
+        <button
+          class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
           aria-label={rule.enabled
             ? t('settings.alerts.actionLabels.disable')
             : t('settings.alerts.actionLabels.enable')}
@@ -430,6 +473,10 @@
         >
           <RotateCcw class="mr-1.5 h-4 w-4" />
           {t('settings.alerts.resetDefaults')}
+        </SettingsButton>
+        <SettingsButton variant="primary" onclick={() => openEditor()}>
+          <Plus class="mr-1.5 h-4 w-4" />
+          {t('settings.alerts.newRule')}
         </SettingsButton>
       </div>
     </div>
@@ -515,3 +562,13 @@
 <main class="settings-page-content" aria-label="Alert rules settings">
   <SettingsTabs {tabs} bind:activeTab showActions={false} />
 </main>
+
+{#if schema}
+  <AlertRuleEditor
+    isOpen={editorOpen}
+    rule={editingRule}
+    {schema}
+    onSave={handleEditorSave}
+    onClose={closeEditor}
+  />
+{/if}
