@@ -175,6 +175,10 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	if retentionDays <= 0 {
 		return
 	}
+	// Stop any existing cleanup goroutine before starting a new one.
+	if e.cleanupStop != nil {
+		close(e.cleanupStop)
+	}
 	e.cleanupStop = make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
