@@ -16,12 +16,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -83,6 +85,10 @@ type Controller struct {
 
 	// V2Manager provides access to the v2 normalized database for stats and backup
 	V2Manager datastoreV2.Manager
+
+	// Alerting fields (initialized lazily in initAlertRoutes)
+	alertRuleRepo repository.AlertRuleRepository
+	alertEngine   *alerting.Engine
 
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
@@ -481,6 +487,7 @@ func (c *Controller) initRoutes() {
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", c.initSpeciesRoutes},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
+		{"alert routes", c.initAlertRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
