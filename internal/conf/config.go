@@ -1249,6 +1249,13 @@ type Settings struct {
 	Backup BackupConfig `json:"backup"` // Backup configuration
 
 	Notification NotificationConfig `json:"notification"` // Configuration for push notifications
+
+	Alerting AlertSettings `json:"alerting"` // Alerting rules engine settings
+}
+
+// AlertSettings configures the alerting rules engine.
+type AlertSettings struct {
+	HistoryRetentionDays int `json:"historyRetentionDays" yaml:"history_retention_days" mapstructure:"history_retention_days"` // Days to retain alert history (0 = unlimited)
 }
 
 // settingsInstance is the current settings instance

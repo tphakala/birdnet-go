@@ -28,6 +28,9 @@ type Engine struct {
 	// Cached rules (refreshed periodically)
 	rules   []entities.AlertRule
 	rulesMu sync.RWMutex
+
+	// History cleanup
+	cleanupStop chan struct{}
 }
 
 // NewEngine creates a new alerting rules engine.
@@ -163,5 +166,41 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 	// Dispatch actions
 	if e.actionFunc != nil {
 		e.actionFunc(rule, event)
+	}
+}
+
+// StartHistoryCleanup starts a background goroutine that periodically deletes
+// alert history entries older than retentionDays. A value of 0 disables cleanup.
+func (e *Engine) StartHistoryCleanup(retentionDays int) {
+	if retentionDays <= 0 {
+		return
+	}
+	e.cleanupStop = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				cutoff := time.Now().AddDate(0, 0, -retentionDays)
+				deleted, err := e.repo.DeleteHistoryBefore(context.Background(), cutoff)
+				if err != nil {
+					e.log.Error("alert history cleanup failed", logger.Error(err))
+				} else if deleted > 0 {
+					e.log.Info("alert history cleanup completed",
+						logger.Int64("deleted", deleted),
+						logger.Int("retention_days", retentionDays))
+				}
+			case <-e.cleanupStop:
+				return
+			}
+		}
+	}()
+}
+
+// Stop shuts down background goroutines (history cleanup).
+func (e *Engine) Stop() {
+	if e.cleanupStop != nil {
+		close(e.cleanupStop)
 	}
 }

@@ -3,6 +3,7 @@ package alerting
 import (
 	"context"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -63,6 +64,11 @@ func Initialize(
 	// Signal to the notification subsystem that the alert engine now handles
 	// detection notifications, bypassing the hardcoded consumer logic.
 	notification.SetAlertEngineActive(true)
+
+	// Start periodic history cleanup based on configured retention
+	if settings := conf.GetSettings(); settings != nil {
+		engine.StartHistoryCleanup(settings.Alerting.HistoryRetentionDays)
+	}
 
 	log.Info("alerting engine initialized",
 		logger.Int("rules_loaded", len(engine.rules)))
