@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"os/exec"
 	"slices"
@@ -600,13 +601,15 @@ func (s *FFmpegStream) publishAlertEvent(from, to ProcessState, reason string) {
 		})
 	}
 
-	// If the reason looks like an error, also publish a stream error event
+	// If the reason looks like an error, also publish a stream error event.
+	// Clone props to avoid mutating the map shared with previously published events.
 	if to == StateBackoff || to == StateCircuitOpen {
-		props[alerting.PropertyError] = reason
+		errProps := maps.Clone(props)
+		errProps[alerting.PropertyError] = reason
 		alerting.TryPublish(&alerting.AlertEvent{
 			ObjectType: alerting.ObjectTypeStream,
 			EventName:  alerting.EventStreamError,
-			Properties: props,
+			Properties: errProps,
 		})
 	}
 }

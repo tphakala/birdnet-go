@@ -10,7 +10,7 @@ type AlertHistory struct {
 	EventData string    `gorm:"type:text;default:''"`
 	Actions   string    `gorm:"type:text;default:''"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
-	Rule      AlertRule `gorm:"foreignKey:RuleID"`
+	Rule      AlertRule `gorm:"foreignKey:RuleID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName returns the table name for GORM.

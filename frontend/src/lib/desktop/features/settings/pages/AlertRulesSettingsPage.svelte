@@ -390,8 +390,8 @@
         : statusType === 'error'
           ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
           : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}"
-      role="status"
-      aria-live="polite"
+      role={statusType === 'error' ? 'alert' : 'status'}
+      aria-live={statusType === 'error' ? 'assertive' : 'polite'}
     >
       {#if statusType === 'success'}
         <CircleCheck class="h-4 w-4 shrink-0" />

@@ -67,6 +67,9 @@ func (r *alertRuleRepository) CreateRule(ctx context.Context, rule *entities.Ale
 
 // UpdateRule replaces an alert rule, deleting existing conditions and actions first.
 func (r *alertRuleRepository) UpdateRule(ctx context.Context, rule *entities.AlertRule) error {
+	if rule.ID == 0 {
+		return fmt.Errorf("failed to update alert rule: missing rule ID")
+	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("rule_id = ?", rule.ID).Delete(&entities.AlertCondition{}).Error; err != nil {
 			return fmt.Errorf("failed to delete old conditions: %w", err)
@@ -90,16 +93,24 @@ func (r *alertRuleRepository) UpdateRule(ctx context.Context, rule *entities.Ale
 
 // DeleteRule deletes an alert rule and its conditions/actions via cascade.
 func (r *alertRuleRepository) DeleteRule(ctx context.Context, id uint) error {
-	if err := r.db.WithContext(ctx).Delete(&entities.AlertRule{}, id).Error; err != nil {
-		return fmt.Errorf("failed to delete alert rule %d: %w", id, err)
+	result := r.db.WithContext(ctx).Delete(&entities.AlertRule{}, id)
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete alert rule %d: %w", id, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrAlertRuleNotFound
 	}
 	return nil
 }
 
 // ToggleRule enables or disables an alert rule.
 func (r *alertRuleRepository) ToggleRule(ctx context.Context, id uint, enabled bool) error {
-	if err := r.db.WithContext(ctx).Model(&entities.AlertRule{}).Where("id = ?", id).Update("enabled", enabled).Error; err != nil {
-		return fmt.Errorf("failed to toggle alert rule %d: %w", id, err)
+	result := r.db.WithContext(ctx).Model(&entities.AlertRule{}).Where("id = ?", id).Update("enabled", enabled)
+	if result.Error != nil {
+		return fmt.Errorf("failed to toggle alert rule %d: %w", id, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrAlertRuleNotFound
 	}
 	return nil
 }

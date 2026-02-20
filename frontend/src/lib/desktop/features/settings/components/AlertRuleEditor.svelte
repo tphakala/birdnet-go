@@ -43,11 +43,14 @@
   let metricName = $state('');
   let cooldownMin = $state(5);
   interface EditorCondition {
+    id: string;
     property: string;
     operator: string;
     value: string;
     duration_sec: number;
   }
+
+  const newConditionId = () => crypto.randomUUID();
 
   interface EditorAction {
     target: string;
@@ -72,6 +75,7 @@
         cooldownMin = Math.floor(rule.cooldown_sec / 60);
         conditions =
           rule.conditions?.map(c => ({
+            id: newConditionId(),
             property: c.property,
             operator: c.operator,
             value: c.value,
@@ -167,7 +171,13 @@
   function addCondition() {
     conditions = [
       ...conditions,
-      { property: availableProperties[0]?.name ?? '', operator: '', value: '', duration_sec: 0 },
+      {
+        id: newConditionId(),
+        property: availableProperties[0]?.name ?? '',
+        operator: '',
+        value: '',
+        duration_sec: 0,
+      },
     ];
   }
 
@@ -309,7 +319,7 @@
         <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">
           {t('settings.alerts.editor.conditionsSection')}
         </h4>
-        {#each conditions as condition, index (index)}
+        {#each conditions as condition, index (condition.id)}
           <div class="flex items-end gap-2">
             <div class="flex-1">
               <SelectDropdown

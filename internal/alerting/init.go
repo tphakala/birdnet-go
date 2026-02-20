@@ -76,22 +76,33 @@ func Initialize(
 	return engine, nil
 }
 
-// seedDefaultRules seeds the built-in default rules if no rules exist yet.
+// seedDefaultRules ensures all built-in default rules exist. It checks by name
+// so partial seeds from previous runs self-heal on restart.
 func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, log logger.Logger) error {
 	existing, err := repo.ListRules(ctx, repository.AlertRuleFilter{})
 	if err != nil {
 		return err
 	}
-	if len(existing) > 0 {
-		return nil
+
+	// Build set of existing rule names for fast lookup
+	existingNames := make(map[string]struct{}, len(existing))
+	for i := range existing {
+		existingNames[existing[i].Name] = struct{}{}
 	}
 
 	defaults := DefaultRules()
+	var created int
 	for i := range defaults {
+		if _, exists := existingNames[defaults[i].Name]; exists {
+			continue
+		}
 		if err := repo.CreateRule(ctx, &defaults[i]); err != nil {
 			return err
 		}
+		created++
 	}
-	log.Info("seeded default alert rules", logger.Int("count", len(defaults)))
+	if created > 0 {
+		log.Info("seeded default alert rules", logger.Int("created", created))
+	}
 	return nil
 }

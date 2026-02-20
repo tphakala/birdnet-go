@@ -165,7 +165,9 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 		EventData: string(eventJSON),
 		Actions:   string(actionsJSON),
 	}
-	if err := e.repo.SaveHistory(context.Background(), history); err != nil {
+	saveCtx, saveCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer saveCancel()
+	if err := e.repo.SaveHistory(saveCtx, history); err != nil {
 		e.log.Error("failed to save alert history",
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
@@ -206,7 +208,9 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 			select {
 			case <-ticker.C:
 				cutoff := time.Now().AddDate(0, 0, -retentionDays)
-				deleted, err := e.repo.DeleteHistoryBefore(context.Background(), cutoff)
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				deleted, err := e.repo.DeleteHistoryBefore(cleanupCtx, cutoff)
+				cleanupCancel()
 				if err != nil {
 					e.log.Error("alert history cleanup failed", logger.Error(err))
 				} else if deleted > 0 {

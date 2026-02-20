@@ -13,12 +13,19 @@ import (
 )
 
 // setupAlertTestDB creates an in-memory SQLite database for alert rule tests.
+// Uses shared-cache mode with a single connection to ensure all operations
+// see the same in-memory database.
 func setupAlertTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:?_foreign_keys=ON"), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_foreign_keys=ON"), &gorm.Config{
 		Logger: gorm_logger.Default.LogMode(gorm_logger.Silent),
 	})
 	require.NoError(t, err, "failed to open in-memory database")
+
+	sqlDB, err := db.DB()
+	require.NoError(t, err, "failed to get sql.DB")
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	err = db.AutoMigrate(
 		&entities.AlertRule{},
@@ -222,11 +229,11 @@ func TestAlertRuleRepository_DeleteRule(t *testing.T) {
 
 	// Verify cascade deleted conditions and actions
 	var condCount int64
-	db.Model(&entities.AlertCondition{}).Where("rule_id = ?", rule.ID).Count(&condCount)
+	require.NoError(t, db.Model(&entities.AlertCondition{}).Where("rule_id = ?", rule.ID).Count(&condCount).Error)
 	assert.Equal(t, int64(0), condCount)
 
 	var actionCount int64
-	db.Model(&entities.AlertAction{}).Where("rule_id = ?", rule.ID).Count(&actionCount)
+	require.NoError(t, db.Model(&entities.AlertAction{}).Where("rule_id = ?", rule.ID).Count(&actionCount).Error)
 	assert.Equal(t, int64(0), actionCount)
 }
 

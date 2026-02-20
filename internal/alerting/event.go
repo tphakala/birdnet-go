@@ -64,6 +64,7 @@ type AlertEventBus struct {
 	mu       sync.RWMutex
 	eventCh  chan *AlertEvent
 	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // NewAlertEventBus creates a new alert event bus and starts its worker.
@@ -86,7 +87,14 @@ func (b *AlertEventBus) Subscribe(handler AlertEventHandler) {
 
 // Publish enqueues an event for async processing. Non-blocking: if the buffer
 // is full the event is dropped to protect callers on hot paths.
+// Events are silently dropped after Stop() has been called.
 func (b *AlertEventBus) Publish(event *AlertEvent) {
+	select {
+	case <-b.stopCh:
+		return // Bus is stopped, discard event
+	default:
+	}
+
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
@@ -98,9 +106,11 @@ func (b *AlertEventBus) Publish(event *AlertEvent) {
 	}
 }
 
-// Stop shuts down the worker goroutine.
+// Stop shuts down the worker goroutine. Safe to call multiple times.
 func (b *AlertEventBus) Stop() {
-	close(b.stopCh)
+	b.stopOnce.Do(func() {
+		close(b.stopCh)
+	})
 }
 
 // processLoop drains the event channel and dispatches to handlers.

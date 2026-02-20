@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+const maxHistoryLimit = 200
 
 // initAlertRoutes registers alert rule API endpoints.
 func (c *Controller) initAlertRoutes() {
@@ -45,16 +48,15 @@ func (c *Controller) initAlertRoutes() {
 }
 
 // requireV2 checks that the enhanced database is available and returns an error response if not.
-func requireV2(ctx echo.Context) error {
-	return ctx.JSON(http.StatusConflict, map[string]string{
-		"error": "Alert rules require the enhanced (v2) database",
-	})
+func (c *Controller) requireV2(ctx echo.Context) error {
+	return c.HandleError(ctx, fmt.Errorf("enhanced database not enabled"),
+		"Alert rules require the enhanced (v2) database", http.StatusConflict)
 }
 
 // GetAlertSchema returns the alerting schema for the UI.
 func (c *Controller) GetAlertSchema(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 	return ctx.JSON(http.StatusOK, alerting.GetSchema())
 }
@@ -62,7 +64,7 @@ func (c *Controller) GetAlertSchema(ctx echo.Context) error {
 // ListAlertRules returns all alert rules, optionally filtered.
 func (c *Controller) ListAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	filter := repository.AlertRuleFilter{
@@ -92,7 +94,7 @@ func (c *Controller) ListAlertRules(ctx echo.Context) error {
 // GetAlertRule returns a single alert rule by ID.
 func (c *Controller) GetAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -115,7 +117,7 @@ func (c *Controller) GetAlertRule(ctx echo.Context) error {
 // CreateAlertRule creates a new alert rule.
 func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	var rule entities.AlertRule
@@ -158,7 +160,7 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 // UpdateAlertRule replaces an existing alert rule.
 func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -180,6 +182,13 @@ func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 	}
 
+	if rule.Name == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Rule name is required"})
+	}
+	if rule.ObjectType == "" || rule.TriggerType == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Object type and trigger type are required"})
+	}
+
 	rule.ID = existing.ID
 	rule.CreatedAt = existing.CreatedAt
 
@@ -196,7 +205,7 @@ func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 // ToggleAlertRule enables or disables an alert rule.
 func (c *Controller) ToggleAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -227,7 +236,7 @@ func (c *Controller) ToggleAlertRule(ctx echo.Context) error {
 // DeleteAlertRule deletes an alert rule.
 func (c *Controller) DeleteAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -251,7 +260,7 @@ func (c *Controller) DeleteAlertRule(ctx echo.Context) error {
 // TestAlertRule simulates firing a rule for testing purposes.
 func (c *Controller) TestAlertRule(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	id, err := parseUintParam(ctx, "id")
@@ -278,7 +287,7 @@ func (c *Controller) TestAlertRule(ctx echo.Context) error {
 // ResetDefaultAlertRules deletes all built-in rules and re-seeds them.
 func (c *Controller) ResetDefaultAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	reqCtx := ctx.Request().Context()
@@ -306,7 +315,7 @@ func (c *Controller) ResetDefaultAlertRules(ctx echo.Context) error {
 // ListAlertHistory returns paginated alert firing history.
 func (c *Controller) ListAlertHistory(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	filter := repository.AlertHistoryFilter{}
@@ -321,6 +330,9 @@ func (c *Controller) ListAlertHistory(ctx echo.Context) error {
 	if limitParam := ctx.QueryParam("limit"); limitParam != "" {
 		v, err := strconv.Atoi(limitParam)
 		if err == nil && v > 0 {
+			if v > maxHistoryLimit {
+				v = maxHistoryLimit
+			}
 			filter.Limit = v
 		}
 	} else {
@@ -350,7 +362,7 @@ func (c *Controller) ListAlertHistory(ctx echo.Context) error {
 // ClearAlertHistory deletes all alert history records.
 func (c *Controller) ClearAlertHistory(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	deleted, err := c.alertRuleRepo.DeleteHistory(ctx.Request().Context())
@@ -365,7 +377,7 @@ func (c *Controller) ClearAlertHistory(ctx echo.Context) error {
 // ExportAlertRules exports all rules as JSON.
 func (c *Controller) ExportAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	rules, err := c.alertRuleRepo.ListRules(ctx.Request().Context(), repository.AlertRuleFilter{})
@@ -384,7 +396,7 @@ func (c *Controller) ExportAlertRules(ctx echo.Context) error {
 // ImportAlertRules imports rules from JSON.
 func (c *Controller) ImportAlertRules(ctx echo.Context) error {
 	if !datastoreV2.IsEnhancedDatabase() {
-		return requireV2(ctx)
+		return c.requireV2(ctx)
 	}
 
 	var payload struct {
