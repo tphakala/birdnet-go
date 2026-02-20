@@ -66,7 +66,8 @@ func NewNtfyContainer(ctx context.Context, config *NtfyConfig) (*NtfyContainer, 
 	req := testcontainers.ContainerRequest{
 		Image:        image,
 		ExposedPorts: []string{ntfyContainerPort},
-		Cmd:          []string{"serve", "--cache-file=/var/lib/ntfy/cache.db"},
+		Cmd:          []string{"serve", "--cache-file=/tmp/ntfy/cache.db"},
+		Tmpfs:        map[string]string{"/tmp/ntfy": "rw"},
 		WaitingFor: wait.ForHTTP("/v1/health").
 			WithPort("80/tcp").
 			WithStartupTimeout(30 * time.Second),
@@ -75,7 +76,7 @@ func NewNtfyContainer(ctx context.Context, config *NtfyConfig) (*NtfyContainer, 
 	// Configure authentication if enabled
 	if config.EnableAuth {
 		req.Env = map[string]string{
-			"NTFY_AUTH_FILE":           "/var/lib/ntfy/auth.db",
+			"NTFY_AUTH_FILE":           "/tmp/ntfy/auth.db",
 			"NTFY_AUTH_DEFAULT_ACCESS": "deny-all",
 		}
 	}
@@ -121,7 +122,9 @@ func (c *NtfyContainer) GetURL(_ context.Context) string {
 	return fmt.Sprintf("http://%s", net.JoinHostPort(c.host, strconv.Itoa(c.port)))
 }
 
-// AddUser creates a new admin user in the ntfy container.
+// AddUser creates a new regular user in the ntfy container.
+// Regular users have no default access when auth-default-access is deny-all;
+// use GrantAccess to give them topic-specific permissions.
 // This is only valid when authentication is enabled.
 func (c *NtfyContainer) AddUser(ctx context.Context, username, password string) error {
 	if !c.authEnabled {
@@ -129,7 +132,7 @@ func (c *NtfyContainer) AddUser(ctx context.Context, username, password string) 
 	}
 
 	exitCode, output, err := c.container.Exec(ctx, []string{
-		"ntfy", "user", "add", "--role=admin", "--password=" + password, username,
+		"sh", "-c", fmt.Sprintf("NTFY_PASSWORD='%s' ntfy user add %s", password, username),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to exec user add command: %w", err)
