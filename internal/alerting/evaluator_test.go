@@ -124,3 +124,42 @@ func TestEvaluateConditions_InvalidNumericValue(t *testing.T) {
 	result := EvaluateConditions(conds, map[string]any{PropertyConfidence: 0.95})
 	assert.False(t, result, "non-numeric condition value should fail")
 }
+
+func TestEvaluateConditions_UnsupportedPropertyType(t *testing.T) {
+	conds := []entities.AlertCondition{
+		{Property: PropertyConfidence, Operator: OperatorGreaterThan, Value: "0.50"},
+	}
+
+	// bool is not a supported numeric type
+	result := EvaluateConditions(conds, map[string]any{PropertyConfidence: true})
+	assert.False(t, result, "unsupported type (bool) should fail numeric comparison")
+
+	// struct is not supported
+	type custom struct{ val int }
+	result = EvaluateConditions(conds, map[string]any{PropertyConfidence: custom{val: 1}})
+	assert.False(t, result, "unsupported type (struct) should fail numeric comparison")
+}
+
+func TestEvaluateConditions_AdditionalIntTypes(t *testing.T) {
+	conds := []entities.AlertCondition{
+		{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "50"},
+	}
+
+	tests := []struct {
+		name string
+		val  any
+		want bool
+	}{
+		{"uint64", uint64(60), true},
+		{"uint32", uint32(60), true},
+		{"int32", int32(60), true},
+		{"uint8", uint8(60), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			props := map[string]any{PropertyValue: tt.val}
+			assert.Equal(t, tt.want, EvaluateConditions(conds, props))
+		})
+	}
+}
