@@ -60,6 +60,10 @@ func Initialize(
 		}
 	}
 
+	// Signal to the notification subsystem that the alert engine now handles
+	// detection notifications, bypassing the hardcoded consumer logic.
+	notification.SetAlertEngineActive(true)
+
 	log.Info("alerting engine initialized",
 		logger.Int("rules_loaded", len(engine.rules)))
 

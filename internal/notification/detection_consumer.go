@@ -45,6 +45,13 @@ func (c *DetectionNotificationConsumer) SupportsBatching() bool {
 }
 
 func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.DetectionEvent) error {
+	// When the alert engine is active, it handles detection notifications via
+	// configurable rules. Skip the hardcoded new-species gate, confidence
+	// threshold, and cooldown logic to avoid duplicate notifications.
+	if IsAlertEngineActive() {
+		return nil
+	}
+
 	if !event.IsNewSpecies() {
 		return nil
 	}

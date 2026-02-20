@@ -3,12 +3,18 @@ package notification
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 var (
 	instance *Service
 	once     sync.Once
 	mu       sync.RWMutex
+
+	// alertEngineActive indicates whether the alerting rules engine is running.
+	// When true, the detection notification consumer skips its hardcoded logic
+	// since the alert engine handles detection notifications via rules.
+	alertEngineActive atomic.Bool
 )
 
 // Initialize sets up the global notification service instance
@@ -55,4 +61,16 @@ func IsInitialized() bool {
 	mu.RLock()
 	defer mu.RUnlock()
 	return instance != nil
+}
+
+// SetAlertEngineActive marks the alert engine as active. Called by the alerting
+// package during initialization to signal that the rules engine handles
+// detection notifications, bypassing the hardcoded consumer logic.
+func SetAlertEngineActive(active bool) {
+	alertEngineActive.Store(active)
+}
+
+// IsAlertEngineActive returns whether the alerting rules engine is running.
+func IsAlertEngineActive() bool {
+	return alertEngineActive.Load()
 }
