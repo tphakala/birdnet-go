@@ -301,6 +301,10 @@
   }
 
   function openEditor(rule: AlertRule | null = null) {
+    if (!schema) {
+      showStatus(t('settings.alerts.errors.schemaLoadFailed'), 'error');
+      return;
+    }
     editingRule = rule;
     editorOpen = true;
   }
@@ -563,6 +567,7 @@
         <div
           class="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
         ></div>
+        <span class="sr-only">{t('common.loading')}</span>
       </div>
     {:else if filteredRules.length === 0}
       <div class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -606,6 +611,7 @@
         <div
           class="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
         ></div>
+        <span class="sr-only">{t('common.loading')}</span>
       </div>
     {:else if history.length === 0}
       <div class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">

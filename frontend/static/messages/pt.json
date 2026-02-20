@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Falha ao limpar histórico",
         "saveFailed": "Falha ao salvar regra",
         "exportFailed": "Falha ao exportar regras",
-        "importFailed": "Falha ao importar regras"
+        "importFailed": "Falha ao importar regras",
+        "schemaLoadFailed": "Falha ao carregar o esquema de alertas. Atualize a página."
       },
       "editor": {
         "createTitle": "Criar regra de alerta",

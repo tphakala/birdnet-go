@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Verlauf konnte nicht gelöscht werden",
         "saveFailed": "Regel konnte nicht gespeichert werden",
         "exportFailed": "Regeln konnten nicht exportiert werden",
-        "importFailed": "Regeln konnten nicht importiert werden"
+        "importFailed": "Regeln konnten nicht importiert werden",
+        "schemaLoadFailed": "Fehler beim Laden des Alarmschemas. Bitte aktualisieren Sie die Seite."
       },
       "editor": {
         "createTitle": "Alarmregel erstellen",

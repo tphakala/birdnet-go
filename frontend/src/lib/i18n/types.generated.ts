@@ -2036,6 +2036,7 @@ export type TranslationKey =
   | 'settings.alerts.errors.saveFailed'
   | 'settings.alerts.errors.exportFailed'
   | 'settings.alerts.errors.importFailed'
+  | 'settings.alerts.errors.schemaLoadFailed'
   | 'settings.alerts.editor.createTitle'
   | 'settings.alerts.editor.editTitle'
   | 'settings.alerts.editor.name'

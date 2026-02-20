@@ -2895,7 +2895,8 @@
         "clearHistoryFailed": "Cancellazione della cronologia non riuscita",
         "saveFailed": "Salvataggio della regola non riuscito",
         "exportFailed": "Esportazione delle regole non riuscita",
-        "importFailed": "Importazione delle regole non riuscita"
+        "importFailed": "Importazione delle regole non riuscita",
+        "schemaLoadFailed": "Impossibile caricare lo schema degli avvisi. Aggiornare la pagina."
       },
       "editor": {
         "createTitle": "Crea regola di allerta",

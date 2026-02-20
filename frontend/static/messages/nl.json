@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Wissen van geschiedenis mislukt",
         "saveFailed": "Opslaan van regel mislukt",
         "exportFailed": "Exporteren van regels mislukt",
-        "importFailed": "Importeren van regels mislukt"
+        "importFailed": "Importeren van regels mislukt",
+        "schemaLoadFailed": "Kan het waarschuwingsschema niet laden. Vernieuw de pagina."
       },
       "editor": {
         "createTitle": "Waarschuwingsregel aanmaken",

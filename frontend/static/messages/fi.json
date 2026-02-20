@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Historian tyhjennys epäonnistui",
         "saveFailed": "Säännön tallennus epäonnistui",
         "exportFailed": "Sääntöjen vienti epäonnistui",
-        "importFailed": "Sääntöjen tuonti epäonnistui"
+        "importFailed": "Sääntöjen tuonti epäonnistui",
+        "schemaLoadFailed": "Hälytysjärjestelmän lataus epäonnistui. Päivitä sivu."
       },
       "editor": {
         "createTitle": "Luo hälytyssääntö",

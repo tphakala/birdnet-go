@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Échec de l'effacement de l'historique",
         "saveFailed": "Échec de l'enregistrement de la règle",
         "exportFailed": "Échec de l'exportation des règles",
-        "importFailed": "Échec de l'importation des règles"
+        "importFailed": "Échec de l'importation des règles",
+        "schemaLoadFailed": "Échec du chargement du schéma d'alerte. Veuillez rafraîchir la page."
       },
       "editor": {
         "createTitle": "Créer une règle d'alerte",

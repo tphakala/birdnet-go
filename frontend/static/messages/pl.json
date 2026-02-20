@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Nie udało się wyczyścić historii",
         "saveFailed": "Nie udało się zapisać reguły",
         "exportFailed": "Nie udało się wyeksportować reguł",
-        "importFailed": "Nie udało się zaimportować reguł"
+        "importFailed": "Nie udało się zaimportować reguł",
+        "schemaLoadFailed": "Nie udało się załadować schematu alertów. Odśwież stronę."
       },
       "editor": {
         "createTitle": "Utwórz regułę alertu",

@@ -2923,7 +2923,8 @@
         "clearHistoryFailed": "Error al borrar el historial",
         "saveFailed": "Error al guardar la regla",
         "exportFailed": "Error al exportar las reglas",
-        "importFailed": "Error al importar las reglas"
+        "importFailed": "Error al importar las reglas",
+        "schemaLoadFailed": "Error al cargar el esquema de alertas. Por favor, actualice la página."
       },
       "editor": {
         "createTitle": "Crear regla de alerta",

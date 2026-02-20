@@ -2922,7 +2922,8 @@
         "clearHistoryFailed": "Nepodarilo sa vymazať históriu",
         "saveFailed": "Nepodarilo sa uložiť pravidlo",
         "exportFailed": "Nepodarilo sa exportovať pravidlá",
-        "importFailed": "Nepodarilo sa importovať pravidlá"
+        "importFailed": "Nepodarilo sa importovať pravidlá",
+        "schemaLoadFailed": "Nepodarilo sa načítať schému upozornení. Obnovte stránku."
       },
       "editor": {
         "createTitle": "Vytvoriť pravidlo upozornenia",

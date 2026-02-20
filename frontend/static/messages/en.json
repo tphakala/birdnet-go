@@ -2939,7 +2939,8 @@
         "clearHistoryFailed": "Failed to clear history",
         "saveFailed": "Failed to save rule",
         "exportFailed": "Failed to export rules",
-        "importFailed": "Failed to import rules"
+        "importFailed": "Failed to import rules",
+        "schemaLoadFailed": "Failed to load alert schema. Please refresh the page."
       },
       "editor": {
         "createTitle": "Create Alert Rule",
