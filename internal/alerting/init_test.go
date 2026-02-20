@@ -75,14 +75,19 @@ func TestSeedDefaultRules_EmptyRepo(t *testing.T) {
 }
 
 func TestSeedDefaultRules_AlreadySeeded(t *testing.T) {
-	repo := &initMockRepo{
-		rules: []entities.AlertRule{{ID: 1, Name: "Existing Rule"}},
+	// Pre-populate with all default rules so seeding finds them by name
+	defaults := DefaultRules()
+	existing := make([]entities.AlertRule, len(defaults))
+	for i := range defaults {
+		existing[i] = defaults[i]
+		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
 	}
+	repo := &initMockRepo{rules: existing}
 	err := seedDefaultRules(t.Context(), repo, initTestLogger())
 	require.NoError(t, err)
 
-	// Should not add any new rules
-	assert.Len(t, repo.rules, 1)
+	// Should not add any new rules since all defaults already exist
+	assert.Len(t, repo.rules, len(defaults))
 }
 
 func TestInitialize_SeedsAndCreatesEngine(t *testing.T) {
@@ -98,7 +103,7 @@ func TestInitialize_SeedsAndCreatesEngine(t *testing.T) {
 	assert.Len(t, repo.rules, expectedCount)
 }
 
-func TestInitialize_SkipsSeedingWhenRulesExist(t *testing.T) {
+func TestInitialize_SeedsOnlyMissingDefaults(t *testing.T) {
 	repo := &initMockRepo{
 		rules: []entities.AlertRule{
 			{ID: 1, Name: "Custom Rule", Enabled: true},
@@ -110,8 +115,8 @@ func TestInitialize_SkipsSeedingWhenRulesExist(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, engine)
 
-	// Should still have just the 1 existing rule
-	assert.Len(t, repo.rules, 1)
+	// Custom rule kept + all defaults seeded (none matched by name)
+	assert.Len(t, repo.rules, 1+len(DefaultRules()))
 }
 
 func TestInitialize_SubscribesToEventBus(t *testing.T) {
