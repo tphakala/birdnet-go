@@ -339,6 +339,31 @@ routeInitializers := []struct {
 | GET    | `/weather/latest`             | `GetLatestWeather`        | ❌   | Latest weather data                 |
 | GET    | `/weather/sun/:date`          | `GetSunTimes`             | ❌   | Sun times (sunrise/sunset) for date |
 
+### Alert Rules (`alerts.go`)
+
+Requires enhanced (v2) database. Returns 409 Conflict if not available.
+
+| Method | Route                            | Handler                  | Auth | Description                    |
+| ------ | -------------------------------- | ------------------------ | ---- | ------------------------------ |
+| GET    | `/alerts/schema`                 | `GetAlertSchema`         | ❌   | Alert schema for UI            |
+| GET    | `/alerts/rules`                  | `ListAlertRules`         | ❌   | List rules (filterable)        |
+| GET    | `/alerts/rules/:id`              | `GetAlertRule`           | ❌   | Get single rule                |
+| GET    | `/alerts/rules/export`           | `ExportAlertRules`       | ❌   | Export rules as JSON           |
+| GET    | `/alerts/history`                | `ListAlertHistory`       | ❌   | List history (paginated)       |
+| POST   | `/alerts/rules`                  | `CreateAlertRule`        | ✅   | Create rule                    |
+| PUT    | `/alerts/rules/:id`              | `UpdateAlertRule`        | ✅   | Replace rule                   |
+| PATCH  | `/alerts/rules/:id/toggle`       | `ToggleAlertRule`        | ✅   | Enable/disable rule            |
+| DELETE | `/alerts/rules/:id`              | `DeleteAlertRule`        | ✅   | Delete rule                    |
+| POST   | `/alerts/rules/:id/test`         | `TestAlertRule`          | ✅   | Test-fire rule                 |
+| POST   | `/alerts/rules/reset-defaults`   | `ResetDefaultAlertRules` | ✅   | Re-seed built-in rules         |
+| POST   | `/alerts/rules/import`           | `ImportAlertRules`       | ✅   | Import rules from JSON         |
+| DELETE | `/alerts/history`                | `ClearAlertHistory`      | ✅   | Delete all history             |
+
+**Query Parameters:**
+
+- `GET /alerts/rules`: `object_type`, `enabled` (true/false), `built_in` (true/false)
+- `GET /alerts/history`: `rule_id`, `limit` (default 50), `offset`
+
 ## Legend
 
 - ✅ = Authentication required
