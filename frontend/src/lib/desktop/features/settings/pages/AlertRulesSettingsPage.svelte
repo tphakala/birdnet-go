@@ -382,11 +382,11 @@
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        if (!data || !Array.isArray(data.rules)) {
+        if (!data || (data.rules && !Array.isArray(data.rules))) {
           showStatus(t('settings.alerts.errors.importFailed'), 'error');
           return;
         }
-        const result = await importAlertRules(data.rules, data.version ?? 1);
+        const result = await importAlertRules(data.rules ?? [], data.version ?? 1);
         await loadRules();
         showStatus(
           t('settings.alerts.status.imported', {
