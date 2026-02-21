@@ -86,7 +86,6 @@ export function getLocale(): Locale {
  */
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
-  // Don't clear cache here - keep old translations while loading new ones
   loadMessages(locale);
 
   // Persist locale to localStorage
@@ -131,8 +130,6 @@ async function loadMessages(locale: Locale): Promise<void> {
     messages = data;
     // Clear previous messages after successful load
     previousMessages = {};
-    // Clear cache only after successfully loading new messages
-    clearTranslationCache();
     // Mark initial load as complete and resolve the promise
     markInitialLoadComplete();
     // Update localStorage cache
@@ -168,8 +165,6 @@ async function loadMessages(locale: Locale): Promise<void> {
           messages = fallbackData;
           // Clear previous messages after successful fallback load
           previousMessages = {};
-          // Clear cache after loading fallback messages
-          clearTranslationCache();
           // Mark initial load as complete and resolve the promise
           markInitialLoadComplete();
           // Update localStorage cache for fallback
@@ -205,9 +200,6 @@ async function loadMessages(locale: Locale): Promise<void> {
   }
 }
 
-// Translation cache for memoization
-const translationCache = new Map<string, { locale: string; params?: string; value: string }>();
-
 /**
  * Helper to get nested value from object using dot notation
  * @param obj - The object to traverse
@@ -227,29 +219,12 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 }
 
 /**
- * Clear translation cache when locale changes
- * @internal
- */
-function clearTranslationCache(): void {
-  translationCache.clear();
-}
-
-/**
  * Translation function with runtime type checking and pluralization support
  * @param key - The translation key
  * @param params - Optional parameters for interpolation
  * @returns The translated string
  */
 export function t(key: string, params?: Record<string, unknown>): string {
-  // Check cache first
-  const paramsKey = params ? JSON.stringify(params) : '';
-  const cacheKey = `${key}:${paramsKey}:${currentLocale}`;
-
-  const cached = translationCache.get(cacheKey);
-  if (cached?.locale === currentLocale && cached.params === paramsKey) {
-    return cached.value;
-  }
-
   // If messages haven't loaded yet, check previousMessages first
   if (Object.keys(messages).length === 0) {
     // Check if we have the key in previousMessages
@@ -270,13 +245,6 @@ export function t(key: string, params?: Record<string, unknown>): string {
       }
     }
 
-    // Try to find any cached translation for this key to prevent flickering
-    for (const [cachedKey, cachedValue] of translationCache.entries()) {
-      if (cachedKey.startsWith(`${key}:${paramsKey}:`)) {
-        return cachedValue.value;
-      }
-    }
-
     // Check critical fallbacks for essential UI strings (loading/error screens)
     // This prevents showing raw keys during initial render before translations load
     if (key in CRITICAL_FALLBACKS) {
@@ -291,16 +259,6 @@ export function t(key: string, params?: Record<string, unknown>): string {
   const value = getNestedValue(messages, key);
   const message = typeof value === 'string' ? value : key;
 
-  // Only cache if we found an actual translation (not the key itself)
-  if (!params && value !== undefined) {
-    // Cache simple translations
-    translationCache.set(cacheKey, {
-      locale: currentLocale,
-      params: paramsKey,
-      value: message,
-    });
-  }
-
   if (!params) {
     return message;
   }
@@ -314,16 +272,6 @@ export function t(key: string, params?: Record<string, unknown>): string {
     // eslint-disable-next-line security/detect-object-injection
     return params[param]?.toString() ?? `{${param}}`;
   });
-
-  // Only cache if we found an actual translation (not the key itself)
-  if (value !== undefined) {
-    // Cache the computed result
-    translationCache.set(cacheKey, {
-      locale: currentLocale,
-      params: paramsKey,
-      value: result,
-    });
-  }
 
   return result;
 }
