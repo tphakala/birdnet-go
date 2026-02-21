@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/labstack/echo/v4"
@@ -200,7 +201,25 @@ func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
 		return httpErr
 	}
 
+	// Set short cache for assets with fixed (unhashed) filenames.
+	// Vite-hashed files (e.g., index-abc123.js) use immutable cache set by serveFileContent.
+	// Non-hashed files (e.g., messages/en.json) must not be cached long-term
+	// because their content changes across app updates without filename changes.
+	if isUnhashedAsset(path) {
+		c.Response().Header().Set("Cache-Control", "no-cache, must-revalidate")
+	}
+
 	return sfs.serveFileContent(c, file, stat, path)
+}
+
+// isUnhashedAsset returns true for asset paths that don't include a content hash
+// in their filename. These files need short cache durations because their content
+// can change across app updates without filename changes.
+func isUnhashedAsset(path string) bool {
+	if strings.HasPrefix(path, "messages/") && strings.HasSuffix(path, ".json") {
+		return true
+	}
+	return false
 }
 
 // serveFileContent serves file content with appropriate headers and efficient delivery.
