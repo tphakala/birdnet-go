@@ -50,6 +50,17 @@ let loading = $state(false);
 let previousMessages = $state<Record<string, string>>({});
 // Track if initial translation load has completed (for first load only)
 let initialLoadComplete = $state(false);
+
+// Build version for cache invalidation. Changes on every build via Vite define.
+// Falls back to a timestamp so dev/test mode always fetches fresh translations.
+const I18N_CACHE_VERSION: string =
+  typeof __I18N_CACHE_VERSION__ !== 'undefined' ? __I18N_CACHE_VERSION__ : 'dev';
+
+const CACHE_KEY_PREFIX = 'birdnet-messages';
+
+function cacheKey(locale: string): string {
+  return `${CACHE_KEY_PREFIX}-${locale}-${I18N_CACHE_VERSION}`;
+}
 /* eslint-enable no-undef */
 
 // Promise that resolves when translations are first loaded
@@ -115,7 +126,9 @@ async function loadMessages(locale: Locale): Promise<void> {
   try {
     // Use fetch to load JSON from the built assets directory
     // In production, these files are copied to dist/messages by Vite
-    const response = await fetch(buildAppUrl(`/ui/assets/messages/${locale}.json`));
+    const response = await fetch(
+      buildAppUrl(`/ui/assets/messages/${locale}.json?v=${I18N_CACHE_VERSION}`)
+    );
     if (!response.ok) {
       throw new Error(`Failed to fetch: ${response.status}`);
     }
@@ -134,7 +147,7 @@ async function loadMessages(locale: Locale): Promise<void> {
     markInitialLoadComplete();
     // Update localStorage cache
     try {
-      localStorage.setItem(`birdnet-messages-${locale}`, JSON.stringify(messages));
+      localStorage.setItem(cacheKey(locale), JSON.stringify(messages));
     } catch {
       // Ignore storage errors
     }
@@ -152,7 +165,7 @@ async function loadMessages(locale: Locale): Promise<void> {
       logger.info(`Falling back to ${DEFAULT_LOCALE} locale`);
       try {
         const fallbackResponse = await fetch(
-          buildAppUrl(`/ui/assets/messages/${DEFAULT_LOCALE}.json`)
+          buildAppUrl(`/ui/assets/messages/${DEFAULT_LOCALE}.json?v=${I18N_CACHE_VERSION}`)
         );
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
@@ -169,7 +182,7 @@ async function loadMessages(locale: Locale): Promise<void> {
           markInitialLoadComplete();
           // Update localStorage cache for fallback
           try {
-            localStorage.setItem(`birdnet-messages-${DEFAULT_LOCALE}`, JSON.stringify(messages));
+            localStorage.setItem(cacheKey(DEFAULT_LOCALE), JSON.stringify(messages));
           } catch {
             // Ignore storage errors
           }
@@ -197,6 +210,25 @@ async function loadMessages(locale: Locale): Promise<void> {
     if (currentSequence === loadSequence) {
       loading = false;
     }
+  }
+}
+
+// Remove old localStorage caches from previous versions.
+function cleanupOldCaches(currentLocale: string): void {
+  try {
+    const currentKey = cacheKey(currentLocale);
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(CACHE_KEY_PREFIX) && key !== currentKey) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore errors during cleanup
   }
 }
 
@@ -287,10 +319,11 @@ export function t(key: string, params?: Record<string, unknown>): string {
 if (typeof window !== 'undefined') {
   // Load messages immediately and synchronously if possible
   const locale = getLocale();
+  cleanupOldCaches(locale);
   loading = true;
 
   // Try to load messages synchronously from cache if available
-  const cachedMessages = localStorage.getItem(`birdnet-messages-${locale}`);
+  const cachedMessages = localStorage.getItem(cacheKey(locale));
   if (cachedMessages) {
     try {
       messages = JSON.parse(cachedMessages);
@@ -307,7 +340,7 @@ if (typeof window !== 'undefined') {
     // Cache messages for next time
     if (Object.keys(messages).length > 0) {
       try {
-        localStorage.setItem(`birdnet-messages-${locale}`, JSON.stringify(messages));
+        localStorage.setItem(cacheKey(locale), JSON.stringify(messages));
       } catch {
         // Ignore storage errors
       }

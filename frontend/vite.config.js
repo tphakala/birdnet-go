@@ -8,6 +8,9 @@ import { join } from 'path'
 export default defineConfig({
   base: '/ui/assets/',
   publicDir: 'static',
+  define: {
+    __I18N_CACHE_VERSION__: JSON.stringify(Date.now().toString(36)),
+  },
   plugins: [
     svelte({
       compilerOptions: {

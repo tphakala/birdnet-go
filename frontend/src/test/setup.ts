@@ -583,7 +583,7 @@ window.getComputedStyle = vi.fn().mockImplementation(function () {
 // Mock fetch for i18n translation loading and API calls
 globalThis.fetch = vi.fn().mockImplementation(function (url: string) {
   // Mock translation files for i18n system
-  if (url.includes('/ui/assets/messages/') && url.endsWith('.json')) {
+  if (url.includes('/ui/assets/messages/') && url.includes('.json')) {
     const mockTranslations = {
       common: {
         loading: 'Loading...',
