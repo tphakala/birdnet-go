@@ -531,6 +531,9 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
 			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
 			if err != nil {
+				if !ctx.Response().Committed {
+					ctx.Response().Header().Del("Cache-Control")
+				}
 				return true, c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
 			}
 			return true, nil
@@ -627,6 +630,9 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 	serveDuration := time.Since(serveStart)
 
 	if err != nil {
+		if !ctx.Response().Committed {
+			ctx.Response().Header().Del("Cache-Control")
+		}
 		c.logErrorIfEnabled("Failed to serve spectrogram file",
 			logger.String("note_id", noteID),
 			logger.String("spectrogram_path", spectrogramPath),
@@ -789,9 +795,13 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		return c.spectrogramHTTPError(ctx, err)
 	}
 
-	// Serve the generated spectrogram using SecureFS
+	// Serve the generated spectrogram using SecureFS with cache headers
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
 	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
 	if err != nil {
+		if !ctx.Response().Committed {
+			ctx.Response().Header().Del("Cache-Control")
+		}
 		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
 	}
 	return nil

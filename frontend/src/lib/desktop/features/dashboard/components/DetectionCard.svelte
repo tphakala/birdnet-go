@@ -339,7 +339,6 @@
           class="spectrogram-image"
           class:opacity-0={spectrogramLoader.loading}
           decoding="async"
-          loading="lazy"
           onload={handleSpectrogramLoad}
           onerror={handleSpectrogramError}
         />
