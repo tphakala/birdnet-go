@@ -52,7 +52,7 @@ let previousMessages = $state<Record<string, string>>({});
 let initialLoadComplete = $state(false);
 
 // Build version for cache invalidation. Changes on every build via Vite define.
-// Falls back to a timestamp so dev/test mode always fetches fresh translations.
+// Falls back to 'dev' so dev/test mode always fetches fresh translations.
 const I18N_CACHE_VERSION: string =
   typeof __I18N_CACHE_VERSION__ !== 'undefined' ? __I18N_CACHE_VERSION__ : 'dev';
 

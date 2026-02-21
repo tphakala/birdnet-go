@@ -61,6 +61,11 @@ func TestIsUnhashedAsset(t *testing.T) {
 			path: "messages/",
 			want: false,
 		},
+		{
+			name: "path traversal attempt",
+			path: "messages/../secrets/credentials.json",
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {

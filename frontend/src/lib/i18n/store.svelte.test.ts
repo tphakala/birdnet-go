@@ -11,7 +11,7 @@
  * Fix: Critical fallbacks provide essential translations immediately
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -172,6 +172,11 @@ describe('i18n store - locale switching', () => {
 });
 
 describe('i18n store - localStorage cache', () => {
+  // Clean up any stale keys injected by tests to avoid leaking state.
+  afterEach(() => {
+    localStorage.removeItem('birdnet-messages-en-oldversion');
+  });
+
   // Note: This test runs after the i18n module has already initialized, so it
   // doesn't exercise the startup cache-read path. It verifies that stale entries
   // from old versions don't interfere with the already-loaded fresh translations.
