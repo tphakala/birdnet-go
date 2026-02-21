@@ -170,3 +170,22 @@ describe('i18n store - locale switching', () => {
     expect(() => setLocale('en')).not.toThrow();
   });
 });
+
+describe('i18n store - localStorage cache', () => {
+  it('should not use stale localStorage cache after version change', async () => {
+    // Simulate stale cache from old version
+    localStorage.setItem(
+      'birdnet-messages-en-oldversion',
+      JSON.stringify({
+        common: { loading: 'Stale Loading...' },
+      })
+    );
+
+    // Wait for fresh translations
+    await waitForTranslations();
+
+    // Should use fresh translations, not stale cache
+    const result = t('common.loading');
+    expect(result).toBe('Loading...');
+  });
+});
