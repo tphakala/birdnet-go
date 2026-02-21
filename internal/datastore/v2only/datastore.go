@@ -2332,6 +2332,30 @@ func thresholdScientificName(t *entities.DynamicThreshold) string {
 	return ""
 }
 
+// resolveCommonName maps a scientific name to its common name using the
+// pre-built commonNameMap. Falls back to the scientific name if no mapping exists.
+// This follows the same pattern used in detectionToNote (line 520),
+// detectionToRecord (line 643), and daily aggregation (line 861).
+func (ds *Datastore) resolveCommonName(scientificName string) string {
+	if cn, ok := ds.commonNameMap[scientificName]; ok {
+		return cn
+	}
+	return scientificName
+}
+
+// resolveToScientificName converts a species name (which may be a common name
+// or scientific name) to a scientific name for v2 label lookups.
+// Uses the pre-built speciesMap (lowercase common name → scientific name).
+// Falls back to the input unchanged if no mapping is found.
+// This follows the same pattern used in GetHourlyOccurrences (line 881).
+func (ds *Datastore) resolveToScientificName(name string) string {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if sci, ok := ds.speciesMap[normalized]; ok {
+		return sci
+	}
+	return name
+}
+
 // SaveDynamicThreshold saves a dynamic threshold.
 // Resolves the scientific name to a label ID before saving.
 func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
@@ -2367,14 +2391,15 @@ func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.Dynamic
 		return nil, fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	t, err := ds.threshold.GetDynamicThreshold(ctx, speciesName)
+	// Resolve to scientific name in case caller passes a common name
+	t, err := ds.threshold.GetDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
 	if err != nil {
 		return nil, err
 	}
 	scientificName := thresholdScientificName(t)
 	return &datastore.DynamicThreshold{
 		ID:             t.ID,
-		SpeciesName:    scientificName, // Use scientific name as species name for compatibility
+		SpeciesName:    ds.resolveCommonName(scientificName),
 		ScientificName: scientificName,
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
@@ -2405,7 +2430,7 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 		scientificName := thresholdScientificName(t)
 		result = append(result, datastore.DynamicThreshold{
 			ID:             t.ID,
-			SpeciesName:    scientificName,
+			SpeciesName:    ds.resolveCommonName(scientificName),
 			ScientificName: scientificName,
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
