@@ -2334,8 +2334,8 @@ func thresholdScientificName(t *entities.DynamicThreshold) string {
 
 // resolveCommonName maps a scientific name to its common name using the
 // pre-built commonNameMap. Falls back to the scientific name if no mapping exists.
-// This follows the same pattern used in detectionToNote (line 520),
-// detectionToRecord (line 643), and daily aggregation (line 861).
+// This follows the same pattern used in detectionToNote, detectionToRecord,
+// and GetTopBirdsData for common-name display.
 func (ds *Datastore) resolveCommonName(scientificName string) string {
 	if cn, ok := ds.commonNameMap[scientificName]; ok {
 		return cn
@@ -2347,7 +2347,7 @@ func (ds *Datastore) resolveCommonName(scientificName string) string {
 // or scientific name) to a scientific name for v2 label lookups.
 // Uses the pre-built speciesMap (lowercase common name → scientific name).
 // Falls back to the input unchanged if no mapping is found.
-// This follows the same pattern used in GetHourlyOccurrences (line 881).
+// This follows the same pattern used in GetHourlyOccurrences.
 func (ds *Datastore) resolveToScientificName(name string) string {
 	normalized := strings.ToLower(strings.TrimSpace(name))
 	if sci, ok := ds.speciesMap[normalized]; ok {
@@ -2682,6 +2682,10 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 }
 
 // DeleteThresholdEvents deletes threshold events for a species.
+// NOTE: This only deletes events by the resolved scientific name. GetThresholdEvents
+// queries both common-name and scientific-name labels (WORKAROUND #1907). Legacy events
+// saved with common-name labels may survive this delete. Full dual-delete cleanup
+// should be added when the #1907 workaround is removed.
 func (ds *Datastore) DeleteThresholdEvents(speciesName string) error {
 	if ds.threshold == nil {
 		return nil
