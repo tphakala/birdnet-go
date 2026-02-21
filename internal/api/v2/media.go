@@ -521,13 +521,14 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 
 		// Check if spectrogram already exists
 		if _, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil {
-			// Spectrogram exists, serve it
+			// Spectrogram exists, serve it with cache headers
 			c.logDebugIfEnabled("Serving existing spectrogram in user-requested mode",
 				logger.String("note_id", noteID),
 				logger.String("spectrogram_path", relSpectrogramPath),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
 
+			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
 			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
 			if err != nil {
 				return true, c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
@@ -614,6 +615,11 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 		logger.Int64("duration_ms", generationDuration.Milliseconds()),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
+
+	// Set cache headers before serving — spectrograms are deterministic (same clip + params = same image)
+	// and never change once generated. This allows browsers to serve from disk cache on reload,
+	// avoiding HTTP/1.1 connection exhaustion when loading many detection cards simultaneously.
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
 
 	// Serve the generated spectrogram using SecureFS
 	serveStart := time.Now()
