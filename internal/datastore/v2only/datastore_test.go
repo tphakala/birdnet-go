@@ -60,6 +60,7 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	// Create repositories (useV2Prefix = false for SQLite, isMySQL = false)
 	detectionRepo := repository.NewDetectionRepository(db, false, false)
 	labelRepo := repository.NewLabelRepository(db, false, false)
+	sourceRepo := repository.NewAudioSourceRepository(db, false, false)
 	weatherRepo := repository.NewWeatherRepository(db, false, false)
 	imageCacheRepo := repository.NewImageCacheRepository(db, labelRepo, false, false)
 	thresholdRepo := repository.NewDynamicThresholdRepository(db, labelRepo, false, false)
@@ -72,6 +73,7 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 		Detection:          detectionRepo,
 		Label:              labelRepo,
 		Model:              modelRepo,
+		Source:             sourceRepo,
 		Weather:            weatherRepo,
 		ImageCache:         imageCacheRepo,
 		Threshold:          thresholdRepo,
@@ -517,4 +519,179 @@ func TestV2OnlyDatastore_ImplementsInterface(t *testing.T) {
 
 	// This compile-time check ensures V2OnlyDatastore implements datastore.Interface
 	var _ datastore.Interface = ds
+}
+
+// === Data gap regression tests ===
+// These tests verify bugs identified in the v2only datastore audit (2026-02-21).
+// See docs/plans/2026-02-21-v2only-datastore-data-gaps.md for full findings.
+
+// saveTestNote is a helper that saves a note and returns its ID.
+func saveTestNote(t *testing.T, ds *Datastore, date, timeStr, species string, confidence float64) {
+	t.Helper()
+	note := &datastore.Note{
+		Date:           date,
+		Time:           timeStr,
+		ScientificName: species,
+		CommonName:     species, // Use scientific name as common name for tests
+		Confidence:     confidence,
+		Latitude:       51.5074,
+		Longitude:      -0.1278,
+		ClipName:       "/clips/test.wav",
+	}
+	err := ds.Save(note, nil)
+	require.NoError(t, err)
+}
+
+// TestV2OnlyDatastore_SpeciesDetections_LoadsRelations verifies that SpeciesDetections
+// returns notes with all relations loaded (label, review, lock).
+func TestV2OnlyDatastore_SpeciesDetections_LoadsRelations(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	// Save a note
+	saveTestNote(t, ds, "2024-01-15", "12:30:00", "Passer domesticus", 0.85)
+
+	// Add review and lock
+	review := &datastore.NoteReview{NoteID: 1, Verified: "correct"}
+	err := ds.SaveNoteReview(review)
+	require.NoError(t, err)
+
+	err = ds.LockNote("1")
+	require.NoError(t, err)
+
+	// Query via SpeciesDetections
+	notes, err := ds.SpeciesDetections("Passer domesticus", "2024-01-15", "", 0, true, 10, 0)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+
+	// These require label loading (Search doesn't load relations)
+	assert.Equal(t, "Passer domesticus", notes[0].ScientificName, "ScientificName should be populated from label")
+	assert.InDelta(t, 0.85, notes[0].Confidence, 0.001)
+
+	// These require review/lock loading
+	assert.Equal(t, "correct", notes[0].Verified, "Verified should be populated from review")
+	assert.True(t, notes[0].Locked, "Locked should be true when lock exists")
+}
+
+// TestV2OnlyDatastore_GetHourlyDetections_LoadsRelations verifies that GetHourlyDetections
+// returns notes with all relations loaded.
+func TestV2OnlyDatastore_GetHourlyDetections_LoadsRelations(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	// Save a note at 12:30
+	saveTestNote(t, ds, "2024-01-15", "12:30:00", "Passer domesticus", 0.85)
+
+	// Add review and lock
+	review := &datastore.NoteReview{NoteID: 1, Verified: "correct"}
+	err := ds.SaveNoteReview(review)
+	require.NoError(t, err)
+
+	err = ds.LockNote("1")
+	require.NoError(t, err)
+
+	// Query via GetHourlyDetections (hour 12, duration 1 hour)
+	notes, err := ds.GetHourlyDetections("2024-01-15", "12", 1, 10, 0)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+
+	assert.Equal(t, "Passer domesticus", notes[0].ScientificName, "ScientificName should be populated")
+	assert.Equal(t, "correct", notes[0].Verified, "Verified should be populated from review")
+	assert.True(t, notes[0].Locked, "Locked should be true when lock exists")
+}
+
+// TestV2OnlyDatastore_SavePersistsAllFields verifies that Save() persists
+// BeginTime, EndTime, and ProcessingTime fields.
+func TestV2OnlyDatastore_SavePersistsAllFields(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	beginTime := time.Date(2024, 1, 15, 12, 30, 0, 0, time.UTC)
+	endTime := time.Date(2024, 1, 15, 12, 30, 3, 0, time.UTC)
+
+	note := &datastore.Note{
+		Date:           "2024-01-15",
+		Time:           "12:30:00",
+		ScientificName: "Passer domesticus",
+		Confidence:     0.85,
+		BeginTime:      beginTime,
+		EndTime:        endTime,
+		ProcessingTime: 150 * time.Millisecond,
+		ClipName:       "/clips/test.wav",
+	}
+	err := ds.Save(note, nil)
+	require.NoError(t, err)
+
+	// Retrieve via Get (uses GetWithRelations)
+	got, err := ds.Get("1")
+	require.NoError(t, err)
+
+	assert.False(t, got.BeginTime.IsZero(), "BeginTime should not be zero")
+	assert.False(t, got.EndTime.IsZero(), "EndTime should not be zero")
+	assert.Equal(t, beginTime.Unix(), got.BeginTime.Unix(), "BeginTime should match saved value")
+	assert.Equal(t, endTime.Unix(), got.EndTime.Unix(), "EndTime should match saved value")
+}
+
+// TestV2OnlyDatastore_DetectionToNote_MapsSourceAndComments verifies that
+// detectionToNote populates Source and Comments fields used by the API.
+func TestV2OnlyDatastore_DetectionToNote_MapsSourceAndComments(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	// Save a note with source info
+	note := &datastore.Note{
+		Date:           "2024-01-15",
+		Time:           "12:30:00",
+		ScientificName: "Passer domesticus",
+		Confidence:     0.85,
+		Source: datastore.AudioSource{
+			SafeString: "rtsp_test_source",
+		},
+	}
+	err := ds.Save(note, nil)
+	require.NoError(t, err)
+
+	// Add a comment
+	comment := &datastore.NoteComment{
+		NoteID:    1,
+		Entry:     "Confirmed by ear",
+		CreatedAt: time.Now(),
+	}
+	err = ds.SaveNoteComment(comment)
+	require.NoError(t, err)
+
+	// Retrieve via Get
+	got, err := ds.Get("1")
+	require.NoError(t, err)
+
+	// Comments should be loaded
+	assert.Len(t, got.Comments, 1, "Comments should be loaded with the note")
+	if len(got.Comments) > 0 {
+		assert.Equal(t, "Confirmed by ear", got.Comments[0].Entry)
+	}
+}
+
+// TestV2OnlyDatastore_ReviewAndLockVisibleInGetAllNotes is a regression guard
+// for the fix in PR #2016. Verifies review/lock are visible in GetAllNotes.
+func TestV2OnlyDatastore_ReviewAndLockVisibleInGetAllNotes(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	saveTestNote(t, ds, "2024-01-15", "12:30:00", "Passer domesticus", 0.85)
+
+	// Add review and lock
+	review := &datastore.NoteReview{NoteID: 1, Verified: "correct"}
+	err := ds.SaveNoteReview(review)
+	require.NoError(t, err)
+
+	err = ds.LockNote("1")
+	require.NoError(t, err)
+
+	// Retrieve via GetAllNotes
+	notes, err := ds.GetAllNotes()
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+
+	assert.Equal(t, "correct", notes[0].Verified, "Verified should be populated in GetAllNotes")
+	assert.True(t, notes[0].Locked, "Locked should be true in GetAllNotes")
 }

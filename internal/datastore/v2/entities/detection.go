@@ -43,8 +43,9 @@ type Detection struct {
 	// These are populated by loadDetectionRelations, not by GORM preload.
 	// We avoid GORM relationship tags here because they interfere with
 	// the CASCADE constraints defined in DetectionReview/DetectionLock.
-	Review *DetectionReview `gorm:"-"`
-	Lock   *DetectionLock   `gorm:"-"`
+	Review   *DetectionReview    `gorm:"-"`
+	Lock     *DetectionLock     `gorm:"-"`
+	Comments []*DetectionComment `gorm:"-"`
 }
 
 // TableName returns the table name for GORM.

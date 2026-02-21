@@ -214,6 +214,17 @@ func (r *detectionRepository) GetWithRelations(ctx context.Context, id uint) (*e
 		return nil, fmt.Errorf("failed to load lock: %w", err)
 	}
 
+	// Load comments (optional - not an error if missing)
+	var comments []*entities.DetectionComment
+	if err := r.db.WithContext(ctx).Table(r.commentsTable()).
+		Where("detection_id = ?", id).Order("created_at ASC").
+		Find(&comments).Error; err != nil {
+		return nil, fmt.Errorf("failed to load comments: %w", err)
+	}
+	if len(comments) > 0 {
+		det.Comments = comments
+	}
+
 	return &det, nil
 }
 
@@ -1168,6 +1179,34 @@ func (r *detectionRepository) SaveCommentsBatch(ctx context.Context, comments []
 	return r.db.WithContext(ctx).Table(r.commentsTable()).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		CreateInBatches(comments, defaultDBBatchSize).Error
+}
+
+// GetCommentsByDetectionIDs retrieves comments for multiple detections.
+// Handles large ID sets by chunking to avoid SQL parameter limits.
+func (r *detectionRepository) GetCommentsByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint][]*entities.DetectionComment, error) {
+	result := make(map[uint][]*entities.DetectionComment)
+	if len(detectionIDs) == 0 {
+		return result, nil
+	}
+
+	for i := 0; i < len(detectionIDs); i += batchQuerySize {
+		end := min(i+batchQuerySize, len(detectionIDs))
+		batchIDs := detectionIDs[i:end]
+
+		var comments []*entities.DetectionComment
+		err := r.db.WithContext(ctx).Table(r.commentsTable()).
+			Where("detection_id IN ?", batchIDs).
+			Order("created_at ASC").
+			Find(&comments).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load comments: %w", err)
+		}
+
+		for _, c := range comments {
+			result[c.DetectionID] = append(result[c.DetectionID], c)
+		}
+	}
+	return result, nil
 }
 
 // ============================================================================

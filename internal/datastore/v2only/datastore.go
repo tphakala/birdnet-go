@@ -394,6 +394,18 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	if note.ClipName != "" {
 		det.ClipName = &note.ClipName
 	}
+	if !note.BeginTime.IsZero() {
+		bt := note.BeginTime.UnixMilli()
+		det.BeginTime = &bt
+	}
+	if !note.EndTime.IsZero() {
+		et := note.EndTime.UnixMilli()
+		det.EndTime = &et
+	}
+	if note.ProcessingTime > 0 {
+		pt := note.ProcessingTime.Milliseconds()
+		det.ProcessingTimeMs = &pt
+	}
 
 	// Use timeout context for transaction to prevent indefinite lock holding.
 	txCtx, cancel := context.WithTimeout(ctx, saveTransactionTimeout)
@@ -508,6 +520,50 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	// Populate virtual Locked field from Lock presence
 	locked := det.Lock != nil
 
+	// Convert BeginTime/EndTime from Unix millis to time.Time
+	var beginTime, endTime time.Time
+	if det.BeginTime != nil {
+		beginTime = time.UnixMilli(*det.BeginTime).In(ds.timezone)
+	}
+	if det.EndTime != nil {
+		endTime = time.UnixMilli(*det.EndTime).In(ds.timezone)
+	}
+
+	// Convert ProcessingTimeMs to time.Duration
+	var processingTime time.Duration
+	if det.ProcessingTimeMs != nil {
+		processingTime = time.Duration(*det.ProcessingTimeMs) * time.Millisecond
+	}
+
+	// Map Source entity to datastore.AudioSource
+	var source datastore.AudioSource
+	if det.Source != nil {
+		displayName := ""
+		if det.Source.DisplayName != nil {
+			displayName = *det.Source.DisplayName
+		}
+		source = datastore.AudioSource{
+			ID:          det.Source.SourceURI,
+			SafeString:  det.Source.SourceURI,
+			DisplayName: displayName,
+		}
+	}
+
+	// Map Comments entities to datastore.NoteComment
+	var comments []datastore.NoteComment
+	if len(det.Comments) > 0 {
+		comments = make([]datastore.NoteComment, len(det.Comments))
+		for i, c := range det.Comments {
+			comments[i] = datastore.NoteComment{
+				ID:        c.ID,
+				NoteID:    c.DetectionID,
+				Entry:     c.Entry,
+				CreatedAt: c.CreatedAt,
+				UpdatedAt: c.UpdatedAt,
+			}
+		}
+	}
+
 	return datastore.Note{
 		ID:             det.ID,
 		Date:           dateStr,
@@ -518,6 +574,11 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Latitude:       lat,
 		Longitude:      lon,
 		ClipName:       clipName,
+		BeginTime:      beginTime,
+		EndTime:        endTime,
+		ProcessingTime: processingTime,
+		Source:         source,
+		Comments:       comments,
 		Verified:       verified,
 		Locked:         locked,
 	}
@@ -1000,6 +1061,13 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 		return nil, err
 	}
 
+	// Load relations (label, source, review, lock, comments) for proper Note conversion
+	if err := ds.loadDetectionRelations(ctx, dets); err != nil {
+		if ds.log != nil {
+			ds.log.Debug("failed to load some detection relations", logger.Error(err))
+		}
+	}
+
 	return ds.detectionsToNotes(dets), nil
 }
 
@@ -1190,17 +1258,25 @@ func (ds *Datastore) GetNoteResults(noteID string) ([]datastore.Results, error) 
 		return nil, err
 	}
 
+	// Batch-load all labels for predictions to avoid N+1 queries
+	labelIDSet := make(map[uint]struct{}, len(preds))
+	for _, pred := range preds {
+		labelIDSet[pred.LabelID] = struct{}{}
+	}
+	labelIDs := slices.Collect(maps.Keys(labelIDSet))
+
+	labelMap, labelErr := ds.label.GetByIDs(ctx, labelIDs)
+	if labelErr != nil {
+		if ds.log != nil {
+			ds.log.Warn("failed to batch-load labels for predictions", logger.Error(labelErr))
+		}
+		labelMap = make(map[uint]*entities.Label) // fallback to empty map
+	}
+
 	results := make([]datastore.Results, 0, len(preds))
 	for _, pred := range preds {
-		label, labelErr := ds.label.GetByID(ctx, pred.LabelID)
-		if labelErr != nil {
-			ds.log.Warn("failed to look up label for prediction",
-				logger.Uint64("label_id", uint64(pred.LabelID)),
-				logger.Uint64("prediction_id", uint64(pred.ID)),
-				logger.Error(labelErr))
-		}
 		scientificName := ""
-		if label != nil && label.ScientificName != "" {
+		if label, ok := labelMap[pred.LabelID]; ok && label.ScientificName != "" {
 			scientificName = label.ScientificName
 		}
 
@@ -1468,6 +1544,14 @@ func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, off
 	if err != nil {
 		return nil, err
 	}
+
+	// Load relations (label, source, review, lock, comments) for proper Note conversion
+	if err := ds.loadDetectionRelations(ctx, dets); err != nil {
+		if ds.log != nil {
+			ds.log.Debug("failed to load some detection relations", logger.Error(err))
+		}
+	}
+
 	return ds.detectionsToNotes(dets), nil
 }
 
@@ -1656,6 +1740,11 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 		return fmt.Errorf("load locks: %w", err)
 	}
 
+	commentMap, err := ds.detection.GetCommentsByDetectionIDs(ctx, detectionIDs)
+	if err != nil {
+		return fmt.Errorf("load comments: %w", err)
+	}
+
 	// Assign loaded relations to detections
 	for _, det := range dets {
 		if label, ok := labelMap[det.LabelID]; ok {
@@ -1671,6 +1760,9 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 		}
 		if lockMap[det.ID] {
 			det.Lock = &entities.DetectionLock{DetectionID: det.ID}
+		}
+		if comments, ok := commentMap[det.ID]; ok {
+			det.Comments = comments
 		}
 	}
 

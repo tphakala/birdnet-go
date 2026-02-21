@@ -193,6 +193,9 @@ type DetectionRepository interface {
 	// SaveCommentsBatch saves multiple comments efficiently.
 	SaveCommentsBatch(ctx context.Context, comments []*entities.DetectionComment) error
 
+	// GetCommentsByDetectionIDs retrieves comments for multiple detections.
+	GetCommentsByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint][]*entities.DetectionComment, error)
+
 	// === Locks ===
 
 	// Lock prevents modification/deletion of a detection.
