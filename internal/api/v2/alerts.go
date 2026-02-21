@@ -17,7 +17,7 @@ import (
 
 const maxHistoryLimit = 200
 
-// initAlertRoutes registers alert rule API endpoints.
+// initAlertRoutes registers alert rule API endpoints and starts the alerting engine.
 func (c *Controller) initAlertRoutes() {
 	if c.V2Manager == nil {
 		return
@@ -25,6 +25,16 @@ func (c *Controller) initAlertRoutes() {
 
 	// Initialize repository lazily from V2Manager
 	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB())
+
+	// Initialize the alerting engine — seeds default rules and starts event processing
+	eventBus := alerting.NewAlertEventBus()
+	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger())
+	if err != nil {
+		GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
+		// Continue without engine — CRUD routes still work, but events won't fire
+	} else {
+		c.alertEngine = engine
+	}
 
 	alerts := c.Group.Group("/alerts")
 

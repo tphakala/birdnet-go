@@ -585,6 +585,11 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
+	// Stop alerting engine background goroutines
+	if c.alertEngine != nil {
+		c.alertEngine.Stop()
+	}
+
 	// Cancel context to stop all goroutines
 	if c.cancel != nil {
 		c.cancel()
