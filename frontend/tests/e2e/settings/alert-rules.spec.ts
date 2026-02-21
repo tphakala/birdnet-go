@@ -415,10 +415,7 @@ test.describe('Alert Rules Settings Page', () => {
         .locator('#settings-tabpanel-rules .space-y-2 > div')
         .locator('text=/built.?in/i')
         .first();
-      // Built-in badge is expected since default rules are seeded
-      if (await builtInBadge.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await expect(builtInBadge).toBeVisible();
-      }
+      await expect(builtInBadge).toBeVisible({ timeout: 3000 });
     });
   });
 
@@ -546,8 +543,7 @@ test.describe('Alert Rules Settings Page', () => {
 
         // Rule card should disappear
         await expect(testRuleCard).not.toBeVisible({ timeout: 5000 });
-      } catch {
-        // Cleanup in case of failure
+      } finally {
         await deleteTestRule(request, testRuleId);
       }
     });
