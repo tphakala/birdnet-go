@@ -2453,7 +2453,7 @@ func (ds *Datastore) DeleteDynamicThreshold(speciesName string) error {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.DeleteDynamicThreshold(ctx, speciesName)
+	return ds.threshold.DeleteDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
 }
 
 // DeleteExpiredDynamicThresholds deletes expired thresholds.
@@ -2471,7 +2471,7 @@ func (ds *Datastore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.UpdateDynamicThresholdExpiry(ctx, speciesName, expiresAt)
+	return ds.threshold.UpdateDynamicThresholdExpiry(ctx, ds.resolveToScientificName(speciesName), expiresAt)
 }
 
 // BatchSaveDynamicThresholds saves multiple thresholds.
@@ -2687,7 +2687,7 @@ func (ds *Datastore) DeleteThresholdEvents(speciesName string) error {
 		return nil
 	}
 	ctx := context.Background()
-	return ds.threshold.DeleteThresholdEvents(ctx, speciesName)
+	return ds.threshold.DeleteThresholdEvents(ctx, ds.resolveToScientificName(speciesName))
 }
 
 // DeleteAllThresholdEvents deletes all threshold events.
