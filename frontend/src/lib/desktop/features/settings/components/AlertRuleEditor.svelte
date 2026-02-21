@@ -48,7 +48,7 @@
     duration_sec: number;
   }
 
-  const newConditionId = () => crypto.randomUUID();
+  const newConditionId = () => crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9);
 
   interface EditorAction {
     target: string;
