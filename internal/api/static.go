@@ -216,10 +216,7 @@ func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
 // in their filename. These files need short cache durations because their content
 // can change across app updates without filename changes.
 func isUnhashedAsset(path string) bool {
-	if strings.HasPrefix(path, "messages/") && strings.HasSuffix(path, ".json") {
-		return true
-	}
-	return false
+	return strings.HasPrefix(path, "messages/") && strings.HasSuffix(path, ".json")
 }
 
 // serveFileContent serves file content with appropriate headers and efficient delivery.

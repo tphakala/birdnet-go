@@ -75,7 +75,7 @@ func TestIsUnhashedAsset(t *testing.T) {
 // TestServeFromEmbedCacheHeaders verifies that serveFromEmbed sets appropriate
 // Cache-Control headers based on whether assets are hashed or unhashed.
 func TestServeFromEmbedCacheHeaders(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this test mutates the global frontend.DistFS.
 
 	// Save and restore the original DistFS to avoid affecting other tests.
 	originalFS := frontend.DistFS
@@ -93,28 +93,24 @@ func TestServeFromEmbedCacheHeaders(t *testing.T) {
 	sfs := NewStaticFileServer()
 
 	tests := []struct {
-		name               string
-		path               string
-		wantCacheControl   string
-		wantCacheImmutable bool
+		name             string
+		path             string
+		wantCacheControl string
 	}{
 		{
-			name:               "translation JSON gets no-cache",
-			path:               "messages/en.json",
-			wantCacheControl:   "no-cache, must-revalidate",
-			wantCacheImmutable: false,
+			name:             "translation JSON gets no-cache",
+			path:             "messages/en.json",
+			wantCacheControl: "no-cache, must-revalidate",
 		},
 		{
-			name:               "hashed JS gets immutable cache",
-			path:               "assets/index-abc123.js",
-			wantCacheControl:   "public, max-age=31536000, immutable",
-			wantCacheImmutable: true,
+			name:             "hashed JS gets immutable cache",
+			path:             "assets/index-abc123.js",
+			wantCacheControl: "public, max-age=31536000, immutable",
 		},
 		{
-			name:               "hashed CSS gets immutable cache",
-			path:               "assets/style-def456.css",
-			wantCacheControl:   "public, max-age=31536000, immutable",
-			wantCacheImmutable: true,
+			name:             "hashed CSS gets immutable cache",
+			path:             "assets/style-def456.css",
+			wantCacheControl: "public, max-age=31536000, immutable",
 		},
 	}
 

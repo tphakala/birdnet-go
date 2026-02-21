@@ -172,6 +172,9 @@ describe('i18n store - locale switching', () => {
 });
 
 describe('i18n store - localStorage cache', () => {
+  // Note: This test runs after the i18n module has already initialized, so it
+  // doesn't exercise the startup cache-read path. It verifies that stale entries
+  // from old versions don't interfere with the already-loaded fresh translations.
   it('should not use stale localStorage cache after version change', async () => {
     // Simulate stale cache from old version
     localStorage.setItem(

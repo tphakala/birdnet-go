@@ -214,13 +214,13 @@ async function loadMessages(locale: Locale): Promise<void> {
 }
 
 // Remove old localStorage caches from previous versions.
-function cleanupOldCaches(currentLocale: string): void {
+function cleanupOldCaches(): void {
   try {
-    const currentKey = cacheKey(currentLocale);
     const keysToRemove: string[] = [];
+    const currentVersionSuffix = `-${I18N_CACHE_VERSION}`;
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith(CACHE_KEY_PREFIX) && key !== currentKey) {
+      if (key?.startsWith(CACHE_KEY_PREFIX) && !key.endsWith(currentVersionSuffix)) {
         keysToRemove.push(key);
       }
     }
@@ -319,7 +319,7 @@ export function t(key: string, params?: Record<string, unknown>): string {
 if (typeof window !== 'undefined') {
   // Load messages immediately and synchronously if possible
   const locale = getLocale();
-  cleanupOldCaches(locale);
+  cleanupOldCaches();
   loading = true;
 
   // Try to load messages synchronously from cache if available
