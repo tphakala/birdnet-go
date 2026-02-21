@@ -382,7 +382,11 @@
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        const result = await importAlertRules(data.rules ?? [], data.version ?? 1);
+        if (!data || !Array.isArray(data.rules)) {
+          showStatus(t('settings.alerts.errors.importFailed'), 'error');
+          return;
+        }
+        const result = await importAlertRules(data.rules, data.version ?? 1);
         await loadRules();
         showStatus(
           t('settings.alerts.status.imported', {
@@ -484,7 +488,7 @@
         </div>
         <div class="flex shrink-0 items-center gap-1">
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] transition-colors"
             aria-label={t('settings.alerts.actionLabels.edit')}
             onclick={() => openEditor(rule)}
             disabled={editorOpen}
@@ -492,7 +496,7 @@
             <Pencil class="size-3.5" />
           </button>
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] transition-colors"
             aria-label={rule.enabled
               ? t('settings.alerts.actionLabels.disable')
               : t('settings.alerts.actionLabels.enable')}
@@ -506,7 +510,7 @@
             {/if}
           </button>
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] transition-colors"
             aria-label={t('settings.alerts.actionLabels.test')}
             disabled={testingId === rule.id}
             onclick={() => handleTest(rule)}
@@ -514,7 +518,7 @@
             <Play class="size-3.5" />
           </button>
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] text-[var(--color-error)] transition-colors"
             aria-label={t('settings.alerts.actionLabels.delete')}
             disabled={deletingId === rule.id || editorOpen}
             onclick={() => handleDelete(rule)}

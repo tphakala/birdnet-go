@@ -31,6 +31,7 @@ func (c *Controller) initAlertRoutes() {
 	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger())
 	if err != nil {
 		GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
+		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
 		// Continue without engine — CRUD routes still work, but events won't fire
 	} else {
 		c.alertEngine = engine
