@@ -407,6 +407,31 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		det.ProcessingTimeMs = &pt
 	}
 
+	// Resolve audio source if provided (follows same pattern as conversion.go)
+	if note.Source.SafeString != "" {
+		nodeName := note.SourceNode
+		if nodeName == "" {
+			nodeName = "default"
+		}
+		var displayName *string
+		if note.Source.DisplayName != "" {
+			displayName = &note.Source.DisplayName
+		}
+		source, sourceErr := ds.source.GetOrCreate(ctx,
+			note.Source.SafeString,
+			nodeName,
+			displayName,
+			entities.SourceType(""))
+		if sourceErr != nil {
+			if ds.log != nil {
+				ds.log.Warn("audio source resolution failed during save", logger.Error(sourceErr))
+			}
+			// Continue without source - not fatal
+		} else {
+			det.SourceID = &source.ID
+		}
+	}
+
 	// Use timeout context for transaction to prevent indefinite lock holding.
 	txCtx, cancel := context.WithTimeout(ctx, saveTransactionTimeout)
 	defer cancel()

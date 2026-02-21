@@ -630,6 +630,7 @@ func TestV2OnlyDatastore_SavePersistsAllFields(t *testing.T) {
 	assert.False(t, got.EndTime.IsZero(), "EndTime should not be zero")
 	assert.Equal(t, beginTime.Unix(), got.BeginTime.Unix(), "BeginTime should match saved value")
 	assert.Equal(t, endTime.Unix(), got.EndTime.Unix(), "EndTime should match saved value")
+	assert.Equal(t, 150*time.Millisecond, got.ProcessingTime, "ProcessingTime should match saved value")
 }
 
 // TestV2OnlyDatastore_DetectionToNote_MapsSourceAndComments verifies that
@@ -663,6 +664,10 @@ func TestV2OnlyDatastore_DetectionToNote_MapsSourceAndComments(t *testing.T) {
 	// Retrieve via Get
 	got, err := ds.Get("1")
 	require.NoError(t, err)
+
+	// Source should be loaded
+	assert.NotEmpty(t, got.Source.SafeString, "Source SafeString should be populated")
+	assert.Equal(t, "rtsp_test_source", got.Source.SafeString, "Source SafeString should match saved value")
 
 	// Comments should be loaded
 	assert.Len(t, got.Comments, 1, "Comments should be loaded with the note")
