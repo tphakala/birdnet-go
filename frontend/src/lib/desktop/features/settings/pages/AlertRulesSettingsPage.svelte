@@ -8,6 +8,7 @@
   Features:
   - List, filter, toggle, delete alert rules
   - Per-rule cards with trigger, conditions, actions summary
+  - Inline rule editor (no modal)
   - Alert history with recent entries
   - Reset to defaults
 
@@ -411,19 +412,19 @@
   {#if statusMessage}
     <div
       class="mb-4 flex items-center gap-2 rounded-lg p-3 text-sm {statusType === 'success'
-        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+        ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]'
         : statusType === 'error'
-          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}"
+          ? 'bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]'
+          : 'bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]'}"
       role={statusType === 'error' ? 'alert' : 'status'}
       aria-live={statusType === 'error' ? 'assertive' : 'polite'}
     >
       {#if statusType === 'success'}
-        <CircleCheck class="h-4 w-4 shrink-0" />
+        <CircleCheck class="size-4 shrink-0" />
       {:else if statusType === 'error'}
-        <XCircle class="h-4 w-4 shrink-0" />
+        <XCircle class="size-4 shrink-0" />
       {:else}
-        <Info class="h-4 w-4 shrink-0" />
+        <Info class="size-4 shrink-0" />
       {/if}
       <span>{statusMessage}</span>
     </div>
@@ -431,92 +432,96 @@
 {/snippet}
 
 {#snippet ruleCard(rule: AlertRule)}
-  <div
-    class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-    class:opacity-60={!rule.enabled}
-  >
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <h4 class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-            {rule.name}
-          </h4>
-          {#if rule.built_in}
+  <div class="rounded-lg bg-[var(--color-base-200)]" class:opacity-60={!rule.enabled}>
+    <div class="py-3 px-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <h4 class="truncate text-sm font-medium text-[var(--color-base-content)]">
+              {rule.name}
+            </h4>
+            {#if rule.built_in}
+              <span
+                class="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] px-2 py-0.5 text-xs font-medium text-[var(--color-info)]"
+              >
+                <Shield class="size-3" />
+                {t('settings.alerts.builtIn')}
+              </span>
+            {/if}
             <span
-              class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+              class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {rule.enabled
+                ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]'
+                : 'bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-60'}"
             >
-              <Shield class="h-3 w-3" />
-              {t('settings.alerts.builtIn')}
+              {rule.enabled ? t('settings.alerts.enabled') : t('settings.alerts.disabled')}
             </span>
+          </div>
+          {#if rule.description}
+            <p class="mt-1 text-xs text-[var(--color-base-content)] opacity-60">
+              {rule.description}
+            </p>
           {/if}
-          <span
-            class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {rule.enabled
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
+          <div
+            class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-base-content)] opacity-60"
           >
-            {rule.enabled ? t('settings.alerts.enabled') : t('settings.alerts.disabled')}
-          </span>
+            <span>
+              <span class="font-medium">{t('settings.alerts.trigger')}:</span>
+              {objectTypeLabel(rule.object_type)} &rarr; {triggerLabel(rule)}
+            </span>
+            <span>
+              <span class="font-medium">{t('settings.alerts.conditions')}:</span>
+              {conditionsSummary(rule)}
+            </span>
+            <span>
+              <span class="font-medium">{t('settings.alerts.actions')}:</span>
+              {actionsSummary(rule)}
+            </span>
+            <span>
+              <span class="font-medium">{t('settings.alerts.cooldown')}:</span>
+              {formatCooldown(rule.cooldown_sec)}
+            </span>
+          </div>
         </div>
-        {#if rule.description}
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{rule.description}</p>
-        {/if}
-        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <span>
-            <span class="font-medium">{t('settings.alerts.trigger')}:</span>
-            {objectTypeLabel(rule.object_type)} &rarr; {triggerLabel(rule)}
-          </span>
-          <span>
-            <span class="font-medium">{t('settings.alerts.conditions')}:</span>
-            {conditionsSummary(rule)}
-          </span>
-          <span>
-            <span class="font-medium">{t('settings.alerts.actions')}:</span>
-            {actionsSummary(rule)}
-          </span>
-          <span>
-            <span class="font-medium">{t('settings.alerts.cooldown')}:</span>
-            {formatCooldown(rule.cooldown_sec)}
-          </span>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            aria-label={t('settings.alerts.actionLabels.edit')}
+            onclick={() => openEditor(rule)}
+            disabled={editorOpen}
+          >
+            <Pencil class="size-3.5" />
+          </button>
+          <button
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            aria-label={rule.enabled
+              ? t('settings.alerts.actionLabels.disable')
+              : t('settings.alerts.actionLabels.enable')}
+            disabled={togglingId === rule.id}
+            onclick={() => handleToggle(rule)}
+          >
+            {#if rule.enabled}
+              <ToggleRight class="size-3.5 text-[var(--color-success)]" />
+            {:else}
+              <ToggleLeft class="size-3.5" />
+            {/if}
+          </button>
+          <button
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            aria-label={t('settings.alerts.actionLabels.test')}
+            disabled={testingId === rule.id}
+            onclick={() => handleTest(rule)}
+          >
+            <Play class="size-3.5" />
+          </button>
+          <button
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors"
+            aria-label={t('settings.alerts.actionLabels.delete')}
+            disabled={deletingId === rule.id || editorOpen}
+            onclick={() => handleDelete(rule)}
+          >
+            <Trash2 class="size-3.5" />
+          </button>
         </div>
-      </div>
-      <div class="flex shrink-0 items-center gap-1">
-        <button
-          class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-          aria-label={t('settings.alerts.actionLabels.edit')}
-          onclick={() => openEditor(rule)}
-        >
-          <Pencil class="h-4 w-4" />
-        </button>
-        <button
-          class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-          aria-label={rule.enabled
-            ? t('settings.alerts.actionLabels.disable')
-            : t('settings.alerts.actionLabels.enable')}
-          disabled={togglingId === rule.id}
-          onclick={() => handleToggle(rule)}
-        >
-          {#if rule.enabled}
-            <ToggleRight class="h-4 w-4 text-green-500" />
-          {:else}
-            <ToggleLeft class="h-4 w-4" />
-          {/if}
-        </button>
-        <button
-          class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-          aria-label={t('settings.alerts.actionLabels.test')}
-          disabled={testingId === rule.id}
-          onclick={() => handleTest(rule)}
-        >
-          <Play class="h-4 w-4" />
-        </button>
-        <button
-          class="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-700 dark:hover:text-red-400"
-          aria-label={t('settings.alerts.actionLabels.delete')}
-          disabled={deletingId === rule.id}
-          onclick={() => handleDelete(rule)}
-        >
-          <Trash2 class="h-4 w-4" />
-        </button>
       </div>
     </div>
   </div>
@@ -525,10 +530,10 @@
 {#snippet v2RequiredBanner()}
   {#if !v2Available}
     <div
-      class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+      class="mb-4 flex items-center gap-2 rounded-lg p-3 text-sm bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]"
       role="status"
     >
-      <Info class="h-4 w-4 shrink-0" />
+      <Info class="size-4 shrink-0" />
       <span>{t('settings.alerts.v2Required')}</span>
     </div>
   {/if}
@@ -566,7 +571,7 @@
           loadingText={t('settings.alerts.exporting')}
           disabled={!v2Available}
         >
-          <Download class="mr-1.5 h-4 w-4" />
+          <Download class="mr-1.5 size-4" />
           {t('settings.alerts.export')}
         </SettingsButton>
         <SettingsButton
@@ -576,7 +581,7 @@
           loadingText={t('settings.alerts.importing')}
           disabled={!v2Available}
         >
-          <Upload class="mr-1.5 h-4 w-4" />
+          <Upload class="mr-1.5 size-4" />
           {t('settings.alerts.import')}
         </SettingsButton>
         <SettingsButton
@@ -586,30 +591,44 @@
           loadingText={t('settings.alerts.resetting')}
           disabled={!v2Available}
         >
-          <RotateCcw class="mr-1.5 h-4 w-4" />
+          <RotateCcw class="mr-1.5 size-4" />
           {t('settings.alerts.resetDefaults')}
         </SettingsButton>
-        <SettingsButton variant="primary" onclick={() => openEditor()} disabled={!v2Available}>
-          <Plus class="mr-1.5 h-4 w-4" />
-          {t('settings.alerts.newRule')}
-        </SettingsButton>
+        {#if !editorOpen}
+          <SettingsButton variant="primary" onclick={() => openEditor()} disabled={!v2Available}>
+            <Plus class="mr-1.5 size-4" />
+            {t('settings.alerts.newRule')}
+          </SettingsButton>
+        {/if}
       </div>
     </div>
+
+    <!-- Inline Editor -->
+    {#if editorOpen && schema}
+      <div class="mb-4">
+        <AlertRuleEditor
+          rule={editingRule}
+          {schema}
+          onSave={handleEditorSave}
+          onClose={closeEditor}
+        />
+      </div>
+    {/if}
 
     <!-- Rules list -->
     {#if loadingRules}
       <div class="flex justify-center py-8" role="status" aria-live="polite">
         <div
-          class="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
+          class="size-6 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent"
         ></div>
         <span class="sr-only">{t('common.loading')}</span>
       </div>
     {:else if filteredRules.length === 0}
-      <div class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+      <div class="py-8 text-center text-sm text-[var(--color-base-content)] opacity-60">
         {rules.length === 0 ? t('settings.alerts.noRules') : t('settings.alerts.noMatchingRules')}
       </div>
     {:else}
-      <div class="space-y-3">
+      <div class="space-y-2">
         {#each filteredRules as rule (rule.id)}
           {@render ruleCard(rule)}
         {/each}
@@ -627,7 +646,7 @@
     defaultOpen={true}
   >
     <div class="mb-4 flex items-center justify-between">
-      <span class="text-sm text-gray-500 dark:text-gray-400">
+      <span class="text-sm text-[var(--color-base-content)] opacity-60">
         {t('settings.alerts.historyCount', { total: String(historyTotal) })}
       </span>
       <SettingsButton
@@ -637,7 +656,7 @@
         loadingText={t('settings.alerts.clearing')}
         disabled={!v2Available || history.length === 0}
       >
-        <Trash2 class="mr-1.5 h-4 w-4" />
+        <Trash2 class="mr-1.5 size-4" />
         {t('settings.alerts.clearHistory')}
       </SettingsButton>
     </div>
@@ -645,28 +664,28 @@
     {#if loadingHistory}
       <div class="flex justify-center py-8" role="status" aria-live="polite">
         <div
-          class="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
+          class="size-6 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent"
         ></div>
         <span class="sr-only">{t('common.loading')}</span>
       </div>
     {:else if history.length === 0}
-      <div class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+      <div class="py-8 text-center text-sm text-[var(--color-base-content)] opacity-60">
         {t('settings.alerts.noHistory')}
       </div>
     {:else}
-      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+      <div class="divide-y divide-[var(--border-200)]">
         {#each history as entry (entry.id)}
           <div class="py-3">
             <div class="flex items-center justify-between">
-              <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <span class="text-sm font-medium text-[var(--color-base-content)]">
                 {entry.rule?.name ?? `Rule #${entry.rule_id}`}
               </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
+              <span class="text-xs text-[var(--color-base-content)] opacity-60">
                 {formatLocalDateTime(new Date(entry.fired_at), false)}
               </span>
             </div>
             {#if entry.actions}
-              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60">
                 {t('settings.alerts.actionsExecuted')}: {entry.actions}
               </p>
             {/if}
@@ -680,13 +699,3 @@
 <main class="settings-page-content" aria-label="Alert rules settings">
   <SettingsTabs {tabs} bind:activeTab showActions={false} />
 </main>
-
-{#if schema}
-  <AlertRuleEditor
-    isOpen={editorOpen}
-    rule={editingRule}
-    {schema}
-    onSave={handleEditorSave}
-    onClose={closeEditor}
-  />
-{/if}
