@@ -13,6 +13,16 @@ test.describe('Alert Rules Settings Page', () => {
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
   }
 
+  /**
+   * Helper: wait for loading spinner to disappear if visible.
+   */
+  async function waitForSpinner(page: Page) {
+    const spinner = page.locator('[role="status"] .animate-spin');
+    if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await expect(spinner).not.toBeVisible({ timeout: 15000 });
+    }
+  }
+
   test.describe('Page Load', () => {
     test('alert rules settings page loads without errors', async ({ page }) => {
       // Collect console errors during page load
@@ -54,12 +64,7 @@ test.describe('Alert Rules Settings Page', () => {
 
     test('rules list loads and displays rule cards', async ({ page }) => {
       await navigateToAlertRules(page);
-
-      // Wait for loading spinner to disappear (if visible)
-      const spinner = page.locator('[role="status"] .animate-spin');
-      if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(spinner).not.toBeVisible({ timeout: 15000 });
-      }
+      await waitForSpinner(page);
 
       // Should display rule cards (default rules are seeded by the engine)
       // Each rule card is a div with rounded-lg inside the rules list
@@ -84,15 +89,11 @@ test.describe('Alert Rules Settings Page', () => {
       });
 
       await navigateToAlertRules(page);
+      await waitForSpinner(page);
 
-      // Wait for rules to finish loading
-      const spinner = page.locator('[role="status"] .animate-spin');
-      if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(spinner).not.toBeVisible({ timeout: 15000 });
-      }
-
-      // Allow a moment for any async rendering errors
-      await page.waitForTimeout(1000);
+      // Wait for rule cards to render (deterministic wait instead of timeout)
+      const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      await expect(ruleCards.first()).toBeVisible({ timeout: 10000 });
 
       const duplicateKeyErrors = errors.filter(e => e.includes('each_key_duplicate'));
       expect(
@@ -214,27 +215,31 @@ test.describe('Alert Rules Settings Page', () => {
 
       // Should show history count or empty state
       const hasHistoryContent =
-        (await historyPanel.locator('text=/\\d+ total/i').isVisible().catch(() => false)) ||
-        (await historyPanel.locator('text=/no.*history/i').isVisible().catch(() => false)) ||
-        (await historyPanel.locator('.divide-y').isVisible().catch(() => false));
-      expect(hasHistoryContent, 'History tab should show count, entries, or empty state').toBe(true);
+        (await historyPanel
+          .locator('text=/\\d+ total/i')
+          .isVisible()
+          .catch(() => false)) ||
+        (await historyPanel
+          .locator('text=/no.*history/i')
+          .isVisible()
+          .catch(() => false)) ||
+        (await historyPanel
+          .locator('.divide-y')
+          .isVisible()
+          .catch(() => false));
+      expect(hasHistoryContent, 'History tab should show count, entries, or empty state').toBe(
+        true
+      );
     });
   });
 
   test.describe('Rule Card Interactions', () => {
     test('rule cards have action buttons (edit, toggle, test, delete)', async ({ page }) => {
       await navigateToAlertRules(page);
-
-      // Wait for rules to load
-      const spinner = page.locator('[role="status"] .animate-spin');
-      if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(spinner).not.toBeVisible({ timeout: 15000 });
-      }
+      await waitForSpinner(page);
 
       // Get the first rule card
-      const firstRuleCard = page
-        .locator('#settings-tabpanel-rules .space-y-2 > div')
-        .first();
+      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
       if (!(await firstRuleCard.isVisible({ timeout: 5000 }).catch(() => false))) {
         // eslint-disable-next-line playwright/no-skipped-test -- No rules to test
         test.skip(true, 'No rule cards available to test');
@@ -249,16 +254,9 @@ test.describe('Alert Rules Settings Page', () => {
 
     test('toggle button changes rule enabled state', async ({ page }) => {
       await navigateToAlertRules(page);
+      await waitForSpinner(page);
 
-      // Wait for rules to load
-      const spinner = page.locator('[role="status"] .animate-spin');
-      if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(spinner).not.toBeVisible({ timeout: 15000 });
-      }
-
-      const firstRuleCard = page
-        .locator('#settings-tabpanel-rules .space-y-2 > div')
-        .first();
+      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
       if (!(await firstRuleCard.isVisible({ timeout: 5000 }).catch(() => false))) {
         // eslint-disable-next-line playwright/no-skipped-test -- No rules to test
         test.skip(true, 'No rule cards available to test');
@@ -286,9 +284,13 @@ test.describe('Alert Rules Settings Page', () => {
         await expect(firstRuleCard).not.toHaveClass(/opacity-60/, { timeout: 5000 });
       }
 
-      // Toggle back to restore original state
+      // Toggle back to restore original state and verify it restored
       await toggleButton.click();
-      await page.waitForTimeout(500);
+      if (wasEnabled) {
+        await expect(firstRuleCard).not.toHaveClass(/opacity-60/, { timeout: 5000 });
+      } else {
+        await expect(firstRuleCard).toHaveClass(/opacity-60/, { timeout: 5000 });
+      }
     });
   });
 
@@ -299,12 +301,7 @@ test.describe('Alert Rules Settings Page', () => {
       // Wait for rules panel
       const rulesPanel = page.locator('#settings-tabpanel-rules');
       await expect(rulesPanel).toBeVisible({ timeout: 10000 });
-
-      // Wait for loading to finish
-      const spinner = page.locator('[role="status"] .animate-spin');
-      if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(spinner).not.toBeVisible({ timeout: 15000 });
-      }
+      await waitForSpinner(page);
 
       // Click "New Rule" button
       const newRuleButton = rulesPanel.locator('button:has-text("New")').first();
@@ -329,12 +326,7 @@ test.describe('Alert Rules Settings Page', () => {
 
       const rulesPanel = page.locator('#settings-tabpanel-rules');
       await expect(rulesPanel).toBeVisible({ timeout: 10000 });
-
-      // Wait for loading to finish
-      const spinner = page.locator('[role="status"] .animate-spin');
-      if (await spinner.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(spinner).not.toBeVisible({ timeout: 15000 });
-      }
+      await waitForSpinner(page);
 
       // Open editor
       const newRuleButton = rulesPanel.locator('button:has-text("New")').first();

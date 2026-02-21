@@ -14,6 +14,8 @@ import (
 // Go defaults to PascalCase, which causes the frontend's {#each rule (rule.id)}
 // to receive undefined keys and trigger Svelte's each_key_duplicate error.
 func TestAlertRuleJSONKeys(t *testing.T) {
+	t.Parallel()
+
 	rule := AlertRule{
 		ID:          42,
 		Name:        "test rule",
@@ -62,11 +64,13 @@ func TestAlertRuleJSONKeys(t *testing.T) {
 	}
 
 	// Verify the id value is correct (the critical field for {#each} keying)
-	assert.InDelta(t, float64(42), m["id"], 0, "id should be 42")
+	assert.EqualValues(t, 42, m["id"], "id should be 42")
 }
 
 // TestAlertConditionJSONKeys verifies AlertCondition serializes with snake_case keys.
 func TestAlertConditionJSONKeys(t *testing.T) {
+	t.Parallel()
+
 	cond := AlertCondition{
 		ID:          1,
 		RuleID:      42,
@@ -94,6 +98,8 @@ func TestAlertConditionJSONKeys(t *testing.T) {
 
 // TestAlertActionJSONKeys verifies AlertAction serializes with snake_case keys.
 func TestAlertActionJSONKeys(t *testing.T) {
+	t.Parallel()
+
 	action := AlertAction{
 		ID:              1,
 		RuleID:          42,
@@ -120,6 +126,8 @@ func TestAlertActionJSONKeys(t *testing.T) {
 
 // TestAlertHistoryJSONKeys verifies AlertHistory serializes with snake_case keys.
 func TestAlertHistoryJSONKeys(t *testing.T) {
+	t.Parallel()
+
 	hist := AlertHistory{
 		ID:        1,
 		RuleID:    42,
@@ -150,6 +158,8 @@ func TestAlertHistoryJSONKeys(t *testing.T) {
 // TestAlertRuleJSONRoundTrip verifies that AlertRule can be serialized and
 // deserialized without data loss, ensuring the json tags are bidirectionally correct.
 func TestAlertRuleJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	original := AlertRule{
 		ID:          7,
 		Name:        "High CPU usage",
@@ -203,6 +213,8 @@ func TestAlertRuleJSONRoundTrip(t *testing.T) {
 // TestAlertRuleJSONEmptyCollections verifies that rules with no conditions
 // or actions serialize correctly (empty arrays, not null).
 func TestAlertRuleJSONEmptyCollections(t *testing.T) {
+	t.Parallel()
+
 	rule := AlertRule{
 		ID:          1,
 		Name:        "simple rule",
@@ -232,6 +244,8 @@ func TestAlertRuleJSONEmptyCollections(t *testing.T) {
 // TestAlertRuleJSONNilCollections verifies that nil conditions/actions
 // serialize as null (Go default for nil slices).
 func TestAlertRuleJSONNilCollections(t *testing.T) {
+	t.Parallel()
+
 	rule := AlertRule{
 		ID:          1,
 		Name:        "rule with nil slices",
@@ -254,6 +268,8 @@ func TestAlertRuleJSONNilCollections(t *testing.T) {
 // JSON can be correctly deserialized into Go structs. This simulates the
 // request body from createAlertRule/updateAlertRule API calls.
 func TestAlertRuleJSONFromSnakeCaseInput(t *testing.T) {
+	t.Parallel()
+
 	input := `{
 		"name": "Test Rule",
 		"description": "Created from frontend",
@@ -298,6 +314,8 @@ func TestAlertRuleJSONFromSnakeCaseInput(t *testing.T) {
 // JSON produces unique "id" values — the direct contract the frontend's
 // {#each filteredRules as rule (rule.id)} depends on.
 func TestAlertRuleListJSONUniqueIDs(t *testing.T) {
+	t.Parallel()
+
 	rules := []AlertRule{
 		{ID: 1, Name: "Rule A", ObjectType: "stream", TriggerType: "event"},
 		{ID: 2, Name: "Rule B", ObjectType: "system", TriggerType: "metric"},
@@ -324,9 +342,11 @@ func TestAlertRuleListJSONUniqueIDs(t *testing.T) {
 // TestAlertHistoryJSONWithRule verifies that AlertHistory with a populated
 // Rule association serializes correctly including the nested rule.
 func TestAlertHistoryJSONWithRule(t *testing.T) {
+	t.Parallel()
+
 	hist := AlertHistory{
-		ID:     1,
-		RuleID: 42,
+		ID:      1,
+		RuleID:  42,
 		FiredAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
 		Rule: AlertRule{
 			ID:          42,
@@ -345,6 +365,6 @@ func TestAlertHistoryJSONWithRule(t *testing.T) {
 	// When Rule is populated, it should be present in JSON
 	ruleData, ok := m["rule"].(map[string]any)
 	require.True(t, ok, "rule should be a nested object when populated")
-	assert.InDelta(t, float64(42), ruleData["id"], 0)
+	assert.EqualValues(t, 42, ruleData["id"])
 	assert.Equal(t, "High CPU", ruleData["name"])
 }
