@@ -488,7 +488,7 @@
         </div>
         <div class="flex shrink-0 items-center gap-1">
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
             aria-label={t('settings.alerts.actionLabels.edit')}
             onclick={() => openEditor(rule)}
             disabled={editorOpen}
@@ -496,7 +496,7 @@
             <Pencil class="size-3.5" />
           </button>
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
             aria-label={rule.enabled
               ? t('settings.alerts.actionLabels.disable')
               : t('settings.alerts.actionLabels.enable')}
@@ -510,7 +510,7 @@
             {/if}
           </button>
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] transition-colors"
             aria-label={t('settings.alerts.actionLabels.test')}
             disabled={testingId === rule.id}
             onclick={() => handleTest(rule)}
@@ -518,7 +518,7 @@
             <Play class="size-3.5" />
           </button>
           <button
-            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] text-[var(--color-error)] transition-colors"
+            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] text-[var(--color-error)] transition-colors"
             aria-label={t('settings.alerts.actionLabels.delete')}
             disabled={deletingId === rule.id || editorOpen}
             onclick={() => handleDelete(rule)}
@@ -536,6 +536,7 @@
     <div
       class="mb-4 flex items-center gap-2 rounded-lg p-3 text-sm bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]"
       role="status"
+      aria-live="polite"
     >
       <Info class="size-4 shrink-0" />
       <span>{t('settings.alerts.v2Required')}</span>
