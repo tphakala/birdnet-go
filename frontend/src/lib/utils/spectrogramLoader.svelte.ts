@@ -14,6 +14,7 @@
  */
 
 import { acquireSlot, releaseSlot, type SlotHandle } from '$lib/utils/imageLoadQueue';
+import { getCsrfToken } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
 
 const logger = loggers.ui;
@@ -167,11 +168,11 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     if (isStale(detectionId)) return;
 
     state = 'checking';
-    abortController = new AbortController();
 
     let fetchRetries = 0;
     while (fetchRetries <= config.maxFetchRetries) {
       try {
+        abortController = new AbortController();
         const response = await fetch(buildStatusUrl(detectionId), {
           signal: abortController.signal,
         });
@@ -226,6 +227,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
           return;
         }
         await new Promise(resolve => setTimeout(resolve, 500 * fetchRetries));
+        if (isStale(detectionId)) return;
       }
     }
   }
@@ -237,8 +239,15 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     abortController = new AbortController();
 
     try {
+      const csrfToken = getCsrfToken();
+      const headers: Record<string, string> = {};
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+
       const response = await fetch(buildGenerateUrl(detectionId), {
         method: 'POST',
+        headers,
         signal: abortController.signal,
       });
 

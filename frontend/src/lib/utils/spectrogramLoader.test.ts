@@ -17,6 +17,11 @@ vi.mock('$lib/utils/imageLoadQueue', () => ({
   MAX_CONCURRENT_IMAGE_LOADS: 3,
 }));
 
+// Mock CSRF token
+vi.mock('$lib/utils/api', () => ({
+  getCsrfToken: () => 'test-csrf-token',
+}));
+
 // Mock logger
 vi.mock('$lib/utils/logger', () => ({
   loggers: {
@@ -116,7 +121,10 @@ describe('spectrogramLoader', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/v2/spectrogram/42/generate?size=md&raw=true',
-        expect.objectContaining({ method: 'POST' })
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'X-CSRF-Token': 'test-csrf-token' },
+        })
       );
       expect(loader.state).toBe('polling');
       expect(loader.isQueued).toBe(true);
