@@ -24,16 +24,10 @@
   import CardActionMenu from './CardActionMenu.svelte';
   import AudioSettingsButton from './AudioSettingsButton.svelte';
   import { cn } from '$lib/utils/cn';
-  import { loggers } from '$lib/utils/logger';
-  import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
-  import { acquireSlot, releaseSlot } from '$lib/utils/imageLoadQueue';
+  import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
-  const logger = loggers.ui;
-
   // Configuration constants
-  const SPECTROGRAM_SPINNER_DELAY_MS = 150;
-  const SPECTROGRAM_TIMEOUT_MS = 60000;
   const DEFAULT_AUDIO_GAIN = 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
   const DEFAULT_DOWNLOAD_NAME = 'detection';
@@ -63,21 +57,10 @@
     onDelete,
   }: Props = $props();
 
-  // Spectrogram loading state
-  const spectrogramLoader = useDelayedLoading({
-    delayMs: SPECTROGRAM_SPINNER_DELAY_MS,
-    timeoutMs: SPECTROGRAM_TIMEOUT_MS,
-    onTimeout: () => {
-      logger.warn('Spectrogram loading timeout', { detectionId: detection.id });
-    },
-  });
+  const loader = createSpectrogramLoader({ size: 'md', raw: true });
 
-  // Spectrogram retry configuration
-  const MAX_RETRIES = 4;
-  const RETRY_DELAYS = [500, 1000, 2000, 4000];
-  let retryCount = $state(0);
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  let spectrogramImage = $state<HTMLImageElement | undefined>(undefined);
+  let cardElement = $state<HTMLElement | undefined>(undefined);
+  let isVisible = $state(false);
 
   // Menu state for z-index management
   let isMenuOpen = $state(false);
@@ -88,12 +71,6 @@
   let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
   let audioContextAvailable = $state(true);
-
-  // Queue slot management
-  let slotHandle: ReturnType<typeof acquireSlot> | undefined;
-  let hasSlot = $state(false);
-  // Separate URL state - persists after slot is released (so image stays visible)
-  let spectrogramUrl = $state('');
 
   function handleGainChange(value: number) {
     audioGainValue = value;
@@ -121,158 +98,31 @@
     onFreezeEnd?.();
   }
 
-  // Helper: Build spectrogram URL for a detection ID
-  function getSpectrogramUrl(id: number): string {
-    return `/api/v2/spectrogram/${id}?size=md&raw=true`;
-  }
-
-  // Helper: Release the current slot if held
-  function releaseCurrentSlot(): void {
-    if (hasSlot) {
-      releaseSlot();
-      hasSlot = false;
-    }
-  }
-
-  // Helper: Clear the retry timer if active
-  function clearRetryTimer(): void {
-    if (retryTimer) {
-      clearTimeout(retryTimer);
-      retryTimer = undefined;
-    }
-  }
-
-  /**
-   * Helper: Request a slot and set up the spectrogram URL when acquired.
-   * Handles stale closure by verifying the detection ID hasn't changed.
-   * @param forDetectionId - The detection ID this request is for
-   */
-  function requestSlotForDetection(forDetectionId: number): void {
-    slotHandle = acquireSlot();
-    slotHandle.promise.then(acquired => {
-      if (acquired) {
-        // Verify detection hasn't changed while waiting for slot
-        if (detection.id === forDetectionId) {
-          hasSlot = true;
-          spectrogramUrl = getSpectrogramUrl(forDetectionId);
-        } else {
-          // Detection changed while waiting - release the slot immediately
-          // Note: We use releaseSlot() directly, not releaseCurrentSlot(),
-          // because hasSlot was never set to true for this request
-          releaseSlot();
-        }
-      } else {
-        // Cancelled (component unmounted or detection changed while waiting)
-        // Only clear loading if this request is still for the current detection
-        // to avoid race condition with new detection's loading state
-        if (detection.id === forDetectionId) {
-          spectrogramLoader.setLoading(false);
-        }
-      }
-    });
-  }
-
-  // Track previous detection ID for cleanup
-  let previousDetectionId: number | undefined;
-
-  /**
-   * Helper: Reset all state when switching to a new detection.
-   * Cleans up pending operations and initializes fresh state.
-   * @param newDetectionId - The ID of the new detection to load
-   */
-  function resetForNewDetection(newDetectionId: number): void {
-    // Cleanup pending retry
-    clearRetryTimer();
-    retryCount = 0;
-    spectrogramLoader.reset();
-
-    // Release old slot and cancel pending request
-    releaseCurrentSlot();
-    if (slotHandle) {
-      slotHandle.cancel();
-    }
-
-    // Request new slot for new detection
-    spectrogramLoader.setLoading(true);
-    spectrogramUrl = '';
-    requestSlotForDetection(newDetectionId);
-
-    // Reset audio settings to defaults
-    audioGainValue = DEFAULT_AUDIO_GAIN;
-    audioFilterFreq = DEFAULT_AUDIO_FILTER_FREQ;
-    audioPlaybackSpeed = DEFAULT_PLAYBACK_SPEED;
-    audioContextAvailable = true;
-  }
-
-  // Check if image is already loaded (handles cached images that complete before onload attaches)
+  // Start/stop loader based on visibility
   $effect(() => {
-    if (
-      spectrogramImage &&
-      spectrogramUrl &&
-      spectrogramImage.complete &&
-      spectrogramImage.naturalWidth > 0 &&
-      spectrogramLoader.loading
-    ) {
-      handleSpectrogramLoad();
+    if (isVisible) {
+      loader.start(detection.id);
+    } else {
+      loader.stop();
     }
   });
 
-  // Reset state when detection changes (component reuse)
+  // Handle detection ID changes (component reuse in keyed each)
+  let previousDetectionId: number | undefined;
   $effect(() => {
     const currentId = detection.id;
     if (previousDetectionId !== undefined && previousDetectionId !== currentId) {
-      resetForNewDetection(currentId);
+      audioGainValue = DEFAULT_AUDIO_GAIN;
+      audioFilterFreq = DEFAULT_AUDIO_FILTER_FREQ;
+      audioPlaybackSpeed = DEFAULT_PLAYBACK_SPEED;
+      audioContextAvailable = true;
+
+      if (isVisible) {
+        loader.start(currentId);
+      }
     }
     previousDetectionId = currentId;
   });
-
-  function handleSpectrogramLoad() {
-    spectrogramLoader.setLoading(false);
-    retryCount = 0;
-    clearRetryTimer();
-    // Release queue slot on successful load
-    releaseCurrentSlot();
-  }
-
-  function handleSpectrogramError() {
-    // Release slot immediately on error so other cards can load
-    releaseCurrentSlot();
-
-    if (retryCount < MAX_RETRIES) {
-      // Index is clamped to valid range, so direct access is safe
-      const retryDelay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
-
-      logger.debug('Spectrogram load failed, retrying', {
-        detectionId: detection.id,
-        retryCount: retryCount + 1,
-        retryDelay,
-      });
-
-      const retryForDetectionId = detection.id;
-      retryCount++;
-      clearRetryTimer();
-
-      retryTimer = setTimeout(() => {
-        // Re-acquire a slot before retrying (re-enters the queue)
-        if (detection.id !== retryForDetectionId) return;
-
-        slotHandle = acquireSlot(true); // urgent: retries get front-of-queue priority
-        slotHandle.promise.then(acquired => {
-          if (!acquired || detection.id !== retryForDetectionId) {
-            if (acquired) releaseSlot();
-            return;
-          }
-          hasSlot = true;
-          const url = new URL(getSpectrogramUrl(retryForDetectionId), window.location.origin);
-          url.searchParams.set('retry', retryCount.toString());
-          url.searchParams.set('t', Date.now().toString());
-          spectrogramUrl = url.toString();
-        });
-      }, retryDelay);
-    } else {
-      spectrogramLoader.setError();
-    }
-  }
 
   function handleMenuOpen() {
     isMenuOpen = true;
@@ -304,24 +154,32 @@
     document.body.removeChild(link);
   }
 
+  // eslint-disable-next-line no-undef -- browser global
+  let observer: IntersectionObserver | undefined;
+
   onMount(() => {
-    spectrogramLoader.setLoading(true);
-    requestSlotForDetection(detection.id);
+    if (!cardElement) return;
+
+    // eslint-disable-next-line no-undef -- browser global
+    observer = new IntersectionObserver(
+      entries => {
+        for (const entry of entries) {
+          isVisible = entry.isIntersecting;
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+    observer.observe(cardElement);
   });
 
   onDestroy(() => {
-    clearRetryTimer();
-    spectrogramLoader.cleanup();
-
-    // Cancel pending slot request or release acquired slot
-    if (slotHandle) {
-      slotHandle.cancel();
-    }
-    releaseCurrentSlot();
+    observer?.disconnect();
+    loader.destroy();
   });
 </script>
 
 <article
+  bind:this={cardElement}
   class={cn(
     'detection-card group relative rounded-xl',
     isNew && 'new-detection',
@@ -332,26 +190,30 @@
   <div class="detection-card-inner">
     <!-- Spectrogram Background -->
     <div class="spectrogram-container">
-      {#if spectrogramLoader.showSpinner}
+      {#if loader.showSpinner}
         <div class="spectrogram-loading">
           <span class="loading loading-spinner loading-md text-base-content/50"></span>
+          {#if loader.isQueued}
+            <span class="text-xs text-base-content/40 mt-1">Waiting...</span>
+          {:else if loader.isGenerating}
+            <span class="text-xs text-base-content/40 mt-1">Generating...</span>
+          {/if}
         </div>
       {/if}
 
-      {#if spectrogramLoader.error}
+      {#if loader.error}
         <div class="spectrogram-error">
           <span class="text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
-      {:else if spectrogramUrl}
+      {:else if loader.spectrogramUrl}
         <img
-          bind:this={spectrogramImage}
-          src={spectrogramUrl}
+          src={loader.spectrogramUrl}
           alt="Spectrogram for {detection.commonName}"
           class="spectrogram-image"
-          class:opacity-0={spectrogramLoader.loading}
+          class:opacity-0={loader.state === 'loading'}
           decoding="async"
-          onload={handleSpectrogramLoad}
-          onerror={handleSpectrogramError}
+          onload={() => loader.handleImageLoad()}
+          onerror={() => loader.handleImageError()}
         />
       {/if}
     </div>
@@ -448,6 +310,7 @@
     position: absolute;
     inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     background: linear-gradient(
