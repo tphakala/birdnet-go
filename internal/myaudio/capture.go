@@ -165,8 +165,19 @@ type UnifiedAudioData struct {
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
+	// Select the appropriate backend for the current OS
+	var backends []malgo.Backend
+	switch runtime.GOOS {
+	case osLinux:
+		backends = []malgo.Backend{malgo.BackendAlsa}
+	case osWindows:
+		backends = []malgo.Backend{malgo.BackendWasapi}
+	case osDarwin:
+		backends = []malgo.Backend{malgo.BackendCoreaudio}
+	}
+
 	// Initialize the audio context
-	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
+	ctx, err := malgo.InitContext(backends, malgo.ContextConfig{}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize context: %w", err)
 	}
@@ -188,6 +199,7 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 
 	// Pre-allocate slice with capacity for all devices (minus discard devices)
 	devices := make([]AudioDeviceInfo, 0, len(infos))
+	seenNames := make(map[string]bool, len(infos))
 
 	// Iterate through the list of devices
 	for i := range infos {
@@ -206,10 +218,17 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 			continue
 		}
 
+		// Skip duplicate device names (ALSA enumerates multiple pseudo-devices per card)
+		name := infos[i].Name()
+		if seenNames[name] {
+			continue
+		}
+		seenNames[name] = true
+
 		// Add the device information to the devices slice
 		devices = append(devices, AudioDeviceInfo{
 			Index: i,
-			Name:  infos[i].Name(),
+			Name:  name,
 			ID:    decodedID,
 		})
 	}
