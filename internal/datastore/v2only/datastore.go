@@ -1418,6 +1418,9 @@ func (ds *Datastore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error {
 	if err := ds.weather.SaveDailyEvents(ctx, v2Events); err != nil {
 		return err
 	}
+	if v2Events.ID == 0 {
+		return fmt.Errorf("SaveDailyEvents: repository returned success but entity ID was not populated")
+	}
 	// Propagate the auto-generated ID back to the caller so that
 	// subsequent SaveHourlyWeather calls can set DailyEventsID correctly.
 	dailyEvents.ID = v2Events.ID
