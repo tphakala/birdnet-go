@@ -74,15 +74,15 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   // Reactive state (Svelte 5 runes)
   // eslint-disable-next-line no-undef -- Svelte 5 runes are globally available in .svelte.ts files
   let state = $state<SpectrogramLoadState>('idle');
-  // eslint-disable-next-line no-undef
+  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let spectrogramUrl = $state('');
-  // eslint-disable-next-line no-undef
+  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let showSpinner = $state(false);
-  // eslint-disable-next-line no-undef
+  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let hasError = $state(false);
-  // eslint-disable-next-line no-undef
+  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let currentDetectionId = $state<number | undefined>(undefined);
-  // eslint-disable-next-line no-undef
+  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let serverStatus = $state<SpectrogramStatus | undefined>(undefined);
 
   // Internal state (not reactive)
@@ -402,6 +402,9 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     const detectionId = currentDetectionId;
     if (detectionId === undefined) return;
 
+    // Release slot immediately so other cards can load during retry delay
+    releaseCurrentSlot();
+
     if (imageRetryCount < config.maxImageRetries) {
       const delay =
         config.imageRetryDelays[Math.min(imageRetryCount, config.imageRetryDelays.length - 1)];
@@ -413,16 +416,16 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         delay,
       });
 
+      // Re-acquire slot through normal flow on retry
       pollTimer = setTimeout(() => {
         if (isStale(detectionId)) return;
-        spectrogramUrl = `${buildImageUrl(detectionId)}&retry=${String(imageRetryCount)}&t=${String(Date.now())}`;
+        void acquireAndLoad(detectionId);
       }, delay);
     } else {
       logger.warn('Spectrogram image load failed after retries', { detectionId });
       state = 'error';
       hasError = true;
       showSpinner = false;
-      releaseCurrentSlot();
     }
   }
 

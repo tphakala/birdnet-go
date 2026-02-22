@@ -328,12 +328,16 @@ describe('spectrogramLoader', () => {
 
       expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/42?size=md&raw=true');
 
+      // Slot is released immediately on error, then re-acquired after delay
       loader.handleImageError();
-      vi.advanceTimersByTime(50);
+      expect(mockReleaseSlot).toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(50);
       await flushAll();
 
-      expect(loader.spectrogramUrl).toContain('retry=1');
-      expect(loader.spectrogramUrl).toContain('t=');
+      // After retry, acquireAndLoad re-acquires slot and sets new URL
+      expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/42?size=md&raw=true');
+      expect(mockAcquireSlot).toHaveBeenCalledTimes(2); // initial + retry
       loader.destroy();
     });
 
@@ -347,14 +351,20 @@ describe('spectrogramLoader', () => {
       loader.start(42);
       await flushAll();
 
+      // First error releases slot and schedules retry
       loader.handleImageError();
-      vi.advanceTimersByTime(10);
+      expect(mockReleaseSlot).toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(10);
       await flushAll();
 
+      // Second error exhausts retries
+      mockReleaseSlot.mockClear();
       loader.handleImageError();
 
       expect(loader.state).toBe('error');
       expect(loader.error).toBe(true);
+      // Slot released on error (before exhausting retries check)
       expect(mockReleaseSlot).toHaveBeenCalled();
       loader.destroy();
     });
@@ -459,7 +469,7 @@ describe('spectrogramLoader', () => {
   });
 
   describe('spinner delay', () => {
-    it('does not show spinner immediately', () => {
+    it('does not show spinner before delay', () => {
       mockFetch.mockImplementation(() => new Promise(() => {}));
 
       const loader = createSpectrogramLoader();
