@@ -110,7 +110,7 @@
     getLocale();
     const noCapture = { value: '', label: t('settings.audio.audioCapture.noSoundCardCapture') };
     const deviceOptions = audioDevices.data.map(device => ({
-      value: device.name,
+      value: device.id,
       label: device.name,
     }));
     return [noCapture, ...deviceOptions];
