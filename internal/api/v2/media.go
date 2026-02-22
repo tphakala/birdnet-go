@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1087,11 +1088,10 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	})
 }
 
-// maxConcurrentSpectrograms limits concurrent spectrogram generations to avoid overloading the system.
-// Set to 4 to match the number of CPU cores on Raspberry Pi 4/5, which is the most common
-// deployment platform for BirdNET-Go. This prevents severe CPU contention and ensures
-// responsive performance on resource-constrained devices.
-const maxConcurrentSpectrograms = 4
+// maxConcurrentSpectrograms limits concurrent spectrogram generations to the number of CPU cores.
+// This adapts automatically to the deployment hardware — 4 on Raspberry Pi 4/5, fewer on Pi Zero/3,
+// more on multi-core desktops — preventing CPU contention while utilizing available resources.
+var maxConcurrentSpectrograms = runtime.NumCPU()
 
 // semaphoreAcquireTimeout is the maximum time to wait for a semaphore slot before timing out
 const semaphoreAcquireTimeout = 30 * time.Second
