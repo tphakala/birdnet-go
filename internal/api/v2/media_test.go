@@ -1045,14 +1045,14 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	err := createTestAudioFile(t, filePath)
 	require.NoError(t, err)
 
-	// Simulate raw spectrogram (default behavior)
-	rawSpectrogramFilename := "test_raw_param_400px.png"
+	// Simulate raw spectrogram (default behavior) using lg size (1026px)
+	rawSpectrogramFilename := "test_raw_param_1026px.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
 	err = os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
-	legendSpectrogramFilename := "test_raw_param_400px-legend.png"
+	legendSpectrogramFilename := "test_raw_param_1026px-legend.png"
 	legendSpectrogramPath := filepath.Join(tempDir, legendSpectrogramFilename)
 	err = os.WriteFile(legendSpectrogramPath, []byte("id legend spectrogram"), 0o600)
 	require.NoError(t, err)
@@ -1169,8 +1169,8 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create request
-			url := "/api/v2/spectrogram/123?size=sm"
+			// Create request using lg size (default)
+			url := "/api/v2/spectrogram/123?size=lg"
 			if tc.rawParam != "" {
 				url += "&raw=" + tc.rawParam
 			}
