@@ -19,28 +19,28 @@ func TestSizeToPixels(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:      "valid small size",
-			size:      "sm",
-			wantWidth: 400,
-			wantErr:   false,
-		},
-		{
 			name:      "valid medium size",
 			size:      "md",
-			wantWidth: 800,
+			wantWidth: 514,
 			wantErr:   false,
 		},
 		{
 			name:      "valid large size",
 			size:      "lg",
-			wantWidth: 1000,
+			wantWidth: 1026,
 			wantErr:   false,
 		},
 		{
 			name:      "valid extra large size",
 			size:      "xl",
-			wantWidth: 1200,
+			wantWidth: 2050,
 			wantErr:   false,
+		},
+		{
+			name:      "removed sm size is invalid",
+			size:      "sm",
+			wantWidth: 0,
+			wantErr:   true,
 		},
 		{
 			name:      "invalid size",
@@ -83,26 +83,20 @@ func TestPixelsToSize(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "400 pixels to sm",
-			width:    400,
-			wantSize: "sm",
-			wantErr:  false,
-		},
-		{
-			name:     "800 pixels to md",
-			width:    800,
+			name:     "514 pixels to md",
+			width:    514,
 			wantSize: "md",
 			wantErr:  false,
 		},
 		{
-			name:     "1000 pixels to lg",
-			width:    1000,
+			name:     "1026 pixels to lg",
+			width:    1026,
 			wantSize: "lg",
 			wantErr:  false,
 		},
 		{
-			name:     "1200 pixels to xl",
-			width:    1200,
+			name:     "2050 pixels to xl",
+			width:    2050,
 			wantSize: "xl",
 			wantErr:  false,
 		},
@@ -142,11 +136,11 @@ func TestPixelsToSize(t *testing.T) {
 func TestGetValidSizes(t *testing.T) {
 	sizes := GetValidSizes()
 
-	// Check that we have exactly 4 sizes
-	assert.Len(t, sizes, 4)
+	// Check that we have exactly 3 sizes (sm removed)
+	assert.Len(t, sizes, 3)
 
 	// Check that sizes are sorted
-	expected := []string{"lg", "md", "sm", "xl"}
+	expected := []string{"lg", "md", "xl"}
 	assert.Equal(t, expected, sizes)
 
 	// Check that all sizes are valid
@@ -224,25 +218,9 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:      "sm size, not raw",
-			audioPath: "clips/audio.wav",
-			width:     400,
-			raw:       false,
-			want:      "clips/audio.sm.png",
-			wantErr:   false,
-		},
-		{
-			name:      "sm size, raw",
-			audioPath: "clips/audio.wav",
-			width:     400,
-			raw:       true,
-			want:      "clips/audio.sm.raw.png",
-			wantErr:   false,
-		},
-		{
 			name:      "md size, not raw",
 			audioPath: "clips/audio.wav",
-			width:     800,
+			width:     514,
 			raw:       false,
 			want:      "clips/audio.md.png",
 			wantErr:   false,
@@ -250,7 +228,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		{
 			name:      "md size, raw",
 			audioPath: "clips/audio.wav",
-			width:     800,
+			width:     514,
 			raw:       true,
 			want:      "clips/audio.md.raw.png",
 			wantErr:   false,
@@ -258,7 +236,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		{
 			name:      "lg size, not raw",
 			audioPath: "clips/audio.wav",
-			width:     1000,
+			width:     1026,
 			raw:       false,
 			want:      "clips/audio.lg.png",
 			wantErr:   false,
@@ -266,7 +244,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		{
 			name:      "xl size, raw",
 			audioPath: "clips/audio.wav",
-			width:     1200,
+			width:     2050,
 			raw:       true,
 			want:      "clips/audio.xl.raw.png",
 			wantErr:   false,
@@ -282,7 +260,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		{
 			name:      "flac file with params",
 			audioPath: "/path/to/audio.flac",
-			width:     800,
+			width:     514,
 			raw:       true,
 			want:      "/path/to/audio.md.raw.png",
 			wantErr:   false,
@@ -290,9 +268,9 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		{
 			name:      "file with multiple dots",
 			audioPath: "clips/file.with.dots.wav",
-			width:     400,
+			width:     1026,
 			raw:       false,
-			want:      "clips/file.with.dots.sm.png",
+			want:      "clips/file.with.dots.lg.png",
 			wantErr:   false,
 		},
 	}

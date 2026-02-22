@@ -123,7 +123,7 @@
 
   // Helper: Build spectrogram URL for a detection ID
   function getSpectrogramUrl(id: number): string {
-    return `/api/v2/spectrogram/${id}?size=md&raw=true`;
+    return `/api/v2/spectrogram/${id}?size=lg&raw=true`;
   }
 
   // Helper: Release the current slot if held

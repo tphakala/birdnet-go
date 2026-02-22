@@ -23,7 +23,7 @@
   // Legacy dispatcher removed
 
   let spectrogramError = $state(false);
-  let spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=sm`);
+  let spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=lg`);
 
   function handlePlay() {
     const audioUrl = `/api/v2/audio/${detection.id}`;

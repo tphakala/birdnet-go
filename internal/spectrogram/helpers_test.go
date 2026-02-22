@@ -74,7 +74,7 @@ type PreRendererTestOptions struct {
 func DefaultPreRendererOptions() *PreRendererTestOptions {
 	return &PreRendererTestOptions{
 		SoxPath:         "/usr/bin/sox",
-		SpectrogramSize: "sm",
+		SpectrogramSize: "lg",
 		RawEnabled:      true,
 	}
 }
@@ -231,7 +231,7 @@ func createIntegrationPreRenderer(t *testing.T, soxPath, audioDirName string) *i
 	// Configure settings for integration testing
 	env.Settings.Realtime.Audio.SoxPath = soxPath
 	env.Settings.Realtime.Dashboard.Spectrogram.Enabled = true
-	env.Settings.Realtime.Dashboard.Spectrogram.Size = "sm"
+	env.Settings.Realtime.Dashboard.Spectrogram.Size = "lg"
 	env.Settings.Realtime.Dashboard.Spectrogram.Raw = true
 
 	pr := NewPreRenderer(env.Ctx, env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))

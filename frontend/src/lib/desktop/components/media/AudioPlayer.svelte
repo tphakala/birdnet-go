@@ -21,7 +21,7 @@
   - responsive: Enable responsive sizing (default: false)
     When true, the component adapts to its container width and maintains aspect ratio.
     Use for flexible layouts like cards and tables. When false, uses fixed dimensions.
-  - spectrogramSize: Spectrogram display size - sm/md/lg/xl (default: md)
+  - spectrogramSize: Spectrogram display size - md/lg/xl (default: lg)
   - spectrogramRaw: Display raw spectrogram without axes (default: false)
   - onPlayStart: Callback when audio starts playing (freezes SSE updates)
   - onPlayEnd: Callback when audio stops playing after 3s delay (resumes SSE updates)
@@ -69,7 +69,7 @@
   /* global Audio, AudioContext, EventListener, ResizeObserver */
 
   // Size type for spectrogram
-  type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
+  type SpectrogramSize = 'md' | 'lg' | 'xl';
 
   interface Props {
     audioUrl: string;
@@ -80,7 +80,7 @@
     showDownload?: boolean;
     className?: string;
     responsive?: boolean;
-    /** Spectrogram display size: sm (400px), md (800px), lg (1000px), xl (1200px) */
+    /** Spectrogram display size: md (514px), lg (1026px), xl (2050px) */
     spectrogramSize?: SpectrogramSize;
     /** Display raw spectrogram without axes and legends */
     spectrogramRaw?: boolean;
@@ -101,7 +101,7 @@
     showDownload = true,
     className = '',
     responsive = false,
-    spectrogramSize = 'md',
+    spectrogramSize = 'lg',
     spectrogramRaw = false,
     onPlayStart,
     onPlayEnd,

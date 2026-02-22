@@ -711,6 +711,7 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 }
 
 // TestGetSoxSpectrogramArgs_DimensionCalculation tests width/height calculation.
+// Heights should be FFT-friendly (2^n + 1) so sox uses fast FFT instead of brute-force DFT.
 func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
@@ -720,15 +721,22 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	testWidths := []int{400, 800, 1000, 1200}
+	tests := []struct {
+		width          int
+		expectedHeight int // FFT-friendly height (2^n + 1)
+	}{
+		{514, 257},   // DFT=512
+		{1026, 513},  // DFT=1024
+		{2050, 1025}, // DFT=2048
+		{800, 513},   // Arbitrary width: nearest 2^n+1 >= 400 is 513
+	}
 
-	for _, width := range testWidths {
-		t.Run("width_"+strconv.Itoa(width), func(t *testing.T) {
-			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, width, false)
+	for _, tt := range tests {
+		t.Run("width_"+strconv.Itoa(tt.width), func(t *testing.T) {
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, tt.width, false)
 
-			// Find width value
-			widthStr := strconv.Itoa(width)
-			heightStr := strconv.Itoa(width / 2)
+			widthStr := strconv.Itoa(tt.width)
+			heightStr := strconv.Itoa(tt.expectedHeight)
 
 			foundWidth := false
 			foundHeight := false
@@ -742,8 +750,8 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 				}
 			}
 
-			assert.True(t, foundWidth, "should have correct width: %d", width)
-			assert.True(t, foundHeight, "should have correct height: %d (width/2)", width/2)
+			assert.True(t, foundWidth, "should have correct width: %d", tt.width)
+			assert.True(t, foundHeight, "should have FFT-friendly height: %d for width %d", tt.expectedHeight, tt.width)
 		})
 	}
 }

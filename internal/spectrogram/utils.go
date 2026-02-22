@@ -14,19 +14,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// Spectrogram size constants define pixel widths for different display contexts
+// Spectrogram size constants define pixel widths for different display contexts.
+// Heights are computed as 2^n + 1 to ensure sox uses fast FFT (O(n log n)) instead of
+// brute-force DFT (O(n²)). Sox DFT size = 2*(height-1), so height must be 2^n + 1
+// for the DFT size to be a power of 2. Widths are 2× height to maintain ~2:1 aspect ratio.
 const (
-	// sizeSmallPx is the width for compact display in lists and dashboards (default)
-	sizeSmallPx = 400
+	// sizeMediumPx is the width for standard detail view (height=257, DFT=512)
+	sizeMediumPx = 514
 
-	// sizeMediumPx is the width for standard detail view and review modals
-	sizeMediumPx = 800
+	// sizeLargePx is the width for large display / default render size (height=513, DFT=1024)
+	sizeLargePx = 1026
 
-	// sizeLargePx is the width for large display for detailed analysis
-	sizeLargePx = 1000
-
-	// sizeExtraLargePx is the width for maximum quality for expert review
-	sizeExtraLargePx = 1200
+	// sizeExtraLargePx is the width for maximum quality for expert review (height=1025, DFT=2048)
+	sizeExtraLargePx = 2050
 
 	// signalKilledMessage is the error message pattern for process termination
 	signalKilledMessage = "signal: killed"
@@ -39,26 +39,24 @@ const (
 )
 
 // validSizes maps size strings to pixel widths (single source of truth).
-// These sizes are optimized for different UI contexts:
-// - sm (400px): Compact display in lists and dashboards (default)
-// - md (800px): Standard detail view and review modals
-// - lg (1000px): Large display for detailed analysis
-// - xl (1200px): Maximum quality for expert review
+// All sizes use FFT-friendly dimensions (width = 2 × height, height = 2^n + 1):
+// - md (514px): Standard detail view (DFT=512)
+// - lg (1026px): Default render size for all contexts (DFT=1024)
+// - xl (2050px): Maximum quality for expert review (DFT=2048)
 var validSizes = map[string]int{
-	"sm": sizeSmallPx,      // Small - 400px
-	"md": sizeMediumPx,     // Medium - 800px
-	"lg": sizeLargePx,      // Large - 1000px
-	"xl": sizeExtraLargePx, // Extra Large - 1200px
+	"md": sizeMediumPx,     // Medium - 514px (height=257, DFT=512)
+	"lg": sizeLargePx,      // Large - 1026px (height=513, DFT=1024)
+	"xl": sizeExtraLargePx, // Extra Large - 2050px (height=1025, DFT=2048)
 }
 
 // SizeToPixels converts a size string to pixel width.
 // Returns an error if the size string is not valid.
 //
-// Valid sizes: sm (400px), md (800px), lg (1000px), xl (1200px)
+// Valid sizes: md (514px), lg (1026px), xl (2050px)
 func SizeToPixels(size string) (int, error) {
 	width, ok := validSizes[size]
 	if !ok {
-		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
+		return 0, errors.Newf("invalid size (valid sizes: md, lg, xl)").
 			Component("spectrogram").
 			Category(errors.CategoryValidation).
 			Context("operation", "size_to_pixels").
@@ -153,9 +151,9 @@ func IsOperationalError(err error) bool {
 // The filename format is: basename.{size}[.raw].png
 // Examples:
 //
-//	"file.wav" with width=400, raw=false  -> "file.sm.png"
-//	"file.wav" with width=400, raw=true   -> "file.sm.raw.png"
-//	"file.wav" with width=800, raw=false  -> "file.md.png"
+//	"file.wav" with width=514, raw=false  -> "file.md.png"
+//	"file.wav" with width=1026, raw=true  -> "file.lg.raw.png"
+//	"file.wav" with width=2050, raw=false -> "file.xl.png"
 func BuildSpectrogramPathWithParams(audioPath string, width int, raw bool) (string, error) {
 	// Find the size string for this width
 	sizeStr, err := PixelsToSize(width)

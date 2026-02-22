@@ -30,17 +30,14 @@ const (
 	StatusClientClosedRequest = 499 // Nginx's non-standard status for client closed connection
 )
 
-// Spectrogram size constants
-// Sizes are optimized for different UI contexts:
-// - sm (400px): Compact display in lists and dashboards
-// - md (800px): Standard detail view and review modals
-// - lg (1000px): Large display for detailed analysis
-// - xl (1200px): Maximum quality for expert review
+// Spectrogram size constants - FFT-friendly dimensions.
+// Heights are 2^n + 1 so sox DFT size (2*(height-1)) is a power of 2,
+// enabling fast FFT instead of brute-force DFT (~20x speedup).
+// Widths are 2× height to maintain ~2:1 aspect ratio.
 const (
-	SpectrogramSizeSm = 400
-	SpectrogramSizeMd = 800
-	SpectrogramSizeLg = 1000
-	SpectrogramSizeXl = 1200
+	SpectrogramSizeMd = 514  // height=257, DFT=512
+	SpectrogramSizeLg = 1026 // height=513, DFT=1024 (default render size)
+	SpectrogramSizeXl = 2050 // height=1025, DFT=2048
 )
 
 // Audio MIME type constants for consistent handling across endpoints
@@ -439,12 +436,12 @@ type spectrogramParameters struct {
 // This is a reusable helper used by multiple endpoints.
 //
 // Parameters:
-//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
 //   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
 //   - raw: Whether to generate raw spectrogram without axes/legends
 func parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
 	params := spectrogramParameters{
-		width:   SpectrogramSizeMd, // Default width (md)
+		width:   SpectrogramSizeLg, // Default width (lg) - single render size for all contexts
 		sizeStr: ctx.QueryParam("size"),
 		raw:     parseRawParameter(ctx.QueryParam("raw")),
 	}
@@ -658,8 +655,8 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 // Route: GET /api/v2/spectrogram/:id
 //
 // Query Parameters:
-//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
-//     Default: "md"
+//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
+//     Default: "lg"
 //   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility with cached spectrograms)
@@ -755,8 +752,8 @@ func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
 // Route: GET /media/spectrogram/:filename
 //
 // Query Parameters:
-//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
-//     Default: "md"
+//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
+//     Default: "lg"
 //   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility with cached spectrograms)
@@ -768,7 +765,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 
 	// Parse size parameter
-	width := SpectrogramSizeMd // Default width (md)
+	width := SpectrogramSizeLg // Default width (lg) - single render size for all contexts
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
 		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
@@ -922,8 +919,8 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 // generated when explicitly requested by the user clicking a button in the UI.
 //
 // Query Parameters:
-//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
-//     Default: "md"
+//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
+//     Default: "lg"
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility)
 //
@@ -990,8 +987,6 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		sizeParam := params.sizeStr
 		if sizeParam == "" {
 			switch params.width {
-			case SpectrogramSizeSm:
-				sizeParam = "sm"
 			case SpectrogramSizeMd:
 				sizeParam = "md"
 			case SpectrogramSizeLg:
@@ -999,7 +994,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 			case SpectrogramSizeXl:
 				sizeParam = "xl"
 			default:
-				sizeParam = "md"
+				sizeParam = "lg"
 			}
 		}
 		queryParams.Set("size", sizeParam)
@@ -1191,10 +1186,10 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool) (relBaseFil
 
 	// Generate spectrogram filename compatible with old HTMX API format
 	if raw {
-		// Raw spectrograms use old API format: filename_400px.png (for cache compatibility)
+		// Raw spectrograms use format: filename_1026px.png
 		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
 	} else {
-		// Spectrograms with legends use new suffix: filename_400px-legend.png
+		// Spectrograms with legends use suffix: filename_1026px-legend.png
 		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
 	}
 

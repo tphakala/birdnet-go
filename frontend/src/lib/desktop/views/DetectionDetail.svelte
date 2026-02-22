@@ -883,7 +883,7 @@
               audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
               detectionId={detection.id.toString()}
               showSpectrogram={true}
-              spectrogramSize="xl"
+              spectrogramSize="lg"
               spectrogramRaw={false}
               responsive={true}
               className="w-full"
