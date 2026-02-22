@@ -82,6 +82,45 @@ describe('imageLoadQueue', () => {
     });
   });
 
+  describe('acquireSlot with urgent', () => {
+    it('places urgent request at front of queue', async () => {
+      // Fill all slots
+      for (let i = 0; i < MAX_CONCURRENT_IMAGE_LOADS; i++) {
+        await acquireSlot().promise;
+      }
+
+      // Queue a normal request, then an urgent one
+      const normalHandle = acquireSlot();
+      const urgentHandle = acquireSlot(true);
+
+      let normalResolved = false;
+      let urgentResolved = false;
+      void normalHandle.promise.then(() => {
+        normalResolved = true;
+      });
+      void urgentHandle.promise.then(() => {
+        urgentResolved = true;
+      });
+
+      // Release one slot - urgent should get it first
+      releaseSlot();
+      await urgentHandle.promise;
+      expect(urgentResolved).toBe(true);
+      expect(normalResolved).toBe(false);
+
+      // Release another slot - normal should get it now
+      releaseSlot();
+      await normalHandle.promise;
+      expect(normalResolved).toBe(true);
+    });
+
+    it('urgent resolves immediately when slots available', async () => {
+      const handle = acquireSlot(true);
+      const result = await handle.promise;
+      expect(result).toBe(true);
+    });
+  });
+
   describe('cancel', () => {
     it('resolves with false when cancelled while waiting', async () => {
       // Fill all slots

@@ -235,6 +235,9 @@
   }
 
   function handleSpectrogramError() {
+    // Release slot immediately on error so other cards can load
+    releaseCurrentSlot();
+
     if (retryCount < MAX_RETRIES) {
       // Index is clamped to valid range, so direct access is safe
       const retryDelay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
@@ -245,21 +248,31 @@
         retryDelay,
       });
 
+      const retryForDetectionId = detection.id;
       retryCount++;
       clearRetryTimer();
 
       retryTimer = setTimeout(() => {
-        if (spectrogramImage) {
-          const url = new URL(spectrogramImage.src);
-          url.searchParams.set('retry', retryCount.toString());
-          url.searchParams.set('t', Date.now().toString());
-          spectrogramImage.src = url.toString();
-        }
+        // Re-acquire a slot before retrying (re-enters the queue)
+        if (detection.id !== retryForDetectionId) return;
+
+        slotHandle = acquireSlot(true); // urgent: retries get front-of-queue priority
+        slotHandle.promise.then(acquired => {
+          if (!acquired || detection.id !== retryForDetectionId) {
+            if (acquired) releaseSlot();
+            return;
+          }
+          hasSlot = true;
+          if (spectrogramImage) {
+            const url = new URL(spectrogramImage.src);
+            url.searchParams.set('retry', retryCount.toString());
+            url.searchParams.set('t', Date.now().toString());
+            spectrogramImage.src = url.toString();
+          }
+        });
       }, retryDelay);
     } else {
       spectrogramLoader.setError();
-      // Release queue slot on final failure
-      releaseCurrentSlot();
     }
   }
 

@@ -26,9 +26,6 @@ func TestNewGenerator(t *testing.T) {
 	require.NotNil(t, gen, "NewGenerator() returned nil")
 	assert.Equal(t, env.Settings, gen.settings, "NewGenerator() did not set settings correctly")
 	assert.Equal(t, env.SFS, gen.sfs, "NewGenerator() did not set sfs correctly")
-	// Logger is intentionally wrapped with component context, so we can't check for equality
-	// Just verify it's not nil
-	assert.NotNil(t, gen.logger, "NewGenerator() did not set logger (logger is nil)")
 }
 
 // TestGenerator_EnsureOutputDirectory tests directory creation
@@ -849,17 +846,16 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 func TestNewGenerator_WithNilLogger(t *testing.T) {
 	env := setupTestEnv(t)
 
-	// Should use default logger when nil is passed
+	// Logger parameter is ignored; generator uses dynamic GetLogger() internally
 	gen := NewGenerator(env.Settings, env.SFS, nil)
 	require.NotNil(t, gen, "generator should be created")
-	assert.NotNil(t, gen.logger, "logger should use default when passed nil")
 
 	// Verify calling methods doesn't panic (would panic if logger were nil)
 	// This validates that nil logger is handled safely
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	// getSoxSpectrogramArgs uses g.logger.Warn internally
+	// getSoxSpectrogramArgs uses g.log().Warn internally
 	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
 	assert.NotEmpty(t, args, "should return valid args without panic")
 }

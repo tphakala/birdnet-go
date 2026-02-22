@@ -71,9 +71,11 @@ const waitQueue: QueuedRequest[] = [];
 /**
  * Request a slot for loading an image.
  *
+ * @param urgent - If true, insert at the front of the wait queue (used for retries
+ *   so that recently-failed loads get priority over initial loads of older items)
  * @returns Handle with promise and cancel function
  */
-export function acquireSlot(): SlotHandle {
+export function acquireSlot(urgent = false): SlotHandle {
   let request: QueuedRequest | undefined;
 
   const promise = new Promise<boolean>(resolve => {
@@ -84,10 +86,15 @@ export function acquireSlot(): SlotHandle {
       return;
     }
 
-    // Queue the request
+    // Queue the request - urgent requests go to front, normal to back
     request = { resolve, cancelled: false };
-    waitQueue.push(request);
-    debugLog('Request queued', { queued: waitQueue.length });
+    if (urgent) {
+      waitQueue.unshift(request);
+      debugLog('Request queued (urgent, front)', { queued: waitQueue.length });
+    } else {
+      waitQueue.push(request);
+      debugLog('Request queued', { queued: waitQueue.length });
+    }
   });
 
   const cancel = () => {
