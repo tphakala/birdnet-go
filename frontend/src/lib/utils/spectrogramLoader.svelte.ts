@@ -150,7 +150,11 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   }
 
   function buildImageUrl(detectionId: number): string {
-    return `/api/v2/spectrogram/${detectionId}?size=${config.size}&raw=${String(config.raw)}`;
+    let url = `/api/v2/spectrogram/${detectionId}?size=${config.size}&raw=${String(config.raw)}`;
+    if (imageRetryCount > 0) {
+      url += `&t=${String(Date.now())}`;
+    }
+    return url;
   }
 
   function isStale(forDetectionId: number): boolean {

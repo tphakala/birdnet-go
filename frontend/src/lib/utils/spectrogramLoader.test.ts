@@ -335,8 +335,8 @@ describe('spectrogramLoader', () => {
       await vi.advanceTimersByTimeAsync(50);
       await flushAll();
 
-      // After retry, acquireAndLoad re-acquires slot and sets new URL
-      expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/42?size=md&raw=true');
+      // After retry, acquireAndLoad re-acquires slot and sets URL with cache-buster
+      expect(loader.spectrogramUrl).toContain('/api/v2/spectrogram/42?size=md&raw=true&t=');
       expect(mockAcquireSlot).toHaveBeenCalledTimes(2); // initial + retry
       loader.destroy();
     });
