@@ -345,7 +345,7 @@
       detectionId={detection.id.toString()}
       showSpectrogram={true}
       showDownload={true}
-      spectrogramSize="lg"
+      spectrogramSize="md"
       spectrogramRaw={true}
       responsive={true}
       className="w-full"

@@ -71,7 +71,7 @@
         responsive={true}
         {showSpectrogram}
         showDownload={true}
-        spectrogramSize="lg"
+        spectrogramSize="md"
         className="w-full"
       />
     </div>

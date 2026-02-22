@@ -139,7 +139,7 @@ describe('AudioPlayer', () => {
     const img = screen.getByAltText('Audio spectrogram');
     expect(img).toBeInTheDocument();
     // URL includes cache-busting parameter
-    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/test-123\?size=lg&cache=\d+/);
+    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/test-123\?size=md&cache=\d+/);
   });
 
   it('generates spectrogram URL from detectionId', () => {
@@ -152,7 +152,7 @@ describe('AudioPlayer', () => {
 
     const img = screen.getByAltText('Audio spectrogram');
     // URL includes cache-busting parameter
-    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/123\?size=lg&cache=\d+/);
+    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/123\?size=md&cache=\d+/);
   });
 
   it('shows play button when paused', () => {
@@ -336,7 +336,7 @@ describe('AudioPlayer', () => {
     // we'll test that the spectrogram is displayed correctly
     const img = screen.getByAltText('Audio spectrogram');
     // URL includes cache-busting parameter
-    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/test-123\?size=lg&cache=\d+/);
+    expect(img.getAttribute('src')).toMatch(/\/api\/v2\/spectrogram\/test-123\?size=md&cache=\d+/);
   });
 
   it('handles keyboard controls', async () => {

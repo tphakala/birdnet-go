@@ -101,7 +101,7 @@
     showDownload = true,
     className = '',
     responsive = false,
-    spectrogramSize = 'lg',
+    spectrogramSize = 'md',
     spectrogramRaw = false,
     onPlayStart,
     onPlayEnd,

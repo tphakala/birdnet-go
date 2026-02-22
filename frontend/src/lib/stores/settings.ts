@@ -487,7 +487,7 @@ export interface SpectrogramPreRender {
 export const DEFAULT_SPECTROGRAM_SETTINGS: SpectrogramPreRender = {
   mode: 'auto',
   enabled: false,
-  size: 'lg',
+  size: 'md',
   raw: true,
   style: 'default',
   dynamicRange: '100',
