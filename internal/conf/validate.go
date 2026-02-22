@@ -926,6 +926,18 @@ func validateDashboardSettings(settings *Dashboard) error {
 		}
 	}
 
+	// Validate spectrogram size (coerce removed "sm" to default "lg")
+	if settings.Spectrogram.Size != "" {
+		validSizes := []string{"md", "lg", "xl"}
+		if !slices.Contains(validSizes, settings.Spectrogram.Size) {
+			GetLogger().Warn("Invalid spectrogram size, using default",
+				logger.String("invalid_size", settings.Spectrogram.Size),
+				logger.String("valid_sizes", strings.Join(validSizes, ", ")),
+				logger.String("fallback", "lg"))
+			settings.Spectrogram.Size = "lg"
+		}
+	}
+
 	// Validate spectrogram style
 	if settings.Spectrogram.Style != "" {
 		validStyles := []string{
