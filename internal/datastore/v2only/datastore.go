@@ -1415,7 +1415,13 @@ func (ds *Datastore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error {
 		Country:  dailyEvents.Country,
 		CityName: dailyEvents.CityName,
 	}
-	return ds.weather.SaveDailyEvents(ctx, v2Events)
+	if err := ds.weather.SaveDailyEvents(ctx, v2Events); err != nil {
+		return err
+	}
+	// Propagate the auto-generated ID back to the caller so that
+	// subsequent SaveHourlyWeather calls can set DailyEventsID correctly.
+	dailyEvents.ID = v2Events.ID
+	return nil
 }
 
 // GetDailyEvents retrieves daily events for a date.
