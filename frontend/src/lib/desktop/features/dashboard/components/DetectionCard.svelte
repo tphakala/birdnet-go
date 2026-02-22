@@ -263,12 +263,10 @@
             return;
           }
           hasSlot = true;
-          if (spectrogramImage) {
-            const url = new URL(spectrogramImage.src);
-            url.searchParams.set('retry', retryCount.toString());
-            url.searchParams.set('t', Date.now().toString());
-            spectrogramImage.src = url.toString();
-          }
+          const url = new URL(getSpectrogramUrl(retryForDetectionId), window.location.origin);
+          url.searchParams.set('retry', retryCount.toString());
+          url.searchParams.set('t', Date.now().toString());
+          spectrogramUrl = url.toString();
         });
       }, retryDelay);
     } else {

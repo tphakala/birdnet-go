@@ -220,7 +220,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		g.log().Warn("Sox spectrogram generation failed, falling back to FFmpeg (style settings may not be applied)",
 			logger.String("audio_path", audioPath),
 			logger.Error(err),
-			logger.Int64("sox_duration_ms", time.Since(start).Milliseconds()))
+			logger.Int64("elapsed_ms", time.Since(start).Milliseconds()))
 
 		// Create FRESH context for FFmpeg fallback with full timeout.
 		// This ensures FFmpeg has adequate time even if Sox consumed most of the
@@ -383,7 +383,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	runtime.Gosched()
 	soxStart := time.Now()
 	if err := cmd.Run(); err != nil {
-		g.log().Info("SoX direct execution failed",
+		g.log().Warn("SoX direct execution failed",
 			logger.String("audio_path", audioPath),
 			logger.Int("width", width),
 			logger.Int64("sox_ms", time.Since(soxStart).Milliseconds()))
@@ -514,7 +514,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	// Run FFmpeg (producer)
 	if err := ffmpegCmd.Run(); err != nil {
 		g.killSoxProcess(soxCmd, soxPid)
-		g.log().Info("FFmpeg|SoX pipeline failed (FFmpeg stage)",
+		g.log().Warn("FFmpeg|SoX pipeline failed (FFmpeg stage)",
 			logger.String("audio_path", audioPath),
 			logger.Int("width", width),
 			logger.Int64("pipeline_ms", time.Since(pipelineStart).Milliseconds()))
@@ -533,7 +533,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 		return eb.Build()
 	}
 
-	ffmpegDone := time.Since(pipelineStart).Milliseconds()
+	ffmpegElapsedMs := time.Since(pipelineStart).Milliseconds()
 
 	// Yield after FFmpeg completes before waiting on Sox
 	runtime.Gosched()
@@ -544,10 +544,10 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	soxWaitDone = true
 
 	if soxWaitErr != nil {
-		g.log().Info("FFmpeg|SoX pipeline failed (SoX stage)",
+		g.log().Warn("FFmpeg|SoX pipeline failed (SoX stage)",
 			logger.String("audio_path", audioPath),
 			logger.Int("width", width),
-			logger.Int64("ffmpeg_ms", ffmpegDone),
+			logger.Int64("ffmpeg_ms", ffmpegElapsedMs),
 			logger.Int64("pipeline_ms", time.Since(pipelineStart).Milliseconds()))
 		eb := errors.New(soxWaitErr).
 			Component("spectrogram").
@@ -569,7 +569,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	g.log().Info("FFmpeg|SoX pipeline completed",
 		logger.String("audio_path", audioPath),
 		logger.Int("width", width),
-		logger.Int64("ffmpeg_ms", ffmpegDone),
+		logger.Int64("ffmpeg_ms", ffmpegElapsedMs),
 		logger.Int64("pipeline_ms", time.Since(pipelineStart).Milliseconds()))
 
 	return nil
@@ -630,7 +630,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	// Run command
 	soxStart := time.Now()
 	if err := cmd.Run(); err != nil {
-		g.log().Info("SoX PCM execution failed",
+		g.log().Warn("SoX PCM execution failed",
 			logger.String("output_path", outputPath),
 			logger.Int("width", width),
 			logger.Int("pcm_bytes", len(pcmData)),
@@ -698,7 +698,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 
 	ffmpegStart := time.Now()
 	if err := cmd.Run(); err != nil {
-		g.log().Info("FFmpeg-only execution failed",
+		g.log().Warn("FFmpeg-only execution failed",
 			logger.String("audio_path", audioPath),
 			logger.Int("width", width),
 			logger.Int64("ffmpeg_ms", time.Since(ffmpegStart).Milliseconds()))
