@@ -859,12 +859,16 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	// Check if the configured device exists in the system
 	deviceFound := false
 	for _, device := range devices {
-		if device.Name == deviceName {
-			activeDevice.ID = device.ID
-			deviceFound = true
-			diagnostics["device_found"] = true
-			break
+		if device.ID != deviceName && device.Name != deviceName {
+			continue
 		}
+
+		activeDevice.Name = device.Name
+		activeDevice.ID = device.ID
+		deviceFound = true
+		diagnostics["device_found"] = true
+
+		break
 	}
 
 	if !deviceFound {
