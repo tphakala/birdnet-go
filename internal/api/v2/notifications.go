@@ -27,7 +27,7 @@ const (
 	// Connection timeouts
 	maxSSEConnectionDuration = 30 * time.Minute       // Maximum connection duration to prevent resource leaks
 	rateLimitWindow          = 1 * time.Minute        // Rate limiter time window
-	heartbeatInterval        = 30 * time.Second       // Heartbeat interval for keep-alive
+	heartbeatInterval        = 15 * time.Second       // Heartbeat interval for keep-alive (must be < server WriteTimeout)
 	eventLoopCheckInterval   = 100 * time.Millisecond // Event loop check interval
 
 	// Endpoints

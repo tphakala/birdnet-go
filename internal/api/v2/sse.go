@@ -24,7 +24,7 @@ import (
 const (
 	// Connection timeouts
 	maxSSEStreamDuration = 30 * time.Minute      // Maximum stream duration to prevent resource leaks
-	sseHeartbeatInterval = 30 * time.Second      // Heartbeat interval for keep-alive
+	sseHeartbeatInterval = 15 * time.Second      // Heartbeat interval for keep-alive (must be < server WriteTimeout)
 	sseEventLoopSleep    = 10 * time.Millisecond // Sleep duration when no events
 	sseWriteDeadline     = 10 * time.Second      // Write deadline for SSE messages
 
