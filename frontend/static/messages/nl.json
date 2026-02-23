@@ -680,6 +680,13 @@
         "genus": "Geslacht",
         "species": "Soort"
       }
+    },
+    "tracking": {
+      "title": "Soortmonitoring",
+      "newSpecies": "Nieuwe soort",
+      "newThisYear": "Eerste keer dit jaar",
+      "newThisSeason": "Eerste keer dit seizoen",
+      "daysSinceFirst": "Dagen sinds eerste waarneming"
     }
   },
   "system": {

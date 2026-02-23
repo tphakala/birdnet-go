@@ -680,6 +680,13 @@
         "genus": "Rod",
         "species": "Druh"
       }
+    },
+    "tracking": {
+      "title": "Sledovanie druhov",
+      "newSpecies": "Nový druh",
+      "newThisYear": "Prvýkrát tento rok",
+      "newThisSeason": "Prvýkrát túto sezónu",
+      "daysSinceFirst": "Dní od prvej detekcie"
     }
   },
   "system": {

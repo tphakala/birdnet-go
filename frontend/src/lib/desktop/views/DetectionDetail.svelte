@@ -73,16 +73,7 @@
 
   // Constants
   const TAB_FOCUS_DELAY_MS = 50;
-  type TabType = 'overview' | 'taxonomy' | 'history' | 'notes' | 'review';
-
-  // Helper to calculate detection duration with NaN safety
-  function calculateDuration(endTime: string, beginTime: string): string {
-    const end = parseFloat(endTime);
-    const begin = parseFloat(beginTime);
-    const duration = end - begin;
-    if (Number.isNaN(duration)) return '—';
-    return `${duration}s`;
-  }
+  type TabType = 'overview' | 'history' | 'notes' | 'review';
 
   interface Props {
     detectionId?: string;
@@ -152,7 +143,7 @@
   $effect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
-    const validTabs: TabType[] = ['overview', 'taxonomy', 'history', 'notes', 'review'];
+    const validTabs: TabType[] = ['overview', 'history', 'notes', 'review'];
     if (tabParam && validTabs.includes(tabParam as TabType)) {
       activeTab = tabParam === 'review' && !canReview ? 'overview' : (tabParam as TabType);
     }
@@ -337,7 +328,7 @@
 
   // Keyboard navigation handler for tab buttons
   function handleTabKeydown(e: KeyboardEvent) {
-    const tabs: TabType[] = ['overview', 'taxonomy', 'history', 'notes'];
+    const tabs: TabType[] = ['overview', 'history', 'notes'];
     if (canReview) tabs.push('review');
 
     const currentIndex = tabs.indexOf(activeTab);
@@ -392,7 +383,7 @@
       function handlePopState() {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
-        const validTabs = ['overview', 'taxonomy', 'history', 'notes', 'review'] as const;
+        const validTabs = ['overview', 'history', 'notes', 'review'] as const;
 
         if (tabParam && validTabs.includes(tabParam as typeof activeTab)) {
           if (tabParam === 'review' && !canReview) {
@@ -420,7 +411,7 @@
   <section class="detection-hero" aria-labelledby="species-heading">
     <!-- Row 1: Thumbnail + Species + Confidence/DateTime -->
     <div class="hero-row">
-      <!-- Species thumbnail with attribution overlay -->
+      <!-- Species thumbnail with credit overlay -->
       <div class="hero-thumbnail">
         <img
           src="/api/v2/media/species-image?name={encodeURIComponent(det.scientificName)}"
@@ -430,28 +421,26 @@
           loading="eager"
         />
         {#if imageAttribution?.authorName}
-          <div
-            class="thumbnail-attribution"
-            aria-label="Image credit: {imageAttribution.authorName}"
-          >
-            <span class="attribution-author">{imageAttribution.authorName}</span>
+          <div class="thumbnail-credit" aria-label="Image credit: {imageAttribution.authorName}">
+            <span class="credit-text">📷 {imageAttribution.authorName}</span>
             {#if imageAttribution.licenseName}
+              <span class="credit-separator">·</span>
               {#if imageAttribution.licenseURL}
                 <a
                   href={imageAttribution.licenseURL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="attribution-license">{imageAttribution.licenseName}</a
+                  class="credit-license">{imageAttribution.licenseName}</a
                 >
               {:else}
-                <span class="attribution-license">{imageAttribution.licenseName}</span>
+                <span class="credit-license">{imageAttribution.licenseName}</span>
               {/if}
             {/if}
           </div>
         {/if}
       </div>
 
-      <!-- Species identity (grows to fill) -->
+      <!-- Species identity -->
       <div class="hero-species">
         <h1 id="species-heading" class="species-display-name">
           {det.commonName}
@@ -461,7 +450,7 @@
           {det.scientificName}
         </p>
         <div class="mt-3" aria-label="Species classification badges">
-          <SpeciesBadges detection={det} size="lg" />
+          <SpeciesBadges detection={det} size="sm" />
         </div>
       </div>
 
@@ -498,13 +487,13 @@
               style="background-color: {colors.bg}; color: {colors.fg};"
             >
               {#if det.timeOfDay === 'day'}
-                <Sun class="w-3 h-3" />
+                <Sun size={12} />
               {:else if det.timeOfDay === 'night'}
-                <Moon class="w-3 h-3" />
+                <Moon size={12} />
               {:else if det.timeOfDay === 'sunrise'}
-                <Sunrise class="w-3 h-3" />
+                <Sunrise size={12} />
               {:else if det.timeOfDay === 'sunset'}
-                <Sunset class="w-3 h-3" />
+                <Sunset size={12} />
               {/if}
               <span class="capitalize">{det.timeOfDay}</span>
             </span>
@@ -549,72 +538,19 @@
 
 {#snippet overviewTab(det: Detection)}
   <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-    <!-- Environmental Conditions -->
-    <section aria-labelledby="environmental-heading">
-      <h3 id="environmental-heading" class="section-heading">
-        {t('detections.environmental.title')}
-      </h3>
-      {#if det.weather}
-        <div class="content-panel">
-          <WeatherDetails
-            weatherIcon={det.weather.weatherIcon}
-            weatherDescription={det.weather.description}
-            temperature={det.weather.temperature}
-            windSpeed={det.weather.windSpeed}
-            windGust={det.weather.windGust}
-            units={det.weather.units}
-            size="lg"
-          />
-        </div>
-      {:else}
-        <p class="text-sm text-base-content/50 italic">{t('detections.weather.noData')}</p>
-      {/if}
-    </section>
-
-    <!-- Detection Metadata -->
-    <section aria-labelledby="metadata-heading">
-      <h3 id="metadata-heading" class="section-heading">
-        {t('detections.metadata.title')}
-      </h3>
-      <div class="content-panel" role="table" aria-label="Detection metadata">
-        <dl class="metadata-list">
-          <div class="metadata-row">
-            <dt>{t('detections.metadata.source')}</dt>
-            <dd>{det.source ?? t('common.values.unknown')}</dd>
-          </div>
-          <div class="metadata-row">
-            <dt>{t('detections.metadata.duration')}</dt>
-            <dd>{calculateDuration(det.endTime, det.beginTime)}</dd>
-          </div>
-          {#if det.verified !== 'unverified'}
-            <div class="metadata-row">
-              <dt>{t('detections.metadata.status')}</dt>
-              <dd class="capitalize">{det.verified}</dd>
-            </div>
-          {/if}
-          {#if det.locked}
-            <div class="metadata-row">
-              <dt>{t('detections.metadata.locked')}</dt>
-              <dd>{t('common.values.yes')}</dd>
-            </div>
-          {/if}
-        </dl>
-      </div>
-    </section>
-
-    <!-- Species Rarity (if available) -->
+    <!-- Species Rarity -->
     {#if speciesInfo?.rarity}
-      <section aria-labelledby="rarity-heading" class="md:col-span-2">
+      <section aria-labelledby="rarity-heading">
         <h3 id="rarity-heading" class="section-heading">{t('species.rarity.title')}</h3>
         <div class="content-panel">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-base font-medium capitalize">{speciesInfo.rarity.status}</span>
-            <span class="text-xs text-base-content/50 tracking-wide">
-              {t('species.rarity.score')}: {(speciesInfo.rarity.score * 100).toFixed(1)}%
+          <div class="flex items-center gap-3 mb-1">
+            <span class="rarity-label">{speciesInfo.rarity.status.replace(/_/g, ' ')}</span>
+            <span class="rarity-score">
+              {(speciesInfo.rarity.score * 100).toFixed(0)}%
             </span>
           </div>
           {#if speciesInfo.rarity.location_based}
-            <p class="text-xs text-base-content/50">
+            <p class="text-xs text-base-content/40">
               {t('species.rarity.basedOnLocation', {
                 latitude: speciesInfo.rarity.latitude.toFixed(2),
                 longitude: speciesInfo.rarity.longitude.toFixed(2),
@@ -624,76 +560,104 @@
         </div>
       </section>
     {/if}
-  </div>
-{/snippet}
 
-{#snippet taxonomyTab()}
-  <div>
-    {#if isLoadingTaxonomy}
-      <div role="status" aria-label="Loading taxonomy information">
-        <div class="animate-pulse space-y-4">
-          <div class="h-5 rounded bg-base-300/60 w-48"></div>
-          <div class="content-panel space-y-3 p-6">
-            {#each Array(7) as _, i (i)}
-              <div class="flex items-center gap-3" style:padding-left="{i * 1.5}rem">
-                <div class="h-3.5 rounded bg-base-300/60 w-16"></div>
-                <div class="h-3.5 rounded bg-base-300/60 w-24"></div>
+    <!-- Species Tracking -->
+    {#if det.isNewSpecies || det.isNewThisYear || det.isNewThisSeason || det.daysSinceFirstSeen != null}
+      <section aria-labelledby="tracking-heading">
+        <h3 id="tracking-heading" class="section-heading">{t('species.tracking.title')}</h3>
+        <div class="content-panel">
+          <dl class="metadata-list">
+            {#if det.isNewSpecies}
+              <div class="metadata-row">
+                <dt>{t('species.tracking.newSpecies')}</dt>
+                <dd class="text-success font-medium">{t('common.values.yes')}</dd>
               </div>
-            {/each}
-          </div>
+            {/if}
+            {#if det.isNewThisYear}
+              <div class="metadata-row">
+                <dt>{t('species.tracking.newThisYear')}</dt>
+                <dd class="text-success font-medium">{t('common.values.yes')}</dd>
+              </div>
+            {/if}
+            {#if det.isNewThisSeason && det.currentSeason}
+              <div class="metadata-row">
+                <dt>{t('species.tracking.newThisSeason')}</dt>
+                <dd class="capitalize">{det.currentSeason}</dd>
+              </div>
+            {/if}
+            {#if det.daysSinceFirstSeen != null && det.daysSinceFirstSeen > 0}
+              <div class="metadata-row">
+                <dt>{t('species.tracking.daysSinceFirst')}</dt>
+                <dd>{det.daysSinceFirstSeen}</dd>
+              </div>
+            {/if}
+          </dl>
         </div>
-      </div>
-    {:else if taxonomyInfo?.taxonomy}
-      <section aria-labelledby="taxonomy-hierarchy-heading">
-        <h3 id="taxonomy-hierarchy-heading" class="section-heading">
+      </section>
+    {/if}
+
+    <!-- Taxonomy -->
+    {#if isLoadingTaxonomy}
+      <section aria-labelledby="taxonomy-heading" class="md:col-span-2">
+        <h3 id="taxonomy-heading" class="section-heading">
           {t('species.taxonomy.hierarchy')}
         </h3>
-        <div class="content-panel p-6">
-          <div class="taxonomy-tree">
-            {#each [{ key: 'kingdom', value: taxonomyInfo.taxonomy.kingdom, depth: 0 }, { key: 'phylum', value: taxonomyInfo.taxonomy.phylum, depth: 1 }, { key: 'class', value: taxonomyInfo.taxonomy.class, depth: 2 }, { key: 'order', value: taxonomyInfo.taxonomy.order, depth: 3 }, { key: 'family', value: taxonomyInfo.taxonomy.family, depth: 4, extra: taxonomyInfo.taxonomy.family_common }, { key: 'genus', value: taxonomyInfo.taxonomy.genus, depth: 5 }, { key: 'species', value: taxonomyInfo.taxonomy.species, depth: 6 }] as rank (rank.key)}
-              <div class="taxonomy-rank" style:padding-left="{rank.depth * 1.5}rem">
-                <span class="taxonomy-label">
-                  {t(`species.taxonomy.labels.${rank.key}`)}
-                </span>
-                <span class="taxonomy-value" class:italic={rank.key === 'species'}>
-                  {rank.value}
-                  {#if rank.extra}
-                    <span class="text-base-content/50">({rank.extra})</span>
-                  {/if}
-                </span>
+        <div class="content-panel">
+          <div class="animate-pulse space-y-3">
+            {#each Array(7) as _, i (i)}
+              <div class="flex items-center gap-2">
+                <div class="h-3 rounded bg-base-300/60 w-14"></div>
+                <div class="h-3 rounded bg-base-300/60 w-24"></div>
               </div>
             {/each}
           </div>
         </div>
       </section>
-
-      {#if subspeciesList.length > 0}
-        <section aria-labelledby="subspecies-heading" class="mt-8">
-          <h3 id="subspecies-heading" class="section-heading">
-            {t('species.taxonomy.subspecies')}
-          </h3>
-          <div
-            class="grid grid-cols-1 md:grid-cols-2 gap-3"
-            role="list"
-            aria-label="Subspecies list"
-          >
-            {#each subspeciesList as subspecies (subspecies.scientific_name)}
-              <div class="content-panel" role="listitem">
-                <p class="font-medium italic text-sm" aria-label="Scientific name">
-                  {subspecies.scientific_name}
-                </p>
-                {#if subspecies.common_name}
-                  <p class="text-xs text-base-content/50 mt-0.5" aria-label="Common name">
-                    {subspecies.common_name}
-                  </p>
+    {:else if taxonomyInfo?.taxonomy}
+      <section aria-labelledby="taxonomy-heading" class="md:col-span-2">
+        <h3 id="taxonomy-heading" class="section-heading">
+          {t('species.taxonomy.hierarchy')}
+        </h3>
+        <div class="content-panel taxonomy-panel">
+          <div class="taxonomy-tree">
+            {#each [{ key: 'kingdom', value: taxonomyInfo.taxonomy.kingdom, depth: 0 }, { key: 'phylum', value: taxonomyInfo.taxonomy.phylum, depth: 1 }, { key: 'class', value: taxonomyInfo.taxonomy.class, depth: 2 }, { key: 'order', value: taxonomyInfo.taxonomy.order, depth: 3 }, { key: 'family', value: taxonomyInfo.taxonomy.family, depth: 4, extra: taxonomyInfo.taxonomy.family_common }, { key: 'genus', value: taxonomyInfo.taxonomy.genus, depth: 5 }, { key: 'species', value: taxonomyInfo.taxonomy.species, depth: 6 }] as rank, i (rank.key)}
+              <div class="taxonomy-node" style:--depth={rank.depth}>
+                {#if i > 0}
+                  <div class="taxonomy-connector" aria-hidden="true">
+                    <div class="connector-vert"></div>
+                    <div class="connector-horiz"></div>
+                  </div>
                 {/if}
+                <span class="taxonomy-rank-label">
+                  {t(`species.taxonomy.labels.${rank.key}`)}
+                </span>
+                <span class="taxonomy-rank-value" class:italic={rank.key === 'species'}>
+                  {rank.value}
+                  {#if rank.extra}
+                    <span class="taxonomy-family-common">({rank.extra})</span>
+                  {/if}
+                </span>
               </div>
             {/each}
           </div>
-        </section>
-      {/if}
-    {:else}
-      <p class="text-sm text-base-content/50 italic">{t('species.taxonomy.noData')}</p>
+
+          {#if subspeciesList.length > 0}
+            <div class="taxonomy-subspecies">
+              <h4 class="taxonomy-subspecies-heading">{t('species.taxonomy.subspecies')}</h4>
+              <div class="taxonomy-subspecies-list">
+                {#each subspeciesList as subspecies (subspecies.scientific_name)}
+                  <div class="taxonomy-subspecies-item">
+                    <span class="italic">{subspecies.scientific_name}</span>
+                    {#if subspecies.common_name}
+                      <span class="taxonomy-subspecies-common">{subspecies.common_name}</span>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+      </section>
     {/if}
   </div>
 {/snippet}
@@ -787,7 +751,7 @@
 
         <!-- Tab Navigation -->
         <div class="tab-nav" role="tablist" aria-label="Detection details tabs">
-          {#each ['overview', 'taxonomy', 'history', 'notes'] as tab (tab)}
+          {#each ['overview', 'history', 'notes'] as tab (tab)}
             <button
               id="tab-{tab}"
               role="tab"
@@ -830,16 +794,6 @@
               tabindex="0"
             >
               {@render overviewTab(detection)}
-            </div>
-          {:else if activeTab === 'taxonomy'}
-            <div
-              role="tabpanel"
-              id="tab-panel-taxonomy"
-              aria-labelledby="tab-taxonomy"
-              aria-hidden="false"
-              tabindex="0"
-            >
-              {@render taxonomyTab()}
             </div>
           {:else if activeTab === 'history'}
             <div
@@ -928,12 +882,12 @@
     }
   }
 
-  /* Species thumbnail — square to match avicommons 320×320 source images */
+  /* Species thumbnail — 4:3 to match avicommons 320×240 source images */
   .hero-thumbnail {
     position: relative;
     width: 100%;
-    aspect-ratio: 1;
-    max-height: 160px;
+    aspect-ratio: 4 / 3;
+    max-height: 140px;
     border-radius: 0.75rem;
     overflow: hidden;
     background: linear-gradient(135deg, var(--color-base-200), var(--color-base-300));
@@ -943,54 +897,51 @@
 
   @media (min-width: 768px) {
     .hero-thumbnail {
-      width: 140px;
-      min-width: 140px;
+      width: 180px;
+      min-width: 180px;
       max-height: none;
     }
   }
 
-  /* Attribution overlay — visible on hover */
-  .thumbnail-attribution {
+  /* Photo credit — bottom-right corner of thumbnail */
+  .thumbnail-credit {
     position: absolute;
-    inset: auto 0 0 0;
+    right: 0;
+    bottom: 0;
     display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-    padding: 0.375rem 0.5rem;
-    background: linear-gradient(to top, oklch(0.15 0 0 / 0.85), oklch(0.15 0 0 / 0));
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.2rem 0.4rem;
+    background: oklch(0.1 0 0 / 0.55);
+    border-top-left-radius: 0.375rem;
   }
 
-  .hero-thumbnail:hover .thumbnail-attribution {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .attribution-author {
-    font-size: 0.625rem;
-    font-weight: 500;
-    color: white;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .attribution-license {
+  .credit-text {
     font-size: 0.5625rem;
-    color: oklch(0.85 0 0);
-    line-height: 1.2;
-    text-decoration: none;
+    color: oklch(0.95 0 0);
+    line-height: 1;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  a.attribution-license:hover {
-    text-decoration: underline;
+  .credit-separator {
+    font-size: 0.5625rem;
+    color: oklch(0.7 0 0);
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .credit-license {
+    font-size: 0.5625rem;
+    color: oklch(0.8 0 0);
+    text-decoration: none;
+    line-height: 1;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  a.credit-license:hover {
     color: white;
+    text-decoration: underline;
   }
 
   /* Species identity - takes available space */
@@ -1161,34 +1112,130 @@
     color: var(--color-base-content);
   }
 
-  /* ----- Taxonomy tree ----- */
-  .taxonomy-tree {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
+  /* ----- Rarity display ----- */
+  .rarity-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-base-content);
+    text-transform: capitalize;
   }
 
-  .taxonomy-rank {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    position: relative;
-  }
-
-  .taxonomy-label {
+  .rarity-score {
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--color-base-content);
-    opacity: 0.45;
-    width: 5rem;
-    flex-shrink: 0;
-    text-align: right;
+    opacity: 0.4;
   }
 
-  .taxonomy-value {
-    font-size: 0.9375rem;
+  /* ----- Taxonomy tree with connector lines ----- */
+  .taxonomy-panel {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .taxonomy-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .taxonomy-node {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: calc(var(--depth) * 1.25rem);
+    min-height: 2rem;
+    position: relative;
+  }
+
+  /* Connector lines */
+  .taxonomy-connector {
+    position: absolute;
+    left: calc(var(--depth) * 1.25rem - 0.75rem);
+    top: 0;
+    width: 0.75rem;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .connector-vert {
+    position: absolute;
+    left: 0;
+    top: -0.25rem;
+    width: 1px;
+    height: calc(50% + 0.25rem);
+    background-color: var(--border-200);
+  }
+
+  .connector-horiz {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 100%;
+    height: 1px;
+    background-color: var(--border-200);
+  }
+
+  .taxonomy-rank-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-base-content);
+    opacity: 0.35;
+    flex-shrink: 0;
+    min-width: 3.5rem;
+  }
+
+  .taxonomy-rank-value {
+    font-size: 0.875rem;
     font-weight: 500;
     color: var(--color-base-content);
+  }
+
+  .taxonomy-family-common {
+    color: var(--color-base-content);
+    opacity: 0.45;
+    font-style: normal;
+  }
+
+  /* Subspecies section */
+  .taxonomy-subspecies {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-100);
+  }
+
+  .taxonomy-subspecies-heading {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-base-content);
+    opacity: 0.35;
+    margin-bottom: 0.5rem;
+  }
+
+  .taxonomy-subspecies-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .taxonomy-subspecies-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--color-base-content);
+    padding: 0.25rem 0.625rem;
+    background-color: var(--color-base-100);
+    border: 1px solid var(--border-100);
+    border-radius: var(--radius-field);
+  }
+
+  .taxonomy-subspecies-common {
+    font-size: 0.75rem;
+    opacity: 0.5;
   }
 
   /* ----- Tab Navigation ----- */

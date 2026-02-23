@@ -685,6 +685,13 @@
         "genus": "Genus",
         "species": "Species"
       }
+    },
+    "tracking": {
+      "title": "Species Tracking",
+      "newSpecies": "New species",
+      "newThisYear": "First this year",
+      "newThisSeason": "First this season",
+      "daysSinceFirst": "Days since first seen"
     }
   },
   "system": {

@@ -680,6 +680,13 @@
         "genus": "Rodzaj",
         "species": "Gatunek"
       }
+    },
+    "tracking": {
+      "title": "Śledzenie gatunków",
+      "newSpecies": "Nowy gatunek",
+      "newThisYear": "Pierwszy raz w tym roku",
+      "newThisSeason": "Pierwszy raz w tym sezonie",
+      "daysSinceFirst": "Dni od pierwszego wykrycia"
     }
   },
   "system": {

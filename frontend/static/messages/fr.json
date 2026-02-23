@@ -680,6 +680,13 @@
         "genus": "Genre",
         "species": "Espèce"
       }
+    },
+    "tracking": {
+      "title": "Suivi des espèces",
+      "newSpecies": "Nouvelle espèce",
+      "newThisYear": "Première fois cette année",
+      "newThisSeason": "Première fois cette saison",
+      "daysSinceFirst": "Jours depuis la première détection"
     }
   },
   "system": {

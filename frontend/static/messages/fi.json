@@ -680,6 +680,13 @@
         "genus": "Suku",
         "species": "Laji"
       }
+    },
+    "tracking": {
+      "title": "Lajiseuranta",
+      "newSpecies": "Uusi laji",
+      "newThisYear": "Ensimmäinen tänä vuonna",
+      "newThisSeason": "Ensimmäinen tällä kaudella",
+      "daysSinceFirst": "Päiviä ensihavainnosta"
     }
   },
   "system": {

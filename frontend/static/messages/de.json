@@ -680,6 +680,13 @@
         "genus": "Gattung",
         "species": "Art"
       }
+    },
+    "tracking": {
+      "title": "Artenbeobachtung",
+      "newSpecies": "Neue Art",
+      "newThisYear": "Erste Beobachtung dieses Jahr",
+      "newThisSeason": "Erste Beobachtung diese Saison",
+      "daysSinceFirst": "Tage seit erster Beobachtung"
     }
   },
   "system": {
