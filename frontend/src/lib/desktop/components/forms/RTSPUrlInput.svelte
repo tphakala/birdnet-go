@@ -113,7 +113,7 @@
 </script>
 
 <div class="space-y-2">
-  {#each urls as url, index (index)}
+  {#each urls as url, index (`${url}-${index}`)}
     <div class="flex items-center gap-2">
       <input
         type="text"
