@@ -76,6 +76,12 @@
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let updateInterval: ReturnType<typeof setInterval> | undefined;
 
+  // Audio retry state (handles 404 when clip is still being written to disk)
+  let audioRetryCount = 0;
+  let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  const MAX_AUDIO_RETRIES = 3;
+  const AUDIO_RETRY_DELAYS = [1000, 2000, 4000];
+
   // Web Audio API
   let audioContext: AudioContext | null = null;
   let isInitializingContext = $state(false);
@@ -124,6 +130,11 @@
         duration = 0;
         error = null;
         hasEverPlayed = false;
+        audioRetryCount = 0;
+        if (audioRetryTimer) {
+          clearTimeout(audioRetryTimer);
+          audioRetryTimer = undefined;
+        }
       }
     }
   });
@@ -133,8 +144,13 @@
 
     if (!audioElement) return;
 
-    // Clear any previous error when retrying
+    // Clear any previous error and reset retry count for fresh user interaction
     error = null;
+    audioRetryCount = 0;
+    if (audioRetryTimer) {
+      clearTimeout(audioRetryTimer);
+      audioRetryTimer = undefined;
+    }
 
     try {
       if (isPlaying) {
@@ -344,6 +360,31 @@
       clearTimeout(canplayTimeoutId);
       canplayTimeoutId = undefined;
     }
+
+    // Retry transparently if user initiated play and retries remain.
+    // This handles the case where the audio clip is still being written
+    // to disk when the user clicks play on a freshly detected species.
+    if (isLoading && audioRetryCount < MAX_AUDIO_RETRIES) {
+      const delay = AUDIO_RETRY_DELAYS[Math.min(audioRetryCount, AUDIO_RETRY_DELAYS.length - 1)];
+      audioRetryCount++;
+      logger.debug('Audio load failed, retrying', {
+        detectionId,
+        retryCount: audioRetryCount,
+        delay,
+      });
+
+      audioRetryTimer = setTimeout(() => {
+        if (!audioElement) return;
+        // Cache-bust to avoid the browser serving the cached 404
+        audioElement.src = `${audioUrl}?t=${String(Date.now())}`;
+        audioElement.load();
+        void audioElement.play().catch(() => {
+          // play() rejection handled by the next error event
+        });
+      }, delay);
+      return;
+    }
+
     error = t('media.audio.error');
     isLoading = false;
   }
@@ -374,6 +415,12 @@
       if (canplayTimeoutId) {
         clearTimeout(canplayTimeoutId);
         canplayTimeoutId = undefined;
+      }
+
+      // Clear audio retry timer
+      if (audioRetryTimer) {
+        clearTimeout(audioRetryTimer);
+        audioRetryTimer = undefined;
       }
 
       // Clean up drag listeners if component unmounts while dragging
