@@ -906,7 +906,7 @@ Performance Optimizations:
           }
         },
         1000,
-        `count-${detection.speciesCode}`
+        `count-${detection.scientificName}`
       );
     } else {
       // Add new species - sorting is handled by DailySummaryCard's sortedData derived value
@@ -969,7 +969,7 @@ Performance Optimizations:
           }
         },
         800,
-        `new-${detection.speciesCode}`
+        `new-${detection.scientificName}`
       );
     }
   }
