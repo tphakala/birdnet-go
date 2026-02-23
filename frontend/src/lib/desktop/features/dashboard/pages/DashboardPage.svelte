@@ -784,8 +784,9 @@ Performance Optimizations:
       return;
     }
 
-    // Add to queue (overwrites previous detection for same species)
-    updateQueue.set(detection.speciesCode, detection);
+    // Add to queue (overwrites previous detection for same species).
+    // Use scientificName as key since species_code may be empty in v2 schema.
+    updateQueue.set(detection.scientificName, detection);
 
     // Clear existing timer and set new one
     if (updateTimer) {
@@ -839,9 +840,16 @@ Performance Optimizations:
     }
 
     // Match by species_code first (primary), then fall back to scientific_name.
-    // This prevents duplicate entries when the same species arrives with a different
-    // species_code (e.g., multi-model setups or code mapping differences).
-    let existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+    // The v2 schema omits species_code (stored as ""), so SSE detections whose
+    // speciesCode comes from BirdNET won't match the empty field. The scientific_name
+    // fallback prevents a duplicate entry in that case, and also handles multi-model
+    // setups where the same species may arrive with different species codes.
+    // Guard: only attempt species_code match when the detection actually has one,
+    // otherwise undefined === undefined would incorrectly match the first entry.
+    let existingIndex = -1;
+    if (detection.speciesCode) {
+      existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+    }
     if (existingIndex < 0) {
       existingIndex = dailySummary.findIndex(s => s.scientific_name === detection.scientificName);
     }
