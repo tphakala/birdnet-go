@@ -568,6 +568,12 @@
     "status": {
       "locked": "Bloccato"
     },
+    "timeOfDay": {
+      "day": "Giorno",
+      "night": "Notte",
+      "sunrise": "Alba",
+      "sunset": "Tramonto"
+    },
     "table": {
       "caption": "Elenco dei rilevamenti di uccelli con data, specie, confidenza e informazioni sullo stato"
     },

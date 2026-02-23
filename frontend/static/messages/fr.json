@@ -617,6 +617,12 @@
     "status": {
       "locked": "Verrouillé"
     },
+    "timeOfDay": {
+      "day": "Jour",
+      "night": "Nuit",
+      "sunrise": "Lever du soleil",
+      "sunset": "Coucher du soleil"
+    },
     "table": {
       "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
     },

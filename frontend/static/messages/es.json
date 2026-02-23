@@ -568,6 +568,12 @@
     "status": {
       "locked": "Bloqueado"
     },
+    "timeOfDay": {
+      "day": "Día",
+      "night": "Noche",
+      "sunrise": "Amanecer",
+      "sunset": "Atardecer"
+    },
     "table": {
       "caption": "Lista de detecciones de aves con fecha, especie, confianza e información de estado"
     },

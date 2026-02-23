@@ -112,6 +112,7 @@
   let detectionController: AbortController | null = null;
   let speciesController: AbortController | null = null;
   let taxonomyController: AbortController | null = null;
+  let attributionController: AbortController | null = null;
 
   // Validate detection ID to prevent path traversal attacks
   // Only allow alphanumeric characters, hyphens, and underscores
@@ -159,6 +160,7 @@
       detectionController?.abort();
       speciesController?.abort();
       taxonomyController?.abort();
+      attributionController?.abort();
     };
   });
 
@@ -230,16 +232,26 @@
   // Fetch image attribution metadata
   async function fetchImageAttribution() {
     if (!detection?.scientificName) return;
+
+    attributionController?.abort();
+    attributionController = new AbortController();
+
     try {
       const url = buildAppUrl(
         `/api/v2/media/species-image/info?name=${encodeURIComponent(detection.scientificName)}`
       );
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: attributionController.signal });
+      if (attributionController.signal.aborted) return;
       if (response.ok) {
-        imageAttribution = (await response.json()) as ImageAttribution;
+        const data = await response.json();
+        if (attributionController.signal.aborted) return;
+        imageAttribution = data as ImageAttribution;
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       // Attribution is non-critical — fail silently
+    } finally {
+      attributionController = null;
     }
   }
 
@@ -496,7 +508,7 @@
               {:else if det.timeOfDay === 'sunset'}
                 <Sunset size={12} />
               {/if}
-              <span class="capitalize">{det.timeOfDay}</span>
+              <span>{t(`detections.timeOfDay.${det.timeOfDay}`)}</span>
             </span>
           {/if}
         </div>
@@ -563,7 +575,7 @@
     {/if}
 
     <!-- Species Tracking -->
-    {#if det.isNewSpecies || det.isNewThisYear || det.isNewThisSeason || det.daysSinceFirstSeen != null}
+    {#if det.isNewSpecies || det.isNewThisYear || det.isNewThisSeason || (det.daysSinceFirstSeen != null && det.daysSinceFirstSeen > 0)}
       <section aria-labelledby="tracking-heading">
         <h3 id="tracking-heading" class="section-heading">{t('species.tracking.title')}</h3>
         <div class="content-panel">
@@ -913,27 +925,27 @@
     align-items: center;
     gap: 0.2rem;
     padding: 0.2rem 0.4rem;
-    background: oklch(0.1 0 0 / 0.55);
+    background: oklch(10% 0 0deg / 0.55);
     border-top-left-radius: 0.375rem;
   }
 
   .credit-text {
     font-size: 0.5625rem;
-    color: oklch(0.95 0 0);
+    color: oklch(95% 0 0deg);
     line-height: 1;
     white-space: nowrap;
   }
 
   .credit-separator {
     font-size: 0.5625rem;
-    color: oklch(0.7 0 0);
+    color: oklch(70% 0 0deg);
     flex-shrink: 0;
     line-height: 1;
   }
 
   .credit-license {
     font-size: 0.5625rem;
-    color: oklch(0.8 0 0);
+    color: oklch(80% 0 0deg);
     text-decoration: none;
     line-height: 1;
     flex-shrink: 0;

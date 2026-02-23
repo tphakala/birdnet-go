@@ -568,6 +568,12 @@
     "status": {
       "locked": "Vergrendeld"
     },
+    "timeOfDay": {
+      "day": "Dag",
+      "night": "Nacht",
+      "sunrise": "Zonsopgang",
+      "sunset": "Zonsondergang"
+    },
     "table": {
       "caption": "Lijst van herkende vogels met datum, soort , betrouwbaarheid en status informatie"
     },

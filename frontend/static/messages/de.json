@@ -568,6 +568,12 @@
     "status": {
       "locked": "Gesperrt"
     },
+    "timeOfDay": {
+      "day": "Tag",
+      "night": "Nacht",
+      "sunrise": "Sonnenaufgang",
+      "sunset": "Sonnenuntergang"
+    },
     "table": {
       "caption": "Liste der Vogelerkennungen mit Datum, Art, Konfidenz und Statusinformationen"
     },

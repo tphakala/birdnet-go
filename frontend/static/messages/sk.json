@@ -568,6 +568,12 @@
     "status": {
       "locked": "Uzamknuté"
     },
+    "timeOfDay": {
+      "day": "Deň",
+      "night": "Noc",
+      "sunrise": "Východ slnka",
+      "sunset": "Západ slnka"
+    },
     "table": {
       "caption": "Zoznam detekcií vtákov s informáciami o dátume, druhu, istote a stave"
     },

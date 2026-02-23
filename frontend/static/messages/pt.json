@@ -576,6 +576,12 @@
     "status": {
       "locked": "Bloqueado"
     },
+    "timeOfDay": {
+      "day": "Dia",
+      "night": "Noite",
+      "sunrise": "Nascer do sol",
+      "sunset": "Pôr do sol"
+    },
     "table": {
       "caption": "Lista de detecções de pássaros com data, espécie, confiança e informações de status"
     },

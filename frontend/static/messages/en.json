@@ -573,6 +573,12 @@
     "status": {
       "locked": "Locked"
     },
+    "timeOfDay": {
+      "day": "Day",
+      "night": "Night",
+      "sunrise": "Sunrise",
+      "sunset": "Sunset"
+    },
     "table": {
       "caption": "List of bird detections with date, species, confidence, and status information"
     },

@@ -568,6 +568,12 @@
     "status": {
       "locked": "Lukittu"
     },
+    "timeOfDay": {
+      "day": "Päivä",
+      "night": "Yö",
+      "sunrise": "Auringonnousu",
+      "sunset": "Auringonlasku"
+    },
     "table": {
       "caption": "Lintuhavaintojen lista päivämäärällä, lajilla, luottamuksella ja tilatiedoilla"
     },

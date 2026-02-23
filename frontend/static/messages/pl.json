@@ -568,6 +568,12 @@
     "status": {
       "locked": "Zablokowane"
     },
+    "timeOfDay": {
+      "day": "Dzień",
+      "night": "Noc",
+      "sunrise": "Wschód słońca",
+      "sunset": "Zachód słońca"
+    },
     "table": {
       "caption": "Lista detekcji ptaków z datą, gatunkiem, pewnością i informacjami o statusie"
     },
