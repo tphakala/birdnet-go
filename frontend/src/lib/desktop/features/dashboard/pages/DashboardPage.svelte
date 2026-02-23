@@ -839,28 +839,20 @@ Performance Optimizations:
       hour = 0;
     }
 
-    // Match by species_code first (primary), then fall back to scientific_name.
-    // The v2 schema omits species_code (stored as ""), so SSE detections whose
-    // speciesCode comes from BirdNET won't match the empty field. The scientific_name
-    // fallback prevents a duplicate entry in that case, and also handles multi-model
-    // setups where the same species may arrive with different species codes.
-    // Guard: only attempt species_code match when the detection actually has one,
-    // otherwise undefined === undefined would incorrectly match the first entry.
-    let existingIndex = -1;
-    if (detection.speciesCode) {
-      existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
-    }
-    if (existingIndex < 0) {
-      existingIndex = dailySummary.findIndex(s => s.scientific_name === detection.scientificName);
-    }
+    // Match by scientific_name — it's the unique key used by both the backend
+    // aggregation (analytics.go) and the Svelte {#each} loop in DailySummaryCard.
+    // species_code is unreliable: v2 schema stores it as "" (omitted via omitempty),
+    // so it's undefined in the frontend for all API-sourced entries.
+    const existingIndex = dailySummary.findIndex(
+      s => s.scientific_name === detection.scientificName
+    );
 
     if (existingIndex >= 0) {
       // Update existing species - DailySummaryCard's sortedData handles reordering
       const existing = safeArrayAccess(dailySummary, existingIndex);
       if (!existing) return;
       const updated = { ...existing };
-      // Sync species_code if matched via scientific_name fallback.
-      // This ensures subsequent lookups (including animation cleanup) use species_code directly.
+      // Backfill species_code from SSE detection if the API-sourced entry lacks one.
       if (!updated.species_code && detection.speciesCode) {
         updated.species_code = detection.speciesCode;
       }
@@ -889,11 +881,12 @@ Performance Optimizations:
       // Update cache incrementally instead of invalidating
       updateDailySummaryCacheEntry(selectedDate, dailySummary);
 
-      // Clear animation flags after animation completes
+      // Clear animation flags after animation completes.
+      // Use scientificName for lookup — species_code may be undefined (v2 schema).
       scheduleAnimationCleanup(
         () => {
           const currentIndex = dailySummary.findIndex(
-            s => s.species_code === detection.speciesCode
+            s => s.scientific_name === detection.scientificName
           );
           if (currentIndex >= 0) {
             const currentItem = safeArrayAccess(dailySummary, currentIndex);
@@ -952,11 +945,12 @@ Performance Optimizations:
       // Update cache incrementally with new species included
       updateDailySummaryCacheEntry(selectedDate, dailySummary);
 
-      // Clear animation flag after animation completes
+      // Clear animation flag after animation completes.
+      // Use scientificName for lookup — species_code may be undefined (v2 schema).
       scheduleAnimationCleanup(
         () => {
           const currentIndex = dailySummary.findIndex(
-            s => s.species_code === detection.speciesCode
+            s => s.scientific_name === detection.scientificName
           );
           if (currentIndex >= 0) {
             const currentItem = safeArrayAccess(dailySummary, currentIndex);
