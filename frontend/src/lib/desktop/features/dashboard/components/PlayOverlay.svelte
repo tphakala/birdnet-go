@@ -181,6 +181,9 @@
         isLoading = false;
       }
     } catch (err) {
+      // If a retry is already queued (handleError ran before play() rejected),
+      // don't overwrite the retry state with an error message.
+      if (audioRetryCount > 0) return;
       logger.error('Error playing audio:', err);
       error = t('media.audio.playError');
       isLoading = false;
@@ -375,6 +378,8 @@
 
       audioRetryTimer = setTimeout(() => {
         if (!audioElement) return;
+        // Ensure isLoading is true so subsequent retries can trigger
+        isLoading = true;
         // Cache-bust to avoid the browser serving the cached 404
         audioElement.src = `${audioUrl}?t=${String(Date.now())}`;
         audioElement.load();
