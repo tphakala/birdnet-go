@@ -134,8 +134,9 @@ func (c *Controller) initMediaRoutes() {
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
 
-	// Bird image endpoint
+	// Bird image endpoints
 	c.Group.GET("/media/species-image", c.GetSpeciesImage)
+	c.Group.GET("/media/species-image/info", c.GetSpeciesImageInfo)
 
 	c.logInfoIfEnabled("Media routes initialized successfully")
 }
@@ -1994,6 +1995,42 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 
 	// Redirect to the image URL
 	return ctx.Redirect(http.StatusFound, birdImage.URL)
+}
+
+// GetSpeciesImageInfo returns attribution metadata for a species image as JSON
+func (c *Controller) GetSpeciesImageInfo(ctx echo.Context) error {
+	scientificName := ctx.QueryParam("name")
+	if scientificName == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing scientific name"), "Scientific name is required", http.StatusBadRequest)
+	}
+
+	scientificName = strings.TrimSpace(scientificName)
+	if scientificName == "" {
+		return c.HandleError(ctx, fmt.Errorf("scientific name contains only whitespace"), "Valid scientific name is required", http.StatusBadRequest)
+	}
+
+	if c.BirdImageCache == nil {
+		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
+	}
+
+	birdImage, err := c.BirdImageCache.Get(scientificName)
+	if err != nil {
+		if errors.Is(err, ErrImageNotFound) {
+			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
+			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to fetch species image info", http.StatusInternalServerError)
+	}
+
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
+
+	return ctx.JSON(http.StatusOK, map[string]string{
+		"authorName":     birdImage.AuthorName,
+		"authorURL":      birdImage.AuthorURL,
+		"licenseName":    birdImage.LicenseName,
+		"licenseURL":     birdImage.LicenseURL,
+		"sourceProvider": birdImage.SourceProvider,
+	})
 }
 
 // HandleError method should exist on Controller, typically defined in controller.go or api.go

@@ -129,6 +129,7 @@ routeInitializers := []struct {
 | GET    | `/media/spectrogram/:filename` | `ServeSpectrogram`     | ❌   | Serve spectrogram image           |
 | GET    | `/media/audio`                 | `ServeAudioByQueryID`  | ❌   | Serve audio by detection ID       |
 | GET    | `/media/species-image`         | `GetSpeciesImage`      | ❌   | Get species thumbnail image       |
+| GET    | `/media/species-image/info`    | `GetSpeciesImageInfo`  | ❌   | Get species image attribution     |
 | GET    | `/spectrogram/:id/status`      | `GetSpectrogramStatus` | ❌   | Get spectrogram generation status |
 
 ### Notifications (`notifications.go`)

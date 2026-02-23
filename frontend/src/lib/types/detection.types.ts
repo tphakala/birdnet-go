@@ -114,6 +114,14 @@ export interface TimeOfDayResponse {
   timeOfDay: string;
 }
 
+export interface ImageAttribution {
+  authorName: string;
+  authorURL: string;
+  licenseName: string;
+  licenseURL: string;
+  sourceProvider: string;
+}
+
 export interface DailySpeciesSummary {
   scientific_name: string;
   common_name: string;
