@@ -100,7 +100,7 @@
     {#if children}
       {@render children()}
     {:else if options}
-      {#each options as option (option.value)}
+      {#each options as option, optionIndex (`${option.value}-${optionIndex}`)}
         <option value={option.value} disabled={option.disabled}>
           {option.label}
         </option>

@@ -474,7 +474,7 @@
                 </div>
               {/if}
 
-              {#each options as option (option.value)}
+              {#each options as option, optionIndex (`${group}-${option.value}-${optionIndex}`)}
                 {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"

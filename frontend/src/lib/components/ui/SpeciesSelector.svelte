@@ -410,7 +410,7 @@
             <p class="mt-2">{emptyText}</p>
           </div>
         {:else}
-          {#each filteredSpecies as group (group.category)}
+          {#each filteredSpecies as group, groupIndex (`${group.category}-${groupIndex}`)}
             {#if group.category && categorized}
               <div class="px-4 py-2 bg-base-200 text-sm font-medium capitalize">
                 {group.category.replaceAll('-', ' ')}
@@ -525,7 +525,7 @@
             {emptyText}
           </div>
         {:else}
-          {#each filteredSpecies as group (group.category)}
+          {#each filteredSpecies as group, groupIndex (`${group.category}-${groupIndex}`)}
             {#each group.items as species (species.id)}
               {@const isSelected = selected.includes(species.id)}
               {@const canSelect = !maxSelections || selected.length < maxSelections || isSelected}
