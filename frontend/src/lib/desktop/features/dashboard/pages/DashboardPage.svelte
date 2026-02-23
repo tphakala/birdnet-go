@@ -302,7 +302,15 @@ Performance Optimizations:
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
         );
       }
-      const newData = await response.json();
+      const rawData = await response.json();
+
+      // Deduplicate by ID to prevent Svelte each_key_duplicate errors.
+      const seen = new Set<number>();
+      const newData = rawData.filter((d: Detection) => {
+        if (seen.has(d.id)) return false;
+        seen.add(d.id);
+        return true;
+      });
 
       // Only apply animations for SSE-triggered updates
       if (applyAnimations) {
@@ -830,13 +838,24 @@ Performance Optimizations:
       hour = 0;
     }
 
-    const existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+    // Match by species_code first (primary), then fall back to scientific_name.
+    // This prevents duplicate entries when the same species arrives with a different
+    // species_code (e.g., multi-model setups or code mapping differences).
+    let existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+    if (existingIndex < 0) {
+      existingIndex = dailySummary.findIndex(s => s.scientific_name === detection.scientificName);
+    }
 
     if (existingIndex >= 0) {
       // Update existing species - DailySummaryCard's sortedData handles reordering
       const existing = safeArrayAccess(dailySummary, existingIndex);
       if (!existing) return;
       const updated = { ...existing };
+      // Sync species_code if matched via scientific_name fallback.
+      // This ensures subsequent lookups (including animation cleanup) use species_code directly.
+      if (!updated.species_code && detection.speciesCode) {
+        updated.species_code = detection.speciesCode;
+      }
       updated.previousCount = updated.count;
       updated.count++;
       updated.countIncreased = true;
