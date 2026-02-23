@@ -271,10 +271,8 @@ func TestResolveAudioCardDisplayName(t *testing.T) {
 	t.Parallel()
 	// In test environment without real audio hardware, the resolver should
 	// return empty string (graceful fallback, no panic).
-	result := resolveAudioCardDisplayName(":0,0")
-	// result may be a device name or empty — both are valid.
-	// The call itself must not panic; a string is always returned.
-	_ = result
+	// The call itself must not panic; the return value is hardware-dependent.
+	resolveAudioCardDisplayName(":0,0")
 }
 
 // TestMultiProtocolValidation tests URL validation for all supported stream protocols
