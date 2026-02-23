@@ -19,7 +19,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { apiCall, API_BASE } from './integration-setup';
+import { apiCall } from './integration-setup';
+import { getLocalDateString } from '$lib/utils/date';
 
 // ============================================================================
 // Helper: Check array for duplicate values in a specific field
@@ -37,7 +38,7 @@ function findDuplicateKeys<T>(
 
   items.forEach((item, index) => {
     const key = keyFn(item);
-    if (key === undefined || key === null) return;
+    if (key === undefined) return;
 
     const existing = seen.get(key);
     if (existing) {
@@ -50,16 +51,6 @@ function findDuplicateKeys<T>(
   return Array.from(seen.entries())
     .filter(([, indexes]) => indexes.length > 1)
     .map(([value, indexes]) => ({ value, indexes }));
-}
-
-/**
- * Get today's date as YYYY-MM-DD string in local timezone
- */
-function getLocalDateString(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 // ============================================================================
@@ -239,25 +230,21 @@ describe('Duplicate Keys: Species Configuration', () => {
 
     const settings = await response.json();
 
-    // Check include list
+    // Check include list (empty lists trivially pass: Set([]).size === 0)
     const includeList: string[] = settings?.realtime?.species?.include ?? [];
-    if (includeList.length > 0) {
-      const includeSet = new Set(includeList);
-      expect(
-        includeList.length,
-        `Duplicate species in include list: ${JSON.stringify(includeList.filter((s: string, i: number) => includeList.indexOf(s) !== i))}`
-      ).toBe(includeSet.size);
-    }
+    const includeSet = new Set(includeList);
+    expect(
+      includeList.length,
+      `Duplicate species in include list: ${JSON.stringify(includeList.filter((s: string, i: number) => includeList.indexOf(s) !== i))}`
+    ).toBe(includeSet.size);
 
     // Check exclude list
     const excludeList: string[] = settings?.realtime?.species?.exclude ?? [];
-    if (excludeList.length > 0) {
-      const excludeSet = new Set(excludeList);
-      expect(
-        excludeList.length,
-        `Duplicate species in exclude list: ${JSON.stringify(excludeList.filter((s: string, i: number) => excludeList.indexOf(s) !== i))}`
-      ).toBe(excludeSet.size);
-    }
+    const excludeSet = new Set(excludeList);
+    expect(
+      excludeList.length,
+      `Duplicate species in exclude list: ${JSON.stringify(excludeList.filter((s: string, i: number) => excludeList.indexOf(s) !== i))}`
+    ).toBe(excludeSet.size);
   });
 
   it('range filter species have unique scientificName keys', async () => {
@@ -323,17 +310,6 @@ describe('Duplicate Keys: Audio Devices', () => {
 
     const duplicates = findDuplicateKeys(devices, item => item.id);
 
-    // Log duplicates as warning even if test passes — duplicates here caused
-    // the SelectDropdown crash before we fixed it with composite keys
-    if (duplicates.length > 0) {
-      console.warn(
-        'Audio devices have duplicate IDs (handled by composite keys in SelectDropdown):',
-        JSON.stringify(duplicates)
-      );
-    }
-
-    // This is informational — our fix handles duplicates,
-    // but unique IDs are still better for correct selection behavior
     expect(duplicates, `Audio devices with duplicate IDs: ${JSON.stringify(duplicates)}`).toEqual(
       []
     );

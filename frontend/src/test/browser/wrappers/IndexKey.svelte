@@ -8,7 +8,7 @@
 <script lang="ts">
   interface Props {
     items: string[];
-    onremove?: (index: number) => void;
+    onremove?: (_index: number) => void;
   }
 
   let { items, onremove }: Props = $props();

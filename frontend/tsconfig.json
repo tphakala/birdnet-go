@@ -35,6 +35,7 @@
     "vite.config.js",
     "vitest.integration.config.ts",
     "vitest.reverse-proxy.config.ts",
+    "vitest.browser.config.ts",
     "tailwind.config.js",
     "postcss.config.js"
   ],

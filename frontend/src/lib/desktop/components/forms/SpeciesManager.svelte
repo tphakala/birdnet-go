@@ -269,7 +269,7 @@
           <div
             class="absolute z-10 w-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 max-h-48 overflow-auto"
           >
-            {#each predictions as prediction, predictionIndex (predictionIndex)}
+            {#each predictions as prediction, predictionIndex (`${prediction}-${predictionIndex}`)}
               <button
                 type="button"
                 onclick={() => selectPrediction(prediction)}
@@ -292,7 +292,7 @@
 
   {#if species.length > 0}
     <div class="mt-4 space-y-2">
-      {#each displaySpecies as item, index (index)}
+      {#each displaySpecies as item, index (`${item}-${index}`)}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={cn(
