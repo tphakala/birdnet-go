@@ -484,7 +484,8 @@
             {@const colors = todColors[det.timeOfDay as keyof typeof todColors] ?? todColors.day}
             <span
               class="time-of-day-badge"
-              style="background-color: {colors.bg}; color: {colors.fg};"
+              style:background-color={colors.bg}
+              style:color={colors.fg}
             >
               {#if det.timeOfDay === 'day'}
                 <Sun size={12} />
