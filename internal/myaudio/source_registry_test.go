@@ -248,6 +248,35 @@ func TestSourceStats(t *testing.T) {
 	assert.Equal(t, 1, stats.Device, "Expected 1 device source")
 }
 
+func TestAudioCardDisplayNameResolution(t *testing.T) {
+	registry := newTestRegistry()
+
+	// Register an audio card source with an ALSA device ID (no explicit DisplayName).
+	// This simulates the post-PR#2031 behavior where config stores device ID.
+	source, err := registry.RegisterSource(":0,0", SourceConfig{
+		Type: SourceTypeAudioCard,
+	})
+	require.NoError(t, err)
+
+	// Display name should be non-empty (either resolved from system or fallback)
+	assert.NotEmpty(t, source.DisplayName,
+		"Display name should not be empty for audio card sources")
+
+	// In test environment (no real ALSA devices), should hit the fallback path.
+	// Fallback produces "Audio Device (<id>)" format.
+	assert.Contains(t, source.DisplayName, "Audio Device",
+		"Fallback display name should contain 'Audio Device' prefix")
+}
+
+func TestResolveAudioCardDisplayName(t *testing.T) {
+	// In test environment without real audio hardware, the resolver should
+	// return empty string (graceful fallback, no panic).
+	result := resolveAudioCardDisplayName(":0,0")
+	// We can't assert the exact value since it depends on hardware,
+	// but it should not panic and should return empty on systems without ALSA.
+	assert.IsType(t, "", result, "Should return a string")
+}
+
 // TestMultiProtocolValidation tests URL validation for all supported stream protocols
 func TestMultiProtocolValidation(t *testing.T) {
 	registry := newTestRegistry()

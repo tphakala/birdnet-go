@@ -829,13 +829,35 @@ func (r *AudioSourceRegistry) generateID(sourceType SourceType) string {
 	return fmt.Sprintf("%s_%s", sourceType, id)
 }
 
+// resolveAudioCardDisplayName attempts to look up the human-readable device name
+// by querying the system's audio devices via ListAudioSources and matching by ID.
+// Returns the device name if found, or empty string if lookup fails.
+func resolveAudioCardDisplayName(connectionString string) string {
+	devices, err := ListAudioSources()
+	if err != nil {
+		return ""
+	}
+
+	for _, device := range devices {
+		if device.ID == connectionString || strings.Contains(device.Name, connectionString) {
+			return device.Name
+		}
+	}
+
+	return ""
+}
+
 func (r *AudioSourceRegistry) generateDisplayName(source *AudioSource) string {
 	switch source.Type {
 	case SourceTypeRTSP:
 		// Use SafeString (sanitized URL) as display name
 		return source.SafeString
 	case SourceTypeAudioCard:
-		// Parse device string based on OS
+		// Try to resolve real device name from system audio devices
+		if name := resolveAudioCardDisplayName(source.connectionString); name != "" {
+			return name
+		}
+		// Fallback: parse device string based on OS
 		return r.parseAudioDeviceName(source.SafeString)
 	case SourceTypeFile:
 		// Use filename without path
