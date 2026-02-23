@@ -249,6 +249,7 @@ func TestSourceStats(t *testing.T) {
 }
 
 func TestAudioCardDisplayNameResolution(t *testing.T) {
+	t.Parallel()
 	registry := newTestRegistry()
 
 	// Register an audio card source with an ALSA device ID (no explicit DisplayName).
@@ -267,12 +268,13 @@ func TestAudioCardDisplayNameResolution(t *testing.T) {
 }
 
 func TestResolveAudioCardDisplayName(t *testing.T) {
+	t.Parallel()
 	// In test environment without real audio hardware, the resolver should
 	// return empty string (graceful fallback, no panic).
 	result := resolveAudioCardDisplayName(":0,0")
-	// We can't assert the exact value since it depends on hardware,
-	// but it should not panic and should return empty on systems without ALSA.
-	assert.IsType(t, "", result, "Should return a string")
+	// result may be a device name or empty — both are valid.
+	// The call itself must not panic; a string is always returned.
+	_ = result
 }
 
 // TestMultiProtocolValidation tests URL validation for all supported stream protocols
