@@ -258,14 +258,12 @@ func TestAudioCardDisplayNameResolution(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Display name should be non-empty (either resolved from system or fallback)
+	// Display name should be non-empty (either resolved from system or fallback).
+	// The exact format depends on hardware availability:
+	// - real device present → resolved name (e.g. "HDA Intel PCH")
+	// - no device found    → fallback "Audio Device (:0,0)"
 	assert.NotEmpty(t, source.DisplayName,
 		"Display name should not be empty for audio card sources")
-
-	// In test environment (no real ALSA devices), should hit the fallback path.
-	// Fallback produces "Audio Device (<id>)" format.
-	assert.Contains(t, source.DisplayName, "Audio Device",
-		"Fallback display name should contain 'Audio Device' prefix")
 }
 
 func TestResolveAudioCardDisplayName(t *testing.T) {

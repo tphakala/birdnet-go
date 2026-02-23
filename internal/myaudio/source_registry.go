@@ -839,7 +839,8 @@ func resolveAudioCardDisplayName(connectionString string) string {
 	}
 
 	for _, device := range devices {
-		if device.ID == connectionString || strings.Contains(device.Name, connectionString) {
+		// Match by device ID (new configs) or exact device name (legacy configs)
+		if device.ID == connectionString || device.Name == connectionString {
 			return device.Name
 		}
 	}
