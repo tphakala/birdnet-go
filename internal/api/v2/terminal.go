@@ -1,16 +1,14 @@
-// internal/api/v2/terminal.go
+// terminal.go — platform-agnostic terminal WebSocket handler.
 package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
 	"sync"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -23,6 +21,14 @@ const (
 	terminalPingPeriod = (terminalPongWait * 9) / 10 // 54s — must be < pongWait
 	terminalMaxMsgSize = 32 * 1024                   // 32KB max message
 )
+
+// ptyHandle abstracts platform-specific PTY operations.
+// Unix: backed by creack/pty (*os.File).
+// Windows: backed by conpty (*conpty.ConPty).
+type ptyHandle interface {
+	io.ReadWriteCloser
+	Resize(cols, rows uint16) error
+}
 
 var terminalUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
@@ -74,14 +80,8 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 
 	conn.SetReadLimit(terminalMaxMsgSize)
 
-	// Find the shell to use
-	shell := findShell()
-
-	// Start the shell in a PTY
-	cmd := exec.CommandContext(c.ctx, shell) //nolint:gosec // shell path comes from findShell, not user input
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
-
-	ptmx, err := pty.Start(cmd)
+	// startPTY is platform-specific (terminal_unix.go / terminal_windows.go).
+	ph, cleanup, err := startPTY(c.ctx)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to start terminal PTY", logger.Error(err))
 		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\nFailed to start shell: "+err.Error()+"\r\n"))
@@ -89,11 +89,7 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 		// Echo's error handler writing an HTTP response to a hijacked conn.
 		return nil
 	}
-	defer func() {
-		_ = ptmx.Close()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	}()
+	defer cleanup()
 
 	// writeMu serializes all WebSocket writes — gorilla/websocket requires
 	// at most one concurrent writer; we have both a PTY goroutine and a ping
@@ -104,7 +100,7 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			n, readErr := ptmx.Read(buf)
+			n, readErr := ph.Read(buf)
 			if n > 0 {
 				writeMu.Lock()
 				_ = conn.SetWriteDeadline(time.Now().Add(terminalWriteWait))
@@ -163,16 +159,16 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 		case websocket.TextMessage:
 			// Text messages are either resize control messages (JSON) or user input.
 			// Binary messages are always raw PTY data and skip this check entirely.
-			if handled := handleResizeMessage(ptmx, msg); handled {
+			if handled := handleResizeMessage(ph, msg); handled {
 				continue
 			}
-			if _, err := ptmx.Write(msg); err != nil {
+			if _, err := ph.Write(msg); err != nil {
 				// PTY write failed (shell exited); return nil because the WebSocket
 				// connection is already hijacked and Echo must not write an HTTP error.
 				return nil
 			}
 		case websocket.BinaryMessage:
-			if _, err := ptmx.Write(msg); err != nil {
+			if _, err := ph.Write(msg); err != nil {
 				return nil
 			}
 		}
@@ -183,7 +179,7 @@ func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 
 // handleResizeMessage attempts to parse and apply a terminal resize message.
 // Returns true if the message was a resize message (even if resize failed).
-func handleResizeMessage(ptmx *os.File, msg []byte) bool {
+func handleResizeMessage(ph ptyHandle, msg []byte) bool {
 	var resizeMsg struct {
 		Type string `json:"type"`
 		Cols uint16 `json:"cols"`
@@ -193,22 +189,7 @@ func handleResizeMessage(ptmx *os.File, msg []byte) bool {
 		return false
 	}
 	if resizeMsg.Cols > 0 && resizeMsg.Rows > 0 {
-		_ = pty.Setsize(ptmx, &pty.Winsize{
-			Cols: resizeMsg.Cols,
-			Rows: resizeMsg.Rows,
-		})
+		_ = ph.Resize(resizeMsg.Cols, resizeMsg.Rows)
 	}
 	return true
-}
-
-// findShell returns the path to an available shell.
-// Falls back to /bin/sh so exec.Command receives an absolute path rather than
-// searching PATH, which could be manipulated in a compromised environment.
-func findShell() string {
-	for _, shell := range []string{"/bin/bash", "/usr/bin/bash", "/bin/sh"} {
-		if _, err := os.Stat(shell); err == nil {
-			return shell
-		}
-	}
-	return "/bin/sh"
 }
