@@ -3252,6 +3252,11 @@
     "connecting": "Verbinde...",
     "connectionError": "Verbindung fehlgeschlagen",
     "connectionClosed": "Verbindung getrennt",
-    "securityWarning": "Warnung: Dieses Terminal bietet direkten Shell-Zugang zum Host-System. Nur in vertrauenswürdigen Netzwerken aktivieren."
+    "securityWarning": "Warnung: Dieses Terminal bietet direkten Shell-Zugang zum Host-System. Nur in vertrauenswürdigen Netzwerken aktivieren.",
+    "copySelection": "Auswahl kopieren",
+    "expand": "Erweitern",
+    "collapse": "Reduzieren",
+    "fullscreen": "Vollbild",
+    "exitFullscreen": "Vollbild verlassen"
   }
 }

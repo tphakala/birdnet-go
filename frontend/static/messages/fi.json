@@ -3252,6 +3252,11 @@
     "connecting": "Yhdistetään...",
     "connectionError": "Yhteys epäonnistui",
     "connectionClosed": "Yhteys katkaistu",
-    "securityWarning": "Varoitus: Tämä pääte tarjoaa suoran komentotulkin käytön host-järjestelmään. Ota käyttöön vain luotetuissa verkoissa."
+    "securityWarning": "Varoitus: Tämä pääte tarjoaa suoran komentotulkin käytön host-järjestelmään. Ota käyttöön vain luotetuissa verkoissa.",
+    "copySelection": "Kopioi valinta",
+    "expand": "Laajenna",
+    "collapse": "Pienennä",
+    "fullscreen": "Koko näyttö",
+    "exitFullscreen": "Poistu koko näytöstä"
   }
 }

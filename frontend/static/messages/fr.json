@@ -3252,6 +3252,11 @@
     "connecting": "Connexion en cours...",
     "connectionError": "Échec de la connexion",
     "connectionClosed": "Connexion fermée",
-    "securityWarning": "Avertissement : Ce terminal fournit un accès shell direct au système hôte. Ne l'activez que sur des réseaux de confiance."
+    "securityWarning": "Avertissement : Ce terminal fournit un accès shell direct au système hôte. Ne l'activez que sur des réseaux de confiance.",
+    "copySelection": "Copier la sélection",
+    "expand": "Agrandir",
+    "collapse": "Réduire",
+    "fullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran"
   }
 }

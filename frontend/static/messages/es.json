@@ -3252,6 +3252,11 @@
     "connecting": "Conectando...",
     "connectionError": "Error de conexión",
     "connectionClosed": "Conexión cerrada",
-    "securityWarning": "Advertencia: Esta terminal proporciona acceso de shell directo al sistema host. Solo habilítela en redes de confianza."
+    "securityWarning": "Advertencia: Esta terminal proporciona acceso de shell directo al sistema host. Solo habilítela en redes de confianza.",
+    "copySelection": "Copiar selección",
+    "expand": "Expandir",
+    "collapse": "Contraer",
+    "fullscreen": "Pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa"
   }
 }

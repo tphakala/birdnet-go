@@ -3251,6 +3251,11 @@
     "connecting": "Pripája sa...",
     "connectionError": "Pripojenie zlyhalo",
     "connectionClosed": "Pripojenie zatvorené",
-    "securityWarning": "Upozornenie: Tento terminál poskytuje priamy prístup k shellu hostiteľského systému. Povoľte iba v dôveryhodných sieťach."
+    "securityWarning": "Upozornenie: Tento terminál poskytuje priamy prístup k shellu hostiteľského systému. Povoľte iba v dôveryhodných sieťach.",
+    "copySelection": "Kopírovať výber",
+    "expand": "Rozbaliť",
+    "collapse": "Zbaliť",
+    "fullscreen": "Celá obrazovka",
+    "exitFullscreen": "Ukončiť celú obrazovku"
   }
 }

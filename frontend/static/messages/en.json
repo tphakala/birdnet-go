@@ -1000,7 +1000,12 @@
     "connecting": "Connecting...",
     "connectionError": "Connection failed",
     "connectionClosed": "Connection closed",
-    "securityWarning": "Warning: This terminal provides direct shell access to the host system. Only enable it on trusted networks."
+    "securityWarning": "Warning: This terminal provides direct shell access to the host system. Only enable it on trusted networks.",
+    "copySelection": "Copy selection",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen"
   },
   "analytics": {
     "title": "Overview",

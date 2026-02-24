@@ -3217,6 +3217,11 @@
     "connecting": "Connessione in corso...",
     "connectionError": "Connessione non riuscita",
     "connectionClosed": "Connessione chiusa",
-    "securityWarning": "Avviso: Questo terminale fornisce accesso diretto alla shell del sistema host. Abilitare solo su reti attendibili."
+    "securityWarning": "Avviso: Questo terminale fornisce accesso diretto alla shell del sistema host. Abilitare solo su reti attendibili.",
+    "copySelection": "Copia selezione",
+    "expand": "Espandi",
+    "collapse": "Comprimi",
+    "fullscreen": "Schermo intero",
+    "exitFullscreen": "Esci da schermo intero"
   }
 }

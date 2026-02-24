@@ -3252,6 +3252,11 @@
     "connecting": "Łączenie...",
     "connectionError": "Błąd połączenia",
     "connectionClosed": "Połączenie zamknięte",
-    "securityWarning": "Ostrzeżenie: Ten terminal zapewnia bezpośredni dostęp do powłoki systemu hosta. Włączaj tylko w zaufanych sieciach."
+    "securityWarning": "Ostrzeżenie: Ten terminal zapewnia bezpośredni dostęp do powłoki systemu hosta. Włączaj tylko w zaufanych sieciach.",
+    "copySelection": "Kopiuj zaznaczenie",
+    "expand": "Rozwiń",
+    "collapse": "Zwiń",
+    "fullscreen": "Pełny ekran",
+    "exitFullscreen": "Zamknij pełny ekran"
   }
 }

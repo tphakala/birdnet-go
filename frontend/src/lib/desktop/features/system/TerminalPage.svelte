@@ -28,6 +28,11 @@
   } from '@lucide/svelte';
   import '@xterm/xterm/css/xterm.css';
 
+  // Terminal theme colors — used in Terminal config, inline styles, and CSS overrides.
+  const TERM_BG = '#1a1b26';
+  const TERM_FG = '#a9b1d6';
+  const TERM_CURSOR = '#c0caf5';
+
   let terminalContainer = $state<HTMLDivElement | null>(null);
   let cardElement = $state<HTMLDivElement | null>(null);
   let statusMessage = $state(t('terminal.connecting'));
@@ -67,9 +72,9 @@
       fontFamily:
         "'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro', menlo, consolas, monospace",
       theme: {
-        background: '#1a1b26',
-        foreground: '#a9b1d6',
-        cursor: '#c0caf5',
+        background: TERM_BG,
+        foreground: TERM_FG,
+        cursor: TERM_CURSOR,
       },
     });
 
@@ -143,14 +148,17 @@
     resizeObserver = null;
   }
 
-  function copyTerminalOutput() {
+  async function copyTerminalOutput() {
     if (!term) return;
-    const selection = term.getSelection();
-    const text = selection || '';
+    const text = term.getSelection();
     if (text) {
-      navigator.clipboard.writeText(text);
-      isCopied = true;
-      setTimeout(() => (isCopied = false), 2000);
+      try {
+        await navigator.clipboard.writeText(text);
+        isCopied = true;
+        setTimeout(() => (isCopied = false), 2000);
+      } catch {
+        // Clipboard write can fail if the document isn't focused
+      }
     }
     term.focus();
   }
@@ -166,23 +174,23 @@
 
   function toggleFullscreen() {
     if (!cardElement) return;
+    // State is updated by the fullscreenchange listener — no eager assignment needed.
     if (!document.fullscreenElement) {
-      cardElement.requestFullscreen();
-      isFullscreen = true;
+      cardElement.requestFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen();
-      isFullscreen = false;
+      document.exitFullscreen().catch(() => {});
     }
-    // Refocus terminal after fullscreen transition
-    setTimeout(() => term?.focus(), 150);
   }
 
   // Listen for fullscreen changes (e.g. user presses Escape)
   $effect(() => {
     function onFullscreenChange() {
       isFullscreen = !!document.fullscreenElement;
-      // Re-fit terminal after fullscreen transition
-      setTimeout(() => fitAddon?.fit(), 100);
+      // Re-fit terminal after fullscreen transition, then refocus
+      setTimeout(() => {
+        fitAddon?.fit();
+        term?.focus();
+      }, 100);
     }
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
@@ -247,6 +255,8 @@
               class:animate-pulse={isConnected}
             ></span>
             <span
+              role="status"
+              aria-live="polite"
               class="text-xs font-medium {isConnected
                 ? 'text-emerald-600 dark:text-emerald-400'
                 : 'text-red-600 dark:text-red-400'}"
@@ -273,10 +283,10 @@
             tabindex="-1"
             class="p-1.5 rounded-md transition-colors cursor-pointer"
             style:color="var(--color-base-content)"
-            style:opacity="0.45"
-            class:opacity-100={isCopied}
+            style:opacity={isCopied ? 1 : 0.45}
             onclick={copyTerminalOutput}
-            title="Copy selection"
+            title={t('terminal.copySelection')}
+            aria-label={t('terminal.copySelection')}
           >
             {#if isCopied}
               <Check class="w-3.5 h-3.5 text-emerald-500" />
@@ -290,7 +300,8 @@
             style:color="var(--color-base-content)"
             style:opacity="0.45"
             onclick={toggleExpanded}
-            title={isExpanded ? 'Collapse' : 'Expand'}
+            title={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
+            aria-label={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
           >
             {#if isExpanded}
               <ChevronsDownUp class="w-3.5 h-3.5" />
@@ -304,7 +315,8 @@
             style:color="var(--color-base-content)"
             style:opacity="0.45"
             onclick={toggleFullscreen}
-            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            title={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
+            aria-label={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
           >
             {#if isFullscreen}
               <Minimize2 class="w-3.5 h-3.5" />
@@ -321,7 +333,7 @@
         class="overflow-hidden"
         class:flex-1={isExpanded || isFullscreen}
         class:min-h-0={isExpanded || isFullscreen}
-        style:background="#1a1b26"
+        style:background={TERM_BG}
         style:height={isExpanded || isFullscreen ? undefined : '480px'}
       ></div>
     </div>
@@ -343,7 +355,7 @@
   }
 
   /* xterm's viewport background defaults to #000 which creates a visible
-     mismatch against the terminal theme background. Match it. */
+     mismatch against the terminal theme background. Must match TERM_BG constant. */
   :global(.xterm .xterm-viewport) {
     background-color: #1a1b26 !important;
     overflow-y: auto !important;
@@ -354,13 +366,16 @@
   :global(.xterm .xterm-viewport::-webkit-scrollbar) {
     width: 6px;
   }
+
   :global(.xterm .xterm-viewport::-webkit-scrollbar-track) {
     background: transparent;
   }
+
   :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb) {
     background: rgba(255, 255, 255, 0.15);
     border-radius: 3px;
   }
+
   :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover) {
     background: rgba(255, 255, 255, 0.25);
   }

@@ -3252,6 +3252,11 @@
     "connecting": "Verbinden...",
     "connectionError": "Verbinding mislukt",
     "connectionClosed": "Verbinding gesloten",
-    "securityWarning": "Waarschuwing: Deze terminal biedt directe shell-toegang tot het hostsysteem. Activeer alleen op vertrouwde netwerken."
+    "securityWarning": "Waarschuwing: Deze terminal biedt directe shell-toegang tot het hostsysteem. Activeer alleen op vertrouwde netwerken.",
+    "copySelection": "Selectie kopiëren",
+    "expand": "Uitvouwen",
+    "collapse": "Invouwen",
+    "fullscreen": "Volledig scherm",
+    "exitFullscreen": "Volledig scherm verlaten"
   }
 }
