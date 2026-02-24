@@ -1139,11 +1139,11 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 	}
 
 	// Check thermal directory access
-	if err := c.checkThermalDirectoryAccess(ctx, &response, ip, path); err != nil {
+	exists, err := c.checkThermalDirectoryAccess(&response, ip, path)
+	if err != nil {
 		return c.HandleError(ctx, err, "Failed to access thermal information due to filesystem error", http.StatusInternalServerError)
 	}
-	// Early return if directory doesn't exist
-	if !response.IsAvailable && response.Message != "" && response.Message != defaultNoSensorMessage {
+	if !exists {
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -1165,22 +1165,22 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 }
 
 // checkThermalDirectoryAccess checks if thermal directory exists and is accessible.
-// Returns nil if the directory exists, sets response fields and returns nil if not found,
-// or returns an error for other filesystem failures.
-func (c *Controller) checkThermalDirectoryAccess(_ echo.Context, response *SystemTemperature, ip, path string) error {
+// Returns (true, nil) if the directory exists, (false, nil) if not found (with response
+// fields set), or (false, error) for other filesystem failures.
+func (c *Controller) checkThermalDirectoryAccess(response *SystemTemperature, ip, path string) (bool, error) {
 	_, err := os.Stat(thermalBasePath)
 	if err == nil {
-		return nil
+		return true, nil
 	}
 
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		response.Message = "Thermal zone directory not found. This feature is typically available on Linux systems."
 		c.logDebugIfEnabled("Thermal zone directory not found, CPU temperature feature unavailable.", logger.String("path", thermalBasePath), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
-		return nil // Caller checks response.Message for early return
+		return false, nil
 	}
 
 	c.logErrorIfEnabled("Failed to stat thermal base path", logger.String("path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
-	return fmt.Errorf("failed to access thermal information: %w", err)
+	return false, fmt.Errorf("failed to access thermal information: %w", err)
 }
 
 // getThermalZones retrieves available thermal zone paths
