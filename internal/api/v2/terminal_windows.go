@@ -8,18 +8,31 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/UserExistsError/conpty"
 )
 
 // windowsPTY wraps a Windows ConPTY to satisfy ptyHandle.
+// Close is guarded by sync.Once because ConPty.Close() calls
+// windows.CloseHandle on raw handles — double-closing a Windows
+// handle is undefined behavior (it can close a recycled handle
+// belonging to another subsystem).
 type windowsPTY struct {
-	cpty *conpty.ConPty
+	cpty      *conpty.ConPty
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (w *windowsPTY) Read(p []byte) (int, error)  { return w.cpty.Read(p) }
 func (w *windowsPTY) Write(p []byte) (int, error) { return w.cpty.Write(p) }
-func (w *windowsPTY) Close() error                { return w.cpty.Close() }
+
+func (w *windowsPTY) Close() error {
+	w.closeOnce.Do(func() {
+		w.closeErr = w.cpty.Close()
+	})
+	return w.closeErr
+}
 
 // Resize sets the terminal dimensions on the Windows ConPTY.
 func (w *windowsPTY) Resize(cols, rows uint16) error {
@@ -35,28 +48,36 @@ func startPTY(ctx context.Context) (ptyHandle, func(), error) {
 		return nil, nil, err
 	}
 
+	ph := &windowsPTY{cpty: cpty}
+
+	// Use a cancellable context for the Wait goroutine so it doesn't
+	// block forever on context.Background() after the ConPTY is closed.
+	waitCtx, waitCancel := context.WithCancel(context.Background())
+
 	cleanup := func() {
-		_ = cpty.Close()
+		ph.Close()
+		waitCancel() // unblock the Wait goroutine if still running
 	}
 
 	// Monitor context cancellation to close the ConPTY when the server shuts down.
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = cpty.Close()
-		case <-waitDone(cpty):
+			ph.Close()
+		case <-waitDone(cpty, waitCtx):
 			// Process exited naturally.
 		}
 	}()
 
-	return &windowsPTY{cpty: cpty}, cleanup, nil
+	return ph, cleanup, nil
 }
 
-// waitDone returns a channel that closes when the ConPTY process exits.
-func waitDone(cpty *conpty.ConPty) <-chan struct{} {
+// waitDone returns a channel that closes when the ConPTY process exits
+// or when the provided context is cancelled.
+func waitDone(cpty *conpty.ConPty, ctx context.Context) <-chan struct{} {
 	ch := make(chan struct{})
 	go func() {
-		_, _ = cpty.Wait(context.Background())
+		_, _ = cpty.Wait(ctx)
 		close(ch)
 	}()
 	return ch
