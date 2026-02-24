@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 	"github.com/tphakala/birdnet-go/internal/datastore/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -227,6 +228,7 @@ type DataStore struct {
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
 	metrics       *Metrics         // Metrics instance for tracking operations
 	metricsMu     sync.RWMutex     // Mutex to protect metrics field access
+	dbCounters    *dbstats.Counters // Atomic counters for query latency tracking
 
 	// Monitoring lifecycle management
 	monitoringCtx    context.Context    // Context for monitoring goroutines
@@ -271,6 +273,12 @@ func (ds *DataStore) SetMetrics(m *Metrics) {
 // This is used by prerequisites checks to run database-specific validation queries.
 func (ds *DataStore) GetDB() *gorm.DB {
 	return ds.DB
+}
+
+// GetDBCounters returns the atomic counters for database query latency tracking.
+// Returns nil if counters have not been initialized (e.g. before Open is called).
+func (ds *DataStore) GetDBCounters() *dbstats.Counters {
+	return ds.dbCounters
 }
 
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service

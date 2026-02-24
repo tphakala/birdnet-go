@@ -6,9 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -22,6 +24,10 @@ type SQLiteStore struct {
 	Settings  *conf.Settings
 	telemetry *DatastoreTelemetry
 	DataStore
+
+	// Cached integrity check result (updated by monitoring goroutine)
+	integrityMu     sync.RWMutex
+	integrityResult string // "ok" or error string; empty until first check
 }
 
 func validateSQLiteConfig() error {
@@ -257,6 +263,10 @@ func (s *SQLiteStore) Open() error {
 	// Store the database connection
 	s.DB = db
 
+	// Initialize atomic counters for query latency tracking and register GORM callbacks
+	s.dbCounters = &dbstats.Counters{}
+	dbstats.RegisterCallbacks(db, s.dbCounters)
+
 	// Log successful connection
 	GetLogger().Info("SQLite database opened successfully",
 		logger.String("path", dbPath),
@@ -280,6 +290,9 @@ func (s *SQLiteStore) Open() error {
 		return err
 	}
 
+	// Ensure _metadata table exists for tracking operational timestamps (e.g. last vacuum)
+	s.EnsureMetadataTable()
+
 	// Start monitoring if metrics are available
 	if s.metrics != nil {
 		// Monitoring intervals:
@@ -290,7 +303,41 @@ func (s *SQLiteStore) Open() error {
 		s.StartMonitoring(30*time.Second, 5*time.Minute)
 	}
 
+	// Start daily integrity check in the background (runs initial check immediately)
+	s.startIntegrityCheckLoop()
+
 	return nil
+}
+
+// integrityCheckInterval is how often PRAGMA quick_check runs (24 hours).
+const integrityCheckInterval = 24 * time.Hour
+
+// startIntegrityCheckLoop runs PRAGMA quick_check at startup and every 24 hours.
+// Uses the monitoring context for clean shutdown.
+func (s *SQLiteStore) startIntegrityCheckLoop() {
+	// Ensure monitoring context exists
+	s.monitoringMu.Lock()
+	if s.monitoringCtx == nil {
+		s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+	}
+	ctx := s.monitoringCtx
+	s.monitoringMu.Unlock()
+
+	// Run initial check immediately, then on interval
+	go func() {
+		s.RunIntegrityCheck()
+
+		ticker := time.NewTicker(integrityCheckInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.RunIntegrityCheck()
+			}
+		}
+	}()
 }
 
 // Close closes the SQLite database connection
@@ -422,6 +469,9 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 		optimizeLogger.Error("VACUUM failed", logger.Error(enhancedErr))
 		return enhancedErr
 	}
+
+	// Record vacuum timestamp for the dashboard
+	s.RecordVacuumTimestamp()
 
 	// Get database size after optimization
 	var sizeAfter int64
