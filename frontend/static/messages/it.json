@@ -705,7 +705,8 @@
       "timezone": "Fuso Orario",
       "temperature": "Temperatura CPU",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Dati temperatura non disponibili"
+      "temperatureUnavailable": "Dati temperatura non disponibili",
+      "cpuCores": "Core CPU"
     },
     "diskUsage": {
       "title": "Utilizzo Disco",
@@ -736,7 +737,8 @@
         "status": "Stato",
         "cpu": "CPU",
         "memory": "Memoria",
-        "uptime": "Tempo di attività"
+        "uptime": "Tempo di attività",
+        "process": "Processo"
       },
       "showAll": "Mostra Tutti i Processi",
       "showBirdnetOnly": "Mostra Solo BirdNET",
@@ -950,6 +952,28 @@
           }
         }
       }
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "temperature": "Temperatura",
+      "system": "Sistema",
+      "cores": "core",
+      "samples": "campioni",
+      "available": "disp.",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Non disponibile",
+      "online": "Online",
+      "uptime": "Tempo attivo",
+      "host": "Host",
+      "model": "Modello"
+    },
+    "storage": {
+      "title": "Archiviazione",
+      "used": "usato",
+      "free": "libero",
+      "ram": "RAM"
     }
   },
   "analytics": {

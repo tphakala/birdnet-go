@@ -1,13 +1,24 @@
 <script lang="ts">
-  import SystemInfoCard from '$lib/desktop/components/ui/SystemInfoCard.svelte';
-  import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
-  import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
+  import MetricStrip from '$lib/desktop/features/system/components/MetricStrip.svelte';
+  import SystemDetailsCard from '$lib/desktop/features/system/components/SystemDetailsCard.svelte';
+  import StorageCard from '$lib/desktop/features/system/components/StorageCard.svelte';
+  import SystemProcessTable from '$lib/desktop/features/system/components/SystemProcessTable.svelte';
   import { DatabaseManagement } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import { t } from '$lib/i18n';
   import { RefreshCw } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { dashboardSettings } from '$lib/stores/settings';
+  import { loggers } from '$lib/utils/logger';
+  import {
+    convertTemperature,
+    getTemperatureSymbol,
+    type TemperatureUnit,
+  } from '$lib/utils/formatters';
+  import ReconnectingEventSource from 'reconnecting-eventsource';
+
+  const logger = loggers.ui;
 
   // Determine which subpage to show
   let currentSubpage = $derived.by(() => {
@@ -17,9 +28,14 @@
     return 'overview';
   });
 
-  // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
-  // Change back to true to re-enable spinners for testing
-  const ENABLE_LOADING_SPINNERS = false;
+  // Maximum number of sparkline data points to retain
+  const MAX_HISTORY_POINTS = 60;
+
+  // Polling fallback interval in milliseconds
+  const POLLING_INTERVAL_MS = 5000;
+
+  // Process name displayed in place of the Go binary name
+  const BIRDNET_PROCESS_NAME = 'BirdNET-Go';
 
   // Type definitions
   interface SystemInfo {
@@ -62,142 +78,241 @@
     uptime: number;
   }
 
-  interface ApiState<T> {
-    loading: boolean;
-    error: string | null;
-    data: T;
+  interface MetricPoint {
+    timestamp: string;
+    value: number;
+  }
+
+  interface MetricsHistoryResponse {
+    metrics: Record<string, MetricPoint[]>;
+  }
+
+  interface ResourcesResponse {
+    cpu_usage_percent: number;
+    memory_total: number;
+    memory_used: number;
+    memory_free: number;
+    memory_available: number;
+    memory_buffers: number;
+    memory_cached: number;
+    memory_usage_percent: number;
   }
 
   // System information state
-  let systemInfo = $state<ApiState<SystemInfo>>({
-    loading: true,
-    error: null,
-    data: {} as SystemInfo,
-  });
+  let systemInfo = $state<SystemInfo>({} as SystemInfo);
+  let diskUsage = $state<DiskInfo[]>([]);
+  let memoryUsage = $state<MemoryInfo>({} as MemoryInfo);
+  let systemTemperature = $state<TemperatureInfo>({ is_available: false });
+  let processes = $state<ProcessInfo[]>([]);
+  let isLoading = $state(true);
 
-  // Disk usage state
-  let diskUsage = $state<ApiState<DiskInfo[]>>({
-    loading: true,
-    error: null,
-    data: [],
-  });
-
-  // Memory usage state
-  let memoryUsage = $state<ApiState<MemoryInfo>>({
-    loading: true,
-    error: null,
-    data: {} as MemoryInfo,
-  });
-
-  // System temperature state
-  let systemTemperature = $state<ApiState<TemperatureInfo>>({
-    loading: true,
-    error: null,
-    data: { is_available: false },
-  });
-
-  // Process information state
-  let processes = $state<ApiState<ProcessInfo[]>>({
-    loading: true,
-    error: null,
-    data: [],
-  });
+  // Sparkline history arrays
+  let cpuHistory = $state<number[]>([]);
+  let memoryHistory = $state<number[]>([]);
+  let temperatureHistory = $state<number[]>([]);
 
   // Toggle for showing all processes
-  let showAllProcesses = $state<boolean>(false);
+  let showAllProcesses = $state(false);
 
-  // PERFORMANCE OPTIMIZATION: Reactive computed properties using $derived
-  // $derived automatically tracks dependencies and only recalculates when they change
-  // This is more efficient than manual state tracking or effects
-  let isAnyLoading = $derived(
-    systemInfo.loading ||
-      diskUsage.loading ||
-      memoryUsage.loading ||
-      processes.loading ||
-      systemTemperature.loading
-  );
+  // SSE connection reference
+  let metricsSSE: ReconnectingEventSource | null = null;
 
-  // Transform disk data for ProgressCard
-  let diskProgressItems = $derived(
-    diskUsage.data.map(disk => ({
-      label: disk.mountpoint,
-      used: disk.used,
-      total: disk.total,
-      usagePercent: disk.usage_percent,
-      mountpoint: disk.mountpoint,
-    }))
-  );
+  // Polling fallback timeout reference (used when SSE endpoints aren't available)
+  let pollingTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Transform memory data for ProgressCard with reactive label
-  let memoryProgressItems = $derived.by(() => {
-    if (!memoryUsage.data.total) return [];
-    return [
-      {
-        label: t('system.memoryUsage.ramUsage'),
-        used: memoryUsage.data.used,
-        total: memoryUsage.data.total,
-        usagePercent: memoryUsage.data.usedPercent,
-        free: memoryUsage.data.free,
-        available: memoryUsage.data.available,
-        buffers: memoryUsage.data.buffers,
-        cached: memoryUsage.data.cached,
-      },
-    ];
+  // Map user's temperature preference to TemperatureUnit format
+  // Settings store uses 'celsius'/'fahrenheit', formatters use 'metric'/'imperial'/'standard'
+  let temperatureUnit = $derived.by((): TemperatureUnit => {
+    const setting = $dashboardSettings?.temperatureUnit;
+    if (setting === 'fahrenheit') return 'imperial';
+    return 'metric';
   });
+  let tempSymbol = $derived(getTemperatureSymbol(temperatureUnit));
+
+  // Computed values for MetricStrip — derived from history arrays so they
+  // stay in sync with both SSE and polling updates
+  let cpuPercent = $derived(cpuHistory.length > 0 ? cpuHistory[cpuHistory.length - 1] : 0);
+  let memoryPercent = $derived(
+    memoryHistory.length > 0 ? memoryHistory[memoryHistory.length - 1] : 0
+  );
+  let temperatureCelsius = $derived(
+    temperatureHistory.length > 0 ? temperatureHistory[temperatureHistory.length - 1] : 0
+  );
+  let temperatureDisplay = $derived(convertTemperature(temperatureCelsius, temperatureUnit));
+  let temperatureHistoryConverted = $derived(
+    temperatureHistory.map(c => convertTemperature(c, temperatureUnit))
+  );
+
+  // Append a value to a history array, keeping it capped at MAX_HISTORY_POINTS
+  function appendHistory(arr: number[], value: number): number[] {
+    const next = [...arr, value];
+    return next.length > MAX_HISTORY_POINTS ? next.slice(next.length - MAX_HISTORY_POINTS) : next;
+  }
+
+  // Whether the metrics history/stream endpoints are available
+  let metricsEndpointAvailable = $state(false);
+
+  // Load initial metrics history for sparklines, then connect SSE if available.
+  // Falls back to polling existing endpoints when metrics history isn't available.
+  // The `active` flag prevents orphaned resources if the component unmounts mid-flight.
+  async function loadMetricsHistory(active: { current: boolean }): Promise<void> {
+    try {
+      const data = await api.get<MetricsHistoryResponse>(
+        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=cpu.total,memory.used_percent,cpu.temperature`
+      );
+
+      if (!active.current) return;
+
+      metricsEndpointAvailable = true;
+
+      if (data.metrics['cpu.total']) {
+        cpuHistory = data.metrics['cpu.total'].map((p: MetricPoint) => p.value);
+      }
+      if (data.metrics['memory.used_percent']) {
+        memoryHistory = data.metrics['memory.used_percent'].map((p: MetricPoint) => p.value);
+      }
+      if (data.metrics['cpu.temperature']) {
+        temperatureHistory = data.metrics['cpu.temperature'].map((p: MetricPoint) => p.value);
+      }
+
+      // Only connect SSE if the history endpoint succeeded and component is still mounted
+      connectMetricsStream();
+    } catch {
+      if (!active.current) return;
+      logger.debug('Metrics history endpoint not available, falling back to polling');
+      startPollingFallback(active);
+    }
+  }
+
+  // Poll existing resource/temperature endpoints to accumulate sparkline data.
+  // Uses recursive setTimeout instead of setInterval to avoid overlapping requests.
+  function startPollingFallback(active: { current: boolean }): void {
+    // Seed initial points from data already loaded
+    if (memoryUsage.usedPercent > 0) {
+      memoryHistory = appendHistory(memoryHistory, memoryUsage.usedPercent);
+    }
+    if (systemTemperature.is_available && systemTemperature.celsius != null) {
+      temperatureHistory = appendHistory(temperatureHistory, systemTemperature.celsius);
+    }
+
+    async function poll(): Promise<void> {
+      if (!active.current) return;
+
+      try {
+        const data = await api.get<ResourcesResponse>('/api/v2/system/resources');
+        if (!active.current) return;
+        cpuHistory = appendHistory(cpuHistory, data.cpu_usage_percent);
+        memoryHistory = appendHistory(memoryHistory, data.memory_usage_percent);
+
+        // Also update the memory state so cards stay current
+        memoryUsage = {
+          total: data.memory_total,
+          used: data.memory_used,
+          free: data.memory_free,
+          available: data.memory_available,
+          buffers: data.memory_buffers,
+          cached: data.memory_cached,
+          usedPercent: data.memory_usage_percent,
+        };
+      } catch {
+        // Silently ignore polling failures
+      }
+
+      try {
+        const temp = await api.get<TemperatureInfo>('/api/v2/system/temperature/cpu');
+        if (!active.current) return;
+        if (temp.is_available && temp.celsius != null) {
+          systemTemperature = temp;
+          temperatureHistory = appendHistory(temperatureHistory, temp.celsius);
+        }
+      } catch {
+        // Temperature may not be available — that's fine
+      }
+
+      if (active.current) {
+        pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
+      }
+    }
+
+    pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
+  }
+
+  function stopPollingFallback(): void {
+    if (pollingTimeout) {
+      clearTimeout(pollingTimeout);
+      pollingTimeout = null;
+    }
+  }
+
+  // Connect to metrics SSE stream for live updates
+  function connectMetricsStream(): void {
+    metricsSSE = new ReconnectingEventSource(
+      '/api/v2/system/metrics/stream?metrics=cpu.total,memory.used_percent,cpu.temperature',
+      { max_retry_time: 30000 }
+    );
+
+    metricsSSE.addEventListener('metrics', (event: Event) => {
+      try {
+        // eslint-disable-next-line no-undef
+        const messageEvent = event as MessageEvent;
+        const metrics = JSON.parse(messageEvent.data) as Record<string, MetricPoint>;
+
+        if (metrics['cpu.total']) {
+          cpuHistory = appendHistory(cpuHistory, metrics['cpu.total'].value);
+        }
+        if (metrics['memory.used_percent']) {
+          memoryHistory = appendHistory(memoryHistory, metrics['memory.used_percent'].value);
+        }
+        if (metrics['cpu.temperature']) {
+          temperatureHistory = appendHistory(temperatureHistory, metrics['cpu.temperature'].value);
+        }
+      } catch {
+        logger.debug('Failed to parse metrics SSE event');
+      }
+    });
+
+    // Close SSE on persistent errors (e.g., 404 when endpoint doesn't exist)
+    metricsSSE.onerror = () => {
+      if (!metricsEndpointAvailable) {
+        disconnectMetricsStream();
+      }
+    };
+  }
+
+  function disconnectMetricsStream(): void {
+    if (metricsSSE) {
+      metricsSSE.close();
+      metricsSSE = null;
+    }
+  }
 
   // Load system information
   async function loadSystemInfo(): Promise<void> {
-    systemInfo.loading = true;
-    systemInfo.error = null;
-
     try {
-      systemInfo.data = await api.get<SystemInfo>('/api/v2/system/info');
+      systemInfo = await api.get<SystemInfo>('/api/v2/system/info');
     } catch (error: unknown) {
-      // Handle system info fetch error silently
-      systemInfo.error = t('system.errors.systemInfo', {
+      logger.debug('Failed to load system info', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-    } finally {
-      systemInfo.loading = false;
     }
   }
 
   // Load disk usage
   async function loadDiskUsage(): Promise<void> {
-    diskUsage.loading = true;
-    diskUsage.error = null;
-
     try {
-      diskUsage.data = await api.get<DiskInfo[]>('/api/v2/system/disks');
+      diskUsage = await api.get<DiskInfo[]>('/api/v2/system/disks');
     } catch (error: unknown) {
-      // Handle disk usage fetch error silently
-      diskUsage.error = t('system.errors.diskUsage', {
+      logger.debug('Failed to load disk usage', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      diskUsage.data = [];
-    } finally {
-      diskUsage.loading = false;
     }
   }
 
-  // Load memory usage
+  // Load memory usage (and CPU from same endpoint)
   async function loadMemoryUsage(): Promise<void> {
-    memoryUsage.loading = true;
-    memoryUsage.error = null;
-
     try {
-      interface ResourcesResponse {
-        memory_total: number;
-        memory_used: number;
-        memory_free: number;
-        memory_available: number;
-        memory_buffers: number;
-        memory_cached: number;
-        memory_usage_percent: number;
-      }
       const data = await api.get<ResourcesResponse>('/api/v2/system/resources');
-      // Map the API response to our UI data model
-      memoryUsage.data = {
+      memoryUsage = {
         total: data.memory_total,
         used: data.memory_used,
         free: data.memory_free,
@@ -207,61 +322,46 @@
         usedPercent: data.memory_usage_percent,
       };
     } catch (error: unknown) {
-      // Handle memory usage fetch error silently
-      memoryUsage.error = t('system.errors.memoryUsage', {
+      logger.debug('Failed to load memory usage', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-    } finally {
-      memoryUsage.loading = false;
     }
   }
 
   // Load system temperature
   async function loadSystemTemperature(): Promise<void> {
-    systemTemperature.loading = true;
-    systemTemperature.error = null;
-
     try {
-      systemTemperature.data = await api.get<TemperatureInfo>('/api/v2/system/temperature/cpu');
+      systemTemperature = await api.get<TemperatureInfo>('/api/v2/system/temperature/cpu');
     } catch (error: unknown) {
-      // Handle 404 as "temperature not available" (not an error)
       if (error instanceof ApiError && error.status === 404) {
-        systemTemperature.data = { is_available: false };
+        systemTemperature = { is_available: false };
         return;
       }
-      // Handle temperature fetch error silently
-      systemTemperature.error = t('system.errors.temperature', {
+      logger.debug('Failed to load temperature', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      systemTemperature.data = { is_available: false };
-    } finally {
-      systemTemperature.loading = false;
+      systemTemperature = { is_available: false };
     }
   }
 
   // Load process information
   async function loadProcesses(): Promise<void> {
-    processes.loading = true;
-    processes.error = null;
-
     try {
       const url = showAllProcesses
         ? '/api/v2/system/processes?all=true'
         : '/api/v2/system/processes';
-      processes.data = await api.get<ProcessInfo[]>(url);
+      processes = await api.get<ProcessInfo[]>(url);
     } catch (error: unknown) {
-      // Handle processes fetch error silently
-      processes.error = t('system.errors.processes', {
+      logger.debug('Failed to load processes', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      processes.data = [];
-    } finally {
-      processes.loading = false;
+      processes = [];
     }
   }
 
   // Load all data
   async function loadAllData(): Promise<void> {
+    isLoading = true;
     await Promise.all([
       loadSystemInfo(),
       loadDiskUsage(),
@@ -269,26 +369,30 @@
       loadSystemTemperature(),
       loadProcesses(),
     ]);
+    isLoading = false;
   }
 
-  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect instead of legacy onMount
-  // $effect runs after component mount and only when dependencies change
-  // This is the modern Svelte 5 pattern for side effects
+  // Initialize on mount, clean up on unmount
   $effect(() => {
-    loadAllData();
+    const active = { current: true };
+
+    // Load initial data, then load metrics history (which needs data for fallback seeding)
+    loadAllData().then(() => {
+      if (active.current) {
+        loadMetricsHistory(active);
+      }
+    });
+
+    return () => {
+      active.current = false;
+      disconnectMetricsStream();
+      stopPollingFallback();
+    };
   });
 </script>
 
 {#if currentSubpage === 'terminal'}
-  <!-- Browser Terminal Page
-       Use explicit dvh-based height: h-full doesn't work here because the ancestor
-       grid uses grid-rows-[min-content], so h-full resolves to content height
-       instead of the viewport, causing the page to scroll.
-       Offset breakdown (mobile / desktop lg):
-         Header: p-1+h-12+p-1=56px  /  lg:p-4+h-12+lg:p-4=80px
-         Header-wrapper bottom padding: p-3=12px  /  lg:pb-0=0px
-         mainContent bottom padding: p-3=12px  /  lg:p-8=32px
-         Total: 80px  /  112px -->
+  <!-- Browser Terminal Page -->
   <div
     class="col-span-12 flex flex-col h-[calc(100dvh-80px)] lg:h-[calc(100dvh-112px)] overflow-hidden"
     role="region"
@@ -306,100 +410,69 @@
 {:else}
   <!-- System Overview Page -->
   <div class="col-span-12 space-y-4" role="region" aria-label={t('system.aria.dashboard')}>
-    <div class="system-cards-grid">
-      <!-- System Information Card -->
-      <SystemInfoCard
-        title={t('system.systemInfo.title')}
-        systemInfo={systemInfo.data}
-        temperatureInfo={systemTemperature.data}
-        isLoading={systemInfo.loading}
-        error={systemInfo.error}
-        temperatureLoading={systemTemperature.loading}
-        temperatureError={systemTemperature.error}
-      />
+    <!-- Top Metric Strip -->
+    <MetricStrip
+      {cpuPercent}
+      cpuCores={systemInfo.num_cpu ?? 0}
+      {cpuHistory}
+      {memoryPercent}
+      memoryUsed={memoryUsage.used ?? 0}
+      memoryTotal={memoryUsage.total ?? 0}
+      memoryAvailable={memoryUsage.available ?? 0}
+      {memoryHistory}
+      temperatureAvailable={systemTemperature.is_available}
+      temperatureValue={temperatureDisplay}
+      temperatureHistory={temperatureHistoryConverted}
+      {tempSymbol}
+      uptimeSeconds={systemInfo.uptime_seconds ?? 0}
+      hostname={systemInfo.hostname ?? ''}
+      systemModel={systemInfo.system_model}
+    />
 
-      <!-- Disk Usage Card -->
-      <ProgressCard
-        title={t('system.diskUsage.title')}
-        items={diskProgressItems}
-        isLoading={diskUsage.loading}
-        error={diskUsage.error}
-        emptyMessage={t('system.diskUsage.emptyMessage')}
+    <!-- System Details + Storage -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <SystemDetailsCard
+        osDisplay={systemInfo.os_display ?? ''}
+        systemModel={systemInfo.system_model}
+        uptimeSeconds={systemInfo.uptime_seconds ?? 0}
+        timeZone={systemInfo.time_zone}
+        cpuCores={systemInfo.num_cpu ?? 0}
+        temperatureAvailable={systemTemperature.is_available}
+        temperatureValue={temperatureDisplay}
+        {tempSymbol}
       />
-
-      <!-- Memory Usage Card -->
-      <ProgressCard
-        title={t('system.memoryUsage.title')}
-        items={memoryProgressItems}
-        isLoading={memoryUsage.loading}
-        error={memoryUsage.error}
-        showDetails={true}
-      />
+      <div class="lg:col-span-2">
+        <StorageCard
+          disks={diskUsage}
+          memory={memoryUsage.total
+            ? memoryUsage
+            : { total: 0, used: 0, free: 0, available: 0, buffers: 0, cached: 0, usedPercent: 0 }}
+        />
+      </div>
     </div>
 
-    <!-- Process Information Card -->
-    <ProcessTable
-      title={t('system.processInfo.title')}
-      processes={processes.data}
+    <!-- Process Table -->
+    <SystemProcessTable
+      {processes}
       {showAllProcesses}
-      isLoading={processes.loading}
-      error={processes.error}
+      processName={BIRDNET_PROCESS_NAME}
       onToggleShowAll={() => {
         showAllProcesses = !showAllProcesses;
         loadProcesses();
       }}
-      className="mt-6"
     />
 
     <!-- Refresh button -->
     <div class="flex justify-center mt-6">
       <button
-        class="btn btn-primary"
+        class="inline-flex items-center px-4 py-2 rounded-lg font-medium text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         onclick={loadAllData}
-        disabled={isAnyLoading}
+        disabled={isLoading}
         aria-label={t('system.aria.refreshData')}
       >
-        {#if ENABLE_LOADING_SPINNERS && isAnyLoading}
-          <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
-        {:else}
-          <span class="mr-2" aria-hidden="true">
-            <RefreshCw class="size-5" />
-          </span>
-        {/if}
+        <RefreshCw class="size-5 mr-2" />
         {t('system.refreshData')}
       </button>
     </div>
   </div>
 {/if}
-
-<style>
-  .system-cards-grid {
-    display: grid;
-    gap: 1.5rem;
-
-    /* Default: Single column for narrow viewports */
-    grid-template-columns: 1fr;
-  }
-
-  /* Tablets: 2 columns when there's enough space */
-  @media (min-width: 768px) {
-    .system-cards-grid {
-      grid-template-columns: repeat(2, minmax(350px, 1fr));
-    }
-  }
-
-  /* Desktop: 3 columns only when cards can be adequately wide */
-  @media (min-width: 1280px) {
-    .system-cards-grid {
-      grid-template-columns: repeat(3, minmax(320px, 1fr));
-    }
-  }
-
-  /* Large desktop: Cap maximum card width for readability */
-  @media (min-width: 1920px) {
-    .system-cards-grid {
-      grid-template-columns: repeat(3, minmax(380px, 480px));
-      justify-content: center;
-    }
-  }
-</style>

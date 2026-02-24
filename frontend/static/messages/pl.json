@@ -712,7 +712,8 @@
       "timezone": "Strefa Czasowa",
       "temperature": "Temperatura CPU",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Dane temperatury niedostępne"
+      "temperatureUnavailable": "Dane temperatury niedostępne",
+      "cpuCores": "Rdzenie CPU"
     },
     "diskUsage": {
       "title": "Użycie Dysku",
@@ -737,7 +738,8 @@
         "status": "Status",
         "cpu": "CPU",
         "memory": "Pamięć",
-        "uptime": "Czas Pracy"
+        "uptime": "Czas Pracy",
+        "process": "Proces"
       },
       "showAll": "Pokaż Wszystkie Procesy",
       "showBirdnetOnly": "Pokaż Tylko BirdNET",
@@ -957,6 +959,28 @@
         "mysqlNote": "Kopia zapasowa MySQL wymaga zewnętrznych narzędzi (mysqldump)"
       },
       "notInitialized": "Nie zainicjalizowano"
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Pamięć",
+      "temperature": "Temperatura",
+      "system": "System",
+      "cores": "rdzeni",
+      "samples": "próbek",
+      "available": "dost.",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Niedostępna",
+      "online": "Online",
+      "uptime": "Czas pracy",
+      "host": "Host",
+      "model": "Model"
+    },
+    "storage": {
+      "title": "Pamięć masowa",
+      "used": "użyte",
+      "free": "wolne",
+      "ram": "RAM"
     }
   },
   "analytics": {

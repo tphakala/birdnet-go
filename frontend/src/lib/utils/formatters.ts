@@ -92,6 +92,32 @@ export function formatUptime(seconds: number): string {
 }
 
 /**
+ * Format bytes to compact human readable size (e.g., "1.5 GB", "256 MB").
+ * Uses single-decimal precision for values under 10, rounded integers otherwise.
+ */
+export function formatBytesCompact(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const value = bytes / Math.pow(1024, i);
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+}
+
+/**
+ * Format uptime in seconds to compact string (e.g., "2d 3h 15m").
+ */
+export function formatUptimeCompact(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(' ');
+}
+
+/**
  * Format number with thousand separators
  */
 export function formatNumber(num: number | string, decimals: number = 0): string {

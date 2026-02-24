@@ -717,7 +717,8 @@
       "timezone": "Time Zone",
       "temperature": "CPU Temperature",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Temperature data unavailable"
+      "temperatureUnavailable": "Temperature data unavailable",
+      "cpuCores": "CPU cores"
     },
     "diskUsage": {
       "title": "Disk Usage",
@@ -748,7 +749,8 @@
         "status": "Status",
         "cpu": "CPU",
         "memory": "Memory",
-        "uptime": "Uptime"
+        "uptime": "Uptime",
+        "process": "Process"
       },
       "showAll": "Show All Processes",
       "showBirdnetOnly": "Show BirdNET Only",
@@ -965,6 +967,28 @@
           }
         }
       }
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Memory",
+      "temperature": "Temperature",
+      "system": "System",
+      "cores": "cores",
+      "samples": "samples",
+      "available": "avail",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Not available",
+      "online": "Online",
+      "uptime": "Uptime",
+      "host": "Host",
+      "model": "Model"
+    },
+    "storage": {
+      "title": "Storage",
+      "used": "used",
+      "free": "free",
+      "ram": "RAM"
     }
   },
   "terminal": {

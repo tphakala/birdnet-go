@@ -712,7 +712,8 @@
       "timezone": "Časové pásmo",
       "temperature": "Teplota CPU",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Údaje o teplote nie sú k dispozícii"
+      "temperatureUnavailable": "Údaje o teplote nie sú k dispozícii",
+      "cpuCores": "Jadrá CPU"
     },
     "diskUsage": {
       "title": "Využitie disku",
@@ -743,7 +744,8 @@
         "status": "Stav",
         "cpu": "CPU",
         "memory": "Pamäť",
-        "uptime": "Doba prevádzky"
+        "uptime": "Doba prevádzky",
+        "process": "Proces"
       },
       "showAll": "Zobraziť všetky procesy",
       "showBirdnetOnly": "Zobraziť iba BirdNET",
@@ -957,6 +959,28 @@
           }
         }
       }
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Pamäť",
+      "temperature": "Teplota",
+      "system": "Systém",
+      "cores": "jadier",
+      "samples": "vzoriek",
+      "available": "dost.",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Nedostupná",
+      "online": "Online",
+      "uptime": "Doba behu",
+      "host": "Host",
+      "model": "Model"
+    },
+    "storage": {
+      "title": "Úložisko",
+      "used": "použité",
+      "free": "voľné",
+      "ram": "RAM"
     }
   },
   "analytics": {

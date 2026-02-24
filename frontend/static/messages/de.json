@@ -712,7 +712,8 @@
       "timezone": "Zeitzone",
       "temperature": "CPU-Temperatur",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Temperaturdaten nicht verfügbar"
+      "temperatureUnavailable": "Temperaturdaten nicht verfügbar",
+      "cpuCores": "CPU-Kerne"
     },
     "diskUsage": {
       "title": "Festplattennutzung",
@@ -737,7 +738,8 @@
         "status": "Status",
         "cpu": "CPU",
         "memory": "Speicher",
-        "uptime": "Laufzeit"
+        "uptime": "Laufzeit",
+        "process": "Prozess"
       },
       "showAll": "Alle Prozesse anzeigen",
       "showBirdnetOnly": "Nur BirdNET anzeigen",
@@ -957,6 +959,28 @@
         "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)"
       },
       "notInitialized": "Nicht initialisiert"
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Speicher",
+      "temperature": "Temperatur",
+      "system": "System",
+      "cores": "Kerne",
+      "samples": "Proben",
+      "available": "verf.",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Nicht verfügbar",
+      "online": "Online",
+      "uptime": "Betriebszeit",
+      "host": "Host",
+      "model": "Modell"
+    },
+    "storage": {
+      "title": "Speicher",
+      "used": "belegt",
+      "free": "frei",
+      "ram": "RAM"
     }
   },
   "analytics": {

@@ -1137,13 +1137,11 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 
 	// Check thermal directory access
 	if err := c.checkThermalDirectoryAccess(ctx, &response, ip, path); err != nil {
-		return err
+		return c.HandleError(ctx, err, "Failed to access thermal information due to filesystem error", http.StatusInternalServerError)
 	}
-	if response.Message != "" && !response.IsAvailable {
-		// Early return if directory doesn't exist - checkThermalDirectoryAccess already set response
-		if response.Message == "Thermal zone directory not found. This feature is typically available on Linux systems." {
-			return ctx.JSON(http.StatusOK, response)
-		}
+	// Early return if directory doesn't exist
+	if !response.IsAvailable && response.Message != "" && response.Message != "No suitable CPU temperature sensor found or temperature out of valid range." {
+		return ctx.JSON(http.StatusOK, response)
 	}
 
 	// Get thermal zones
@@ -1163,8 +1161,10 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
-// checkThermalDirectoryAccess checks if thermal directory exists and is accessible
-func (c *Controller) checkThermalDirectoryAccess(ctx echo.Context, response *SystemTemperature, ip, path string) error {
+// checkThermalDirectoryAccess checks if thermal directory exists and is accessible.
+// Returns nil if the directory exists, sets response fields and returns nil if not found,
+// or returns an error for other filesystem failures.
+func (c *Controller) checkThermalDirectoryAccess(_ echo.Context, response *SystemTemperature, ip, path string) error {
 	_, err := os.Stat(thermalBasePath)
 	if err == nil {
 		return nil
@@ -1173,11 +1173,11 @@ func (c *Controller) checkThermalDirectoryAccess(ctx echo.Context, response *Sys
 	if os.IsNotExist(err) {
 		response.Message = "Thermal zone directory not found. This feature is typically available on Linux systems."
 		c.logInfoIfEnabled("Thermal zone directory not found, CPU temperature feature unavailable.", logger.String("path", thermalBasePath), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
-		return ctx.JSON(http.StatusOK, response)
+		return nil // Caller checks response.Message for early return
 	}
 
 	c.logErrorIfEnabled("Failed to stat thermal base path", logger.String("path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
-	return c.HandleError(ctx, err, "Failed to access thermal information due to filesystem error", http.StatusInternalServerError)
+	return fmt.Errorf("failed to access thermal information: %w", err)
 }
 
 // getThermalZones retrieves available thermal zone paths

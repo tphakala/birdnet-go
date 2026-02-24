@@ -712,7 +712,8 @@
       "timezone": "Tijdzone",
       "temperature": "Processor temperatuur",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Temperatuur informatie niet beschikbaar"
+      "temperatureUnavailable": "Temperatuur informatie niet beschikbaar",
+      "cpuCores": "CPU-kernen"
     },
     "diskUsage": {
       "title": "Opslag gebruik",
@@ -737,7 +738,8 @@
         "status": "Status",
         "cpu": "Processor",
         "memory": "Geheugen",
-        "uptime": "Werktijd"
+        "uptime": "Werktijd",
+        "process": "Proces"
       },
       "showAll": "Toon alle processen",
       "showBirdnetOnly": "Toon alleen BirdNET",
@@ -957,6 +959,28 @@
         "mysqlNote": "MySQL-back-up vereist externe tools (mysqldump)"
       },
       "notInitialized": "Niet geïnitialiseerd"
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Geheugen",
+      "temperature": "Temperatuur",
+      "system": "Systeem",
+      "cores": "kernen",
+      "samples": "samples",
+      "available": "beschikb.",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Niet beschikbaar",
+      "online": "Online",
+      "uptime": "Uptime",
+      "host": "Host",
+      "model": "Model"
+    },
+    "storage": {
+      "title": "Opslag",
+      "used": "gebruikt",
+      "free": "vrij",
+      "ram": "RAM"
     }
   },
   "analytics": {

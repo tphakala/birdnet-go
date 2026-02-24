@@ -712,7 +712,8 @@
       "timezone": "Aikavyöhyke",
       "temperature": "Prosessorin lämpötila",
       "temperatureValue": "{temp}°C",
-      "temperatureUnavailable": "Lämpötilatiedot eivät ole saatavilla"
+      "temperatureUnavailable": "Lämpötilatiedot eivät ole saatavilla",
+      "cpuCores": "CPU-ytimet"
     },
     "diskUsage": {
       "title": "Levyn käyttö",
@@ -737,7 +738,8 @@
         "status": "Tila",
         "cpu": "CPU",
         "memory": "Muisti",
-        "uptime": "Käynnissäoloaika"
+        "uptime": "Käynnissäoloaika",
+        "process": "Prosessi"
       },
       "showAll": "Näytä kaikki prosessit",
       "showBirdnetOnly": "Näytä vain BirdNET",
@@ -957,6 +959,28 @@
         "mysqlNote": "MySQL-varmuuskopiointi vaatii ulkoisia työkaluja (mysqldump)"
       },
       "notInitialized": "Ei alustettu"
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Muisti",
+      "temperature": "Lämpötila",
+      "system": "Järjestelmä",
+      "cores": "ydintä",
+      "samples": "näytettä",
+      "available": "saatav.",
+      "min": "Min",
+      "max": "Max",
+      "tempUnavailable": "Ei saatavilla",
+      "online": "Verkossa",
+      "uptime": "Käyntiaika",
+      "host": "Palvelin",
+      "model": "Malli"
+    },
+    "storage": {
+      "title": "Tallennustila",
+      "used": "käytössä",
+      "free": "vapaana",
+      "ram": "RAM"
     }
   },
   "analytics": {
