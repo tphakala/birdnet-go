@@ -76,7 +76,7 @@ func setDefaultConfig() {
 	// Range filter configuration
 	viper.SetDefault("birdnet.rangefilter.debug", false)
 	viper.SetDefault("birdnet.rangefilter.model", "latest")
-	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
+	viper.SetDefault("birdnet.rangefilter.threshold", 0.03)
 
 	// Realtime configuration
 	viper.SetDefault("realtime.interval", 15)
@@ -155,7 +155,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dynamicthreshold.enabled", true)
 	viper.SetDefault("realtime.dynamicthreshold.debug", false)
 	viper.SetDefault("realtime.dynamicthreshold.trigger", 0.90)
-	viper.SetDefault("realtime.dynamicthreshold.min", 0.20)
+	viper.SetDefault("realtime.dynamicthreshold.min", 0.40)
 	viper.SetDefault("realtime.dynamicthreshold.validhours", 24)
 
 	// Log deduplication configuration
@@ -163,10 +163,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.logdeduplication.healthcheckintervalseconds", 60)
 
 	// False positive filter configuration
-	// Level 0 = Off (no filtering, backward compatible default)
-	// Level 1 = Lenient, Level 2 = Moderate, Level 3 = Balanced (original behavior)
+	// Level 0 = Off, Level 1 = Lenient, Level 2 = Moderate (default)
+	// Level 3 = Balanced (original behavior)
 	// Level 4 = Strict (RPi 4+ required), Level 5 = Maximum (RPi 4+ required)
-	viper.SetDefault("realtime.falsepositivefilter.level", 0)
+	viper.SetDefault("realtime.falsepositivefilter.level", 2)
 
 	// Log configuration
 	viper.SetDefault("realtime.log.enabled", false)

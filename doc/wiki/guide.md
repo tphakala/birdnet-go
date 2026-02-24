@@ -777,7 +777,7 @@ birdnet:
   latitude: 60.1699
   longitude: 24.9384
   rangefilter:
-    threshold: 0.01 # Lower = more permissive, higher = more strict
+    threshold: 0.03 # Lower = more permissive, higher = more strict
 ```
 
 ### Stage 2: Confidence Threshold
@@ -860,7 +860,7 @@ realtime:
     enabled: true # Enable dynamic threshold adjustment (default: true)
     debug: false # Enable debug logging for threshold changes
     trigger: 0.90 # Confidence level that triggers threshold reduction
-    min: 0.20 # Minimum allowed threshold (safety floor)
+    min: 0.40 # Minimum allowed threshold (safety floor)
     validhours: 24 # Hours before threshold resets to base value
 ```
 
@@ -1146,16 +1146,17 @@ birdnet:
   rangefilter:
     debug: false # Enable debug logging
     model: "" # "" for V2 (default), "legacy" for V1
-    threshold: 0.01 # Species occurrence threshold (0.0-1.0)
+    threshold: 0.03 # Species occurrence threshold (0.0-1.0)
 ```
 
 > **Note**: The configuration uses `birdnet.rangefilter` in YAML, while CLI commands use the `range` group (e.g., `birdnet-go range print`). These refer to the same functionality.
 
 #### Understanding the Threshold Parameter
 
-The `threshold` parameter controls which species are included in analysis based on their occurrence probability. **The default value of 0.01 is recommended for most users and rarely needs to be changed** unless you have very specific requirements.
+The `threshold` parameter controls which species are included in analysis based on their occurrence probability. **The default value of 0.03 is recommended for most users and rarely needs to be changed** unless you have very specific requirements.
 
-- **Default (0.01)**: Permissive filtering that works well for most locations and use cases
+- **Default (0.03)**: Balanced filtering that works well for most locations and use cases
+- **Permissive values (0.01)**: Include more species, including those with very low occurrence probability
 - **Conservative values (0.05-0.1)**: Include fewer species, only those with higher occurrence probability
 - **Strict values (0.1-0.3)**: Include only species with strong occurrence probability
 - **Very strict values (0.5+)**: Include only the most common species for your area
@@ -1164,15 +1165,15 @@ The `threshold` parameter controls which species are included in analysis based 
 
 ### Configuration Examples
 
-#### Example 1: Default Permissive Filtering
+#### Example 1: Default Balanced Filtering
 
 ```yaml
 rangefilter:
-  threshold: 0.01 # Default - good for most users
+  threshold: 0.03 # Default - good for most users
 ```
 
-- Includes species with ≥1% occurrence probability
-- Captures most potential species including occasional visitors
+- Includes species with ≥3% occurrence probability
+- Captures most expected species while filtering out unlikely ones
 - Balanced approach suitable for most locations
 
 #### Example 2: Conservative Filtering
