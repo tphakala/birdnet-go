@@ -81,6 +81,16 @@ func parseID(id string) (uint, error) {
 	return uint(parsed), nil
 }
 
+// extractScientificName extracts the scientific name from a species string that
+// may be in the legacy concatenated format "ScientificName_CommonName" or
+// "ScientificName_CommonName_Code". Returns just the scientific name portion.
+func extractScientificName(species string) string {
+	if sciName, _, ok := strings.Cut(species, "_"); ok {
+		return sciName
+	}
+	return species
+}
+
 // parseDetectionTimestamp converts date and time strings to Unix timestamp.
 // Falls back to current time if parsing fails.
 func parseDetectionTimestamp(date, timeStr string, tz *time.Location) int64 {
@@ -352,10 +362,13 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// Uses batch operation to avoid N+1 queries.
 	var predLabels []*entities.Label
 	if len(results) > 0 {
-		// Collect species names for batch resolution
+		// Collect species names for batch resolution.
+		// Results.Species may contain concatenated "ScientificName_CommonName" format
+		// from legacy code (see AdditionalResultsToDatastoreResults). Extract only
+		// the scientific name portion for v2 label storage.
 		speciesNames := make([]string, len(results))
 		for i, r := range results {
-			speciesNames[i] = r.Species
+			speciesNames[i] = extractScientificName(r.Species)
 		}
 
 		// Batch resolve all labels (returns map[scientificName]*Label)
@@ -367,7 +380,8 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		// Build predLabels slice from map, preserving order
 		predLabels = make([]*entities.Label, len(results))
 		for i, r := range results {
-			lbl, ok := labelMap[r.Species]
+			sciName := extractScientificName(r.Species)
+			lbl, ok := labelMap[sciName]
 			if !ok {
 				return fmt.Errorf("label not found for species %s after batch creation", r.Species)
 			}
