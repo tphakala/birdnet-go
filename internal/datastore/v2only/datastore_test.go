@@ -953,6 +953,8 @@ func TestV2OnlyDatastore_ReviewAndLockVisibleInGetAllNotes(t *testing.T) {
 // properly extract scientific names from legacy concatenated labels stored as
 // "ScientificName_CommonName" in the labels table.
 func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
+	t.Parallel()
+
 	// Provide label mapping so commonNameMap resolves "Strix aluco" → "lehtopöllö"
 	labels := []string{
 		"Strix aluco_lehtopöllö",
@@ -1038,10 +1040,14 @@ func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
 		err := ds.Save(note, nil)
 		require.NoError(t, err)
 
-		// The label should be stored with just the scientific name
-		label, err := ds.label.GetOrCreate(ctx, "Picus viridis", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+		// Verify no concatenated label was stored: scan all species labels for viridis
+		var allLabels []entities.Label
+		err = ds.manager.DB().
+			Where("label_type_id = ? AND scientific_name LIKE ?", ds.speciesLabelTypeID, "%viridis%").
+			Find(&allLabels).Error
 		require.NoError(t, err)
-		assert.Equal(t, "Picus viridis", label.ScientificName,
-			"Save should extract scientific name before creating label")
+		require.Len(t, allLabels, 1, "exactly one label should exist for Picus viridis")
+		assert.Equal(t, "Picus viridis", allLabels[0].ScientificName,
+			"Save should store only the extracted scientific name, not the concatenated form")
 	})
 }
