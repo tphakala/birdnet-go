@@ -95,6 +95,12 @@
       isConnected = true;
       statusMessage = t('terminal.connected');
       fitAddon?.fit();
+      // Send initial resize so the backend PTY matches our dimensions.
+      // The first fit() above runs before onResize is registered, so
+      // the backend would otherwise stay at its default size.
+      if (term) {
+        ws?.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
     };
 
     ws.onmessage = event => {
