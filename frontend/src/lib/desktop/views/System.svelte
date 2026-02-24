@@ -185,6 +185,7 @@
   // Uses recursive setTimeout instead of setInterval to avoid overlapping requests.
   function startPollingFallback(active: { current: boolean }): void {
     // Seed initial points from data already loaded
+    // (cpuHistory is already seeded in loadMemoryUsage)
     if (memoryUsage.usedPercent > 0) {
       memoryHistory = appendHistory(memoryHistory, memoryUsage.usedPercent);
     }
@@ -298,7 +299,7 @@
     }
   }
 
-  // Load memory usage (and CPU from same endpoint)
+  // Load memory usage and CPU from same endpoint
   async function loadMemoryUsage(): Promise<void> {
     try {
       const data = await api.get<ResourcesResponse>('/api/v2/system/resources');
@@ -311,6 +312,10 @@
         cached: data.memory_cached,
         usedPercent: data.memory_usage_percent,
       };
+      // Seed initial CPU history point so the sparkline isn't empty before SSE/polling starts
+      if (data.cpu_usage_percent > 0) {
+        cpuHistory = appendHistory(cpuHistory, data.cpu_usage_percent);
+      }
     } catch (error: unknown) {
       logger.debug('Failed to load memory usage', {
         error: error instanceof Error ? error.message : 'Unknown error',
