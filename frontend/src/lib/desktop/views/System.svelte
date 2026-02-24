@@ -136,7 +136,9 @@
     memoryHistory.length > 0 ? memoryHistory[memoryHistory.length - 1] : 0
   );
   let temperatureCelsius = $derived(
-    temperatureHistory.length > 0 ? temperatureHistory[temperatureHistory.length - 1] : 0
+    temperatureHistory.length > 0
+      ? temperatureHistory[temperatureHistory.length - 1]
+      : (systemTemperature.celsius ?? 0)
   );
   let temperatureDisplay = $derived(convertTemperature(temperatureCelsius, temperatureUnit));
   let temperatureHistoryConverted = $derived(

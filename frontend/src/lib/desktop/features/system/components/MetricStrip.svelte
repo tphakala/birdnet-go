@@ -60,7 +60,7 @@
       </div>
       <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
     </div>
-    <Sparkline data={cpuHistory} color="var(--color-primary)" width={160} height={28} />
+    <Sparkline data={cpuHistory} color="#3b82f6" width={160} height={28} />
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span>{cpuCores} {t('system.metrics.cores')}</span>
       <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
