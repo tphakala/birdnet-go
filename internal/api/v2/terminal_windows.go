@@ -64,7 +64,7 @@ func startPTY(ctx context.Context) (ptyHandle, func(), error) {
 		select {
 		case <-ctx.Done():
 			ph.Close()
-		case <-waitDone(cpty, waitCtx):
+		case <-waitDone(waitCtx, cpty):
 			// Process exited naturally.
 		}
 	}()
@@ -74,7 +74,7 @@ func startPTY(ctx context.Context) (ptyHandle, func(), error) {
 
 // waitDone returns a channel that closes when the ConPTY process exits
 // or when the provided context is cancelled.
-func waitDone(cpty *conpty.ConPty, ctx context.Context) <-chan struct{} {
+func waitDone(ctx context.Context, cpty *conpty.ConPty) <-chan struct{} {
 	ch := make(chan struct{})
 	go func() {
 		_, _ = cpty.Wait(ctx)

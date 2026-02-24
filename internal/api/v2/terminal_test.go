@@ -7,6 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Compile-time interface check.
+var _ ptyHandle = (*mockPTY)(nil)
+
 // mockPTY implements ptyHandle for testing.
 type mockPTY struct {
 	resizeCols uint16

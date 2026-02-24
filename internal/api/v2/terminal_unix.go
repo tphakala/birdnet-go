@@ -7,18 +7,30 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"sync"
 
 	"github.com/creack/pty"
 )
 
 // unixPTY wraps a Unix PTY file descriptor to satisfy ptyHandle.
+// Close is guarded by sync.Once for parity with windowsPTY —
+// double-closing a Unix fd can close a recycled fd belonging to
+// another goroutine.
 type unixPTY struct {
-	ptmx *os.File
+	ptmx      *os.File
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (u *unixPTY) Read(p []byte) (int, error)  { return u.ptmx.Read(p) }
 func (u *unixPTY) Write(p []byte) (int, error) { return u.ptmx.Write(p) }
-func (u *unixPTY) Close() error                { return u.ptmx.Close() }
+
+func (u *unixPTY) Close() error {
+	u.closeOnce.Do(func() {
+		u.closeErr = u.ptmx.Close()
+	})
+	return u.closeErr
+}
 
 // Resize sets the terminal dimensions on the Unix PTY.
 func (u *unixPTY) Resize(cols, rows uint16) error {
