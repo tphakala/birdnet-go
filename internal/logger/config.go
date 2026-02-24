@@ -70,12 +70,13 @@ const (
 
 // ensureModuleOutput adds a default module output configuration if not already present.
 // This helper reduces repetition when setting up default module configurations.
+// Level is intentionally left empty so that ModuleLevels or DefaultLevel take precedence.
+// Setting a non-empty Level here would silently override user-configured module_levels.
 func ensureModuleOutput(cfg *LoggingConfig, module, filePath string) {
 	if _, exists := cfg.ModuleOutputs[module]; !exists {
 		cfg.ModuleOutputs[module] = ModuleOutput{
 			Enabled:     true,
 			FilePath:    filePath,
-			Level:       DefaultLogLevel,
 			ConsoleAlso: false,
 		}
 	}
