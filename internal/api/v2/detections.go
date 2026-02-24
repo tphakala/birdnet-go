@@ -1505,13 +1505,13 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 
 	switch {
 	case detTime >= sunriseStart && detTime <= sunriseEnd:
-		return "Sunrise"
+		return datastore.TimeOfDaySunrise
 	case detTime >= sunsetStart && detTime <= sunsetEnd:
-		return "Sunset"
+		return datastore.TimeOfDaySunset
 	case detTime >= sunriseTime && detTime < sunsetTime:
-		return "Day"
+		return datastore.TimeOfDayDay
 	default:
-		return "Night"
+		return datastore.TimeOfDayNight
 	}
 }
 

@@ -580,7 +580,9 @@
       "day": "Dia",
       "night": "Noite",
       "sunrise": "Nascer do sol",
-      "sunset": "Pôr do sol"
+      "sunset": "Pôr do sol",
+      "any": "Qualquer",
+      "unknown": "Desconhecido"
     },
     "table": {
       "caption": "Lista de detecções de pássaros com data, espécie, confiança e informações de status"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Raridade da espécie",
       "score": "Pontuação",
-      "basedOnLocation": "Baseado na localização: {latitude}, {longitude}"
+      "basedOnLocation": "Baseado na localização: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Muito comum",
+        "common": "Comum",
+        "uncommon": "Incomum",
+        "rare": "Raro",
+        "very_rare": "Muito raro",
+        "unknown": "Desconhecido"
+      }
     },
     "taxonomy": {
       "hierarchy": "Classificação taxonômica",

@@ -572,7 +572,9 @@
       "day": "Päivä",
       "night": "Yö",
       "sunrise": "Auringonnousu",
-      "sunset": "Auringonlasku"
+      "sunset": "Auringonlasku",
+      "any": "Mikä tahansa",
+      "unknown": "Tuntematon"
     },
     "table": {
       "caption": "Lintuhavaintojen lista päivämäärällä, lajilla, luottamuksella ja tilatiedoilla"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Lajin harvinaisuus",
       "score": "Pisteet",
-      "basedOnLocation": "Sijainnin perusteella: {latitude}, {longitude}"
+      "basedOnLocation": "Sijainnin perusteella: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Hyvin yleinen",
+        "common": "Yleinen",
+        "uncommon": "Melko harvinainen",
+        "rare": "Harvinainen",
+        "very_rare": "Hyvin harvinainen",
+        "unknown": "Tuntematon"
+      }
     },
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",

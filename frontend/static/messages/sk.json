@@ -572,7 +572,9 @@
       "day": "Deň",
       "night": "Noc",
       "sunrise": "Východ slnka",
-      "sunset": "Západ slnka"
+      "sunset": "Západ slnka",
+      "any": "Akýkoľvek",
+      "unknown": "Neznámy"
     },
     "table": {
       "caption": "Zoznam detekcií vtákov s informáciami o dátume, druhu, istote a stave"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Vzácnosť druhu",
       "score": "Skóre",
-      "basedOnLocation": "Na základe polohy: {latitude}, {longitude}"
+      "basedOnLocation": "Na základe polohy: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Veľmi bežný",
+        "common": "Bežný",
+        "uncommon": "Nezvyčajný",
+        "rare": "Vzácny",
+        "very_rare": "Veľmi vzácny",
+        "unknown": "Neznámy"
+      }
     },
     "taxonomy": {
       "hierarchy": "Taxonomická klasifikácia",

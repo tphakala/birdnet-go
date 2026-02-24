@@ -572,7 +572,9 @@
       "day": "Día",
       "night": "Noche",
       "sunrise": "Amanecer",
-      "sunset": "Atardecer"
+      "sunset": "Atardecer",
+      "any": "Cualquiera",
+      "unknown": "Desconocido"
     },
     "table": {
       "caption": "Lista de detecciones de aves con fecha, especie, confianza e información de estado"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Rareza de la especie",
       "score": "Puntuación",
-      "basedOnLocation": "Basado en la ubicación: {latitude}, {longitude}"
+      "basedOnLocation": "Basado en la ubicación: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Muy común",
+        "common": "Común",
+        "uncommon": "Poco común",
+        "rare": "Raro",
+        "very_rare": "Muy raro",
+        "unknown": "Desconocido"
+      }
     },
     "taxonomy": {
       "hierarchy": "Clasificación taxonómica",

@@ -572,7 +572,9 @@
       "day": "Tag",
       "night": "Nacht",
       "sunrise": "Sonnenaufgang",
-      "sunset": "Sonnenuntergang"
+      "sunset": "Sonnenuntergang",
+      "any": "Beliebig",
+      "unknown": "Unbekannt"
     },
     "table": {
       "caption": "Liste der Vogelerkennungen mit Datum, Art, Konfidenz und Statusinformationen"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Seltenheit der Art",
       "score": "Bewertung",
-      "basedOnLocation": "Basierend auf Standort: {latitude}, {longitude}"
+      "basedOnLocation": "Basierend auf Standort: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Sehr häufig",
+        "common": "Häufig",
+        "uncommon": "Ungewöhnlich",
+        "rare": "Selten",
+        "very_rare": "Sehr selten",
+        "unknown": "Unbekannt"
+      }
     },
     "taxonomy": {
       "hierarchy": "Taxonomische Klassifizierung",

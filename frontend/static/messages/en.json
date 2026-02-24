@@ -577,7 +577,9 @@
       "day": "Day",
       "night": "Night",
       "sunrise": "Sunrise",
-      "sunset": "Sunset"
+      "sunset": "Sunset",
+      "any": "Any",
+      "unknown": "Unknown"
     },
     "table": {
       "caption": "List of bird detections with date, species, confidence, and status information"
@@ -676,7 +678,15 @@
     "rarity": {
       "title": "Species Rarity",
       "score": "Score",
-      "basedOnLocation": "Based on location: {latitude}, {longitude}"
+      "basedOnLocation": "Based on location: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Very Common",
+        "common": "Common",
+        "uncommon": "Uncommon",
+        "rare": "Rare",
+        "very_rare": "Very Rare",
+        "unknown": "Unknown"
+      }
     },
     "taxonomy": {
       "hierarchy": "Taxonomic Classification",

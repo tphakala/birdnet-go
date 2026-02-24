@@ -621,7 +621,9 @@
       "day": "Jour",
       "night": "Nuit",
       "sunrise": "Lever du soleil",
-      "sunset": "Coucher du soleil"
+      "sunset": "Coucher du soleil",
+      "any": "N'importe quand",
+      "unknown": "Inconnu"
     },
     "table": {
       "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Rareté de l'espèce",
       "score": "Score",
-      "basedOnLocation": "Basé sur l'emplacement : {latitude}, {longitude}"
+      "basedOnLocation": "Basé sur l'emplacement : {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Très commun",
+        "common": "Commun",
+        "uncommon": "Peu commun",
+        "rare": "Rare",
+        "very_rare": "Très rare",
+        "unknown": "Inconnu"
+      }
     },
     "taxonomy": {
       "hierarchy": "Classification taxonomique",

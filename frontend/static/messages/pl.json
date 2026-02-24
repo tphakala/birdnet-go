@@ -572,7 +572,9 @@
       "day": "Dzień",
       "night": "Noc",
       "sunrise": "Wschód słońca",
-      "sunset": "Zachód słońca"
+      "sunset": "Zachód słońca",
+      "any": "Dowolna",
+      "unknown": "Nieznana"
     },
     "table": {
       "caption": "Lista detekcji ptaków z datą, gatunkiem, pewnością i informacjami o statusie"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Rzadkość Gatunku",
       "score": "Wynik",
-      "basedOnLocation": "Na podstawie lokalizacji: {latitude}, {longitude}"
+      "basedOnLocation": "Na podstawie lokalizacji: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Bardzo pospolity",
+        "common": "Pospolity",
+        "uncommon": "Niepospolity",
+        "rare": "Rzadki",
+        "very_rare": "Bardzo rzadki",
+        "unknown": "Nieznany"
+      }
     },
     "taxonomy": {
       "hierarchy": "Klasyfikacja Taksonomiczna",

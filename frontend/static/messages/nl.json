@@ -572,7 +572,9 @@
       "day": "Dag",
       "night": "Nacht",
       "sunrise": "Zonsopgang",
-      "sunset": "Zonsondergang"
+      "sunset": "Zonsondergang",
+      "any": "Willekeurig",
+      "unknown": "Onbekend"
     },
     "table": {
       "caption": "Lijst van herkende vogels met datum, soort , betrouwbaarheid en status informatie"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Soort zeldzaamheid",
       "score": "Score",
-      "basedOnLocation": "Gebaseerd op locatie: {latitude}, {longitude}"
+      "basedOnLocation": "Gebaseerd op locatie: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Zeer algemeen",
+        "common": "Algemeen",
+        "uncommon": "Ongewoon",
+        "rare": "Zeldzaam",
+        "very_rare": "Zeer zeldzaam",
+        "unknown": "Onbekend"
+      }
     },
     "taxonomy": {
       "hierarchy": "Taxonomische klassificatie",

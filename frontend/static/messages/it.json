@@ -572,7 +572,9 @@
       "day": "Giorno",
       "night": "Notte",
       "sunrise": "Alba",
-      "sunset": "Tramonto"
+      "sunset": "Tramonto",
+      "any": "Qualsiasi",
+      "unknown": "Sconosciuto"
     },
     "table": {
       "caption": "Elenco dei rilevamenti di uccelli con data, specie, confidenza e informazioni sullo stato"
@@ -671,7 +673,15 @@
     "rarity": {
       "title": "Rarità Specie",
       "score": "Punteggio",
-      "basedOnLocation": "Basato sulla posizione: {latitude}, {longitude}"
+      "basedOnLocation": "Basato sulla posizione: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Molto comune",
+        "common": "Comune",
+        "uncommon": "Non comune",
+        "rare": "Raro",
+        "very_rare": "Molto raro",
+        "unknown": "Sconosciuto"
+      }
     },
     "taxonomy": {
       "hierarchy": "Classificazione Tassonomica",
