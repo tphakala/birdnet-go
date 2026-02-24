@@ -305,7 +305,7 @@ func (s *Server) setupRoutes() error {
 		apiv2.WithAuthMiddleware(s.authMiddleware),
 		apiv2.WithAuthService(s.authService),
 		apiv2.WithV2Manager(s.v2Manager),
-		apiv2.WithMetricsStore(observability.NewMemoryStore(360)),
+		apiv2.WithMetricsStore(observability.NewMemoryStore(apiv2.MetricsHistoryMaxPoints)),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize API v2: %w", err)

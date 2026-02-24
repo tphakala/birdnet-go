@@ -17,7 +17,10 @@ import (
 // metricsHistoryDefaultPoints is the default number of points returned when the
 // "points" query parameter is omitted.
 const metricsHistoryDefaultPoints = 360
-const metricsHistoryMaxPoints = 360
+
+// MetricsHistoryMaxPoints is the maximum (and default) number of data points
+// retained per metric in the ring buffer. It also caps the "points" query parameter.
+const MetricsHistoryMaxPoints = 360
 
 // metricsSSEHeartbeatInterval is the keepalive interval for the metrics SSE stream.
 const metricsSSEHeartbeatInterval = 30 * time.Second
@@ -38,7 +41,7 @@ func (c *Controller) GetMetricsHistory(ctx echo.Context) error {
 	points := metricsHistoryDefaultPoints
 	if raw := ctx.QueryParam("points"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed <= 0 || parsed > metricsHistoryMaxPoints {
+		if err != nil || parsed <= 0 || parsed > MetricsHistoryMaxPoints {
 			return c.HandleError(ctx, err, "Invalid 'points' parameter", http.StatusBadRequest)
 		}
 		points = parsed
