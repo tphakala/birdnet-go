@@ -3,6 +3,7 @@ module github.com/tphakala/birdnet-go
 go 1.26
 
 require (
+	github.com/UserExistsError/conpty v0.1.4
 	github.com/antonholmquist/jason v1.0.0
 	github.com/creack/pty v1.1.24
 	github.com/docker/go-connections v0.6.0
