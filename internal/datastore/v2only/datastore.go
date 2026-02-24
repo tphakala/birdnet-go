@@ -353,7 +353,8 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// NOTE: Label GetOrCreate calls are outside the transaction.
 	// If the detection save fails, orphaned reference data may persist.
 	// This is acceptable as they will be reused on subsequent saves.
-	label, err := ds.label.GetOrCreate(ctx, note.ScientificName, model.ID, ds.speciesLabelTypeID, ds.avesClassID)
+	// Extract scientific name in case it contains concatenated "ScientificName_CommonName" format.
+	label, err := ds.label.GetOrCreate(ctx, extractScientificName(note.ScientificName), model.ID, ds.speciesLabelTypeID, ds.avesClassID)
 	if err != nil {
 		return fmt.Errorf("failed to get/create label: %w", err)
 	}
@@ -518,14 +519,16 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	}
 
 	scientificName := ""
-	// Try to get scientific name from preloaded Label first
+	// Try to get scientific name from preloaded Label first.
+	// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+	// so extract only the scientific name portion.
 	if det.Label != nil && det.Label.ScientificName != "" {
-		scientificName = det.Label.ScientificName
+		scientificName = extractScientificName(det.Label.ScientificName)
 	} else if det.LabelID > 0 && ds.label != nil {
 		// Label not preloaded, fetch it from the repository
 		ctx := context.Background()
 		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil {
-			scientificName = label.ScientificName
+			scientificName = extractScientificName(label.ScientificName)
 		}
 	}
 
@@ -646,10 +649,12 @@ func (ds *Datastore) detectionsToNotes(dets []*entities.Detection) []datastore.N
 
 // detectionToRecord converts a v2 Detection to a DetectionRecord.
 func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.DetectionRecord {
-	// Scientific name from Label
+	// Scientific name from Label.
+	// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+	// so extract only the scientific name portion.
 	scientificName := ""
 	if det.Label != nil && det.Label.ScientificName != "" {
-		scientificName = det.Label.ScientificName
+		scientificName = extractScientificName(det.Label.ScientificName)
 	}
 
 	// Look up common name from pre-built map, fallback to scientific name
@@ -870,14 +875,18 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		// Format the latest time as HH:MM:SS
 		latestTime := time.Unix(r.LatestTime, 0).In(ds.timezone)
 
+		// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+		// so extract only the scientific name portion.
+		sciName := extractScientificName(r.ScientificName)
+
 		// Look up common name from the cached map
-		commonName := r.ScientificName
-		if cn, ok := ds.commonNameMap[r.ScientificName]; ok {
+		commonName := sciName
+		if cn, ok := ds.commonNameMap[sciName]; ok {
 			commonName = cn
 		}
 
 		note := datastore.Note{
-			ScientificName: r.ScientificName,
+			ScientificName: sciName,
 			CommonName:     commonName,
 			Confidence:     r.MaxConfidence,
 			Date:           selectedDate,
@@ -1132,15 +1141,18 @@ func (ds *Datastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 		return nil, err
 	}
 
-	// Use a map to deduplicate by scientific name (since labels are now per-model)
+	// Use a map to deduplicate by scientific name (since labels are now per-model).
+	// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+	// so extract only the scientific name portion.
 	seen := make(map[string]struct{}, len(labels))
 	notes := make([]datastore.Note, 0, len(labels))
 	for i := range labels {
-		if labels[i].ScientificName != "" {
-			if _, exists := seen[labels[i].ScientificName]; !exists {
-				seen[labels[i].ScientificName] = struct{}{}
+		sciName := extractScientificName(labels[i].ScientificName)
+		if sciName != "" {
+			if _, exists := seen[sciName]; !exists {
+				seen[sciName] = struct{}{}
 				notes = append(notes, datastore.Note{
-					ScientificName: labels[i].ScientificName,
+					ScientificName: sciName,
 				})
 			}
 		}
@@ -1320,7 +1332,7 @@ func (ds *Datastore) GetNoteResults(noteID string) ([]datastore.Results, error) 
 	for _, pred := range preds {
 		scientificName := ""
 		if label, ok := labelMap[pred.LabelID]; ok && label.ScientificName != "" {
-			scientificName = label.ScientificName
+			scientificName = extractScientificName(label.ScientificName)
 		}
 
 		results = append(results, datastore.Results{
@@ -1893,9 +1905,10 @@ func (ds *Datastore) GetLockedNotesClipPaths() ([]string, error) {
 // ============================================================
 
 // imageCacheScientificName extracts the scientific name from an image cache's label.
+// Handles legacy concatenated "ScientificName_CommonName" format.
 func imageCacheScientificName(cache *entities.ImageCache) string {
 	if cache.Label != nil && cache.Label.ScientificName != "" {
-		return cache.Label.ScientificName
+		return extractScientificName(cache.Label.ScientificName)
 	}
 	return ""
 }
@@ -2053,14 +2066,18 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 
 	result := make([]datastore.SpeciesSummaryData, 0, len(v2Data))
 	for _, d := range v2Data {
+		// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+		// so extract only the scientific name portion.
+		sciName := extractScientificName(d.ScientificName)
+
 		// Look up common name from pre-built map, fallback to scientific name
-		commonName := d.ScientificName
-		if cn, ok := ds.commonNameMap[d.ScientificName]; ok {
+		commonName := sciName
+		if cn, ok := ds.commonNameMap[sciName]; ok {
 			commonName = cn
 		}
 
 		result = append(result, datastore.SpeciesSummaryData{
-			ScientificName: d.ScientificName,
+			ScientificName: sciName,
 			CommonName:     commonName,
 			SpeciesCode:    "", // Not available in v2 schema
 			Count:          int(d.TotalDetections),
@@ -2216,15 +2233,19 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 
 	result := make([]datastore.NewSpeciesData, 0, len(data))
 	for _, d := range data {
+		// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+		// so extract only the scientific name portion.
+		sciName := extractScientificName(d.ScientificName)
+
 		// Look up common name from pre-built map, fallback to scientific name
-		commonName := d.ScientificName
-		if cn, ok := ds.commonNameMap[d.ScientificName]; ok {
+		commonName := sciName
+		if cn, ok := ds.commonNameMap[sciName]; ok {
 			commonName = cn
 		}
 
 		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format(time.DateOnly)
 		result = append(result, datastore.NewSpeciesData{
-			ScientificName: d.ScientificName,
+			ScientificName: sciName,
 			CommonName:     commonName,
 			FirstSeenDate:  firstSeenDate,
 			CountInPeriod:  0,
@@ -2350,20 +2371,21 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 // thresholdScientificName extracts the scientific name from a threshold's label.
 func thresholdScientificName(t *entities.DynamicThreshold) string {
 	if t.Label != nil && t.Label.ScientificName != "" {
-		return t.Label.ScientificName
+		return extractScientificName(t.Label.ScientificName)
 	}
 	return ""
 }
 
 // resolveCommonName maps a scientific name to its common name using the
 // pre-built commonNameMap. Falls back to the scientific name if no mapping exists.
-// This follows the same pattern used in detectionToNote, detectionToRecord,
-// and GetTopBirdsData for common-name display.
+// Handles legacy concatenated "ScientificName_CommonName" format by extracting
+// only the scientific name portion before lookup.
 func (ds *Datastore) resolveCommonName(scientificName string) string {
-	if cn, ok := ds.commonNameMap[scientificName]; ok {
+	sciName := extractScientificName(scientificName)
+	if cn, ok := ds.commonNameMap[sciName]; ok {
 		return cn
 	}
-	return scientificName
+	return sciName
 }
 
 // resolveToScientificName converts a species name (which may be a common name
@@ -2570,9 +2592,10 @@ func (ds *Datastore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 // ============================================================
 
 // eventSpeciesName extracts the species name from an event's label.
+// Handles legacy concatenated "ScientificName_CommonName" format.
 func eventSpeciesName(e *entities.ThresholdEvent) string {
 	if e.Label != nil && e.Label.ScientificName != "" {
-		return e.Label.ScientificName
+		return extractScientificName(e.Label.ScientificName)
 	}
 	return ""
 }
@@ -2731,9 +2754,10 @@ func (ds *Datastore) DeleteAllThresholdEvents() (int64, error) {
 // ============================================================
 
 // notificationScientificName extracts the scientific name from a notification's label.
+// Handles legacy concatenated "ScientificName_CommonName" format.
 func notificationScientificName(h *entities.NotificationHistory) string {
 	if h.Label != nil && h.Label.ScientificName != "" {
-		return h.Label.ScientificName
+		return extractScientificName(h.Label.ScientificName)
 	}
 	return ""
 }

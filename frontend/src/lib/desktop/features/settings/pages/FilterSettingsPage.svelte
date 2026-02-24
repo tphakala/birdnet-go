@@ -139,7 +139,9 @@
     try {
       const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
       if (data?.species && Array.isArray(data.species)) {
-        speciesListState.data = data.species.map((species: { label: string }) => species.label);
+        speciesListState.data = data.species.map(
+          (species: { label: string; commonName?: string }) => species.commonName || species.label
+        );
       } else {
         speciesListState.data = [];
       }
