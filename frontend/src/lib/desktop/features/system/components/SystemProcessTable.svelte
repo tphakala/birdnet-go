@@ -131,7 +131,20 @@
           {#each columns as col (col.key)}
             <th
               class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-400 dark:text-slate-500"
+              role="columnheader"
+              tabindex="0"
+              aria-sort={sortColumn === col.key
+                ? sortDirection === 'asc'
+                  ? 'ascending'
+                  : 'descending'
+                : 'none'}
               onclick={() => toggleSort(col.key)}
+              onkeydown={(e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleSort(col.key);
+                }
+              }}
             >
               <div class="flex items-center gap-1">
                 {t(col.label)}

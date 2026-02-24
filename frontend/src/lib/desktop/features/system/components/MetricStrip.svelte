@@ -40,8 +40,9 @@
     systemModel,
   }: Props = $props();
 
-  let tempMin = $derived(temperatureHistory.length > 0 ? Math.min(...temperatureHistory) : 0);
-  let tempMax = $derived(temperatureHistory.length > 0 ? Math.max(...temperatureHistory) : 0);
+  let hasTempHistory = $derived(temperatureHistory.length > 0);
+  let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
+  let tempMax = $derived(hasTempHistory ? Math.max(...temperatureHistory) : temperatureValue);
   let shortModel = $derived(systemModel?.split(' ').slice(0, 3).join(' ') ?? '');
 </script>
 

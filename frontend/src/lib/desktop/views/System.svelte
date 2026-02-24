@@ -149,9 +149,6 @@
     return next.length > MAX_HISTORY_POINTS ? next.slice(next.length - MAX_HISTORY_POINTS) : next;
   }
 
-  // Whether the metrics history/stream endpoints are available
-  let metricsEndpointAvailable = $state(false);
-
   // Load initial metrics history for sparklines, then connect SSE if available.
   // Falls back to polling existing endpoints when metrics history isn't available.
   // The `active` flag prevents orphaned resources if the component unmounts mid-flight.
@@ -162,8 +159,6 @@
       );
 
       if (!active.current) return;
-
-      metricsEndpointAvailable = true;
 
       if (data.metrics['cpu.total']) {
         cpuHistory = data.metrics['cpu.total'].map((p: MetricPoint) => p.value);
@@ -270,13 +265,6 @@
         logger.debug('Failed to parse metrics SSE event');
       }
     });
-
-    // Close SSE on persistent errors (e.g., 404 when endpoint doesn't exist)
-    metricsSSE.onerror = () => {
-      if (!metricsEndpointAvailable) {
-        disconnectMetricsStream();
-      }
-    };
   }
 
   function disconnectMetricsStream(): void {

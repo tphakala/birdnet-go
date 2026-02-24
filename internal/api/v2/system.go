@@ -1117,6 +1117,9 @@ func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bo
 // thermalBasePath is the base directory for thermal zones on Linux
 const thermalBasePath = "/sys/class/thermal/"
 
+// defaultNoSensorMessage is the default message when no suitable CPU temperature sensor is found
+const defaultNoSensorMessage = "No suitable CPU temperature sensor found or temperature out of valid range."
+
 // cpuThermalTypes contains sensor types for CPU temperature
 var cpuThermalTypes = map[string]bool{
 	"cpu-thermal":     true, // Common on Raspberry Pi
@@ -1132,7 +1135,7 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 
 	response := SystemTemperature{
 		IsAvailable: false,
-		Message:     "No suitable CPU temperature sensor found or temperature out of valid range.",
+		Message:     defaultNoSensorMessage,
 	}
 
 	// Check thermal directory access
@@ -1140,7 +1143,7 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to access thermal information due to filesystem error", http.StatusInternalServerError)
 	}
 	// Early return if directory doesn't exist
-	if !response.IsAvailable && response.Message != "" && response.Message != "No suitable CPU temperature sensor found or temperature out of valid range." {
+	if !response.IsAvailable && response.Message != "" && response.Message != defaultNoSensorMessage {
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -1172,7 +1175,7 @@ func (c *Controller) checkThermalDirectoryAccess(_ echo.Context, response *Syste
 
 	if os.IsNotExist(err) {
 		response.Message = "Thermal zone directory not found. This feature is typically available on Linux systems."
-		c.logInfoIfEnabled("Thermal zone directory not found, CPU temperature feature unavailable.", logger.String("path", thermalBasePath), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
+		c.logDebugIfEnabled("Thermal zone directory not found, CPU temperature feature unavailable.", logger.String("path", thermalBasePath), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
 		return nil // Caller checks response.Message for early return
 	}
 

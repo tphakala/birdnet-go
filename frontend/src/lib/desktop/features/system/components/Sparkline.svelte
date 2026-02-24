@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { scaleLinear } from 'd3-scale';
+  import { line, area, curveMonotoneX } from 'd3-shape';
+  import { extent } from 'd3-array';
+
   interface Props {
     data?: number[];
     color?: string;
@@ -10,25 +14,47 @@
 
   let pathD = $derived.by(() => {
     if (data.length < 2) return '';
-    const min = Math.min(...data);
-    const max = Math.max(...data);
-    const range = max - min || 1;
-    const stepX = width / (data.length - 1);
-    const padding = 2;
-    const chartHeight = height - padding * 2;
 
-    return data
-      .map((v, i) => {
-        const x = i * stepX;
-        const y = padding + chartHeight - ((v - min) / range) * chartHeight;
-        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
+    const padding = 2;
+    const [minVal, maxVal] = extent(data) as [number, number];
+
+    const xScale = scaleLinear()
+      .domain([0, data.length - 1])
+      .range([0, width]);
+
+    const yScale = scaleLinear()
+      .domain([minVal, maxVal === minVal ? minVal + 1 : maxVal])
+      .range([height - padding, padding]);
+
+    const lineGenerator = line<number>()
+      .x((_, i) => xScale(i))
+      .y(d => yScale(d))
+      .curve(curveMonotoneX);
+
+    return lineGenerator(data) ?? '';
   });
 
   let areaD = $derived.by(() => {
-    if (!pathD) return '';
-    return `${pathD} L${width},${height} L0,${height} Z`;
+    if (data.length < 2) return '';
+
+    const padding = 2;
+    const [minVal, maxVal] = extent(data) as [number, number];
+
+    const xScale = scaleLinear()
+      .domain([0, data.length - 1])
+      .range([0, width]);
+
+    const yScale = scaleLinear()
+      .domain([minVal, maxVal === minVal ? minVal + 1 : maxVal])
+      .range([height - padding, padding]);
+
+    const areaGenerator = area<number>()
+      .x((_, i) => xScale(i))
+      .y0(height)
+      .y1(d => yScale(d))
+      .curve(curveMonotoneX);
+
+    return areaGenerator(data) ?? '';
   });
 </script>
 
