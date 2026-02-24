@@ -1351,8 +1351,9 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 // The modelID parameter selects which global threshold to use when no per-species config exists;
 // see modelGlobalConfidenceThreshold for the per-model selection rules.
 func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName, modelID string) float32 {
-	// Check if species has a custom threshold using both common and scientific name lookup
-	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
+	// Check if species has a custom threshold using both common and scientific name lookup.
+	// Species with threshold: 0 (actions-only config) fall through to the global threshold.
+	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists && config.Threshold > 0 {
 		if settings.Debug {
 			GetLogger().Debug("using custom confidence threshold",
 				logger.String("commonName", commonName),
