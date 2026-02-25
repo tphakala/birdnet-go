@@ -3435,6 +3435,13 @@
     "expand": "Rozwiń",
     "collapse": "Zwiń",
     "fullscreen": "Pełny ekran",
-    "exitFullscreen": "Zamknij pełny ekran"
+    "exitFullscreen": "Zamknij pełny ekran",
+    "colorTheme": "Motyw kolorów",
+    "themeDark": "Ciemny",
+    "themeLight": "Jasny",
+    "themeHighContrast": "Wysoki kontrast",
+    "detach": "Otwórz w nowym oknie",
+    "detached": "Terminal jest odłączony",
+    "detachedDescription": "Terminal działa w osobnym oknie. Zamknij to okno, aby przywrócić go tutaj."
   }
 }

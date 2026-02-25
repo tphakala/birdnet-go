@@ -1175,7 +1175,14 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit fullscreen"
+    "exitFullscreen": "Exit fullscreen",
+    "colorTheme": "Color theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeHighContrast": "High Contrast",
+    "detach": "Open in new window",
+    "detached": "Terminal is detached",
+    "detachedDescription": "The terminal is running in a separate window. Close that window to return it here."
   },
   "analytics": {
     "title": "Overview",

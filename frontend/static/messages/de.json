@@ -3435,6 +3435,13 @@
     "expand": "Erweitern",
     "collapse": "Reduzieren",
     "fullscreen": "Vollbild",
-    "exitFullscreen": "Vollbild verlassen"
+    "exitFullscreen": "Vollbild verlassen",
+    "colorTheme": "Farbschema",
+    "themeDark": "Dunkel",
+    "themeLight": "Hell",
+    "themeHighContrast": "Hoher Kontrast",
+    "detach": "In neuem Fenster öffnen",
+    "detached": "Terminal ist abgetrennt",
+    "detachedDescription": "Das Terminal läuft in einem separaten Fenster. Schließen Sie dieses Fenster, um es hierher zurückzuholen."
   }
 }

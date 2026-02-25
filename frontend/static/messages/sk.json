@@ -3266,6 +3266,13 @@
     "expand": "Rozbaliť",
     "collapse": "Zbaliť",
     "fullscreen": "Celá obrazovka",
-    "exitFullscreen": "Ukončiť celú obrazovku"
+    "exitFullscreen": "Ukončiť celú obrazovku",
+    "colorTheme": "Farebná téma",
+    "themeDark": "Tmavá",
+    "themeLight": "Svetlá",
+    "themeHighContrast": "Vysoký kontrast",
+    "detach": "Otvoriť v novom okne",
+    "detached": "Terminál je odpojený",
+    "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem."
   }
 }

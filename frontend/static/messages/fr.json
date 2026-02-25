@@ -3435,6 +3435,13 @@
     "expand": "Agrandir",
     "collapse": "Réduire",
     "fullscreen": "Plein écran",
-    "exitFullscreen": "Quitter le plein écran"
+    "exitFullscreen": "Quitter le plein écran",
+    "colorTheme": "Thème de couleur",
+    "themeDark": "Sombre",
+    "themeLight": "Clair",
+    "themeHighContrast": "Contraste élevé",
+    "detach": "Ouvrir dans une nouvelle fenêtre",
+    "detached": "Terminal détaché",
+    "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici."
   }
 }

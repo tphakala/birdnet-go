@@ -3435,6 +3435,13 @@
     "expand": "Expandir",
     "collapse": "Recolher",
     "fullscreen": "Tela cheia",
-    "exitFullscreen": "Sair da tela cheia"
+    "exitFullscreen": "Sair da tela cheia",
+    "colorTheme": "Tema de cores",
+    "themeDark": "Escuro",
+    "themeLight": "Claro",
+    "themeHighContrast": "Alto contraste",
+    "detach": "Abrir em nova janela",
+    "detached": "Terminal separado",
+    "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui."
   }
 }

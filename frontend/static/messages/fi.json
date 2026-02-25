@@ -3435,6 +3435,13 @@
     "expand": "Laajenna",
     "collapse": "Pienennä",
     "fullscreen": "Koko näyttö",
-    "exitFullscreen": "Poistu koko näytöstä"
+    "exitFullscreen": "Poistu koko näytöstä",
+    "colorTheme": "Väriteema",
+    "themeDark": "Tumma",
+    "themeLight": "Vaalea",
+    "themeHighContrast": "Korkea kontrasti",
+    "detach": "Avaa uudessa ikkunassa",
+    "detached": "Terminaali on irrotettu",
+    "detachedDescription": "Terminaali toimii erillisessä ikkunassa. Sulje se palauttaaksesi sen tänne."
   }
 }

@@ -3435,6 +3435,13 @@
     "expand": "Uitvouwen",
     "collapse": "Invouwen",
     "fullscreen": "Volledig scherm",
-    "exitFullscreen": "Volledig scherm verlaten"
+    "exitFullscreen": "Volledig scherm verlaten",
+    "colorTheme": "Kleurenthema",
+    "themeDark": "Donker",
+    "themeLight": "Licht",
+    "themeHighContrast": "Hoog contrast",
+    "detach": "Openen in nieuw venster",
+    "detached": "Terminal is losgekoppeld",
+    "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen."
   }
 }
