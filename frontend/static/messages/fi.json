@@ -1092,7 +1092,7 @@
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
           "mysqlBackupNote": "MySQL-varmuuskopiot tulee hallita mysqldump-työkalulla tai MySQL-hallintatyökaluillasi.",
-          "chartLabel": "Tunnistusprosentti 24 tunnin ajalta",
+          "chartLabel": "Tunnistusmäärä 24 tunnin ajalta",
           "detectionsTooltip": "{count} tunnistusta"
         },
         "tables": {

@@ -49,6 +49,7 @@
   let isValidating = $derived(migState === 'validating');
   let isCutover = $derived(migState === 'cutover');
   let isPaused = $derived(status?.worker_paused === true);
+  let banner = $derived(bannerMessage(migState));
 
   /** Average bytes per detection record in v2 database, used to estimate v2 DB size during migration */
   const ESTIMATED_V2_RECORD_SIZE_BYTES = 180;
@@ -364,7 +365,7 @@
     <!-- STATES: Active (initializing / dual_write / migrating) or Paused -->
   {:else}
     <!-- State-aware info banner -->
-    {#if bannerMessage(migState)}
+    {#if banner}
       <div
         class="flex items-start gap-2 p-2.5 rounded-lg mb-4 text-xs {isPaused
           ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
@@ -375,7 +376,7 @@
         {:else}
           <Info class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
         {/if}
-        <span>{bannerMessage(migState)}</span>
+        <span>{banner}</span>
       </div>
     {/if}
 
@@ -420,7 +421,7 @@
           class="h-3 rounded-full overflow-hidden bg-black/[0.03] dark:bg-white/[0.03]"
           role="progressbar"
           aria-label={t('system.database.migration.progress.title')}
-          aria-valuenow={Math.min(status?.progress_percent ?? 0, 100)}
+          aria-valuenow={Math.round(Math.min(status?.progress_percent ?? 0, 100))}
           aria-valuemin={0}
           aria-valuemax={100}
         >
