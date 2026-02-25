@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -26,7 +27,7 @@ func NewDetectionRateCache(ttl time.Duration) *DetectionRateCache {
 func (c *DetectionRateCache) GetHourly(fetchFn func() ([]HourlyCount, error)) ([]HourlyCount, error) {
 	c.mu.RLock()
 	if time.Now().Before(c.hourlyExp) && c.hourly != nil {
-		data := c.hourly
+		data := slices.Clone(c.hourly)
 		c.mu.RUnlock()
 		return data, nil
 	}
@@ -36,7 +37,7 @@ func (c *DetectionRateCache) GetHourly(fetchFn func() ([]HourlyCount, error)) ([
 	defer c.mu.Unlock()
 	// Double-check after acquiring write lock
 	if time.Now().Before(c.hourlyExp) && c.hourly != nil {
-		return c.hourly, nil
+		return slices.Clone(c.hourly), nil
 	}
 
 	data, err := fetchFn()
@@ -45,14 +46,14 @@ func (c *DetectionRateCache) GetHourly(fetchFn func() ([]HourlyCount, error)) ([
 	}
 	c.hourly = data
 	c.hourlyExp = time.Now().Add(c.ttl)
-	return data, nil
+	return slices.Clone(data), nil
 }
 
 // GetDaily returns cached daily counts, refreshing via fetchFn if expired or days changed.
 func (c *DetectionRateCache) GetDaily(days int, fetchFn func(int) ([]DailyCount, error)) ([]DailyCount, error) {
 	c.mu.RLock()
 	if time.Now().Before(c.dailyExp) && c.daily != nil && c.dailyDays == days {
-		data := c.daily
+		data := slices.Clone(c.daily)
 		c.mu.RUnlock()
 		return data, nil
 	}
@@ -61,7 +62,7 @@ func (c *DetectionRateCache) GetDaily(days int, fetchFn func(int) ([]DailyCount,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if time.Now().Before(c.dailyExp) && c.daily != nil && c.dailyDays == days {
-		return c.daily, nil
+		return slices.Clone(c.daily), nil
 	}
 
 	data, err := fetchFn(days)
@@ -71,5 +72,5 @@ func (c *DetectionRateCache) GetDaily(days int, fetchFn func(int) ([]DailyCount,
 	c.daily = data
 	c.dailyDays = days
 	c.dailyExp = time.Now().Add(c.ttl)
-	return data, nil
+	return slices.Clone(data), nil
 }

@@ -92,7 +92,7 @@ func (s *SQLiteStore) getTableStatsViaDBStat() ([]TableStats, error) {
 
 	var rows []dbstatRow
 	err := s.DB.Raw(
-		"SELECT tbl AS name, SUM(pgsize) AS size_bytes FROM dbstat GROUP BY tbl ORDER BY size_bytes DESC",
+		"SELECT name, SUM(pgsize) AS size_bytes FROM dbstat GROUP BY name ORDER BY size_bytes DESC",
 	).Scan(&rows).Error
 	if err != nil {
 		return nil, err
@@ -189,7 +189,10 @@ func (s *SQLiteStore) GetDetectionRate24h() ([]HourlyCount, error) {
 		GROUP BY hour
 		ORDER BY hour
 	`).Scan(&results).Error
-	return results, err
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: get 24h detection rate: %w", err)
+	}
+	return results, nil
 }
 
 // GetDetectionRateDaily returns daily detection counts for the specified number of days.
@@ -205,7 +208,10 @@ func (s *SQLiteStore) GetDetectionRateDaily(days int) ([]DailyCount, error) {
 		GROUP BY date
 		ORDER BY date
 	`, fmt.Sprintf("-%d days", days)).Scan(&results).Error
-	return results, err
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: get daily detection rate: %w", err)
+	}
+	return results, nil
 }
 
 // quoteIdentifier wraps a SQL identifier in double quotes for safe use in queries.
@@ -239,12 +245,12 @@ func (s *SQLiteStore) EnsureMetadataTable() error {
 
 // RecordVacuumTimestamp stores the current UTC time as the last vacuum timestamp.
 // Called after a successful VACUUM operation.
-func (s *SQLiteStore) RecordVacuumTimestamp() {
-	s.DB.Exec(
+func (s *SQLiteStore) RecordVacuumTimestamp() error {
+	return s.DB.Exec(
 		"INSERT OR REPLACE INTO _metadata (key, value) VALUES (?, ?)",
 		"last_vacuum_at",
 		time.Now().UTC().Format(time.RFC3339),
-	)
+	).Error
 }
 
 // Ensure SQLiteStore also satisfies gorm.DB access for the inspector queries above.

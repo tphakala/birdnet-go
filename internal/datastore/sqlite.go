@@ -474,7 +474,9 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 	}
 
 	// Record vacuum timestamp for the dashboard
-	s.RecordVacuumTimestamp()
+	if err := s.RecordVacuumTimestamp(); err != nil {
+		GetLogger().Warn("Failed to record vacuum timestamp", logger.Error(err))
+	}
 
 	// Get database size after optimization
 	var sizeAfter int64
