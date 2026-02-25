@@ -16,9 +16,15 @@
 
   let migState = $derived(migrationStatus?.state ?? 'idle');
 
-  let isActive = $derived(
-    migState === 'initializing' || migState === 'dual_write' || migState === 'migrating'
-  );
+  const ACTIVE_STATES = [
+    'initializing',
+    'dual_write',
+    'migrating',
+    'migrating_predictions',
+    'validating',
+    'cutover',
+  ];
+  let isActive = $derived(ACTIVE_STATES.includes(migState));
   let isIdle = $derived(migState === 'idle');
   let isCompleted = $derived(migState === 'completed');
   let isFailed = $derived(migState === 'failed');

@@ -67,14 +67,15 @@
 
   // --- Derived state ---
   let isV2OnlyMode = $derived(migrationStatus.data?.is_v2_only_mode === true);
-  let isActive = $derived(
-    migrationStatus.data?.state === 'initializing' ||
-      migrationStatus.data?.state === 'dual_write' ||
-      migrationStatus.data?.state === 'migrating' ||
-      migrationStatus.data?.state === 'migrating_predictions' ||
-      migrationStatus.data?.state === 'validating' ||
-      migrationStatus.data?.state === 'cutover'
-  );
+  const ACTIVE_MIGRATION_STATES = [
+    'initializing',
+    'dual_write',
+    'migrating',
+    'migrating_predictions',
+    'validating',
+    'cutover',
+  ];
+  let isActive = $derived(ACTIVE_MIGRATION_STATES.includes(migrationStatus.data?.state ?? ''));
   let isCleanupActive = $derived(migrationStatus.data?.cleanup_state === 'in_progress');
 
   // SSE connection
@@ -403,16 +404,18 @@
   $effect(() => {
     if (!isActive) return;
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
+      if (cancelled) return;
       await Promise.all([fetchMigrationStatus(), fetchV2Stats()]);
       if (!cancelled) {
-        setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
       }
     }
-    const timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   });
 
@@ -427,16 +430,18 @@
   $effect(() => {
     if (!isCleanupActive) return;
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
+      if (cancelled) return;
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
       if (!cancelled) {
-        setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
       }
     }
-    const timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   });
 </script>
