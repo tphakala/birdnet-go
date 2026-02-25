@@ -28,6 +28,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -141,6 +142,9 @@ type Datastore struct {
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
 	dbstatAvailable int32
+
+	// dbCounters tracks atomic query latency counters for metrics collection.
+	dbCounters *dbstats.Counters
 }
 
 // Config configures the Datastore.
@@ -186,6 +190,10 @@ func New(cfg *Config) (*Datastore, error) {
 	// Self-initialize lookup table IDs if not provided.
 	// These are seeded during Manager.Initialize(), so we look them up.
 	db := cfg.Manager.DB()
+
+	// Register GORM callbacks for query latency tracking.
+	dbCounters := &dbstats.Counters{}
+	dbstats.RegisterCallbacks(db, dbCounters)
 
 	// Get or verify species label type ID
 	speciesLabelTypeID := cfg.SpeciesLabelTypeID
@@ -264,12 +272,18 @@ func New(cfg *Config) (*Datastore, error) {
 		avesClassID:        avesClassID,
 		speciesMap:         speciesMap,
 		commonNameMap:      commonNameMap,
+		dbCounters:         dbCounters,
 	}, nil
 }
 
 // Open is a no-op since the manager is already open.
 func (ds *Datastore) Open() error {
 	return nil
+}
+
+// GetDBCounters returns the atomic counters for database query latency tracking.
+func (ds *Datastore) GetDBCounters() *dbstats.Counters {
+	return ds.dbCounters
 }
 
 // Close closes the datastore.
