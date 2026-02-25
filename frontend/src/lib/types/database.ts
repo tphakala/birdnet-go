@@ -72,7 +72,7 @@ export interface DatabaseOverviewResponse {
   total_tables: number;
   sqlite?: SQLiteDetails;
   mysql?: MySQLDetails;
-  tables: TableStats[];
+  tables: TableStats[] | null;
   performance: PerformanceStats;
-  detection_rate_24h: HourlyCount[];
+  detection_rate_24h: HourlyCount[] | null;
 }

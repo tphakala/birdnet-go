@@ -438,14 +438,17 @@
         {/if}
 
         <DatabaseDetectionRateCard
-          data={overview.detection_rate_24h}
+          data={overview.detection_rate_24h ?? []}
           engine={overview.engine}
           mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
         />
       </div>
 
       <!-- Table breakdown -->
-      <DatabaseTableBreakdown tables={overview.tables} showEngine={overview.engine === 'mysql'} />
+      <DatabaseTableBreakdown
+        tables={overview.tables ?? []}
+        showEngine={overview.engine === 'mysql'}
+      />
 
       <!-- Legacy cleanup (if legacy DB still exists) -->
       {#if legacyStatus.data?.exists}

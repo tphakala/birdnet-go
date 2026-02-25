@@ -24,9 +24,9 @@
     sizeBytes,
     totalDetections,
     journalMode,
-    readLatencyHistory,
-    writeLatencyHistory,
-    queriesPerSecHistory,
+    readLatencyHistory = [],
+    writeLatencyHistory = [],
+    queriesPerSecHistory = [],
   }: Props = $props();
 
   let lastQps = $derived(
