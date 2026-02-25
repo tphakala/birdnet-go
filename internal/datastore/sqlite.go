@@ -28,6 +28,10 @@ type SQLiteStore struct {
 	// Cached integrity check result (updated by monitoring goroutine)
 	integrityMu     sync.RWMutex
 	integrityResult string // "ok" or error string; empty until first check
+
+	// dbstatAvailable caches whether the dbstat virtual table exists.
+	// 0 = unchecked, 1 = available, -1 = not available.
+	dbstatAvailable int32
 }
 
 func validateSQLiteConfig() error {

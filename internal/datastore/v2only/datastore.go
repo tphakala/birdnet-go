@@ -137,6 +137,10 @@ type Datastore struct {
 	// commonNameMap provides O(1) lookup from scientific name to common name.
 	// Used for display purposes in analytics and summary endpoints.
 	commonNameMap map[string]string
+
+	// dbstatAvailable caches whether the dbstat virtual table exists.
+	// 0 = unchecked, 1 = available, -1 = not available.
+	dbstatAvailable int32
 }
 
 // Config configures the Datastore.
@@ -329,12 +333,30 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 		dbType = "mysql"
 	}
 
-	return &datastore.DatabaseStats{
+	stats := &datastore.DatabaseStats{
 		Type:            dbType,
 		TotalDetections: count,
 		Connected:       true,
 		Location:        ds.manager.Path(),
-	}, nil
+	}
+
+	// Get database size (best-effort)
+	if !ds.manager.IsMySQL() {
+		var pageCount, pageSize int64
+		db := ds.manager.DB()
+		db.Raw("PRAGMA page_count").Scan(&pageCount)
+		db.Raw("PRAGMA page_size").Scan(&pageSize)
+		stats.SizeBytes = pageCount * pageSize
+	} else {
+		db := ds.manager.DB()
+		db.Raw(`
+			SELECT SUM(DATA_LENGTH + INDEX_LENGTH)
+			FROM information_schema.TABLES
+			WHERE TABLE_SCHEMA = DATABASE()
+		`).Scan(&stats.SizeBytes)
+	}
+
+	return stats, nil
 }
 
 // Save saves a note with its results atomically.

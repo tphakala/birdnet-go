@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"gorm.io/gorm"
@@ -74,12 +75,21 @@ func (s *SQLiteStore) GetEngineDetails() (EngineDetails, error) {
 
 // GetTableStats returns per-table row counts and sizes for all user tables.
 // Tries the dbstat virtual table first; falls back to row-count proportional estimation.
+// Caches dbstat availability to avoid repeated WARN logs when the virtual table
+// is not compiled in (requires SQLITE_ENABLE_DBSTAT_VTAB).
 func (s *SQLiteStore) GetTableStats() ([]TableStats, error) {
+	cached := atomic.LoadInt32(&s.dbstatAvailable)
+	if cached == -1 {
+		return s.getTableStatsEstimated()
+	}
+
 	stats, err := s.getTableStatsViaDBStat()
 	if err == nil {
+		atomic.StoreInt32(&s.dbstatAvailable, 1)
 		return stats, nil
 	}
-	// dbstat not available — fall back to estimation
+
+	atomic.StoreInt32(&s.dbstatAvailable, -1)
 	return s.getTableStatsEstimated()
 }
 
