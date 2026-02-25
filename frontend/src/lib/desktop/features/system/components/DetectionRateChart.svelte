@@ -37,7 +37,7 @@
       .range([0, innerW])
       .padding(0.15);
 
-    const maxCount = max(data, d => d.count) ?? 1;
+    const maxCount = Math.max(1, max(data, d => d.count) ?? 1);
     const yScale = scaleLinear().domain([0, maxCount]).range([innerH, 0]);
 
     const bars = data.map((d, i) => {
