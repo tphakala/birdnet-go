@@ -416,8 +416,25 @@
       return;
     }
 
+    // Register a fallback cleanup immediately in case the popup is closed
+    // before the DOM-settle timeout fires (e.g., popup blocker closes it).
+    function earlyCleanup() {
+      detachedWs.onclose = null;
+      detachedWs.close();
+      popoutWindow = null;
+      isDetached = false;
+      setTimeout(() => {
+        if (terminalContainer && isEnabled && !term) {
+          connect();
+        }
+      }, POPUP_RECONNECT_DELAY_MS);
+    }
+    popup.addEventListener('beforeunload', earlyCleanup);
+
     // Use the popup window's setTimeout to let the DOM settle
     popup.setTimeout(() => {
+      // Remove the early fallback; the full handler below replaces it.
+      popup.removeEventListener('beforeunload', earlyCleanup);
       let currentThemeId: TerminalThemeId = activeThemeId;
       let currentTheme = TERMINAL_THEMES[currentThemeId];
 
