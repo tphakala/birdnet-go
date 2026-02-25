@@ -45,7 +45,9 @@
 
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
   <!-- Read Latency -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-blue-500/10">
@@ -59,7 +61,9 @@
         >{performance.read_latency_avg_ms.toFixed(1)}ms</span
       >
     </div>
-    <Sparkline data={readLatencyHistory} color="#3b82f6" width={160} height={28} />
+    <div class="flex-1 min-h-[28px]">
+      <Sparkline data={readLatencyHistory} color="#3b82f6" />
+    </div>
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span
         >{t('system.database.dashboard.metrics.avg')}
@@ -73,7 +77,9 @@
   </div>
 
   <!-- Write Latency -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-violet-500/10">
@@ -87,7 +93,9 @@
         >{performance.write_latency_avg_ms.toFixed(1)}ms</span
       >
     </div>
-    <Sparkline data={writeLatencyHistory} color="#8b5cf6" width={160} height={28} />
+    <div class="flex-1 min-h-[28px]">
+      <Sparkline data={writeLatencyHistory} color="#8b5cf6" />
+    </div>
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span
         >{t('system.database.dashboard.metrics.avg')}
@@ -101,7 +109,9 @@
   </div>
 
   <!-- Queries/sec -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-emerald-500/10">
@@ -113,7 +123,9 @@
       </div>
       <span class="font-mono tabular-nums text-lg font-semibold">{lastQps.toFixed(0)}</span>
     </div>
-    <Sparkline data={queriesPerSecHistory} color="#22c55e" width={160} height={28} />
+    <div class="flex-1 min-h-[28px]">
+      <Sparkline data={queriesPerSecHistory} color="#22c55e" />
+    </div>
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span
         >{t('system.database.dashboard.metrics.lastHour', {
@@ -129,7 +141,9 @@
   </div>
 
   <!-- Database Status -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div
@@ -155,7 +169,7 @@
         {/if}
       </div>
     </div>
-    <div class="space-y-2 text-sm">
+    <div class="space-y-2 text-sm flex-1">
       <div class="flex justify-between">
         <span class="text-slate-400 dark:text-slate-500">{t('system.database.stats.type')}</span>
         <span class="font-medium">{engineLabel}</span>
