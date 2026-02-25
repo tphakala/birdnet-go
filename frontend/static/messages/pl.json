@@ -3442,6 +3442,7 @@
     "themeHighContrast": "Wysoki kontrast",
     "detach": "Otwórz w nowym oknie",
     "detached": "Terminal jest odłączony",
-    "detachedDescription": "Terminal działa w osobnym oknie. Zamknij to okno, aby przywrócić go tutaj."
+    "detachedDescription": "Terminal działa w osobnym oknie. Zamknij to okno, aby przywrócić go tutaj.",
+    "reattach": "Podłącz ponownie"
   }
 }

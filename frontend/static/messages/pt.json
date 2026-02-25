@@ -3442,6 +3442,7 @@
     "themeHighContrast": "Alto contraste",
     "detach": "Abrir em nova janela",
     "detached": "Terminal separado",
-    "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui."
+    "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui.",
+    "reattach": "Reconectar"
   }
 }

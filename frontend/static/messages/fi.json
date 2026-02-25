@@ -3442,6 +3442,7 @@
     "themeHighContrast": "Korkea kontrasti",
     "detach": "Avaa uudessa ikkunassa",
     "detached": "Terminaali on irrotettu",
-    "detachedDescription": "Terminaali toimii erillisessä ikkunassa. Sulje se palauttaaksesi sen tänne."
+    "detachedDescription": "Terminaali toimii erillisessä ikkunassa. Sulje se palauttaaksesi sen tänne.",
+    "reattach": "Liitä takaisin"
   }
 }

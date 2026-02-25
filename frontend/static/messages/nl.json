@@ -3442,6 +3442,7 @@
     "themeHighContrast": "Hoog contrast",
     "detach": "Openen in nieuw venster",
     "detached": "Terminal is losgekoppeld",
-    "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen."
+    "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen.",
+    "reattach": "Opnieuw koppelen"
   }
 }

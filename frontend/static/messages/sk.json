@@ -3273,6 +3273,7 @@
     "themeHighContrast": "Vysoký kontrast",
     "detach": "Otvoriť v novom okne",
     "detached": "Terminál je odpojený",
-    "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem."
+    "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
+    "reattach": "Pripojiť späť"
   }
 }

@@ -3442,6 +3442,7 @@
     "themeHighContrast": "Contraste élevé",
     "detach": "Ouvrir dans une nouvelle fenêtre",
     "detached": "Terminal détaché",
-    "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici."
+    "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici.",
+    "reattach": "Rattacher"
   }
 }

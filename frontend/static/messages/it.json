@@ -3239,6 +3239,7 @@
     "themeHighContrast": "Alto contrasto",
     "detach": "Apri in nuova finestra",
     "detached": "Terminale separato",
-    "detachedDescription": "Il terminale è in esecuzione in una finestra separata. Chiudere quella finestra per riportarlo qui."
+    "detachedDescription": "Il terminale è in esecuzione in una finestra separata. Chiudere quella finestra per riportarlo qui.",
+    "reattach": "Riattacca"
   }
 }

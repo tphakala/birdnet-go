@@ -12,7 +12,7 @@
   reachable when the user is authenticated.
 -->
 <script lang="ts">
-  /* global WebSocket, ResizeObserver */
+  /* global WebSocket, ResizeObserver, Element */
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { t } from '$lib/i18n';
@@ -69,6 +69,10 @@
   };
 
   const THEME_STORAGE_KEY = 'birdnet-terminal-theme';
+  const POPUP_WINDOW_NAME = 'birdnet-terminal';
+  const POPUP_WINDOW_FEATURES = 'width=900,height=600,menubar=no,toolbar=no,location=no,status=no';
+  const POPUP_DOM_SETTLE_MS = 50;
+  const POPUP_RECONNECT_DELAY_MS = 100;
 
   function loadThemeId(): TerminalThemeId {
     if (typeof window === 'undefined') return 'dark';
@@ -231,11 +235,10 @@
     ws = null;
     fitAddon = null;
     resizeObserver = null;
-    if (popoutWindow && !popoutWindow.closed) {
-      popoutWindow.close();
-    }
-    popoutWindow = null;
-    isDetached = false;
+    // Don't touch popoutWindow or isDetached here. This function is called
+    // by the connect $effect's cleanup, which re-runs when terminalContainer
+    // becomes null during detach. Closing the popup here would kill the
+    // detached terminal immediately.
   }
 
   async function copyTerminalOutput() {
@@ -279,11 +282,7 @@
     const theme = TERMINAL_THEMES[activeThemeId];
 
     // Open a new window
-    const popup = window.open(
-      '',
-      'birdnet-terminal',
-      'width=900,height=600,menubar=no,toolbar=no,location=no,status=no'
-    );
+    const popup = window.open('', POPUP_WINDOW_NAME, POPUP_WINDOW_FEATURES);
     if (!popup) return; // popup blocker
 
     // Transfer WebSocket ownership to the popup BEFORE setting isDetached.
@@ -306,11 +305,49 @@
     // Build popup HTML via concatenation — template literals with style tags
     // and interpolation confuse the Svelte CSS preprocessor.
     const popupHtml =
-      '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
+      '<!DOCTYPE html><html lang="' +
+      (document.documentElement.lang || 'en') +
+      '"><head><meta charset="UTF-8"/>' +
       '<title>BirdNET-Go \u2014 ' +
       t('terminal.title') +
       '</title></head>' +
-      '<body><div id="terminal"></div></body></html>';
+      '<body>' +
+      '<div id="toolbar">' +
+      '<div class="toolbar-left">' +
+      '<div class="status-group">' +
+      '<span id="status-dot" class="status-dot connected"></span>' +
+      '<span id="status-text" class="status-text">' +
+      t('terminal.connected') +
+      '</span>' +
+      '</div>' +
+      '<span id="dimensions" class="dimensions"></span>' +
+      '</div>' +
+      '<div class="toolbar-right">' +
+      '<div class="theme-swatches">' +
+      '<button id="theme-dark" class="swatch-btn" title="' +
+      t('terminal.themeDark') +
+      '"><span class="swatch" data-swatch="dark"></span></button>' +
+      '<button id="theme-light" class="swatch-btn" title="' +
+      t('terminal.themeLight') +
+      '"><span class="swatch" data-swatch="light"></span></button>' +
+      '<button id="theme-hc" class="swatch-btn" title="' +
+      t('terminal.themeHighContrast') +
+      '"><span class="swatch" data-swatch="highContrast"></span></button>' +
+      '</div>' +
+      '<button id="copy-btn" class="toolbar-btn" title="' +
+      t('terminal.copySelection') +
+      '">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+      '</button>' +
+      '<button id="reattach-btn" class="toolbar-btn" title="' +
+      t('terminal.reattach') +
+      '">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>' +
+      '</button>' +
+      '</div>' +
+      '</div>' +
+      '<div id="terminal"></div>' +
+      '</body></html>';
     popup.document.open();
     popup.document.write(popupHtml);
     popup.document.close();
@@ -319,15 +356,39 @@
     const popupStyle = popup.document.createElement('style');
     popupStyle.textContent =
       '*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-color: transparent; }' +
-      'html, body { width: 100%; height: 100%; overflow: hidden; background: ' +
+      'html, body { width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: ' +
       theme.background +
       '; }' +
-      '#terminal { width: 100%; height: 100%; }' +
+      '#toolbar { height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid rgba(128,128,128,0.2); background: rgba(128,128,128,0.06); }' +
+      '.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 10px; }' +
+      '.status-group { display: flex; align-items: center; gap: 6px; }' +
+      '.status-dot { width: 7px; height: 7px; border-radius: 50%; }' +
+      '.status-dot.connected { background: #10b981; animation: pulse 2s infinite; }' +
+      '.status-dot.disconnected { background: #ef4444; }' +
+      '@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }' +
+      '.status-text { font-size: 11px; font-weight: 500; font-family: system-ui, sans-serif; }' +
+      '.status-text.connected { color: #10b981; }' +
+      '.status-text.disconnected { color: #ef4444; }' +
+      '.dimensions { font-size: 10px; font-family: monospace; opacity: 0.35; color: ' +
+      theme.foreground +
+      '; }' +
+      '.theme-swatches { display: flex; gap: 4px; }' +
+      '.swatch-btn { background: none; border: none; padding: 3px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }' +
+      '.swatch-btn:hover { background: rgba(128,128,128,0.15); }' +
+      '.swatch-btn.active { background: rgba(128,128,128,0.2); }' +
+      '.swatch { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid; }' +
+      '[data-swatch="dark"] { background: #1a1b26; border-color: #a9b1d6; }' +
+      '[data-swatch="light"] { background: #fafafa; border-color: #383a42; }' +
+      '[data-swatch="highContrast"] { background: #000000; border-color: #00ff00; }' +
+      '.toolbar-btn { background: none; border: none; padding: 6px; border-radius: 6px; cursor: pointer; color: ' +
+      theme.foreground +
+      '; opacity: 0.45; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
+      '.toolbar-btn:hover { opacity: 1; background: rgba(128,128,128,0.15); }' +
+      '.toolbar-btn.copied { opacity: 1; color: #10b981; }' +
+      '#terminal { flex: 1; min-height: 0; overflow: hidden; }' +
       '.xterm { padding: 12px 16px; }' +
       '.xterm, .xterm * { border-color: transparent; }' +
-      '.xterm .xterm-viewport { background-color: ' +
-      theme.background +
-      ' !important; overflow-y: auto !important; }' +
+      '.xterm .xterm-viewport { background-color: inherit !important; overflow-y: auto !important; }' +
       '.xterm .xterm-viewport::-webkit-scrollbar { width: 6px; }' +
       '.xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }' +
       '.xterm .xterm-viewport::-webkit-scrollbar-thumb { background: ' +
@@ -357,6 +418,9 @@
 
     // Use the popup window's setTimeout to let the DOM settle
     popup.setTimeout(() => {
+      let currentThemeId: TerminalThemeId = activeThemeId;
+      let currentTheme = TERMINAL_THEMES[currentThemeId];
+
       const popupTerm = new Terminal({
         cursorBlink: true,
         fontSize: 13,
@@ -364,9 +428,9 @@
         fontFamily:
           "'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro', menlo, consolas, monospace",
         theme: {
-          background: theme.background,
-          foreground: theme.foreground,
-          cursor: theme.cursor,
+          background: currentTheme.background,
+          foreground: currentTheme.foreground,
+          cursor: currentTheme.cursor,
         },
       });
 
@@ -374,6 +438,108 @@
       popupTerm.loadAddon(popupFit);
       popupTerm.open(popupContainer);
       popupFit.fit();
+
+      // ── Toolbar references ──
+      const doc = popup.document;
+      const statusDot = doc.getElementById('status-dot');
+      const statusText = doc.getElementById('status-text');
+      const dimensionsEl = doc.getElementById('dimensions');
+      const copyBtn = doc.getElementById('copy-btn');
+      const reattachBtn = doc.getElementById('reattach-btn');
+      const swatchBtns = {
+        dark: doc.getElementById('theme-dark'),
+        light: doc.getElementById('theme-light'),
+        highContrast: doc.getElementById('theme-hc'),
+      };
+
+      // Mark the initial active theme swatch
+      swatchBtns[currentThemeId]?.classList.add('active');
+
+      // Update dimensions display
+      function updateDimensions(cols: number, rows: number) {
+        if (dimensionsEl) dimensionsEl.textContent = cols + '\u00d7' + rows;
+      }
+      updateDimensions(popupTerm.cols, popupTerm.rows);
+
+      // ── Theme switching ──
+      function applyPopupTheme(id: TerminalThemeId) {
+        const th = TERMINAL_THEMES[id];
+        currentThemeId = id;
+        currentTheme = th;
+
+        // Update xterm theme
+        popupTerm.options.theme = {
+          background: th.background,
+          foreground: th.foreground,
+          cursor: th.cursor,
+        };
+
+        // Update body and terminal container backgrounds
+        doc.body.style.background = th.background;
+        if (popupContainer) popupContainer.style.background = th.background;
+
+        // Update scrollbar CSS custom properties via stylesheet replacement
+        const existingCustomStyle = doc.getElementById('custom-theme-style');
+        if (existingCustomStyle) existingCustomStyle.remove();
+        const newStyle = doc.createElement('style');
+        newStyle.id = 'custom-theme-style';
+        newStyle.textContent =
+          '.xterm .xterm-viewport::-webkit-scrollbar-thumb { background: ' +
+          th.scrollThumb +
+          '; }' +
+          '.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover { background: ' +
+          th.scrollThumbHover +
+          '; }';
+        doc.head.appendChild(newStyle);
+
+        // Update toolbar button colors
+        const toolbarBtns = doc.querySelectorAll('.toolbar-btn');
+        toolbarBtns.forEach((btn: Element) => {
+          (btn as HTMLElement).style.color = th.foreground;
+        });
+        if (dimensionsEl) dimensionsEl.style.color = th.foreground;
+
+        // Update active swatch indicator
+        Object.entries(swatchBtns).forEach(([key, btn]) => {
+          btn?.classList.toggle('active', key === id);
+        });
+
+        // Sync to main window state & localStorage
+        activeThemeId = id;
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, id);
+        } catch {
+          // ignore
+        }
+      }
+
+      // Wire up swatch buttons
+      swatchBtns.dark?.addEventListener('click', () => applyPopupTheme('dark'));
+      swatchBtns.light?.addEventListener('click', () => applyPopupTheme('light'));
+      swatchBtns.highContrast?.addEventListener('click', () => applyPopupTheme('highContrast'));
+
+      // ── Copy button ──
+      copyBtn?.addEventListener('click', () => {
+        const text = popupTerm.getSelection();
+        if (text) {
+          navigator.clipboard.writeText(text).then(() => {
+            copyBtn.classList.add('copied');
+            copyBtn.innerHTML =
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            popup.setTimeout(() => {
+              copyBtn.classList.remove('copied');
+              copyBtn.innerHTML =
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+            }, 2000);
+          });
+        }
+        popupTerm.focus();
+      });
+
+      // ── Reattach button — close popup, reconnect inline ──
+      reattachBtn?.addEventListener('click', () => {
+        popup.close();
+      });
 
       // Send resize to backend
       if (detachedWs.readyState === WebSocket.OPEN) {
@@ -393,6 +559,13 @@
 
       detachedWs.onclose = () => {
         popupTerm.write(`\r\n\r\n[${t('terminal.connectionClosed')}]\r\n`);
+        if (statusDot) {
+          statusDot.className = 'status-dot disconnected';
+        }
+        if (statusText) {
+          statusText.textContent = t('terminal.disconnected');
+          statusText.className = 'status-text disconnected';
+        }
       };
 
       // Popup terminal → WebSocket
@@ -411,6 +584,7 @@
       popupTerm.onResize(({ cols, rows }) => {
         termCols = cols;
         termRows = rows;
+        updateDimensions(cols, rows);
         if (detachedWs.readyState === WebSocket.OPEN) {
           detachedWs.send(JSON.stringify({ type: 'resize', cols, rows }));
         }
@@ -425,6 +599,7 @@
       // When the popup is closed, reattach the terminal in the main window
       popup.addEventListener('beforeunload', () => {
         popupResizeObserver.disconnect();
+        detachedWs.onclose = null;
         popupTerm.dispose();
         detachedWs.close();
         popoutWindow = null;
@@ -435,9 +610,9 @@
           if (terminalContainer && isEnabled && !term) {
             connect();
           }
-        }, 100);
+        }, POPUP_RECONNECT_DELAY_MS);
       });
-    }, 50);
+    }, POPUP_DOM_SETTLE_MS);
   }
 
   // Close theme menu when clicking outside
@@ -485,6 +660,19 @@
       connect();
     }
     return cleanup;
+  });
+
+  // Close the popup window when the main page unloads (navigation, tab close).
+  // This is separate from cleanup() because cleanup() runs on every $effect
+  // re-evaluation (including detach), while this only runs on true teardown.
+  $effect(() => {
+    function onBeforeUnload() {
+      if (popoutWindow && !popoutWindow.closed) {
+        popoutWindow.close();
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   });
 </script>
 
@@ -571,7 +759,6 @@
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
             <button
-              tabindex="-1"
               class="p-1.5 rounded-md transition-colors cursor-pointer"
               style:color="var(--color-base-content)"
               style:opacity={showThemeMenu ? 1 : 0.45}
@@ -599,8 +786,8 @@
                 >
                   <span
                     class="w-3 h-3 rounded-full border"
-                    style:background="#1a1b26"
-                    style:border-color="#a9b1d6"
+                    style:background={TERMINAL_THEMES.dark.background}
+                    style:border-color={TERMINAL_THEMES.dark.foreground}
                   ></span>
                   {t('terminal.themeDark')}
                   {#if activeThemeId === 'dark'}
@@ -615,8 +802,8 @@
                 >
                   <span
                     class="w-3 h-3 rounded-full border"
-                    style:background="#fafafa"
-                    style:border-color="#383a42"
+                    style:background={TERMINAL_THEMES.light.background}
+                    style:border-color={TERMINAL_THEMES.light.foreground}
                   ></span>
                   {t('terminal.themeLight')}
                   {#if activeThemeId === 'light'}
@@ -631,8 +818,8 @@
                 >
                   <span
                     class="w-3 h-3 rounded-full border"
-                    style:background="#000000"
-                    style:border-color="#00ff00"
+                    style:background={TERMINAL_THEMES.highContrast.background}
+                    style:border-color={TERMINAL_THEMES.highContrast.foreground}
                   ></span>
                   {t('terminal.themeHighContrast')}
                   {#if activeThemeId === 'highContrast'}
@@ -659,7 +846,6 @@
             {/if}
           </button>
           <button
-            tabindex="-1"
             class="p-1.5 rounded-md transition-colors cursor-pointer"
             style:color="var(--color-base-content)"
             style:opacity="0.45"

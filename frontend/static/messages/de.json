@@ -3442,6 +3442,7 @@
     "themeHighContrast": "Hoher Kontrast",
     "detach": "In neuem Fenster öffnen",
     "detached": "Terminal ist abgetrennt",
-    "detachedDescription": "Das Terminal läuft in einem separaten Fenster. Schließen Sie dieses Fenster, um es hierher zurückzuholen."
+    "detachedDescription": "Das Terminal läuft in einem separaten Fenster. Schließen Sie dieses Fenster, um es hierher zurückzuholen.",
+    "reattach": "Wieder anhängen"
   }
 }

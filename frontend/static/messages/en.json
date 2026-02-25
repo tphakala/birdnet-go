@@ -1182,7 +1182,8 @@
     "themeHighContrast": "High Contrast",
     "detach": "Open in new window",
     "detached": "Terminal is detached",
-    "detachedDescription": "The terminal is running in a separate window. Close that window to return it here."
+    "detachedDescription": "The terminal is running in a separate window. Close that window to return it here.",
+    "reattach": "Reattach"
   },
   "analytics": {
     "title": "Overview",
