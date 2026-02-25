@@ -16,10 +16,15 @@
   import DatabaseDetectionRateCard from '$lib/desktop/features/system/components/DatabaseDetectionRateCard.svelte';
   import DatabaseTableBreakdown from '$lib/desktop/features/system/components/DatabaseTableBreakdown.svelte';
 
-  // Existing migration components (reused)
-  import MigrationControlCard from './MigrationControlCard.svelte';
+  // Migration view components
+  import DatabaseMigrationMetricStrip from '$lib/desktop/features/system/components/DatabaseMigrationMetricStrip.svelte';
+  import DatabaseMigrationProgress from '$lib/desktop/features/system/components/DatabaseMigrationProgress.svelte';
+  import DatabaseMigrationDetails from '$lib/desktop/features/system/components/DatabaseMigrationDetails.svelte';
+  import DatabasePrerequisites from '$lib/desktop/features/system/components/DatabasePrerequisites.svelte';
+  import DatabaseBackupHistory from '$lib/desktop/features/system/components/DatabaseBackupHistory.svelte';
+
+  // Existing migration components (reused for dialogs & cleanup)
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
-  import DatabaseStatsCard from './DatabaseStatsCard.svelte';
   import LegacyCleanupCard from './LegacyCleanupCard.svelte';
   import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
 
@@ -246,6 +251,46 @@
     }
   }
 
+  // --- Backup job state ---
+  interface BackupJob {
+    job_id: string;
+    db_type: string;
+    status: string;
+    progress: number;
+    bytes_written: number;
+    total_bytes: number;
+    started_at: string;
+    completed_at?: string;
+    error?: string;
+    download_url?: string;
+  }
+
+  let backupJobs = $state<BackupJob[]>([]);
+  let backupCreating = $state(false);
+
+  async function fetchBackupJobs(): Promise<void> {
+    try {
+      const resp = await api.get<{ jobs: BackupJob[] }>('/api/v2/system/database/backup/jobs');
+      backupJobs = resp.jobs ?? [];
+    } catch {
+      logger.debug('Failed to fetch backup jobs');
+    }
+  }
+
+  async function createBackup(): Promise<void> {
+    backupCreating = true;
+    try {
+      await api.post('/api/v2/system/database/backup/jobs?type=legacy');
+      await fetchBackupJobs();
+    } catch (e) {
+      logger.debug('Failed to create backup', {
+        error: e instanceof Error ? e.message : 'Unknown',
+      });
+    } finally {
+      backupCreating = false;
+    }
+  }
+
   // --- Metrics SSE ---
   interface MetricPoint {
     timestamp: string;
@@ -337,6 +382,7 @@
       fetchLegacyStats(),
       fetchV2Stats(),
       fetchPrerequisites(),
+      fetchBackupJobs(),
     ]).then(() => {
       if (active.current) {
         loadMetricsHistory(active);
@@ -465,38 +511,48 @@
   {/if}
 {:else}
   <!-- MIGRATION VIEW (not v2-only) -->
-  <div class="space-y-6">
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <DatabaseStatsCard
-        title={t('system.database.legacy.title')}
-        dbType="legacy"
-        stats={legacyStats.data}
-        isLoading={legacyStats.loading}
-        error={legacyStats.error}
-        migrationActive={isActive}
-      />
-      <DatabaseStatsCard
-        title={t('system.database.v2.title')}
-        dbType="v2"
-        stats={v2Stats.data}
-        isLoading={v2Stats.loading}
-        error={v2Stats.error}
-        migrationActive={isActive}
-      />
+  <div class="space-y-4">
+    <!-- Top metric strip -->
+    <DatabaseMigrationMetricStrip
+      legacyStats={legacyStats.data}
+      v2Stats={v2Stats.data}
+      migrationStatus={migrationStatus.data}
+    />
+
+    <!-- Middle row: details + progress -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <DatabaseMigrationDetails stats={legacyStats.data} />
+      <div class="lg:col-span-2">
+        <DatabaseMigrationProgress
+          status={migrationStatus.data}
+          legacyStats={legacyStats.data}
+          v2Stats={v2Stats.data}
+          prerequisites={prerequisites.data}
+          isStarting={startLoading}
+          onStart={() => (showConfirmDialog = true)}
+          onPause={pauseMigration}
+          onResume={resumeMigration}
+          onRetryValidation={retryValidation}
+          onCancel={cancelMigration}
+        />
+      </div>
     </div>
 
-    <MigrationControlCard
-      status={migrationStatus.data}
-      isLoading={migrationStatus.loading && !migrationStatus.data}
-      isStarting={startLoading}
-      error={migrationStatus.error}
-      {prerequisites}
-      onStart={() => (showConfirmDialog = true)}
-      onPause={pauseMigration}
-      onResume={resumeMigration}
-      onRetryValidation={retryValidation}
-      onCancel={cancelMigration}
-      onRefreshPrerequisites={fetchPrerequisites}
+    <!-- Prerequisites (collapsible, hidden during active migration) -->
+    {#if !isActive}
+      <DatabasePrerequisites
+        prerequisites={prerequisites.data}
+        isLoading={prerequisites.loading}
+        onRefresh={fetchPrerequisites}
+      />
+    {/if}
+
+    <!-- Backup history -->
+    <DatabaseBackupHistory
+      backups={backupJobs}
+      onCreateBackup={createBackup}
+      isCreating={backupCreating}
+      disabled={isActive}
     />
   </div>
 {/if}

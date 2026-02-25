@@ -65,7 +65,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={cpuHistory} color="#3b82f6" />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
       <span>{cpuCores} {t('system.metrics.cores')}</span>
       <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
     </div>
@@ -89,7 +89,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={memoryHistory} color="#8b5cf6" />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
       <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
       <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
     </div>
@@ -120,13 +120,13 @@
       <div class="flex-1 min-h-[28px]">
         <Sparkline data={temperatureHistory} color="#f97316" />
       </div>
-      <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+      <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
         <span>{t('system.metrics.min')} {tempMin.toFixed(1)}{tempSymbol}</span>
         <span>{t('system.metrics.max')} {tempMax.toFixed(1)}{tempSymbol}</span>
       </div>
     {:else}
       <div class="flex-1 min-h-[28px] flex items-center">
-        <span class="text-xs text-slate-400 dark:text-slate-500"
+        <span class="text-xs text-slate-500 dark:text-slate-400"
           >{t('system.metrics.tempUnavailable')}</span
         >
       </div>
@@ -155,16 +155,16 @@
     </div>
     <div class="space-y-2 text-sm flex-1">
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500">{t('system.metrics.uptime')}</span>
+        <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.uptime')}</span>
         <span class="font-mono tabular-nums font-medium">{formatUptimeCompact(uptimeSeconds)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500">{t('system.metrics.host')}</span>
+        <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.host')}</span>
         <span class="font-medium truncate ml-2">{hostname}</span>
       </div>
       {#if shortModel}
         <div class="flex justify-between">
-          <span class="text-slate-400 dark:text-slate-500">{t('system.metrics.model')}</span>
+          <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.model')}</span>
           <span class="font-medium truncate ml-2 text-xs">{shortModel}</span>
         </div>
       {/if}
