@@ -272,10 +272,13 @@
       if (data.metrics['db.queries_per_sec']) {
         queriesPerSecHistory = data.metrics['db.queries_per_sec'].map(p => p.value);
       }
-
-      connectMetricsStream();
     } catch {
       logger.debug('Database metrics history not available');
+    } finally {
+      // Always connect SSE for live updates, even if history backfill failed
+      if (active.current) {
+        connectMetricsStream();
+      }
     }
   }
 
@@ -350,14 +353,21 @@
     };
   });
 
-  // Poll during active migration
+  // Poll during active migration (recursive setTimeout to prevent pile-up)
   $effect(() => {
     if (!isActive) return;
-    const interval = setInterval(() => {
-      fetchMigrationStatus();
-      fetchV2Stats();
-    }, STATUS_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    async function poll() {
+      await Promise.all([fetchMigrationStatus(), fetchV2Stats()]);
+      if (!cancelled) {
+        setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    }
+    const timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   });
 
   // Fetch legacy status in v2-only mode
@@ -367,14 +377,21 @@
     }
   });
 
-  // Poll during cleanup
+  // Poll during cleanup (recursive setTimeout to prevent pile-up)
   $effect(() => {
     if (!isCleanupActive) return;
-    const interval = setInterval(() => {
-      fetchMigrationStatus();
-      fetchLegacyStatus();
-    }, STATUS_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    async function poll() {
+      await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
+      if (!cancelled) {
+        setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    }
+    const timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   });
 </script>
 

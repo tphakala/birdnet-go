@@ -47,19 +47,18 @@
     >
   </div>
 
-  {#if engine === 'sqlite'}
-    <!-- SQLite: Create Backup button -->
+  {#if engine === 'sqlite' && onBackup}
+    <!-- SQLite: Create Backup button (only shown when handler is provided) -->
     <div class="mt-4 pt-3 border-t border-[var(--border-100)]">
       <button
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer border border-[var(--border-100)] text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer border border-[var(--border-100)] text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5"
         onclick={onBackup}
-        disabled={!onBackup}
       >
         <Download class="w-3.5 h-3.5" />
         {t('system.database.dashboard.detectionRate.createBackup')}
       </button>
     </div>
-  {:else}
+  {:else if engine === 'mysql'}
     <!-- MySQL: Host info + backup note -->
     <div class="mt-4 pt-3 border-t border-[var(--border-100)]">
       <div class="flex items-center gap-2 text-sm">
