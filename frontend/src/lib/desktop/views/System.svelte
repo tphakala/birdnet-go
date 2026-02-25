@@ -397,7 +397,11 @@
   </div>
 {:else if currentSubpage === 'database'}
   <!-- Database Dashboard Page -->
-  <div class="col-span-12 space-y-4" role="region" aria-label={t('system.database.dashboard.title')}>
+  <div
+    class="col-span-12 space-y-4"
+    role="region"
+    aria-label={t('system.database.dashboard.title')}
+  >
     <div class="max-w-5xl mx-auto">
       <DatabaseDashboard />
     </div>

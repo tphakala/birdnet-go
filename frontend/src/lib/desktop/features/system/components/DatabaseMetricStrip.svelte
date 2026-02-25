@@ -32,7 +32,7 @@
   let lastQps = $derived(
     queriesPerSecHistory.length > 0
       ? queriesPerSecHistory[queriesPerSecHistory.length - 1]
-      : performance.queries_per_sec,
+      : performance.queries_per_sec
   );
 
   let engineLabel = $derived.by(() => {
@@ -62,10 +62,12 @@
     <Sparkline data={readLatencyHistory} color="#3b82f6" width={160} height={28} />
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span
-        >{t('system.database.dashboard.metrics.avg')} {performance.read_latency_avg_ms.toFixed(1)}ms</span
+        >{t('system.database.dashboard.metrics.avg')}
+        {performance.read_latency_avg_ms.toFixed(1)}ms</span
       >
       <span
-        >{t('system.database.dashboard.metrics.max')} {performance.read_latency_max_ms.toFixed(1)}ms</span
+        >{t('system.database.dashboard.metrics.max')}
+        {performance.read_latency_max_ms.toFixed(1)}ms</span
       >
     </div>
   </div>
@@ -88,10 +90,12 @@
     <Sparkline data={writeLatencyHistory} color="#8b5cf6" width={160} height={28} />
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span
-        >{t('system.database.dashboard.metrics.avg')} {performance.write_latency_avg_ms.toFixed(1)}ms</span
+        >{t('system.database.dashboard.metrics.avg')}
+        {performance.write_latency_avg_ms.toFixed(1)}ms</span
       >
       <span
-        >{t('system.database.dashboard.metrics.max')} {performance.write_latency_max_ms.toFixed(1)}ms</span
+        >{t('system.database.dashboard.metrics.max')}
+        {performance.write_latency_max_ms.toFixed(1)}ms</span
       >
     </div>
   </div>
@@ -112,10 +116,14 @@
     <Sparkline data={queriesPerSecHistory} color="#22c55e" width={160} height={28} />
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
       <span
-        >{t('system.database.dashboard.metrics.lastHour', { count: formatNumber(performance.queries_last_hour) })}</span
+        >{t('system.database.dashboard.metrics.lastHour', {
+          count: formatNumber(performance.queries_last_hour),
+        })}</span
       >
       <span
-        >{t('system.database.dashboard.metrics.slowQueries', { count: performance.slow_query_count })}</span
+        >{t('system.database.dashboard.metrics.slowQueries', {
+          count: performance.slow_query_count,
+        })}</span
       >
     </div>
   </div>
@@ -127,9 +135,7 @@
         <div
           class="p-1.5 rounded-lg {engine === 'mysql' ? 'bg-orange-500/10' : 'bg-emerald-500/10'}"
         >
-          <Database
-            class="w-4 h-4 {engine === 'mysql' ? 'text-orange-500' : 'text-emerald-500'}"
-          />
+          <Database class="w-4 h-4 {engine === 'mysql' ? 'text-orange-500' : 'text-emerald-500'}" />
         </div>
         <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
           >{t('system.database.dashboard.metrics.database')}</span

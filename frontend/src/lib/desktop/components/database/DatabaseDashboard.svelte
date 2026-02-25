@@ -68,7 +68,7 @@
       migrationStatus.data?.state === 'migrating' ||
       migrationStatus.data?.state === 'migrating_predictions' ||
       migrationStatus.data?.state === 'validating' ||
-      migrationStatus.data?.state === 'cutover',
+      migrationStatus.data?.state === 'cutover'
   );
   let isCleanupActive = $derived(migrationStatus.data?.cleanup_state === 'in_progress');
 
@@ -100,7 +100,7 @@
   async function fetchMigrationStatus(): Promise<void> {
     try {
       migrationStatus.data = await api.get<MigrationStatus>(
-        '/api/v2/system/database/migration/status',
+        '/api/v2/system/database/migration/status'
       );
       migrationStatus.error = null;
     } catch (e) {
@@ -132,8 +132,7 @@
         v2Stats.data = null;
         v2Stats.error = null;
       } else {
-        v2Stats.error =
-          e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
+        v2Stats.error = e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
       }
     } finally {
       v2Stats.loading = false;
@@ -144,7 +143,7 @@
     try {
       prerequisites.loading = true;
       prerequisites.data = await api.get<PrerequisitesResponse>(
-        '/api/v2/system/database/migration/prerequisites',
+        '/api/v2/system/database/migration/prerequisites'
       );
       prerequisites.error = null;
     } catch (e) {
@@ -260,18 +259,18 @@
   async function loadMetricsHistory(active: { current: boolean }): Promise<void> {
     try {
       const data = await api.get<MetricsHistoryResponse>(
-        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec`,
+        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec`
       );
       if (!active.current) return;
 
       if (data.metrics['db.read_latency_ms']) {
-        readLatencyHistory = data.metrics['db.read_latency_ms'].map((p) => p.value);
+        readLatencyHistory = data.metrics['db.read_latency_ms'].map(p => p.value);
       }
       if (data.metrics['db.write_latency_ms']) {
-        writeLatencyHistory = data.metrics['db.write_latency_ms'].map((p) => p.value);
+        writeLatencyHistory = data.metrics['db.write_latency_ms'].map(p => p.value);
       }
       if (data.metrics['db.queries_per_sec']) {
-        queriesPerSecHistory = data.metrics['db.queries_per_sec'].map((p) => p.value);
+        queriesPerSecHistory = data.metrics['db.queries_per_sec'].map(p => p.value);
       }
 
       connectMetricsStream();
@@ -283,30 +282,31 @@
   function connectMetricsStream(): void {
     metricsSSE = new ReconnectingEventSource(
       '/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec',
-      { max_retry_time: 30000 },
+      { max_retry_time: 30000 }
     );
 
     metricsSSE.addEventListener('metrics', (event: Event) => {
       try {
+        // eslint-disable-next-line no-undef
         const messageEvent = event as MessageEvent;
         const metrics = JSON.parse(messageEvent.data) as Record<string, MetricPoint>;
 
         if (metrics['db.read_latency_ms']) {
           readLatencyHistory = appendHistory(
             readLatencyHistory,
-            metrics['db.read_latency_ms'].value,
+            metrics['db.read_latency_ms'].value
           );
         }
         if (metrics['db.write_latency_ms']) {
           writeLatencyHistory = appendHistory(
             writeLatencyHistory,
-            metrics['db.write_latency_ms'].value,
+            metrics['db.write_latency_ms'].value
           );
         }
         if (metrics['db.queries_per_sec']) {
           queriesPerSecHistory = appendHistory(
             queriesPerSecHistory,
-            metrics['db.queries_per_sec'].value,
+            metrics['db.queries_per_sec'].value
           );
         }
       } catch {

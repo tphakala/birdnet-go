@@ -37,10 +37,8 @@
       .range([0, innerW])
       .padding(0.15);
 
-    const maxCount = max(data, (d) => d.count) ?? 1;
-    const yScale = scaleLinear()
-      .domain([0, maxCount])
-      .range([innerH, 0]);
+    const maxCount = max(data, d => d.count) ?? 1;
+    const yScale = scaleLinear().domain([0, maxCount]).range([innerH, 0]);
 
     const bars = data.map((d, i) => {
       const hour = new Date(d.hour);
@@ -66,15 +64,7 @@
 <svg {width} {height} viewBox="0 0 {width} {height}" class="overflow-visible">
   <g transform="translate({margin.left},{margin.top})">
     {#each chartData.bars as bar, i (i)}
-      <rect
-        x={bar.x}
-        y={bar.y}
-        width={bar.w}
-        height={bar.h}
-        fill={color}
-        opacity="0.7"
-        rx="1"
-      >
+      <rect x={bar.x} y={bar.y} width={bar.w} height={bar.h} fill={color} opacity="0.7" rx="1">
         <title>{bar.count} detections</title>
       </rect>
       {#if showLabel(i)}

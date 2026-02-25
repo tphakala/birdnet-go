@@ -12,10 +12,10 @@
 
   let { data = [], engine, mysqlHost }: Props = $props();
 
-  let counts = $derived(data.map((d) => d.count));
+  let counts = $derived(data.map(d => d.count));
   let minCount = $derived(counts.length > 0 ? Math.min(...counts) : 0);
   let avgCount = $derived(
-    counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 0,
+    counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 0
   );
   let maxCount = $derived(counts.length > 0 ? Math.max(...counts) : 0);
 </script>
@@ -33,13 +33,16 @@
     class="grid grid-cols-3 text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500"
   >
     <span
-      >{t('system.database.dashboard.detectionRate.min')} {minCount}{t('system.database.dashboard.detectionRate.perHour')}</span
+      >{t('system.database.dashboard.detectionRate.min')}
+      {minCount}{t('system.database.dashboard.detectionRate.perHour')}</span
     >
     <span class="text-center"
-      >{t('system.database.dashboard.detectionRate.avg')} {avgCount}{t('system.database.dashboard.detectionRate.perHour')}</span
+      >{t('system.database.dashboard.detectionRate.avg')}
+      {avgCount}{t('system.database.dashboard.detectionRate.perHour')}</span
     >
     <span class="text-right"
-      >{t('system.database.dashboard.detectionRate.max')} {maxCount}{t('system.database.dashboard.detectionRate.perHour')}</span
+      >{t('system.database.dashboard.detectionRate.max')}
+      {maxCount}{t('system.database.dashboard.detectionRate.perHour')}</span
     >
   </div>
 

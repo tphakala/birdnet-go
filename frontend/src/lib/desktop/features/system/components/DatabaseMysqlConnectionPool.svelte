@@ -11,9 +11,7 @@
   let { details }: Props = $props();
 
   let poolUsagePct = $derived(
-    details.max_connections > 0
-      ? (details.active_connections / details.max_connections) * 100
-      : 0,
+    details.max_connections > 0 ? (details.active_connections / details.max_connections) * 100 : 0
   );
 </script>
 
@@ -45,12 +43,11 @@
         class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500"
       >
         <span
-          >{details.active_connections} {t('system.database.dashboard.connectionPool.active')}, {details.idle_connections}
+          >{details.active_connections}
+          {t('system.database.dashboard.connectionPool.active')}, {details.idle_connections}
           {t('system.database.dashboard.connectionPool.idle')}</span
         >
-        <span
-          >{details.threads_idle} {t('system.database.dashboard.connectionPool.waiting')}</span
-        >
+        <span>{details.threads_idle} {t('system.database.dashboard.connectionPool.waiting')}</span>
       </div>
     </div>
 
@@ -64,8 +61,7 @@
             >{t('system.database.dashboard.connectionPool.totalCreated')}</span
           >
         </div>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatNumber(details.total_created)}</span
+        <span class="font-mono tabular-nums font-medium">{formatNumber(details.total_created)}</span
         >
       </div>
       <div class="flex justify-between text-sm">
@@ -76,8 +72,9 @@
           >
         </div>
         <span
-          class="font-mono tabular-nums font-medium {details.connection_errors > 0 ? 'text-amber-600 dark:text-amber-400' : ''}"
-          >{details.connection_errors}</span
+          class="font-mono tabular-nums font-medium {details.connection_errors > 0
+            ? 'text-amber-600 dark:text-amber-400'
+            : ''}">{details.connection_errors}</span
         >
       </div>
       <div class="flex justify-between text-sm">
@@ -88,7 +85,8 @@
           >
         </div>
         <span class="font-mono tabular-nums font-medium"
-          >{details.threads_running} {t('system.database.dashboard.connectionPool.running')}, {details.threads_cached}
+          >{details.threads_running}
+          {t('system.database.dashboard.connectionPool.running')}, {details.threads_cached}
           {t('system.database.dashboard.connectionPool.cached')}</span
         >
       </div>

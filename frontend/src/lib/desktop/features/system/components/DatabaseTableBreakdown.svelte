@@ -48,14 +48,12 @@
 
   type ColumnDef = { key: string; label: string };
   let columns = $derived.by((): ColumnDef[] => {
-    const cols: ColumnDef[] = [
-      { key: 'name', label: t('system.database.dashboard.tables.table') },
-    ];
+    const cols: ColumnDef[] = [{ key: 'name', label: t('system.database.dashboard.tables.table') }];
     if (showEngine)
       cols.push({ key: 'engine', label: t('system.database.dashboard.tables.engine') });
     cols.push(
       { key: 'row_count', label: t('system.database.dashboard.tables.rows') },
-      { key: 'size_bytes', label: t('system.database.dashboard.tables.size') },
+      { key: 'size_bytes', label: t('system.database.dashboard.tables.size') }
     );
     return cols;
   });
@@ -64,9 +62,7 @@
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <h3
-        class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500"
-      >
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
         {t('system.database.dashboard.tables.title')}
       </h3>
       <span
@@ -103,9 +99,7 @@
               </div>
             </th>
           {/each}
-          <th
-            class="text-left py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500"
-          >
+          <th class="text-left py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500">
             {t('system.database.dashboard.tables.usage')}
           </th>
         </tr>
@@ -128,9 +122,7 @@
               </td>
             {/if}
             <td class="py-2 px-3">
-              <span class="font-mono tabular-nums text-xs"
-                >{formatNumber(table.row_count)}</span
-              >
+              <span class="font-mono tabular-nums text-xs">{formatNumber(table.row_count)}</span>
             </td>
             <td class="py-2 px-3">
               <span class="font-mono tabular-nums text-xs font-medium"
@@ -139,9 +131,7 @@
             </td>
             <td class="py-2 px-3">
               <div class="flex items-center gap-2">
-                <div
-                  class="w-16 h-1.5 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
-                >
+                <div class="w-16 h-1.5 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
                   <div
                     class="h-full rounded-full {showEngine
                       ? 'bg-orange-500'
@@ -149,8 +139,7 @@
                     style:width="{pct}%"
                   ></div>
                 </div>
-                <span
-                  class="font-mono tabular-nums text-[10px] text-slate-400 dark:text-slate-500"
+                <span class="font-mono tabular-nums text-[10px] text-slate-400 dark:text-slate-500"
                   >{pct.toFixed(1)}%</span
                 >
               </div>
