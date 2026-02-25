@@ -140,7 +140,7 @@
   }
 
   function connect() {
-    if (!terminalContainer || !isEnabled) return;
+    if (!terminalContainer || !isEnabled || isDetached) return;
 
     const theme = TERMINAL_THEMES[activeThemeId];
 
@@ -286,10 +286,17 @@
     );
     if (!popup) return; // popup blocker
 
+    // Transfer WebSocket ownership to the popup BEFORE setting isDetached.
+    // isDetached is $state and tracked by the connect $effect — setting it
+    // would trigger cleanup() which calls ws?.close(). By nulling ws first,
+    // cleanup becomes a no-op for the WebSocket.
+    const detachedWs = ws;
+    ws = null;
+
     popoutWindow = popup;
     isDetached = true;
 
-    // Tear down the inline terminal (but keep the WebSocket alive)
+    // Tear down the inline terminal (ws is already transferred above)
     resizeObserver?.disconnect();
     resizeObserver = null;
     term.dispose();
@@ -339,8 +346,9 @@
     // Create a new Terminal in the popup
     const popupContainer = popup.document.getElementById('terminal');
     if (!popupContainer) {
-      // Popup DOM failed — close the popup and reconnect inline
+      // Popup DOM failed — close the popup, restore ws, and reconnect inline
       popup.close();
+      ws = detachedWs;
       popoutWindow = null;
       isDetached = false;
       connect();
@@ -368,25 +376,29 @@
       popupFit.fit();
 
       // Send resize to backend
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: popupTerm.cols, rows: popupTerm.rows }));
+      if (detachedWs.readyState === WebSocket.OPEN) {
+        detachedWs.send(
+          JSON.stringify({ type: 'resize', cols: popupTerm.cols, rows: popupTerm.rows })
+        );
       }
 
       // WebSocket → popup terminal
-      if (ws) {
-        ws.onmessage = event => {
-          if (event.data instanceof ArrayBuffer) {
-            popupTerm.write(new Uint8Array(event.data));
-          } else {
-            popupTerm.write(event.data as string);
-          }
-        };
-      }
+      detachedWs.onmessage = event => {
+        if (event.data instanceof ArrayBuffer) {
+          popupTerm.write(new Uint8Array(event.data));
+        } else {
+          popupTerm.write(event.data as string);
+        }
+      };
+
+      detachedWs.onclose = () => {
+        popupTerm.write(`\r\n\r\n[${t('terminal.connectionClosed')}]\r\n`);
+      };
 
       // Popup terminal → WebSocket
       popupTerm.onData(data => {
-        if (ws?.readyState === WebSocket.OPEN) {
-          ws.send(data);
+        if (detachedWs.readyState === WebSocket.OPEN) {
+          detachedWs.send(data);
         }
       });
 
@@ -399,8 +411,8 @@
       popupTerm.onResize(({ cols, rows }) => {
         termCols = cols;
         termRows = rows;
-        if (ws?.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+        if (detachedWs.readyState === WebSocket.OPEN) {
+          detachedWs.send(JSON.stringify({ type: 'resize', cols, rows }));
         }
       });
 
@@ -414,6 +426,7 @@
       popup.addEventListener('beforeunload', () => {
         popupResizeObserver.disconnect();
         popupTerm.dispose();
+        detachedWs.close();
         popoutWindow = null;
         isDetached = false;
 
@@ -468,7 +481,7 @@
   // case where the user enables the terminal and saves settings while already
   // on this page — onMount would miss that second scenario.
   $effect(() => {
-    if (isEnabled && terminalContainer && !term && !isDetached) {
+    if (isEnabled && terminalContainer && !term) {
       connect();
     }
     return cleanup;
