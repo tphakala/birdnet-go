@@ -100,7 +100,7 @@
     "axe-core": "^4.10.3",
     "eslint": "^9.39.2",
     "eslint-plugin-playwright": "^2.7.1",
-    "eslint-plugin-security": "^3.0.1",
+    "eslint-plugin-security": "^4.0.0",
     "eslint-plugin-svelte": "^3.10.1",
     "husky": "^9.1.7",
     "jscpd": "^4.0.8",
