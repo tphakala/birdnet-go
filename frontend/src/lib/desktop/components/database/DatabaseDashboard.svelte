@@ -280,6 +280,7 @@
   }
 
   function connectMetricsStream(): void {
+    disconnectMetricsStream();
     metricsSSE = new ReconnectingEventSource(
       '/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec',
       { max_retry_time: 30000 }
@@ -361,7 +362,7 @@
 
   // Fetch legacy status in v2-only mode
   $effect(() => {
-    if (isV2OnlyMode && !legacyStatus.data && !legacyStatus.loading) {
+    if (isV2OnlyMode && !legacyStatus.data && !legacyStatus.loading && !legacyStatus.error) {
       fetchLegacyStatus();
     }
   });
@@ -377,66 +378,71 @@
   });
 </script>
 
-{#if isV2OnlyMode && overview}
-  <!-- OPERATIONAL DASHBOARD VIEW -->
-  <div class="space-y-4">
-    <!-- Top metric strip -->
-    <DatabaseMetricStrip
-      performance={overview.performance}
-      engine={overview.engine}
-      status={overview.status}
-      sizeBytes={overview.size_bytes}
-      totalDetections={overview.total_detections}
-      journalMode={overview.sqlite?.journal_mode}
-      {readLatencyHistory}
-      {writeLatencyHistory}
-      {queriesPerSecHistory}
-    />
-
-    <!-- Middle row: engine-specific cards + detection rate -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-      {#if overview.engine === 'sqlite' && overview.sqlite}
-        <DatabaseSqliteDetails details={overview.sqlite} />
-        <DatabaseLocksWalCard details={overview.sqlite} />
-      {:else if overview.engine === 'mysql' && overview.mysql}
-        <DatabaseMysqlConnectionPool details={overview.mysql} />
-        <DatabaseMysqlInnodbCard details={overview.mysql} />
-      {/if}
-
-      <DatabaseDetectionRateCard
-        data={overview.detection_rate_24h}
-        engine={overview.engine}
-        mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
-      />
-    </div>
-
-    <!-- Table breakdown -->
-    <DatabaseTableBreakdown tables={overview.tables} showEngine={overview.engine === 'mysql'} />
-
-    <!-- Legacy cleanup (if legacy DB still exists) -->
-    {#if legacyStatus.data?.exists}
-      <LegacyCleanupCard
-        status={legacyStatus.data}
-        cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
-        cleanupError={migrationStatus.data?.cleanup_error ?? ''}
-        cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-        isLoading={legacyStatus.loading || cleanupLoading}
-        onDelete={() => (showCleanupDialog = true)}
-      />
-    {/if}
-  </div>
-{:else if overviewLoading || migrationStatus.loading}
-  <!-- Loading state -->
+{#if migrationStatus.loading}
+  <!-- Loading state (waiting for migration status to determine view) -->
   <div class="flex items-center justify-center py-16">
     <div class="text-sm text-slate-400 dark:text-slate-500">Loading...</div>
   </div>
-{:else if overviewError}
-  <!-- Error state -->
-  <div
-    class="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400"
-  >
-    {overviewError}
-  </div>
+{:else if isV2OnlyMode}
+  <!-- OPERATIONAL DASHBOARD VIEW -->
+  {#if overviewLoading}
+    <div class="flex items-center justify-center py-16">
+      <div class="text-sm text-slate-400 dark:text-slate-500">Loading...</div>
+    </div>
+  {:else if overviewError || !overview}
+    <div
+      class="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400"
+    >
+      {overviewError ?? t('system.database.dashboard.fetchFailed')}
+    </div>
+  {:else}
+    <div class="space-y-4">
+      <!-- Top metric strip -->
+      <DatabaseMetricStrip
+        performance={overview.performance}
+        engine={overview.engine}
+        status={overview.status}
+        sizeBytes={overview.size_bytes}
+        totalDetections={overview.total_detections}
+        journalMode={overview.sqlite?.journal_mode}
+        {readLatencyHistory}
+        {writeLatencyHistory}
+        {queriesPerSecHistory}
+      />
+
+      <!-- Middle row: engine-specific cards + detection rate -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {#if overview.engine === 'sqlite' && overview.sqlite}
+          <DatabaseSqliteDetails details={overview.sqlite} />
+          <DatabaseLocksWalCard details={overview.sqlite} />
+        {:else if overview.engine === 'mysql' && overview.mysql}
+          <DatabaseMysqlConnectionPool details={overview.mysql} />
+          <DatabaseMysqlInnodbCard details={overview.mysql} />
+        {/if}
+
+        <DatabaseDetectionRateCard
+          data={overview.detection_rate_24h}
+          engine={overview.engine}
+          mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
+        />
+      </div>
+
+      <!-- Table breakdown -->
+      <DatabaseTableBreakdown tables={overview.tables} showEngine={overview.engine === 'mysql'} />
+
+      <!-- Legacy cleanup (if legacy DB still exists) -->
+      {#if legacyStatus.data?.exists}
+        <LegacyCleanupCard
+          status={legacyStatus.data}
+          cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
+          cleanupError={migrationStatus.data?.cleanup_error ?? ''}
+          cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
+          isLoading={legacyStatus.loading || cleanupLoading}
+          onDelete={() => (showCleanupDialog = true)}
+        />
+      {/if}
+    </div>
+  {/if}
 {:else}
   <!-- MIGRATION VIEW (not v2-only) -->
   <div class="space-y-6">

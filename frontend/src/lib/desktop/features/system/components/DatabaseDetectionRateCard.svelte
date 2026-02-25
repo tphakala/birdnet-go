@@ -8,9 +8,10 @@
     data: HourlyCount[];
     engine: 'sqlite' | 'mysql';
     mysqlHost?: string;
+    onBackup?: () => void;
   }
 
-  let { data = [], engine, mysqlHost }: Props = $props();
+  let { data = [], engine, mysqlHost, onBackup }: Props = $props();
 
   let counts = $derived(data.map(d => d.count));
   let minCount = $derived(counts.length > 0 ? Math.min(...counts) : 0);
@@ -50,7 +51,9 @@
     <!-- SQLite: Create Backup button -->
     <div class="mt-4 pt-3 border-t border-[var(--border-100)]">
       <button
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer border border-[var(--border-100)] text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer border border-[var(--border-100)] text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+        onclick={onBackup}
+        disabled={!onBackup}
       >
         <Download class="w-3.5 h-3.5" />
         {t('system.database.dashboard.detectionRate.createBackup')}
