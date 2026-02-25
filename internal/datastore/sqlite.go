@@ -291,7 +291,9 @@ func (s *SQLiteStore) Open() error {
 	}
 
 	// Ensure _metadata table exists for tracking operational timestamps (e.g. last vacuum)
-	s.EnsureMetadataTable()
+	if err := s.EnsureMetadataTable(); err != nil {
+		GetLogger().Warn("Failed to create _metadata table", logger.Error(err))
+	}
 
 	// Start monitoring if metrics are available
 	if s.metrics != nil {
@@ -304,6 +306,7 @@ func (s *SQLiteStore) Open() error {
 	}
 
 	// Start daily integrity check in the background (runs initial check immediately)
+	GetLogger().Debug("Starting daily integrity check loop")
 	s.startIntegrityCheckLoop()
 
 	return nil

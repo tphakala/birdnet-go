@@ -36,33 +36,32 @@ type EngineDetails struct {
 // SQLiteDetails contains SQLite-specific engine metadata collected from
 // PRAGMAs, file system stats, and atomic counters.
 type SQLiteDetails struct {
-	EngineVersion string  `json:"engine_version"`  // sqlite_version()
-	JournalMode   string  `json:"journal_mode"`    // PRAGMA journal_mode
-	PageSize      int     `json:"page_size"`       // PRAGMA page_size (bytes)
-	CacheHitRate  float64 `json:"cache_hit_rate"`  // percentage
-	IntegrityCheck string `json:"integrity_check"` // "ok" or error (cached, run daily)
-	LastVacuumAt  *string `json:"last_vacuum_at"`  // ISO 8601 timestamp from _metadata table
+	EngineVersion  string  `json:"engine_version"`  // sqlite_version()
+	JournalMode    string  `json:"journal_mode"`    // PRAGMA journal_mode
+	PageSize       int     `json:"page_size"`       // PRAGMA page_size (bytes)
+	IntegrityCheck string  `json:"integrity_check"` // "ok" or error (cached, run daily)
+	LastVacuumAt   *string `json:"last_vacuum_at"`  // ISO 8601 timestamp from _metadata table
 
 	// WAL & Locks
-	WALSizeBytes   int64   `json:"wal_size_bytes"`   // os.Stat on -wal file
-	WALCheckpoints int64   `json:"wal_checkpoints"`  // from PRAGMA wal_checkpoint
-	FreelistPages  int     `json:"freelist_pages"`   // PRAGMA freelist_count
-	CacheSizeBytes int64   `json:"cache_size_bytes"` // PRAGMA cache_size converted to bytes
-	BusyTimeouts   int64   `json:"busy_timeouts"`    // SQLITE_BUSY count from atomic counters
+	WALSizeBytes   int64 `json:"wal_size_bytes"`   // os.Stat on -wal file
+	WALCheckpoints int64 `json:"wal_checkpoints"`  // from PRAGMA wal_checkpoint
+	FreelistPages  int   `json:"freelist_pages"`   // PRAGMA freelist_count
+	CacheSizeBytes int64 `json:"cache_size_bytes"` // PRAGMA cache_size converted to bytes
+	BusyTimeouts   int64 `json:"busy_timeouts"`    // SQLITE_BUSY count from atomic counters
 }
 
 // MySQLDetails contains MySQL-specific engine metadata collected from
 // sql.DB.Stats() and SHOW GLOBAL STATUS.
 type MySQLDetails struct {
 	// Connection Pool (from sql.DB.Stats() + SHOW GLOBAL STATUS)
-	ActiveConnections    int   `json:"active_connections"`
-	IdleConnections      int   `json:"idle_connections"`
-	MaxConnections       int   `json:"max_connections"`
-	WaitingForConnection int   `json:"waiting_for_connection"` // Threads_waiting
-	TotalCreated         int64 `json:"total_created"`          // Connections (cumulative)
-	ConnectionErrors     int64 `json:"connection_errors"`      // sum of Connection_errors_*
-	ThreadsRunning       int   `json:"threads_running"`
-	ThreadsCached        int   `json:"threads_cached"`
+	ActiveConnections int   `json:"active_connections"`
+	IdleConnections   int   `json:"idle_connections"`
+	MaxConnections    int   `json:"max_connections"`
+	ThreadsIdle       int   `json:"threads_idle"`      // Threads_connected - Threads_running
+	TotalCreated      int64 `json:"total_created"`     // Connections (cumulative)
+	ConnectionErrors  int64 `json:"connection_errors"` // sum of Connection_errors_*
+	ThreadsRunning    int   `json:"threads_running"`
+	ThreadsCached     int   `json:"threads_cached"`
 
 	// InnoDB & Locks (from SHOW GLOBAL STATUS)
 	BufferPoolHitRate   float64 `json:"buffer_pool_hit_rate"`   // percentage
@@ -87,7 +86,7 @@ type TableStats struct {
 // the ring buffer and atomic counters.
 type PerformanceStats struct {
 	ReadLatencyAvgMs  float64 `json:"read_latency_avg_ms"`
-	ReadLatencyMaxMs  float64 `json:"read_latency_max_ms"`  // max from latest tick (reset-on-read)
+	ReadLatencyMaxMs  float64 `json:"read_latency_max_ms"` // max from latest tick (reset-on-read)
 	WriteLatencyAvgMs float64 `json:"write_latency_avg_ms"`
 	WriteLatencyMaxMs float64 `json:"write_latency_max_ms"` // max from latest tick (reset-on-read)
 	QueriesPerSec     float64 `json:"queries_per_sec"`
@@ -103,12 +102,12 @@ type DBCountersProvider interface {
 
 // HourlyCount represents the number of detections in a single hour.
 type HourlyCount struct {
-	Hour  string `json:"hour"`  // ISO 8601: "2026-02-24T14:00:00Z"
+	Hour  string `json:"hour"` // ISO 8601: "2026-02-24T14:00:00Z"
 	Count int64  `json:"count"`
 }
 
 // DailyCount represents the number of detections on a single day.
 type DailyCount struct {
-	Date  string `json:"date"`  // "2026-02-24"
+	Date  string `json:"date"` // "2026-02-24"
 	Count int64  `json:"count"`
 }

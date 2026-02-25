@@ -6,22 +6,23 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // DatabaseOverviewResponse is the response for GET /api/v2/system/database/overview.
 // It adapts to the active database engine via the Engine field.
 type DatabaseOverviewResponse struct {
-	Engine          string                    `json:"engine"`           // "sqlite" or "mysql"
-	Status          string                    `json:"status"`           // "connected" or "disconnected"
-	Location        string                    `json:"location"`         // file path or host:port/db
-	SizeBytes       int64                     `json:"size_bytes"`       // total database size
-	TotalDetections int64                     `json:"total_detections"` // total detection count
-	TotalTables     int                       `json:"total_tables"`     // number of user tables
-	SQLite          *datastore.SQLiteDetails  `json:"sqlite,omitempty"`
-	MySQL           *datastore.MySQLDetails   `json:"mysql,omitempty"`
-	Tables          []datastore.TableStats    `json:"tables"`
-	Performance     datastore.PerformanceStats `json:"performance"`
-	DetectionRate24h []datastore.HourlyCount   `json:"detection_rate_24h"`
+	Engine           string                     `json:"engine"`           // "sqlite" or "mysql"
+	Status           string                     `json:"status"`           // "connected" or "disconnected"
+	Location         string                     `json:"location"`         // file path or host:port/db
+	SizeBytes        int64                      `json:"size_bytes"`       // total database size
+	TotalDetections  int64                      `json:"total_detections"` // total detection count
+	TotalTables      int                        `json:"total_tables"`     // number of user tables
+	SQLite           *datastore.SQLiteDetails   `json:"sqlite,omitempty"`
+	MySQL            *datastore.MySQLDetails    `json:"mysql,omitempty"`
+	Tables           []datastore.TableStats     `json:"tables"`
+	Performance      datastore.PerformanceStats `json:"performance"`
+	DetectionRate24h []datastore.HourlyCount    `json:"detection_rate_24h"`
 }
 
 // Database connection status constants.
@@ -30,14 +31,12 @@ const (
 	dbStatusDisconnected = "disconnected"
 )
 
-// metricsCollectorIntervalSec is the collector interval in seconds, used to
-// convert ring buffer queries_per_sec entries into total query counts.
-// Must match metricsCollectorInterval in metrics_history.go.
-const metricsCollectorIntervalSec = 5.0
+// metricsCollectorIntervalSec is the collector interval in seconds, derived from
+// metricsCollectorInterval to guarantee consistency.
+var metricsCollectorIntervalSec = metricsCollectorInterval.Seconds()
 
-// samplesPerHour is how many ring buffer entries cover one hour at 5s intervals.
-// Computed as 3600 / metricsCollectorIntervalSec.
-const samplesPerHour = int(3600 / metricsCollectorIntervalSec)
+// samplesPerHour is how many ring buffer entries cover one hour at the collector interval.
+var samplesPerHour = int(3600 / metricsCollectorIntervalSec)
 
 // detectionRateCacheTTL is how long detection rate query results are cached.
 const detectionRateCacheTTL = 5 * time.Minute
@@ -49,16 +48,23 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 	// Get basic database stats from the store
 	basicStats, err := c.DS.GetDatabaseStats()
 	if err != nil || basicStats == nil {
+		if err != nil {
+			c.logDebugIfEnabled("Database stats unavailable", logger.Error(err))
+		}
 		return ctx.JSON(http.StatusOK, &DatabaseOverviewResponse{
-			Status: dbStatusDisconnected,
+			Status:           dbStatusDisconnected,
+			Tables:           []datastore.TableStats{},
+			DetectionRate24h: []datastore.HourlyCount{},
 		})
 	}
 
 	resp := &DatabaseOverviewResponse{
-		Engine:          basicStats.Type,
-		Location:        basicStats.Location,
-		SizeBytes:       basicStats.SizeBytes,
-		TotalDetections: basicStats.TotalDetections,
+		Engine:           basicStats.Type,
+		Location:         basicStats.Location,
+		SizeBytes:        basicStats.SizeBytes,
+		TotalDetections:  basicStats.TotalDetections,
+		Tables:           []datastore.TableStats{},
+		DetectionRate24h: []datastore.HourlyCount{},
 	}
 
 	if basicStats.Connected {
@@ -83,11 +89,7 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 		}
 
 		// Detection rate (24h hourly histogram) — cached to avoid repeated queries
-		if c.detectionRateCache != nil {
-			if rates, err := c.detectionRateCache.GetHourly(inspector.GetDetectionRate24h); err == nil {
-				resp.DetectionRate24h = rates
-			}
-		} else if rates, err := inspector.GetDetectionRate24h(); err == nil {
+		if rates, err := c.detectionRateCache.GetHourly(inspector.GetDetectionRate24h); err == nil {
 			resp.DetectionRate24h = rates
 		}
 	}

@@ -17,8 +17,12 @@ var _ DatabaseInspector = (*SQLiteStore)(nil)
 func (s *SQLiteStore) GetEngineDetails() (EngineDetails, error) {
 	details := &SQLiteDetails{}
 
-	// All cheap single-row PRAGMAs
-	s.DB.Raw("SELECT sqlite_version()").Scan(&details.EngineVersion)
+	// Version query — if this fails, the connection is unusable
+	if err := s.DB.Raw("SELECT sqlite_version()").Scan(&details.EngineVersion).Error; err != nil {
+		return EngineDetails{}, fmt.Errorf("sqlite: query version: %w", err)
+	}
+
+	// Remaining cheap single-row PRAGMAs (best-effort)
 	s.DB.Raw("PRAGMA journal_mode").Scan(&details.JournalMode)
 	s.DB.Raw("PRAGMA page_size").Scan(&details.PageSize)
 	s.DB.Raw("PRAGMA freelist_count").Scan(&details.FreelistPages)
@@ -190,6 +194,9 @@ func (s *SQLiteStore) GetDetectionRate24h() ([]HourlyCount, error) {
 
 // GetDetectionRateDaily returns daily detection counts for the specified number of days.
 func (s *SQLiteStore) GetDetectionRateDaily(days int) ([]DailyCount, error) {
+	if days <= 0 {
+		return nil, fmt.Errorf("sqlite: days must be positive, got %d", days)
+	}
 	var results []DailyCount
 	err := s.DB.Raw(`
 		SELECT strftime('%Y-%m-%d', date) AS date, COUNT(*) AS count
@@ -211,9 +218,13 @@ func quoteIdentifier(name string) string {
 // RunIntegrityCheck executes PRAGMA quick_check and caches the result.
 // Called by the monitoring goroutine on a daily schedule.
 func (s *SQLiteStore) RunIntegrityCheck() {
-	var result string
-	if err := s.DB.Raw("PRAGMA quick_check").Scan(&result).Error; err != nil {
-		result = err.Error()
+	var results []string
+	if err := s.DB.Raw("PRAGMA quick_check").Scan(&results).Error; err != nil {
+		results = []string{err.Error()}
+	}
+	result := strings.Join(results, "; ")
+	if result == "" {
+		result = "ok"
 	}
 	s.integrityMu.Lock()
 	s.integrityResult = result
@@ -222,8 +233,8 @@ func (s *SQLiteStore) RunIntegrityCheck() {
 
 // EnsureMetadataTable creates the _metadata key-value table if it doesn't exist.
 // Called during store initialization.
-func (s *SQLiteStore) EnsureMetadataTable() {
-	s.DB.Exec("CREATE TABLE IF NOT EXISTS _metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+func (s *SQLiteStore) EnsureMetadataTable() error {
+	return s.DB.Exec("CREATE TABLE IF NOT EXISTS _metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)").Error
 }
 
 // RecordVacuumTimestamp stores the current UTC time as the last vacuum timestamp.

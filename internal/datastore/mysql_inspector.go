@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"fmt"
 	"strconv"
 
 	"gorm.io/gorm"
@@ -24,11 +25,14 @@ func (s *MySQLStore) GetEngineDetails() (EngineDetails, error) {
 	}
 
 	// SHOW GLOBAL STATUS — single query, parse into map
-	statusVars := queryGlobalStatus(s.DB)
+	statusVars, err := queryGlobalStatus(s.DB)
+	if err != nil {
+		return EngineDetails{MySQL: details}, fmt.Errorf("mysql: query global status: %w", err)
+	}
 
 	details.ThreadsRunning = parseStatusInt(statusVars["Threads_running"])
 	details.ThreadsCached = parseStatusInt(statusVars["Threads_cached"])
-	details.WaitingForConnection = max(parseStatusInt(statusVars["Threads_connected"])-details.ThreadsRunning, 0)
+	details.ThreadsIdle = max(parseStatusInt(statusVars["Threads_connected"])-details.ThreadsRunning, 0)
 	details.TotalCreated = parseStatusInt64(statusVars["Connections"])
 	details.ConnectionErrors = sumConnectionErrors(statusVars)
 
@@ -67,7 +71,7 @@ func (s *MySQLStore) GetTableStats() ([]TableStats, error) {
 		ORDER BY size_bytes DESC
 	`).Scan(&results).Error
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mysql: get table stats: %w", err)
 	}
 
 	// Compute usage percentage
@@ -89,43 +93,54 @@ func (s *MySQLStore) GetDetectionRate24h() ([]HourlyCount, error) {
 	err := s.DB.Raw(`
 		SELECT DATE_FORMAT(date, '%Y-%m-%dT%H:00:00Z') AS hour, COUNT(*) AS count
 		FROM notes
-		WHERE date > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+		WHERE date > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)
 		GROUP BY hour
 		ORDER BY hour
 	`).Scan(&results).Error
-	return results, err
+	if err != nil {
+		return nil, fmt.Errorf("mysql: get 24h detection rate: %w", err)
+	}
+	return results, nil
 }
 
 // GetDetectionRateDaily returns daily detection counts for the specified number of days.
 func (s *MySQLStore) GetDetectionRateDaily(days int) ([]DailyCount, error) {
+	if days <= 0 {
+		return nil, fmt.Errorf("mysql: days must be positive, got %d", days)
+	}
 	var results []DailyCount
 	err := s.DB.Raw(`
 		SELECT DATE_FORMAT(date, '%Y-%m-%d') AS date, COUNT(*) AS count
 		FROM notes
-		WHERE date > DATE_SUB(NOW(), INTERVAL ? DAY)
+		WHERE date > DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY)
 		GROUP BY date
 		ORDER BY date
 	`, days).Scan(&results).Error
-	return results, err
+	if err != nil {
+		return nil, fmt.Errorf("mysql: get daily detection rate: %w", err)
+	}
+	return results, nil
 }
 
 // --- MySQL status helpers ---
 
 // queryGlobalStatus executes SHOW GLOBAL STATUS and returns a map of variable names to values.
-func queryGlobalStatus(db *gorm.DB) map[string]string {
+func queryGlobalStatus(db *gorm.DB) (map[string]string, error) {
 	type statusRow struct {
 		VariableName string `gorm:"column:Variable_name"`
 		Value        string `gorm:"column:Value"`
 	}
 
 	var rows []statusRow
-	db.Raw("SHOW GLOBAL STATUS").Scan(&rows)
+	if err := db.Raw("SHOW GLOBAL STATUS").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
 
 	result := make(map[string]string, len(rows))
 	for i := range rows {
 		result[rows[i].VariableName] = rows[i].Value
 	}
-	return result
+	return result, nil
 }
 
 // sumConnectionErrors sums all Connection_errors_* status variables.
