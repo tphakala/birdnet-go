@@ -78,7 +78,7 @@
     if (typeof window === 'undefined') return 'dark';
     try {
       const stored = localStorage.getItem(THEME_STORAGE_KEY);
-      if (stored === 'dark' || stored === 'light' || stored === 'highContrast') return stored;
+      if (stored && stored in TERMINAL_THEMES) return stored as TerminalThemeId;
     } catch {
       // localStorage may be disabled in restrictive browsing modes
     }
