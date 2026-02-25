@@ -377,9 +377,21 @@
       '.swatch-btn:hover { background: rgba(128,128,128,0.15); }' +
       '.swatch-btn.active { background: rgba(128,128,128,0.2); }' +
       '.swatch { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid; }' +
-      '[data-swatch="dark"] { background: #1a1b26; border-color: #a9b1d6; }' +
-      '[data-swatch="light"] { background: #fafafa; border-color: #383a42; }' +
-      '[data-swatch="highContrast"] { background: #000000; border-color: #00ff00; }' +
+      '[data-swatch="dark"] { background: ' +
+      TERMINAL_THEMES.dark.background +
+      '; border-color: ' +
+      TERMINAL_THEMES.dark.foreground +
+      '; }' +
+      '[data-swatch="light"] { background: ' +
+      TERMINAL_THEMES.light.background +
+      '; border-color: ' +
+      TERMINAL_THEMES.light.foreground +
+      '; }' +
+      '[data-swatch="highContrast"] { background: ' +
+      TERMINAL_THEMES.highContrast.background +
+      '; border-color: ' +
+      TERMINAL_THEMES.highContrast.foreground +
+      '; }' +
       '.toolbar-btn { background: none; border: none; padding: 6px; border-radius: 6px; cursor: pointer; color: ' +
       theme.foreground +
       '; opacity: 0.45; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
