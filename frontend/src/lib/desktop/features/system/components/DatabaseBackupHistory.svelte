@@ -95,6 +95,14 @@
       ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
       : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
   }
+
+  function statusLabel(status: string): string {
+    const key = `system.database.backup.history.status.${status}`;
+    const translated = t(key);
+    return translated === key
+      ? status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      : translated;
+  }
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
@@ -202,7 +210,7 @@
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] {statusClasses(
                     backup.status
-                  )}">{t('system.database.backup.history.status.' + backup.status)}</span
+                  )}">{statusLabel(backup.status)}</span
                 >
               </td>
               <td class="py-2 px-3 text-right">

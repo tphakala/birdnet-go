@@ -669,9 +669,9 @@
       "error": "Erro ao carregar detecção: {error}"
     },
     "viewToggle": {
-      "label": "View mode",
-      "table": "Table view",
-      "cards": "Card view"
+      "label": "Modo de visualização",
+      "table": "Vista de tabela",
+      "cards": "Vista de cartões"
     }
   },
   "species": {
@@ -803,7 +803,7 @@
           "validating": "A validar",
           "cutover": "Transição em curso",
           "completed": "Migração concluída",
-          "failed": "Validation Failed"
+          "failed": "Validação falhou"
         },
         "progress": {
           "title": "Progresso da migração",
@@ -816,28 +816,28 @@
           "dirtyIds": "{count} registos pendentes",
           "paused": "Migração em pausa",
           "completedTitle": "Migração concluída",
-          "completedBody": "Todos os {count} registros foram migrados com sucesso para o banco de dados V2. O aplicativo usará o V2 como banco de dados principal após a reinicialização.",
+          "completedBody": "Todos os {count} registos foram migrados com sucesso para o banco de dados V2. O aplicativo usará o V2 como banco de dados principal após a reinicialização.",
           "restartTitle": "Reinicialização necessária",
           "restartBody": "Reinicie o aplicativo para mudar para o banco de dados V2. A limpeza do banco de dados legado estará disponível após a reinicialização.",
-          "fallbackError": "Divergência na contagem de registros entre os bancos de dados legado e V2. Alguns registros podem não ter sido migrados corretamente.",
-          "migrateInfo": "A migração transferirá {count} registros do banco de dados legado para o novo esquema V2. O modo de escrita dupla garante zero perda de dados durante a migração.",
+          "fallbackError": "Divergência na contagem de registos entre os bancos de dados legado e V2. Alguns registos podem não ter sido migrados corretamente.",
+          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. O modo de escrita dupla garante zero perda de dados durante a migração.",
           "sourceLegacy": "Origem (legado)",
           "targetV2": "Destino (V2)",
-          "recordsLabel": "Registros",
+          "recordsLabel": "Registos",
           "sizeLabel": "Tamanho",
           "prerequisitesNotMet": "Pré-requisitos não atendidos — resolva os problemas críticos abaixo",
           "validatingTitle": "Validando dados",
-          "validatingBody": "Comparando {count} registros legados com o banco de dados V2...",
-          "dirtyRecordsCatchup": "{count} registros pendentes — tentando reconciliação",
+          "validatingBody": "Comparando {count} registos legados com o banco de dados V2...",
+          "dirtyRecordsCatchup": "{count} registos pendentes — tentando reconciliação",
           "cutoverTitle": "Finalizando transição",
           "cutoverBody": "Finalizando transição para o banco de dados V2...",
           "migratingPhase": "Migrando {phase}",
           "progressLabel": "Progresso",
-          "ofRecords": "/ {count} registros",
+          "ofRecords": "/ {count} registos",
           "percentComplete": "{percent}% concluído",
-          "recordsPerSec": "{rate} registros/s",
+          "recordsPerSec": "{rate} registos/s",
           "calculating": "Calculando...",
-          "dirtyWriteFailed": "{count} registros falharam ao gravar — serão reconciliados durante a validação"
+          "dirtyWriteFailed": "{count} registos falharam ao gravar — serão reconciliados durante a validação"
         },
         "phase": {
           "indicator": "Fase {current} de {total}: ",
@@ -851,7 +851,7 @@
           "in_progress": "Você pode continuar usando o sistema normalmente enquanto a migração é executada em segundo plano.",
           "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
           "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
-          "validating": "Verificando se todos os registros foram copiados corretamente. Quase pronto!",
+          "validating": "Verificando se todos os registos foram copiados corretamente. Quase pronto!",
           "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
           "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
         },
@@ -861,11 +861,11 @@
           "resume": "Retomar",
           "cancel": "Cancelar",
           "rollback": "Reverter",
-          "retryValidation": "Retry Validation"
+          "retryValidation": "Repetir validação"
         },
         "confirmCancel": {
           "title": "Cancelar migração?",
-          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registros não serão duplicados.",
+          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registos não serão duplicados.",
           "confirm": "Sim, cancelar",
           "dismiss": "Não, continuar"
         },
@@ -882,7 +882,7 @@
           "cancelFailed": "Falha ao cancelar a migração",
           "rollbackFailed": "Falha ao reverter a migração",
           "fetchFailed": "Falha ao obter o estado da migração",
-          "retryValidationFailed": "Failed to retry validation"
+          "retryValidationFailed": "Falha ao repetir a validação"
         },
         "worker": {
           "running": "Worker em execução",
@@ -977,10 +977,10 @@
           "active": "Ativo",
           "migration": "Migração",
           "complete": "Concluída",
-          "recordsMigrated": "{count} registros migrados",
+          "recordsMigrated": "{count} registos migrados",
           "readyToMigrate": "Pronto para migrar",
-          "recordsInLegacy": "{count} registros no legado",
-          "comparingRecords": "Comparando contagem de registros...",
+          "recordsInLegacy": "{count} registos no legado",
+          "comparingRecords": "Comparando contagem de registos...",
           "validationFailed": "Validação falhou",
           "rate": "Taxa",
           "recPerSec": "{rate} reg/s",
@@ -1091,7 +1091,7 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "mysqlBackupNote": "Os backups do MySQL devem ser geridos através do mysqldump ou das suas ferramentas de administração MySQL.",
           "chartLabel": "Taxa de detecção nas últimas 24 horas",
           "detectionsTooltip": "{count} detecções"
         },

@@ -669,9 +669,9 @@
       "noIdProvided": "Geen detectie-ID opgegeven."
     },
     "viewToggle": {
-      "label": "View mode",
-      "table": "Table view",
-      "cards": "Card view"
+      "label": "Weergavemodus",
+      "table": "Tabelweergave",
+      "cards": "Kaartweergave"
     }
   },
   "species": {
@@ -803,7 +803,7 @@
           "validating": "Valideren",
           "cutover": "Overschakeling bezig",
           "completed": "Migratie voltooid",
-          "failed": "Validation Failed"
+          "failed": "Validatie mislukt"
         },
         "progress": {
           "title": "Migratievoortgang",
@@ -861,7 +861,7 @@
           "resume": "Hervatten",
           "cancel": "Annuleren",
           "rollback": "Terugdraaien",
-          "retryValidation": "Retry Validation"
+          "retryValidation": "Validatie opnieuw proberen"
         },
         "confirmCancel": {
           "title": "Migratie annuleren?",
@@ -882,7 +882,7 @@
           "cancelFailed": "Kan migratie niet annuleren",
           "rollbackFailed": "Kan migratie niet terugdraaien",
           "fetchFailed": "Kan migratiestatus niet ophalen",
-          "retryValidationFailed": "Failed to retry validation"
+          "retryValidationFailed": "Opnieuw proberen van validatie mislukt"
         },
         "worker": {
           "running": "Worker actief",
@@ -1091,7 +1091,7 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "mysqlBackupNote": "MySQL-back-ups moeten worden beheerd via mysqldump of uw MySQL-beheertools.",
           "chartLabel": "Detectiepercentage over 24 uur",
           "detectionsTooltip": "{count} detecties"
         },

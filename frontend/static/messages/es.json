@@ -669,9 +669,9 @@
       "noIdProvided": "No se proporcionó ID de detección."
     },
     "viewToggle": {
-      "label": "View mode",
-      "table": "Table view",
-      "cards": "Card view"
+      "label": "Modo de vista",
+      "table": "Vista de tabla",
+      "cards": "Vista de tarjetas"
     }
   },
   "species": {
@@ -803,7 +803,7 @@
           "validating": "Validando",
           "cutover": "Cambio en progreso",
           "completed": "Migración completada",
-          "failed": "Validation Failed"
+          "failed": "Validación fallida"
         },
         "progress": {
           "title": "Progreso de migración",
@@ -861,7 +861,7 @@
           "resume": "Reanudar",
           "cancel": "Cancelar",
           "rollback": "Revertir",
-          "retryValidation": "Retry Validation"
+          "retryValidation": "Reintentar validación"
         },
         "confirmCancel": {
           "title": "¿Cancelar migración?",
@@ -882,7 +882,7 @@
           "cancelFailed": "Error al cancelar la migración",
           "rollbackFailed": "Error al revertir la migración",
           "fetchFailed": "Error al obtener el estado de migración",
-          "retryValidationFailed": "Failed to retry validation"
+          "retryValidationFailed": "Error al reintentar la validación"
         },
         "worker": {
           "running": "Worker ejecutándose",
@@ -1091,7 +1091,7 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "mysqlBackupNote": "Las copias de seguridad de MySQL deben gestionarse mediante mysqldump o sus herramientas de administración de MySQL.",
           "chartLabel": "Tasa de detección en 24 horas",
           "detectionsTooltip": "{count} detecciones"
         },

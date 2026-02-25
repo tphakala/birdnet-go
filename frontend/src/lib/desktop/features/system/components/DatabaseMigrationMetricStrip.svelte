@@ -71,7 +71,9 @@
   function stateLabel(state: string): string {
     const key = `system.database.migration.status.${state}`;
     const translated = t(key);
-    return translated === key ? state : translated;
+    return translated === key
+      ? state.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      : translated;
   }
 </script>
 

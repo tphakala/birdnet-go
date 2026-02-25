@@ -37,7 +37,7 @@
         class="h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
         role="progressbar"
         aria-label={t('system.database.dashboard.connectionPool.poolUsage')}
-        aria-valuenow={poolUsagePct}
+        aria-valuenow={Math.round(poolUsagePct)}
         aria-valuemin={0}
         aria-valuemax={100}
       >

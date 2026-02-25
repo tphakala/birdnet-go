@@ -669,9 +669,9 @@
       "noIdProvided": "Keine Erkennungs-ID angegeben."
     },
     "viewToggle": {
-      "label": "View mode",
-      "table": "Table view",
-      "cards": "Card view"
+      "label": "Ansichtsmodus",
+      "table": "Tabellenansicht",
+      "cards": "Kartenansicht"
     }
   },
   "species": {
@@ -803,7 +803,7 @@
           "validating": "Validierung",
           "cutover": "Umstellung läuft",
           "completed": "Migration abgeschlossen",
-          "failed": "Validation Failed"
+          "failed": "Validierung fehlgeschlagen"
         },
         "progress": {
           "title": "Migrationsfortschritt",
@@ -861,7 +861,7 @@
           "resume": "Fortsetzen",
           "cancel": "Abbrechen",
           "rollback": "Zurücksetzen",
-          "retryValidation": "Retry Validation"
+          "retryValidation": "Validierung wiederholen"
         },
         "confirmCancel": {
           "title": "Migration abbrechen?",
@@ -882,7 +882,7 @@
           "cancelFailed": "Fehler beim Abbrechen der Migration",
           "rollbackFailed": "Fehler beim Zurücksetzen der Migration",
           "fetchFailed": "Fehler beim Abrufen des Migrationsstatus",
-          "retryValidationFailed": "Failed to retry validation"
+          "retryValidationFailed": "Fehler beim Wiederholen der Validierung"
         },
         "worker": {
           "running": "Worker läuft",
@@ -1091,7 +1091,7 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "mysqlBackupNote": "MySQL-Backups sollten über mysqldump oder Ihre MySQL-Administrationswerkzeuge verwaltet werden.",
           "chartLabel": "Erkennungsrate über 24 Stunden",
           "detectionsTooltip": "{count} Erkennungen"
         },

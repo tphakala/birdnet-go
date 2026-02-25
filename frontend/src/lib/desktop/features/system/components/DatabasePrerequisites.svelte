@@ -67,6 +67,14 @@
     skipped: 'bg-slate-500/10 text-slate-500',
   };
 
+  function statusLabel(status: string): string {
+    const key = `system.database.migration.prerequisites.status.${status}`;
+    const translated = t(key);
+    return translated === key
+      ? status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      : translated;
+  }
+
   async function handleRefresh() {
     isRefreshing = true;
     try {
@@ -180,7 +188,7 @@
               check.status
             ]}"
           >
-            {t('system.database.migration.prerequisites.status.' + check.status)}
+            {statusLabel(check.status)}
           </span>
         </div>
       {/each}

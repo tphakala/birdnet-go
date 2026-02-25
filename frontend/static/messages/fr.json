@@ -669,9 +669,9 @@
       "noIdProvided": "Aucun identifiant de détection fourni."
     },
     "viewToggle": {
-      "label": "View mode",
-      "table": "Table view",
-      "cards": "Card view"
+      "label": "Mode d'affichage",
+      "table": "Vue tableau",
+      "cards": "Vue cartes"
     }
   },
   "species": {
@@ -803,7 +803,7 @@
           "validating": "Validation",
           "cutover": "Basculement en cours",
           "completed": "Migration terminée",
-          "failed": "Validation Failed"
+          "failed": "Validation échouée"
         },
         "progress": {
           "title": "Progression de la migration",
@@ -861,7 +861,7 @@
           "resume": "Reprendre",
           "cancel": "Annuler",
           "rollback": "Restaurer",
-          "retryValidation": "Retry Validation"
+          "retryValidation": "Réessayer la validation"
         },
         "confirmCancel": {
           "title": "Annuler la migration ?",
@@ -882,7 +882,7 @@
           "cancelFailed": "Échec de l'annulation de la migration",
           "rollbackFailed": "Échec de la restauration de la migration",
           "fetchFailed": "Échec de la récupération du statut de migration",
-          "retryValidationFailed": "Failed to retry validation"
+          "retryValidationFailed": "Échec de la nouvelle tentative de validation"
         },
         "worker": {
           "running": "Worker en cours",
@@ -1091,7 +1091,7 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "mysqlBackupNote": "Les sauvegardes MySQL doivent être gérées via mysqldump ou vos outils d'administration MySQL.",
           "chartLabel": "Taux de détection sur 24 heures",
           "detectionsTooltip": "{count} détections"
         },

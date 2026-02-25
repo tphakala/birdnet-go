@@ -669,9 +669,9 @@
       "error": "Virhe havainnon latauksessa: {error}"
     },
     "viewToggle": {
-      "label": "View mode",
-      "table": "Table view",
-      "cards": "Card view"
+      "label": "Näkymätila",
+      "table": "Taulukkonäkymä",
+      "cards": "Korttinäkymä"
     }
   },
   "species": {
@@ -803,7 +803,7 @@
           "validating": "Vahvistetaan",
           "cutover": "Vaihto käynnissä",
           "completed": "Migraatio valmis",
-          "failed": "Validation Failed"
+          "failed": "Validointi epäonnistui"
         },
         "progress": {
           "title": "Migraation edistyminen",
@@ -861,7 +861,7 @@
           "resume": "Jatka",
           "cancel": "Peruuta",
           "rollback": "Palauta",
-          "retryValidation": "Retry Validation"
+          "retryValidation": "Yritä validointia uudelleen"
         },
         "confirmCancel": {
           "title": "Peruuta migraatio?",
@@ -882,7 +882,7 @@
           "cancelFailed": "Migraation peruutus epäonnistui",
           "rollbackFailed": "Migraation palautus epäonnistui",
           "fetchFailed": "Migraation tilan haku epäonnistui",
-          "retryValidationFailed": "Failed to retry validation"
+          "retryValidationFailed": "Validoinnin uudelleenyritys epäonnistui"
         },
         "worker": {
           "running": "Worker käynnissä",
@@ -1091,7 +1091,7 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "mysqlBackupNote": "MySQL-varmuuskopiot tulee hallita mysqldump-työkalulla tai MySQL-hallintatyökaluillasi.",
           "chartLabel": "Tunnistusprosentti 24 tunnin ajalta",
           "detectionsTooltip": "{count} tunnistusta"
         },

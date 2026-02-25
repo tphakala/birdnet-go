@@ -40,9 +40,9 @@
     systemModel,
   }: Props = $props();
 
-  const SPARKLINE_COLOR_CPU = '#3b82f6';
-  const SPARKLINE_COLOR_MEMORY = '#8b5cf6';
-  const SPARKLINE_COLOR_TEMPERATURE = '#f97316';
+  const sparklineColorCpu = '#3b82f6';
+  const sparklineColorMemory = '#8b5cf6';
+  const sparklineColorTemperature = '#f97316';
 
   let hasTempHistory = $derived(temperatureHistory.length > 0);
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
@@ -67,7 +67,7 @@
       <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
     </div>
     <div class="flex-1 min-h-[28px]">
-      <Sparkline data={cpuHistory} color={SPARKLINE_COLOR_CPU} />
+      <Sparkline data={cpuHistory} color={sparklineColorCpu} />
     </div>
     <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
       <span>{cpuCores} {t('system.metrics.cores')}</span>
@@ -91,7 +91,7 @@
       <span class="font-mono tabular-nums text-lg font-semibold">{memoryPercent.toFixed(1)}%</span>
     </div>
     <div class="flex-1 min-h-[28px]">
-      <Sparkline data={memoryHistory} color={SPARKLINE_COLOR_MEMORY} />
+      <Sparkline data={memoryHistory} color={sparklineColorMemory} />
     </div>
     <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
       <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
@@ -122,7 +122,7 @@
     </div>
     {#if temperatureAvailable}
       <div class="flex-1 min-h-[28px]">
-        <Sparkline data={temperatureHistory} color={SPARKLINE_COLOR_TEMPERATURE} />
+        <Sparkline data={temperatureHistory} color={sparklineColorTemperature} />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
         <span>{t('system.metrics.min')} {tempMin.toFixed(1)}{tempSymbol}</span>

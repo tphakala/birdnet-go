@@ -67,7 +67,7 @@
         <span
           class="font-mono tabular-nums font-medium {details.deadlocks > 0
             ? 'text-red-600 dark:text-red-400'
-            : 'text-emerald-600 dark:text-emerald-400'}">{details.deadlocks}</span
+            : 'text-emerald-600 dark:text-emerald-400'}">{formatNumber(details.deadlocks)}</span
         >
       </div>
       <div class="flex justify-between text-sm">
