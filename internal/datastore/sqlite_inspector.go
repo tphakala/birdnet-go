@@ -98,32 +98,35 @@ func (s *SQLiteStore) getTableStatsViaDBStat() ([]TableStats, error) {
 		return nil, err
 	}
 
-	// Compute total size for usage percentage
+	// Filter out internal SQLite tables and compute total from user tables only
+	type userTable struct {
+		name      string
+		sizeBytes int64
+	}
+	userTables := make([]userTable, 0, len(rows))
 	var totalSize int64
 	for i := range rows {
+		if strings.HasPrefix(rows[i].Name, "sqlite_") {
+			continue
+		}
+		userTables = append(userTables, userTable{name: rows[i].Name, sizeBytes: rows[i].SizeBytes})
 		totalSize += rows[i].SizeBytes
 	}
 
-	stats := make([]TableStats, 0, len(rows))
-	for i := range rows {
-		r := &rows[i]
-		// Skip internal SQLite tables
-		if strings.HasPrefix(r.Name, "sqlite_") {
-			continue
-		}
-
+	stats := make([]TableStats, 0, len(userTables))
+	for _, t := range userTables {
 		var rowCount int64
-		s.DB.Raw("SELECT COUNT(*) FROM " + quoteIdentifier(r.Name)).Scan(&rowCount) //nolint:gosec // table names from sqlite_master
+		s.DB.Raw("SELECT COUNT(*) FROM " + quoteIdentifier(t.name)).Scan(&rowCount) //nolint:gosec // table names from sqlite_master
 
 		var usagePct float64
 		if totalSize > 0 {
-			usagePct = float64(r.SizeBytes) / float64(totalSize) * 100
+			usagePct = float64(t.sizeBytes) / float64(totalSize) * 100
 		}
 
 		stats = append(stats, TableStats{
-			Name:      r.Name,
+			Name:      t.name,
 			RowCount:  rowCount,
-			SizeBytes: r.SizeBytes,
+			SizeBytes: t.sizeBytes,
 			UsagePct:  usagePct,
 		})
 	}

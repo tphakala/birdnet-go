@@ -77,19 +77,25 @@ func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 	inspector, ok := c.DS.(datastore.DatabaseInspector)
 	if ok {
 		// Engine details
-		if details, err := inspector.GetEngineDetails(); err == nil {
+		if details, err := inspector.GetEngineDetails(); err != nil {
+			c.logDebugIfEnabled("Failed to get engine details", logger.Error(err))
+		} else {
 			resp.SQLite = details.SQLite
 			resp.MySQL = details.MySQL
 		}
 
 		// Table stats
-		if tables, err := inspector.GetTableStats(); err == nil {
+		if tables, err := inspector.GetTableStats(); err != nil {
+			c.logDebugIfEnabled("Failed to get table stats", logger.Error(err))
+		} else {
 			resp.Tables = tables
 			resp.TotalTables = len(tables)
 		}
 
 		// Detection rate (24h hourly histogram) — cached to avoid repeated queries
-		if rates, err := c.detectionRateCache.GetHourly(inspector.GetDetectionRate24h); err == nil {
+		if rates, err := c.detectionRateCache.GetHourly(inspector.GetDetectionRate24h); err != nil {
+			c.logDebugIfEnabled("Failed to get detection rate", logger.Error(err))
+		} else {
 			resp.DetectionRate24h = rates
 		}
 	}
