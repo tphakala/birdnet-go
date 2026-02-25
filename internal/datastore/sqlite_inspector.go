@@ -91,42 +91,39 @@ func (s *SQLiteStore) getTableStatsViaDBStat() ([]TableStats, error) {
 	}
 
 	var rows []dbstatRow
-	err := s.DB.Raw(
-		"SELECT name, SUM(pgsize) AS size_bytes FROM dbstat GROUP BY name ORDER BY size_bytes DESC",
-	).Scan(&rows).Error
+	err := s.DB.Raw(`
+		SELECT d.name, SUM(d.pgsize) AS size_bytes
+		FROM dbstat d
+		JOIN sqlite_master m ON m.name = d.name
+		WHERE m.type = 'table' AND d.name NOT LIKE 'sqlite_%'
+		GROUP BY d.name
+		ORDER BY size_bytes DESC
+	`).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter out internal SQLite tables and compute total from user tables only
-	type userTable struct {
-		name      string
-		sizeBytes int64
-	}
-	userTables := make([]userTable, 0, len(rows))
+	// Compute total size for usage percentage
 	var totalSize int64
 	for i := range rows {
-		if strings.HasPrefix(rows[i].Name, "sqlite_") {
-			continue
-		}
-		userTables = append(userTables, userTable{name: rows[i].Name, sizeBytes: rows[i].SizeBytes})
 		totalSize += rows[i].SizeBytes
 	}
 
-	stats := make([]TableStats, 0, len(userTables))
-	for _, t := range userTables {
+	stats := make([]TableStats, 0, len(rows))
+	for i := range rows {
+		r := &rows[i]
 		var rowCount int64
-		s.DB.Raw("SELECT COUNT(*) FROM " + quoteIdentifier(t.name)).Scan(&rowCount) //nolint:gosec // table names from sqlite_master
+		s.DB.Raw("SELECT COUNT(*) FROM " + quoteIdentifier(r.Name)).Scan(&rowCount) //nolint:gosec // table names from sqlite_master
 
 		var usagePct float64
 		if totalSize > 0 {
-			usagePct = float64(t.sizeBytes) / float64(totalSize) * 100
+			usagePct = float64(r.SizeBytes) / float64(totalSize) * 100
 		}
 
 		stats = append(stats, TableStats{
-			Name:      t.name,
+			Name:      r.Name,
 			RowCount:  rowCount,
-			SizeBytes: t.sizeBytes,
+			SizeBytes: r.SizeBytes,
 			UsagePct:  usagePct,
 		})
 	}
