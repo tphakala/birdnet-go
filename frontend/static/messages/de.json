@@ -959,6 +959,83 @@
         "detections": "Erkennungen",
         "fetchFailed": "Fehler beim Abrufen der Datenbankstatistiken"
       },
+      "dashboard": {
+        "title": "Database Dashboard",
+        "fetchFailed": "Failed to fetch database overview",
+        "metrics": {
+          "readLatency": "Read Latency",
+          "writeLatency": "Write Latency",
+          "queriesPerSec": "Queries/sec",
+          "database": "Database",
+          "avg": "avg",
+          "max": "max",
+          "lastHour": "{count} last hour",
+          "slowQueries": "{count} slow"
+        },
+        "details": {
+          "title": "Database Details",
+          "engine": "Engine",
+          "journal": "Journal",
+          "pageSize": "Page size",
+          "cacheHit": "Cache hit",
+          "integrity": "Integrity",
+          "lastVacuum": "Last VACUUM"
+        },
+        "locksWal": {
+          "title": "Locks & WAL",
+          "lockWaits": "Lock waits",
+          "lockTimeouts": "Lock timeouts",
+          "avgWait": "Avg wait",
+          "busyTimeouts": "Busy timeouts",
+          "walSize": "WAL size",
+          "checkpoints": "Checkpoints",
+          "freelistPages": "Freelist pages",
+          "cacheSize": "Cache size"
+        },
+        "connectionPool": {
+          "title": "Connection Pool",
+          "poolUsage": "Pool Usage",
+          "active": "active",
+          "idle": "idle",
+          "waiting": "waiting",
+          "totalCreated": "Total created",
+          "connErrors": "Conn errors",
+          "threads": "Threads",
+          "running": "running",
+          "cached": "cached"
+        },
+        "innodb": {
+          "title": "InnoDB & Locks",
+          "bufferPoolHitRate": "Buffer pool hit rate",
+          "bufferPoolSize": "Buffer pool size",
+          "lockWaits": "Lock waits",
+          "deadlocks": "Deadlocks",
+          "avgLockWait": "Avg lock wait",
+          "tableLocksWaited": "Table locks waited",
+          "tableLocksImmediate": "Table locks immediate"
+        },
+        "detectionRate": {
+          "title": "Detection Rate (24h)",
+          "perHour": "/hr",
+          "min": "min",
+          "avg": "avg",
+          "max": "max",
+          "lastBackup": "Last backup",
+          "backupSize": "Backup size",
+          "createBackup": "Create Backup",
+          "mysqlHost": "Host",
+          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools."
+        },
+        "tables": {
+          "title": "Tables",
+          "total": "Total",
+          "table": "Table",
+          "engine": "Engine",
+          "rows": "Rows",
+          "size": "Size",
+          "usage": "Usage"
+        }
+      },
       "backup": {
         "download": "Backup herunterladen",
         "downloading": "Wird heruntergeladen...",
