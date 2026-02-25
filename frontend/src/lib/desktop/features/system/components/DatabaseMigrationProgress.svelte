@@ -49,6 +49,9 @@
   let isCutover = $derived(migState === 'cutover');
   let isPaused = $derived(status?.worker_paused === true);
 
+  /** Average bytes per detection record in v2 database, used to estimate v2 DB size during migration */
+  const ESTIMATED_V2_RECORD_SIZE_BYTES = 180;
+
   let phaseName = $derived(
     status?.current_phase
       ? status.current_phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -489,7 +492,8 @@
                 <span class="text-slate-400 dark:text-slate-500">Size</span>
                 <span class="tabular-nums font-medium"
                   >{formatBytesCompact(
-                    (v2Stats?.size_bytes ?? 0) + (status?.migrated_records ?? 0) * 180
+                    (v2Stats?.size_bytes ?? 0) +
+                      (status?.migrated_records ?? 0) * ESTIMATED_V2_RECORD_SIZE_BYTES
                   )}</span
                 >
               </div>
