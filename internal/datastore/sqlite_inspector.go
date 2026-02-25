@@ -44,9 +44,9 @@ func (s *SQLiteStore) GetEngineDetails() (EngineDetails, error) {
 	}
 
 	// WAL checkpoint stats (passive — does not force a checkpoint)
-	var walPages, checkpointed int
+	var checkpointed int
 	if err := s.DB.Raw("PRAGMA wal_checkpoint(PASSIVE)").Row().Scan(
-		new(int), &walPages, &checkpointed,
+		new(int), new(int), &checkpointed,
 	); err == nil {
 		details.WALCheckpoints = int64(checkpointed)
 	}
