@@ -49,6 +49,7 @@
       case 'initializing':
       case 'dual_write':
       case 'migrating':
+      case 'migrating_predictions':
         return 'bg-blue-500/15 text-blue-600 dark:text-blue-400';
       case 'paused':
         return 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
@@ -197,10 +198,10 @@
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-orange-500/10">
-          {#if isActive}
-            <RefreshCw class="w-4 h-4 text-orange-500 animate-spin" />
-          {:else if isValidating}
+          {#if isValidating}
             <Loader2 class="w-4 h-4 text-violet-500 animate-spin" />
+          {:else if isActive}
+            <RefreshCw class="w-4 h-4 text-orange-500 animate-spin" />
           {:else}
             <RefreshCw class="w-4 h-4 text-orange-500" />
           {/if}
