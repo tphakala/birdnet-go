@@ -114,7 +114,7 @@
       <span
         class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-400 dark:text-slate-500"
       >
-        {backups.length}
+        {safeBackups.length}
       </span>
     </div>
     <button
@@ -134,7 +134,7 @@
     </button>
   </div>
 
-  {#if backups.length === 0}
+  {#if safeBackups.length === 0}
     <div class="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
       {t('system.database.backup.history.noBackups')}
     </div>
