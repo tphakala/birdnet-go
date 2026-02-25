@@ -759,7 +759,7 @@
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
             <button
-              class="p-1.5 rounded-md transition-colors cursor-pointer"
+              class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
               style:color="var(--color-base-content)"
               style:opacity={showThemeMenu ? 1 : 0.45}
               onclick={() => (showThemeMenu = !showThemeMenu)}
@@ -832,7 +832,7 @@
 
           <button
             tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
             style:opacity={isCopied ? 1 : 0.45}
             onclick={copyTerminalOutput}
@@ -846,7 +846,7 @@
             {/if}
           </button>
           <button
-            class="p-1.5 rounded-md transition-colors cursor-pointer"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
             style:opacity="0.45"
             onclick={detachTerminal}
@@ -857,7 +857,7 @@
           </button>
           <button
             tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
             style:opacity="0.45"
             onclick={toggleExpanded}
@@ -872,7 +872,7 @@
           </button>
           <button
             tabindex="-1"
-            class="p-1.5 rounded-md transition-colors cursor-pointer"
+            class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
             style:opacity="0.45"
             onclick={toggleFullscreen}
