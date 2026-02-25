@@ -17,6 +17,7 @@
     AlertTriangle,
     Info,
   } from '@lucide/svelte';
+  import { t } from '$lib/i18n';
   import type { PrerequisitesResponse, PrerequisiteCheckStatus } from '$lib/types/migration';
 
   interface Props {
@@ -84,21 +85,26 @@
       <span
         class="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]"
       >
-        Prerequisites
+        {t('system.database.migration.prerequisites.title')}
       </span>
 
       {#if prerequisites}
         <span
           class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
         >
-          {passedCount}/{totalCount} passed
+          {t('system.database.migration.prerequisites.passedCount', {
+            passed: passedCount,
+            total: totalCount,
+          })}
         </span>
 
         {#if prerequisites.critical_failures > 0}
           <span
             class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-600 dark:text-red-400"
           >
-            {prerequisites.critical_failures} critical
+            {t('system.database.migration.prerequisites.criticalCount', {
+              count: prerequisites.critical_failures,
+            })}
           </span>
         {/if}
 
@@ -106,7 +112,9 @@
           <span
             class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400"
           >
-            {prerequisites.warnings} warning{prerequisites.warnings > 1 ? 's' : ''}
+            {t('system.database.migration.prerequisites.warningCount', {
+              count: prerequisites.warnings,
+            })}
           </span>
         {/if}
       {/if}
@@ -121,15 +129,19 @@
         disabled={isLoading || isRefreshing}
       >
         <RefreshCw class="w-3 h-3 {isRefreshing ? 'animate-spin' : ''}" />
-        Re-run
+        {t('system.database.migration.prerequisites.rerun')}
       </button>
 
       <button
         type="button"
         class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-blue-500 text-[var(--color-text-tertiary)]"
         onclick={() => (showDetails = !showDetails)}
+        aria-expanded={showDetails}
+        aria-controls="prerequisites-details"
       >
-        {showDetails ? 'Hide' : 'Show'} details
+        {showDetails
+          ? t('system.database.migration.prerequisites.hideDetails')
+          : t('system.database.migration.prerequisites.showDetails')}
         {#if showDetails}
           <ChevronUp class="w-3 h-3" />
         {:else}
@@ -141,7 +153,7 @@
 
   <!-- Expandable check list -->
   {#if showDetails && prerequisites}
-    <div class="mt-3 space-y-1.5">
+    <div id="prerequisites-details" class="mt-3 space-y-1.5">
       {#each checks as check (check.id)}
         {@const StatusIcon = statusIconMap[check.status]}
         <div
@@ -159,7 +171,7 @@
             <span
               class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400"
             >
-              Critical
+              {t('system.database.migration.prerequisites.critical')}
             </span>
           {/if}
 
@@ -168,7 +180,7 @@
               check.status
             ]}"
           >
-            {check.status}
+            {t('system.database.migration.prerequisites.status.' + check.status)}
           </span>
         </div>
       {/each}

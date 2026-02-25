@@ -667,6 +667,11 @@
       "serverError": "Serverfout. Probeer het later opnieuw of neem contact op met de ondersteuning als het probleem aanhoudt.",
       "loadFailed": "Kon detectie niet laden (Fout {status}). Ververs de pagina.",
       "noIdProvided": "Geen detectie-ID opgegeven."
+    },
+    "viewToggle": {
+      "label": "View mode",
+      "table": "Table view",
+      "cards": "Card view"
     }
   },
   "species": {
@@ -797,7 +802,8 @@
           "paused": "Gepauzeerd",
           "validating": "Valideren",
           "cutover": "Overschakeling bezig",
-          "completed": "Migratie voltooid"
+          "completed": "Migratie voltooid",
+          "failed": "Validation Failed"
         },
         "progress": {
           "title": "Migratievoortgang",
@@ -808,7 +814,30 @@
           "remaining": "Resterend: {time}",
           "eta": "Geschatte resterende tijd",
           "dirtyIds": "{count} records wachtend",
-          "paused": "Migratie gepauzeerd"
+          "paused": "Migratie gepauzeerd",
+          "completedTitle": "Migratie voltooid",
+          "completedBody": "Alle {count} records zijn succesvol gemigreerd naar de V2-database. De applicatie gebruikt V2 als primaire database na herstart.",
+          "restartTitle": "Herstart vereist",
+          "restartBody": "Herstart de applicatie om naar de V2-database te schakelen. Opruiming van de oude database is beschikbaar na herstart.",
+          "fallbackError": "Verschil in recordaantal tussen legacy- en V2-database. Sommige records zijn mogelijk niet correct gemigreerd.",
+          "migrateInfo": "De migratie zal {count} records overzetten van de legacy-database naar het nieuwe V2-schema. De dual-write-modus garandeert nul dataverlies tijdens de migratie.",
+          "sourceLegacy": "Bron (legacy)",
+          "targetV2": "Doel (V2)",
+          "recordsLabel": "Records",
+          "sizeLabel": "Grootte",
+          "prerequisitesNotMet": "Vereisten niet voldaan — los de kritieke problemen hieronder op",
+          "validatingTitle": "Gegevens valideren",
+          "validatingBody": "{count} legacy-records vergelijken met V2-database...",
+          "dirtyRecordsCatchup": "{count} gewijzigde records — poging tot synchronisatie",
+          "cutoverTitle": "Overschakeling voltooien",
+          "cutoverBody": "Overschakeling naar V2-database voltooien...",
+          "migratingPhase": "Migratie van {phase}",
+          "progressLabel": "Voortgang",
+          "ofRecords": "/ {count} records",
+          "percentComplete": "{percent}% voltooid",
+          "recordsPerSec": "{rate} records/s",
+          "calculating": "Berekenen...",
+          "dirtyWriteFailed": "{count} records konden niet worden geschreven — worden afgestemd tijdens validatie"
         },
         "phase": {
           "indicator": "Fase {current} van {total}: ",
@@ -831,7 +860,8 @@
           "pause": "Pauzeren",
           "resume": "Hervatten",
           "cancel": "Annuleren",
-          "rollback": "Terugdraaien"
+          "rollback": "Terugdraaien",
+          "retryValidation": "Retry Validation"
         },
         "confirmCancel": {
           "title": "Migratie annuleren?",
@@ -851,7 +881,8 @@
           "resumeFailed": "Kan migratie niet hervatten",
           "cancelFailed": "Kan migratie niet annuleren",
           "rollbackFailed": "Kan migratie niet terugdraaien",
-          "fetchFailed": "Kan migratiestatus niet ophalen"
+          "fetchFailed": "Kan migratiestatus niet ophalen",
+          "retryValidationFailed": "Failed to retry validation"
         },
         "worker": {
           "running": "Worker actief",
@@ -910,6 +941,19 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} geslaagd",
+          "criticalCount": "{count} kritiek",
+          "warningCount": "{count} waarschuwing(en)",
+          "rerun": "Opnieuw uitvoeren",
+          "showDetails": "Details tonen",
+          "hideDetails": "Details verbergen",
+          "status": {
+            "passed": "Geslaagd",
+            "failed": "Mislukt",
+            "error": "Fout",
+            "warning": "Waarschuwing",
+            "skipped": "Overgeslagen"
           }
         },
         "requiredNote": "Databasemigratie is vereist voor aankomende BirdNET-Go-functies die afhankelijk zijn van het nieuwe genormaliseerde databaseschema. Nieuwe functies zijn pas beschikbaar na voltooiing van de migratie.",
@@ -919,6 +963,29 @@
           "message": "De migratie kopieert uw detectiegegevens van de huidige database naar een nieuwe genormaliseerde database. Uw originele database blijft ongewijzigd. Het wordt echter aanbevolen om een back-up te maken voor het geval er onverwachte problemen optreden.",
           "checkbox": "Ik bevestig dat ik een back-up van mijn database heb gemaakt of de risico's begrijp van doorgaan zonder back-up.",
           "note": "U kunt een back-up downloaden met de knop \"Back-up downloaden\" hierboven."
+        },
+        "details": {
+          "title": "Databasedetails",
+          "detections": "{count} detecties",
+          "lastBackup": "Laatste back-up: {date}",
+          "noBackups": "Geen back-ups",
+          "integrity": "Integriteit: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (doel)",
+          "active": "Actief",
+          "migration": "Migratie",
+          "complete": "Voltooid",
+          "recordsMigrated": "{count} records gemigreerd",
+          "readyToMigrate": "Klaar voor migratie",
+          "recordsInLegacy": "{count} records in legacy",
+          "comparingRecords": "Recordaantallen vergelijken...",
+          "validationFailed": "Validatie mislukt",
+          "rate": "Snelheid",
+          "recPerSec": "{rate} rec/s",
+          "dayAvg": "~{count} / dag gem.",
+          "dayHistory": "30 dagen geschiedenis"
         }
       },
       "legacy": {
@@ -1024,7 +1091,9 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools."
+          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "chartLabel": "Detectiepercentage over 24 uur",
+          "detectionsTooltip": "{count} detecties"
         },
         "tables": {
           "title": "Tables",
@@ -1034,7 +1103,8 @@
           "rows": "Rows",
           "size": "Size",
           "usage": "Usage"
-        }
+        },
+        "loading": "Laden..."
       },
       "backup": {
         "download": "Back-up downloaden",
@@ -1043,7 +1113,28 @@
         "creating": "Back-up maken...",
         "cancel": "Annuleren",
         "retry": "Opnieuw proberen",
-        "mysqlNote": "MySQL-back-up vereist externe tools (mysqldump)"
+        "mysqlNote": "MySQL-back-up vereist externe tools (mysqldump)",
+        "history": {
+          "title": "Back-upgeschiedenis",
+          "creating": "Aanmaken...",
+          "createBackup": "Back-up maken",
+          "noBackups": "Nog geen back-ups",
+          "download": "Downloaden",
+          "failed": "Mislukt",
+          "columns": {
+            "date": "Datum",
+            "database": "Database",
+            "size": "Grootte",
+            "status": "Status",
+            "actions": "Acties"
+          },
+          "status": {
+            "pending": "Wachtend",
+            "in_progress": "Bezig",
+            "completed": "Voltooid",
+            "failed": "Mislukt"
+          }
+        }
       },
       "notInitialized": "Niet geïnitialiseerd"
     },

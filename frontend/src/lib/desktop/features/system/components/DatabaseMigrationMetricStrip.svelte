@@ -5,6 +5,8 @@
   import Sparkline from './Sparkline.svelte';
   import type { DatabaseStats, MigrationStatus } from '$lib/types/migration';
 
+  const SPARKLINE_COLOR = '#3b82f6';
+
   interface Props {
     legacyStats: DatabaseStats | null;
     v2Stats: DatabaseStats | null;
@@ -67,10 +69,9 @@
   }
 
   function stateLabel(state: string): string {
-    return state
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    const key = `system.database.migration.status.${state}`;
+    const translated = t(key);
+    return translated === key ? state : translated;
   }
 </script>
 
@@ -84,7 +85,9 @@
         <div class="p-1.5 rounded-lg bg-amber-500/10">
           <Database class="w-4 h-4 text-amber-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Legacy</span>
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+          >{t('system.database.migration.strip.legacy')}</span
+        >
       </div>
       <div class="flex items-center gap-1">
         {#if legacyStats?.connected}
@@ -131,12 +134,16 @@
         <div class="p-1.5 rounded-lg bg-emerald-500/10">
           <Database class="w-4 h-4 text-emerald-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">V2 (Target)</span>
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+          >{t('system.database.migration.strip.v2Target')}</span
+        >
       </div>
       <div class="flex items-center gap-1">
         {#if v2Stats?.connected}
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Active</span>
+          <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium"
+            >{t('system.database.migration.strip.active')}</span
+          >
         {:else}
           <span class="w-2 h-2 rounded-full bg-red-500"></span>
           <span class="text-xs text-red-600 dark:text-red-400 font-medium"
@@ -183,11 +190,11 @@
       >
     </div>
     <div class="flex-1 min-h-[28px]">
-      <Sparkline data={detectionHistory} color="#3b82f6" />
+      <Sparkline data={detectionHistory} color={SPARKLINE_COLOR} />
     </div>
     <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
-      <span>~{dailyAverage} / day avg</span>
-      <span>30 day history</span>
+      <span>{t('system.database.migration.strip.dayAvg', { count: dailyAverage })}</span>
+      <span>{t('system.database.migration.strip.dayHistory')}</span>
     </div>
   </div>
 
@@ -206,7 +213,9 @@
             <RefreshCw class="w-4 h-4 text-orange-500" />
           {/if}
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Migration</span>
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+          >{t('system.database.migration.strip.migration')}</span
+        >
       </div>
       <span class="px-2 py-0.5 rounded-full text-[10px] font-medium {stateBadgeClass(migState)}"
         >{stateLabel(migState)}</span
@@ -218,15 +227,21 @@
         class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium"
       >
         <CheckCircle class="w-4 h-4" />
-        <span>Complete</span>
+        <span>{t('system.database.migration.strip.complete')}</span>
       </div>
       <div class="mt-1 text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
-        {formatNumber(migrationStatus?.total_records ?? 0)} records migrated
+        {t('system.database.migration.strip.recordsMigrated', {
+          count: formatNumber(migrationStatus?.total_records ?? 0),
+        })}
       </div>
     {:else if isIdle}
-      <div class="text-sm text-slate-500 dark:text-slate-400">Ready to migrate</div>
+      <div class="text-sm text-slate-500 dark:text-slate-400">
+        {t('system.database.migration.strip.readyToMigrate')}
+      </div>
       <div class="mt-1 text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
-        {formatNumber(legacyStats?.total_detections ?? 0)} records in legacy
+        {t('system.database.migration.strip.recordsInLegacy', {
+          count: formatNumber(legacyStats?.total_detections ?? 0),
+        })}
       </div>
     {:else if isValidating}
       <div class="space-y-2">
@@ -235,14 +250,14 @@
             <div class="h-full rounded-full bg-violet-500 animate-pulse" style:width="100%"></div>
           </div>
           <div class="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-            Comparing record counts...
+            {t('system.database.migration.strip.comparingRecords')}
           </div>
         </div>
       </div>
     {:else if isFailed}
       <div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 font-medium">
         <XCircle class="w-4 h-4" />
-        <span>Validation failed</span>
+        <span>{t('system.database.migration.strip.validationFailed')}</span>
       </div>
     {:else}
       <!-- Active / Paused: progress bar -->
@@ -259,14 +274,22 @@
           >
             <span>{(migrationStatus?.progress_percent ?? 0).toFixed(1)}%</span>
             {#if migrationStatus?.estimated_remaining}
-              <span>ETA {migrationStatus.estimated_remaining}</span>
+              <span
+                >{t('system.database.migration.progress.remaining', {
+                  time: migrationStatus.estimated_remaining,
+                })}</span
+              >
             {/if}
           </div>
         </div>
         <div class="flex justify-between text-sm">
-          <span class="text-slate-400 dark:text-slate-500">Rate</span>
+          <span class="text-slate-400 dark:text-slate-500"
+            >{t('system.database.migration.strip.rate')}</span
+          >
           <span class="font-mono tabular-nums font-medium"
-            >{formatNumber(Math.round(migrationStatus?.records_per_second ?? 0))} rec/s</span
+            >{t('system.database.migration.progress.rateValue', {
+              rate: formatNumber(Math.round(migrationStatus?.records_per_second ?? 0)),
+            })}</span
           >
         </div>
       </div>

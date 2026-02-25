@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
+  import { t } from '$lib/i18n';
 
   interface BackupJob {
     job_id: string;
@@ -27,12 +28,12 @@
   let sortColumn = $state<string>('date');
   let sortDirection = $state<'asc' | 'desc'>('desc');
 
-  type ColumnDef = { key: string; label: string };
+  type ColumnDef = { key: string; labelKey: string };
   const columns: ColumnDef[] = [
-    { key: 'date', label: 'Date' },
-    { key: 'type', label: 'Database' },
-    { key: 'size', label: 'Size' },
-    { key: 'status', label: 'Status' },
+    { key: 'date', labelKey: 'system.database.backup.history.columns.date' },
+    { key: 'type', labelKey: 'system.database.backup.history.columns.database' },
+    { key: 'size', labelKey: 'system.database.backup.history.columns.size' },
+    { key: 'status', labelKey: 'system.database.backup.history.columns.status' },
   ];
 
   const statusOrder: Record<string, number> = {
@@ -100,7 +101,7 @@
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
       <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-        Backup History
+        {t('system.database.backup.history.title')}
       </h3>
       <span
         class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-400 dark:text-slate-500"
@@ -117,16 +118,18 @@
     >
       {#if isCreating}
         <Loader2 class="w-3.5 h-3.5 animate-spin" />
-        Creating...
+        {t('system.database.backup.history.creating')}
       {:else}
         <Download class="w-3.5 h-3.5" />
-        Create Backup
+        {t('system.database.backup.history.createBackup')}
       {/if}
     </button>
   </div>
 
   {#if backups.length === 0}
-    <div class="py-8 text-center text-sm text-slate-400 dark:text-slate-500">No backups yet</div>
+    <div class="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+      {t('system.database.backup.history.noBackups')}
+    </div>
   {:else}
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
@@ -135,10 +138,23 @@
             {#each columns as col (col.key)}
               <th
                 class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-400 dark:text-slate-500"
+                scope="col"
+                tabindex="0"
+                aria-sort={sortColumn === col.key
+                  ? sortDirection === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'}
                 onclick={() => toggleSort(col.key)}
+                onkeydown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSort(col.key);
+                  }
+                }}
               >
                 <div class="flex items-center gap-1">
-                  {col.label}
+                  {t(col.labelKey)}
                   {#if sortColumn === col.key}
                     {#if sortDirection === 'asc'}
                       <ChevronUp class="w-3 h-3" />
@@ -151,8 +167,11 @@
                 </div>
               </th>
             {/each}
-            <th class="text-right py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500">
-              Actions
+            <th
+              scope="col"
+              class="text-right py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500"
+            >
+              {t('system.database.backup.history.columns.actions')}
             </th>
           </tr>
         </thead>
@@ -183,7 +202,7 @@
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] {statusClasses(
                     backup.status
-                  )}">{backup.status}</span
+                  )}">{t('system.database.backup.history.status.' + backup.status)}</span
                 >
               </td>
               <td class="py-2 px-3 text-right">
@@ -194,7 +213,7 @@
                     download
                   >
                     <Download class="w-3 h-3" />
-                    Download
+                    {t('system.database.backup.history.download')}
                   </a>
                 {:else if backup.status === 'in_progress'}
                   <span
@@ -205,7 +224,7 @@
                   </span>
                 {:else if backup.status === 'failed'}
                   <span class="text-xs text-red-600 dark:text-red-400" title={backup.error ?? ''}>
-                    Failed
+                    {t('system.database.backup.history.failed')}
                   </span>
                 {:else}
                   <span class="text-xs text-slate-400 dark:text-slate-500">&mdash;</span>

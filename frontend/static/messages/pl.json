@@ -667,6 +667,11 @@
       "serverError": "Błąd serwera. Spróbuj ponownie później lub skontaktuj się z pomocą techniczną, jeśli problem będzie się powtarzał.",
       "loadFailed": "Nie udało się załadować detekcji (Błąd {status}). Odśwież stronę.",
       "noIdProvided": "Nie podano identyfikatora detekcji."
+    },
+    "viewToggle": {
+      "label": "View mode",
+      "table": "Table view",
+      "cards": "Card view"
     }
   },
   "species": {
@@ -797,7 +802,8 @@
           "paused": "Wstrzymano",
           "validating": "Walidacja",
           "cutover": "Przełączanie w toku",
-          "completed": "Migracja zakończona"
+          "completed": "Migracja zakończona",
+          "failed": "Validation Failed"
         },
         "progress": {
           "title": "Postęp migracji",
@@ -808,7 +814,30 @@
           "remaining": "Pozostało: {time}",
           "eta": "Szacowany pozostały czas",
           "dirtyIds": "{count} rekordów oczekuje",
-          "paused": "Migracja wstrzymana"
+          "paused": "Migracja wstrzymana",
+          "completedTitle": "Migracja zakończona",
+          "completedBody": "Wszystkie {count} rekordów zostało pomyślnie zmigrowanych do bazy danych V2. Aplikacja użyje V2 jako głównej bazy danych po ponownym uruchomieniu.",
+          "restartTitle": "Wymagane ponowne uruchomienie",
+          "restartBody": "Uruchom ponownie aplikację, aby przełączyć się na bazę danych V2. Czyszczenie starszej bazy danych będzie dostępne po ponownym uruchomieniu.",
+          "fallbackError": "Niezgodność liczby rekordów między starszą bazą danych a V2. Niektóre rekordy mogły nie zostać poprawnie zmigrowane.",
+          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Tryb podwójnego zapisu zapewnia brak utraty danych podczas migracji.",
+          "sourceLegacy": "Źródło (starsza)",
+          "targetV2": "Cel (V2)",
+          "recordsLabel": "Rekordy",
+          "sizeLabel": "Rozmiar",
+          "prerequisitesNotMet": "Wymagania wstępne nie są spełnione — rozwiąż poniższe krytyczne problemy",
+          "validatingTitle": "Walidacja danych",
+          "validatingBody": "Porównywanie {count} starszych rekordów z bazą danych V2...",
+          "dirtyRecordsCatchup": "{count} zmienionych rekordów — próba uzgodnienia",
+          "cutoverTitle": "Kończenie przełączania",
+          "cutoverBody": "Finalizowanie przejścia na bazę danych V2...",
+          "migratingPhase": "Migracja {phase}",
+          "progressLabel": "Postęp",
+          "ofRecords": "/ {count} rekordów",
+          "percentComplete": "{percent}% ukończono",
+          "recordsPerSec": "{rate} rekordów/s",
+          "calculating": "Obliczanie...",
+          "dirtyWriteFailed": "{count} rekordów nie udało się zapisać — zostaną uzgodnione podczas walidacji"
         },
         "phase": {
           "indicator": "Faza {current} z {total}: ",
@@ -831,7 +860,8 @@
           "pause": "Wstrzymaj",
           "resume": "Wznów",
           "cancel": "Anuluj",
-          "rollback": "Cofnij"
+          "rollback": "Cofnij",
+          "retryValidation": "Retry Validation"
         },
         "confirmCancel": {
           "title": "Anulować migrację?",
@@ -851,7 +881,8 @@
           "resumeFailed": "Nie udało się wznowić migracji",
           "cancelFailed": "Nie udało się anulować migracji",
           "rollbackFailed": "Nie udało się cofnąć migracji",
-          "fetchFailed": "Nie udało się pobrać statusu migracji"
+          "fetchFailed": "Nie udało się pobrać statusu migracji",
+          "retryValidationFailed": "Failed to retry validation"
         },
         "worker": {
           "running": "Worker działa",
@@ -910,6 +941,19 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} zaliczonych",
+          "criticalCount": "{count} krytycznych",
+          "warningCount": "{count} ostrzeżeń",
+          "rerun": "Uruchom ponownie",
+          "showDetails": "Pokaż szczegóły",
+          "hideDetails": "Ukryj szczegóły",
+          "status": {
+            "passed": "Zaliczono",
+            "failed": "Niepowodzenie",
+            "error": "Błąd",
+            "warning": "Ostrzeżenie",
+            "skipped": "Pominięto"
           }
         },
         "requiredNote": "Migracja bazy danych jest wymagana dla nadchodzących funkcji BirdNET-Go, które opierają się na nowym znormalizowanym schemacie bazy danych. Nowe funkcje nie będą dostępne do czasu zakończenia migracji.",
@@ -919,6 +963,29 @@
           "message": "Migracja skopiuje dane wykrywania z bieżącej bazy danych do nowej znormalizowanej bazy danych. Oryginalna baza danych pozostaje niezmieniona. Zaleca się jednak utworzenie kopii zapasowej na wypadek nieoczekiwanych problemów.",
           "checkbox": "Potwierdzam, że wykonałem kopię zapasową bazy danych lub rozumiem ryzyko kontynuowania bez kopii zapasowej.",
           "note": "Możesz pobrać kopię zapasową, używając przycisku \"Pobierz kopię zapasową\" powyżej."
+        },
+        "details": {
+          "title": "Szczegóły bazy danych",
+          "detections": "{count} wykryć",
+          "lastBackup": "Ostatnia kopia zapasowa: {date}",
+          "noBackups": "Brak kopii zapasowych",
+          "integrity": "Integralność: {status}"
+        },
+        "strip": {
+          "legacy": "Starsza",
+          "v2Target": "V2 (cel)",
+          "active": "Aktywna",
+          "migration": "Migracja",
+          "complete": "Zakończona",
+          "recordsMigrated": "{count} rekordów zmigrowanych",
+          "readyToMigrate": "Gotowe do migracji",
+          "recordsInLegacy": "{count} rekordów w starszej",
+          "comparingRecords": "Porównywanie liczby rekordów...",
+          "validationFailed": "Walidacja nieudana",
+          "rate": "Szybkość",
+          "recPerSec": "{rate} rek/s",
+          "dayAvg": "~{count} / dzień śr.",
+          "dayHistory": "Historia 30 dni"
         }
       },
       "legacy": {
@@ -1024,7 +1091,9 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools."
+          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "chartLabel": "Wskaźnik wykryć w ciągu 24 godzin",
+          "detectionsTooltip": "{count} wykryć"
         },
         "tables": {
           "title": "Tables",
@@ -1034,7 +1103,8 @@
           "rows": "Rows",
           "size": "Size",
           "usage": "Usage"
-        }
+        },
+        "loading": "Ładowanie..."
       },
       "backup": {
         "download": "Pobierz kopię zapasową",
@@ -1043,7 +1113,28 @@
         "creating": "Tworzenie kopii zapasowej...",
         "cancel": "Anuluj",
         "retry": "Ponów próbę",
-        "mysqlNote": "Kopia zapasowa MySQL wymaga zewnętrznych narzędzi (mysqldump)"
+        "mysqlNote": "Kopia zapasowa MySQL wymaga zewnętrznych narzędzi (mysqldump)",
+        "history": {
+          "title": "Historia kopii zapasowych",
+          "creating": "Tworzenie...",
+          "createBackup": "Utwórz kopię zapasową",
+          "noBackups": "Brak kopii zapasowych",
+          "download": "Pobierz",
+          "failed": "Niepowodzenie",
+          "columns": {
+            "date": "Data",
+            "database": "Baza danych",
+            "size": "Rozmiar",
+            "status": "Status",
+            "actions": "Akcje"
+          },
+          "status": {
+            "pending": "Oczekuje",
+            "in_progress": "W toku",
+            "completed": "Zakończono",
+            "failed": "Niepowodzenie"
+          }
+        }
       },
       "notInitialized": "Nie zainicjalizowano"
     },

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Database, MapPin, HardDrive, FileText, Clock, Shield } from '@lucide/svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
+  import { t } from '$lib/i18n';
   import type { DatabaseStats } from '$lib/types/migration';
 
   interface Props {
@@ -16,7 +17,7 @@
   <h3
     class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-400 dark:text-slate-500"
   >
-    Database Details
+    {t('system.database.migration.details.title')}
   </h3>
   <div class="space-y-2.5">
     <div class="flex items-center gap-3">
@@ -36,17 +37,26 @@
     <div class="flex items-center gap-3">
       <FileText class="w-3.5 h-3.5 flex-shrink-0 text-slate-400 dark:text-slate-500" />
       <span class="text-sm tabular-nums"
-        >{stats ? `${formatNumber(stats.total_detections)} detections` : '—'}</span
+        >{stats
+          ? t('system.database.migration.details.detections', {
+              count: formatNumber(stats.total_detections),
+            })
+          : '—'}</span
       >
     </div>
     <div class="flex items-center gap-3">
       <Clock class="w-3.5 h-3.5 flex-shrink-0 text-slate-400 dark:text-slate-500" />
-      <span class="text-sm">{lastBackupDate ? `Last backup: ${lastBackupDate}` : 'No backups'}</span
+      <span class="text-sm"
+        >{lastBackupDate
+          ? t('system.database.migration.details.lastBackup', { date: lastBackupDate })
+          : t('system.database.migration.details.noBackups')}</span
       >
     </div>
     <div class="flex items-center gap-3">
       <Shield class="w-3.5 h-3.5 flex-shrink-0 text-slate-400 dark:text-slate-500" />
-      <span class="text-sm">Integrity: {integrityStatus}</span>
+      <span class="text-sm"
+        >{t('system.database.migration.details.integrity', { status: integrityStatus })}</span
+      >
     </div>
   </div>
 </div>

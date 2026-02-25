@@ -33,7 +33,14 @@
           <span class="text-slate-400 dark:text-slate-500"> / {details.max_connections}</span>
         </span>
       </div>
-      <div class="h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+      <div
+        class="h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
+        role="progressbar"
+        aria-label={t('system.database.dashboard.connectionPool.poolUsage')}
+        aria-valuenow={poolUsagePct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
           class="h-full rounded-full bg-blue-500 transition-all duration-300"
           style:width="{poolUsagePct}%"

@@ -82,8 +82,21 @@
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
             <th
+              scope="col"
+              tabindex="0"
+              aria-sort={sortColumn === col.key
+                ? sortDirection === 'asc'
+                  ? 'ascending'
+                  : 'descending'
+                : 'none'}
               class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-400 dark:text-slate-500"
               onclick={() => toggleSort(col.key)}
+              onkeydown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleSort(col.key);
+                }
+              }}
             >
               <div class="flex items-center gap-1">
                 {col.label}
@@ -99,7 +112,10 @@
               </div>
             </th>
           {/each}
-          <th class="text-left py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500">
+          <th
+            scope="col"
+            class="text-left py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500"
+          >
             {t('system.database.dashboard.tables.usage')}
           </th>
         </tr>

@@ -829,6 +829,7 @@
       "dashboard": {
         "title": "Database Dashboard",
         "fetchFailed": "Failed to fetch database overview",
+        "loading": "Loading...",
         "metrics": {
           "readLatency": "Read Latency",
           "writeLatency": "Write Latency",
@@ -883,6 +884,8 @@
         },
         "detectionRate": {
           "title": "Detection Rate (24h)",
+          "chartLabel": "Detection rate over 24 hours",
+          "detectionsTooltip": "{count} detections",
           "perHour": "/hr",
           "min": "min",
           "avg": "avg",
@@ -910,7 +913,28 @@
         "creating": "Creating backup...",
         "cancel": "Cancel",
         "retry": "Retry Backup",
-        "mysqlNote": "MySQL backup requires external tools (mysqldump)"
+        "mysqlNote": "MySQL backup requires external tools (mysqldump)",
+        "history": {
+          "title": "Backup History",
+          "creating": "Creating...",
+          "createBackup": "Create Backup",
+          "noBackups": "No backups yet",
+          "download": "Download",
+          "failed": "Failed",
+          "columns": {
+            "date": "Date",
+            "database": "Database",
+            "size": "Size",
+            "status": "Status",
+            "actions": "Actions"
+          },
+          "status": {
+            "pending": "Pending",
+            "in_progress": "In Progress",
+            "completed": "Completed",
+            "failed": "Failed"
+          }
+        }
       },
       "notInitialized": "Not initialized",
       "migration": {
@@ -941,7 +965,53 @@
           "rateValue": "{rate} rec/s",
           "remaining": "Est. remaining: {time}",
           "eta": "Estimated time remaining",
-          "dirtyIds": "{count} records pending re-sync"
+          "dirtyIds": "{count} records pending re-sync",
+          "completedTitle": "Migration Completed",
+          "completedBody": "All {count} records have been successfully migrated to the V2 database. The application will use V2 as the primary database after restart.",
+          "restartTitle": "Restart Required",
+          "restartBody": "Restart the application to switch to the V2 database. Legacy database cleanup will be available after restart.",
+          "fallbackError": "Record count mismatch between legacy and V2 databases. Some records may not have migrated correctly.",
+          "migrateInfo": "Migration will transfer {count} records from the legacy database to the new V2 schema. Dual-write mode ensures zero data loss during migration.",
+          "sourceLegacy": "Source (Legacy)",
+          "targetV2": "Target (V2)",
+          "recordsLabel": "Records",
+          "sizeLabel": "Size",
+          "prerequisitesNotMet": "Prerequisites not met — resolve critical issues below",
+          "validatingTitle": "Validating Data",
+          "validatingBody": "Comparing {count} legacy records against V2 database...",
+          "dirtyRecordsCatchup": "{count} dirty records — will attempt catch-up reconciliation",
+          "cutoverTitle": "Completing Cutover",
+          "cutoverBody": "Finalizing transition to V2 database...",
+          "migratingPhase": "Migrating {phase}",
+          "progressLabel": "Progress",
+          "ofRecords": "/ {count} records",
+          "percentComplete": "{percent}% complete",
+          "recordsPerSec": "{rate} records/sec",
+          "calculating": "Calculating...",
+          "dirtyWriteFailed": "{count} records failed to write — will be reconciled during validation"
+        },
+        "details": {
+          "title": "Database Details",
+          "detections": "{count} detections",
+          "lastBackup": "Last backup: {date}",
+          "noBackups": "No backups",
+          "integrity": "Integrity: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (Target)",
+          "active": "Active",
+          "migration": "Migration",
+          "complete": "Complete",
+          "recordsMigrated": "{count} records migrated",
+          "readyToMigrate": "Ready to migrate",
+          "recordsInLegacy": "{count} records in legacy",
+          "comparingRecords": "Comparing record counts...",
+          "validationFailed": "Validation failed",
+          "rate": "Rate",
+          "recPerSec": "{rate} rec/s",
+          "dayAvg": "~{count} / day avg",
+          "dayHistory": "30 day history"
         },
         "phase": {
           "indicator": "Phase {current} of {total}: ",
@@ -1008,6 +1078,19 @@
           "warningsCount": "{count} warning(s)",
           "running": "Running pre-migration checks...",
           "checkingStep": "Step {current} of {total}",
+          "passedCount": "{passed}/{total} passed",
+          "criticalCount": "{count} critical",
+          "warningCount": "{count} warning(s)",
+          "rerun": "Re-run",
+          "showDetails": "Show details",
+          "hideDetails": "Hide details",
+          "status": {
+            "passed": "Passed",
+            "failed": "Failed",
+            "error": "Error",
+            "warning": "Warning",
+            "skipped": "Skipped"
+          },
           "errors": {
             "fetchFailed": "Failed to fetch prerequisites"
           },

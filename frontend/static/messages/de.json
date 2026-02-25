@@ -667,6 +667,11 @@
       "serverError": "Serverfehler. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support, wenn das Problem weiterhin besteht.",
       "loadFailed": "Fehler beim Laden der Erkennung (Fehler {status}). Bitte aktualisieren Sie die Seite.",
       "noIdProvided": "Keine Erkennungs-ID angegeben."
+    },
+    "viewToggle": {
+      "label": "View mode",
+      "table": "Table view",
+      "cards": "Card view"
     }
   },
   "species": {
@@ -797,7 +802,8 @@
           "paused": "Pausiert",
           "validating": "Validierung",
           "cutover": "Umstellung läuft",
-          "completed": "Migration abgeschlossen"
+          "completed": "Migration abgeschlossen",
+          "failed": "Validation Failed"
         },
         "progress": {
           "title": "Migrationsfortschritt",
@@ -808,7 +814,30 @@
           "remaining": "Verbleibend: {time}",
           "eta": "Geschätzte Restzeit",
           "dirtyIds": "{count} Datensätze ausstehend",
-          "paused": "Migration pausiert"
+          "paused": "Migration pausiert",
+          "completedTitle": "Migration abgeschlossen",
+          "completedBody": "Alle {count} Datensätze wurden erfolgreich in die V2-Datenbank migriert. Die Anwendung verwendet V2 nach dem Neustart als primäre Datenbank.",
+          "restartTitle": "Neustart erforderlich",
+          "restartBody": "Starten Sie die Anwendung neu, um zur V2-Datenbank zu wechseln. Die Bereinigung der Legacy-Datenbank ist nach dem Neustart verfügbar.",
+          "fallbackError": "Abweichung der Datensatzanzahl zwischen Legacy- und V2-Datenbank. Einige Datensätze wurden möglicherweise nicht korrekt migriert.",
+          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Der Dual-Write-Modus stellt sicher, dass während der Migration keine Daten verloren gehen.",
+          "sourceLegacy": "Quelle (Legacy)",
+          "targetV2": "Ziel (V2)",
+          "recordsLabel": "Datensätze",
+          "sizeLabel": "Größe",
+          "prerequisitesNotMet": "Voraussetzungen nicht erfüllt – beheben Sie die kritischen Probleme unten",
+          "validatingTitle": "Daten werden überprüft",
+          "validatingBody": "{count} Legacy-Datensätze werden mit der V2-Datenbank verglichen...",
+          "dirtyRecordsCatchup": "{count} schmutzige Datensätze — Nachholabgleich wird versucht",
+          "cutoverTitle": "Umstellung wird abgeschlossen",
+          "cutoverBody": "Übergang zur V2-Datenbank wird abgeschlossen...",
+          "migratingPhase": "Migriere {phase}",
+          "progressLabel": "Fortschritt",
+          "ofRecords": "/ {count} Datensätze",
+          "percentComplete": "{percent}% abgeschlossen",
+          "recordsPerSec": "{rate} Datensätze/Sek.",
+          "calculating": "Berechne...",
+          "dirtyWriteFailed": "{count} Datensätze konnten nicht geschrieben werden — werden bei der Validierung abgeglichen"
         },
         "phase": {
           "indicator": "Phase {current} von {total}: ",
@@ -831,7 +860,8 @@
           "pause": "Pausieren",
           "resume": "Fortsetzen",
           "cancel": "Abbrechen",
-          "rollback": "Zurücksetzen"
+          "rollback": "Zurücksetzen",
+          "retryValidation": "Retry Validation"
         },
         "confirmCancel": {
           "title": "Migration abbrechen?",
@@ -851,7 +881,8 @@
           "resumeFailed": "Fehler beim Fortsetzen der Migration",
           "cancelFailed": "Fehler beim Abbrechen der Migration",
           "rollbackFailed": "Fehler beim Zurücksetzen der Migration",
-          "fetchFailed": "Fehler beim Abrufen des Migrationsstatus"
+          "fetchFailed": "Fehler beim Abrufen des Migrationsstatus",
+          "retryValidationFailed": "Failed to retry validation"
         },
         "worker": {
           "running": "Worker läuft",
@@ -910,6 +941,19 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} bestanden",
+          "criticalCount": "{count} kritisch",
+          "warningCount": "{count} Warnung(en)",
+          "rerun": "Erneut prüfen",
+          "showDetails": "Details anzeigen",
+          "hideDetails": "Details ausblenden",
+          "status": {
+            "passed": "Bestanden",
+            "failed": "Fehlgeschlagen",
+            "error": "Fehler",
+            "warning": "Warnung",
+            "skipped": "Übersprungen"
           }
         },
         "requiredNote": "Die Datenbankmigration ist für kommende BirdNET-Go-Funktionen erforderlich, die das neue normalisierte Datenbankschema nutzen. Neue Funktionen sind erst nach Abschluss der Migration verfügbar.",
@@ -919,6 +963,29 @@
           "message": "Die Migration kopiert Ihre Erkennungsdaten von der aktuellen Datenbank in eine neue normalisierte Datenbank. Ihre ursprüngliche Datenbank bleibt unverändert. Es wird jedoch empfohlen, ein Backup zu erstellen, falls unerwartete Probleme auftreten.",
           "checkbox": "Ich bestätige, dass ich meine Datenbank gesichert habe oder die Risiken verstehe, ohne Backup fortzufahren.",
           "note": "Sie können ein Backup über die Schaltfläche \"Backup herunterladen\" oben herunterladen."
+        },
+        "details": {
+          "title": "Datenbankdetails",
+          "detections": "{count} Erkennungen",
+          "lastBackup": "Letzte Sicherung: {date}",
+          "noBackups": "Keine Sicherungen",
+          "integrity": "Integrität: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (Ziel)",
+          "active": "Aktiv",
+          "migration": "Migration",
+          "complete": "Abgeschlossen",
+          "recordsMigrated": "{count} Datensätze migriert",
+          "readyToMigrate": "Bereit zur Migration",
+          "recordsInLegacy": "{count} Datensätze in Legacy",
+          "comparingRecords": "Datensatzanzahl wird verglichen...",
+          "validationFailed": "Validierung fehlgeschlagen",
+          "rate": "Rate",
+          "recPerSec": "{rate} Dat./s",
+          "dayAvg": "~{count} / Tag Durchschn.",
+          "dayHistory": "30-Tage-Verlauf"
         }
       },
       "legacy": {
@@ -1024,7 +1091,9 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools."
+          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "chartLabel": "Erkennungsrate über 24 Stunden",
+          "detectionsTooltip": "{count} Erkennungen"
         },
         "tables": {
           "title": "Tables",
@@ -1034,7 +1103,8 @@
           "rows": "Rows",
           "size": "Size",
           "usage": "Usage"
-        }
+        },
+        "loading": "Laden..."
       },
       "backup": {
         "download": "Backup herunterladen",
@@ -1043,7 +1113,28 @@
         "creating": "Backup wird erstellt...",
         "cancel": "Abbrechen",
         "retry": "Erneut versuchen",
-        "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)"
+        "mysqlNote": "MySQL-Backup erfordert externe Tools (mysqldump)",
+        "history": {
+          "title": "Sicherungsverlauf",
+          "creating": "Wird erstellt...",
+          "createBackup": "Sicherung erstellen",
+          "noBackups": "Noch keine Sicherungen",
+          "download": "Herunterladen",
+          "failed": "Fehlgeschlagen",
+          "columns": {
+            "date": "Datum",
+            "database": "Datenbank",
+            "size": "Größe",
+            "status": "Status",
+            "actions": "Aktionen"
+          },
+          "status": {
+            "pending": "Ausstehend",
+            "in_progress": "In Bearbeitung",
+            "completed": "Abgeschlossen",
+            "failed": "Fehlgeschlagen"
+          }
+        }
       },
       "notInitialized": "Nicht initialisiert"
     },

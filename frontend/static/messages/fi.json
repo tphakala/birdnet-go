@@ -667,6 +667,11 @@
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
       "error": "Virhe havainnon latauksessa: {error}"
+    },
+    "viewToggle": {
+      "label": "View mode",
+      "table": "Table view",
+      "cards": "Card view"
     }
   },
   "species": {
@@ -797,7 +802,8 @@
           "paused": "Keskeytetty",
           "validating": "Vahvistetaan",
           "cutover": "Vaihto käynnissä",
-          "completed": "Migraatio valmis"
+          "completed": "Migraatio valmis",
+          "failed": "Validation Failed"
         },
         "progress": {
           "title": "Migraation edistyminen",
@@ -808,7 +814,30 @@
           "remaining": "Jäljellä: {time}",
           "eta": "Arvioitu jäljellä oleva aika",
           "dirtyIds": "{count} tietuetta odottaa",
-          "paused": "Migraatio keskeytetty"
+          "paused": "Migraatio keskeytetty",
+          "completedTitle": "Siirto valmis",
+          "completedBody": "Kaikki {count} tietuetta on siirretty onnistuneesti V2-tietokantaan. Sovellus käyttää V2:ta ensisijaisena tietokantana uudelleenkäynnistyksen jälkeen.",
+          "restartTitle": "Uudelleenkäynnistys vaaditaan",
+          "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
+          "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
+          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Kaksoistallennustila varmistaa, ettei tietoja menetetä siirron aikana.",
+          "sourceLegacy": "Lähde (vanha)",
+          "targetV2": "Kohde (V2)",
+          "recordsLabel": "Tietueet",
+          "sizeLabel": "Koko",
+          "prerequisitesNotMet": "Edellytykset eivät täyty – ratkaise alla olevat kriittiset ongelmat",
+          "validatingTitle": "Tietojen tarkistus",
+          "validatingBody": "Verrataan {count} vanhaa tietuetta V2-tietokantaan...",
+          "dirtyRecordsCatchup": "{count} muuttunutta tietuetta — yritetään täsmäytystä",
+          "cutoverTitle": "Viimeistellään siirtymä",
+          "cutoverBody": "Viimeistellään siirtymä V2-tietokantaan...",
+          "migratingPhase": "Siirretään {phase}",
+          "progressLabel": "Edistyminen",
+          "ofRecords": "/ {count} tietuetta",
+          "percentComplete": "{percent}% valmis",
+          "recordsPerSec": "{rate} tietuetta/s",
+          "calculating": "Lasketaan...",
+          "dirtyWriteFailed": "{count} tietueen kirjoitus epäonnistui — täsmäytetään tarkistuksen aikana"
         },
         "phase": {
           "indicator": "Vaihe {current}/{total}: ",
@@ -831,7 +860,8 @@
           "pause": "Keskeytä",
           "resume": "Jatka",
           "cancel": "Peruuta",
-          "rollback": "Palauta"
+          "rollback": "Palauta",
+          "retryValidation": "Retry Validation"
         },
         "confirmCancel": {
           "title": "Peruuta migraatio?",
@@ -851,7 +881,8 @@
           "resumeFailed": "Migraation jatkaminen epäonnistui",
           "cancelFailed": "Migraation peruutus epäonnistui",
           "rollbackFailed": "Migraation palautus epäonnistui",
-          "fetchFailed": "Migraation tilan haku epäonnistui"
+          "fetchFailed": "Migraation tilan haku epäonnistui",
+          "retryValidationFailed": "Failed to retry validation"
         },
         "worker": {
           "running": "Worker käynnissä",
@@ -910,6 +941,19 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} hyväksytty",
+          "criticalCount": "{count} kriittistä",
+          "warningCount": "{count} varoitusta",
+          "rerun": "Suorita uudelleen",
+          "showDetails": "Näytä tiedot",
+          "hideDetails": "Piilota tiedot",
+          "status": {
+            "passed": "Hyväksytty",
+            "failed": "Epäonnistui",
+            "error": "Virhe",
+            "warning": "Varoitus",
+            "skipped": "Ohitettu"
           }
         },
         "requiredNote": "Tietokannan migraatio vaaditaan tulevien BirdNET-Go-ominaisuuksien vuoksi, jotka hyödyntävät uutta normalisoitua tietokantaskeemaa. Uudet ominaisuudet eivät ole käytettävissä ennen migraation valmistumista.",
@@ -919,6 +963,29 @@
           "message": "Migraatio kopioi havaintotietosi nykyisestä tietokannasta uuteen normalisoituun tietokantaan. Alkuperäinen tietokantasi säilyy muuttumattomana. Varmuuskopion luominen on kuitenkin suositeltavaa odottamattomien ongelmien varalta.",
           "checkbox": "Vahvistan, että olen varmuuskopioinut tietokantani tai ymmärrän riskit jatkamisesta ilman varmuuskopiota.",
           "note": "Voit ladata varmuuskopion käyttämällä yllä olevaa \"Lataa varmuuskopio\" -painiketta."
+        },
+        "details": {
+          "title": "Tietokannan tiedot",
+          "detections": "{count} tunnistusta",
+          "lastBackup": "Viimeisin varmuuskopio: {date}",
+          "noBackups": "Ei varmuuskopioita",
+          "integrity": "Eheys: {status}"
+        },
+        "strip": {
+          "legacy": "Vanha",
+          "v2Target": "V2 (kohde)",
+          "active": "Aktiivinen",
+          "migration": "Siirto",
+          "complete": "Valmis",
+          "recordsMigrated": "{count} tietuetta siirretty",
+          "readyToMigrate": "Valmis siirtoon",
+          "recordsInLegacy": "{count} tietuetta vanhassa",
+          "comparingRecords": "Verrataan tietuemääriä...",
+          "validationFailed": "Tarkistus epäonnistui",
+          "rate": "Nopeus",
+          "recPerSec": "{rate} tiet./s",
+          "dayAvg": "~{count} / päivä keskim.",
+          "dayHistory": "30 päivän historia"
         }
       },
       "legacy": {
@@ -1024,7 +1091,9 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools."
+          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "chartLabel": "Tunnistusprosentti 24 tunnin ajalta",
+          "detectionsTooltip": "{count} tunnistusta"
         },
         "tables": {
           "title": "Tables",
@@ -1034,7 +1103,8 @@
           "rows": "Rows",
           "size": "Size",
           "usage": "Usage"
-        }
+        },
+        "loading": "Ladataan..."
       },
       "backup": {
         "download": "Lataa varmuuskopio",
@@ -1043,7 +1113,28 @@
         "creating": "Luodaan varmuuskopiota...",
         "cancel": "Peruuta",
         "retry": "Yritä uudelleen",
-        "mysqlNote": "MySQL-varmuuskopiointi vaatii ulkoisia työkaluja (mysqldump)"
+        "mysqlNote": "MySQL-varmuuskopiointi vaatii ulkoisia työkaluja (mysqldump)",
+        "history": {
+          "title": "Varmuuskopiohistoria",
+          "creating": "Luodaan...",
+          "createBackup": "Luo varmuuskopio",
+          "noBackups": "Ei varmuuskopioita vielä",
+          "download": "Lataa",
+          "failed": "Epäonnistui",
+          "columns": {
+            "date": "Päivämäärä",
+            "database": "Tietokanta",
+            "size": "Koko",
+            "status": "Tila",
+            "actions": "Toiminnot"
+          },
+          "status": {
+            "pending": "Odottaa",
+            "in_progress": "Käynnissä",
+            "completed": "Valmis",
+            "failed": "Epäonnistui"
+          }
+        }
       },
       "notInitialized": "Ei alustettu"
     },

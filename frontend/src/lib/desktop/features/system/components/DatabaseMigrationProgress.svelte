@@ -12,6 +12,7 @@
     AlertTriangle,
   } from '@lucide/svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
+  import { t } from '$lib/i18n';
   import type { MigrationStatus, DatabaseStats, PrerequisitesResponse } from '$lib/types/migration';
 
   interface Props {
@@ -59,26 +60,9 @@
   );
 
   function stateLabel(state: string): string {
-    switch (state) {
-      case 'idle':
-        return 'Idle';
-      case 'initializing':
-        return 'Initializing';
-      case 'dual_write':
-        return 'Dual Write';
-      case 'migrating':
-        return 'Migrating';
-      case 'validating':
-        return 'Validating';
-      case 'cutover':
-        return 'Cutover';
-      case 'completed':
-        return 'Completed';
-      case 'failed':
-        return 'Failed';
-      default:
-        return state;
-    }
+    const key = `system.database.migration.status.${state}`;
+    const translated = t(key);
+    return translated === key ? state : translated;
   }
 
   function stateBadgeClass(state: string): string {
@@ -103,21 +87,10 @@
   }
 
   function bannerMessage(state: string): string {
-    if (isPaused) return 'Migration paused. Resume when ready to continue.';
-    switch (state) {
-      case 'initializing':
-        return 'Initializing migration — setting up dual-write mode.';
-      case 'dual_write':
-        return 'Dual-write active — new detections are written to both databases.';
-      case 'migrating':
-        return 'Migrating historical records to the V2 database.';
-      case 'validating':
-        return 'Validating migrated data against the legacy database.';
-      case 'cutover':
-        return 'Completing cutover — switching primary database to V2.';
-      default:
-        return '';
-    }
+    if (isPaused) return t('system.database.migration.notes.paused');
+    const key = `system.database.migration.notes.${state}`;
+    const translated = t(key);
+    return translated === key ? '' : translated;
   }
 </script>
 
@@ -128,12 +101,15 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-3">
     <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-      Migration Progress
+      {t('system.database.migration.progress.title')}
     </h3>
     <div class="flex items-center gap-2">
       {#if status?.current_phase && !isIdle && !isCompleted}
         <span class="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
-          Phase {status.phase_number} of {status.total_phases}
+          {t('system.database.migration.phase.indicator', {
+            current: status.phase_number,
+            total: status.total_phases,
+          })}
         </span>
         <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {stateBadgeClass(migState)}">
           {phaseName}
@@ -144,22 +120,23 @@
           isPaused ? 'paused' : migState
         )}"
       >
-        {isPaused ? 'Paused' : stateLabel(migState)}
+        {isPaused ? t('system.database.migration.status.paused') : stateLabel(migState)}
       </span>
     </div>
   </div>
 
   <!-- STATE: Completed -->
   {#if isCompleted}
-    <div class="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10">
+    <div class="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10" role="status">
       <CheckCircle class="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
       <div>
         <p class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-          Migration Completed
+          {t('system.database.migration.progress.completedTitle')}
         </p>
         <p class="text-xs mt-1 text-slate-500 dark:text-slate-400">
-          All {formatNumber(status?.total_records ?? 0)} records have been successfully migrated to the
-          V2 database. The application will use V2 as the primary database after restart.
+          {t('system.database.migration.progress.completedBody', {
+            count: formatNumber(status?.total_records ?? 0),
+          })}
         </p>
       </div>
     </div>
@@ -169,10 +146,11 @@
       <div class="flex items-start gap-3 p-3 rounded-lg bg-blue-500/10">
         <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
         <div class="flex-1">
-          <p class="text-sm font-medium text-blue-700 dark:text-blue-300">Restart Required</p>
+          <p class="text-sm font-medium text-blue-700 dark:text-blue-300">
+            {t('system.database.migration.progress.restartTitle')}
+          </p>
           <p class="text-xs mt-0.5 text-slate-500 dark:text-slate-400">
-            Restart the application to switch to the V2 database. Legacy database cleanup will be
-            available after restart.
+            {t('system.database.migration.progress.restartBody')}
           </p>
         </div>
       </div>
@@ -180,17 +158,18 @@
 
     <!-- STATE: Failed -->
   {:else if isFailed}
-    <div class="flex items-start gap-3 p-4 rounded-lg bg-red-500/10">
+    <div class="flex items-start gap-3 p-4 rounded-lg bg-red-500/10" role="alert">
       <CircleAlert class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
       <div class="flex-1">
-        <p class="text-sm font-semibold text-red-700 dark:text-red-300">Validation Failed</p>
+        <p class="text-sm font-semibold text-red-700 dark:text-red-300">
+          {t('system.database.migration.status.failed')}
+        </p>
         <p class="text-xs mt-1 text-slate-500 dark:text-slate-400">
-          {status?.error_message ??
-            'Record count mismatch between legacy and V2 databases. Some records may not have migrated correctly.'}
+          {status?.error_message ?? t('system.database.migration.progress.fallbackError')}
         </p>
         {#if status && status.dirty_id_count > 0}
           <p class="text-xs mt-1 font-medium text-amber-600 dark:text-amber-400">
-            {status.dirty_id_count} dirty records pending reconciliation
+            {t('system.database.migration.progress.dirtyIds', { count: status.dirty_id_count })}
           </p>
         {/if}
       </div>
@@ -204,7 +183,7 @@
           class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20 transition-colors"
         >
           <RotateCcw class="w-3.5 h-3.5" />
-          Retry Validation
+          {t('system.database.migration.actions.retryValidation')}
         </button>
       {/if}
       {#if status?.can_cancel}
@@ -213,7 +192,7 @@
           class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
         >
           <Square class="w-3.5 h-3.5" />
-          Cancel
+          {t('system.database.migration.actions.cancel')}
         </button>
       {/if}
     </div>
@@ -225,8 +204,9 @@
     >
       <Info class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
       <span>
-        Migration will transfer {formatNumber(legacyStats?.total_detections ?? 0)} records from the legacy
-        database to the new V2 schema. Dual-write mode ensures zero data loss during migration.
+        {t('system.database.migration.progress.migrateInfo', {
+          count: formatNumber(legacyStats?.total_detections ?? 0),
+        })}
       </span>
     </div>
 
@@ -235,17 +215,23 @@
       <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
         <div class="flex items-center gap-2 mb-2">
           <Database class="w-3.5 h-3.5 text-amber-500" />
-          <span class="text-xs font-medium">Source (Legacy)</span>
+          <span class="text-xs font-medium"
+            >{t('system.database.migration.progress.sourceLegacy')}</span
+          >
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
-            <span class="text-slate-400 dark:text-slate-500">Records</span>
+            <span class="text-slate-400 dark:text-slate-500"
+              >{t('system.database.migration.progress.recordsLabel')}</span
+            >
             <span class="tabular-nums font-medium"
               >{formatNumber(legacyStats?.total_detections ?? 0)}</span
             >
           </div>
           <div class="flex justify-between text-xs">
-            <span class="text-slate-400 dark:text-slate-500">Size</span>
+            <span class="text-slate-400 dark:text-slate-500"
+              >{t('system.database.migration.progress.sizeLabel')}</span
+            >
             <span class="tabular-nums font-medium"
               >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
             >
@@ -255,17 +241,22 @@
       <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
         <div class="flex items-center gap-2 mb-2">
           <Database class="w-3.5 h-3.5 text-emerald-500" />
-          <span class="text-xs font-medium">Target (V2)</span>
+          <span class="text-xs font-medium">{t('system.database.migration.progress.targetV2')}</span
+          >
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
-            <span class="text-slate-400 dark:text-slate-500">Records</span>
+            <span class="text-slate-400 dark:text-slate-500"
+              >{t('system.database.migration.progress.recordsLabel')}</span
+            >
             <span class="tabular-nums font-medium"
               >{formatNumber(v2Stats?.total_detections ?? 0)}</span
             >
           </div>
           <div class="flex justify-between text-xs">
-            <span class="text-slate-400 dark:text-slate-500">Size</span>
+            <span class="text-slate-400 dark:text-slate-500"
+              >{t('system.database.migration.progress.sizeLabel')}</span
+            >
             <span class="tabular-nums font-medium"
               >{formatBytesCompact(v2Stats?.size_bytes ?? 0)}</span
             >
@@ -283,10 +274,10 @@
       >
         {#if isStarting}
           <Loader2 class="w-4 h-4 animate-spin" />
-          Starting...
+          {t('system.database.migration.starting')}
         {:else}
           <Play class="w-4 h-4" />
-          Start Migration
+          {t('system.database.migration.actions.start')}
         {/if}
       </button>
     {:else}
@@ -295,10 +286,10 @@
         disabled
       >
         <Play class="w-4 h-4" />
-        Start Migration
+        {t('system.database.migration.actions.start')}
       </button>
       <p class="text-[10px] text-center mt-1.5 text-red-500">
-        Prerequisites not met — resolve critical issues below
+        {t('system.database.migration.progress.prerequisitesNotMet')}
       </p>
     {/if}
 
@@ -314,21 +305,27 @@
     <!-- Validation in progress -->
     <div class="p-4 rounded-lg text-center bg-black/[0.03] dark:bg-white/[0.03]">
       <Loader2 class="w-6 h-6 mx-auto mb-2 text-violet-500 animate-spin" />
-      <p class="text-sm font-medium">Validating Data</p>
+      <p class="text-sm font-medium">{t('system.database.migration.progress.validatingTitle')}</p>
       <p class="text-xs mt-1 text-slate-400 dark:text-slate-500">
-        Comparing {formatNumber(legacyStats?.total_detections ?? 0)} legacy records against V2 database...
+        {t('system.database.migration.progress.validatingBody', {
+          count: formatNumber(legacyStats?.total_detections ?? 0),
+        })}
       </p>
 
       <!-- Indeterminate progress bar -->
       <div
         class="h-2 rounded-full overflow-hidden mt-3 mx-auto max-w-xs bg-black/[0.03] dark:bg-white/[0.03]"
+        role="progressbar"
+        aria-label={t('system.database.migration.progress.validatingTitle')}
       >
         <div class="h-full w-1/3 rounded-full bg-violet-500 animate-validating"></div>
       </div>
 
       {#if status && status.dirty_id_count > 0}
         <p class="text-xs mt-2 text-amber-600 dark:text-amber-400">
-          {status.dirty_id_count} dirty records — will attempt catch-up reconciliation
+          {t('system.database.migration.progress.dirtyRecordsCatchup', {
+            count: status.dirty_id_count,
+          })}
         </p>
       {/if}
     </div>
@@ -340,7 +337,7 @@
           class="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
         >
           <Square class="w-3.5 h-3.5" />
-          Cancel
+          {t('system.database.migration.actions.cancel')}
         </button>
       </div>
     {/if}
@@ -356,9 +353,9 @@
 
     <div class="p-4 rounded-lg text-center bg-black/[0.03] dark:bg-white/[0.03]">
       <Loader2 class="w-6 h-6 mx-auto mb-2 text-amber-500 animate-spin" />
-      <p class="text-sm font-medium">Completing Cutover</p>
+      <p class="text-sm font-medium">{t('system.database.migration.progress.cutoverTitle')}</p>
       <p class="text-xs mt-1 text-slate-400 dark:text-slate-500">
-        Finalizing transition to V2 database...
+        {t('system.database.migration.progress.cutoverBody')}
       </p>
     </div>
 
@@ -391,10 +388,13 @@
             <Pause class="w-3.5 h-3.5 text-amber-500" />
           {/if}
           <span class="text-sm font-medium">
-            Migrating {phaseName}
+            {t('system.database.migration.progress.migratingPhase', { phase: phaseName })}
           </span>
           <span class="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
-            Phase {status.phase_number} of {status.total_phases}
+            {t('system.database.migration.phase.indicator', {
+              current: status.phase_number,
+              total: status.total_phases,
+            })}
           </span>
         </div>
       {/if}
@@ -402,15 +402,26 @@
       <!-- Progress bar -->
       <div>
         <div class="flex items-center justify-between mb-1.5">
-          <span class="text-sm font-medium">Progress</span>
+          <span class="text-sm font-medium"
+            >{t('system.database.migration.progress.progressLabel')}</span
+          >
           <div class="text-sm tabular-nums">
             <span class="font-semibold">{formatNumber(status?.migrated_records ?? 0)}</span>
             <span class="text-slate-400 dark:text-slate-500">
-              / {formatNumber(status?.total_records ?? 0)} records</span
+              {t('system.database.migration.progress.ofRecords', {
+                count: formatNumber(status?.total_records ?? 0),
+              })}</span
             >
           </div>
         </div>
-        <div class="h-3 rounded-full overflow-hidden bg-black/[0.03] dark:bg-white/[0.03]">
+        <div
+          class="h-3 rounded-full overflow-hidden bg-black/[0.03] dark:bg-white/[0.03]"
+          role="progressbar"
+          aria-label={t('system.database.migration.progress.title')}
+          aria-valuenow={Math.min(status?.progress_percent ?? 0, 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
           <div
             class="h-full rounded-full transition-all duration-300 {isPaused
               ? 'bg-amber-500'
@@ -421,19 +432,27 @@
         <div
           class="grid grid-cols-3 mt-1.5 text-[10px] tabular-nums text-slate-400 dark:text-slate-500"
         >
-          <span>{(status?.progress_percent ?? 0).toFixed(1)}% complete</span>
+          <span
+            >{t('system.database.migration.progress.percentComplete', {
+              percent: (status?.progress_percent ?? 0).toFixed(1),
+            })}</span
+          >
           <span class="text-center">
             {isPaused
               ? '\u2014'
-              : `${formatNumber(Math.round(status?.records_per_second ?? 0))} records/sec`}
+              : t('system.database.migration.progress.recordsPerSec', {
+                  rate: formatNumber(Math.round(status?.records_per_second ?? 0)),
+                })}
           </span>
           <span class="text-right">
             {#if isPaused}
-              Paused
+              {t('system.database.migration.status.paused')}
             {:else if status?.estimated_remaining}
-              ETA: {status.estimated_remaining}
+              {t('system.database.migration.progress.remaining', {
+                time: status.estimated_remaining,
+              })}
             {:else}
-              Calculating...
+              {t('system.database.migration.progress.calculating')}
             {/if}
           </span>
         </div>
@@ -444,8 +463,9 @@
         <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 text-xs">
           <AlertTriangle class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
           <span class="text-amber-700 dark:text-amber-300">
-            <strong>{status.dirty_id_count}</strong> records failed to write — will be reconciled during
-            validation
+            {t('system.database.migration.progress.dirtyWriteFailed', {
+              count: status.dirty_id_count,
+            })}
           </span>
         </div>
       {/if}
@@ -456,17 +476,23 @@
           <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
             <div class="flex items-center gap-2 mb-2">
               <Database class="w-3.5 h-3.5 text-amber-500" />
-              <span class="text-xs font-medium">Source (Legacy)</span>
+              <span class="text-xs font-medium"
+                >{t('system.database.migration.progress.sourceLegacy')}</span
+              >
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-slate-400 dark:text-slate-500">Records</span>
+                <span class="text-slate-400 dark:text-slate-500"
+                  >{t('system.database.migration.progress.recordsLabel')}</span
+                >
                 <span class="tabular-nums font-medium"
                   >{formatNumber(legacyStats?.total_detections ?? 0)}</span
                 >
               </div>
               <div class="flex justify-between text-xs">
-                <span class="text-slate-400 dark:text-slate-500">Size</span>
+                <span class="text-slate-400 dark:text-slate-500"
+                  >{t('system.database.migration.progress.sizeLabel')}</span
+                >
                 <span class="tabular-nums font-medium"
                   >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
                 >
@@ -477,11 +503,15 @@
           <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
             <div class="flex items-center gap-2 mb-2">
               <Database class="w-3.5 h-3.5 text-emerald-500" />
-              <span class="text-xs font-medium">Target (V2)</span>
+              <span class="text-xs font-medium"
+                >{t('system.database.migration.progress.targetV2')}</span
+              >
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-slate-400 dark:text-slate-500">Records</span>
+                <span class="text-slate-400 dark:text-slate-500"
+                  >{t('system.database.migration.progress.recordsLabel')}</span
+                >
                 <span class="tabular-nums font-medium"
                   >{formatNumber(
                     (v2Stats?.total_detections ?? 0) + (status?.migrated_records ?? 0)
@@ -489,7 +519,9 @@
                 >
               </div>
               <div class="flex justify-between text-xs">
-                <span class="text-slate-400 dark:text-slate-500">Size</span>
+                <span class="text-slate-400 dark:text-slate-500"
+                  >{t('system.database.migration.progress.sizeLabel')}</span
+                >
                 <span class="tabular-nums font-medium"
                   >{formatBytesCompact(
                     (v2Stats?.size_bytes ?? 0) +
@@ -511,7 +543,7 @@
               class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
             >
               <Play class="w-3.5 h-3.5" />
-              Resume
+              {t('system.database.migration.actions.resume')}
             </button>
           {/if}
         {:else if status?.can_pause}
@@ -520,7 +552,7 @@
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border border-[var(--border-100)] cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
           >
             <Pause class="w-3.5 h-3.5" />
-            Pause
+            {t('system.database.migration.actions.pause')}
           </button>
         {/if}
         {#if status?.can_cancel}
@@ -529,7 +561,7 @@
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20"
           >
             <Square class="w-3.5 h-3.5" />
-            Cancel
+            {t('system.database.migration.actions.cancel')}
           </button>
         {/if}
       </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scaleLinear, scaleBand } from 'd3-scale';
   import { max } from 'd3-array';
+  import { t } from '$lib/i18n';
   import type { HourlyCount } from '$lib/types/database';
 
   interface Props {
@@ -61,11 +62,22 @@
   }
 </script>
 
-<svg {width} {height} viewBox="0 0 {width} {height}" class="overflow-visible">
+<svg
+  {width}
+  {height}
+  viewBox="0 0 {width} {height}"
+  class="overflow-visible"
+  role="img"
+  aria-label={t('system.database.dashboard.detectionRate.chartLabel')}
+>
   <g transform="translate({margin.left},{margin.top})">
     {#each chartData.bars as bar, i (i)}
       <rect x={bar.x} y={bar.y} width={bar.w} height={bar.h} fill={color} opacity="0.7" rx="1">
-        <title>{bar.count} detections</title>
+        <title
+          >{t('system.database.dashboard.detectionRate.detectionsTooltip', {
+            count: bar.count,
+          })}</title
+        >
       </rect>
       {#if showLabel(i)}
         <text

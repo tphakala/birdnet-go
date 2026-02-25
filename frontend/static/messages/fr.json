@@ -667,6 +667,11 @@
       "serverError": "Erreur serveur. Veuillez réessayer plus tard ou contacter le support si le problème persiste.",
       "loadFailed": "Échec du chargement de la détection (Erreur {status}). Veuillez actualiser la page.",
       "noIdProvided": "Aucun identifiant de détection fourni."
+    },
+    "viewToggle": {
+      "label": "View mode",
+      "table": "Table view",
+      "cards": "Card view"
     }
   },
   "species": {
@@ -797,7 +802,8 @@
           "paused": "En pause",
           "validating": "Validation",
           "cutover": "Basculement en cours",
-          "completed": "Migration terminée"
+          "completed": "Migration terminée",
+          "failed": "Validation Failed"
         },
         "progress": {
           "title": "Progression de la migration",
@@ -808,7 +814,30 @@
           "remaining": "Restant : {time}",
           "eta": "Temps restant estimé",
           "dirtyIds": "{count} enregistrements en attente",
-          "paused": "Migration en pause"
+          "paused": "Migration en pause",
+          "completedTitle": "Migration terminée",
+          "completedBody": "Les {count} enregistrements ont été migrés avec succès vers la base de données V2. L'application utilisera V2 comme base de données principale après le redémarrage.",
+          "restartTitle": "Redémarrage requis",
+          "restartBody": "Redémarrez l'application pour basculer vers la base de données V2. Le nettoyage de l'ancienne base de données sera disponible après le redémarrage.",
+          "fallbackError": "Incohérence du nombre d'enregistrements entre les bases de données ancienne et V2. Certains enregistrements n'ont peut-être pas été migrés correctement.",
+          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Le mode double écriture garantit zéro perte de données pendant la migration.",
+          "sourceLegacy": "Source (ancienne)",
+          "targetV2": "Cible (V2)",
+          "recordsLabel": "Enregistrements",
+          "sizeLabel": "Taille",
+          "prerequisitesNotMet": "Prérequis non remplis — résolvez les problèmes critiques ci-dessous",
+          "validatingTitle": "Validation des données",
+          "validatingBody": "Comparaison de {count} enregistrements avec la base de données V2...",
+          "dirtyRecordsCatchup": "{count} enregistrements modifiés — tentative de réconciliation",
+          "cutoverTitle": "Finalisation du basculement",
+          "cutoverBody": "Finalisation de la transition vers la base de données V2...",
+          "migratingPhase": "Migration de {phase}",
+          "progressLabel": "Progression",
+          "ofRecords": "/ {count} enregistrements",
+          "percentComplete": "{percent}% terminé",
+          "recordsPerSec": "{rate} enregistrements/s",
+          "calculating": "Calcul...",
+          "dirtyWriteFailed": "{count} enregistrements n'ont pas pu être écrits — seront réconciliés lors de la validation"
         },
         "phase": {
           "indicator": "Phase {current} sur {total} : ",
@@ -831,7 +860,8 @@
           "pause": "Pause",
           "resume": "Reprendre",
           "cancel": "Annuler",
-          "rollback": "Restaurer"
+          "rollback": "Restaurer",
+          "retryValidation": "Retry Validation"
         },
         "confirmCancel": {
           "title": "Annuler la migration ?",
@@ -851,7 +881,8 @@
           "resumeFailed": "Échec de la reprise de la migration",
           "cancelFailed": "Échec de l'annulation de la migration",
           "rollbackFailed": "Échec de la restauration de la migration",
-          "fetchFailed": "Échec de la récupération du statut de migration"
+          "fetchFailed": "Échec de la récupération du statut de migration",
+          "retryValidationFailed": "Failed to retry validation"
         },
         "worker": {
           "running": "Worker en cours",
@@ -910,6 +941,19 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} réussis",
+          "criticalCount": "{count} critique(s)",
+          "warningCount": "{count} avertissement(s)",
+          "rerun": "Relancer",
+          "showDetails": "Afficher les détails",
+          "hideDetails": "Masquer les détails",
+          "status": {
+            "passed": "Réussi",
+            "failed": "Échoué",
+            "error": "Erreur",
+            "warning": "Avertissement",
+            "skipped": "Ignoré"
           }
         },
         "requiredNote": "La migration de la base de données est requise pour les prochaines fonctionnalités de BirdNET-Go qui reposent sur le nouveau schéma de base de données normalisé. Les nouvelles fonctionnalités ne seront pas disponibles tant que la migration ne sera pas terminée.",
@@ -919,6 +963,29 @@
           "message": "La migration copiera vos données de détection de la base de données actuelle vers une nouvelle base de données normalisée. Votre base de données d'origine reste inchangée. Cependant, il est recommandé de créer une sauvegarde en cas de problèmes inattendus.",
           "checkbox": "Je confirme avoir sauvegardé ma base de données ou comprendre les risques de continuer sans sauvegarde.",
           "note": "Vous pouvez télécharger une sauvegarde en utilisant le bouton \"Télécharger la sauvegarde\" ci-dessus."
+        },
+        "details": {
+          "title": "Détails de la base de données",
+          "detections": "{count} détections",
+          "lastBackup": "Dernière sauvegarde : {date}",
+          "noBackups": "Aucune sauvegarde",
+          "integrity": "Intégrité : {status}"
+        },
+        "strip": {
+          "legacy": "Ancienne",
+          "v2Target": "V2 (cible)",
+          "active": "Actif",
+          "migration": "Migration",
+          "complete": "Terminée",
+          "recordsMigrated": "{count} enregistrements migrés",
+          "readyToMigrate": "Prêt pour la migration",
+          "recordsInLegacy": "{count} enregistrements dans l'ancienne",
+          "comparingRecords": "Comparaison du nombre d'enregistrements...",
+          "validationFailed": "Validation échouée",
+          "rate": "Débit",
+          "recPerSec": "{rate} enr./s",
+          "dayAvg": "~{count} / jour moy.",
+          "dayHistory": "Historique 30 jours"
         }
       },
       "legacy": {
@@ -1024,7 +1091,9 @@
           "backupSize": "Backup size",
           "createBackup": "Create Backup",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools."
+          "mysqlBackupNote": "MySQL backups should be managed via mysqldump or your MySQL administration tools.",
+          "chartLabel": "Taux de détection sur 24 heures",
+          "detectionsTooltip": "{count} détections"
         },
         "tables": {
           "title": "Tables",
@@ -1034,7 +1103,8 @@
           "rows": "Rows",
           "size": "Size",
           "usage": "Usage"
-        }
+        },
+        "loading": "Chargement..."
       },
       "backup": {
         "download": "Télécharger la sauvegarde",
@@ -1043,7 +1113,28 @@
         "creating": "Création de la sauvegarde...",
         "cancel": "Annuler",
         "retry": "Réessayer",
-        "mysqlNote": "La sauvegarde MySQL nécessite des outils externes (mysqldump)"
+        "mysqlNote": "La sauvegarde MySQL nécessite des outils externes (mysqldump)",
+        "history": {
+          "title": "Historique des sauvegardes",
+          "creating": "Création...",
+          "createBackup": "Créer une sauvegarde",
+          "noBackups": "Aucune sauvegarde",
+          "download": "Télécharger",
+          "failed": "Échoué",
+          "columns": {
+            "date": "Date",
+            "database": "Base de données",
+            "size": "Taille",
+            "status": "Statut",
+            "actions": "Actions"
+          },
+          "status": {
+            "pending": "En attente",
+            "in_progress": "En cours",
+            "completed": "Terminé",
+            "failed": "Échoué"
+          }
+        }
       },
       "notInitialized": "Non initialisé"
     },
