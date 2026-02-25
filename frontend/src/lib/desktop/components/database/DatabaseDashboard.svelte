@@ -450,8 +450,8 @@
         showEngine={overview.engine === 'mysql'}
       />
 
-      <!-- Legacy cleanup (if legacy DB still exists) -->
-      {#if legacyStatus.data?.exists}
+      <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
+      {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
         <LegacyCleanupCard
           status={legacyStatus.data}
           cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
