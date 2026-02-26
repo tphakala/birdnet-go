@@ -915,9 +915,7 @@
       // Check if new species name already exists
       if (species in updatedConfig) {
         // Prevent overwriting existing configuration
-        toastActions.error(
-          `Species "${species}" already has a configuration. Please choose a different name.`
-        );
+        toastActions.error(t('settings.species.duplicateConfigError', { species }));
         return;
       }
       // Rename: delete old entry and create new

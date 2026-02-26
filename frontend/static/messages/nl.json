@@ -1771,9 +1771,7 @@
         "providersLoadFailed": "Kan afbeeldings leveranciers niet laden. Gebruik standaardwaarden.",
         "rangeFilterTestFailed": "Testen van bereik filter instellingen mislukt",
         "rangeFilterLoadFailed": "Laden van soorten lijst mislukt",
-        "rangeFilterCountFailed": "Laden van soorten aantal mislukt"
-      },
-      "errors": {
+        "rangeFilterCountFailed": "Laden van soorten aantal mislukt",
         "mapLibraryLoadFailed": "Laden van kaartbibliotheek mislukt. Vernieuw de pagina.",
         "mapLoadFailed": "Laden van kaart mislukt. Probeer de pagina te vernieuwen.",
         "modalMapLoadFailed": "Laden van modale kaart mislukt. Sluit het venster en open het opnieuw."
@@ -2856,6 +2854,7 @@
       "saveError": "Opslaan van configuratie voor \"{species}\" mislukt. Probeer het opnieuw.",
       "configUpdated": "Configuratie voor \"{species}\" bijgewerkt",
       "configAdded": "Configuratie voor \"{species}\" toegevoegd",
+      "duplicateConfigError": "Soort \"{species}\" heeft al een configuratie. Kies een andere naam.",
       "activeSpecies": {
         "title": "Actieve Soorten",
         "tabLabel": "Actief",

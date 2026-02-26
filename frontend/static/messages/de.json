@@ -392,7 +392,7 @@
         "cancelledMessage": "Datenbankmigration wurde abgebrochen. Sie können jederzeit eine neue Migration in den Datenbankeinstellungen starten.",
         "completedTitle": "Datenbankmigration abgeschlossen",
         "completedMessage": "Migration abgeschlossen. Bitte starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln.",
-        "errorTitle": "Datenbankmigrationssfehler",
+        "errorTitle": "Datenbankmigrationsfehler",
         "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut. Fehler: {error}"
       },
       "cleanup": {
@@ -2715,6 +2715,7 @@
       "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
       "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
       "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
+      "duplicateConfigError": "Art \"{species}\" hat bereits eine Konfiguration. Bitte wählen Sie einen anderen Namen.",
       "activeSpecies": {
         "title": "Aktive Arten",
         "tabLabel": "Aktiv",

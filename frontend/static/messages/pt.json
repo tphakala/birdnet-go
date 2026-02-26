@@ -1449,11 +1449,6 @@
       "changedAriaLabel": "Configurações alteradas"
     },
     "main": {
-      "errors": {
-        "mapLibraryLoadFailed": "Falha ao carregar a biblioteca de mapas. Atualize a página.",
-        "mapLoadFailed": "Falha ao carregar o mapa. Tente atualizar a página.",
-        "modalMapLoadFailed": "Falha ao carregar o mapa modal. Feche e reabra a janela."
-      },
       "sections": {
         "main": {
           "title": "Configurações principais",
@@ -1773,10 +1768,13 @@
       },
       "errors": {
         "localesLoadFailed": "Não foi possível carregar as opções de idioma. Usando padrões.",
+        "mapLibraryLoadFailed": "Falha ao carregar a biblioteca de mapas. Atualize a página.",
+        "mapLoadFailed": "Falha ao carregar o mapa. Tente atualizar a página.",
+        "modalMapLoadFailed": "Falha ao carregar o mapa modal. Feche e reabra a janela.",
         "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões.",
-        "rangeFilterTestFailed": "Falha ao testar configurações do filtro de alcance",
+        "rangeFilterCountFailed": "Falha ao carregar contagem de espécies",
         "rangeFilterLoadFailed": "Falha ao carregar lista de espécies",
-        "rangeFilterCountFailed": "Falha ao carregar contagem de espécies"
+        "rangeFilterTestFailed": "Falha ao testar configurações do filtro de alcance"
       },
       "tabs": {
         "general": "Geral",
@@ -2717,6 +2715,7 @@
       "saveError": "Falha ao guardar a configuração de \"{species}\". Tente novamente.",
       "configUpdated": "Configuração de \"{species}\" atualizada",
       "configAdded": "Configuração de \"{species}\" adicionada",
+      "duplicateConfigError": "A espécie \"{species}\" já tem uma configuração. Escolha outro nome.",
       "activeSpecies": {
         "title": "Espécies Ativas",
         "tabLabel": "Ativas",

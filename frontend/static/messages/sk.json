@@ -1286,11 +1286,6 @@
       "defaultIndicator": "Predvolený zdroj vstupu"
     },
     "main": {
-      "errors": {
-        "mapLibraryLoadFailed": "Nepodarilo sa načítať knižnicu máp. Obnovte stránku.",
-        "mapLoadFailed": "Nepodarilo sa načítať mapu. Skúste obnoviť stránku.",
-        "modalMapLoadFailed": "Nepodarilo sa načítať modálnu mapu. Zatvorte a znova otvorte okno."
-      },
       "tabs": {
         "general": "Všeobecné",
         "detection": "Detekcia",
@@ -1619,7 +1614,10 @@
         "providersLoadFailed": "Nepodarilo sa načítať poskytovateľov obrázkov. Používajú sa predvolené nastavenia.",
         "rangeFilterTestFailed": "Nepodarilo sa otestovať nastavenia filtra rozsahu",
         "rangeFilterLoadFailed": "Nepodarilo sa načítať zoznam druhov",
-        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov"
+        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov",
+        "mapLibraryLoadFailed": "Nepodarilo sa načítať knižnicu máp. Obnovte stránku.",
+        "mapLoadFailed": "Nepodarilo sa načítať mapu. Skúste obnoviť stránku.",
+        "modalMapLoadFailed": "Nepodarilo sa načítať modálnu mapu. Zatvorte a znova otvorte okno."
       }
     },
     "support": {
@@ -2693,6 +2691,7 @@
       "saveError": "Uloženie konfigurácie pre \"{species}\" zlyhalo. Skúste to znova.",
       "configUpdated": "Konfigurácia pre \"{species}\" aktualizovaná",
       "configAdded": "Konfigurácia pre \"{species}\" pridaná",
+      "duplicateConfigError": "Druh \"{species}\" už má konfiguráciu. Vyberte iný názov.",
       "activeSpecies": {
         "title": "Aktívne druhy",
         "tabLabel": "Aktívne",

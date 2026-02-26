@@ -1252,11 +1252,6 @@
       "defaultIndicator": "Sorgente di input predefinita"
     },
     "main": {
-      "errors": {
-        "mapLibraryLoadFailed": "Caricamento della libreria mappa non riuscito. Aggiorna la pagina.",
-        "mapLoadFailed": "Caricamento della mappa non riuscito. Prova ad aggiornare la pagina.",
-        "modalMapLoadFailed": "Caricamento della mappa modale non riuscito. Chiudi e riapri la finestra."
-      },
       "tabs": {
         "general": "Generale",
         "detection": "Rilevamento",
@@ -1585,7 +1580,10 @@
         "providersLoadFailed": "Impossibile caricare fornitori immagini. Usando predefiniti.",
         "rangeFilterTestFailed": "Impossibile testare impostazioni filtro intervallo",
         "rangeFilterLoadFailed": "Impossibile caricare lista specie",
-        "rangeFilterCountFailed": "Impossibile caricare conteggio specie"
+        "rangeFilterCountFailed": "Impossibile caricare conteggio specie",
+        "mapLibraryLoadFailed": "Caricamento della libreria mappa non riuscito. Aggiorna la pagina.",
+        "mapLoadFailed": "Caricamento della mappa non riuscito. Prova ad aggiornare la pagina.",
+        "modalMapLoadFailed": "Caricamento della mappa modale non riuscito. Chiudi e riapri la finestra."
       }
     },
     "support": {
@@ -2659,6 +2657,7 @@
       "saveError": "Salvataggio della configurazione per \"{species}\" non riuscito. Riprova.",
       "configUpdated": "Configurazione di \"{species}\" aggiornata",
       "configAdded": "Configurazione di \"{species}\" aggiunta",
+      "duplicateConfigError": "La specie \"{species}\" ha già una configurazione. Scegli un altro nome.",
       "activeSpecies": {
         "title": "Specie Attive",
         "tabLabel": "Attive",

@@ -1455,11 +1455,6 @@
       "defaultIndicator": "Domyślne źródło wejściowe"
     },
     "main": {
-      "errors": {
-        "mapLibraryLoadFailed": "Nie udało się załadować biblioteki map. Odśwież stronę.",
-        "mapLoadFailed": "Nie udało się załadować mapy. Spróbuj odświeżyć stronę.",
-        "modalMapLoadFailed": "Nie udało się załadować mapy w oknie modalnym. Zamknij i otwórz okno ponownie."
-      },
       "tabs": {
         "general": "Ogólne",
         "detection": "Detekcja",
@@ -1788,7 +1783,10 @@
         "providersLoadFailed": "Nie można załadować dostawców obrazów. Używanie domyślnych.",
         "rangeFilterTestFailed": "Nie udało się przetestować ustawień filtra zasięgu",
         "rangeFilterLoadFailed": "Nie udało się załadować listy gatunków",
-        "rangeFilterCountFailed": "Nie udało się załadować liczby gatunków"
+        "rangeFilterCountFailed": "Nie udało się załadować liczby gatunków",
+        "mapLibraryLoadFailed": "Nie udało się załadować biblioteki map. Odśwież stronę.",
+        "mapLoadFailed": "Nie udało się załadować mapy. Spróbuj odświeżyć stronę.",
+        "modalMapLoadFailed": "Nie udało się załadować mapy w oknie modalnym. Zamknij i otwórz okno ponownie."
       }
     },
     "support": {
@@ -2862,6 +2860,7 @@
       "saveError": "Nie udało się zapisać konfiguracji dla \"{species}\". Spróbuj ponownie.",
       "configUpdated": "Zaktualizowano konfigurację dla \"{species}\"",
       "configAdded": "Dodano konfigurację dla \"{species}\"",
+      "duplicateConfigError": "Gatunek \"{species}\" ma już konfigurację. Wybierz inną nazwę.",
       "activeSpecies": {
         "title": "Aktywne Gatunki",
         "tabLabel": "Aktywne",
