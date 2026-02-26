@@ -24,6 +24,22 @@ func (a *notificationAdapter) CreateAndBroadcast(title, message string) error {
 	return err
 }
 
+func (a *notificationAdapter) CreateAndBroadcastWithKeys(
+	title, message, titleKey string, titleParams map[string]any,
+	messageKey string, messageParams map[string]any,
+) error {
+	svc := notification.GetService()
+	if svc == nil {
+		return nil // notification service not yet initialized
+	}
+	notif := notification.NewNotification(notification.TypeSystem, notification.PriorityHigh, title, message).
+		WithTitleKey(titleKey, titleParams)
+	if messageKey != "" {
+		notif = notif.WithMessageKey(messageKey, messageParams)
+	}
+	return svc.CreateWithMetadata(notif)
+}
+
 // Initialize creates and starts the alerting engine.
 // It seeds default rules if none exist, creates the engine with the
 // action dispatcher, subscribes to the event bus, and loads rules.

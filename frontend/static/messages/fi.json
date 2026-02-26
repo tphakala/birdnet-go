@@ -398,6 +398,11 @@
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Hälytys: {rule_name} ({event_name})",
+        "firedTitleMetric": "Hälytys: {rule_name} ({metric_name})",
+        "firedTitle": "Hälytys: {rule_name}"
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -3296,7 +3301,45 @@
           "less_or_equal": "pienempi tai yhtä suuri"
         }
       },
-      "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Päivitä tietokanta pääasetuksissa ottaaksesi tämän ominaisuuden käyttöön."
+      "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Päivitä tietokanta pääasetuksissa ottaaksesi tämän ominaisuuden käyttöön.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Uusi laji havaittu",
+          "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
+        },
+        "streamDisconnected": {
+          "name": "Äänivirta katkennut",
+          "description": "Ilmoittaa kun RTSP- tai äänivirran yhteys katkeaa"
+        },
+        "streamError": {
+          "name": "Äänivirran virhe",
+          "description": "Ilmoittaa kun äänivirrassa tapahtuu virhe"
+        },
+        "deviceError": {
+          "name": "Äänilaitteen virhe",
+          "description": "Ilmoittaa kun paikallisessa äänikaappauslaitteessa tapahtuu virhe"
+        },
+        "highCpu": {
+          "name": "Korkea suorittimen käyttö",
+          "description": "Ilmoittaa kun suorittimen käyttö ylittää 90% 5 minuutin ajan"
+        },
+        "highMemory": {
+          "name": "Korkea muistin käyttö",
+          "description": "Ilmoittaa kun muistin käyttö ylittää 90% 5 minuutin ajan"
+        },
+        "lowDisk": {
+          "name": "Vähän levytilaa",
+          "description": "Ilmoittaa kun levyn käyttö ylittää 85% 5 minuutin ajan"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT-yhteys katkennut",
+          "description": "Ilmoittaa kun MQTT-välittäjän yhteys katkeaa"
+        },
+        "birdWeatherFailed": {
+          "name": "BirdWeather-lähetys epäonnistui",
+          "description": "Ilmoittaa kun BirdWeather-lähetys epäonnistuu"
+        }
+      }
     }
   },
   "auth": {

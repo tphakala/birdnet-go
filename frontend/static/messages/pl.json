@@ -398,6 +398,11 @@
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Alarm: {rule_name} ({event_name})",
+        "firedTitleMetric": "Alarm: {rule_name} ({metric_name})",
+        "firedTitle": "Alarm: {rule_name}"
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -3296,7 +3301,45 @@
           "less_or_equal": "less or equal"
         }
       },
-      "v2Required": "Rozszerzony schemat bazy danych jest wymagany dla reguł alertów. Zaktualizuj bazę danych w ustawieniach głównych, aby włączyć tę funkcję."
+      "v2Required": "Rozszerzony schemat bazy danych jest wymagany dla reguł alertów. Zaktualizuj bazę danych w ustawieniach głównych, aby włączyć tę funkcję.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Wykryto nowy gatunek",
+          "description": "Powiadamia, gdy gatunek zostanie wykryty po raz pierwszy"
+        },
+        "streamDisconnected": {
+          "name": "Strumień audio rozłączony",
+          "description": "Powiadamia, gdy strumień RTSP lub audio utraci połączenie"
+        },
+        "streamError": {
+          "name": "Błąd strumienia audio",
+          "description": "Powiadamia, gdy strumień audio napotka błąd"
+        },
+        "deviceError": {
+          "name": "Błąd urządzenia audio",
+          "description": "Powiadamia, gdy lokalne urządzenie przechwytywania audio napotka błąd"
+        },
+        "highCpu": {
+          "name": "Wysokie użycie CPU",
+          "description": "Powiadamia, gdy użycie CPU przekroczy 90% przez 5 minut"
+        },
+        "highMemory": {
+          "name": "Wysokie użycie pamięci",
+          "description": "Powiadamia, gdy użycie pamięci przekroczy 90% przez 5 minut"
+        },
+        "lowDisk": {
+          "name": "Mało miejsca na dysku",
+          "description": "Powiadamia, gdy użycie dysku przekroczy 85% przez 5 minut"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT rozłączony",
+          "description": "Powiadamia, gdy połączenie z brokerem MQTT zostanie utracone"
+        },
+        "birdWeatherFailed": {
+          "name": "Przesyłanie do BirdWeather nie powiodło się",
+          "description": "Powiadamia, gdy przesyłanie do BirdWeather nie powiedzie się"
+        }
+      }
     }
   },
   "auth": {

@@ -29,9 +29,9 @@ const (
 	EventApplicationStarted = "application.started"
 	EventApplicationStopped = "application.stopped"
 
-	EventBirdWeatherFailed  = "integration.birdweather_failed"
-	EventMQTTConnected      = "integration.mqtt_connected"
-	EventMQTTDisconnected   = "integration.mqtt_disconnected"
+	EventBirdWeatherFailed = "integration.birdweather_failed"
+	EventMQTTConnected     = "integration.mqtt_connected"
+	EventMQTTDisconnected  = "integration.mqtt_disconnected"
 
 	EventDeviceStarted = "device.started"
 	EventDeviceStopped = "device.stopped"
@@ -75,4 +75,37 @@ const (
 // Action targets identify where notifications are sent.
 const (
 	TargetBell = "bell"
+)
+
+// Built-in rule i18n key constants.
+// These correspond to entries in the frontend i18n files under
+// "settings.alerts.builtInRules.*".
+const (
+	RuleKeyNewSpeciesName  = "settings.alerts.builtInRules.newSpecies.name"
+	RuleKeyNewSpeciesDesc  = "settings.alerts.builtInRules.newSpecies.description"
+	RuleKeyStreamDiscName  = "settings.alerts.builtInRules.streamDisconnected.name"
+	RuleKeyStreamDiscDesc  = "settings.alerts.builtInRules.streamDisconnected.description"
+	RuleKeyStreamErrorName = "settings.alerts.builtInRules.streamError.name"
+	RuleKeyStreamErrorDesc = "settings.alerts.builtInRules.streamError.description"
+	RuleKeyDeviceErrorName = "settings.alerts.builtInRules.deviceError.name"
+	RuleKeyDeviceErrorDesc = "settings.alerts.builtInRules.deviceError.description"
+	RuleKeyHighCPUName     = "settings.alerts.builtInRules.highCpu.name"
+	RuleKeyHighCPUDesc     = "settings.alerts.builtInRules.highCpu.description"
+	RuleKeyHighMemoryName  = "settings.alerts.builtInRules.highMemory.name"
+	RuleKeyHighMemoryDesc  = "settings.alerts.builtInRules.highMemory.description"
+	RuleKeyLowDiskName     = "settings.alerts.builtInRules.lowDisk.name"
+	RuleKeyLowDiskDesc     = "settings.alerts.builtInRules.lowDisk.description"
+	RuleKeyMQTTDiscName    = "settings.alerts.builtInRules.mqttDisconnected.name"
+	RuleKeyMQTTDiscDesc    = "settings.alerts.builtInRules.mqttDisconnected.description"
+	RuleKeyBirdWeatherName = "settings.alerts.builtInRules.birdWeatherFailed.name"
+	RuleKeyBirdWeatherDesc = "settings.alerts.builtInRules.birdWeatherFailed.description"
+)
+
+// Alert notification i18n key constants.
+// These correspond to entries in the frontend i18n files under
+// "notifications.content.alert.*".
+const (
+	MsgAlertFiredTitleEvent  = "notifications.content.alert.firedTitleEvent"
+	MsgAlertFiredTitleMetric = "notifications.content.alert.firedTitleMetric"
+	MsgAlertFiredTitle       = "notifications.content.alert.firedTitle"
 )

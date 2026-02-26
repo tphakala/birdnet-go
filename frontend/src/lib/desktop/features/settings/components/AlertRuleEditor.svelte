@@ -223,10 +223,20 @@
 
   function handleSave() {
     if (!isValid) return;
+
+    // Preserve translation keys only when the user has not changed the
+    // built-in rule's name/description; clear them otherwise so the
+    // custom text takes precedence.
+    const nameKey = rule?.name_key && name.trim() === rule.name ? rule.name_key : '';
+    const descKey =
+      rule?.description_key && description.trim() === rule.description ? rule.description_key : '';
+
     onSave({
       id: rule?.id,
       name: name.trim(),
       description: description.trim(),
+      name_key: nameKey || undefined,
+      description_key: descKey || undefined,
       enabled,
       object_type: objectType,
       trigger_type: triggerType,

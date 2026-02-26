@@ -68,6 +68,7 @@
     schemaPropertyLabel,
     schemaOperatorLabel,
   } from '$lib/utils/alertSchema';
+  import { translateField } from '$lib/utils/notifications';
 
   const logger = loggers.settings;
 
@@ -480,7 +481,7 @@
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <h4 class="truncate text-sm font-medium text-[var(--color-base-content)]">
-              {rule.name}
+              {translateField(rule.name_key, undefined, rule.name)}
             </h4>
             {#if rule.built_in}
               <span
@@ -500,7 +501,7 @@
           </div>
           {#if rule.description}
             <p class="mt-1 text-xs text-[var(--color-base-content)] opacity-60">
-              {rule.description}
+              {translateField(rule.description_key, undefined, rule.description)}
             </p>
           {/if}
           <div

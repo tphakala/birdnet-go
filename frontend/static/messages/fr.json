@@ -398,6 +398,11 @@
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Alerte : {rule_name} ({event_name})",
+        "firedTitleMetric": "Alerte : {rule_name} ({metric_name})",
+        "firedTitle": "Alerte : {rule_name}"
       }
     },
     "loading": "Chargement des notifications..."
@@ -3296,7 +3301,45 @@
           "less_or_equal": "less or equal"
         }
       },
-      "v2Required": "Le schéma de base de données amélioré est requis pour les règles d'alerte. Veuillez mettre à jour votre base de données dans les paramètres principaux pour activer cette fonctionnalité."
+      "v2Required": "Le schéma de base de données amélioré est requis pour les règles d'alerte. Veuillez mettre à jour votre base de données dans les paramètres principaux pour activer cette fonctionnalité.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Nouvelle espèce détectée",
+          "description": "Notifie lorsqu'une espèce est détectée pour la première fois"
+        },
+        "streamDisconnected": {
+          "name": "Flux audio déconnecté",
+          "description": "Notifie lorsqu'un flux RTSP ou audio perd la connexion"
+        },
+        "streamError": {
+          "name": "Erreur de flux audio",
+          "description": "Notifie lorsqu'un flux audio rencontre une erreur"
+        },
+        "deviceError": {
+          "name": "Erreur de périphérique audio",
+          "description": "Notifie lorsqu'un périphérique de capture audio local rencontre une erreur"
+        },
+        "highCpu": {
+          "name": "Utilisation CPU élevée",
+          "description": "Notifie lorsque l'utilisation du CPU dépasse 90% pendant 5 minutes"
+        },
+        "highMemory": {
+          "name": "Utilisation mémoire élevée",
+          "description": "Notifie lorsque l'utilisation de la mémoire dépasse 90% pendant 5 minutes"
+        },
+        "lowDisk": {
+          "name": "Espace disque faible",
+          "description": "Notifie lorsque l'utilisation du disque dépasse 85% pendant 5 minutes"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT déconnecté",
+          "description": "Notifie lorsque la connexion au broker MQTT est perdue"
+        },
+        "birdWeatherFailed": {
+          "name": "Envoi BirdWeather échoué",
+          "description": "Notifie lorsqu'un envoi BirdWeather échoue"
+        }
+      }
     }
   },
   "auth": {

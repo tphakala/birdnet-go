@@ -398,6 +398,11 @@
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Alert: {rule_name} ({event_name})",
+        "firedTitleMetric": "Alert: {rule_name} ({metric_name})",
+        "firedTitle": "Alert: {rule_name}"
       }
     },
     "loading": "Loading notifications..."
@@ -3320,7 +3325,45 @@
           "less_or_equal": "less or equal"
         }
       },
-      "v2Required": "The enhanced database schema is required for alert rules. Please update your database in the main settings to enable this feature."
+      "v2Required": "The enhanced database schema is required for alert rules. Please update your database in the main settings to enable this feature.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "New species detected",
+          "description": "Notifies when a species is detected for the first time"
+        },
+        "streamDisconnected": {
+          "name": "Audio stream disconnected",
+          "description": "Notifies when an RTSP or audio stream loses connection"
+        },
+        "streamError": {
+          "name": "Audio stream error",
+          "description": "Notifies when an audio stream encounters an error"
+        },
+        "deviceError": {
+          "name": "Audio device error",
+          "description": "Notifies when a local audio capture device encounters an error"
+        },
+        "highCpu": {
+          "name": "High CPU usage",
+          "description": "Notifies when CPU usage exceeds 90% for 5 minutes"
+        },
+        "highMemory": {
+          "name": "High memory usage",
+          "description": "Notifies when memory usage exceeds 90% for 5 minutes"
+        },
+        "lowDisk": {
+          "name": "Low disk space",
+          "description": "Notifies when disk usage exceeds 85% for 5 minutes"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT disconnected",
+          "description": "Notifies when the MQTT broker connection is lost"
+        },
+        "birdWeatherFailed": {
+          "name": "BirdWeather upload failed",
+          "description": "Notifies when a BirdWeather upload fails"
+        }
+      }
     }
   },
   "auth": {

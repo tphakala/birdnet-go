@@ -398,6 +398,11 @@
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Alarm: {rule_name} ({event_name})",
+        "firedTitleMetric": "Alarm: {rule_name} ({metric_name})",
+        "firedTitle": "Alarm: {rule_name}"
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -3296,7 +3301,45 @@
           "less_or_equal": "less or equal"
         }
       },
-      "v2Required": "Für Alarmregeln ist das erweiterte Datenbankschema erforderlich. Bitte aktualisieren Sie Ihre Datenbank in den Haupteinstellungen, um diese Funktion zu aktivieren."
+      "v2Required": "Für Alarmregeln ist das erweiterte Datenbankschema erforderlich. Bitte aktualisieren Sie Ihre Datenbank in den Haupteinstellungen, um diese Funktion zu aktivieren.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Neue Art erkannt",
+          "description": "Benachrichtigt, wenn eine Art zum ersten Mal erkannt wird"
+        },
+        "streamDisconnected": {
+          "name": "Audiostream getrennt",
+          "description": "Benachrichtigt, wenn ein RTSP- oder Audiostream die Verbindung verliert"
+        },
+        "streamError": {
+          "name": "Audiostream-Fehler",
+          "description": "Benachrichtigt, wenn bei einem Audiostream ein Fehler auftritt"
+        },
+        "deviceError": {
+          "name": "Audiogerät-Fehler",
+          "description": "Benachrichtigt, wenn bei einem lokalen Audioaufnahmegerät ein Fehler auftritt"
+        },
+        "highCpu": {
+          "name": "Hohe CPU-Auslastung",
+          "description": "Benachrichtigt, wenn die CPU-Auslastung 5 Minuten lang 90% überschreitet"
+        },
+        "highMemory": {
+          "name": "Hohe Speicherauslastung",
+          "description": "Benachrichtigt, wenn die Speicherauslastung 5 Minuten lang 90% überschreitet"
+        },
+        "lowDisk": {
+          "name": "Wenig Speicherplatz",
+          "description": "Benachrichtigt, wenn die Festplattenauslastung 5 Minuten lang 85% überschreitet"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT getrennt",
+          "description": "Benachrichtigt, wenn die Verbindung zum MQTT-Broker verloren geht"
+        },
+        "birdWeatherFailed": {
+          "name": "BirdWeather-Upload fehlgeschlagen",
+          "description": "Benachrichtigt, wenn ein BirdWeather-Upload fehlschlägt"
+        }
+      }
     }
   },
   "auth": {
