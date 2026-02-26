@@ -138,6 +138,49 @@ func TestController_createToastEventData(t *testing.T) {
 				// duration should not be present
 			},
 		},
+		{
+			name: "toast with translation keys",
+			notif: &notification.Notification{
+				ID:            "i18n-toast-id",
+				Message:       "Updating MQTT connection...",
+				Component:     "api",
+				Timestamp:     time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+				MessageKey:    "notifications.content.settings.reconfiguringMqtt",
+				MessageParams: map[string]any{"setting": "mqtt"},
+				Metadata: map[string]any{
+					"isToast":   true,
+					"toastId":   "toast-i18n",
+					"toastType": "info",
+					"duration":  3000,
+				},
+			},
+			expected: map[string]any{
+				"id":          "toast-i18n",
+				"message":     "Updating MQTT connection...",
+				"type":        "info",
+				"timestamp":   time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+				"component":   "api",
+				"duration":    3000,
+				"message_key": "notifications.content.settings.reconfiguringMqtt",
+			},
+		},
+		{
+			name: "toast without translation keys omits key fields",
+			notif: &notification.Notification{
+				ID:      "no-key-toast-id",
+				Message: "Plain toast",
+				Metadata: map[string]any{
+					"isToast":   true,
+					"toastId":   "toast-plain",
+					"toastType": "success",
+				},
+			},
+			expected: map[string]any{
+				"id":      "toast-plain",
+				"message": "Plain toast",
+				"type":    "success",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +191,17 @@ func TestController_createToastEventData(t *testing.T) {
 			assertMapContainsExpected(t, result, tt.expected)
 			assertNoZeroDuration(t, result, tt.notif.Metadata)
 			assertNoNilAction(t, result, tt.notif.Metadata)
+
+			// Verify translation key fields are included only when set
+			if tt.notif.MessageKey != "" {
+				assert.Equal(t, tt.notif.MessageKey, result["message_key"], "message_key should be included")
+				if tt.notif.MessageParams != nil {
+					assert.NotNil(t, result["message_params"], "message_params should be included when set")
+				}
+			} else {
+				assertEventDataMissing(t, result, "message_key")
+				assertEventDataMissing(t, result, "message_params")
+			}
 		})
 	}
 }

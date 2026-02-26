@@ -529,7 +529,8 @@ func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64,
 		return
 	}
 
-	var title, body string
+	var title, body, titleKey, messageKey string
+	var messageParams map[string]any
 	var priority notification.Priority
 
 	if success {
@@ -537,20 +538,33 @@ func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64,
 		body = fmt.Sprintf("Successfully removed legacy database. %s disk space reclaimed.",
 			formatBytes(spaceReclaimed))
 		priority = notification.PriorityMedium
+		titleKey = notification.MsgCleanupCompleteTitle
+		messageKey = notification.MsgCleanupCompleteMessage
+		messageParams = map[string]any{"space": formatBytes(spaceReclaimed)}
 	} else {
 		title = "Legacy Database Cleanup Failed"
 		body = fmt.Sprintf("Failed to remove legacy database: %s", errMsg)
 		priority = notification.PriorityHigh
+		titleKey = notification.MsgCleanupFailedTitle
+		messageKey = notification.MsgCleanupFailedMessage
+		messageParams = map[string]any{"error": errMsg}
 	}
 
-	if _, err := notifService.CreateWithComponent(
+	notif, err := notifService.CreateWithComponent(
 		notification.TypeSystem,
 		priority,
 		title,
 		body,
 		"database",
-	); err != nil {
+	)
+	if err != nil {
 		c.logWarnIfEnabled("Failed to send cleanup notification", logger.Error(err))
+		return
+	}
+	if notif != nil {
+		notif.WithTitleKey(titleKey, nil).
+			WithMessageKey(messageKey, messageParams)
+		_ = notifService.UpdateNotification(notif)
 	}
 }
 

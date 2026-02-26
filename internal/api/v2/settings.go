@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -1443,7 +1444,8 @@ type settingsChangeCheck struct {
 	name     string                                 // Human-readable name for logging
 	action   string                                 // Control action to trigger (empty = notify only)
 	changed  func(old, current *conf.Settings) bool // Function to detect if settings changed
-	toast    string                                 // Toast message to display
+	toast    string                                 // Toast message to display (English fallback)
+	toastKey string                                 // i18n translation key for the toast message
 	toastTyp string                                 // Toast type: "info" or "warning"
 	duration int                                    // Toast duration in milliseconds
 }
@@ -1451,15 +1453,15 @@ type settingsChangeCheck struct {
 // settingsChangeChecks defines all settings change detectors in order of execution.
 // Each check has a detection function, action to trigger, and toast notification.
 var settingsChangeChecks = []settingsChangeCheck{
-	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", "info", toastDurationLong},
-	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", "info", toastDurationMedium},
-	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", "info", toastDurationShort},
-	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", "info", toastDurationMedium},
-	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", "info", toastDurationMedium},
-	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", "info", toastDurationMedium},
-	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", "info", toastDurationShort},
-	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", "info", toastDurationShort},
-	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", "warning", toastDurationExtended},
+	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, "info", toastDurationLong},
+	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, "info", toastDurationMedium},
+	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, "info", toastDurationShort},
+	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", notification.MsgSettingsReconfiguringMqtt, "info", toastDurationMedium},
+	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", notification.MsgSettingsReconfiguringBirdweather, "info", toastDurationMedium},
+	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, "info", toastDurationMedium},
+	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
+	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
+	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
@@ -1473,7 +1475,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 			if check.action != "" {
 				reconfigActions = append(reconfigActions, check.action)
 			}
-			_ = c.SendToast(check.toast, check.toastTyp, check.duration)
+			_ = c.SendToastWithKey(check.toast, check.toastTyp, check.duration, check.toastKey, nil)
 		}
 	}
 

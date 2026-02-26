@@ -204,6 +204,68 @@ func TestToast_MethodChaining(t *testing.T) {
 	assert.Equal(t, "Chain Action", toast.Action.Label)
 }
 
+func TestToast_WithMessageKey(t *testing.T) {
+	t.Parallel()
+
+	toast := NewToast("test message", ToastTypeInfo)
+	params := map[string]any{"key1": "value1", "key2": 42}
+
+	result := toast.WithMessageKey("notifications.content.test", params)
+
+	assert.Same(t, toast, result, "should return same toast for chaining")
+	assert.Equal(t, "notifications.content.test", toast.MessageKey)
+	assert.Equal(t, "value1", toast.MessageParams["key1"])
+	assert.Equal(t, 42, toast.MessageParams["key2"])
+}
+
+func TestToast_WithMessageKey_NilParams(t *testing.T) {
+	t.Parallel()
+
+	toast := NewToast("test", ToastTypeInfo)
+	toast.WithMessageKey("notifications.content.test", nil)
+
+	assert.Equal(t, "notifications.content.test", toast.MessageKey)
+	assert.Nil(t, toast.MessageParams)
+}
+
+func TestToast_WithMessageKey_NonScalarParams(t *testing.T) {
+	t.Parallel()
+
+	toast := NewToast("test", ToastTypeInfo)
+	params := map[string]any{
+		"safe":   "string",
+		"struct": struct{ X int }{X: 1},
+	}
+	toast.WithMessageKey("test.key", params)
+
+	assert.Equal(t, "string", toast.MessageParams["safe"])
+	assert.IsType(t, "", toast.MessageParams["struct"], "non-scalar should be coerced to string")
+}
+
+func TestToast_ToNotification_PropagatesMessageKey(t *testing.T) {
+	t.Parallel()
+
+	toast := NewToast("test message", ToastTypeWarning).
+		WithComponent("test").
+		WithMessageKey("notifications.content.settings.test", map[string]any{"setting": "mqtt"})
+
+	notif := toast.ToNotification()
+
+	assert.Equal(t, "notifications.content.settings.test", notif.MessageKey)
+	require.NotNil(t, notif.MessageParams)
+	assert.Equal(t, "mqtt", notif.MessageParams["setting"])
+}
+
+func TestToast_ToNotification_NoKeysWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	toast := NewToast("test message", ToastTypeInfo)
+	notif := toast.ToNotification()
+
+	assert.Empty(t, notif.MessageKey)
+	assert.Nil(t, notif.MessageParams)
+}
+
 func TestToast_ToNotification_WithoutOptionalFields(t *testing.T) {
 	t.Parallel()
 

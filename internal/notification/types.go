@@ -100,6 +100,21 @@ type Notification struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 	// ExpiresAt indicates when the notification should be auto-removed (optional)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// Translation key fields for frontend i18n support.
+	// The frontend uses these to translate notifications via t(key, params).
+	// Title/Message fields always contain English fallback text for push providers.
+
+	// TitleKey is the i18n translation key for the title (e.g., "notifications.content.startup.title")
+	TitleKey string `json:"title_key,omitempty"`
+	// TitleParams contains interpolation parameters for the title translation.
+	// Values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
+	TitleParams map[string]any `json:"title_params,omitempty"`
+	// MessageKey is the i18n translation key for the message
+	MessageKey string `json:"message_key,omitempty"`
+	// MessageParams contains interpolation parameters for the message translation.
+	// Values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
+	MessageParams map[string]any `json:"message_params,omitempty"`
 }
 
 // NewNotification creates a new notification with a unique ID and timestamp
@@ -138,6 +153,43 @@ func (n *Notification) WithExpiry(duration time.Duration) *Notification {
 	return n
 }
 
+// WithTitleKey sets the translation key and parameters for the title.
+// Params values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
+// Non-scalar values are coerced to strings via fmt.Sprintf as a safety net.
+func (n *Notification) WithTitleKey(key string, params map[string]any) *Notification {
+	n.TitleKey = key
+	n.TitleParams = sanitizeParams(params)
+	return n
+}
+
+// WithMessageKey sets the translation key and parameters for the message.
+// Params values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
+// Non-scalar values are coerced to strings via fmt.Sprintf as a safety net.
+func (n *Notification) WithMessageKey(key string, params map[string]any) *Notification {
+	n.MessageKey = key
+	n.MessageParams = sanitizeParams(params)
+	return n
+}
+
+// sanitizeParams ensures all parameter values are scalar types suitable for
+// frontend i18n interpolation. Non-scalar values (structs, slices, maps, time.Time)
+// are coerced to their string representation.
+func sanitizeParams(params map[string]any) map[string]any {
+	if params == nil {
+		return nil
+	}
+	sanitized := make(map[string]any, len(params))
+	for k, v := range params {
+		switch v.(type) {
+		case string, int, int64, float64, bool:
+			sanitized[k] = v
+		default:
+			sanitized[k] = fmt.Sprintf("%v", v)
+		}
+	}
+	return sanitized
+}
+
 // IsExpired checks if the notification has expired
 func (n *Notification) IsExpired() bool {
 	if n.ExpiresAt == nil {
@@ -165,14 +217,16 @@ func (n *Notification) Clone() *Notification {
 	}
 
 	clone := &Notification{
-		ID:        n.ID,
-		Type:      n.Type,
-		Priority:  n.Priority,
-		Status:    n.Status,
-		Title:     n.Title,
-		Message:   n.Message,
-		Component: n.Component,
-		Timestamp: n.Timestamp,
+		ID:         n.ID,
+		Type:       n.Type,
+		Priority:   n.Priority,
+		Status:     n.Status,
+		Title:      n.Title,
+		Message:    n.Message,
+		Component:  n.Component,
+		Timestamp:  n.Timestamp,
+		TitleKey:   n.TitleKey,
+		MessageKey: n.MessageKey,
 	}
 
 	// Deep copy ExpiresAt
@@ -184,6 +238,14 @@ func (n *Notification) Clone() *Notification {
 	// Deep copy Metadata map to handle nested structures safely
 	if n.Metadata != nil {
 		clone.Metadata = deepCopyMetadata(n.Metadata)
+	}
+
+	// Deep copy translation parameter maps
+	if n.TitleParams != nil {
+		clone.TitleParams = deepCopyMetadata(n.TitleParams)
+	}
+	if n.MessageParams != nil {
+		clone.MessageParams = deepCopyMetadata(n.MessageParams)
 	}
 
 	return clone

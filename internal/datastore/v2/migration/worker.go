@@ -526,14 +526,19 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 
 	// Send completion notification
 	if notifService := notification.GetService(); notifService != nil {
-		if _, err := notifService.CreateWithComponent(
+		notif, err := notifService.CreateWithComponent(
 			notification.TypeSystem,
 			notification.PriorityMedium,
 			"Database Migration Completed",
-			"Database migration has completed successfully. Please restart BirdNET-Go to switch to the new database.",
+			"Migration completed. Please restart BirdNET-Go to switch to the new database.",
 			"database",
-		); err != nil {
+		)
+		if err != nil {
 			w.logger.Warn("failed to send migration completion notification", logger.Error(err))
+		} else if notif != nil {
+			notif.WithTitleKey(notification.MsgMigrationCompletedTitle, nil).
+				WithMessageKey(notification.MsgMigrationCompletedMessage, nil)
+			_ = notifService.UpdateNotification(notif)
 		}
 	}
 
@@ -769,14 +774,19 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 
 	// Send notification that migration has completed
 	if notifService := notification.GetService(); notifService != nil {
-		if _, err := notifService.CreateWithComponent(
+		notif, err := notifService.CreateWithComponent(
 			notification.TypeSystem,
 			notification.PriorityMedium,
 			"Database Migration Completed",
-			"Database migration has completed successfully. Please restart BirdNET-Go to switch to the new database.",
+			"Migration completed. Please restart BirdNET-Go to switch to the new database.",
 			"database",
-		); err != nil {
+		)
+		if err != nil {
 			w.logger.Warn("failed to send migration completion notification", logger.Error(err))
+		} else if notif != nil {
+			notif.WithTitleKey(notification.MsgMigrationCompletedTitle, nil).
+				WithMessageKey(notification.MsgMigrationCompletedMessage, nil)
+			_ = notifService.UpdateNotification(notif)
 		}
 	}
 
@@ -1041,14 +1051,19 @@ func (w *Worker) handleError(err error, msg string) bool {
 
 		// Send notification about the error
 		if notifService := notification.GetService(); notifService != nil {
-			if _, notifErr := notifService.CreateWithComponent(
+			notif, notifErr := notifService.CreateWithComponent(
 				notification.TypeWarning,
 				notification.PriorityHigh,
 				"Database Migration Error",
-				fmt.Sprintf("Migration paused due to repeated errors. Please check the logs and try resuming. Error: %v", err),
+				fmt.Sprintf("Migration paused due to errors. Check logs and try resuming. Error: %v", err),
 				"database",
-			); notifErr != nil {
+			)
+			if notifErr != nil {
 				w.logger.Warn("failed to send migration error notification", logger.Error(notifErr))
+			} else if notif != nil {
+				notif.WithTitleKey(notification.MsgMigrationErrorTitle, nil).
+					WithMessageKey(notification.MsgMigrationErrorMessage, map[string]any{"error": err.Error()})
+				_ = notifService.UpdateNotification(notif)
 			}
 		}
 

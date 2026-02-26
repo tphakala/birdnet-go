@@ -126,23 +126,28 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 
 	w.updateLastAlertTime(alertKey)
 
-	notifType, priority, title := w.mapSeverityToNotification(event)
-	if notifType == "" {
+	info := w.mapSeverityToNotification(event)
+	if info.notifType == "" {
 		return nil // Unknown severity
 	}
 
-	notification, err := w.service.CreateWithComponent(
-		notifType,
-		priority,
-		title,
-		event.GetMessage(),
-		"system-monitor",
-	)
-	if err != nil {
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	resourceName := w.getResourceNameWithPath(event)
+	notif := NewNotification(info.notifType, info.priority, info.title, event.GetMessage()).
+		WithComponent("system-monitor").
+		WithTitleKey(info.titleKey, map[string]any{"resource": resourceName}).
+		WithMessageKey(MsgResourceCurrentUsage, map[string]any{
+			"current":   fmt.Sprintf("%.1f", event.GetCurrentValue()),
+			"threshold": fmt.Sprintf("%.1f", event.GetThreshold()),
+			"unit":      "%",
+		})
+
+	w.enrichResourceMetadata(notif, event)
+
+	if err := w.service.CreateWithMetadata(notif); err != nil {
 		return fmt.Errorf("failed to create notification: %w", err)
 	}
 
-	w.enrichResourceMetadata(notification, event)
 	w.processedCount.Add(1)
 
 	if w.logger != nil {
@@ -151,7 +156,7 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 			logger.String("severity", event.GetSeverity()),
 			logger.Float64("current_value", event.GetCurrentValue()),
 			logger.Float64("threshold", event.GetThreshold()),
-			logger.String("notification_id", notification.ID))
+			logger.String("notification_id", notif.ID))
 	}
 
 	return nil
@@ -167,9 +172,17 @@ func (w *ResourceEventWorker) buildAlertKey(event events.ResourceEvent) string {
 	return fmt.Sprintf("%s|%s", event.GetResourceType(), event.GetSeverity())
 }
 
-// mapSeverityToNotification maps event severity to notification type, priority, and title.
+// resourceNotificationInfo holds the notification type, priority, title, and translation key for a resource event.
+type resourceNotificationInfo struct {
+	notifType Type
+	priority  Priority
+	title     string
+	titleKey  string
+}
+
+// mapSeverityToNotification maps event severity to notification type, priority, title, and translation key.
 // Returns empty type if severity is unknown.
-func (w *ResourceEventWorker) mapSeverityToNotification(event events.ResourceEvent) (Type, Priority, string) {
+func (w *ResourceEventWorker) mapSeverityToNotification(event events.ResourceEvent) resourceNotificationInfo {
 	resourceName := w.getResourceNameWithPath(event)
 
 	switch event.GetSeverity() {
@@ -178,16 +191,16 @@ func (w *ResourceEventWorker) mapSeverityToNotification(event events.ResourceEve
 		if event.GetResourceType() == events.ResourceDisk {
 			priority = PriorityMedium
 		}
-		return TypeInfo, priority, fmt.Sprintf("%s Usage Recovered", resourceName)
+		return resourceNotificationInfo{TypeInfo, priority, fmt.Sprintf("%s Usage Recovered", resourceName), MsgResourceRecovered}
 
 	case events.SeverityWarning:
-		return TypeWarning, PriorityHigh, fmt.Sprintf("High %s Usage", resourceName)
+		return resourceNotificationInfo{TypeWarning, PriorityHigh, fmt.Sprintf("High %s Usage", resourceName), MsgResourceHighUsage}
 
 	case events.SeverityCritical:
-		return TypeWarning, PriorityCritical, fmt.Sprintf("Critical %s Usage", resourceName)
+		return resourceNotificationInfo{TypeWarning, PriorityCritical, fmt.Sprintf("Critical %s Usage", resourceName), MsgResourceCriticalUsage}
 
 	default:
-		return "", "", ""
+		return resourceNotificationInfo{}
 	}
 }
 
@@ -201,6 +214,7 @@ func (w *ResourceEventWorker) getResourceNameWithPath(event events.ResourceEvent
 }
 
 // enrichResourceMetadata adds metadata and expiry to the notification.
+// This should be called before the notification is broadcast/saved.
 func (w *ResourceEventWorker) enrichResourceMetadata(notification *Notification, event events.ResourceEvent) {
 	if notification == nil {
 		return
@@ -225,7 +239,6 @@ func (w *ResourceEventWorker) enrichResourceMetadata(notification *Notification,
 	}
 
 	notification.WithExpiry(w.determineResourceExpiry(event))
-	_ = w.service.store.Update(notification)
 }
 
 // determineResourceExpiry returns the appropriate expiry duration based on event severity and type.
