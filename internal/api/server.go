@@ -256,6 +256,11 @@ func (s *Server) setupMiddleware() {
 	// CSRF protection middleware (uses centralized logger)
 	s.echo.Use(mw.NewCSRF(nil))
 
+	// Refresh CSRF cookie expiration on every API request.
+	// Echo v4.15's Sec-Fetch-Site check short-circuits before the built-in
+	// cookie refresh code, so the cookie expires after 30 minutes without this.
+	s.echo.Use(mw.CSRFCookieRefresh())
+
 	// Body limit middleware
 	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))
 
