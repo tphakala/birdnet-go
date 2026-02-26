@@ -334,6 +334,69 @@
       "unread": "{count} não lidas",
       "confirmBulkDelete": "Excluir várias notificações",
       "bulkDeleteConfirmation": "Tem certeza de que deseja excluir {count} notificações?"
+    },
+    "content": {
+      "startup": {
+        "title": "BirdNET-Go Started",
+        "message": "Application started successfully (v{version})"
+      },
+      "shutdown": {
+        "title": "BirdNET-Go Shutting Down",
+        "message": "Application is shutting down gracefully"
+      },
+      "detection": {
+        "title": "Detected: {species}",
+        "message": "Confidence: {confidence}%"
+      },
+      "integration": {
+        "failedTitle": "{integration} Integration Failed",
+        "failedMessage": "Failed to connect or send data: {error}"
+      },
+      "resource": {
+        "highUsage": "High {resource} usage",
+        "criticalUsage": "Critical {resource} usage",
+        "recovered": "{resource} usage recovered",
+        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+      },
+      "error": {
+        "criticalSystem": "Critical System Error",
+        "application": "Application Error",
+        "imageProvider": "Image Provider Notice",
+        "categoryError": "{category} Error"
+      },
+      "settings": {
+        "reloadingBirdnet": "Applying new analysis settings...",
+        "rebuildingRangeFilter": "Rebuilding species range filter...",
+        "updatingIntervals": "Updating detection intervals...",
+        "reconfiguringMqtt": "Updating MQTT connection...",
+        "reconfiguringBirdweather": "Updating BirdWeather integration...",
+        "reconfiguringStreams": "Updating audio streams...",
+        "reconfiguringTelemetry": "Updating telemetry settings...",
+        "reconfiguringSpeciesTracking": "Updating species tracking...",
+        "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "reconfiguringSoundLevel": "Updating sound level monitoring...",
+        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
+        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
+        "equalizerUpdated": "Audio equalizer settings updated"
+      },
+      "migration": {
+        "startedTitle": "Database Migration Started",
+        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
+        "pausedTitle": "Database Migration Paused",
+        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
+        "cancelledTitle": "Database Migration Cancelled",
+        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
+        "completedTitle": "Database Migration Completed",
+        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
+        "errorTitle": "Database Migration Error",
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+      },
+      "cleanup": {
+        "completeTitle": "Legacy Database Cleanup Complete",
+        "completeMessage": "{space} disk space reclaimed.",
+        "failedTitle": "Legacy Database Cleanup Failed",
+        "failedMessage": "Failed to remove legacy database: {error}"
+      }
     }
   },
   "search": {
