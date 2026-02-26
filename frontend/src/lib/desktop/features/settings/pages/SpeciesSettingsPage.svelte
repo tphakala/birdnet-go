@@ -1185,7 +1185,7 @@
                 class:max-h-[32rem]={!isListExpanded}
                 class:max-h-[80vh]={isListExpanded}
               >
-                {#each filteredActiveSpecies as species (species.scientificName)}
+                {#each filteredActiveSpecies as species (`${species.scientificName}_${species.commonName}`)}
                   <div
                     class="flex items-center justify-between p-3 hover:bg-[var(--color-base-200)]/50 transition-colors"
                   >
