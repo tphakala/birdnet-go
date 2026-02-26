@@ -662,7 +662,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			// Handle the restart signal.
 			GetLogger().Info("restarting audio capture",
 				logger.String("operation", "restart_audio_capture"))
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+			unifiedAudioChan = startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+			myaudio.SetCurrentAudioChan(unifiedAudioChan)
 		}
 	}
 }
