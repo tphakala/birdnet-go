@@ -99,11 +99,11 @@
     lg: 'py-3 pl-4 pr-3 text-base',
   };
 
-  // Menu item size classes (font size and padding)
+  // Menu item size classes (font size matches trigger sizeClasses)
   const menuSizeClasses = {
     xs: 'text-xs py-1.5 px-2',
-    sm: 'text-sm py-1.5 px-2.5',
-    md: 'py-2 px-3',
+    sm: 'text-[0.8125rem] py-1.5 px-2.5',
+    md: 'text-sm py-2 px-3',
   };
 
   // Trigger button classes based on variant
@@ -442,7 +442,7 @@
       <div
         bind:this={dropdownElement}
         class={cn(
-          'fixed z-[60] font-sans bg-base-100 rounded-md shadow-xl border border-base-content/20 overflow-hidden',
+          'fixed z-[60] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
           dropdownClassName
         )}
         style:top="{dropdownPosition.top}px"
@@ -451,7 +451,7 @@
         style:max-height="{maxHeight}px"
       >
         {#if searchable}
-          <div class="p-2 border-b border-base-300">
+          <div class="p-2 border-b border-[var(--color-base-300)]">
             <input
               bind:this={inputElement}
               type="text"
@@ -475,7 +475,7 @@
           aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
           {#if filteredOptions.length === 0}
-            <div class="p-4 text-center text-base-content opacity-60">
+            <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">
               {t('components.forms.select.noOptions')}
             </div>
           {:else}
@@ -483,7 +483,9 @@
             {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
             {#each Object.entries(groupedOptions) as [group, options] (group)}
               {#if group && groupBy}
-                <div class="px-3 py-2 text-xs font-semibold text-base-content opacity-60 uppercase">
+                <div
+                  class="px-3 py-2 text-xs font-semibold text-[var(--color-base-content)] opacity-60 uppercase"
+                >
                   {group}
                 </div>
               {/if}
@@ -493,11 +495,12 @@
                 <button
                   type="button"
                   class={cn(
-                    'w-full text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden flex items-center gap-2 rounded',
+                    'w-full text-left hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden flex items-center gap-2 rounded',
                     safeGet(menuSizeClasses, menuSize, ''),
-                    isSelected(option) && 'bg-primary/10 text-primary',
+                    isSelected(option) &&
+                      'bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-primary)]',
                     option.disabled && 'opacity-50 cursor-not-allowed',
-                    highlightedIndex === flatIndex && 'bg-base-200'
+                    highlightedIndex === flatIndex && 'bg-[var(--color-base-200)]'
                   )}
                   disabled={option.disabled}
                   onclick={() => selectOption(option)}
@@ -529,7 +532,9 @@
                     {:else}
                       <div>{option.label}</div>
                       {#if option.description}
-                        <div class="text-xs text-base-content opacity-60">{option.description}</div>
+                        <div class="text-xs text-[var(--color-base-content)] opacity-60">
+                          {option.description}
+                        </div>
                       {/if}
                     {/if}
                   </div>
@@ -540,7 +545,9 @@
         </div>
 
         {#if multiple && maxSelections}
-          <div class="p-2 border-t border-base-300 text-xs text-base-content opacity-60">
+          <div
+            class="p-2 border-t border-[var(--color-base-300)] text-xs text-[var(--color-base-content)] opacity-60"
+          >
             {selectedOptions.length} / {maxSelections} selected
           </div>
         {/if}
