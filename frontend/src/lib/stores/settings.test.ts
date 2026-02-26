@@ -25,6 +25,7 @@ vi.mock('$lib/i18n/index.js', () => ({
   getLocale: vi.fn().mockReturnValue('en'),
   setLocale: vi.fn(),
   isValidLocale: vi.fn().mockReturnValue(true),
+  t: vi.fn((key: string) => key),
 }));
 
 describe('Settings Store - Dynamic Threshold and Range Filter', () => {

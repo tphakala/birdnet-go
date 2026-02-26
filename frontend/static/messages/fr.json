@@ -339,65 +339,67 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go démarré",
+        "message": "Application démarrée avec succès (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "Arrêt de BirdNET-Go",
+        "message": "L'application s'arrête proprement"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Détecté : {species}",
+        "message": "Confiance : {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "Échec de l'intégration {integration}",
+        "failedMessage": "Échec de la connexion ou de l'envoi des données : {error}"
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Utilisation élevée de {resource}",
+        "criticalUsage": "Utilisation critique de {resource}",
+        "recovered": "Utilisation de {resource} rétablie",
+        "currentUsage": "Actuellement à {current}{unit} (seuil : {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Erreur système critique",
+        "application": "Erreur d'application",
+        "imageProvider": "Avis du fournisseur d'images",
+        "categoryError": "Erreur {category}"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Application des nouveaux paramètres d'analyse...",
+        "rebuildingRangeFilter": "Reconstruction du filtre de répartition des espèces...",
+        "updatingIntervals": "Mise à jour des intervalles de détection...",
+        "reconfiguringMqtt": "Mise à jour de la connexion MQTT...",
+        "reconfiguringBirdweather": "Mise à jour de l'intégration BirdWeather...",
+        "reconfiguringStreams": "Mise à jour des flux audio...",
+        "reconfiguringTelemetry": "Mise à jour des paramètres de télémétrie...",
+        "reconfiguringSpeciesTracking": "Mise à jour du suivi des espèces...",
+        "webserverRestartRequired": "Les paramètres du serveur web ont changé. Redémarrage requis.",
+        "reconfiguringSoundLevel": "Mise à jour de la surveillance du niveau sonore...",
+        "audioDeviceRestartRequired": "Périphérique audio modifié. Redémarrage requis.",
+        "equalizerUpdateFailed": "Échec de la mise à jour des paramètres de l'égaliseur audio",
+        "equalizerUpdated": "Paramètres de l'égaliseur audio mis à jour",
+        "savedSuccessfully": "Paramètres enregistrés avec succès",
+        "saveFailed": "Échec de l'enregistrement des paramètres"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Migration de la base de données démarrée",
+        "startedMessage": "La migration a commencé. Cela peut prendre un certain temps selon le nombre de détections.",
+        "pausedTitle": "Migration de la base de données en pause",
+        "pausedMessage": "La migration de la base de données a été mise en pause. Vous pouvez la reprendre à tout moment depuis les paramètres de la base de données.",
+        "cancelledTitle": "Migration de la base de données annulée",
+        "cancelledMessage": "La migration de la base de données a été annulée. Vous pouvez démarrer une nouvelle migration à tout moment depuis les paramètres de la base de données.",
+        "completedTitle": "Migration de la base de données terminée",
+        "completedMessage": "Migration terminée. Veuillez redémarrer BirdNET-Go pour basculer vers la nouvelle base de données.",
+        "errorTitle": "Erreur de migration de la base de données",
+        "errorMessage": "Migration mise en pause suite à des erreurs. Vérifiez les journaux et réessayez. Erreur : {error}"
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Nettoyage de l'ancienne base de données terminé",
+        "completeMessage": "{space} d'espace disque récupéré.",
+        "failedTitle": "Échec du nettoyage de l'ancienne base de données",
+        "failedMessage": "Impossible de supprimer l'ancienne base de données : {error}"
       },
       "alert": {
         "firedTitle": "Alerte : {rule_name}"
@@ -1769,7 +1771,10 @@
         "providersLoadFailed": "Impossible de charger les fournisseurs d'images. Utilisation des valeurs par défaut.",
         "rangeFilterTestFailed": "Échec du test des paramètres du filtre de portée",
         "rangeFilterLoadFailed": "Échec du chargement de la liste des espèces",
-        "rangeFilterCountFailed": "Échec du chargement du nombre d'espèces"
+        "rangeFilterCountFailed": "Échec du chargement du nombre d'espèces",
+        "mapLibraryLoadFailed": "Échec du chargement de la bibliothèque cartographique. Veuillez actualiser la page.",
+        "mapLoadFailed": "Échec du chargement de la carte. Veuillez essayer d'actualiser la page.",
+        "modalMapLoadFailed": "Échec du chargement de la carte modale. Veuillez fermer et rouvrir la fenêtre."
       },
       "tabs": {
         "general": "Général",
@@ -2846,6 +2851,10 @@
       }
     },
     "species": {
+      "saveError": "Échec de l'enregistrement de la configuration pour \"{species}\". Veuillez réessayer.",
+      "configUpdated": "Configuration de \"{species}\" mise à jour",
+      "configAdded": "Configuration de \"{species}\" ajoutée",
+      "duplicateConfigError": "L'espèce \"{species}\" a déjà une configuration. Veuillez choisir un autre nom.",
       "activeSpecies": {
         "title": "Espèces Actives",
         "tabLabel": "Actives",

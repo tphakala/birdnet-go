@@ -379,7 +379,9 @@
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "audioDeviceRestartRequired": "Audio device changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "equalizerUpdated": "Audio equalizer settings updated",
+        "savedSuccessfully": "Settings saved successfully",
+        "saveFailed": "Failed to save settings"
       },
       "migration": {
         "startedTitle": "Database Migration Started",
@@ -1805,7 +1807,10 @@
         "providersLoadFailed": "Unable to load image providers. Using defaults.",
         "rangeFilterTestFailed": "Failed to test range filter settings",
         "rangeFilterLoadFailed": "Failed to load species list",
-        "rangeFilterCountFailed": "Failed to load species count"
+        "rangeFilterCountFailed": "Failed to load species count",
+        "mapLibraryLoadFailed": "Failed to load map library. Please refresh the page.",
+        "mapLoadFailed": "Failed to load map. Please try refreshing the page.",
+        "modalMapLoadFailed": "Failed to load modal map. Please try closing and reopening the modal."
       }
     },
     "support": {
@@ -2876,6 +2881,10 @@
       }
     },
     "species": {
+      "saveError": "Failed to save configuration for \"{species}\". Please try again.",
+      "configUpdated": "Updated configuration for \"{species}\"",
+      "configAdded": "Added configuration for \"{species}\"",
+      "duplicateConfigError": "Species \"{species}\" already has a configuration. Please choose a different name.",
       "activeSpecies": {
         "title": "Active Species",
         "tabLabel": "Active",

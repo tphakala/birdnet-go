@@ -339,65 +339,67 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go gestartet",
+        "message": "Anwendung erfolgreich gestartet (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go wird heruntergefahren",
+        "message": "Anwendung wird ordnungsgemäß heruntergefahren"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Erkannt: {species}",
+        "message": "Konfidenz: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "{integration}-Integration fehlgeschlagen",
+        "failedMessage": "Verbindung oder Datenübertragung fehlgeschlagen: {error}"
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Hohe {resource}-Auslastung",
+        "criticalUsage": "Kritische {resource}-Auslastung",
+        "recovered": "{resource}-Auslastung normalisiert",
+        "currentUsage": "Aktuell bei {current}{unit} (Schwellenwert: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kritischer Systemfehler",
+        "application": "Anwendungsfehler",
+        "imageProvider": "Bildanbieter-Hinweis",
+        "categoryError": "{category}-Fehler"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Neue Analyseeinstellungen werden angewendet...",
+        "rebuildingRangeFilter": "Artenbereichsfilter wird neu aufgebaut...",
+        "updatingIntervals": "Erkennungsintervalle werden aktualisiert...",
+        "reconfiguringMqtt": "MQTT-Verbindung wird aktualisiert...",
+        "reconfiguringBirdweather": "BirdWeather-Integration wird aktualisiert...",
+        "reconfiguringStreams": "Audiostreams werden aktualisiert...",
+        "reconfiguringTelemetry": "Telemetrieeinstellungen werden aktualisiert...",
+        "reconfiguringSpeciesTracking": "Artenverfolgung wird aktualisiert...",
+        "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
+        "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
+        "audioDeviceRestartRequired": "Audiogerät geändert. Neustart erforderlich.",
+        "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",
+        "equalizerUpdated": "Audio-Equalizer-Einstellungen aktualisiert",
+        "savedSuccessfully": "Einstellungen erfolgreich gespeichert",
+        "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Datenbankmigration gestartet",
+        "startedMessage": "Migration wurde gestartet. Dies kann je nach Anzahl der Erkennungen eine Weile dauern.",
+        "pausedTitle": "Datenbankmigration pausiert",
+        "pausedMessage": "Datenbankmigration wurde pausiert. Sie können sie jederzeit in den Datenbankeinstellungen fortsetzen.",
+        "cancelledTitle": "Datenbankmigration abgebrochen",
+        "cancelledMessage": "Datenbankmigration wurde abgebrochen. Sie können jederzeit eine neue Migration in den Datenbankeinstellungen starten.",
+        "completedTitle": "Datenbankmigration abgeschlossen",
+        "completedMessage": "Migration abgeschlossen. Bitte starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln.",
+        "errorTitle": "Datenbankmigrationsfehler",
+        "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut. Fehler: {error}"
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Bereinigung der alten Datenbank abgeschlossen",
+        "completeMessage": "{space} Speicherplatz freigegeben.",
+        "failedTitle": "Bereinigung der alten Datenbank fehlgeschlagen",
+        "failedMessage": "Alte Datenbank konnte nicht entfernt werden: {error}"
       },
       "alert": {
         "firedTitle": "Alarm: {rule_name}"
@@ -1769,7 +1771,10 @@
         "providersLoadFailed": "Bildanbieter konnten nicht geladen werden. Verwende Standardwerte.",
         "rangeFilterTestFailed": "Fehler beim Testen der Reichweitenfilter-Einstellungen",
         "rangeFilterLoadFailed": "Fehler beim Laden der Artenliste",
-        "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl"
+        "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl",
+        "mapLibraryLoadFailed": "Kartenbibliothek konnte nicht geladen werden. Bitte aktualisieren Sie die Seite.",
+        "mapLoadFailed": "Karte konnte nicht geladen werden. Bitte versuchen Sie, die Seite zu aktualisieren.",
+        "modalMapLoadFailed": "Modalkarte konnte nicht geladen werden. Bitte schließen und öffnen Sie das Modal erneut."
       },
       "tabs": {
         "general": "Allgemein",
@@ -2707,6 +2712,10 @@
       }
     },
     "species": {
+      "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+      "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
+      "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
+      "duplicateConfigError": "Art \"{species}\" hat bereits eine Konfiguration. Bitte wählen Sie einen anderen Namen.",
       "activeSpecies": {
         "title": "Aktive Arten",
         "tabLabel": "Aktiv",

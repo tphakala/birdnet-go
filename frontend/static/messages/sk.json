@@ -339,65 +339,67 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go spustený",
+        "message": "Aplikácia úspešne spustená (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go sa vypína",
+        "message": "Aplikácia sa riadne vypína"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Zistený: {species}",
+        "message": "Spoľahlivosť: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "Integrácia {integration} zlyhala",
+        "failedMessage": "Pripojenie alebo odoslanie údajov zlyhalo: {error}"
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Vysoké využitie {resource}",
+        "criticalUsage": "Kritické využitie {resource}",
+        "recovered": "Využitie {resource} obnovené",
+        "currentUsage": "Aktuálne na {current}{unit} (prah: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kritická systémová chyba",
+        "application": "Chyba aplikácie",
+        "imageProvider": "Oznámenie poskytovateľa obrázkov",
+        "categoryError": "Chyba {category}"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Aplikovanie nových nastavení analýzy...",
+        "rebuildingRangeFilter": "Prestavba filtra rozšírenia druhov...",
+        "updatingIntervals": "Aktualizácia intervalov detekcie...",
+        "reconfiguringMqtt": "Aktualizácia MQTT pripojenia...",
+        "reconfiguringBirdweather": "Aktualizácia integrácie BirdWeather...",
+        "reconfiguringStreams": "Aktualizácia audio streamov...",
+        "reconfiguringTelemetry": "Aktualizácia nastavení telemetrie...",
+        "reconfiguringSpeciesTracking": "Aktualizácia sledovania druhov...",
+        "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
+        "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
+        "audioDeviceRestartRequired": "Audio zariadenie zmenené. Vyžaduje sa reštart.",
+        "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",
+        "equalizerUpdated": "Nastavenia audio ekvalizéra aktualizované",
+        "savedSuccessfully": "Nastavenia úspešne uložené",
+        "saveFailed": "Uloženie nastavení zlyhalo"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Migrácia databázy spustená",
+        "startedMessage": "Migrácia bola spustená. Môže to chvíľu trvať v závislosti od počtu detekcií.",
+        "pausedTitle": "Migrácia databázy pozastavená",
+        "pausedMessage": "Migrácia databázy bola pozastavená. Môžete ju kedykoľvek obnoviť v nastaveniach databázy.",
+        "cancelledTitle": "Migrácia databázy zrušená",
+        "cancelledMessage": "Migrácia databázy bola zrušená. Novú migráciu môžete kedykoľvek spustiť v nastaveniach databázy.",
+        "completedTitle": "Migrácia databázy dokončená",
+        "completedMessage": "Migrácia dokončená. Reštartujte BirdNET-Go pre prepnutie na novú databázu.",
+        "errorTitle": "Chyba migrácie databázy",
+        "errorMessage": "Migrácia pozastavená kvôli chybám. Skontrolujte záznamy a skúste pokračovať. Chyba: {error}"
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Vyčistenie starej databázy dokončené",
+        "completeMessage": "Uvoľnených {space} miesta na disku.",
+        "failedTitle": "Vyčistenie starej databázy zlyhalo",
+        "failedMessage": "Nepodarilo sa odstrániť starú databázu: {error}"
       },
       "alert": {
         "firedTitle": "Upozornenie: {rule_name}"
@@ -1612,7 +1614,10 @@
         "providersLoadFailed": "Nepodarilo sa načítať poskytovateľov obrázkov. Používajú sa predvolené nastavenia.",
         "rangeFilterTestFailed": "Nepodarilo sa otestovať nastavenia filtra rozsahu",
         "rangeFilterLoadFailed": "Nepodarilo sa načítať zoznam druhov",
-        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov"
+        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov",
+        "mapLibraryLoadFailed": "Nepodarilo sa načítať knižnicu máp. Obnovte stránku.",
+        "mapLoadFailed": "Nepodarilo sa načítať mapu. Skúste obnoviť stránku.",
+        "modalMapLoadFailed": "Nepodarilo sa načítať modálnu mapu. Zatvorte a znova otvorte okno."
       }
     },
     "support": {
@@ -2683,6 +2688,10 @@
       }
     },
     "species": {
+      "saveError": "Uloženie konfigurácie pre \"{species}\" zlyhalo. Skúste to znova.",
+      "configUpdated": "Konfigurácia pre \"{species}\" aktualizovaná",
+      "configAdded": "Konfigurácia pre \"{species}\" pridaná",
+      "duplicateConfigError": "Druh \"{species}\" už má konfiguráciu. Vyberte iný názov.",
       "activeSpecies": {
         "title": "Aktívne druhy",
         "tabLabel": "Aktívne",
