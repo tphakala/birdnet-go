@@ -301,7 +301,8 @@
       "acknowledge": "Reconhecer",
       "delete": "Excluir",
       "confirmDelete": "Confirmar exclusão",
-      "deleteConfirmation": "Tem certeza de que deseja excluir esta notificação?"
+      "deleteConfirmation": "Tem certeza de que deseja excluir esta notificação?",
+      "viewAll": "Ver todas as notificações"
     },
     "aria": {
       "filterByStatus": "Filtrar por status",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Falha ao carregar notificações. Por favor, tente novamente.",
       "deleteFailed": "Falha ao excluir notificação. Por favor, tente novamente.",
-      "networkError": "Erro de rede. Por favor, tente novamente."
+      "networkError": "Erro de rede. Por favor, tente novamente.",
+      "markReadFailed": "Falha ao marcar notificação como lida. Por favor, tente novamente."
     },
     "timeAgo": {
       "justNow": "Agora mesmo",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Carregando notificações..."
   },
   "search": {
     "title": "Filtros de pesquisa",

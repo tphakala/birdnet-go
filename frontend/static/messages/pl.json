@@ -301,7 +301,8 @@
       "acknowledge": "Potwierdź",
       "delete": "Usuń",
       "confirmDelete": "Potwierdź Usunięcie",
-      "deleteConfirmation": "Czy na pewno chcesz usunąć to powiadomienie?"
+      "deleteConfirmation": "Czy na pewno chcesz usunąć to powiadomienie?",
+      "viewAll": "Wyświetl wszystkie powiadomienia"
     },
     "aria": {
       "filterByStatus": "Filtruj według statusu",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Nie udało się załadować powiadomień. Spróbuj ponownie.",
       "deleteFailed": "Nie udało się usunąć powiadomienia. Spróbuj ponownie.",
-      "networkError": "Wystąpił błąd sieci. Spróbuj ponownie."
+      "networkError": "Wystąpił błąd sieci. Spróbuj ponownie.",
+      "markReadFailed": "Nie udało się oznaczyć powiadomienia jako przeczytane. Spróbuj ponownie."
     },
     "timeAgo": {
       "justNow": "Przed chwilą",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Ładowanie powiadomień..."
   },
   "search": {
     "title": "Filtry Wyszukiwania",

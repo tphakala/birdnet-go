@@ -301,7 +301,8 @@
       "acknowledge": "Potvrdiť",
       "delete": "Odstrániť",
       "confirmDelete": "Potvrdiť odstránenie",
-      "deleteConfirmation": "Naozaj chcete odstrániť toto upozornenie?"
+      "deleteConfirmation": "Naozaj chcete odstrániť toto upozornenie?",
+      "viewAll": "Zobraziť všetky upozornenia"
     },
     "aria": {
       "filterByStatus": "Filtrovať podľa stavu",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Nepodarilo sa načítať upozornenia. Skúste to znova.",
       "deleteFailed": "Nepodarilo sa odstrániť upozornenie. Skúste to znova.",
-      "networkError": "Vyskytla sa sieťová chyba. Skúste to znova."
+      "networkError": "Vyskytla sa sieťová chyba. Skúste to znova.",
+      "markReadFailed": "Nepodarilo sa označiť upozornenie ako prečítané. Skúste to prosím znova."
     },
     "timeAgo": {
       "justNow": "Práve teraz",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Načítavam upozornenia..."
   },
   "search": {
     "title": "Filtre vyhľadávania",

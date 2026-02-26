@@ -301,7 +301,8 @@
       "acknowledge": "Acknowledge",
       "delete": "Delete",
       "confirmDelete": "Confirm Delete",
-      "deleteConfirmation": "Are you sure you want to delete this notification?"
+      "deleteConfirmation": "Are you sure you want to delete this notification?",
+      "viewAll": "View all notifications"
     },
     "aria": {
       "filterByStatus": "Filter by status",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Failed to load notifications. Please try again.",
       "deleteFailed": "Failed to delete notification. Please try again.",
-      "networkError": "Network error occurred. Please try again."
+      "networkError": "Network error occurred. Please try again.",
+      "markReadFailed": "Failed to mark notification as read. Please try again."
     },
     "timeAgo": {
       "justNow": "Just now",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Loading notifications..."
   },
   "search": {
     "title": "Search Filters",

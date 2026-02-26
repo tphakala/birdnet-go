@@ -7,6 +7,7 @@
   import { Bell, BellOff, XCircle, TriangleAlert, Info, Settings, Star } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { t } from '$lib/i18n';
   import {
     type Notification,
     mergeAndDeduplicateNotifications,
@@ -87,10 +88,14 @@
     const diffMs = now.getTime() - time.getTime();
     const diffMins = Math.max(0, Math.floor(diffMs / MS_PER_MINUTE));
 
-    if (diffMins < 1) return 'just now';
-    if (diffMins < MINUTES_PER_HOUR) return `${diffMins}m ago`;
-    if (diffMins < MINUTES_PER_DAY) return `${Math.floor(diffMins / MINUTES_PER_HOUR)}h ago`;
-    return `${Math.floor(diffMins / MINUTES_PER_DAY)}d ago`;
+    if (diffMins < 1) return t('notifications.timeAgo.justNow');
+    if (diffMins < MINUTES_PER_HOUR)
+      return t('notifications.timeAgo.minutesAgo', { minutes: diffMins });
+    if (diffMins < MINUTES_PER_DAY)
+      return t('notifications.timeAgo.hoursAgo', {
+        hours: Math.floor(diffMins / MINUTES_PER_HOUR),
+      });
+    return t('notifications.timeAgo.daysAgo', { days: Math.floor(diffMins / MINUTES_PER_DAY) });
   }
 
   function getNotificationIconClass(notification: Notification): string {
@@ -149,7 +154,7 @@
 
       // Only show user-facing error for non-auth notification loading failures
       if (error instanceof ApiError) {
-        toastActions.error('Unable to load notifications. Please refresh the page.');
+        toastActions.error(t('notifications.errors.loadFailed'));
       }
       // Log error for debugging - logger already handles dev/prod environment
       logger.error('Failed to load notifications', error, {
@@ -230,7 +235,7 @@
     } catch (error) {
       // Show user feedback for failed mark-as-read since this is a user action
       if (error instanceof ApiError) {
-        toastActions.error('Failed to mark notification as read.');
+        toastActions.error(t('notifications.errors.markReadFailed'));
       }
       logger.error('Failed to mark notification as read', error, {
         component: 'NotificationBell',
@@ -422,7 +427,7 @@
     bind:this={buttonRef}
     onclick={() => (dropdownOpen = !dropdownOpen)}
     class="btn btn-ghost btn-sm p-1 relative"
-    aria-label="Notifications"
+    aria-label={t('notifications.title')}
     aria-expanded={dropdownOpen}
     aria-haspopup="menu"
     aria-controls="notification-dropdown"
@@ -455,14 +460,14 @@
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">
-        <h3 class="text-lg font-semibold">Notifications</h3>
+        <h3 class="text-lg font-semibold">{t('notifications.title')}</h3>
         {#if formattedNotifications.length > 0}
           <button
             onclick={markAllAsRead}
             class="text-sm link link-primary"
-            aria-label="Mark all notifications as read"
+            aria-label={t('notifications.actions.markAllRead')}
           >
-            Mark all as read
+            {t('notifications.actions.markAllRead')}
           </button>
         {/if}
       </div>
@@ -473,16 +478,20 @@
           <!-- Loading state -->
           <div class="p-8 text-center">
             <div class="loading loading-spinner loading-md" role="status">
-              <span class="sr-only">Loading notifications...</span>
+              <span class="sr-only">{t('notifications.loading')}</span>
             </div>
           </div>
         {:else if formattedNotifications.length === 0}
           <!-- Empty state -->
           <div class="p-8 text-center text-base-content/60">
-            <div class="mx-auto mb-2 opacity-50" role="img" aria-label="No notifications">
+            <div
+              class="mx-auto mb-2 opacity-50"
+              role="img"
+              aria-label={t('notifications.empty.title')}
+            >
               <BellOff class="size-12" />
             </div>
-            <p>No notifications</p>
+            <p>{t('notifications.empty.title')}</p>
           </div>
         {:else}
           <!-- Notifications -->
@@ -555,7 +564,7 @@
       <!-- Footer -->
       <div class="p-4 border-t border-base-300">
         <button onclick={navigateToNotifications} class="btn btn-sm btn-block btn-ghost">
-          View all notifications
+          {t('notifications.actions.viewAll')}
         </button>
       </div>
     </div>

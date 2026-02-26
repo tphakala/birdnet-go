@@ -275,6 +275,7 @@ export type TranslationKey =
   | 'notifications.actions.delete'
   | 'notifications.actions.confirmDelete'
   | 'notifications.actions.deleteConfirmation'
+  | 'notifications.actions.viewAll'
   | 'notifications.aria.filterByStatus'
   | 'notifications.aria.filterByType'
   | 'notifications.aria.filterByPriority'
@@ -283,6 +284,7 @@ export type TranslationKey =
   | 'notifications.errors.loadFailed'
   | 'notifications.errors.deleteFailed'
   | 'notifications.errors.networkError'
+  | 'notifications.errors.markReadFailed'
   | 'notifications.timeAgo.justNow'
   | 'notifications.timeAgo.minutesAgo' // params: minutes
   | 'notifications.timeAgo.hoursAgo' // params: hours
@@ -338,6 +340,7 @@ export type TranslationKey =
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
   | 'notifications.content.cleanup.failedMessage' // params: error
+  | 'notifications.loading'
   | 'search.title'
   | 'search.results'
   | 'search.resultsCountZero'

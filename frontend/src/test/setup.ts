@@ -141,6 +141,18 @@ const translations: Record<string, string> = {
   'settings.audio.streams.timeline.to': 'To',
   'settings.audio.streams.timeline.reason': 'Reason',
   'settings.audio.streams.timeline.eventAt': 'Event at {time}',
+  // Notification bell UI chrome translations
+  'notifications.title': 'Notifications',
+  'notifications.loading': 'Loading notifications...',
+  'notifications.actions.markAllRead': 'Mark All Read',
+  'notifications.actions.viewAll': 'View all notifications',
+  'notifications.empty.title': 'No notifications found',
+  'notifications.errors.loadFailed': 'Failed to load notifications. Please try again.',
+  'notifications.errors.markReadFailed': 'Failed to mark notification as read. Please try again.',
+  'notifications.timeAgo.justNow': 'Just now',
+  'notifications.timeAgo.minutesAgo': '{minutes}m ago',
+  'notifications.timeAgo.hoursAgo': '{hours}h ago',
+  'notifications.timeAgo.daysAgo': '{days}d ago',
 };
 
 vi.mock('$lib/i18n', () => ({
