@@ -301,7 +301,8 @@
       "acknowledge": "Acquitter",
       "delete": "Supprimer",
       "confirmDelete": "Confirmer la suppression",
-      "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer cette notification ?"
+      "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer cette notification ?",
+      "viewAll": "View all notifications"
     },
     "aria": {
       "filterByStatus": "Filtrer par statut",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Échec du chargement des notifications. Veuillez réessayer.",
       "deleteFailed": "Échec de la suppression de la notification. Veuillez réessayer.",
-      "networkError": "Une erreur réseau est survenue. Veuillez réessayer."
+      "networkError": "Une erreur réseau est survenue. Veuillez réessayer.",
+      "markReadFailed": "Failed to mark notification as read. Please try again."
     },
     "timeAgo": {
       "justNow": "À l'instant",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Loading notifications..."
   },
   "search": {
     "title": "Filtres de recherche",

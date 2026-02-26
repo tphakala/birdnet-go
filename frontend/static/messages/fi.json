@@ -301,7 +301,8 @@
       "acknowledge": "Kuittaa",
       "delete": "Poista",
       "confirmDelete": "Vahvista poisto",
-      "deleteConfirmation": "Haluatko varmasti poistaa tämän ilmoituksen?"
+      "deleteConfirmation": "Haluatko varmasti poistaa tämän ilmoituksen?",
+      "viewAll": "View all notifications"
     },
     "aria": {
       "filterByStatus": "Suodata tilan mukaan",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Ilmoitusten lataus epäonnistui. Yritä uudelleen.",
       "deleteFailed": "Ilmoituksen poisto epäonnistui. Yritä uudelleen.",
-      "networkError": "Verkkovirhe. Yritä uudelleen."
+      "networkError": "Verkkovirhe. Yritä uudelleen.",
+      "markReadFailed": "Failed to mark notification as read. Please try again."
     },
     "timeAgo": {
       "justNow": "Juuri nyt",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Loading notifications..."
   },
   "search": {
     "title": "Hakusuodattimet",

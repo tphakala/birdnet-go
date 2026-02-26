@@ -301,7 +301,8 @@
       "acknowledge": "Bevestig",
       "delete": "Wis",
       "confirmDelete": "Bevestig wissen",
-      "deleteConfirmation": "Weet je zeker dat je deze melding wilt wissen"
+      "deleteConfirmation": "Weet je zeker dat je deze melding wilt wissen",
+      "viewAll": "View all notifications"
     },
     "aria": {
       "filterByStatus": "Filter op status",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Kan meldingen niet laden. Probeer opnieuw.",
       "deleteFailed": "Kan Meldingen niet wissen. Probeer opnieuw.",
-      "networkError": "Er is een netwerk fout opgetreden. Probeer opnieuw."
+      "networkError": "Er is een netwerk fout opgetreden. Probeer opnieuw.",
+      "markReadFailed": "Failed to mark notification as read. Please try again."
     },
     "timeAgo": {
       "justNow": "Nu",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Loading notifications..."
   },
   "search": {
     "title": "Zoek filters",

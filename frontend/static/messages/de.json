@@ -301,7 +301,8 @@
       "acknowledge": "Bestätigen",
       "delete": "Löschen",
       "confirmDelete": "Löschen bestätigen",
-      "deleteConfirmation": "Sind Sie sicher, dass Sie diese Benachrichtigung löschen möchten?"
+      "deleteConfirmation": "Sind Sie sicher, dass Sie diese Benachrichtigung löschen möchten?",
+      "viewAll": "View all notifications"
     },
     "aria": {
       "filterByStatus": "Nach Status filtern",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Fehler beim Laden der Benachrichtigungen. Bitte versuchen Sie es erneut.",
       "deleteFailed": "Fehler beim Löschen der Benachrichtigung. Bitte versuchen Sie es erneut.",
-      "networkError": "Netzwerkfehler aufgetreten. Bitte versuchen Sie es erneut."
+      "networkError": "Netzwerkfehler aufgetreten. Bitte versuchen Sie es erneut.",
+      "markReadFailed": "Failed to mark notification as read. Please try again."
     },
     "timeAgo": {
       "justNow": "Gerade eben",
@@ -397,7 +399,8 @@
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
       }
-    }
+    },
+    "loading": "Loading notifications..."
   },
   "search": {
     "title": "Suchfilter",

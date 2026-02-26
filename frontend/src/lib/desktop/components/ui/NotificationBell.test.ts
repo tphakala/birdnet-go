@@ -270,7 +270,7 @@ describe('NotificationBell Component', () => {
       const button = screen.getByRole('button', { name: /notifications/i });
       await fireEvent.click(button);
 
-      const markAllButton = screen.getByText('Mark all as read');
+      const markAllButton = screen.getByText('Mark All Read');
       await fireEvent.click(markAllButton);
 
       await waitFor(() => {
@@ -373,7 +373,7 @@ describe('NotificationBell Component', () => {
       // Should show updated timestamp - the notification now has the newer timestamp
       // and should be sorted to maintain newest-first order
       const timeElement = container.querySelector('time');
-      expect(timeElement?.textContent).toContain('just now');
+      expect(timeElement?.textContent).toContain('Just now');
 
       // Verify there's still only one notification with this message (deduplicated)
       const messages = screen.getAllByText('Testing timestamp update');
@@ -669,7 +669,7 @@ describe('NotificationBell Component', () => {
       const button = screen.getByRole('button', { name: /notifications/i });
       await fireEvent.click(button);
 
-      expect(screen.getByText('No notifications')).toBeInTheDocument();
+      expect(screen.getByText('No notifications found')).toBeInTheDocument();
     });
   });
 
