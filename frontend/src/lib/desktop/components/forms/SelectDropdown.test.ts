@@ -457,11 +457,11 @@ describe('SelectDropdown', () => {
 
       // First ArrowDown should highlight first option
       await user.keyboard('{ArrowDown}');
-      expect(options[0]).toHaveClass('bg-base-200');
+      expect(options[0]).toHaveClass('bg-[var(--color-base-200)]');
 
       // Second ArrowDown should highlight second option
       await user.keyboard('{ArrowDown}');
-      expect(options[1]).toHaveClass('bg-base-200');
+      expect(options[1]).toHaveClass('bg-[var(--color-base-200)]');
     });
 
     it('opens with Enter or Space', async () => {
@@ -525,7 +525,7 @@ describe('SelectDropdown', () => {
       },
     });
 
-    expect(document.querySelector('.select-dropdown.custom-select')).toBeInTheDocument();
+    expect(document.querySelector('.custom-select')).toBeInTheDocument();
   });
 
   it('shows help text', () => {
