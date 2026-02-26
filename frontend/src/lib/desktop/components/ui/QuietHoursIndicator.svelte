@@ -50,6 +50,7 @@
 {#if quietHoursStore.status?.anyActive}
   <div class={cn('relative', className)}>
     <button
+      type="button"
       class="btn btn-ghost btn-sm p-1 relative text-warning"
       aria-label={tooltipText}
       title={tooltipText}
