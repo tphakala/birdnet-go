@@ -398,6 +398,11 @@
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
         "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Waarschuwing: {rule_name} ({event_name})",
+        "firedTitleMetric": "Waarschuwing: {rule_name} ({metric_name})",
+        "firedTitle": "Waarschuwing: {rule_name}"
       }
     },
     "loading": "Meldingen laden..."
@@ -3296,7 +3301,45 @@
           "less_or_equal": "less or equal"
         }
       },
-      "v2Required": "Het uitgebreide databaseschema is vereist voor waarschuwingsregels. Werk uw database bij in de hoofdinstellingen om deze functie in te schakelen."
+      "v2Required": "Het uitgebreide databaseschema is vereist voor waarschuwingsregels. Werk uw database bij in de hoofdinstellingen om deze functie in te schakelen.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Nieuwe soort gedetecteerd",
+          "description": "Meldt wanneer een soort voor het eerst wordt gedetecteerd"
+        },
+        "streamDisconnected": {
+          "name": "Audiostream verbroken",
+          "description": "Meldt wanneer een RTSP- of audiostream de verbinding verliest"
+        },
+        "streamError": {
+          "name": "Audiostream-fout",
+          "description": "Meldt wanneer een audiostream een fout ondervindt"
+        },
+        "deviceError": {
+          "name": "Audioapparaatfout",
+          "description": "Meldt wanneer een lokaal audio-opnameapparaat een fout ondervindt"
+        },
+        "highCpu": {
+          "name": "Hoog CPU-gebruik",
+          "description": "Meldt wanneer het CPU-gebruik 5 minuten lang 90% overschrijdt"
+        },
+        "highMemory": {
+          "name": "Hoog geheugengebruik",
+          "description": "Meldt wanneer het geheugengebruik 5 minuten lang 90% overschrijdt"
+        },
+        "lowDisk": {
+          "name": "Weinig schijfruimte",
+          "description": "Meldt wanneer het schijfgebruik 5 minuten lang 85% overschrijdt"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT verbroken",
+          "description": "Meldt wanneer de verbinding met de MQTT-broker verloren gaat"
+        },
+        "birdWeatherFailed": {
+          "name": "BirdWeather-upload mislukt",
+          "description": "Meldt wanneer een BirdWeather-upload mislukt"
+        }
+      }
     }
   },
   "auth": {

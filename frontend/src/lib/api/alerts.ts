@@ -25,6 +25,8 @@ export interface AlertRule {
   id: number;
   name: string;
   description: string;
+  name_key?: string;
+  description_key?: string;
   enabled: boolean;
   built_in: boolean;
   object_type: string;

@@ -340,6 +340,9 @@ export type TranslationKey =
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
   | 'notifications.content.cleanup.failedMessage' // params: error
+  | 'notifications.content.alert.firedTitleEvent' // params: rule_name, event_name
+  | 'notifications.content.alert.firedTitleMetric' // params: rule_name, metric_name
+  | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -2344,6 +2347,24 @@ export type TranslationKey =
   | 'settings.alerts.schema.operators.greater_or_equal'
   | 'settings.alerts.schema.operators.less_or_equal'
   | 'settings.alerts.v2Required'
+  | 'settings.alerts.builtInRules.newSpecies.name'
+  | 'settings.alerts.builtInRules.newSpecies.description'
+  | 'settings.alerts.builtInRules.streamDisconnected.name'
+  | 'settings.alerts.builtInRules.streamDisconnected.description'
+  | 'settings.alerts.builtInRules.streamError.name'
+  | 'settings.alerts.builtInRules.streamError.description'
+  | 'settings.alerts.builtInRules.deviceError.name'
+  | 'settings.alerts.builtInRules.deviceError.description'
+  | 'settings.alerts.builtInRules.highCpu.name'
+  | 'settings.alerts.builtInRules.highCpu.description'
+  | 'settings.alerts.builtInRules.highMemory.name'
+  | 'settings.alerts.builtInRules.highMemory.description'
+  | 'settings.alerts.builtInRules.lowDisk.name'
+  | 'settings.alerts.builtInRules.lowDisk.description'
+  | 'settings.alerts.builtInRules.mqttDisconnected.name'
+  | 'settings.alerts.builtInRules.mqttDisconnected.description'
+  | 'settings.alerts.builtInRules.birdWeatherFailed.name'
+  | 'settings.alerts.builtInRules.birdWeatherFailed.description'
   | 'auth.login'
   | 'auth.logout'
   | 'auth.openLoginModal'
@@ -2543,6 +2564,15 @@ export type TranslationParams = {
   'notifications.content.migration.errorMessage': { error: string | number };
   'notifications.content.cleanup.completeMessage': { space: string | number };
   'notifications.content.cleanup.failedMessage': { error: string | number };
+  'notifications.content.alert.firedTitleEvent': {
+    rule_name: string | number;
+    event_name: string | number;
+  };
+  'notifications.content.alert.firedTitleMetric': {
+    rule_name: string | number;
+    metric_name: string | number;
+  };
+  'notifications.content.alert.firedTitle': { rule_name: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };
   'search.detailsPanel.collapseDetails': { species: string | number };

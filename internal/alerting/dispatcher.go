@@ -11,6 +11,7 @@ import (
 // NotificationCreator abstracts the notification service for testability.
 type NotificationCreator interface {
 	CreateAndBroadcast(title, message string) error
+	CreateAndBroadcastWithKeys(title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any) error
 }
 
 // ActionDispatcher routes alert rule actions to the notification bell
@@ -37,7 +38,8 @@ func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent)
 
 		switch action.Target {
 		case TargetBell:
-			d.dispatchBell(title, message, rule)
+			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
+			d.dispatchBell(title, message, rule, event, hasCustomTemplate)
 		default:
 			d.log.Warn("unknown alert action target",
 				logger.String("target", action.Target),
@@ -46,15 +48,49 @@ func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent)
 	}
 }
 
-func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule) {
+func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate bool) {
 	if d.notifCreator == nil {
 		return
 	}
+
+	// When no custom template is set, use translation keys so the
+	// frontend can render the notification in the user's locale.
+	if !hasCustomTemplate {
+		titleKey, titleParams := defaultTitleKey(rule, event)
+		if err := d.notifCreator.CreateAndBroadcastWithKeys(title, message, titleKey, titleParams, "", nil); err != nil {
+			d.log.Error("failed to create bell notification",
+				logger.Uint64("rule_id", uint64(rule.ID)),
+				logger.Error(err))
+		}
+		return
+	}
+
 	if err := d.notifCreator.CreateAndBroadcast(title, message); err != nil {
 		d.log.Error("failed to create bell notification",
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
 	}
+}
+
+// defaultTitleKey returns the i18n key and parameters for the default alert
+// notification title based on the event type.
+func defaultTitleKey(rule *entities.AlertRule, event *AlertEvent) (key string, params map[string]any) {
+	params = map[string]any{
+		"rule_name": rule.Name,
+	}
+	if rule.NameKey != "" {
+		params["rule_name_key"] = rule.NameKey
+	}
+
+	if event.EventName != "" {
+		params["event_name"] = event.EventName
+		return MsgAlertFiredTitleEvent, params
+	}
+	if event.MetricName != "" {
+		params["metric_name"] = event.MetricName
+		return MsgAlertFiredTitleMetric, params
+	}
+	return MsgAlertFiredTitle, params
 }
 
 // renderTemplate substitutes template variables in the title/message strings.
