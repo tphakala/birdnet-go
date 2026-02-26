@@ -625,7 +625,8 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 			"Database Migration Cancelled",
 			"Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
 		).WithComponent("database").
-			WithTitleKey(notification.MsgMigrationCancelledTitle, nil)
+			WithTitleKey(notification.MsgMigrationCancelledTitle, nil).
+			WithMessageKey(notification.MsgMigrationCancelledMessage, nil)
 
 		if err := notifService.CreateWithMetadata(notif); err != nil {
 			c.logWarnIfEnabled("Failed to send migration cancel notification",

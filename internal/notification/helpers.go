@@ -3,6 +3,7 @@ package notification
 import (
 	"fmt"
 
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -66,7 +67,9 @@ func NotifyDetection(species string, confidence float64, metadata map[string]any
 		notif.WithMetadata(k, v)
 	}
 
-	_ = service.CreateWithMetadata(notif)
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create detection notification", logger.Error(err))
+	}
 }
 
 // NotifyIntegrationFailure creates a notification for integration failures
@@ -93,7 +96,9 @@ func NotifyIntegrationFailure(integration string, err error) {
 		WithTitleKey(MsgIntegrationFailedTitle, map[string]any{"integration": integration}).
 		WithMessageKey(MsgIntegrationFailedMessage, map[string]any{"error": errMsg})
 
-	_ = service.CreateWithMetadata(notif)
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create integration failure notification", logger.Error(err))
+	}
 }
 
 // NotifyResourceAlert creates notifications for resource threshold violations
@@ -135,7 +140,9 @@ func NotifyResourceAlert(resource string, current, threshold float64, unit strin
 		WithMetadata("unit", unit).
 		WithExpiry(DefaultResourceAlertExpiry) // Auto-expire resource alerts
 
-	_ = service.CreateWithMetadata(notif)
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create resource alert notification", logger.Error(err))
+	}
 }
 
 // NotifyInfo creates an informational notification
@@ -187,7 +194,9 @@ func NotifyStartup(version string) {
 		WithMessageKey(MsgStartupMessage, map[string]any{"version": version}).
 		WithExpiry(DefaultQuickExpiry) // Auto-expire after 5 minutes
 
-	_ = service.CreateWithMetadata(notif)
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create startup notification", logger.Error(err))
+	}
 }
 
 // NotifyShutdown creates a notification when the application is shutting down
@@ -210,7 +219,9 @@ func NotifyShutdown() {
 		WithTitleKey(MsgShutdownTitle, nil).
 		WithMessageKey(MsgShutdownMessage, nil)
 
-	_ = service.CreateWithMetadata(notif)
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create shutdown notification", logger.Error(err))
+	}
 }
 
 // Privacy scrubbing helpers

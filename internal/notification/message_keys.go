@@ -58,6 +58,7 @@ const (
 	MsgMigrationPausedTitle      = "notifications.content.migration.pausedTitle"
 	MsgMigrationPausedMessage    = "notifications.content.migration.pausedMessage"
 	MsgMigrationCancelledTitle   = "notifications.content.migration.cancelledTitle"
+	MsgMigrationCancelledMessage = "notifications.content.migration.cancelledMessage"
 	MsgMigrationCompletedTitle   = "notifications.content.migration.completedTitle"
 	MsgMigrationCompletedMessage = "notifications.content.migration.completedMessage"
 	MsgMigrationErrorTitle       = "notifications.content.migration.errorTitle"
