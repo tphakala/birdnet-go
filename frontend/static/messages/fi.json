@@ -1771,7 +1771,10 @@
         "providersLoadFailed": "Kuvatoimittajia ei voitu ladata. Käytetään oletusarvoja.",
         "rangeFilterTestFailed": "Aluesuodatinasetusten testaus epäonnistui",
         "rangeFilterLoadFailed": "Lajiluettelon lataus epäonnistui",
-        "rangeFilterCountFailed": "Lajimäärän lataus epäonnistui"
+        "rangeFilterCountFailed": "Lajimäärän lataus epäonnistui",
+        "mapLibraryLoadFailed": "Karttakirjaston lataus epäonnistui. Päivitä sivu.",
+        "mapLoadFailed": "Kartan lataus epäonnistui. Kokeile päivittää sivu.",
+        "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen."
       },
       "tabs": {
         "general": "Yleiset",
@@ -3141,11 +3144,6 @@
       "sqlitePlaceholder": "Syötä SQLite-tietokannan polku",
       "mysqlHostPlaceholder": "Syötä MySQL-isäntä",
       "mysqlUsernamePlaceholder": "Syötä MySQL-käyttäjänimi"
-    },
-    "errors": {
-      "mapLibraryLoadFailed": "Karttakirjaston lataus epäonnistui. Päivitä sivu.",
-      "mapLoadFailed": "Kartan lataus epäonnistui. Kokeile päivittää sivu.",
-      "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen."
     },
     "tabs": {
       "navigation": "Asetusten navigointivälilehdet",
