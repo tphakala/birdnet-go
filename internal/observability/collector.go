@@ -12,6 +12,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/tphakala/birdnet-go/internal/birdnet/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 )
 
@@ -33,6 +34,10 @@ type Collector struct {
 	// Database latency tracking (optional, set via SetDBCounters)
 	dbCounters *dbstats.Counters
 	prevDBSnap *dbstats.Snapshot
+
+	// Inference latency tracking (optional, set via SetInferenceCounters)
+	inferenceCounters *inferencestats.Counters
+	prevInferenceSnap *inferencestats.Snapshot
 
 	// Track which metrics have had logged errors to avoid log spam
 	loggedErrors map[string]bool
@@ -93,6 +98,8 @@ const (
 	metricDBReadLatencyMax  = "db.read_latency_max_ms"
 	metricDBWriteLatencyMax = "db.write_latency_max_ms"
 	metricDBQueriesPerSec   = "db.queries_per_sec"
+	metricBirdNETInvokeAvg  = "birdnet.invoke_avg_ms"
+	metricBirdNETInvokeMax  = "birdnet.invoke_max_ms"
 
 	// maxValidCelsius is the upper bound for valid CPU temperature readings.
 	// 120°C captures overheating events before thermal shutdown while filtering bogus values.
@@ -108,6 +115,7 @@ func (c *Collector) collect() {
 	c.collectTemperature(points)
 	c.collectDisk(points)
 	c.collectDatabase(points)
+	c.collectInference(points)
 
 	if len(points) > 0 {
 		c.store.RecordBatch(points)
@@ -248,6 +256,38 @@ func (c *Collector) collectDatabase(points map[string]float64) {
 	}
 
 	c.prevDBSnap = &snap
+}
+
+// SetInferenceCounters sets the BirdNET inference counters for latency tracking.
+// Must be called before Start. If not called, inference metrics are skipped.
+func (c *Collector) SetInferenceCounters(counters *inferencestats.Counters) {
+	c.inferenceCounters = counters
+}
+
+// collectInference computes inference latency metrics from atomic counter snapshots.
+// When idle (no new invocations since last tick), avg is recorded as 0 to maintain
+// consistent sparkline time axis spacing.
+func (c *Collector) collectInference(points map[string]float64) {
+	if c.inferenceCounters == nil {
+		return
+	}
+
+	snap := c.inferenceCounters.Snapshot()
+
+	points[metricBirdNETInvokeMax] = float64(snap.InvokeMaxUs) / usToMs
+
+	if c.prevInferenceSnap != nil {
+		deltaInvokes := snap.InvokeCount - c.prevInferenceSnap.InvokeCount
+		if deltaInvokes > 0 {
+			deltaUs := snap.InvokeTotalUs - c.prevInferenceSnap.InvokeTotalUs
+			points[metricBirdNETInvokeAvg] = float64(deltaUs) / float64(deltaInvokes) / usToMs
+		} else {
+			// Record 0 during idle periods to keep sparkline time axis consistent
+			points[metricBirdNETInvokeAvg] = 0
+		}
+	}
+
+	c.prevInferenceSnap = &snap
 }
 
 // logOnce logs a message for a metric category only on the first occurrence.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/birdnet/inferencestats"
 )
 
 func TestCollector_CollectsCPU(t *testing.T) {
@@ -174,6 +175,56 @@ func TestReadThermalZone_NonCPUSensor(t *testing.T) {
 
 	_, ok := readThermalZone(tmpDir)
 	assert.False(t, ok, "non-CPU sensor should be skipped")
+}
+
+func TestCollector_CollectsInferenceMetrics(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, 1*time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.Counters{}
+	counters.RecordInvoke(5000)  // 5ms
+	counters.RecordInvoke(15000) // 15ms
+	collector.SetInferenceCounters(counters)
+
+	// First tick: only max (no previous snapshot for avg)
+	collector.collect()
+	maxPts := store.Get("birdnet.invoke_max_ms", 1)
+	require.Len(t, maxPts, 1)
+	assert.InDelta(t, 15.0, maxPts[0].Value, 0.01)
+
+	// Avg should NOT be recorded on first tick (no prev snapshot)
+	avgPts := store.Get("birdnet.invoke_avg_ms", 10)
+	assert.Nil(t, avgPts, "avg should not be recorded on first tick")
+
+	// Record more data for second tick
+	counters.RecordInvoke(8000) // 8ms
+
+	// Second tick: should have avg
+	collector.collect()
+	avgPts = store.Get("birdnet.invoke_avg_ms", 10)
+	require.Len(t, avgPts, 1)
+	// 8ms total / 1 invoke = 8ms avg
+	assert.InDelta(t, 8.0, avgPts[0].Value, 0.01)
+}
+
+func TestCollector_InferenceIdleRecordsZero(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore(10)
+	collector := NewCollector(store, 1*time.Second, func() float64 { return 0 })
+
+	counters := &inferencestats.Counters{}
+	counters.RecordInvoke(5000)
+	collector.SetInferenceCounters(counters)
+
+	// First tick: establishes baseline
+	collector.collect()
+
+	// Second tick: no new invocations — should record 0
+	collector.collect()
+	avgPts := store.Get("birdnet.invoke_avg_ms", 10)
+	require.Len(t, avgPts, 1)
+	assert.InDelta(t, 0.0, avgPts[0].Value, 0.01)
 }
 
 func TestReadThermalZone_OutOfRangeTemperature(t *testing.T) {
