@@ -68,7 +68,7 @@
     // virtualScroll = false, // Reserved for future implementation
     variant = 'select',
     size = 'sm',
-    menuSize = 'md',
+    menuSize = 'sm',
     onChange,
     onSearch,
     onClear,
