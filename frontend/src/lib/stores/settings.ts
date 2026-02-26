@@ -39,6 +39,7 @@
  * - Automatic persistence to server
  * - Error handling and user feedback
  */
+import { t } from '$lib/i18n';
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
@@ -1048,7 +1049,7 @@ export const settingsActions = {
       }));
 
       // Show success toast
-      toastActions.success('Settings saved successfully');
+      toastActions.success(t('notifications.content.settings.savedSuccessfully'));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to save settings';
       settingsStore.update(state => ({
@@ -1058,7 +1059,7 @@ export const settingsActions = {
       }));
 
       // Show error toast
-      toastActions.error(errorMessage);
+      toastActions.error(t('notifications.content.settings.saveFailed'));
 
       throw error;
     }

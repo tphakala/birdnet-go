@@ -339,65 +339,67 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go käynnistetty",
+        "message": "Sovellus käynnistyi onnistuneesti (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go sammutetaan",
+        "message": "Sovellus sammutetaan hallitusti"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Havaittu: {species}",
+        "message": "Luottamus: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "{integration}-integraatio epäonnistui",
+        "failedMessage": "Yhteyden muodostaminen tai tietojen lähettäminen epäonnistui: {error}"
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Korkea {resource}-käyttö",
+        "criticalUsage": "Kriittinen {resource}-käyttö",
+        "recovered": "{resource}-käyttö palautunut",
+        "currentUsage": "Tällä hetkellä {current}{unit} (raja: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kriittinen järjestelmävirhe",
+        "application": "Sovellusvirhe",
+        "imageProvider": "Kuvantarjoajan ilmoitus",
+        "categoryError": "{category}-virhe"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Otetaan uusia analyysi\u00adasetuksia käyttöön...",
+        "rebuildingRangeFilter": "Rakennetaan lajien aluesuodatinta uudelleen...",
+        "updatingIntervals": "Päivitetään havaintovälejä...",
+        "reconfiguringMqtt": "Päivitetään MQTT-yhteyttä...",
+        "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
+        "reconfiguringStreams": "Päivitetään äänivirtoja...",
+        "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
+        "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
+        "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
+        "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
+        "audioDeviceRestartRequired": "Äänilaite vaihdettu. Uudelleenkäynnistys vaaditaan.",
+        "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
+        "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
+        "savedSuccessfully": "Asetukset tallennettu onnistuneesti",
+        "saveFailed": "Asetusten tallennus epäonnistui"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Tietokannan siirto aloitettu",
+        "startedMessage": "Siirto on aloitettu. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen.",
+        "pausedTitle": "Tietokannan siirto keskeytetty",
+        "pausedMessage": "Tietokannan siirto on keskeytetty. Voit jatkaa sitä milloin tahansa Tietokanta-asetuksista.",
+        "cancelledTitle": "Tietokannan siirto peruutettu",
+        "cancelledMessage": "Tietokannan siirto on peruutettu. Voit aloittaa uuden siirron milloin tahansa Tietokanta-asetuksista.",
+        "completedTitle": "Tietokannan siirto valmis",
+        "completedMessage": "Siirto valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan.",
+        "errorTitle": "Tietokannan siirtovirhe",
+        "errorMessage": "Siirto keskeytetty virheiden vuoksi. Tarkista lokit ja yritä jatkaa. Virhe: {error}"
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Vanhan tietokannan siivous valmis",
+        "completeMessage": "{space} levytilaa vapautettu.",
+        "failedTitle": "Vanhan tietokannan siivous epäonnistui",
+        "failedMessage": "Vanhan tietokannan poisto epäonnistui: {error}"
       },
       "alert": {
         "firedTitle": "Hälytys: {rule_name}"
@@ -2707,6 +2709,9 @@
       }
     },
     "species": {
+      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
+      "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
+      "configAdded": "Lajin \"{species}\" asetukset lisätty",
       "activeSpecies": {
         "title": "Aktiiviset lajit",
         "tabLabel": "Aktiivis.",
@@ -3135,6 +3140,11 @@
       "sqlitePlaceholder": "Syötä SQLite-tietokannan polku",
       "mysqlHostPlaceholder": "Syötä MySQL-isäntä",
       "mysqlUsernamePlaceholder": "Syötä MySQL-käyttäjänimi"
+    },
+    "errors": {
+      "mapLibraryLoadFailed": "Karttakirjaston lataus epäonnistui. Päivitä sivu.",
+      "mapLoadFailed": "Kartan lataus epäonnistui. Kokeile päivittää sivu.",
+      "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen."
     },
     "tabs": {
       "navigation": "Asetusten navigointivälilehdet",

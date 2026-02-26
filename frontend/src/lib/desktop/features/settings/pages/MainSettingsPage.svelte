@@ -731,7 +731,7 @@
         } catch (importError) {
           mapLibraryLoading = false;
           logger.error('Failed to load MapLibre GL JS:', importError);
-          toastActions.error('Failed to load map library. Please refresh the page.');
+          toastActions.error(t('settings.main.errors.mapLibraryLoadFailed'));
           mapInitialized = false;
           return;
         }
@@ -796,7 +796,7 @@
       }
     } catch (error) {
       logger.error('Failed to initialize map:', error);
-      toastActions.error('Failed to load map. Please try refreshing the page.');
+      toastActions.error(t('settings.main.errors.mapLoadFailed'));
       mapInitialized = false;
     }
   }
@@ -981,7 +981,7 @@
       }
     } catch (error) {
       logger.error('Failed to initialize modal map:', error);
-      toastActions.error('Failed to load modal map. Please try closing and reopening the modal.');
+      toastActions.error(t('settings.main.errors.modalMapLoadFailed'));
       mapModalOpen = false;
       return () => {};
     }

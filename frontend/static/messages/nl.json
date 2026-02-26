@@ -339,65 +339,67 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go gestart",
+        "message": "Applicatie succesvol gestart (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go wordt afgesloten",
+        "message": "Applicatie wordt netjes afgesloten"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Gedetecteerd: {species}",
+        "message": "Betrouwbaarheid: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "{integration}-integratie mislukt",
+        "failedMessage": "Verbinding of gegevensoverdracht mislukt: {error}"
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Hoog {resource}-gebruik",
+        "criticalUsage": "Kritiek {resource}-gebruik",
+        "recovered": "{resource}-gebruik hersteld",
+        "currentUsage": "Momenteel op {current}{unit} (drempel: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kritieke systeemfout",
+        "application": "Applicatiefout",
+        "imageProvider": "Melding afbeeldingprovider",
+        "categoryError": "{category}-fout"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Nieuwe analyse-instellingen worden toegepast...",
+        "rebuildingRangeFilter": "Soortenverspreidingsfilter wordt opnieuw opgebouwd...",
+        "updatingIntervals": "Detectie-intervallen worden bijgewerkt...",
+        "reconfiguringMqtt": "MQTT-verbinding wordt bijgewerkt...",
+        "reconfiguringBirdweather": "BirdWeather-integratie wordt bijgewerkt...",
+        "reconfiguringStreams": "Audiostreams worden bijgewerkt...",
+        "reconfiguringTelemetry": "Telemetrie-instellingen worden bijgewerkt...",
+        "reconfiguringSpeciesTracking": "Soortentracering wordt bijgewerkt...",
+        "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
+        "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
+        "audioDeviceRestartRequired": "Audioapparaat gewijzigd. Herstart vereist.",
+        "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
+        "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
+        "savedSuccessfully": "Instellingen succesvol opgeslagen",
+        "saveFailed": "Opslaan van instellingen mislukt"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Databasemigratie gestart",
+        "startedMessage": "De migratie is gestart. Dit kan enige tijd duren afhankelijk van het aantal detecties.",
+        "pausedTitle": "Databasemigratie gepauzeerd",
+        "pausedMessage": "De databasemigratie is gepauzeerd. U kunt deze op elk moment hervatten vanuit de database-instellingen.",
+        "cancelledTitle": "Databasemigratie geannuleerd",
+        "cancelledMessage": "De databasemigratie is geannuleerd. U kunt op elk moment een nieuwe migratie starten vanuit de database-instellingen.",
+        "completedTitle": "Databasemigratie voltooid",
+        "completedMessage": "Migratie voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database.",
+        "errorTitle": "Databasemigratiefout",
+        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten. Fout: {error}"
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Opruiming oude database voltooid",
+        "completeMessage": "{space} schijfruimte vrijgemaakt.",
+        "failedTitle": "Opruiming oude database mislukt",
+        "failedMessage": "Oude database kon niet worden verwijderd: {error}"
       },
       "alert": {
         "firedTitle": "Waarschuwing: {rule_name}"
@@ -1771,6 +1773,11 @@
         "rangeFilterLoadFailed": "Laden van soorten lijst mislukt",
         "rangeFilterCountFailed": "Laden van soorten aantal mislukt"
       },
+      "errors": {
+        "mapLibraryLoadFailed": "Laden van kaartbibliotheek mislukt. Vernieuw de pagina.",
+        "mapLoadFailed": "Laden van kaart mislukt. Probeer de pagina te vernieuwen.",
+        "modalMapLoadFailed": "Laden van modale kaart mislukt. Sluit het venster en open het opnieuw."
+      },
       "tabs": {
         "general": "Algemeen",
         "detection": "Detectie",
@@ -2846,6 +2853,9 @@
       }
     },
     "species": {
+      "saveError": "Opslaan van configuratie voor \"{species}\" mislukt. Probeer het opnieuw.",
+      "configUpdated": "Configuratie voor \"{species}\" bijgewerkt",
+      "configAdded": "Configuratie voor \"{species}\" toegevoegd",
       "activeSpecies": {
         "title": "Actieve Soorten",
         "tabLabel": "Actief",

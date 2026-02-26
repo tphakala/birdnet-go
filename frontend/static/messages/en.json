@@ -379,7 +379,9 @@
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "audioDeviceRestartRequired": "Audio device changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "equalizerUpdated": "Audio equalizer settings updated",
+        "savedSuccessfully": "Settings saved successfully",
+        "saveFailed": "Failed to save settings"
       },
       "migration": {
         "startedTitle": "Database Migration Started",
@@ -1477,6 +1479,11 @@
       "defaultIndicator": "Default input source"
     },
     "main": {
+      "errors": {
+        "mapLibraryLoadFailed": "Failed to load map library. Please refresh the page.",
+        "mapLoadFailed": "Failed to load map. Please try refreshing the page.",
+        "modalMapLoadFailed": "Failed to load modal map. Please try closing and reopening the modal."
+      },
       "tabs": {
         "general": "General",
         "detection": "Detection",
@@ -2876,6 +2883,9 @@
       }
     },
     "species": {
+      "saveError": "Failed to save configuration for \"{species}\". Please try again.",
+      "configUpdated": "Updated configuration for \"{species}\"",
+      "configAdded": "Added configuration for \"{species}\"",
       "activeSpecies": {
         "title": "Active Species",
         "tabLabel": "Active",

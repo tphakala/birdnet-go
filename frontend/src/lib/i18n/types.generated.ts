@@ -326,6 +326,8 @@ export type TranslationKey =
   | 'notifications.content.settings.audioDeviceRestartRequired'
   | 'notifications.content.settings.equalizerUpdateFailed'
   | 'notifications.content.settings.equalizerUpdated'
+  | 'notifications.content.settings.savedSuccessfully'
+  | 'notifications.content.settings.saveFailed'
   | 'notifications.content.migration.startedTitle'
   | 'notifications.content.migration.startedMessage'
   | 'notifications.content.migration.pausedTitle'
@@ -1110,6 +1112,11 @@ export type TranslationKey =
   | 'settings.tabs.hasChanges'
   | 'settings.tabs.setAsDefault'
   | 'settings.tabs.defaultIndicator'
+  | 'settings.main.errors.localesLoadFailed'
+  | 'settings.main.errors.providersLoadFailed'
+  | 'settings.main.errors.rangeFilterTestFailed'
+  | 'settings.main.errors.rangeFilterLoadFailed'
+  | 'settings.main.errors.rangeFilterCountFailed'
   | 'settings.main.tabs.general'
   | 'settings.main.tabs.detection'
   | 'settings.main.tabs.location'
@@ -1289,11 +1296,6 @@ export type TranslationKey =
   | 'settings.main.fields.locale.helpText'
   | 'settings.main.fields.tensorflowThreads.label'
   | 'settings.main.fields.tensorflowThreads.helpText'
-  | 'settings.main.errors.localesLoadFailed'
-  | 'settings.main.errors.providersLoadFailed'
-  | 'settings.main.errors.rangeFilterTestFailed'
-  | 'settings.main.errors.rangeFilterLoadFailed'
-  | 'settings.main.errors.rangeFilterCountFailed'
   | 'settings.support.sections.telemetry.title'
   | 'settings.support.sections.telemetry.description'
   | 'settings.support.sections.diagnostics.title'
@@ -2025,6 +2027,9 @@ export type TranslationKey =
   | 'settings.security.terminal.enableHelpText'
   | 'settings.security.terminal.securityWarning'
   | 'settings.security.terminal.confirmEnable'
+  | 'settings.species.saveError' // params: species
+  | 'settings.species.configUpdated' // params: species
+  | 'settings.species.configAdded' // params: species
   | 'settings.species.activeSpecies.title'
   | 'settings.species.activeSpecies.tabLabel'
   | 'settings.species.activeSpecies.description'
@@ -2707,6 +2712,9 @@ export type TranslationParams = {
   'settings.audio.fileSettings.bitrateHelp': { min: string | number; max: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
+  'settings.species.saveError': { species: string | number };
+  'settings.species.configUpdated': { species: string | number };
+  'settings.species.configAdded': { species: string | number };
   'settings.species.activeSpecies.stats.minutesAgo': { count: string | number };
   'settings.species.activeSpecies.stats.hoursAgo': { count: string | number };
   'settings.species.customConfiguration.badges.threshold': { value: string | number };

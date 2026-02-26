@@ -949,15 +949,15 @@
       // Show success feedback
       toastActions.success(
         editingSpecies
-          ? `Updated configuration for "${species}"`
-          : `Added configuration for "${species}"`
+          ? t('settings.species.configUpdated', { species })
+          : t('settings.species.configAdded', { species })
       );
 
       // Reset form only after successful save
       cancelEdit();
     } catch (error) {
       logger.error('Failed to save species configuration:', error);
-      toastActions.error(`Failed to save configuration for "${species}". Please try again.`);
+      toastActions.error(t('settings.species.saveError', { species }));
       // Don't reset the form on error so user can retry
     }
   }
