@@ -1223,7 +1223,10 @@
       "online": "En ligne",
       "uptime": "Durée de fonctionnement",
       "host": "Hôte",
-      "model": "Modèle"
+      "model": "Modèle",
+      "inference": "Inférence",
+      "avgTime": "Moy",
+      "noInference": "Pas encore de données"
     },
     "storage": {
       "title": "Stockage",

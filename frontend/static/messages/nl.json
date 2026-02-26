@@ -1223,7 +1223,10 @@
       "online": "Online",
       "uptime": "Uptime",
       "host": "Host",
-      "model": "Model"
+      "model": "Model",
+      "inference": "Inferentie",
+      "avgTime": "Gem",
+      "noInference": "Nog geen gegevens"
     },
     "storage": {
       "title": "Opslag",
