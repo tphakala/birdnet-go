@@ -513,7 +513,7 @@
                     {#if renderOption}
                       {@render renderOption(option)}
                     {:else}
-                      <div class="font-medium">{option.label}</div>
+                      <div>{option.label}</div>
                       {#if option.description}
                         <div class="text-xs text-base-content opacity-60">{option.description}</div>
                       {/if}
