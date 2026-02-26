@@ -102,6 +102,9 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		globalMetrics.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
 	}
 
+	// Record to atomic counters for ring buffer metrics
+	globalInferenceCounters.RecordInvoke(invokeDuration.Microseconds())
+
 	// Read the results from the output tensor
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	predictions := extractPredictions(outputTensor)
