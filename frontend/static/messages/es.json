@@ -1219,11 +1219,15 @@
       "available": "disp.",
       "min": "Mín",
       "max": "Máx",
+      "limit": "Límite",
       "tempUnavailable": "No disponible",
       "online": "En línea",
       "uptime": "Tiempo activo",
       "host": "Host",
-      "model": "Modelo"
+      "model": "Modelo",
+      "inference": "Inferencia",
+      "avgTime": "Prom",
+      "noInference": "Sin datos aún"
     },
     "storage": {
       "title": "Almacenamiento",

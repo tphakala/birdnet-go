@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { Cpu, MemoryStick, Thermometer, Server } from '@lucide/svelte';
-  import { formatBytesCompact, formatUptimeCompact } from '$lib/utils/formatters';
+  import { Cpu, MemoryStick, Thermometer, Brain } from '@lucide/svelte';
+  import { formatBytesCompact } from '$lib/utils/formatters';
   import Sparkline from './Sparkline.svelte';
 
   interface Props {
@@ -17,9 +17,10 @@
     temperatureValue: number;
     temperatureHistory: number[];
     tempSymbol: string;
-    uptimeSeconds: number;
-    hostname: string;
-    systemModel?: string;
+    inferenceAvgMs: number;
+    inferenceHistory: number[];
+    hasInferenceData: boolean;
+    inferenceThresholdMs?: number;
   }
 
   let {
@@ -35,19 +36,20 @@
     temperatureValue,
     temperatureHistory,
     tempSymbol,
-    uptimeSeconds,
-    hostname,
-    systemModel,
+    inferenceAvgMs,
+    inferenceHistory,
+    hasInferenceData,
+    inferenceThresholdMs,
   }: Props = $props();
 
   const sparklineColorCpu = '#3b82f6';
   const sparklineColorMemory = '#8b5cf6';
   const sparklineColorTemperature = '#f97316';
+  const sparklineColorInference = '#14b8a6';
 
   let hasTempHistory = $derived(temperatureHistory.length > 0);
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
   let tempMax = $derived(hasTempHistory ? Math.max(...temperatureHistory) : temperatureValue);
-  let shortModel = $derived(systemModel?.split(' ').slice(0, 3).join(' ') ?? '');
 </script>
 
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -137,41 +139,50 @@
     {/if}
   </div>
 
-  <!-- System Status -->
+  <!-- Inference Time -->
   <div
     class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
   >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-emerald-500/10">
-          <Server class="w-4 h-4 text-emerald-500" />
+        <div class="p-1.5 rounded-lg bg-teal-500/10">
+          <Brain class="w-4 h-4 text-teal-500" />
         </div>
         <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
-          >{t('system.metrics.system')}</span
+          >{t('system.metrics.inference')}</span
         >
       </div>
-      <div class="flex items-center gap-1">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium"
-          >{t('system.metrics.online')}</span
+      <span class="font-mono tabular-nums text-lg font-semibold">
+        {#if hasInferenceData}
+          {inferenceAvgMs.toFixed(0)}ms
+        {:else}
+          —
+        {/if}
+      </span>
+    </div>
+    {#if hasInferenceData}
+      <div class="flex-1 min-h-[28px]">
+        <Sparkline
+          data={inferenceHistory}
+          color={sparklineColorInference}
+          threshold={inferenceThresholdMs}
+        />
+      </div>
+      <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+        <span>{t('system.metrics.avgTime')} {inferenceAvgMs.toFixed(1)}ms</span>
+        {#if inferenceThresholdMs != null}
+          <span class="text-red-500/60"
+            >{t('system.metrics.limit')} {inferenceThresholdMs.toFixed(0)}ms</span
+          >
+        {/if}
+        <span>{inferenceHistory.length} {t('system.metrics.samples')}</span>
+      </div>
+    {:else}
+      <div class="flex-1 min-h-[28px] flex items-center">
+        <span class="text-xs text-slate-500 dark:text-slate-400"
+          >{t('system.metrics.noInference')}</span
         >
       </div>
-    </div>
-    <div class="space-y-2 text-sm flex-1">
-      <div class="flex justify-between">
-        <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.uptime')}</span>
-        <span class="font-mono tabular-nums font-medium">{formatUptimeCompact(uptimeSeconds)}</span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.host')}</span>
-        <span class="font-medium truncate ml-2">{hostname}</span>
-      </div>
-      {#if shortModel}
-        <div class="flex justify-between">
-          <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.model')}</span>
-          <span class="font-medium truncate ml-2 text-xs">{shortModel}</span>
-        </div>
-      {/if}
-    </div>
+    {/if}
   </div>
 </div>

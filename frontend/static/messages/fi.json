@@ -1219,11 +1219,15 @@
       "available": "saatav.",
       "min": "Min",
       "max": "Max",
+      "limit": "Raja",
       "tempUnavailable": "Ei saatavilla",
       "online": "Verkossa",
       "uptime": "Käyntiaika",
       "host": "Palvelin",
-      "model": "Malli"
+      "model": "Malli",
+      "inference": "Päättely",
+      "avgTime": "Ka",
+      "noInference": "Ei dataa vielä"
     },
     "storage": {
       "title": "Tallennustila",

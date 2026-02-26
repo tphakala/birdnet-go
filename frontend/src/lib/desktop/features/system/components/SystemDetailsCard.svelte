@@ -1,11 +1,12 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { Monitor, Server, Clock, Globe, Cpu, Thermometer } from '@lucide/svelte';
+  import { Monitor, Server, Network, Clock, Globe, Cpu, Thermometer } from '@lucide/svelte';
   import { formatUptimeCompact } from '$lib/utils/formatters';
 
   interface Props {
     osDisplay: string;
     systemModel?: string;
+    hostname: string;
     uptimeSeconds: number;
     timeZone?: string;
     cpuCores: number;
@@ -17,6 +18,7 @@
   let {
     osDisplay,
     systemModel,
+    hostname,
     uptimeSeconds,
     timeZone,
     cpuCores,
@@ -37,6 +39,12 @@
       <Monitor class="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
       <span class="text-sm truncate">{osDisplay}</span>
     </div>
+    {#if hostname}
+      <div class="flex items-center gap-3">
+        <Network class="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+        <span class="text-sm truncate">{hostname}</span>
+      </div>
+    {/if}
     {#if systemModel}
       <div class="flex items-center gap-3">
         <Server class="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />

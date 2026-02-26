@@ -1219,11 +1219,15 @@
       "available": "dost.",
       "min": "Min",
       "max": "Max",
+      "limit": "Limit",
       "tempUnavailable": "Niedostępna",
       "online": "Online",
       "uptime": "Czas pracy",
       "host": "Host",
-      "model": "Model"
+      "model": "Model",
+      "inference": "Wnioskowanie",
+      "avgTime": "Śr",
+      "noInference": "Brak danych"
     },
     "storage": {
       "title": "Pamięć masowa",
