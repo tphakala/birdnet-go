@@ -81,13 +81,17 @@ func NotifyIntegrationFailure(integration string, err error) {
 	}
 
 	title := fmt.Sprintf("%s Integration Failed", integration)
-	message := fmt.Sprintf("Failed to connect or send data: %v", err)
+	errMsg := "unknown integration error"
+	if err != nil {
+		errMsg = err.Error()
+	}
+	message := fmt.Sprintf("Failed to connect or send data: %s", errMsg)
 
 	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
 	notif := NewNotification(TypeError, PriorityHigh, title, message).
 		WithComponent(integration).
 		WithTitleKey(MsgIntegrationFailedTitle, map[string]any{"integration": integration}).
-		WithMessageKey(MsgIntegrationFailedMessage, map[string]any{"error": err.Error()})
+		WithMessageKey(MsgIntegrationFailedMessage, map[string]any{"error": errMsg})
 
 	_ = service.CreateWithMetadata(notif)
 }

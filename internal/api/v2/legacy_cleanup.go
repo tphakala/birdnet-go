@@ -550,21 +550,18 @@ func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64,
 		messageParams = map[string]any{"error": errMsg}
 	}
 
-	notif, err := notifService.CreateWithComponent(
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := notification.NewNotification(
 		notification.TypeSystem,
 		priority,
 		title,
 		body,
-		"database",
-	)
-	if err != nil {
+	).WithComponent("database").
+		WithTitleKey(titleKey, nil).
+		WithMessageKey(messageKey, messageParams)
+
+	if err := notifService.CreateWithMetadata(notif); err != nil {
 		c.logWarnIfEnabled("Failed to send cleanup notification", logger.Error(err))
-		return
-	}
-	if notif != nil {
-		notif.WithTitleKey(titleKey, nil).
-			WithMessageKey(messageKey, messageParams)
-		_ = notifService.UpdateNotification(notif)
 	}
 }
 

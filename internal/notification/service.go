@@ -330,6 +330,13 @@ func (s *Service) GetUnreadCount() (int, error) {
 
 // CreateErrorNotification creates a notification from an error
 func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
+	if err == nil {
+		return nil, errors.Newf("error cannot be nil").
+			Component("notification").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	// Extract error details
 	var title, message, component string
 	var priority Priority

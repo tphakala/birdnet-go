@@ -424,20 +424,19 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 
 	// Send notification that migration has started
 	if notifService := notification.GetService(); notifService != nil {
-		notif, err := notifService.CreateWithComponent(
+		// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+		notif := notification.NewNotification(
 			notification.TypeSystem,
 			notification.PriorityMedium,
 			"Database Migration Started",
 			"Migration has started. This may take a while depending on the number of detections.",
-			"database",
-		)
-		if err != nil {
+		).WithComponent("database").
+			WithTitleKey(notification.MsgMigrationStartedTitle, nil).
+			WithMessageKey(notification.MsgMigrationStartedMessage, nil)
+
+		if err := notifService.CreateWithMetadata(notif); err != nil {
 			c.logWarnIfEnabled("Failed to send migration start notification",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		} else if notif != nil {
-			notif.WithTitleKey(notification.MsgMigrationStartedTitle, nil).
-				WithMessageKey(notification.MsgMigrationStartedMessage, nil)
-			_ = notifService.UpdateNotification(notif)
 		}
 	}
 
@@ -619,19 +618,18 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 
 	// Send notification that migration was cancelled
 	if notifService := notification.GetService(); notifService != nil {
-		notif, err := notifService.CreateWithComponent(
+		// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+		notif := notification.NewNotification(
 			notification.TypeSystem,
 			notification.PriorityMedium,
 			"Database Migration Cancelled",
 			"Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-			"database",
-		)
-		if err != nil {
+		).WithComponent("database").
+			WithTitleKey(notification.MsgMigrationCancelledTitle, nil)
+
+		if err := notifService.CreateWithMetadata(notif); err != nil {
 			c.logWarnIfEnabled("Failed to send migration cancel notification",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		} else if notif != nil {
-			notif.WithTitleKey(notification.MsgMigrationCancelledTitle, nil)
-			_ = notifService.UpdateNotification(notif)
 		}
 	}
 
@@ -754,22 +752,24 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 	// Send notification if configured
 	if params.notificationTitle != "" {
 		if notifService := notification.GetService(); notifService != nil {
-			notif, err := notifService.CreateWithComponent(
+			// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+			notif := notification.NewNotification(
 				notification.TypeSystem,
 				notification.PriorityMedium,
 				params.notificationTitle,
 				params.notificationBody,
-				"database",
-			)
-			if err != nil {
+			).WithComponent("database")
+
+			if params.titleKey != "" {
+				notif.WithTitleKey(params.titleKey, nil)
+			}
+			if params.messageKey != "" {
+				notif.WithMessageKey(params.messageKey, nil)
+			}
+
+			if err := notifService.CreateWithMetadata(notif); err != nil {
 				c.logWarnIfEnabled("Failed to send migration notification",
 					logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-			} else if notif != nil && params.titleKey != "" {
-				notif.WithTitleKey(params.titleKey, nil)
-				if params.messageKey != "" {
-					notif.WithMessageKey(params.messageKey, nil)
-				}
-				_ = notifService.UpdateNotification(notif)
 			}
 		}
 	}

@@ -140,7 +140,7 @@ func (t *Toast) ToNotification() *Notification {
 	// Propagate translation keys from toast to notification
 	if t.MessageKey != "" {
 		notif.MessageKey = t.MessageKey
-		notif.MessageParams = t.MessageParams
+		notif.MessageParams = sanitizeParams(t.MessageParams)
 	}
 
 	// Toasts are ephemeral - set short expiry
