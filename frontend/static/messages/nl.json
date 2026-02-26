@@ -1227,7 +1227,10 @@
       "model": "Model",
       "inference": "Inferentie",
       "avgTime": "Gem",
-      "noInference": "Nog geen gegevens"
+      "noInference": "Nog geen gegevens",
+      "statusOk": "OK",
+      "statusWarning": "Waarschuwing",
+      "statusCritical": "Kritiek"
     },
     "storage": {
       "title": "Opslag",

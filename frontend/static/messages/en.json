@@ -1227,7 +1227,10 @@
       "model": "Model",
       "inference": "Inference",
       "avgTime": "Avg",
-      "noInference": "No data yet"
+      "noInference": "No data yet",
+      "statusOk": "OK",
+      "statusWarning": "Warning",
+      "statusCritical": "Critical"
     },
     "storage": {
       "title": "Storage",

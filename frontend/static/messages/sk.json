@@ -1055,7 +1055,14 @@
       "online": "Online",
       "uptime": "Doba behu",
       "host": "Host",
-      "model": "Model"
+      "model": "Model",
+      "limit": "Limit",
+      "inference": "Inferencia",
+      "avgTime": "Priemer",
+      "noInference": "Žiadne dáta",
+      "statusOk": "OK",
+      "statusWarning": "Varovanie",
+      "statusCritical": "Kritický"
     },
     "storage": {
       "title": "Úložisko",

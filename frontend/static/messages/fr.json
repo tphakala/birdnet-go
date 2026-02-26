@@ -1227,7 +1227,10 @@
       "model": "Modèle",
       "inference": "Inférence",
       "avgTime": "Moy",
-      "noInference": "Pas encore de données"
+      "noInference": "Pas encore de données",
+      "statusOk": "OK",
+      "statusWarning": "Attention",
+      "statusCritical": "Critique"
     },
     "storage": {
       "title": "Stockage",

@@ -1227,7 +1227,10 @@
       "model": "Modell",
       "inference": "Inferenz",
       "avgTime": "Durchschn.",
-      "noInference": "Noch keine Daten"
+      "noInference": "Noch keine Daten",
+      "statusOk": "OK",
+      "statusWarning": "Warnung",
+      "statusCritical": "Kritisch"
     },
     "storage": {
       "title": "Speicher",

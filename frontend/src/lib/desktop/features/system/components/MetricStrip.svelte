@@ -50,6 +50,15 @@
   let hasTempHistory = $derived(temperatureHistory.length > 0);
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
   let tempMax = $derived(hasTempHistory ? Math.max(...temperatureHistory) : temperatureValue);
+
+  // Inference status based on avg vs threshold: OK < 70%, WARNING 70-100%, CRITICAL >= 100%
+  let inferenceStatus = $derived.by(() => {
+    if (!hasInferenceData || inferenceThresholdMs == null) return null;
+    const ratio = inferenceAvgMs / inferenceThresholdMs;
+    if (ratio >= 1.0) return 'critical' as const;
+    if (ratio >= 0.7) return 'warning' as const;
+    return 'ok' as const;
+  });
 </script>
 
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -152,29 +161,38 @@
           >{t('system.metrics.inference')}</span
         >
       </div>
-      <span class="font-mono tabular-nums text-lg font-semibold">
-        {#if hasInferenceData}
-          {inferenceAvgMs.toFixed(0)}ms
-        {:else}
-          —
+      <div class="flex items-center gap-2">
+        {#if inferenceStatus === 'ok'}
+          <span
+            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            >{t('system.metrics.statusOk')}</span
+          >
+        {:else if inferenceStatus === 'warning'}
+          <span
+            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            >{t('system.metrics.statusWarning')}</span
+          >
+        {:else if inferenceStatus === 'critical'}
+          <span
+            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400"
+            >{t('system.metrics.statusCritical')}</span
+          >
         {/if}
-      </span>
+        <span class="font-mono tabular-nums text-lg font-semibold">
+          {#if hasInferenceData}
+            {inferenceAvgMs.toFixed(0)}ms
+          {:else}
+            —
+          {/if}
+        </span>
+      </div>
     </div>
     {#if hasInferenceData}
       <div class="flex-1 min-h-[28px]">
-        <Sparkline
-          data={inferenceHistory}
-          color={sparklineColorInference}
-          threshold={inferenceThresholdMs}
-        />
+        <Sparkline data={inferenceHistory} color={sparklineColorInference} />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
         <span>{t('system.metrics.avgTime')} {inferenceAvgMs.toFixed(1)}ms</span>
-        {#if inferenceThresholdMs != null}
-          <span class="text-red-500/60"
-            >{t('system.metrics.limit')} {inferenceThresholdMs.toFixed(0)}ms</span
-          >
-        {/if}
         <span>{inferenceHistory.length} {t('system.metrics.samples')}</span>
       </div>
     {:else}

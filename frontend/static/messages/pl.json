@@ -1227,7 +1227,10 @@
       "model": "Model",
       "inference": "Wnioskowanie",
       "avgTime": "Śr",
-      "noInference": "Brak danych"
+      "noInference": "Brak danych",
+      "statusOk": "OK",
+      "statusWarning": "Ostrzeżenie",
+      "statusCritical": "Krytyczny"
     },
     "storage": {
       "title": "Pamięć masowa",

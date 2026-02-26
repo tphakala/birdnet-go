@@ -1048,7 +1048,14 @@
       "online": "Online",
       "uptime": "Tempo attivo",
       "host": "Host",
-      "model": "Modello"
+      "model": "Modello",
+      "limit": "Limite",
+      "inference": "Inferenza",
+      "avgTime": "Med",
+      "noInference": "Nessun dato",
+      "statusOk": "OK",
+      "statusWarning": "Attenzione",
+      "statusCritical": "Critico"
     },
     "storage": {
       "title": "Archiviazione",

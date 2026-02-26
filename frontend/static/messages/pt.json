@@ -1227,7 +1227,10 @@
       "model": "Modelo",
       "inference": "Inferência",
       "avgTime": "Méd",
-      "noInference": "Sem dados ainda"
+      "noInference": "Sem dados ainda",
+      "statusOk": "OK",
+      "statusWarning": "Aviso",
+      "statusCritical": "Crítico"
     },
     "storage": {
       "title": "Armazenamento",

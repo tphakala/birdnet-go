@@ -1227,7 +1227,10 @@
       "model": "Modelo",
       "inference": "Inferencia",
       "avgTime": "Prom",
-      "noInference": "Sin datos aún"
+      "noInference": "Sin datos aún",
+      "statusOk": "OK",
+      "statusWarning": "Advertencia",
+      "statusCritical": "Crítico"
     },
     "storage": {
       "title": "Almacenamiento",
