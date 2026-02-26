@@ -6,6 +6,10 @@
   interface Props {
     data?: number[];
     color?: string;
+    /** Optional threshold value — renders a dashed horizontal line */
+    threshold?: number;
+    /** Color for the threshold line */
+    thresholdColor?: string;
     /** Internal viewBox width for path calculations */
     viewWidth?: number;
     /** Internal viewBox height for path calculations */
@@ -15,15 +19,23 @@
   let {
     data = [],
     color = 'var(--color-primary)',
+    threshold,
+    thresholdColor = '#ef4444',
     viewWidth = 200,
     viewHeight = 40,
   }: Props = $props();
 
   let paths = $derived.by(() => {
-    if (data.length < 2) return { line: '', area: '' };
+    if (data.length < 2) return { line: '', area: '', thresholdY: undefined as number | undefined };
 
     const padding = 2;
-    const [minVal, maxVal] = extent(data) as [number, number];
+    let [minVal, maxVal] = extent(data) as [number, number];
+
+    // Extend domain to include threshold so the line is always visible
+    if (threshold != null) {
+      if (threshold > maxVal) maxVal = threshold;
+      if (threshold < minVal) minVal = threshold;
+    }
 
     const xScale = scaleLinear()
       .domain([0, data.length - 1])
@@ -47,6 +59,7 @@
     return {
       line: lineGenerator(data) ?? '',
       area: areaGenerator(data) ?? '',
+      thresholdY: threshold != null ? yScale(threshold) : undefined,
     };
   });
 </script>
@@ -69,5 +82,18 @@
       stroke-linejoin="round"
       vector-effect="non-scaling-stroke"
     />
+    {#if paths.thresholdY != null}
+      <line
+        x1="0"
+        y1={paths.thresholdY}
+        x2={viewWidth}
+        y2={paths.thresholdY}
+        stroke={thresholdColor}
+        stroke-width="1"
+        stroke-dasharray="4 3"
+        opacity="0.6"
+        vector-effect="non-scaling-stroke"
+      />
+    {/if}
   {/if}
 </svg>

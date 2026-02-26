@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { Cpu, MemoryStick, Thermometer, BrainCircuit } from '@lucide/svelte';
+  import { Cpu, MemoryStick, Thermometer, Brain } from '@lucide/svelte';
   import { formatBytesCompact } from '$lib/utils/formatters';
   import Sparkline from './Sparkline.svelte';
 
@@ -20,6 +20,7 @@
     inferenceAvgMs: number;
     inferenceHistory: number[];
     hasInferenceData: boolean;
+    inferenceThresholdMs?: number;
   }
 
   let {
@@ -38,6 +39,7 @@
     inferenceAvgMs,
     inferenceHistory,
     hasInferenceData,
+    inferenceThresholdMs,
   }: Props = $props();
 
   const sparklineColorCpu = '#3b82f6';
@@ -144,7 +146,7 @@
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-teal-500/10">
-          <BrainCircuit class="w-4 h-4 text-teal-500" />
+          <Brain class="w-4 h-4 text-teal-500" />
         </div>
         <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
           >{t('system.metrics.inference')}</span
@@ -160,10 +162,19 @@
     </div>
     {#if hasInferenceData}
       <div class="flex-1 min-h-[28px]">
-        <Sparkline data={inferenceHistory} color={sparklineColorInference} />
+        <Sparkline
+          data={inferenceHistory}
+          color={sparklineColorInference}
+          threshold={inferenceThresholdMs}
+        />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
         <span>{t('system.metrics.avgTime')} {inferenceAvgMs.toFixed(1)}ms</span>
+        {#if inferenceThresholdMs != null}
+          <span class="text-red-500/60"
+            >{t('system.metrics.max')} {inferenceThresholdMs.toFixed(0)}ms</span
+          >
+        {/if}
         <span>{inferenceHistory.length} {t('system.metrics.samples')}</span>
       </div>
     {:else}
