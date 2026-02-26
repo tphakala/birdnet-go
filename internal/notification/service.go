@@ -330,9 +330,20 @@ func (s *Service) GetUnreadCount() (int, error) {
 
 // CreateErrorNotification creates a notification from an error
 func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
+	if err == nil {
+		return nil, errors.Newf("error cannot be nil").
+			Component("notification").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	// Extract error details
 	var title, message, component string
 	var priority Priority
+
+	// Track the translation key for the title
+	var titleKey string
+	var titleParams map[string]any
 
 	// Check if it's an enhanced error
 	var enhancedErr *errors.EnhancedError
@@ -346,25 +357,42 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 		case string(errors.CategorySystem), string(errors.CategoryDatabase):
 			priority = PriorityCritical
 			title = "Critical System Error"
+			titleKey = MsgErrorCriticalSystem
 		case string(errors.CategoryNetwork), string(errors.CategoryHTTP):
 			priority = PriorityHigh
 			title = fmt.Sprintf("%s Error", category)
+			titleKey = MsgErrorCategory
+			titleParams = map[string]any{"category": category}
 		case string(errors.CategoryImageProvider), string(errors.CategoryImageFetch):
 			priority = PriorityLow
 			title = "Image Provider Notice"
+			titleKey = MsgErrorImageProvider
 		default:
 			priority = PriorityMedium
 			title = "Application Error"
+			titleKey = MsgErrorApplication
 		}
 	} else {
 		// Fallback for standard errors
 		priority = PriorityMedium
 		title = "Application Error"
+		titleKey = MsgErrorApplication
 		message = err.Error()
 		component = "unknown"
 	}
 
-	return s.CreateWithComponent(TypeError, priority, title, message, component)
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := NewNotification(TypeError, priority, title, message).
+		WithComponent(component)
+	if titleKey != "" {
+		notif.WithTitleKey(titleKey, titleParams)
+		// MessageKey intentionally left empty — raw error strings are diagnostic, not translatable
+	}
+
+	if createErr := s.CreateWithMetadata(notif); createErr != nil {
+		return nil, createErr
+	}
+	return notif, nil
 }
 
 // broadcastStats tracks broadcast results.

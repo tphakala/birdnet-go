@@ -581,6 +581,14 @@ func (c *Controller) createToastEventData(notif *notification.Notification) map[
 		toastEvent["action"] = action
 	}
 
+	// Include translation keys for frontend i18n
+	if notif.MessageKey != "" {
+		toastEvent["message_key"] = notif.MessageKey
+		if notif.MessageParams != nil {
+			toastEvent["message_params"] = notif.MessageParams
+		}
+	}
+
 	return toastEvent
 }
 

@@ -432,10 +432,12 @@ func (c *Controller) ListBackupJobs(ctx echo.Context) error {
 		backupJobManager.mu.RUnlock()
 	}
 
-	// Update progress for in-progress jobs before returning
+	// Update progress for in-progress jobs and set download URL for completed jobs
 	for _, job := range jobs {
 		if job.Status == BackupStatusInProgress {
 			job.updateProgress()
+		} else if job.Status == BackupStatusCompleted && job.DownloadURL == "" {
+			job.setDownloadURL(fmt.Sprintf("/api/v2/system/database/backup/jobs/%s/download", job.ID))
 		}
 	}
 

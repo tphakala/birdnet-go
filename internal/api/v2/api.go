@@ -72,6 +72,9 @@ type Controller struct {
 	// Metrics history store for sparkline data
 	metricsStore observability.MetricsStore
 
+	// Detection rate cache for database overview endpoint
+	detectionRateCache *datastore.DetectionRateCache
+
 	// SSE related fields
 	sseManager *SSEManager // Manager for Server-Sent Events connections
 
@@ -318,6 +321,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		ctx:                  ctx,
 		cancel:               cancel,
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
+		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
 	}
 
 	// Initialize structured logger for API requests

@@ -12,6 +12,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 )
 
 // CPUUsageFunc is a function that returns the current total CPU usage percentage.
@@ -28,6 +29,10 @@ type Collector struct {
 	// Internal state for disk I/O delta computation
 	prevDiskIO   map[string]disk.IOCountersStat
 	prevDiskTime time.Time
+
+	// Database latency tracking (optional, set via SetDBCounters)
+	dbCounters *dbstats.Counters
+	prevDBSnap *dbstats.Snapshot
 
 	// Track which metrics have had logged errors to avoid log spam
 	loggedErrors map[string]bool
@@ -83,6 +88,11 @@ const (
 	metricDiskUsedPercent   = "disk.used_percent.%s"
 	metricDiskIORead        = "disk.io.read.%s"
 	metricDiskIOWrite       = "disk.io.write.%s"
+	metricDBReadLatency     = "db.read_latency_ms"
+	metricDBWriteLatency    = "db.write_latency_ms"
+	metricDBReadLatencyMax  = "db.read_latency_max_ms"
+	metricDBWriteLatencyMax = "db.write_latency_max_ms"
+	metricDBQueriesPerSec   = "db.queries_per_sec"
 
 	// maxValidCelsius is the upper bound for valid CPU temperature readings.
 	// 120°C captures overheating events before thermal shutdown while filtering bogus values.
@@ -97,6 +107,7 @@ func (c *Collector) collect() {
 	c.collectMemory(points)
 	c.collectTemperature(points)
 	c.collectDisk(points)
+	c.collectDatabase(points)
 
 	if len(points) > 0 {
 		c.store.RecordBatch(points)
@@ -192,6 +203,51 @@ func (c *Collector) collectDiskIO(points map[string]float64) {
 
 	c.prevDiskIO = counters
 	c.prevDiskTime = now
+}
+
+// SetDBCounters sets the database atomic counters for latency tracking.
+// Must be called before Start. If not called, database metrics are skipped.
+func (c *Collector) SetDBCounters(counters *dbstats.Counters) {
+	c.dbCounters = counters
+}
+
+// usToMs converts microseconds to milliseconds.
+const usToMs = 1000.0
+
+// collectDatabase computes database latency and throughput metrics from
+// atomic counter snapshots. Requires two consecutive snapshots for deltas.
+func (c *Collector) collectDatabase(points map[string]float64) {
+	if c.dbCounters == nil {
+		return
+	}
+
+	snap := c.dbCounters.Snapshot()
+
+	// Max values are reset-on-read from Snapshot(), always record them
+	// (even on the first tick when prevDBSnap is nil)
+	points[metricDBReadLatencyMax] = float64(snap.ReadMaxUs) / usToMs
+	points[metricDBWriteLatencyMax] = float64(snap.WriteMaxUs) / usToMs
+
+	if c.prevDBSnap != nil {
+		elapsed := snap.CollectedAt.Sub(c.prevDBSnap.CollectedAt).Seconds()
+		if elapsed > 0 {
+			deltaReads := snap.ReadCount - c.prevDBSnap.ReadCount
+			deltaWrites := snap.WriteCount - c.prevDBSnap.WriteCount
+
+			if deltaReads > 0 {
+				deltaUs := snap.ReadTotalUs - c.prevDBSnap.ReadTotalUs
+				points[metricDBReadLatency] = float64(deltaUs) / float64(deltaReads) / usToMs
+			}
+			if deltaWrites > 0 {
+				deltaUs := snap.WriteTotalUs - c.prevDBSnap.WriteTotalUs
+				points[metricDBWriteLatency] = float64(deltaUs) / float64(deltaWrites) / usToMs
+			}
+
+			points[metricDBQueriesPerSec] = float64(deltaReads+deltaWrites) / elapsed
+		}
+	}
+
+	c.prevDBSnap = &snap
 }
 
 // logOnce logs a message for a metric category only on the first occurrence.

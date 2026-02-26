@@ -104,6 +104,35 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 	return false
 }
 
+// CSRFCookieRefresh returns a middleware that refreshes the CSRF cookie expiration
+// on every non-skipped API request.
+//
+// Echo v4.15.0+ introduced Sec-Fetch-Site header checks that short-circuit the
+// CSRF middleware before it reaches the cookie-setting code. This means the
+// cookie's max-age is never extended during normal same-origin browsing, causing
+// it to expire after 30 minutes. This middleware fixes that by refreshing the
+// cookie independently of the token validation path.
+func CSRFCookieRefresh() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if DefaultCSRFSkipper(c) {
+				return next(c)
+			}
+
+			err := next(c)
+
+			// On success, refresh the CSRF cookie if one exists
+			if err == nil {
+				if cookie, cookieErr := c.Cookie(csrfCookieName); cookieErr == nil && cookie.Value != "" {
+					setCSRFCookie(c, cookie.Value)
+				}
+			}
+
+			return err
+		}
+	}
+}
+
 // NewCSRF creates a CSRF middleware with the given configuration.
 // If config is nil, sensible defaults are used that match the legacy implementation.
 func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {

@@ -487,28 +487,29 @@
             {det.time}
           </span>
           {#if det.timeOfDay}
+            {@const tod = det.timeOfDay.toLowerCase()}
             {@const todColors = {
               day: { bg: 'oklch(0.92 0.08 90)', fg: 'oklch(0.45 0.12 75)' },
               night: { bg: 'oklch(0.3 0.06 270)', fg: 'oklch(0.8 0.08 270)' },
               sunrise: { bg: 'oklch(0.92 0.1 60)', fg: 'oklch(0.48 0.14 45)' },
               sunset: { bg: 'oklch(0.9 0.1 30)', fg: 'oklch(0.45 0.14 25)' },
             }}
-            {@const colors = todColors[det.timeOfDay as keyof typeof todColors] ?? todColors.day}
+            {@const colors = todColors[tod as keyof typeof todColors] ?? todColors.day}
             <span
               class="time-of-day-badge"
               style:background-color={colors.bg}
               style:color={colors.fg}
             >
-              {#if det.timeOfDay === 'day'}
+              {#if tod === 'day'}
                 <Sun size={12} />
-              {:else if det.timeOfDay === 'night'}
+              {:else if tod === 'night'}
                 <Moon size={12} />
-              {:else if det.timeOfDay === 'sunrise'}
+              {:else if tod === 'sunrise'}
                 <Sunrise size={12} />
-              {:else if det.timeOfDay === 'sunset'}
+              {:else if tod === 'sunset'}
                 <Sunset size={12} />
               {/if}
-              <span>{t(`detections.timeOfDay.${det.timeOfDay}`)}</span>
+              <span>{t(`detections.timeOfDay.${tod}`)}</span>
             </span>
           {/if}
         </div>
@@ -523,6 +524,7 @@
             <WeatherDetails
               weatherIcon={det.weather.weatherIcon}
               weatherDescription={det.weather.description}
+              timeOfDay={det.timeOfDay?.toLowerCase() === 'night' ? 'night' : 'day'}
               temperature={det.weather.temperature}
               windSpeed={det.weather.windSpeed}
               windGust={det.weather.windGust}
@@ -557,7 +559,9 @@
         <h3 id="rarity-heading" class="section-heading">{t('species.rarity.title')}</h3>
         <div class="content-panel">
           <div class="flex items-center gap-3 mb-1">
-            <span class="rarity-label">{speciesInfo.rarity.status.replace(/_/g, ' ')}</span>
+            <span class="rarity-label"
+              >{t(`species.rarity.statuses.${speciesInfo.rarity.status}`)}</span
+            >
             <span class="rarity-score">
               {(speciesInfo.rarity.score * 100).toFixed(0)}%
             </span>
@@ -1137,7 +1141,7 @@
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--color-base-content);
-    opacity: 0.4;
+    opacity: 0.65;
   }
 
   /* ----- Taxonomy tree with connector lines ----- */

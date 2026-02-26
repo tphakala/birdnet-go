@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // audioDeviceSettingChanged checks if audio device settings have changed
@@ -59,14 +60,16 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring sound level monitoring...", "info", toastDurationShort)
+		_ = c.SendToastWithKey("Reconfiguring sound level monitoring...", "info", toastDurationShort,
+			notification.MsgSettingsReconfiguringSoundLevel, nil)
 	}
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
 		// Send toast notification about restart requirement
-		_ = c.SendToast("Audio device changed. Restart required to apply changes.", "warning", toastDurationExtended)
+		_ = c.SendToastWithKey("Audio device changed. Restart required to apply changes.", "warning", toastDurationExtended,
+			notification.MsgSettingsAudioDeviceRestart, nil)
 	}
 
 	// Check audio equalizer settings
@@ -75,11 +78,13 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		// Handle audio equalizer changes synchronously as it returns an error
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			// Send error toast
-			_ = c.SendToast("Failed to update audio equalizer settings", "error", toastDurationLong)
+			_ = c.SendToastWithKey("Failed to update audio equalizer settings", "error", toastDurationLong,
+				notification.MsgSettingsEqualizerFailed, nil)
 			return reconfigActions, fmt.Errorf("failed to update audio equalizer: %w", err)
 		}
 		// Send success toast
-		_ = c.SendToast("Audio equalizer settings updated", "success", toastDurationShort)
+		_ = c.SendToastWithKey("Audio equalizer settings updated", "success", toastDurationShort,
+			notification.MsgSettingsEqualizerUpdated, nil)
 	}
 
 	return reconfigActions, nil

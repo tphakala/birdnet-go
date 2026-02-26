@@ -62,9 +62,9 @@ func BuildRangeFilter(bn *BirdNET) error {
 		// Debug: Write included species to file
 		debugFile := "debug_included_species.txt"
 		var content strings.Builder
-		content.WriteString(fmt.Sprintf("Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
+		fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
 			time.Now().Format(time.DateTime),
-			len(includedSpecies)))
+			len(includedSpecies))
 		for _, species := range includedSpecies {
 			content.WriteString(species + "\n")
 		}

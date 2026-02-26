@@ -379,7 +379,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
-	log.Info("Refreshing cache entry")
+	log.Debug("Refreshing cache entry")
 
 	// Check if provider is set
 	providerPtr := c.provider.Load()
@@ -426,7 +426,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		// ERROR: Actual system failures
 		switch {
 		case errors.Is(err, ErrImageNotFound):
-			log.Warn("Failed to fetch image during refresh",
+			log.Debug("Image not found during cache refresh",
 				logger.Error(enhancedErr))
 		case errors.Is(err, ErrProviderNotConfigured):
 			// This is normal - provider correctly identified it's not configured for use
@@ -453,7 +453,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	if c.metrics != nil {
 		c.metrics.IncrementImageDownloads()
 	}
-	log.Info("Successfully refreshed cache entry")
+	log.Debug("Successfully refreshed cache entry")
 }
 
 // Close stops the cache refresh routine and performs cleanup
@@ -650,7 +650,7 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 		fallbackImages, err := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
 		if err == nil && len(fallbackImages) > 0 {
 			if debug {
-				log.Info("Found images using fallback provider",
+				log.Debug("Found images using fallback provider",
 					logger.String("fallback_provider", fallbackProvider),
 					logger.Int("found_count", len(fallbackImages)))
 			}
@@ -919,15 +919,15 @@ func (c *BirdImageCache) tryFallbackOnGetError(err error, scientificName string,
 	}
 
 	triedProviders := map[string]bool{c.providerName: true}
-	log.Info("Primary provider failed, attempting fallback (policy: all)",
+	log.Debug("Primary provider failed, attempting fallback (policy: all)",
 		logger.Error(err))
 	fallbackImg, found := c.tryFallbackProviders(scientificName, triedProviders)
 	if found {
-		log.Info("Image found via fallback provider",
+		log.Debug("Image found via fallback provider",
 			logger.String("fallback_provider", fallbackImg.SourceProvider))
 		return fallbackImg, true
 	}
-	log.Warn("Image not found via fallback providers either")
+	log.Debug("Image not found via fallback providers either")
 	return BirdImage{}, false
 }
 
@@ -1015,12 +1015,12 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 		if c.shouldQuit() {
 			log.Debug("Skipping background refresh - shutdown in progress")
 		} else {
-			log.Info("DB cache entry is stale, returning stale data and triggering background refresh",
+			log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
 				logger.Time("cached_at", dbImage.CachedAt))
 			go c.refreshEntry(scientificName)
 		}
 	} else {
-		log.Info("Image loaded from DB cache")
+		log.Debug("Image loaded from DB cache")
 	}
 
 	c.dataMap.Store(scientificName, dbImage)
@@ -1041,7 +1041,7 @@ func (c *BirdImageCache) handleNegativeDBEntry(scientificName string, dbImage *B
 		return BirdImage{}, false // Continue to provider fetch
 	}
 
-	log.Info("Valid negative cache entry loaded from DB")
+	log.Debug("Valid negative cache entry loaded from DB")
 	c.dataMap.Store(scientificName, dbImage)
 	if c.metrics != nil {
 		c.metrics.IncrementCacheMisses()
@@ -1054,7 +1054,7 @@ func (c *BirdImageCache) fetchSingleFromProvider(scientificName string, fetchSta
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
-	log.Info("Image not found in DB cache, fetching from provider")
+	log.Debug("Image not found in DB cache, fetching from provider")
 
 	provider, err := c.getProvider()
 	if err != nil {
@@ -1141,7 +1141,7 @@ func (c *BirdImageCache) storeNegativeCacheEntry(scientificName string, fetchErr
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
-	log.Info("Image not found by provider, storing negative cache entry")
+	log.Debug("Image not found by provider, storing negative cache entry")
 
 	negativeEntry := BirdImage{
 		URL:            negativeEntryMarker,
@@ -1168,7 +1168,7 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 
 	fetchedImage.CachedAt = time.Now()
 	fetchedImage.SourceProvider = c.providerName
-	log.Info("Image successfully fetched from provider", logger.String("url", fetchedImage.URL))
+	log.Debug("Image successfully fetched from provider", logger.String("url", fetchedImage.URL))
 
 	c.dataMap.Store(scientificName, fetchedImage)
 	c.saveToDB(fetchedImage)
@@ -1196,7 +1196,7 @@ func (c *BirdImageCache) logSlowOperation(operation, scientificName string, dura
 // tryFallbackProviders attempts to get the image from other registered providers.
 func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProviders map[string]bool) (BirdImage, bool) {
 	log := GetLogger().With(logger.String("scientific_name", scientificName))
-	log.Info("Trying fallback providers")
+	log.Debug("Trying fallback providers")
 	registry := c.GetRegistry()
 	if registry == nil {
 		log.Warn("Cannot try fallback providers: registry is not set")
@@ -1218,7 +1218,7 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 			return true // Continue ranging
 		}
 
-		log.Info("Attempting fallback fetch from provider", logger.String("provider", name))
+		log.Debug("Attempting fallback fetch from provider", logger.String("provider", name))
 		localTriedProviders[name] = true // Mark as tried
 
 		// Instead of calling Get (which would recursively try fallbacks), use fetchAndStore directly
@@ -1234,7 +1234,7 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 
 		// Check if a valid image was found (URL is not empty)
 		if img.URL != "" {
-			log.Info("Image found via fallback provider",
+			log.Debug("Image found via fallback provider",
 				logger.String("provider", name),
 				logger.String("url", img.URL))
 			foundImage = img
@@ -1248,9 +1248,9 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 	})
 
 	if found {
-		log.Info("Fallback successful", logger.String("found_provider", foundImage.SourceProvider))
+		log.Debug("Fallback successful", logger.String("found_provider", foundImage.SourceProvider))
 	} else {
-		log.Info("Fallback unsuccessful, image not found in any provider")
+		log.Debug("Fallback unsuccessful, image not found in any provider")
 	}
 	return foundImage, found
 }

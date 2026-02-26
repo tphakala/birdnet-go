@@ -394,13 +394,13 @@ func (w *NotificationWorker) processEventGroup(key eventKey, groupEvents []event
 // buildAggregatedMessage builds an aggregated message from multiple events.
 func (w *NotificationWorker) buildAggregatedMessage(key eventKey, groupEvents []events.ErrorEvent) string {
 	var messageBuilder strings.Builder
-	messageBuilder.WriteString(fmt.Sprintf("Multiple %s errors in %s:\n", key.category, key.component))
+	fmt.Fprintf(&messageBuilder, "Multiple %s errors in %s:\n", key.category, key.component)
 
 	uniqueMessages := make(map[string]bool)
 	for _, event := range groupEvents {
 		msg := event.GetMessage()
 		if len(uniqueMessages) >= DefaultMaxSummaryMessages {
-			messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors", len(groupEvents)-len(uniqueMessages)))
+			fmt.Fprintf(&messageBuilder, "\n... and %d more errors", len(groupEvents)-len(uniqueMessages))
 			break
 		}
 		if !uniqueMessages[msg] {

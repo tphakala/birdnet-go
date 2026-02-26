@@ -41,12 +41,19 @@ type Toast struct {
 	Component string `json:"component,omitempty"`
 	// Action provides an optional action button
 	Action *ToastAction `json:"action,omitempty"`
+	// MessageKey is the i18n translation key for the message
+	MessageKey string `json:"message_key,omitempty"`
+	// MessageParams contains interpolation parameters for the message translation.
+	// Values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
+	MessageParams map[string]any `json:"message_params,omitempty"`
 }
 
 // ToastAction represents an optional action button on a toast
 type ToastAction struct {
-	// Label is the button text
+	// Label is the button text (English fallback)
 	Label string `json:"label"`
+	// LabelKey is the i18n translation key for the label
+	LabelKey string `json:"label_key,omitempty"`
 	// URL is the link to navigate to (if applicable)
 	URL string `json:"url,omitempty"`
 	// Handler is a frontend event handler name (if applicable)
@@ -82,6 +89,14 @@ func (t *Toast) WithAction(label, url, handler string) *Toast {
 		URL:     url,
 		Handler: handler,
 	}
+	return t
+}
+
+// WithMessageKey sets the translation key and parameters for the toast message.
+// Params values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
+func (t *Toast) WithMessageKey(key string, params map[string]any) *Toast {
+	t.MessageKey = key
+	t.MessageParams = sanitizeParams(params)
 	return t
 }
 
@@ -122,6 +137,12 @@ func (t *Toast) ToNotification() *Notification {
 		notif.WithMetadata("action", t.Action)
 	}
 
+	// Propagate translation keys from toast to notification
+	if t.MessageKey != "" {
+		notif.MessageKey = t.MessageKey
+		notif.MessageParams = sanitizeParams(t.MessageParams)
+	}
+
 	// Toasts are ephemeral - set short expiry
 	notif.WithExpiry(DefaultQuickExpiry)
 
@@ -160,6 +181,27 @@ func SendToastWithDuration(message string, toastType ToastType, component string
 	toast := NewToast(message, toastType).
 		WithComponent(component).
 		WithDuration(duration)
+	notification := toast.ToNotification()
+
+	// Use CreateWithMetadata to preserve all toast metadata
+	return service.CreateWithMetadata(notification)
+}
+
+// SendToastWithDurationAndKey sends a toast with a specific display duration and translation key
+func SendToastWithDurationAndKey(message string, toastType ToastType, component string, duration int, messageKey string, messageParams map[string]any) error {
+	if !IsInitialized() {
+		return fmt.Errorf("notification service not initialized")
+	}
+
+	service := GetService()
+	if service == nil {
+		return fmt.Errorf("notification service is nil")
+	}
+
+	toast := NewToast(message, toastType).
+		WithComponent(component).
+		WithDuration(duration).
+		WithMessageKey(messageKey, messageParams)
 	notification := toast.ToNotification()
 
 	// Use CreateWithMetadata to preserve all toast metadata

@@ -301,7 +301,8 @@
       "acknowledge": "Riconosci",
       "delete": "Elimina",
       "confirmDelete": "Conferma eliminazione",
-      "deleteConfirmation": "Sei sicuro di voler eliminare questa notifica?"
+      "deleteConfirmation": "Sei sicuro di voler eliminare questa notifica?",
+      "viewAll": "Visualizza tutte le notifiche"
     },
     "aria": {
       "filterByStatus": "Filtra per stato",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Impossibile caricare le notifiche. Riprova.",
       "deleteFailed": "Impossibile eliminare la notifica. Riprova.",
-      "networkError": "Si è verificato un errore di rete. Riprova."
+      "networkError": "Si è verificato un errore di rete. Riprova.",
+      "markReadFailed": "Impossibile contrassegnare la notifica come letta. Riprova."
     },
     "timeAgo": {
       "justNow": "Proprio ora",
@@ -334,7 +336,76 @@
       "unread": "{count} non letti",
       "confirmBulkDelete": "Elimina più notifiche",
       "bulkDeleteConfirmation": "Sei sicuro di voler eliminare {count} notifiche?"
-    }
+    },
+    "content": {
+      "startup": {
+        "title": "BirdNET-Go Started",
+        "message": "Application started successfully (v{version})"
+      },
+      "shutdown": {
+        "title": "BirdNET-Go Shutting Down",
+        "message": "Application is shutting down gracefully"
+      },
+      "detection": {
+        "title": "Detected: {species}",
+        "message": "Confidence: {confidence}%"
+      },
+      "integration": {
+        "failedTitle": "{integration} Integration Failed",
+        "failedMessage": "Failed to connect or send data: {error}"
+      },
+      "resource": {
+        "highUsage": "High {resource} usage",
+        "criticalUsage": "Critical {resource} usage",
+        "recovered": "{resource} usage recovered",
+        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+      },
+      "error": {
+        "criticalSystem": "Critical System Error",
+        "application": "Application Error",
+        "imageProvider": "Image Provider Notice",
+        "categoryError": "{category} Error"
+      },
+      "settings": {
+        "reloadingBirdnet": "Applying new analysis settings...",
+        "rebuildingRangeFilter": "Rebuilding species range filter...",
+        "updatingIntervals": "Updating detection intervals...",
+        "reconfiguringMqtt": "Updating MQTT connection...",
+        "reconfiguringBirdweather": "Updating BirdWeather integration...",
+        "reconfiguringStreams": "Updating audio streams...",
+        "reconfiguringTelemetry": "Updating telemetry settings...",
+        "reconfiguringSpeciesTracking": "Updating species tracking...",
+        "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "reconfiguringSoundLevel": "Updating sound level monitoring...",
+        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
+        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
+        "equalizerUpdated": "Audio equalizer settings updated"
+      },
+      "migration": {
+        "startedTitle": "Database Migration Started",
+        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
+        "pausedTitle": "Database Migration Paused",
+        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
+        "cancelledTitle": "Database Migration Cancelled",
+        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
+        "completedTitle": "Database Migration Completed",
+        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
+        "errorTitle": "Database Migration Error",
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+      },
+      "cleanup": {
+        "completeTitle": "Legacy Database Cleanup Complete",
+        "completeMessage": "{space} disk space reclaimed.",
+        "failedTitle": "Legacy Database Cleanup Failed",
+        "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Avviso: {rule_name} ({event_name})",
+        "firedTitleMetric": "Avviso: {rule_name} ({metric_name})",
+        "firedTitle": "Avviso: {rule_name}"
+      }
+    },
+    "loading": "Caricamento notifiche..."
   },
   "search": {
     "title": "Filtri di ricerca",
@@ -572,7 +643,9 @@
       "day": "Giorno",
       "night": "Notte",
       "sunrise": "Alba",
-      "sunset": "Tramonto"
+      "sunset": "Tramonto",
+      "any": "Qualsiasi",
+      "unknown": "Sconosciuto"
     },
     "table": {
       "caption": "Elenco dei rilevamenti di uccelli con data, specie, confidenza e informazioni sullo stato"
@@ -671,7 +744,15 @@
     "rarity": {
       "title": "Rarità Specie",
       "score": "Punteggio",
-      "basedOnLocation": "Basato sulla posizione: {latitude}, {longitude}"
+      "basedOnLocation": "Basato sulla posizione: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Molto comune",
+        "common": "Comune",
+        "uncommon": "Non comune",
+        "rare": "Raro",
+        "very_rare": "Molto raro",
+        "unknown": "Sconosciuto"
+      }
     },
     "taxonomy": {
       "hierarchy": "Classificazione Tassonomica",
@@ -2966,7 +3047,97 @@
       "import": "Importa",
       "exporting": "Esportazione...",
       "importing": "Importazione...",
-      "v2Required": "Lo schema del database avanzato è necessario per le regole di allerta. Aggiorna il database nelle impostazioni principali per abilitare questa funzionalità."
+      "schema": {
+        "objectTypes": {
+          "stream": "Audio Stream",
+          "detection": "Detection",
+          "application": "Application",
+          "integration": "Integration",
+          "device": "Device",
+          "system": "System"
+        },
+        "events": {
+          "stream_connected": "Stream Connected",
+          "stream_disconnected": "Stream Disconnected",
+          "stream_error": "Stream Error",
+          "detection_new_species": "New Species Detected",
+          "detection_occurred": "Detection Occurred",
+          "application_started": "Application Started",
+          "application_stopped": "Application Stopped",
+          "integration_birdweather_failed": "BirdWeather Upload Failed",
+          "integration_mqtt_connected": "MQTT Connected",
+          "integration_mqtt_disconnected": "MQTT Disconnected",
+          "device_started": "Device Started",
+          "device_stopped": "Device Stopped",
+          "device_error": "Device Error"
+        },
+        "metrics": {
+          "system_cpu_usage": "CPU Usage",
+          "system_memory_usage": "Memory Usage",
+          "system_disk_usage": "Disk Usage"
+        },
+        "properties": {
+          "value": "Value",
+          "species_name": "Species Name",
+          "scientific_name": "Scientific Name",
+          "confidence": "Confidence",
+          "location": "Location",
+          "stream_name": "Stream Name",
+          "stream_url": "Stream URL",
+          "device_name": "Device Name",
+          "error": "Error Message",
+          "broker": "Broker"
+        },
+        "operators": {
+          "is": "is",
+          "is_not": "is not",
+          "contains": "contains",
+          "not_contains": "does not contain",
+          "greater_than": "greater than",
+          "less_than": "less than",
+          "greater_or_equal": "greater or equal",
+          "less_or_equal": "less or equal"
+        }
+      },
+      "v2Required": "Lo schema del database avanzato è necessario per le regole di allerta. Aggiorna il database nelle impostazioni principali per abilitare questa funzionalità.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Nuova specie rilevata",
+          "description": "Notifica quando una specie viene rilevata per la prima volta"
+        },
+        "streamDisconnected": {
+          "name": "Flusso audio disconnesso",
+          "description": "Notifica quando un flusso RTSP o audio perde la connessione"
+        },
+        "streamError": {
+          "name": "Errore flusso audio",
+          "description": "Notifica quando un flusso audio incontra un errore"
+        },
+        "deviceError": {
+          "name": "Errore dispositivo audio",
+          "description": "Notifica quando un dispositivo di acquisizione audio locale incontra un errore"
+        },
+        "highCpu": {
+          "name": "Utilizzo CPU elevato",
+          "description": "Notifica quando l'utilizzo della CPU supera il 90% per 5 minuti"
+        },
+        "highMemory": {
+          "name": "Utilizzo memoria elevato",
+          "description": "Notifica quando l'utilizzo della memoria supera il 90% per 5 minuti"
+        },
+        "lowDisk": {
+          "name": "Spazio su disco insufficiente",
+          "description": "Notifica quando l'utilizzo del disco supera l'85% per 5 minuti"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT disconnesso",
+          "description": "Notifica quando la connessione al broker MQTT viene persa"
+        },
+        "birdWeatherFailed": {
+          "name": "Caricamento BirdWeather fallito",
+          "description": "Notifica quando un caricamento BirdWeather non riesce"
+        }
+      }
     }
   },
   "auth": {
@@ -3223,7 +3394,15 @@
     "expand": "Espandi",
     "collapse": "Comprimi",
     "fullscreen": "Schermo intero",
-    "exitFullscreen": "Esci da schermo intero"
+    "exitFullscreen": "Esci da schermo intero",
+    "colorTheme": "Tema colori",
+    "themeDark": "Scuro",
+    "themeLight": "Chiaro",
+    "themeHighContrast": "Alto contrasto",
+    "detach": "Apri in nuova finestra",
+    "detached": "Terminale separato",
+    "detachedDescription": "Il terminale è in esecuzione in una finestra separata. Chiudere quella finestra per riportarlo qui.",
+    "reattach": "Riattacca"
   },
   "quietHours": {
     "indicator": {

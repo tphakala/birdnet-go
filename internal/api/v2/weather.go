@@ -17,7 +17,7 @@ import (
 
 // Weather constants (file-local)
 const (
-	timePeriodNight        = "Night"
+	timePeriodNight        = datastore.TimeOfDayNight
 	minTimeStringLength    = 2  // Minimum length for parsing hour from time string
 	weatherSunWindowMinute = 30 // Minutes before/after sunrise/sunset for weather
 )
@@ -371,7 +371,7 @@ func (c *Controller) findHourlyWeatherByHourString(hourlyWeatherList []datastore
 	return HourlyWeatherResponse{}
 }
 
-// determineTimeOfDayForDetection calculates the time of day string ("Day", "Night", etc.)
+// determineTimeOfDayForDetection calculates the time of day string ("day", "night", etc.)
 // It returns the parsed detection time, the calculated timeOfDay string, and any error during parsing or calculation.
 func (c *Controller) determineTimeOfDayForDetection(note *datastore.Note, date, detectionID string) (*time.Time, string, error) {
 	timeOfDay := timePeriodNight // Default
@@ -528,11 +528,11 @@ func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *sunc
 
 	switch {
 	case detTime >= sunriseStart && detTime <= sunriseEnd:
-		return "Sunrise"
+		return datastore.TimeOfDaySunrise
 	case detTime >= sunsetStart && detTime <= sunsetEnd:
-		return "Sunset"
+		return datastore.TimeOfDaySunset
 	case detTime >= sunriseTime && detTime < sunsetTime:
-		return "Day"
+		return datastore.TimeOfDayDay
 	default:
 		return timePeriodNight
 	}

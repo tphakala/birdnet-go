@@ -301,7 +301,8 @@
       "acknowledge": "Potvrdiť",
       "delete": "Odstrániť",
       "confirmDelete": "Potvrdiť odstránenie",
-      "deleteConfirmation": "Naozaj chcete odstrániť toto upozornenie?"
+      "deleteConfirmation": "Naozaj chcete odstrániť toto upozornenie?",
+      "viewAll": "Zobraziť všetky upozornenia"
     },
     "aria": {
       "filterByStatus": "Filtrovať podľa stavu",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Nepodarilo sa načítať upozornenia. Skúste to znova.",
       "deleteFailed": "Nepodarilo sa odstrániť upozornenie. Skúste to znova.",
-      "networkError": "Vyskytla sa sieťová chyba. Skúste to znova."
+      "networkError": "Vyskytla sa sieťová chyba. Skúste to znova.",
+      "markReadFailed": "Nepodarilo sa označiť upozornenie ako prečítané. Skúste to prosím znova."
     },
     "timeAgo": {
       "justNow": "Práve teraz",
@@ -334,7 +336,76 @@
       "unread": "{count} neprečítaných",
       "confirmBulkDelete": "Odstrániť viacero upozornení",
       "bulkDeleteConfirmation": "Naozaj chcete odstrániť {count} upozornení?"
-    }
+    },
+    "content": {
+      "startup": {
+        "title": "BirdNET-Go Started",
+        "message": "Application started successfully (v{version})"
+      },
+      "shutdown": {
+        "title": "BirdNET-Go Shutting Down",
+        "message": "Application is shutting down gracefully"
+      },
+      "detection": {
+        "title": "Detected: {species}",
+        "message": "Confidence: {confidence}%"
+      },
+      "integration": {
+        "failedTitle": "{integration} Integration Failed",
+        "failedMessage": "Failed to connect or send data: {error}"
+      },
+      "resource": {
+        "highUsage": "High {resource} usage",
+        "criticalUsage": "Critical {resource} usage",
+        "recovered": "{resource} usage recovered",
+        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+      },
+      "error": {
+        "criticalSystem": "Critical System Error",
+        "application": "Application Error",
+        "imageProvider": "Image Provider Notice",
+        "categoryError": "{category} Error"
+      },
+      "settings": {
+        "reloadingBirdnet": "Applying new analysis settings...",
+        "rebuildingRangeFilter": "Rebuilding species range filter...",
+        "updatingIntervals": "Updating detection intervals...",
+        "reconfiguringMqtt": "Updating MQTT connection...",
+        "reconfiguringBirdweather": "Updating BirdWeather integration...",
+        "reconfiguringStreams": "Updating audio streams...",
+        "reconfiguringTelemetry": "Updating telemetry settings...",
+        "reconfiguringSpeciesTracking": "Updating species tracking...",
+        "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "reconfiguringSoundLevel": "Updating sound level monitoring...",
+        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
+        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
+        "equalizerUpdated": "Audio equalizer settings updated"
+      },
+      "migration": {
+        "startedTitle": "Database Migration Started",
+        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
+        "pausedTitle": "Database Migration Paused",
+        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
+        "cancelledTitle": "Database Migration Cancelled",
+        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
+        "completedTitle": "Database Migration Completed",
+        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
+        "errorTitle": "Database Migration Error",
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+      },
+      "cleanup": {
+        "completeTitle": "Legacy Database Cleanup Complete",
+        "completeMessage": "{space} disk space reclaimed.",
+        "failedTitle": "Legacy Database Cleanup Failed",
+        "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Upozornenie: {rule_name} ({event_name})",
+        "firedTitleMetric": "Upozornenie: {rule_name} ({metric_name})",
+        "firedTitle": "Upozornenie: {rule_name}"
+      }
+    },
+    "loading": "Načítavam upozornenia..."
   },
   "search": {
     "title": "Filtre vyhľadávania",
@@ -572,7 +643,9 @@
       "day": "Deň",
       "night": "Noc",
       "sunrise": "Východ slnka",
-      "sunset": "Západ slnka"
+      "sunset": "Západ slnka",
+      "any": "Akýkoľvek",
+      "unknown": "Neznámy"
     },
     "table": {
       "caption": "Zoznam detekcií vtákov s informáciami o dátume, druhu, istote a stave"
@@ -671,7 +744,15 @@
     "rarity": {
       "title": "Vzácnosť druhu",
       "score": "Skóre",
-      "basedOnLocation": "Na základe polohy: {latitude}, {longitude}"
+      "basedOnLocation": "Na základe polohy: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Veľmi bežný",
+        "common": "Bežný",
+        "uncommon": "Nezvyčajný",
+        "rare": "Vzácny",
+        "very_rare": "Veľmi vzácny",
+        "unknown": "Neznámy"
+      }
     },
     "taxonomy": {
       "hierarchy": "Taxonomická klasifikácia",
@@ -3000,7 +3081,97 @@
       "import": "Importovať",
       "exporting": "Exportovanie...",
       "importing": "Importovanie...",
-      "v2Required": "Pre pravidlá upozornení je potrebná rozšírená schéma databázy. Aktualizujte databázu v hlavných nastaveniach, aby ste túto funkciu povolili."
+      "schema": {
+        "objectTypes": {
+          "stream": "Audio Stream",
+          "detection": "Detection",
+          "application": "Application",
+          "integration": "Integration",
+          "device": "Device",
+          "system": "System"
+        },
+        "events": {
+          "stream_connected": "Stream Connected",
+          "stream_disconnected": "Stream Disconnected",
+          "stream_error": "Stream Error",
+          "detection_new_species": "New Species Detected",
+          "detection_occurred": "Detection Occurred",
+          "application_started": "Application Started",
+          "application_stopped": "Application Stopped",
+          "integration_birdweather_failed": "BirdWeather Upload Failed",
+          "integration_mqtt_connected": "MQTT Connected",
+          "integration_mqtt_disconnected": "MQTT Disconnected",
+          "device_started": "Device Started",
+          "device_stopped": "Device Stopped",
+          "device_error": "Device Error"
+        },
+        "metrics": {
+          "system_cpu_usage": "CPU Usage",
+          "system_memory_usage": "Memory Usage",
+          "system_disk_usage": "Disk Usage"
+        },
+        "properties": {
+          "value": "Value",
+          "species_name": "Species Name",
+          "scientific_name": "Scientific Name",
+          "confidence": "Confidence",
+          "location": "Location",
+          "stream_name": "Stream Name",
+          "stream_url": "Stream URL",
+          "device_name": "Device Name",
+          "error": "Error Message",
+          "broker": "Broker"
+        },
+        "operators": {
+          "is": "is",
+          "is_not": "is not",
+          "contains": "contains",
+          "not_contains": "does not contain",
+          "greater_than": "greater than",
+          "less_than": "less than",
+          "greater_or_equal": "greater or equal",
+          "less_or_equal": "less or equal"
+        }
+      },
+      "v2Required": "Pre pravidlá upozornení je potrebná rozšírená schéma databázy. Aktualizujte databázu v hlavných nastaveniach, aby ste túto funkciu povolili.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Nový druh zistený",
+          "description": "Upozorní, keď je druh zistený prvýkrát"
+        },
+        "streamDisconnected": {
+          "name": "Audio stream odpojený",
+          "description": "Upozorní, keď RTSP alebo audio stream stratí pripojenie"
+        },
+        "streamError": {
+          "name": "Chyba audio streamu",
+          "description": "Upozorní, keď audio stream narazí na chybu"
+        },
+        "deviceError": {
+          "name": "Chyba audio zariadenia",
+          "description": "Upozorní, keď lokálne zariadenie na zachytávanie zvuku narazí na chybu"
+        },
+        "highCpu": {
+          "name": "Vysoké využitie CPU",
+          "description": "Upozorní, keď využitie CPU presiahne 90% na 5 minút"
+        },
+        "highMemory": {
+          "name": "Vysoké využitie pamäte",
+          "description": "Upozorní, keď využitie pamäte presiahne 90% na 5 minút"
+        },
+        "lowDisk": {
+          "name": "Málo miesta na disku",
+          "description": "Upozorní, keď využitie disku presiahne 85% na 5 minút"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT odpojený",
+          "description": "Upozorní, keď sa stratí pripojenie k MQTT brokeru"
+        },
+        "birdWeatherFailed": {
+          "name": "Nahrávanie do BirdWeather zlyhalo",
+          "description": "Upozorní, keď nahrávanie do BirdWeather zlyhá"
+        }
+      }
     }
   },
   "auth": {
@@ -3257,7 +3428,15 @@
     "expand": "Rozbaliť",
     "collapse": "Zbaliť",
     "fullscreen": "Celá obrazovka",
-    "exitFullscreen": "Ukončiť celú obrazovku"
+    "exitFullscreen": "Ukončiť celú obrazovku",
+    "colorTheme": "Farebná téma",
+    "themeDark": "Tmavá",
+    "themeLight": "Svetlá",
+    "themeHighContrast": "Vysoký kontrast",
+    "detach": "Otvoriť v novom okne",
+    "detached": "Terminál je odpojený",
+    "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
+    "reattach": "Pripojiť späť"
   },
   "quietHours": {
     "indicator": {

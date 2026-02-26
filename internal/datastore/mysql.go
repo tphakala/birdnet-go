@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 
@@ -77,6 +78,10 @@ func (store *MySQLStore) Open() error {
 	}
 
 	store.DB = db
+
+	// Initialize atomic counters for query latency tracking and register GORM callbacks
+	store.dbCounters = &dbstats.Counters{}
+	dbstats.RegisterCallbacks(db, store.dbCounters)
 
 	// Log successful connection
 	GetLogger().Info("MySQL database opened successfully",

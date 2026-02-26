@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -946,4 +947,107 @@ func TestV2OnlyDatastore_ReviewAndLockVisibleInGetAllNotes(t *testing.T) {
 
 	assert.Equal(t, "correct", notes[0].Verified, "Verified should be populated in GetAllNotes")
 	assert.True(t, notes[0].Locked, "Locked should be true in GetAllNotes")
+}
+
+// TestV2OnlyDatastore_ConcatenatedLabelExtraction verifies that all read paths
+// properly extract scientific names from legacy concatenated labels stored as
+// "ScientificName_CommonName" in the labels table.
+func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
+	t.Parallel()
+
+	// Provide label mapping so commonNameMap resolves "Strix aluco" → "lehtopöllö"
+	labels := []string{
+		"Strix aluco_lehtopöllö",
+	}
+	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	defer cleanup()
+
+	ctx := t.Context()
+
+	// Simulate legacy data: directly create a label with concatenated scientific name
+	// (this is what happened before the extractScientificName fix was applied to writes)
+	concatenatedName := "Strix aluco_lehtopöllö"
+	legacyLabel, err := ds.label.GetOrCreate(ctx, concatenatedName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+
+	// Insert a detection referencing this concatenated label
+	now := time.Now().In(ds.timezone)
+	clipName := "/clips/test-owl.wav"
+	det := &entities.Detection{
+		LabelID:    legacyLabel.ID,
+		ModelID:    ds.defaultModelID,
+		DetectedAt: now.Unix(),
+		Confidence: 0.92,
+		ClipName:   &clipName,
+	}
+	err = ds.manager.DB().Create(det).Error
+	require.NoError(t, err)
+
+	t.Run("detectionToNote extracts scientific name from concatenated label", func(t *testing.T) {
+		notes, err := ds.GetAllNotes()
+		require.NoError(t, err)
+		require.Len(t, notes, 1)
+
+		assert.Equal(t, "Strix aluco", notes[0].ScientificName,
+			"ScientificName should be extracted from concatenated label")
+		assert.Equal(t, "lehtopöllö", notes[0].CommonName,
+			"CommonName should be resolved from commonNameMap")
+	})
+
+	t.Run("GetAllDetectedSpecies extracts scientific name from concatenated label", func(t *testing.T) {
+		species, err := ds.GetAllDetectedSpecies()
+		require.NoError(t, err)
+		require.NotEmpty(t, species)
+
+		// Find our species in the list
+		found := false
+		for _, s := range species {
+			if s.ScientificName == "Strix aluco" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "GetAllDetectedSpecies should return extracted scientific name 'Strix aluco', not concatenated form")
+
+		// Verify no concatenated names leaked through
+		for _, s := range species {
+			assert.NotContains(t, s.ScientificName, "_",
+				"ScientificName should not contain underscore separator")
+		}
+	})
+
+	t.Run("GetTopBirdsData extracts scientific name from concatenated label", func(t *testing.T) {
+		dateStr := now.Format(time.DateOnly)
+		topBirds, err := ds.GetTopBirdsData(dateStr, 0.0, 10)
+		require.NoError(t, err)
+		require.Len(t, topBirds, 1)
+
+		assert.Equal(t, "Strix aluco", topBirds[0].ScientificName,
+			"ScientificName should be extracted from concatenated label")
+		assert.Equal(t, "lehtopöllö", topBirds[0].CommonName,
+			"CommonName should be resolved from commonNameMap")
+	})
+
+	t.Run("Save with concatenated ScientificName extracts properly", func(t *testing.T) {
+		// Simulate saving a detection where ScientificName is accidentally concatenated
+		note := &datastore.Note{
+			Date:           now.Format(time.DateOnly),
+			Time:           now.Format(time.TimeOnly),
+			ScientificName: "Picus viridis_vihertikka",
+			CommonName:     "vihertikka",
+			Confidence:     0.88,
+		}
+		err := ds.Save(note, nil)
+		require.NoError(t, err)
+
+		// Verify no concatenated label was stored: scan all species labels for viridis
+		var allLabels []entities.Label
+		err = ds.manager.DB().
+			Where("label_type_id = ? AND scientific_name LIKE ?", ds.speciesLabelTypeID, "%viridis%").
+			Find(&allLabels).Error
+		require.NoError(t, err)
+		require.Len(t, allLabels, 1, "exactly one label should exist for Picus viridis")
+		assert.Equal(t, "Picus viridis", allLabels[0].ScientificName,
+			"Save should store only the extracted scientific name, not the concatenated form")
+	})
 }

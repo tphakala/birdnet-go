@@ -550,8 +550,8 @@ func BenchmarkStressTest(b *testing.B) {
 	// Generate a large message with many instances of sensitive data
 	var builder strings.Builder
 	for i := range 100 {
-		builder.WriteString(fmt.Sprintf("Entry %d: IP=%d.%d.%d.%d, Email=user%d@example.com, UUID=%08x-0000-0000-0000-000000000000\n",
-			i, i%256, (i+1)%256, (i+2)%256, (i+3)%256, i, i))
+		fmt.Fprintf(&builder, "Entry %d: IP=%d.%d.%d.%d, Email=user%d@example.com, UUID=%08x-0000-0000-0000-000000000000\n",
+			i, i%256, (i+1)%256, (i+2)%256, (i+3)%256, i, i)
 	}
 	largeMessage := builder.String()
 

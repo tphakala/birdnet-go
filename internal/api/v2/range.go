@@ -536,10 +536,10 @@ func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location L
 
 	// Write metadata headers as comments (not part of CSV data)
 	buf.WriteString("# BirdNET-Go Range Filter Species Export\n")
-	buf.WriteString(fmt.Sprintf("# Generated: %s\n", time.Now().Format(time.RFC3339)))
-	buf.WriteString(fmt.Sprintf("# Location: %.6f, %.6f\n", location.Latitude, location.Longitude))
-	buf.WriteString(fmt.Sprintf("# Threshold: %.2f\n", threshold))
-	buf.WriteString(fmt.Sprintf("# Total Species: %d\n", len(species)))
+	fmt.Fprintf(&buf, "# Generated: %s\n", time.Now().Format(time.RFC3339))
+	fmt.Fprintf(&buf, "# Location: %.6f, %.6f\n", location.Latitude, location.Longitude)
+	fmt.Fprintf(&buf, "# Threshold: %.2f\n", threshold)
+	fmt.Fprintf(&buf, "# Total Species: %d\n", len(species))
 	buf.WriteString("#\n")
 
 	// Create CSV writer

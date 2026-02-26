@@ -21,6 +21,14 @@
   import { Plus, Trash2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { AlertRule, AlertSchema, ObjectTypeSchema } from '$lib/api/alerts';
+  import {
+    schemaObjectTypeLabel,
+    schemaEventLabel,
+    schemaMetricLabel,
+    schemaPropertyLabel,
+    schemaOperatorLabel,
+  } from '$lib/utils/alertSchema';
+  import { translateField } from '$lib/utils/notifications';
 
   interface Props {
     rule: AlertRule | null;
@@ -63,8 +71,8 @@
   // Initialize form state from rule prop
   $effect(() => {
     if (rule) {
-      name = rule.name;
-      description = rule.description;
+      name = translateField(rule.name_key, undefined, rule.name);
+      description = translateField(rule.description_key, undefined, rule.description);
       enabled = rule.enabled;
       objectType = rule.object_type;
       triggerType = (rule.trigger_type as 'event' | 'metric') || 'event';
@@ -101,7 +109,10 @@
 
   // Schema-driven options
   let objectTypeOptions = $derived<SelectOption[]>(
-    schema.objectTypes.map(ot => ({ value: ot.name, label: ot.label }))
+    schema.objectTypes.map(ot => ({
+      value: ot.name,
+      label: schemaObjectTypeLabel(ot.name, ot.label),
+    }))
   );
 
   let selectedObjectType = $derived<ObjectTypeSchema | undefined>(
@@ -121,12 +132,17 @@
   });
 
   let eventOptions = $derived<SelectOption[]>(
-    selectedObjectType?.events?.map(e => ({ value: e.name, label: e.label })) ?? []
+    selectedObjectType?.events?.map(e => ({
+      value: e.name,
+      label: schemaEventLabel(e.name, e.label),
+    })) ?? []
   );
 
   let metricOptions = $derived<SelectOption[]>(
-    selectedObjectType?.metrics?.map(m => ({ value: m.name, label: `${m.label} (${m.unit})` })) ??
-      []
+    selectedObjectType?.metrics?.map(m => ({
+      value: m.name,
+      label: `${schemaMetricLabel(m.name, m.label)} (${m.unit})`,
+    })) ?? []
   );
 
   // Get available properties for current trigger
@@ -145,7 +161,7 @@
   );
 
   let propertyOptions = $derived<SelectOption[]>(
-    availableProperties.map(p => ({ value: p.name, label: p.label }))
+    availableProperties.map(p => ({ value: p.name, label: schemaPropertyLabel(p.name, p.label) }))
   );
 
   // Get operators for a given property
@@ -154,7 +170,8 @@
     if (!prop) return [];
     return prop.operators.map(op => {
       const schemaOp = schema.operators.find(o => o.name === op);
-      return { value: op, label: schemaOp?.label ?? op };
+      const fallback = schemaOp?.label ?? op;
+      return { value: op, label: schemaOperatorLabel(op, fallback) };
     });
   }
 
@@ -207,10 +224,28 @@
 
   function handleSave() {
     if (!isValid) return;
+
+    // Preserve translation keys only when the user has not changed the
+    // built-in rule's name/description; clear them otherwise so the
+    // custom text takes precedence.
+    const translatedOriginalName = rule?.name_key
+      ? translateField(rule.name_key, undefined, rule.name)
+      : rule?.name;
+    const translatedOriginalDesc = rule?.description_key
+      ? translateField(rule.description_key, undefined, rule.description)
+      : rule?.description;
+    const nameKey = rule?.name_key && name.trim() === translatedOriginalName ? rule.name_key : '';
+    const descKey =
+      rule?.description_key && description.trim() === translatedOriginalDesc
+        ? rule.description_key
+        : '';
+
     onSave({
       id: rule?.id,
       name: name.trim(),
       description: description.trim(),
+      name_key: nameKey || undefined,
+      description_key: descKey || undefined,
       enabled,
       object_type: objectType,
       trigger_type: triggerType,

@@ -56,6 +56,20 @@ Performance Optimizations:
     ChevronDown,
     ChevronsLeft,
     ChevronsRight,
+    LineChart,
+    Bird,
+    TrendingUp,
+    Monitor,
+    Database,
+    Terminal,
+    SlidersHorizontal,
+    Volume2,
+    Filter,
+    Bell,
+    AlertTriangle,
+    Puzzle,
+    Shield,
+    LifeBuoy,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { resetDateToToday } from '$lib/utils/datePersistence';
@@ -416,35 +430,35 @@ Performance Optimizations:
                   <button
                     onclick={() => navigate(navigationUrls.analytics)}
                     class={cn(
-                      'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.analyticsExact
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('analytics.title')}
+                    <LineChart class="size-4 shrink-0" />{t('analytics.title')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.analyticsSpecies)}
                     class={cn(
-                      'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.analyticsSpecies
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('analytics.species.title')}
+                    <Bird class="size-4 shrink-0" />{t('analytics.species.title')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.analyticsAdvanced)}
                     class={cn(
-                      'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.analyticsAdvanced
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('analytics.advanced.title')}
+                    <TrendingUp class="size-4 shrink-0" />{t('analytics.advanced.title')}
                   </button>
                 </div>
               </div>
@@ -477,35 +491,35 @@ Performance Optimizations:
                 <button
                   onclick={() => navigate(navigationUrls.analytics)}
                   class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.analyticsExact
                       ? 'menu-subitem-active'
                       : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
-                  {t('analytics.title')}
+                  <LineChart class="size-4 shrink-0" />{t('analytics.title')}
                 </button>
                 <button
                   onclick={() => navigate(navigationUrls.analyticsSpecies)}
                   class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.analyticsSpecies
                       ? 'menu-subitem-active'
                       : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
-                  {t('analytics.species.title')}
+                  <Bird class="size-4 shrink-0" />{t('analytics.species.title')}
                 </button>
                 <button
                   onclick={() => navigate(navigationUrls.analyticsAdvanced)}
                   class={cn(
-                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.analyticsAdvanced
                       ? 'menu-subitem-active'
                       : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
-                  {t('analytics.advanced.title')}
+                  <TrendingUp class="size-4 shrink-0" />{t('analytics.advanced.title')}
                 </button>
               </div>
             {/if}
@@ -594,35 +608,35 @@ Performance Optimizations:
                     <button
                       onclick={() => navigate(navigationUrls.systemOverview)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.systemOverview
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('system.sections.overview')}
+                      <Monitor class="size-4 shrink-0" />{t('system.sections.overview')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.systemDatabase)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.systemDatabase
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('system.sections.database')}
+                      <Database class="size-4 shrink-0" />{t('system.sections.database')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.systemTerminal)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.systemTerminal
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('system.sections.terminal')}
+                      <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
                     </button>
                   </div>
                 </div>
@@ -655,35 +669,35 @@ Performance Optimizations:
                   <button
                     onclick={() => navigate(navigationUrls.systemOverview)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.systemOverview
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('system.sections.overview')}
+                    <Monitor class="size-4 shrink-0" />{t('system.sections.overview')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.systemDatabase)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.systemDatabase
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('system.sections.database')}
+                    <Database class="size-4 shrink-0" />{t('system.sections.database')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.systemTerminal)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.systemTerminal
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('system.sections.terminal')}
+                    <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
                   </button>
                 </div>
               {/if}
@@ -729,101 +743,101 @@ Performance Optimizations:
                     <button
                       onclick={() => navigate(navigationUrls.settingsMain)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsMain
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.node')}
+                      <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsAudio)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsAudio
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.audio')}
+                      <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsSpecies)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsSpecies
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.species')}
+                      <Bird class="size-4 shrink-0" />{t('settings.sections.species')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsFilters)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsFilters
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.filters')}
+                      <Filter class="size-4 shrink-0" />{t('settings.sections.filters')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsNotifications)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsNotifications
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.notifications')}
+                      <Bell class="size-4 shrink-0" />{t('settings.sections.notifications')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsAlertRules)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsAlertRules
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.alertrules')}
+                      <AlertTriangle class="size-4 shrink-0" />{t('settings.sections.alertrules')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsIntegrations)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsIntegrations
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.integration')}
+                      <Puzzle class="size-4 shrink-0" />{t('settings.sections.integration')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsSecurity)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsSecurity
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.security')}
+                      <Shield class="size-4 shrink-0" />{t('settings.sections.security')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsSupport)}
                       class={cn(
-                        'flex items-center w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsSupport
                           ? 'menu-subitem-active'
                           : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                       )}
                     >
-                      {t('settings.sections.support')}
+                      <LifeBuoy class="size-4 shrink-0" />{t('settings.sections.support')}
                     </button>
                   </div>
                 </div>
@@ -856,101 +870,101 @@ Performance Optimizations:
                   <button
                     onclick={() => navigate(navigationUrls.settingsMain)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsMain
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.node')}
+                    <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsAudio)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsAudio
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.audio')}
+                    <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsSpecies)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsSpecies
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.species')}
+                    <Bird class="size-4 shrink-0" />{t('settings.sections.species')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsFilters)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsFilters
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.filters')}
+                    <Filter class="size-4 shrink-0" />{t('settings.sections.filters')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsNotifications)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsNotifications
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.notifications')}
+                    <Bell class="size-4 shrink-0" />{t('settings.sections.notifications')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsAlertRules)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsAlertRules
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.alertrules')}
+                    <AlertTriangle class="size-4 shrink-0" />{t('settings.sections.alertrules')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsIntegrations)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsIntegrations
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.integration')}
+                    <Puzzle class="size-4 shrink-0" />{t('settings.sections.integration')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsSecurity)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsSecurity
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.security')}
+                    <Shield class="size-4 shrink-0" />{t('settings.sections.security')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsSupport)}
                     class={cn(
-                      'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsSupport
                         ? 'menu-subitem-active'
                         : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                     )}
                   >
-                    {t('settings.sections.support')}
+                    <LifeBuoy class="size-4 shrink-0" />{t('settings.sections.support')}
                   </button>
                 </div>
               {/if}

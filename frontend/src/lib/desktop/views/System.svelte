@@ -3,7 +3,7 @@
   import SystemDetailsCard from '$lib/desktop/features/system/components/SystemDetailsCard.svelte';
   import StorageCard from '$lib/desktop/features/system/components/StorageCard.svelte';
   import SystemProcessTable from '$lib/desktop/features/system/components/SystemProcessTable.svelte';
-  import { DatabaseManagement } from '$lib/desktop/components/database';
+  import { DatabaseDashboard } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import { t } from '$lib/i18n';
   import { RefreshCw } from '@lucide/svelte';
@@ -396,10 +396,14 @@
     <TerminalPage />
   </div>
 {:else if currentSubpage === 'database'}
-  <!-- Database Management Page -->
-  <div class="col-span-12 space-y-4" role="region" aria-label={t('system.database.title')}>
+  <!-- Database Dashboard Page -->
+  <div
+    class="col-span-12 space-y-4"
+    role="region"
+    aria-label={t('system.database.dashboard.title')}
+  >
     <div class="max-w-5xl mx-auto">
-      <DatabaseManagement />
+      <DatabaseDashboard />
     </div>
   </div>
 {:else}

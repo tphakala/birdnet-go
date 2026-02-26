@@ -53,7 +53,10 @@ describe('NotificationGroup', () => {
   it('renders the group title', () => {
     render(NotificationGroup, {
       props: {
-        group: createMockGroup({ title: 'System Alerts' }),
+        group: createMockGroup({
+          title: 'System Alerts',
+          notifications: [createMockNotification({ title: 'System Alerts' })],
+        }),
       },
     });
 
@@ -334,7 +337,7 @@ describe('NotificationGroup', () => {
     });
 
     // Should show time-related translation key (there can be multiple time elements)
-    expect(screen.getAllByText(/notifications\.timeAgo\.minutesAgo/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\d+m ago/i).length).toBeGreaterThan(0);
   });
 
   it('applies border styling for unread notifications', () => {
@@ -366,8 +369,8 @@ describe('NotificationGroup', () => {
       },
     });
 
-    // Should show "just now" translation key (can have multiple)
-    expect(screen.getAllByText(/notifications\.timeAgo\.justNow/i).length).toBeGreaterThan(0);
+    // Should show "Just now" translated text (can have multiple)
+    expect(screen.getAllByText(/Just now/i).length).toBeGreaterThan(0);
   });
 
   it('applies custom className', () => {

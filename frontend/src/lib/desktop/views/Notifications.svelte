@@ -21,6 +21,7 @@
   import {
     deduplicateNotifications,
     sanitizeNotificationMessage,
+    translateNotification,
     groupNotifications,
     mapApiNotifications,
   } from '$lib/utils/notifications';
@@ -528,6 +529,7 @@
     {:else}
       <!-- Flat View with compact styling -->
       {#each notifications as notification (notification.id)}
+        {@const translated = translateNotification(notification)}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={getNotificationCardClass(notification)}
@@ -568,9 +570,11 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
-                    <h3 class="font-medium text-sm truncate">{notification.title}</h3>
+                    <h3 class="font-medium text-sm truncate">
+                      {translated.title}
+                    </h3>
                     <p class="text-xs text-base-content/80 mt-0.5 line-clamp-2">
-                      {sanitizeNotificationMessage(notification.message)}
+                      {sanitizeNotificationMessage(translated.message)}
                     </p>
 
                     <!-- Metadata (compact) -->

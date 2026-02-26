@@ -301,7 +301,8 @@
       "acknowledge": "Reconhecer",
       "delete": "Excluir",
       "confirmDelete": "Confirmar exclusão",
-      "deleteConfirmation": "Tem certeza de que deseja excluir esta notificação?"
+      "deleteConfirmation": "Tem certeza de que deseja excluir esta notificação?",
+      "viewAll": "Ver todas as notificações"
     },
     "aria": {
       "filterByStatus": "Filtrar por status",
@@ -315,7 +316,8 @@
     "errors": {
       "loadFailed": "Falha ao carregar notificações. Por favor, tente novamente.",
       "deleteFailed": "Falha ao excluir notificação. Por favor, tente novamente.",
-      "networkError": "Erro de rede. Por favor, tente novamente."
+      "networkError": "Erro de rede. Por favor, tente novamente.",
+      "markReadFailed": "Falha ao marcar notificação como lida. Por favor, tente novamente."
     },
     "timeAgo": {
       "justNow": "Agora mesmo",
@@ -334,7 +336,76 @@
       "unread": "{count} não lidas",
       "confirmBulkDelete": "Excluir várias notificações",
       "bulkDeleteConfirmation": "Tem certeza de que deseja excluir {count} notificações?"
-    }
+    },
+    "content": {
+      "startup": {
+        "title": "BirdNET-Go Started",
+        "message": "Application started successfully (v{version})"
+      },
+      "shutdown": {
+        "title": "BirdNET-Go Shutting Down",
+        "message": "Application is shutting down gracefully"
+      },
+      "detection": {
+        "title": "Detected: {species}",
+        "message": "Confidence: {confidence}%"
+      },
+      "integration": {
+        "failedTitle": "{integration} Integration Failed",
+        "failedMessage": "Failed to connect or send data: {error}"
+      },
+      "resource": {
+        "highUsage": "High {resource} usage",
+        "criticalUsage": "Critical {resource} usage",
+        "recovered": "{resource} usage recovered",
+        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+      },
+      "error": {
+        "criticalSystem": "Critical System Error",
+        "application": "Application Error",
+        "imageProvider": "Image Provider Notice",
+        "categoryError": "{category} Error"
+      },
+      "settings": {
+        "reloadingBirdnet": "Applying new analysis settings...",
+        "rebuildingRangeFilter": "Rebuilding species range filter...",
+        "updatingIntervals": "Updating detection intervals...",
+        "reconfiguringMqtt": "Updating MQTT connection...",
+        "reconfiguringBirdweather": "Updating BirdWeather integration...",
+        "reconfiguringStreams": "Updating audio streams...",
+        "reconfiguringTelemetry": "Updating telemetry settings...",
+        "reconfiguringSpeciesTracking": "Updating species tracking...",
+        "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "reconfiguringSoundLevel": "Updating sound level monitoring...",
+        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
+        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
+        "equalizerUpdated": "Audio equalizer settings updated"
+      },
+      "migration": {
+        "startedTitle": "Database Migration Started",
+        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
+        "pausedTitle": "Database Migration Paused",
+        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
+        "cancelledTitle": "Database Migration Cancelled",
+        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
+        "completedTitle": "Database Migration Completed",
+        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
+        "errorTitle": "Database Migration Error",
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+      },
+      "cleanup": {
+        "completeTitle": "Legacy Database Cleanup Complete",
+        "completeMessage": "{space} disk space reclaimed.",
+        "failedTitle": "Legacy Database Cleanup Failed",
+        "failedMessage": "Failed to remove legacy database: {error}"
+      },
+      "alert": {
+        "firedTitleEvent": "Alerta: {rule_name} ({event_name})",
+        "firedTitleMetric": "Alerta: {rule_name} ({metric_name})",
+        "firedTitle": "Alerta: {rule_name}"
+      }
+    },
+    "loading": "Carregando notificações..."
   },
   "search": {
     "title": "Filtros de pesquisa",
@@ -580,7 +651,9 @@
       "day": "Dia",
       "night": "Noite",
       "sunrise": "Nascer do sol",
-      "sunset": "Pôr do sol"
+      "sunset": "Pôr do sol",
+      "any": "Qualquer",
+      "unknown": "Desconhecido"
     },
     "table": {
       "caption": "Lista de detecções de pássaros com data, espécie, confiança e informações de status"
@@ -665,13 +738,26 @@
       "loading": "Carregando detalhes da detecção...",
       "loaded": "Detalhes de detecção carregados para {species}",
       "error": "Erro ao carregar detecção: {error}"
+    },
+    "viewToggle": {
+      "label": "Modo de visualização",
+      "table": "Vista de tabela",
+      "cards": "Vista de cartões"
     }
   },
   "species": {
     "rarity": {
       "title": "Raridade da espécie",
       "score": "Pontuação",
-      "basedOnLocation": "Baseado na localização: {latitude}, {longitude}"
+      "basedOnLocation": "Baseado na localização: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Muito comum",
+        "common": "Comum",
+        "uncommon": "Incomum",
+        "rare": "Raro",
+        "very_rare": "Muito raro",
+        "unknown": "Desconhecido"
+      }
     },
     "taxonomy": {
       "hierarchy": "Classificação taxonômica",
@@ -787,7 +873,8 @@
           "paused": "Pausado",
           "validating": "A validar",
           "cutover": "Transição em curso",
-          "completed": "Migração concluída"
+          "completed": "Migração concluída",
+          "failed": "Validação falhou"
         },
         "progress": {
           "title": "Progresso da migração",
@@ -798,7 +885,30 @@
           "remaining": "Restante: {time}",
           "eta": "Tempo restante estimado",
           "dirtyIds": "{count} registos pendentes",
-          "paused": "Migração em pausa"
+          "paused": "Migração em pausa",
+          "completedTitle": "Migração concluída",
+          "completedBody": "Todos os {count} registos foram migrados com sucesso para o banco de dados V2. O aplicativo usará o V2 como banco de dados principal após a reinicialização.",
+          "restartTitle": "Reinicialização necessária",
+          "restartBody": "Reinicie o aplicativo para mudar para o banco de dados V2. A limpeza do banco de dados legado estará disponível após a reinicialização.",
+          "fallbackError": "Divergência na contagem de registos entre os bancos de dados legado e V2. Alguns registos podem não ter sido migrados corretamente.",
+          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. O modo de escrita dupla garante zero perda de dados durante a migração.",
+          "sourceLegacy": "Origem (legado)",
+          "targetV2": "Destino (V2)",
+          "recordsLabel": "Registos",
+          "sizeLabel": "Tamanho",
+          "prerequisitesNotMet": "Pré-requisitos não atendidos — resolva os problemas críticos abaixo",
+          "validatingTitle": "Validando dados",
+          "validatingBody": "Comparando {count} registos legados com o banco de dados V2...",
+          "dirtyRecordsCatchup": "{count} registos pendentes — tentando reconciliação",
+          "cutoverTitle": "Finalizando transição",
+          "cutoverBody": "Finalizando transição para o banco de dados V2...",
+          "migratingPhase": "Migrando {phase}",
+          "progressLabel": "Progresso",
+          "ofRecords": "/ {count} registos",
+          "percentComplete": "{percent}% concluído",
+          "recordsPerSec": "{rate} registos/s",
+          "calculating": "Calculando...",
+          "dirtyWriteFailed": "{count} registos falharam ao gravar — serão reconciliados durante a validação"
         },
         "phase": {
           "indicator": "Fase {current} de {total}: ",
@@ -812,7 +922,7 @@
           "in_progress": "Você pode continuar usando o sistema normalmente enquanto a migração é executada em segundo plano.",
           "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
           "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
-          "validating": "Verificando se todos os registros foram copiados corretamente. Quase pronto!",
+          "validating": "Verificando se todos os registos foram copiados corretamente. Quase pronto!",
           "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
           "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
         },
@@ -821,11 +931,12 @@
           "pause": "Pausar",
           "resume": "Retomar",
           "cancel": "Cancelar",
-          "rollback": "Reverter"
+          "rollback": "Reverter",
+          "retryValidation": "Repetir validação"
         },
         "confirmCancel": {
           "title": "Cancelar migração?",
-          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registros não serão duplicados.",
+          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registos não serão duplicados.",
           "confirm": "Sim, cancelar",
           "dismiss": "Não, continuar"
         },
@@ -841,7 +952,8 @@
           "resumeFailed": "Falha ao retomar a migração",
           "cancelFailed": "Falha ao cancelar a migração",
           "rollbackFailed": "Falha ao reverter a migração",
-          "fetchFailed": "Falha ao obter o estado da migração"
+          "fetchFailed": "Falha ao obter o estado da migração",
+          "retryValidationFailed": "Falha ao repetir a validação"
         },
         "worker": {
           "running": "Worker em execução",
@@ -900,6 +1012,19 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} aprovadas",
+          "criticalCount": "{count} crítico(s)",
+          "warningCount": "{count} aviso(s)",
+          "rerun": "Executar novamente",
+          "showDetails": "Mostrar detalhes",
+          "hideDetails": "Ocultar detalhes",
+          "status": {
+            "passed": "Aprovado",
+            "failed": "Falhou",
+            "error": "Erro",
+            "warning": "Aviso",
+            "skipped": "Ignorado"
           }
         },
         "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
@@ -909,6 +1034,29 @@
           "message": "A migração irá copiar os seus dados de deteção da base de dados atual para uma nova base de dados normalizada. A sua base de dados original permanece inalterada. No entanto, é recomendado criar uma cópia de segurança caso ocorram problemas inesperados.",
           "checkbox": "Confirmo que fiz uma cópia de segurança da minha base de dados ou compreendo os riscos de continuar sem cópia de segurança.",
           "note": "Pode transferir uma cópia de segurança usando o botão \"Transferir cópia de segurança\" acima."
+        },
+        "details": {
+          "title": "Detalhes do banco de dados",
+          "detections": "{count} detecções",
+          "lastBackup": "Último backup: {date}",
+          "noBackups": "Sem backups",
+          "integrity": "Integridade: {status}"
+        },
+        "strip": {
+          "legacy": "Legado",
+          "v2Target": "V2 (destino)",
+          "active": "Ativo",
+          "migration": "Migração",
+          "complete": "Concluída",
+          "recordsMigrated": "{count} registos migrados",
+          "readyToMigrate": "Pronto para migrar",
+          "recordsInLegacy": "{count} registos no legado",
+          "comparingRecords": "Comparando contagem de registos...",
+          "validationFailed": "Validação falhou",
+          "rate": "Taxa",
+          "recPerSec": "{rate} reg/s",
+          "dayAvg": "~{count} / dia méd.",
+          "dayHistory": "Histórico de 30 dias"
         }
       },
       "legacy": {
@@ -949,6 +1097,86 @@
         "detections": "Deteções",
         "fetchFailed": "Falha ao obter estatísticas da base de dados"
       },
+      "dashboard": {
+        "title": "Database Dashboard",
+        "fetchFailed": "Failed to fetch database overview",
+        "metrics": {
+          "readLatency": "Read Latency",
+          "writeLatency": "Write Latency",
+          "queriesPerSec": "Queries/sec",
+          "database": "Database",
+          "avg": "avg",
+          "max": "max",
+          "lastHour": "{count} last hour",
+          "slowQueries": "{count} slow"
+        },
+        "details": {
+          "title": "Database Details",
+          "engine": "Engine",
+          "journal": "Journal",
+          "pageSize": "Page size",
+          "cacheHit": "Cache hit",
+          "integrity": "Integrity",
+          "lastVacuum": "Last VACUUM"
+        },
+        "locksWal": {
+          "title": "Locks & WAL",
+          "lockWaits": "Lock waits",
+          "lockTimeouts": "Lock timeouts",
+          "avgWait": "Avg wait",
+          "busyTimeouts": "Busy timeouts",
+          "walSize": "WAL size",
+          "checkpoints": "Checkpoints",
+          "freelistPages": "Freelist pages",
+          "cacheSize": "Cache size"
+        },
+        "connectionPool": {
+          "title": "Connection Pool",
+          "poolUsage": "Pool Usage",
+          "active": "active",
+          "idle": "idle",
+          "waiting": "waiting",
+          "totalCreated": "Total created",
+          "connErrors": "Conn errors",
+          "threads": "Threads",
+          "running": "running",
+          "cached": "cached"
+        },
+        "innodb": {
+          "title": "InnoDB & Locks",
+          "bufferPoolHitRate": "Buffer pool hit rate",
+          "bufferPoolSize": "Buffer pool size",
+          "lockWaits": "Lock waits",
+          "deadlocks": "Deadlocks",
+          "avgLockWait": "Avg lock wait",
+          "tableLocksWaited": "Table locks waited",
+          "tableLocksImmediate": "Table locks immediate"
+        },
+        "detectionRate": {
+          "title": "Detection Rate (24h)",
+          "perHour": "/hr",
+          "min": "min",
+          "avg": "avg",
+          "max": "max",
+          "lastBackup": "Last backup",
+          "backupSize": "Backup size",
+          "createBackup": "Create Backup",
+          "mysqlHost": "Host",
+          "mysqlBackupNote": "Os backups do MySQL devem ser geridos através do mysqldump ou das suas ferramentas de administração MySQL.",
+          "chartLabel": "Taxa de detecção nas últimas 24 horas",
+          "detectionsTooltip": "{count} detecções"
+        },
+        "tables": {
+          "title": "Tables",
+          "total": "Total",
+          "table": "Table",
+          "engine": "Engine",
+          "rows": "Rows",
+          "size": "Size",
+          "usage": "Usage"
+        },
+        "loading": "Carregando..."
+      },
       "backup": {
         "download": "Transferir cópia de segurança",
         "downloading": "A transferir...",
@@ -956,7 +1184,28 @@
         "creating": "A criar cópia de segurança...",
         "cancel": "Cancelar",
         "retry": "Tentar novamente",
-        "mysqlNote": "A cópia de segurança MySQL requer ferramentas externas (mysqldump)"
+        "mysqlNote": "A cópia de segurança MySQL requer ferramentas externas (mysqldump)",
+        "history": {
+          "title": "Histórico de backups",
+          "creating": "Criando...",
+          "createBackup": "Criar backup",
+          "noBackups": "Nenhum backup ainda",
+          "download": "Baixar",
+          "failed": "Falhou",
+          "columns": {
+            "date": "Data",
+            "database": "Banco de dados",
+            "size": "Tamanho",
+            "status": "Status",
+            "actions": "Ações"
+          },
+          "status": {
+            "pending": "Pendente",
+            "in_progress": "Em andamento",
+            "completed": "Concluído",
+            "failed": "Falhou"
+          }
+        }
       },
       "notInitialized": "Não inicializado"
     },
@@ -3001,7 +3250,97 @@
       "import": "Importar",
       "exporting": "Exportando...",
       "importing": "Importando...",
-      "v2Required": "O esquema de banco de dados aprimorado é necessário para regras de alerta. Atualize seu banco de dados nas configurações principais para ativar este recurso."
+      "schema": {
+        "objectTypes": {
+          "stream": "Audio Stream",
+          "detection": "Detection",
+          "application": "Application",
+          "integration": "Integration",
+          "device": "Device",
+          "system": "System"
+        },
+        "events": {
+          "stream_connected": "Stream Connected",
+          "stream_disconnected": "Stream Disconnected",
+          "stream_error": "Stream Error",
+          "detection_new_species": "New Species Detected",
+          "detection_occurred": "Detection Occurred",
+          "application_started": "Application Started",
+          "application_stopped": "Application Stopped",
+          "integration_birdweather_failed": "BirdWeather Upload Failed",
+          "integration_mqtt_connected": "MQTT Connected",
+          "integration_mqtt_disconnected": "MQTT Disconnected",
+          "device_started": "Device Started",
+          "device_stopped": "Device Stopped",
+          "device_error": "Device Error"
+        },
+        "metrics": {
+          "system_cpu_usage": "CPU Usage",
+          "system_memory_usage": "Memory Usage",
+          "system_disk_usage": "Disk Usage"
+        },
+        "properties": {
+          "value": "Value",
+          "species_name": "Species Name",
+          "scientific_name": "Scientific Name",
+          "confidence": "Confidence",
+          "location": "Location",
+          "stream_name": "Stream Name",
+          "stream_url": "Stream URL",
+          "device_name": "Device Name",
+          "error": "Error Message",
+          "broker": "Broker"
+        },
+        "operators": {
+          "is": "is",
+          "is_not": "is not",
+          "contains": "contains",
+          "not_contains": "does not contain",
+          "greater_than": "greater than",
+          "less_than": "less than",
+          "greater_or_equal": "greater or equal",
+          "less_or_equal": "less or equal"
+        }
+      },
+      "v2Required": "O esquema de banco de dados aprimorado é necessário para regras de alerta. Atualize seu banco de dados nas configurações principais para ativar este recurso.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Nova espécie detetada",
+          "description": "Notifica quando uma espécie é detetada pela primeira vez"
+        },
+        "streamDisconnected": {
+          "name": "Fluxo de áudio desligado",
+          "description": "Notifica quando um fluxo RTSP ou de áudio perde a ligação"
+        },
+        "streamError": {
+          "name": "Erro no fluxo de áudio",
+          "description": "Notifica quando um fluxo de áudio encontra um erro"
+        },
+        "deviceError": {
+          "name": "Erro no dispositivo de áudio",
+          "description": "Notifica quando um dispositivo de captura de áudio local encontra um erro"
+        },
+        "highCpu": {
+          "name": "Utilização de CPU elevada",
+          "description": "Notifica quando a utilização do CPU excede 90% durante 5 minutos"
+        },
+        "highMemory": {
+          "name": "Utilização de memória elevada",
+          "description": "Notifica quando a utilização de memória excede 90% durante 5 minutos"
+        },
+        "lowDisk": {
+          "name": "Pouco espaço em disco",
+          "description": "Notifica quando a utilização do disco excede 85% durante 5 minutos"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT desligado",
+          "description": "Notifica quando a ligação ao broker MQTT é perdida"
+        },
+        "birdWeatherFailed": {
+          "name": "Envio para BirdWeather falhou",
+          "description": "Notifica quando um envio para BirdWeather falha"
+        }
+      }
     }
   },
   "auth": {
@@ -3258,7 +3597,15 @@
     "expand": "Expandir",
     "collapse": "Recolher",
     "fullscreen": "Tela cheia",
-    "exitFullscreen": "Sair da tela cheia"
+    "exitFullscreen": "Sair da tela cheia",
+    "colorTheme": "Tema de cores",
+    "themeDark": "Escuro",
+    "themeLight": "Claro",
+    "themeHighContrast": "Alto contraste",
+    "detach": "Abrir em nova janela",
+    "detached": "Terminal separado",
+    "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui.",
+    "reattach": "Reconectar"
   },
   "quietHours": {
     "indicator": {

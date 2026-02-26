@@ -10,7 +10,10 @@
  */
 
 import { loggers } from '$lib/utils/logger';
-import { getCsrfToken as getAppStateCsrfToken } from '$lib/stores/appState.svelte';
+import {
+  getCsrfToken as getAppStateCsrfToken,
+  refreshCsrfToken,
+} from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = loggers.api;
@@ -214,6 +217,8 @@ function validateAndSanitizeBody(body: unknown): string | FormData | undefined {
 interface FetchOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   timeout?: number;
+  /** Internal flag to prevent infinite CSRF retry loops */
+  _csrfRetried?: boolean;
 }
 
 /**
@@ -325,6 +330,24 @@ export async function fetchWithCSRF<T = unknown>(
     const response = await fetch(buildAppUrl(url), finalOptions);
 
     clearTimeout(timeoutId);
+
+    // If 403 on a state-changing request, the CSRF token may have expired.
+    // Refresh the token and retry once.
+    const method = (finalOptions.method ?? 'GET').toUpperCase();
+    if (
+      response.status === 403 &&
+      method !== 'GET' &&
+      method !== 'HEAD' &&
+      method !== 'OPTIONS' &&
+      !options._csrfRetried
+    ) {
+      logger.warn('Got 403 on state-changing request, attempting CSRF token refresh');
+      const refreshed = await refreshCsrfToken();
+      if (refreshed) {
+        return fetchWithCSRF<T>(url, { ...options, _csrfRetried: true });
+      }
+    }
+
     const result = await handleResponse<T>(response);
     logger.debug(`Response from ${url} received successfully`);
     return result;

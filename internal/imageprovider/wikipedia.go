@@ -249,7 +249,7 @@ func (l *wikiMediaProvider) createHTTPRequest(fullURL string) (*http.Request, er
 	req.Header.Set("User-Agent", l.userAgent)
 	req.Header.Set("Accept", "application/json")
 
-	GetLogger().Info("Setting User-Agent for Wikipedia API request",
+	GetLogger().Debug("Setting User-Agent for Wikipedia API request",
 		logger.String("provider", wikiProviderName),
 		logger.String("user_agent", l.userAgent),
 		logger.Int("user_agent_length", len(l.userAgent)),
@@ -512,7 +512,7 @@ func buildUserAgent(appVersion string) string {
 // logUserAgentValidation logs the constructed user-agent for debugging purposes
 func logUserAgentValidation(appVersion string) {
 	userAgent := buildUserAgent(appVersion)
-	GetLogger().Info("Wikipedia user-agent validation",
+	GetLogger().Debug("Wikipedia user-agent validation",
 		logger.String("provider", wikiProviderName),
 		logger.String("user_agent", userAgent),
 		logger.String("complies_with_policy", "https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy"),
@@ -765,7 +765,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, origEr
 
 	case wikiErrorTemporary:
 		// Temporary error - continue with retry logic but with longer backoff
-		log.Info("Temporary Wikipedia error, will retry with backoff",
+		log.Warn("Temporary Wikipedia error, will retry with backoff",
 			logger.String("error_message", errorMsg),
 			logger.Bool("will_retry", attempt < l.maxRetries-1))
 		return nil
@@ -843,7 +843,7 @@ func getTroubleshootingHint(category apiErrorCategory) string {
 
 // logAPISuccess logs successful API operations for baseline metrics
 func logAPISuccess(reqID, species, operation string) {
-	GetLogger().Info("Wikipedia API success - operation completed normally",
+	GetLogger().Debug("Wikipedia API success - operation completed normally",
 		logger.String("provider", wikiProviderName),
 		logger.Bool("success", true),
 		logger.String("request_id", reqID),
@@ -1090,7 +1090,7 @@ func logQueryMissingError(resp *jason.Object, params map[string]string, fullURL 
 			logger.String("request_url", fullURL))
 	}
 
-	log.Info("Wikipedia response missing 'query' field - analyzing response structure",
+	log.Debug("Wikipedia response missing 'query' field - analyzing response structure",
 		logger.Error(queryErr),
 		logger.String("request_url", fullURL),
 		logger.String("response_analysis", "checking_for_api_errors"))
@@ -1128,7 +1128,7 @@ func logPagesMissingError(query *jason.Object, params map[string]string, fullURL
 			logger.String("request_url", fullURL))
 	}
 
-	log.Info("No 'pages' field in Wikipedia query response - analyzing alternative response structures",
+	log.Debug("No 'pages' field in Wikipedia query response - analyzing alternative response structures",
 		logger.String("pages_error", pagesErr.Error()),
 		logger.String("species_query", params["titles"]),
 		logger.String("request_url", fullURL),
@@ -1136,7 +1136,7 @@ func logPagesMissingError(query *jason.Object, params map[string]string, fullURL
 
 	// Check for redirects
 	if redirects, redirectErr := query.GetObjectArray("redirects"); redirectErr == nil && len(redirects) > 0 {
-		log.Info("Wikipedia response contains redirects but no pages",
+		log.Debug("Wikipedia response contains redirects but no pages",
 			logger.Int("redirect_count", len(redirects)),
 			logger.String("error_type", "redirect_without_pages"),
 			logger.String("diagnostic_hint", "wikipedia_redirected_query_but_target_page_missing"))
@@ -1144,13 +1144,13 @@ func logPagesMissingError(query *jason.Object, params map[string]string, fullURL
 
 	// Check for normalized titles
 	if normalized, normalErr := query.GetObjectArray("normalized"); normalErr == nil && len(normalized) > 0 {
-		log.Info("Wikipedia response contains normalized titles but no pages",
+		log.Debug("Wikipedia response contains normalized titles but no pages",
 			logger.Int("normalized_count", len(normalized)),
 			logger.String("error_type", "normalized_title_without_pages"),
 			logger.String("diagnostic_hint", "wikipedia_normalized_species_name_but_no_page_found"))
 	}
 
-	log.Info("Wikipedia page structure analysis complete - no pages found",
+	log.Debug("Wikipedia page structure analysis complete - no pages found",
 		logger.String("error_type", "no_pages_in_response"),
 		logger.String("species_query", params["titles"]),
 		logger.String("diagnostic_hint", "species_likely_has_no_wikipedia_page"))
@@ -1203,7 +1203,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 		logger.String("titles", params["titles"]))
 
 	fullURL := buildDebugURL(params)
-	log.Info("Querying Wikipedia API", logger.String("debug_full_url", fullURL))
+	log.Debug("Querying Wikipedia API", logger.String("debug_full_url", fullURL))
 
 	resp, err := l.queryWithRetryAndLimiter(ctx, reqID, params, limiter)
 	if err != nil {
@@ -1333,7 +1333,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 	if limiter != nil {
 		rateLimitType = "background"
 	}
-	log.Info("Starting Wikipedia image fetch - operation details",
+	log.Debug("Starting Wikipedia image fetch - operation details",
 		logger.String("operation", "fetch_image"),
 		logger.String("species_query", scientificName),
 		logger.String("rate_limit_type", rateLimitType),
@@ -1344,7 +1344,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		// Error already logged in queryThumbnail
 		return BirdImage{}, err // Pass through the user-friendly error from queryThumbnail
 	}
-	log.Info("Thumbnail retrieved successfully",
+	log.Debug("Thumbnail retrieved successfully",
 		logger.String("thumbnail_url", thumbnailURL),
 		logger.String("source_file", thumbnailSourceFile))
 
@@ -1376,7 +1376,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 			return BirdImage{}, enhancedErr
 		}
 	}
-	log.Info("Author info retrieved successfully",
+	log.Debug("Author info retrieved successfully",
 		logger.String("author", authorInfo.name),
 		logger.String("license", authorInfo.licenseName))
 

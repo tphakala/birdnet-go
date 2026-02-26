@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -209,6 +210,14 @@ func (c *Controller) initMetricsHistoryRoutes() {
 			metricsCollectorInterval,
 			c.getCPUUsageFunc(),
 		)
+
+		// Wire database counters if the datastore supports them
+		if provider, ok := c.DS.(datastore.DBCountersProvider); ok {
+			if counters := provider.GetDBCounters(); counters != nil {
+				collector.SetDBCounters(counters)
+			}
+		}
+
 		collector.Start(c.ctx)
 	})
 

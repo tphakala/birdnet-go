@@ -4,23 +4,28 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// SendToast sends a toast notification through the notification system
-func (c *Controller) SendToast(message, toastType string, duration int) error {
-	// Map string toast type to notification.ToastType
-	var notifToastType notification.ToastType
+// mapToastType converts a string toast type to notification.ToastType
+func mapToastType(toastType string) notification.ToastType {
 	switch toastType {
 	case ToastTypeSuccess:
-		notifToastType = notification.ToastTypeSuccess
+		return notification.ToastTypeSuccess
 	case ToastTypeError:
-		notifToastType = notification.ToastTypeError
+		return notification.ToastTypeError
 	case ToastTypeWarning:
-		notifToastType = notification.ToastTypeWarning
+		return notification.ToastTypeWarning
 	case ToastTypeInfo:
-		notifToastType = notification.ToastTypeInfo
+		return notification.ToastTypeInfo
 	default:
-		notifToastType = notification.ToastTypeInfo
+		return notification.ToastTypeInfo
 	}
+}
 
-	// Use the notification service to send the toast
-	return notification.SendToastWithDuration(message, notifToastType, "api", duration)
+// SendToast sends a toast notification through the notification system
+func (c *Controller) SendToast(message, toastType string, duration int) error {
+	return notification.SendToastWithDuration(message, mapToastType(toastType), "api", duration)
+}
+
+// SendToastWithKey sends a toast notification with an i18n translation key
+func (c *Controller) SendToastWithKey(message, toastType string, duration int, messageKey string, messageParams map[string]any) error {
+	return notification.SendToastWithDurationAndKey(message, mapToastType(toastType), "api", duration, messageKey, messageParams)
 }

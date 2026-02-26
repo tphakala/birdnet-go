@@ -275,6 +275,7 @@ export type TranslationKey =
   | 'notifications.actions.delete'
   | 'notifications.actions.confirmDelete'
   | 'notifications.actions.deleteConfirmation'
+  | 'notifications.actions.viewAll'
   | 'notifications.aria.filterByStatus'
   | 'notifications.aria.filterByType'
   | 'notifications.aria.filterByPriority'
@@ -283,6 +284,7 @@ export type TranslationKey =
   | 'notifications.errors.loadFailed'
   | 'notifications.errors.deleteFailed'
   | 'notifications.errors.networkError'
+  | 'notifications.errors.markReadFailed'
   | 'notifications.timeAgo.justNow'
   | 'notifications.timeAgo.minutesAgo' // params: minutes
   | 'notifications.timeAgo.hoursAgo' // params: hours
@@ -295,6 +297,53 @@ export type TranslationKey =
   | 'notifications.groups.unread' // params: count
   | 'notifications.groups.confirmBulkDelete'
   | 'notifications.groups.bulkDeleteConfirmation' // params: count
+  | 'notifications.content.startup.title'
+  | 'notifications.content.startup.message' // params: version
+  | 'notifications.content.shutdown.title'
+  | 'notifications.content.shutdown.message'
+  | 'notifications.content.detection.title' // params: species
+  | 'notifications.content.detection.message' // params: confidence
+  | 'notifications.content.integration.failedTitle' // params: integration
+  | 'notifications.content.integration.failedMessage' // params: error
+  | 'notifications.content.resource.highUsage' // params: resource
+  | 'notifications.content.resource.criticalUsage' // params: resource
+  | 'notifications.content.resource.recovered' // params: resource
+  | 'notifications.content.resource.currentUsage' // params: current, unit, threshold
+  | 'notifications.content.error.criticalSystem'
+  | 'notifications.content.error.application'
+  | 'notifications.content.error.imageProvider'
+  | 'notifications.content.error.categoryError' // params: category
+  | 'notifications.content.settings.reloadingBirdnet'
+  | 'notifications.content.settings.rebuildingRangeFilter'
+  | 'notifications.content.settings.updatingIntervals'
+  | 'notifications.content.settings.reconfiguringMqtt'
+  | 'notifications.content.settings.reconfiguringBirdweather'
+  | 'notifications.content.settings.reconfiguringStreams'
+  | 'notifications.content.settings.reconfiguringTelemetry'
+  | 'notifications.content.settings.reconfiguringSpeciesTracking'
+  | 'notifications.content.settings.webserverRestartRequired'
+  | 'notifications.content.settings.reconfiguringSoundLevel'
+  | 'notifications.content.settings.audioDeviceRestartRequired'
+  | 'notifications.content.settings.equalizerUpdateFailed'
+  | 'notifications.content.settings.equalizerUpdated'
+  | 'notifications.content.migration.startedTitle'
+  | 'notifications.content.migration.startedMessage'
+  | 'notifications.content.migration.pausedTitle'
+  | 'notifications.content.migration.pausedMessage'
+  | 'notifications.content.migration.cancelledTitle'
+  | 'notifications.content.migration.cancelledMessage'
+  | 'notifications.content.migration.completedTitle'
+  | 'notifications.content.migration.completedMessage'
+  | 'notifications.content.migration.errorTitle'
+  | 'notifications.content.migration.errorMessage' // params: error
+  | 'notifications.content.cleanup.completeTitle'
+  | 'notifications.content.cleanup.completeMessage' // params: space
+  | 'notifications.content.cleanup.failedTitle'
+  | 'notifications.content.cleanup.failedMessage' // params: error
+  | 'notifications.content.alert.firedTitleEvent' // params: rule_name, event_name
+  | 'notifications.content.alert.firedTitleMetric' // params: rule_name, metric_name
+  | 'notifications.content.alert.firedTitle' // params: rule_name
+  | 'notifications.loading'
   | 'search.title'
   | 'search.results'
   | 'search.resultsCountZero'
@@ -459,6 +508,12 @@ export type TranslationKey =
   | 'detections.viewToggle.table'
   | 'detections.viewToggle.cards'
   | 'detections.status.locked'
+  | 'detections.timeOfDay.day'
+  | 'detections.timeOfDay.night'
+  | 'detections.timeOfDay.sunrise'
+  | 'detections.timeOfDay.sunset'
+  | 'detections.timeOfDay.any'
+  | 'detections.timeOfDay.unknown'
   | 'detections.table.caption'
   | 'detections.empty.title'
   | 'detections.empty.description'
@@ -522,6 +577,12 @@ export type TranslationKey =
   | 'species.rarity.title'
   | 'species.rarity.score'
   | 'species.rarity.basedOnLocation' // params: latitude, longitude
+  | 'species.rarity.statuses.very_common'
+  | 'species.rarity.statuses.common'
+  | 'species.rarity.statuses.uncommon'
+  | 'species.rarity.statuses.rare'
+  | 'species.rarity.statuses.very_rare'
+  | 'species.rarity.statuses.unknown'
   | 'species.taxonomy.hierarchy'
   | 'species.taxonomy.subspecies'
   | 'species.taxonomy.noData'
@@ -532,6 +593,11 @@ export type TranslationKey =
   | 'species.taxonomy.labels.family'
   | 'species.taxonomy.labels.genus'
   | 'species.taxonomy.labels.species'
+  | 'species.tracking.title'
+  | 'species.tracking.newSpecies'
+  | 'species.tracking.newThisYear'
+  | 'species.tracking.newThisSeason'
+  | 'species.tracking.daysSinceFirst'
   | 'system.title'
   | 'system.refreshData'
   | 'system.aria.refreshData'
@@ -546,6 +612,7 @@ export type TranslationKey =
   | 'system.systemInfo.temperature'
   | 'system.systemInfo.temperatureValue' // params: temp
   | 'system.systemInfo.temperatureUnavailable'
+  | 'system.systemInfo.cpuCores'
   | 'system.diskUsage.title'
   | 'system.diskUsage.emptyMessage'
   | 'system.memoryUsage.title'
@@ -564,6 +631,7 @@ export type TranslationKey =
   | 'system.processInfo.headers.cpu'
   | 'system.processInfo.headers.memory'
   | 'system.processInfo.headers.uptime'
+  | 'system.processInfo.headers.process'
   | 'system.processInfo.showAll'
   | 'system.processInfo.showBirdnetOnly'
   | 'system.processInfo.table.process'
@@ -612,6 +680,70 @@ export type TranslationKey =
   | 'system.database.stats.size'
   | 'system.database.stats.detections'
   | 'system.database.stats.fetchFailed'
+  | 'system.database.dashboard.title'
+  | 'system.database.dashboard.fetchFailed'
+  | 'system.database.dashboard.loading'
+  | 'system.database.dashboard.metrics.readLatency'
+  | 'system.database.dashboard.metrics.writeLatency'
+  | 'system.database.dashboard.metrics.queriesPerSec'
+  | 'system.database.dashboard.metrics.database'
+  | 'system.database.dashboard.metrics.avg'
+  | 'system.database.dashboard.metrics.max'
+  | 'system.database.dashboard.metrics.lastHour' // params: count
+  | 'system.database.dashboard.metrics.slowQueries' // params: count
+  | 'system.database.dashboard.details.title'
+  | 'system.database.dashboard.details.engine'
+  | 'system.database.dashboard.details.journal'
+  | 'system.database.dashboard.details.pageSize'
+  | 'system.database.dashboard.details.cacheHit'
+  | 'system.database.dashboard.details.integrity'
+  | 'system.database.dashboard.details.lastVacuum'
+  | 'system.database.dashboard.locksWal.title'
+  | 'system.database.dashboard.locksWal.lockWaits'
+  | 'system.database.dashboard.locksWal.lockTimeouts'
+  | 'system.database.dashboard.locksWal.avgWait'
+  | 'system.database.dashboard.locksWal.busyTimeouts'
+  | 'system.database.dashboard.locksWal.walSize'
+  | 'system.database.dashboard.locksWal.checkpoints'
+  | 'system.database.dashboard.locksWal.freelistPages'
+  | 'system.database.dashboard.locksWal.cacheSize'
+  | 'system.database.dashboard.connectionPool.title'
+  | 'system.database.dashboard.connectionPool.poolUsage'
+  | 'system.database.dashboard.connectionPool.active'
+  | 'system.database.dashboard.connectionPool.idle'
+  | 'system.database.dashboard.connectionPool.waiting'
+  | 'system.database.dashboard.connectionPool.totalCreated'
+  | 'system.database.dashboard.connectionPool.connErrors'
+  | 'system.database.dashboard.connectionPool.threads'
+  | 'system.database.dashboard.connectionPool.running'
+  | 'system.database.dashboard.connectionPool.cached'
+  | 'system.database.dashboard.innodb.title'
+  | 'system.database.dashboard.innodb.bufferPoolHitRate'
+  | 'system.database.dashboard.innodb.bufferPoolSize'
+  | 'system.database.dashboard.innodb.lockWaits'
+  | 'system.database.dashboard.innodb.deadlocks'
+  | 'system.database.dashboard.innodb.avgLockWait'
+  | 'system.database.dashboard.innodb.tableLocksWaited'
+  | 'system.database.dashboard.innodb.tableLocksImmediate'
+  | 'system.database.dashboard.detectionRate.title'
+  | 'system.database.dashboard.detectionRate.chartLabel'
+  | 'system.database.dashboard.detectionRate.detectionsTooltip' // params: count
+  | 'system.database.dashboard.detectionRate.perHour'
+  | 'system.database.dashboard.detectionRate.min'
+  | 'system.database.dashboard.detectionRate.avg'
+  | 'system.database.dashboard.detectionRate.max'
+  | 'system.database.dashboard.detectionRate.lastBackup'
+  | 'system.database.dashboard.detectionRate.backupSize'
+  | 'system.database.dashboard.detectionRate.createBackup'
+  | 'system.database.dashboard.detectionRate.mysqlHost'
+  | 'system.database.dashboard.detectionRate.mysqlBackupNote'
+  | 'system.database.dashboard.tables.title'
+  | 'system.database.dashboard.tables.total'
+  | 'system.database.dashboard.tables.table'
+  | 'system.database.dashboard.tables.engine'
+  | 'system.database.dashboard.tables.rows'
+  | 'system.database.dashboard.tables.size'
+  | 'system.database.dashboard.tables.usage'
   | 'system.database.backup.download'
   | 'system.database.backup.downloading'
   | 'system.database.backup.starting'
@@ -619,6 +751,21 @@ export type TranslationKey =
   | 'system.database.backup.cancel'
   | 'system.database.backup.retry'
   | 'system.database.backup.mysqlNote'
+  | 'system.database.backup.history.title'
+  | 'system.database.backup.history.creating'
+  | 'system.database.backup.history.createBackup'
+  | 'system.database.backup.history.noBackups'
+  | 'system.database.backup.history.download'
+  | 'system.database.backup.history.failed'
+  | 'system.database.backup.history.columns.date'
+  | 'system.database.backup.history.columns.database'
+  | 'system.database.backup.history.columns.size'
+  | 'system.database.backup.history.columns.status'
+  | 'system.database.backup.history.columns.actions'
+  | 'system.database.backup.history.status.pending'
+  | 'system.database.backup.history.status.in_progress'
+  | 'system.database.backup.history.status.completed'
+  | 'system.database.backup.history.status.failed'
   | 'system.database.notInitialized'
   | 'system.database.migration.title'
   | 'system.database.migration.description'
@@ -635,6 +782,7 @@ export type TranslationKey =
   | 'system.database.migration.status.validating'
   | 'system.database.migration.status.cutover'
   | 'system.database.migration.status.completed'
+  | 'system.database.migration.status.failed'
   | 'system.database.migration.progress.title'
   | 'system.database.migration.progress.records'
   | 'system.database.migration.progress.paused'
@@ -644,6 +792,48 @@ export type TranslationKey =
   | 'system.database.migration.progress.remaining' // params: time
   | 'system.database.migration.progress.eta'
   | 'system.database.migration.progress.dirtyIds' // params: count
+  | 'system.database.migration.progress.completedTitle'
+  | 'system.database.migration.progress.completedBody' // params: count
+  | 'system.database.migration.progress.restartTitle'
+  | 'system.database.migration.progress.restartBody'
+  | 'system.database.migration.progress.fallbackError'
+  | 'system.database.migration.progress.migrateInfo' // params: count
+  | 'system.database.migration.progress.sourceLegacy'
+  | 'system.database.migration.progress.targetV2'
+  | 'system.database.migration.progress.recordsLabel'
+  | 'system.database.migration.progress.sizeLabel'
+  | 'system.database.migration.progress.prerequisitesNotMet'
+  | 'system.database.migration.progress.validatingTitle'
+  | 'system.database.migration.progress.validatingBody' // params: count
+  | 'system.database.migration.progress.dirtyRecordsCatchup' // params: count
+  | 'system.database.migration.progress.cutoverTitle'
+  | 'system.database.migration.progress.cutoverBody'
+  | 'system.database.migration.progress.migratingPhase' // params: phase
+  | 'system.database.migration.progress.progressLabel'
+  | 'system.database.migration.progress.ofRecords' // params: count
+  | 'system.database.migration.progress.percentComplete' // params: percent
+  | 'system.database.migration.progress.recordsPerSec' // params: rate
+  | 'system.database.migration.progress.calculating'
+  | 'system.database.migration.progress.dirtyWriteFailed' // params: count
+  | 'system.database.migration.details.title'
+  | 'system.database.migration.details.detections' // params: count
+  | 'system.database.migration.details.lastBackup' // params: date
+  | 'system.database.migration.details.noBackups'
+  | 'system.database.migration.details.integrity' // params: status
+  | 'system.database.migration.strip.legacy'
+  | 'system.database.migration.strip.v2Target'
+  | 'system.database.migration.strip.active'
+  | 'system.database.migration.strip.migration'
+  | 'system.database.migration.strip.complete'
+  | 'system.database.migration.strip.recordsMigrated' // params: count
+  | 'system.database.migration.strip.readyToMigrate'
+  | 'system.database.migration.strip.recordsInLegacy' // params: count
+  | 'system.database.migration.strip.comparingRecords'
+  | 'system.database.migration.strip.validationFailed'
+  | 'system.database.migration.strip.rate'
+  | 'system.database.migration.strip.recPerSec' // params: rate
+  | 'system.database.migration.strip.dayAvg' // params: count
+  | 'system.database.migration.strip.dayHistory'
   | 'system.database.migration.phase.indicator' // params: current, total
   | 'system.database.migration.phase.detections'
   | 'system.database.migration.phase.predictions'
@@ -661,6 +851,7 @@ export type TranslationKey =
   | 'system.database.migration.actions.resume'
   | 'system.database.migration.actions.cancel'
   | 'system.database.migration.actions.rollback'
+  | 'system.database.migration.actions.retryValidation'
   | 'system.database.migration.confirmDialog.title'
   | 'system.database.migration.confirmDialog.message'
   | 'system.database.migration.confirmDialog.checkbox'
@@ -678,6 +869,7 @@ export type TranslationKey =
   | 'system.database.migration.errors.resumeFailed'
   | 'system.database.migration.errors.cancelFailed'
   | 'system.database.migration.errors.rollbackFailed'
+  | 'system.database.migration.errors.retryValidationFailed'
   | 'system.database.migration.errors.fetchFailed'
   | 'system.database.migration.worker.running'
   | 'system.database.migration.worker.paused'
@@ -690,6 +882,17 @@ export type TranslationKey =
   | 'system.database.migration.prerequisites.warningsCount' // params: count
   | 'system.database.migration.prerequisites.running'
   | 'system.database.migration.prerequisites.checkingStep' // params: current, total
+  | 'system.database.migration.prerequisites.passedCount' // params: passed, total
+  | 'system.database.migration.prerequisites.criticalCount' // params: count
+  | 'system.database.migration.prerequisites.warningCount' // params: count
+  | 'system.database.migration.prerequisites.rerun'
+  | 'system.database.migration.prerequisites.showDetails'
+  | 'system.database.migration.prerequisites.hideDetails'
+  | 'system.database.migration.prerequisites.status.passed'
+  | 'system.database.migration.prerequisites.status.failed'
+  | 'system.database.migration.prerequisites.status.error'
+  | 'system.database.migration.prerequisites.status.warning'
+  | 'system.database.migration.prerequisites.status.skipped'
   | 'system.database.migration.prerequisites.errors.fetchFailed'
   | 'system.database.migration.prerequisites.checks.state_idle.name'
   | 'system.database.migration.prerequisites.checks.disk_space.name'
@@ -704,6 +907,24 @@ export type TranslationKey =
   | 'system.database.migration.prerequisites.checks.memory_available.name'
   | 'system.database.migration.prerequisites.checks.mysql_max_packet.name'
   | 'system.database.migration.prerequisites.checks.mysql_timeout.name'
+  | 'system.metrics.cpu'
+  | 'system.metrics.memory'
+  | 'system.metrics.temperature'
+  | 'system.metrics.system'
+  | 'system.metrics.cores'
+  | 'system.metrics.samples'
+  | 'system.metrics.available'
+  | 'system.metrics.min'
+  | 'system.metrics.max'
+  | 'system.metrics.tempUnavailable'
+  | 'system.metrics.online'
+  | 'system.metrics.uptime'
+  | 'system.metrics.host'
+  | 'system.metrics.model'
+  | 'system.storage.title'
+  | 'system.storage.used'
+  | 'system.storage.free'
+  | 'system.storage.ram'
   | 'terminal.title'
   | 'terminal.disabled'
   | 'terminal.disabledDescription'
@@ -713,6 +934,19 @@ export type TranslationKey =
   | 'terminal.connectionError'
   | 'terminal.connectionClosed'
   | 'terminal.securityWarning'
+  | 'terminal.copySelection'
+  | 'terminal.expand'
+  | 'terminal.collapse'
+  | 'terminal.fullscreen'
+  | 'terminal.exitFullscreen'
+  | 'terminal.colorTheme'
+  | 'terminal.themeDark'
+  | 'terminal.themeLight'
+  | 'terminal.themeHighContrast'
+  | 'terminal.detach'
+  | 'terminal.detached'
+  | 'terminal.detachedDescription'
+  | 'terminal.reattach'
   | 'analytics.title'
   | 'analytics.loadingError'
   | 'analytics.stats.totalDetections'
@@ -2072,7 +2306,65 @@ export type TranslationKey =
   | 'settings.alerts.import'
   | 'settings.alerts.exporting'
   | 'settings.alerts.importing'
+  | 'settings.alerts.schema.objectTypes.stream'
+  | 'settings.alerts.schema.objectTypes.detection'
+  | 'settings.alerts.schema.objectTypes.application'
+  | 'settings.alerts.schema.objectTypes.integration'
+  | 'settings.alerts.schema.objectTypes.device'
+  | 'settings.alerts.schema.objectTypes.system'
+  | 'settings.alerts.schema.events.stream_connected'
+  | 'settings.alerts.schema.events.stream_disconnected'
+  | 'settings.alerts.schema.events.stream_error'
+  | 'settings.alerts.schema.events.detection_new_species'
+  | 'settings.alerts.schema.events.detection_occurred'
+  | 'settings.alerts.schema.events.application_started'
+  | 'settings.alerts.schema.events.application_stopped'
+  | 'settings.alerts.schema.events.integration_birdweather_failed'
+  | 'settings.alerts.schema.events.integration_mqtt_connected'
+  | 'settings.alerts.schema.events.integration_mqtt_disconnected'
+  | 'settings.alerts.schema.events.device_started'
+  | 'settings.alerts.schema.events.device_stopped'
+  | 'settings.alerts.schema.events.device_error'
+  | 'settings.alerts.schema.metrics.system_cpu_usage'
+  | 'settings.alerts.schema.metrics.system_memory_usage'
+  | 'settings.alerts.schema.metrics.system_disk_usage'
+  | 'settings.alerts.schema.properties.value'
+  | 'settings.alerts.schema.properties.species_name'
+  | 'settings.alerts.schema.properties.scientific_name'
+  | 'settings.alerts.schema.properties.confidence'
+  | 'settings.alerts.schema.properties.location'
+  | 'settings.alerts.schema.properties.stream_name'
+  | 'settings.alerts.schema.properties.stream_url'
+  | 'settings.alerts.schema.properties.device_name'
+  | 'settings.alerts.schema.properties.error'
+  | 'settings.alerts.schema.properties.broker'
+  | 'settings.alerts.schema.operators.is'
+  | 'settings.alerts.schema.operators.is_not'
+  | 'settings.alerts.schema.operators.contains'
+  | 'settings.alerts.schema.operators.not_contains'
+  | 'settings.alerts.schema.operators.greater_than'
+  | 'settings.alerts.schema.operators.less_than'
+  | 'settings.alerts.schema.operators.greater_or_equal'
+  | 'settings.alerts.schema.operators.less_or_equal'
   | 'settings.alerts.v2Required'
+  | 'settings.alerts.builtInRules.newSpecies.name'
+  | 'settings.alerts.builtInRules.newSpecies.description'
+  | 'settings.alerts.builtInRules.streamDisconnected.name'
+  | 'settings.alerts.builtInRules.streamDisconnected.description'
+  | 'settings.alerts.builtInRules.streamError.name'
+  | 'settings.alerts.builtInRules.streamError.description'
+  | 'settings.alerts.builtInRules.deviceError.name'
+  | 'settings.alerts.builtInRules.deviceError.description'
+  | 'settings.alerts.builtInRules.highCpu.name'
+  | 'settings.alerts.builtInRules.highCpu.description'
+  | 'settings.alerts.builtInRules.highMemory.name'
+  | 'settings.alerts.builtInRules.highMemory.description'
+  | 'settings.alerts.builtInRules.lowDisk.name'
+  | 'settings.alerts.builtInRules.lowDisk.description'
+  | 'settings.alerts.builtInRules.mqttDisconnected.name'
+  | 'settings.alerts.builtInRules.mqttDisconnected.description'
+  | 'settings.alerts.builtInRules.birdWeatherFailed.name'
+  | 'settings.alerts.builtInRules.birdWeatherFailed.description'
   | 'auth.login'
   | 'auth.logout'
   | 'auth.openLoginModal'
@@ -2255,6 +2547,32 @@ export type TranslationParams = {
   'notifications.timeAgo.daysAgo': { days: string | number };
   'notifications.groups.unread': { count: string | number };
   'notifications.groups.bulkDeleteConfirmation': { count: string | number };
+  'notifications.content.startup.message': { version: string | number };
+  'notifications.content.detection.title': { species: string | number };
+  'notifications.content.detection.message': { confidence: string | number };
+  'notifications.content.integration.failedTitle': { integration: string | number };
+  'notifications.content.integration.failedMessage': { error: string | number };
+  'notifications.content.resource.highUsage': { resource: string | number };
+  'notifications.content.resource.criticalUsage': { resource: string | number };
+  'notifications.content.resource.recovered': { resource: string | number };
+  'notifications.content.resource.currentUsage': {
+    current: string | number;
+    unit: string | number;
+    threshold: string | number;
+  };
+  'notifications.content.error.categoryError': { category: string | number };
+  'notifications.content.migration.errorMessage': { error: string | number };
+  'notifications.content.cleanup.completeMessage': { space: string | number };
+  'notifications.content.cleanup.failedMessage': { error: string | number };
+  'notifications.content.alert.firedTitleEvent': {
+    rule_name: string | number;
+    event_name: string | number;
+  };
+  'notifications.content.alert.firedTitleMetric': {
+    rule_name: string | number;
+    metric_name: string | number;
+  };
+  'notifications.content.alert.firedTitle': { rule_name: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };
   'search.detailsPanel.collapseDetails': { species: string | number };
@@ -2326,11 +2644,30 @@ export type TranslationParams = {
   'system.errors.processes': { error: string | number };
   'system.database.legacy.cleanup.success': { size: string | number };
   'system.database.legacy.cleanup.confirmMessage': { size: string | number };
+  'system.database.dashboard.metrics.lastHour': { count: string | number };
+  'system.database.dashboard.metrics.slowQueries': { count: string | number };
+  'system.database.dashboard.detectionRate.detectionsTooltip': { count: string | number };
   'system.database.migration.progress.percent': { percent: string | number };
   'system.database.migration.progress.rate': { rate: string | number };
   'system.database.migration.progress.rateValue': { rate: string | number };
   'system.database.migration.progress.remaining': { time: string | number };
   'system.database.migration.progress.dirtyIds': { count: string | number };
+  'system.database.migration.progress.completedBody': { count: string | number };
+  'system.database.migration.progress.migrateInfo': { count: string | number };
+  'system.database.migration.progress.validatingBody': { count: string | number };
+  'system.database.migration.progress.dirtyRecordsCatchup': { count: string | number };
+  'system.database.migration.progress.migratingPhase': { phase: string | number };
+  'system.database.migration.progress.ofRecords': { count: string | number };
+  'system.database.migration.progress.percentComplete': { percent: string | number };
+  'system.database.migration.progress.recordsPerSec': { rate: string | number };
+  'system.database.migration.progress.dirtyWriteFailed': { count: string | number };
+  'system.database.migration.details.detections': { count: string | number };
+  'system.database.migration.details.lastBackup': { date: string | number };
+  'system.database.migration.details.integrity': { status: string | number };
+  'system.database.migration.strip.recordsMigrated': { count: string | number };
+  'system.database.migration.strip.recordsInLegacy': { count: string | number };
+  'system.database.migration.strip.recPerSec': { rate: string | number };
+  'system.database.migration.strip.dayAvg': { count: string | number };
   'system.database.migration.phase.indicator': { current: string | number; total: string | number };
   'system.database.migration.prerequisites.criticalIssues': { count: string | number };
   'system.database.migration.prerequisites.warningsCount': { count: string | number };
@@ -2338,6 +2675,12 @@ export type TranslationParams = {
     current: string | number;
     total: string | number;
   };
+  'system.database.migration.prerequisites.passedCount': {
+    passed: string | number;
+    total: string | number;
+  };
+  'system.database.migration.prerequisites.criticalCount': { count: string | number };
+  'system.database.migration.prerequisites.warningCount': { count: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
   'settings.notFound.message': { section: string | number };

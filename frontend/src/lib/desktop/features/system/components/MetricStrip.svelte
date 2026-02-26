@@ -40,6 +40,10 @@
     systemModel,
   }: Props = $props();
 
+  const sparklineColorCpu = '#3b82f6';
+  const sparklineColorMemory = '#8b5cf6';
+  const sparklineColorTemperature = '#f97316';
+
   let hasTempHistory = $derived(temperatureHistory.length > 0);
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
   let tempMax = $derived(hasTempHistory ? Math.max(...temperatureHistory) : temperatureValue);
@@ -48,7 +52,9 @@
 
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
   <!-- CPU -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-blue-500/10">
@@ -60,15 +66,19 @@
       </div>
       <span class="font-mono tabular-nums text-lg font-semibold">{cpuPercent.toFixed(1)}%</span>
     </div>
-    <Sparkline data={cpuHistory} color="#3b82f6" width={160} height={28} />
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex-1 min-h-[28px]">
+      <Sparkline data={cpuHistory} color={sparklineColorCpu} />
+    </div>
+    <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
       <span>{cpuCores} {t('system.metrics.cores')}</span>
       <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
     </div>
   </div>
 
   <!-- Memory -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-violet-500/10">
@@ -80,15 +90,19 @@
       </div>
       <span class="font-mono tabular-nums text-lg font-semibold">{memoryPercent.toFixed(1)}%</span>
     </div>
-    <Sparkline data={memoryHistory} color="#8b5cf6" width={160} height={28} />
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex-1 min-h-[28px]">
+      <Sparkline data={memoryHistory} color={sparklineColorMemory} />
+    </div>
+    <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
       <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
       <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
     </div>
   </div>
 
   <!-- Temperature -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-orange-500/10">
@@ -107,14 +121,16 @@
       </span>
     </div>
     {#if temperatureAvailable}
-      <Sparkline data={temperatureHistory} color="#f97316" width={160} height={28} />
-      <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+      <div class="flex-1 min-h-[28px]">
+        <Sparkline data={temperatureHistory} color={sparklineColorTemperature} />
+      </div>
+      <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
         <span>{t('system.metrics.min')} {tempMin.toFixed(1)}{tempSymbol}</span>
         <span>{t('system.metrics.max')} {tempMax.toFixed(1)}{tempSymbol}</span>
       </div>
     {:else}
-      <div class="h-[28px] flex items-center">
-        <span class="text-xs text-slate-400 dark:text-slate-500"
+      <div class="flex-1 min-h-[28px] flex items-center">
+        <span class="text-xs text-slate-500 dark:text-slate-400"
           >{t('system.metrics.tempUnavailable')}</span
         >
       </div>
@@ -122,7 +138,9 @@
   </div>
 
   <!-- System Status -->
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+  <div
+    class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+  >
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-emerald-500/10">
@@ -139,18 +157,18 @@
         >
       </div>
     </div>
-    <div class="space-y-2 text-sm">
+    <div class="space-y-2 text-sm flex-1">
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500">{t('system.metrics.uptime')}</span>
+        <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.uptime')}</span>
         <span class="font-mono tabular-nums font-medium">{formatUptimeCompact(uptimeSeconds)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500">{t('system.metrics.host')}</span>
+        <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.host')}</span>
         <span class="font-medium truncate ml-2">{hostname}</span>
       </div>
       {#if shortModel}
         <div class="flex justify-between">
-          <span class="text-slate-400 dark:text-slate-500">{t('system.metrics.model')}</span>
+          <span class="text-slate-500 dark:text-slate-400">{t('system.metrics.model')}</span>
           <span class="font-medium truncate ml-2 text-xs">{shortModel}</span>
         </div>
       {/if}

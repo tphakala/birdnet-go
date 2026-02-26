@@ -6,11 +6,18 @@
   interface Props {
     data?: number[];
     color?: string;
-    width?: number;
-    height?: number;
+    /** Internal viewBox width for path calculations */
+    viewWidth?: number;
+    /** Internal viewBox height for path calculations */
+    viewHeight?: number;
   }
 
-  let { data = [], color = 'var(--color-primary)', width = 120, height = 32 }: Props = $props();
+  let {
+    data = [],
+    color = 'var(--color-primary)',
+    viewWidth = 200,
+    viewHeight = 40,
+  }: Props = $props();
 
   let paths = $derived.by(() => {
     if (data.length < 2) return { line: '', area: '' };
@@ -20,11 +27,11 @@
 
     const xScale = scaleLinear()
       .domain([0, data.length - 1])
-      .range([0, width]);
+      .range([0, viewWidth]);
 
     const yScale = scaleLinear()
       .domain([minVal, maxVal === minVal ? minVal + 1 : maxVal])
-      .range([height - padding, padding]);
+      .range([viewHeight - padding, padding]);
 
     const lineGenerator = line<number>()
       .x((_, i) => xScale(i))
@@ -33,7 +40,7 @@
 
     const areaGenerator = area<number>()
       .x((_, i) => xScale(i))
-      .y0(height)
+      .y0(viewHeight)
       .y1(d => yScale(d))
       .curve(curveMonotoneX);
 
@@ -44,7 +51,13 @@
   });
 </script>
 
-<svg {width} {height} viewBox="0 0 {width} {height}" class="overflow-visible">
+<svg
+  width="100%"
+  height="100%"
+  viewBox="0 0 {viewWidth} {viewHeight}"
+  preserveAspectRatio="none"
+  class="overflow-visible"
+>
   {#if paths.line}
     <path d={paths.area} fill={color} opacity="0.08" />
     <path
@@ -54,6 +67,7 @@
       stroke-width="1.5"
       stroke-linecap="round"
       stroke-linejoin="round"
+      vector-effect="non-scaling-stroke"
     />
   {/if}
 </svg>

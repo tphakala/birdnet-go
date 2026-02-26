@@ -3,6 +3,7 @@ package notification
 import (
 	"fmt"
 
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -56,20 +57,18 @@ func NotifyDetection(species string, confidence float64, metadata map[string]any
 	title := fmt.Sprintf("Detected: %s", species)
 	message := fmt.Sprintf("Confidence: %.1f%%", confidence*PercentMultiplier)
 
-	notification, err := service.CreateWithComponent(
-		TypeDetection,
-		PriorityMedium,
-		title,
-		message,
-		"detection",
-	)
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := NewNotification(TypeDetection, PriorityMedium, title, message).
+		WithComponent("detection").
+		WithTitleKey(MsgDetectionTitle, map[string]any{"species": species}).
+		WithMessageKey(MsgDetectionMessage, map[string]any{"confidence": fmt.Sprintf("%.1f", confidence*PercentMultiplier)})
 
-	if err == nil && notification != nil && metadata != nil {
-		// Add metadata
-		for k, v := range metadata {
-			notification.WithMetadata(k, v)
-		}
-		_ = service.store.Update(notification)
+	for k, v := range metadata {
+		notif.WithMetadata(k, v)
+	}
+
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create detection notification", logger.Error(err))
 	}
 }
 
@@ -85,15 +84,21 @@ func NotifyIntegrationFailure(integration string, err error) {
 	}
 
 	title := fmt.Sprintf("%s Integration Failed", integration)
-	message := fmt.Sprintf("Failed to connect or send data: %v", err)
+	errMsg := "unknown integration error"
+	if err != nil {
+		errMsg = err.Error()
+	}
+	message := fmt.Sprintf("Failed to connect or send data: %s", errMsg)
 
-	_, _ = service.CreateWithComponent(
-		TypeError,
-		PriorityHigh,
-		title,
-		message,
-		integration,
-	)
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := NewNotification(TypeError, PriorityHigh, title, message).
+		WithComponent(integration).
+		WithTitleKey(MsgIntegrationFailedTitle, map[string]any{"integration": integration}).
+		WithMessageKey(MsgIntegrationFailedMessage, map[string]any{"error": errMsg})
+
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create integration failure notification", logger.Error(err))
+	}
 }
 
 // NotifyResourceAlert creates notifications for resource threshold violations
@@ -120,15 +125,23 @@ func NotifyResourceAlert(resource string, current, threshold float64, unit strin
 	title := fmt.Sprintf("High %s Usage", resource)
 	message := fmt.Sprintf("Current: %.1f%s (Threshold: %.1f%s)", current, unit, threshold, unit)
 
-	notification, _ := service.CreateWithComponent(TypeWarning, priority, title, message, "system")
-	if notification != nil {
-		notification.
-			WithMetadata("resource", resource).
-			WithMetadata("current_value", current).
-			WithMetadata("threshold", threshold).
-			WithMetadata("unit", unit).
-			WithExpiry(DefaultResourceAlertExpiry) // Auto-expire resource alerts
-		_ = service.store.Update(notification)
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := NewNotification(TypeWarning, priority, title, message).
+		WithComponent("system").
+		WithTitleKey(MsgResourceHighUsage, map[string]any{"resource": resource}).
+		WithMessageKey(MsgResourceCurrentUsage, map[string]any{
+			"current":   fmt.Sprintf("%.1f", current),
+			"threshold": fmt.Sprintf("%.1f", threshold),
+			"unit":      unit,
+		}).
+		WithMetadata("resource", resource).
+		WithMetadata("current_value", current).
+		WithMetadata("threshold", threshold).
+		WithMetadata("unit", unit).
+		WithExpiry(DefaultResourceAlertExpiry) // Auto-expire resource alerts
+
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create resource alert notification", logger.Error(err))
 	}
 }
 
@@ -174,10 +187,15 @@ func NotifyStartup(version string) {
 	title := "BirdNET-Go Started"
 	message := fmt.Sprintf("Application started successfully (v%s)", version)
 
-	notification, _ := service.CreateWithComponent(TypeInfo, PriorityLow, title, message, "system")
-	if notification != nil {
-		notification.WithExpiry(DefaultQuickExpiry) // Auto-expire after 5 minutes
-		_ = service.store.Update(notification)
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := NewNotification(TypeInfo, PriorityLow, title, message).
+		WithComponent("system").
+		WithTitleKey(MsgStartupTitle, nil).
+		WithMessageKey(MsgStartupMessage, map[string]any{"version": version}).
+		WithExpiry(DefaultQuickExpiry) // Auto-expire after 5 minutes
+
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create startup notification", logger.Error(err))
 	}
 }
 
@@ -195,7 +213,15 @@ func NotifyShutdown() {
 	title := "BirdNET-Go Shutting Down"
 	message := "Application is shutting down gracefully"
 
-	_, _ = service.CreateWithComponent(TypeInfo, PriorityMedium, title, message, "system")
+	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
+	notif := NewNotification(TypeInfo, PriorityMedium, title, message).
+		WithComponent("system").
+		WithTitleKey(MsgShutdownTitle, nil).
+		WithMessageKey(MsgShutdownMessage, nil)
+
+	if err := service.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create shutdown notification", logger.Error(err))
+	}
 }
 
 // Privacy scrubbing helpers

@@ -719,7 +719,7 @@ func (ctx *ErrorContext) FormatForConsole() string {
 	if len(ctx.TroubleShooting) > 0 {
 		sb.WriteString("\n   Troubleshooting steps:\n")
 		for _, step := range ctx.TroubleShooting {
-			sb.WriteString(fmt.Sprintf("   • %s\n", step))
+			fmt.Fprintf(&sb, "   • %s\n", step)
 		}
 	}
 

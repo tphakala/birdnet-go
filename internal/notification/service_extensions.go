@@ -5,6 +5,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// UpdateNotification persists changes to an existing notification in the store.
+// Use this after modifying fields (e.g., adding translation keys) on a notification
+// that was already created via Create or CreateWithComponent.
+func (s *Service) UpdateNotification(notification *Notification) error {
+	if notification == nil {
+		return errors.Newf("notification cannot be nil").
+			Component("notification").
+			Category(errors.CategorySystem).
+			Build()
+	}
+	return s.store.Update(notification)
+}
+
 // CreateWithMetadata creates a notification with full metadata support
 // This is useful for creating notifications that need custom metadata like toast notifications
 func (s *Service) CreateWithMetadata(notification *Notification) error {

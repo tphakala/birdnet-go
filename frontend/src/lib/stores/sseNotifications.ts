@@ -6,6 +6,7 @@ import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
 import {
   sanitizeNotificationMessage,
   isValidNotification,
+  translateField,
   type Notification,
 } from '$lib/utils/notifications';
 
@@ -31,8 +32,11 @@ interface SSEToastData {
   duration?: number;
   component?: string;
   timestamp: string;
+  message_key?: string;
+  message_params?: Record<string, unknown>;
   action?: {
     label: string;
+    label_key?: string;
     url?: string;
     handler?: string;
   };
@@ -189,26 +193,39 @@ class SSENotificationManager {
    * Handle incoming SSE toast event
    */
   private handleToast(toastData: SSEToastData): void {
-    // Show the toast using the toast store
-    const actions = toastData.action
-      ? [
-          {
-            label: toastData.action.label,
-            onClick: () => {
-              if (toastData.action?.url) {
-                // Use buildAppUrl for internal URLs to support reverse proxy scenarios
-                const url = toastData.action.url;
-                window.location.href = isRelativePath(url) ? buildAppUrl(url) : url;
-              } else if (toastData.action?.handler) {
-                // Handle custom actions if needed
-                logger.debug('Toast action handler:', toastData.action.handler);
-              }
-            },
-          },
-        ]
+    // Translate toast message using i18n key if available, falling back to English text
+    const message = translateField(
+      toastData.message_key,
+      toastData.message_params,
+      toastData.message
+    );
+
+    // Translate action label if i18n key is available
+    const actionLabel = toastData.action
+      ? translateField(toastData.action.label_key, undefined, toastData.action.label)
       : undefined;
 
-    toastActions.show(sanitizeNotificationMessage(toastData.message), toastData.type, {
+    // Show the toast using the toast store
+    const actions =
+      toastData.action && actionLabel
+        ? [
+            {
+              label: actionLabel,
+              onClick: () => {
+                if (toastData.action?.url) {
+                  // Use buildAppUrl for internal URLs to support reverse proxy scenarios
+                  const url = toastData.action.url;
+                  window.location.href = isRelativePath(url) ? buildAppUrl(url) : url;
+                } else if (toastData.action?.handler) {
+                  // Handle custom actions if needed
+                  logger.debug('Toast action handler:', toastData.action.handler);
+                }
+              },
+            },
+          ]
+        : undefined;
+
+    toastActions.show(sanitizeNotificationMessage(message), toastData.type, {
       duration: toastData.duration ?? TOAST_DEFAULT_DURATION_MS,
       position: TOAST_DEFAULT_POSITION,
       actions,
