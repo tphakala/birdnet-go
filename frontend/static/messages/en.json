@@ -3268,6 +3268,58 @@
       "import": "Import",
       "exporting": "Exporting...",
       "importing": "Importing...",
+      "schema": {
+        "objectTypes": {
+          "stream": "Audio Stream",
+          "detection": "Detection",
+          "application": "Application",
+          "integration": "Integration",
+          "device": "Device",
+          "system": "System"
+        },
+        "events": {
+          "stream_connected": "Stream Connected",
+          "stream_disconnected": "Stream Disconnected",
+          "stream_error": "Stream Error",
+          "detection_new_species": "New Species Detected",
+          "detection_occurred": "Detection Occurred",
+          "application_started": "Application Started",
+          "application_stopped": "Application Stopped",
+          "integration_birdweather_failed": "BirdWeather Upload Failed",
+          "integration_mqtt_connected": "MQTT Connected",
+          "integration_mqtt_disconnected": "MQTT Disconnected",
+          "device_started": "Device Started",
+          "device_stopped": "Device Stopped",
+          "device_error": "Device Error"
+        },
+        "metrics": {
+          "system_cpu_usage": "CPU Usage",
+          "system_memory_usage": "Memory Usage",
+          "system_disk_usage": "Disk Usage"
+        },
+        "properties": {
+          "value": "Value",
+          "species_name": "Species Name",
+          "scientific_name": "Scientific Name",
+          "confidence": "Confidence",
+          "location": "Location",
+          "stream_name": "Stream Name",
+          "stream_url": "Stream URL",
+          "device_name": "Device Name",
+          "error": "Error Message",
+          "broker": "Broker"
+        },
+        "operators": {
+          "is": "is",
+          "is_not": "is not",
+          "contains": "contains",
+          "not_contains": "does not contain",
+          "greater_than": "greater than",
+          "less_than": "less than",
+          "greater_or_equal": "greater or equal",
+          "less_or_equal": "less or equal"
+        }
+      },
       "v2Required": "The enhanced database schema is required for alert rules. Please update your database in the main settings to enable this feature."
     }
   },
