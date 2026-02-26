@@ -150,7 +150,7 @@
   let inferenceAvgMs = $derived(
     inferenceHistory.length > 0 ? inferenceHistory[inferenceHistory.length - 1] : 0
   );
-  let hasInferenceData = $derived(inferenceHistory.length > 0 && inferenceHistory.some(v => v > 0));
+  let hasInferenceData = $derived(inferenceHistory.length > 0);
 
   // BirdNET overlap setting — used to compute the inference threshold
   // Threshold = (3.0 - overlap) * 1000 ms: inference must stay below this to keep up with real-time

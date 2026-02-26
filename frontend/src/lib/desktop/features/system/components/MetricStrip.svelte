@@ -172,7 +172,7 @@
         <span>{t('system.metrics.avgTime')} {inferenceAvgMs.toFixed(1)}ms</span>
         {#if inferenceThresholdMs != null}
           <span class="text-red-500/60"
-            >{t('system.metrics.max')} {inferenceThresholdMs.toFixed(0)}ms</span
+            >{t('system.metrics.limit')} {inferenceThresholdMs.toFixed(0)}ms</span
           >
         {/if}
         <span>{inferenceHistory.length} {t('system.metrics.samples')}</span>

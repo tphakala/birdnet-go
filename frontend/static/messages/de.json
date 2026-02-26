@@ -1219,6 +1219,7 @@
       "available": "verf.",
       "min": "Min",
       "max": "Max",
+      "limit": "Limit",
       "tempUnavailable": "Nicht verfügbar",
       "online": "Online",
       "uptime": "Betriebszeit",
