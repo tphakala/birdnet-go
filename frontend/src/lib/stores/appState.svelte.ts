@@ -244,6 +244,35 @@ export function getCsrfToken(): string {
 }
 
 /**
+ * Refreshes the CSRF token by re-fetching /api/v2/app/config.
+ * Called when a 403 suggests the CSRF cookie has expired.
+ * Deduplicates concurrent calls so only one network request is made.
+ *
+ * @returns true if refresh succeeded, false otherwise
+ */
+let csrfRefreshPromise: Promise<boolean> | null = null;
+
+export function refreshCsrfToken(): Promise<boolean> {
+  if (csrfRefreshPromise) return csrfRefreshPromise;
+
+  csrfRefreshPromise = (async () => {
+    try {
+      const config = await fetchConfig();
+      appState.csrfToken = config.csrfToken;
+      logger.info('CSRF token refreshed successfully');
+      return true;
+    } catch (error) {
+      logger.error('Failed to refresh CSRF token', error);
+      return false;
+    } finally {
+      csrfRefreshPromise = null;
+    }
+  })();
+
+  return csrfRefreshPromise;
+}
+
+/**
  * Checks if security is enabled.
  *
  * @returns True if security is enabled
