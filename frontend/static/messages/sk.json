@@ -2251,6 +2251,7 @@
           "connecting": "Pripája sa",
           "error": "Chyba",
           "idle": "Nečinné",
+          "suppressed": "Tiché hodiny",
           "unknown": "Neznáme"
         },
         "emptyState": {
@@ -3257,5 +3258,10 @@
     "collapse": "Zbaliť",
     "fullscreen": "Celá obrazovka",
     "exitFullscreen": "Ukončiť celú obrazovku"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Tiché hodiny aktívne — {count} zdroj(e) pozastavený(é)"
+    }
   }
 }

@@ -2217,6 +2217,7 @@
           "connecting": "Connessione",
           "error": "Errore",
           "idle": "Inattivo",
+          "suppressed": "Ore silenziose",
           "unknown": "Sconosciuto"
         },
         "emptyState": {
@@ -3223,5 +3224,10 @@
     "collapse": "Comprimi",
     "fullscreen": "Schermo intero",
     "exitFullscreen": "Esci da schermo intero"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Ore silenziose attive — {count} sorgente/i in pausa"
+    }
   }
 }

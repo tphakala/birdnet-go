@@ -2247,6 +2247,25 @@
         "active": "Active",
         "streamsConfigured": "{count} stream(s) configured"
       },
+      "quietHours": {
+        "title": "Quiet Hours",
+        "sectionTitle": "Quiet Hours",
+        "sectionDescription": "Pause audio capture during configured time windows to reduce CPU usage when birds are unlikely to be active.",
+        "modeLabel": "Schedule Mode",
+        "modeFixed": "Fixed Times",
+        "modeSolar": "Sunrise/Sunset",
+        "startTime": "Start Time",
+        "endTime": "End Time",
+        "startEvent": "Start Event",
+        "endEvent": "End Event",
+        "offsetMinutes": "Offset (min)",
+        "sunrise": "Sunrise",
+        "sunset": "Sunset",
+        "fixedHint": "Capture pauses between start and end times daily. Overnight windows (e.g., 22:00 to 06:00) are supported.",
+        "solarHint": "Times are calculated from sunrise/sunset at your configured location. Use negative offsets for before the event, positive for after.",
+        "badge": "Quiet",
+        "enabledBadge": "Quiet hours enabled for this stream"
+      },
       "rtspStreams": {
         "title": "Audio Stream Configuration",
         "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols.",
@@ -2276,6 +2295,7 @@
           "connecting": "Connecting",
           "error": "Error",
           "idle": "Idle",
+          "suppressed": "Quiet Hours",
           "unknown": "Unknown"
         },
         "emptyState": {
@@ -3265,6 +3285,11 @@
       "back": "Back",
       "review": "Review",
       "download": "Download"
+    }
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Quiet hours active — {count} source(s) paused"
     }
   }
 }

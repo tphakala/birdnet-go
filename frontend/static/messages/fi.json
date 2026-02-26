@@ -2239,6 +2239,7 @@
           "connecting": "Yhdistetään",
           "error": "Virhe",
           "idle": "Odottaa",
+          "suppressed": "Hiljaiset tunnit",
           "unknown": "Tuntematon"
         },
         "emptyState": {
@@ -3258,5 +3259,10 @@
     "collapse": "Pienennä",
     "fullscreen": "Koko näyttö",
     "exitFullscreen": "Poistu koko näytöstä"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Hiljaiset tunnit aktiiviset — {count} lähde tauolla"
+    }
   }
 }

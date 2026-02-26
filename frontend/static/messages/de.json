@@ -2406,6 +2406,7 @@
           "connecting": "Verbindung wird hergestellt",
           "error": "Fehler",
           "idle": "Inaktiv",
+          "suppressed": "Ruhezeit",
           "unknown": "Unbekannt"
         },
         "emptyState": {
@@ -3258,5 +3259,10 @@
     "collapse": "Reduzieren",
     "fullscreen": "Vollbild",
     "exitFullscreen": "Vollbild verlassen"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Ruhemodus aktiv — {count} Quelle(n) pausiert"
+    }
   }
 }

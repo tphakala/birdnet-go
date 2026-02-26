@@ -29,7 +29,9 @@
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
-  import type { StreamConfig, StreamType } from '$lib/stores/settings';
+  import QuietHoursEditor from './QuietHoursEditor.svelte';
+  import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
+  import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
   const logger = loggers.audio;
 
@@ -96,6 +98,17 @@
   // IMPORTANT: Pass the object directly, not a getter. Never reassign - only mutate properties.
   let streamHealth = $state<Record<string, StreamHealthResponse>>({});
 
+  // Quiet hours suppression state — tracks which streams are currently paused by quiet hours
+  interface QuietHoursStatus {
+    anyActive: boolean;
+    soundCardSuppressed: boolean;
+    suppressedStreams: Record<string, boolean>;
+  }
+  let quietHoursStatus = $state<QuietHoursStatus | null>(null);
+
+  /** Polling interval for quiet hours status in milliseconds */
+  const QUIET_HOURS_POLL_INTERVAL_MS = 30000;
+
   // Provide the state object via context so children can access it reactively
   // Pass the object directly - children will see mutations to its properties
   setContext('streamHealth', streamHealth);
@@ -108,6 +121,7 @@
   let newUrl = $state('');
   let newTransport = $state<'tcp' | 'udp'>('tcp');
   let newStreamType = $state<StreamType>('rtsp');
+  let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
 
@@ -153,10 +167,18 @@
   });
 
   // Convert backend process state to UI status
-  function getStreamStatus(url: string): StreamStatus {
+  function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = streamHealth[url];
-    if (!health) return 'unknown';
+    if (!health) {
+      // No health data means the stream was removed from the active map.
+      // If quiet hours is enabled for this stream and any source is suppressed,
+      // show it as suppressed rather than unknown.
+      if (stream.quietHours?.enabled && quietHoursStatus?.anyActive) {
+        return 'suppressed';
+      }
+      return 'unknown';
+    }
 
     const state = health.process_state.toLowerCase();
 
@@ -219,6 +241,18 @@
       // Health loading failure is non-critical, stream cards will show "unknown" status
     } finally {
       healthLoading = false;
+    }
+  }
+
+  // Fetch quiet hours suppression state from backend
+  async function fetchQuietHoursStatus() {
+    try {
+      quietHoursStatus = await api.get<QuietHoursStatus>('/api/v2/streams/quiet-hours/status');
+    } catch {
+      // Non-critical — suppressed streams will just show as "unknown"
+      logger.debug('Failed to fetch quiet hours status', null, {
+        component: 'StreamManager',
+      });
     }
   }
 
@@ -357,6 +391,7 @@
       url: trimmedUrl,
       type: newStreamType,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
+      quietHours: newQuietHours,
     } as StreamConfig;
 
     // Add the new stream
@@ -368,6 +403,7 @@
     newUrl = '';
     newTransport = 'tcp';
     newStreamType = 'rtsp';
+    newQuietHours = { ...defaultQuietHoursConfig };
     clearErrors();
     showAddForm = false;
 
@@ -445,6 +481,7 @@
 
   onMount(() => {
     loadHealthStatus();
+    fetchQuietHoursStatus();
     if (streams.length > 0) {
       connectSSE();
     }
@@ -454,6 +491,14 @@
     if (eventSource) {
       eventSource.close();
       eventSource = null;
+    }
+  });
+
+  // Poll quiet hours status so suppressed streams update without page refresh
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      const timer = globalThis.setInterval(fetchQuietHoursStatus, QUIET_HOURS_POLL_INTERVAL_MS);
+      return () => globalThis.clearInterval(timer);
     }
   });
 
@@ -543,7 +588,7 @@
         <StreamCard
           {stream}
           {index}
-          status={getStreamStatus(stream.url)}
+          status={getStreamStatus(stream.url, stream)}
           {disabled}
           onUpdate={updatedStream => updateStream(index, updatedStream)}
           onDelete={() => deleteStream(index)}
@@ -643,6 +688,14 @@
             {/if}
           </div>
 
+          <!-- Quiet Hours -->
+          <QuietHoursEditor
+            config={newQuietHours}
+            onChange={qh => (newQuietHours = qh)}
+            {disabled}
+            idPrefix="new-stream-qh"
+          />
+
           <!-- Action Buttons -->
           <div class="flex justify-end gap-2 pt-2">
             <button
@@ -652,6 +705,7 @@
                 showAddForm = false;
                 newName = '';
                 newUrl = '';
+                newQuietHours = { ...defaultQuietHoursConfig };
                 clearErrors();
               }}
             >

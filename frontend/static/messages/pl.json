@@ -2412,6 +2412,7 @@
           "connecting": "Łączenie",
           "error": "Błąd",
           "idle": "Bezczynny",
+          "suppressed": "Cisza nocna",
           "unknown": "Nieznany"
         },
         "emptyState": {
@@ -3258,5 +3259,10 @@
     "collapse": "Zwiń",
     "fullscreen": "Pełny ekran",
     "exitFullscreen": "Zamknij pełny ekran"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Cisza nocna aktywna — {count} źródło(a) wstrzymane"
+    }
   }
 }

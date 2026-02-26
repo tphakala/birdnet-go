@@ -99,7 +99,8 @@ type AudioSettings struct {
 	Export          ExportSettings     `json:"export"`                                                 // export settings
 	SoundLevel      SoundLevelSettings `json:"soundLevel"`                                             // sound level monitoring settings
 
-	Equalizer EqualizerSettings `json:"equalizer"` // equalizer settings
+	Equalizer  EqualizerSettings `json:"equalizer"`  // equalizer settings
+	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours for sound card
 }
 
 // NeedsFfprobeWorkaround returns true if the current FFmpeg version requires
@@ -422,6 +423,20 @@ type RTSPHealthSettings struct {
 	MonitoringInterval   int `json:"monitoringInterval"`   // health check interval in seconds (default: 30)
 }
 
+// QuietHoursConfig defines a time window during which an audio source is stopped
+// to reduce CPU usage when birds are unlikely to be active.
+// Mode can be "fixed" (clock times) or "solar" (relative to sunrise/sunset).
+type QuietHoursConfig struct {
+	Enabled     bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // true to enable quiet hours
+	Mode        string `yaml:"mode" json:"mode" mapstructure:"mode"`                            // "fixed" or "solar"
+	StartTime   string `yaml:"startTime" json:"startTime" mapstructure:"startTime"`             // "HH:MM" format for fixed mode (e.g., "22:00")
+	EndTime     string `yaml:"endTime" json:"endTime" mapstructure:"endTime"`                   // "HH:MM" format for fixed mode (e.g., "06:00")
+	StartEvent  string `yaml:"startEvent" json:"startEvent" mapstructure:"startEvent"`          // "sunset" or "sunrise" for solar mode
+	StartOffset int    `yaml:"startOffset" json:"startOffset" mapstructure:"startOffset"`       // minutes relative to start event (positive = after, negative = before)
+	EndEvent    string `yaml:"endEvent" json:"endEvent" mapstructure:"endEvent"`                // "sunset" or "sunrise" for solar mode
+	EndOffset   int    `yaml:"endOffset" json:"endOffset" mapstructure:"endOffset"`             // minutes relative to end event (positive = after, negative = before)
+}
+
 // StreamType constants for supported streaming protocols
 const (
 	StreamTypeRTSP = "rtsp" // RTSP/RTSPS - IP cameras
@@ -433,10 +448,11 @@ const (
 
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
-	Name      string `yaml:"name" json:"name" mapstructure:"name"`                // Required: descriptive name like "Front Yard"
-	URL       string `yaml:"url" json:"url" mapstructure:"url"`                   // Required: stream URL
-	Type      string `yaml:"type" json:"type" mapstructure:"type"`                // Stream type: rtsp, http, hls, rtmp, udp
-	Transport string `yaml:"transport" json:"transport" mapstructure:"transport"` // Transport: tcp or udp (for RTSP/RTMP)
+	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                      // Required: descriptive name like "Front Yard"
+	URL        string           `yaml:"url" json:"url" mapstructure:"url"`                         // Required: stream URL
+	Type       string           `yaml:"type" json:"type" mapstructure:"type"`                      // Stream type: rtsp, http, hls, rtmp, udp
+	Transport  string           `yaml:"transport" json:"transport" mapstructure:"transport"`       // Transport: tcp or udp (for RTSP/RTMP)
+	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`   // Quiet hours configuration
 }
 
 // RTSPSettings contains settings for audio streaming (supports multiple protocols).

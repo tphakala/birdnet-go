@@ -320,6 +320,13 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 	if settings.Realtime.Audio.Source != "" {
 		log := GetLogger()
 
+		// Check if sound card is suppressed by quiet hours
+		if IsSoundCardInQuietHours() {
+			log.Info("Sound card capture skipped due to quiet hours",
+				logger.String("source", settings.Realtime.Audio.Source))
+			return
+		}
+
 		// Validate audio device
 		if err := ValidateAudioDevice(settings); err != nil {
 			log.Warn("audio device validation failed",

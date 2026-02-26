@@ -405,6 +405,12 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 
+	// Initialize quiet hours scheduler for stream and sound card management
+	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, nil, controlChan)
+	myaudio.SetGlobalScheduler(quietHoursScheduler)
+	quietHoursScheduler.Start()
+	defer quietHoursScheduler.Stop()
+
 	// Publish application started alert event
 	alerting.TryPublish(&alerting.AlertEvent{
 		ObjectType: alerting.ObjectTypeApplication,
@@ -438,7 +444,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// restarting the application. The control monitor will start the endpoint if enabled.
 
 	// start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics)
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics, quietHoursScheduler)
 
 	// start shutdown signal monitor
 	monitorShutdownSignals(quitChan)
@@ -1302,8 +1308,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics) *ControlMonitor {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics)
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics, quietHoursScheduler)
 	ctrlMonitor.Start()
 	return ctrlMonitor
 }

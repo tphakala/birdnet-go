@@ -19,19 +19,36 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { Settings, Trash2, Check, X, AlertCircle, Radio, ChevronDown } from '@lucide/svelte';
+  import {
+    Settings,
+    Trash2,
+    Check,
+    X,
+    AlertCircle,
+    Radio,
+    ChevronDown,
+    Moon,
+  } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
-  import type { StreamConfig, StreamType } from '$lib/stores/settings';
+  import QuietHoursEditor from './QuietHoursEditor.svelte';
+  import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
+  import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import type { StreamHealthResponse } from './StreamManager.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
 
   // Stream health status type
-  export type StreamStatus = 'connected' | 'connecting' | 'error' | 'idle' | 'unknown';
+  export type StreamStatus =
+    | 'connected'
+    | 'connecting'
+    | 'error'
+    | 'idle'
+    | 'suppressed'
+    | 'unknown';
 
   interface Props {
     stream: StreamConfig;
@@ -117,6 +134,7 @@
   let editUrl = $state('');
   let editTransport = $state<'tcp' | 'udp'>('tcp');
   let editStreamType = $state<StreamType>('rtsp');
+  let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
 
   // Stream type options (all supported types)
@@ -155,6 +173,12 @@
           text: 'text-[var(--color-error)]',
           border: 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
         };
+      case 'suppressed':
+        return {
+          bg: 'bg-[color-mix(in_srgb,var(--color-info)_20%,transparent)]',
+          text: 'text-[var(--color-info)]',
+          border: 'border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]',
+        };
       case 'idle':
       default:
         return {
@@ -177,6 +201,8 @@
         return 'warning';
       case 'error':
         return 'error';
+      case 'suppressed':
+        return 'neutral';
       case 'idle':
       default:
         return 'neutral';
@@ -194,6 +220,8 @@
         return t('settings.audio.streams.status.error');
       case 'idle':
         return t('settings.audio.streams.status.idle');
+      case 'suppressed':
+        return t('settings.audio.streams.status.suppressed');
       default:
         return t('settings.audio.streams.status.unknown');
     }
@@ -208,6 +236,8 @@
         return 'border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)]';
       case 'error':
         return 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]';
+      case 'suppressed':
+        return 'border-[color-mix(in_srgb,var(--color-info)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-info)_5%,transparent)]';
       case 'idle':
       default:
         return 'border-[var(--border-200)] bg-[var(--color-base-200)]/50';
@@ -226,6 +256,7 @@
     editUrl = stream.url;
     editTransport = stream.transport ?? 'tcp';
     editStreamType = stream.type;
+    editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     isEditing = true;
   }
 
@@ -242,6 +273,7 @@
         type: editStreamType,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
+        quietHours: editQuietHours,
       } as StreamConfig);
       if (success) {
         isEditing = false;
@@ -377,6 +409,14 @@
           {/if}
         </div>
 
+        <!-- Quiet Hours -->
+        <QuietHoursEditor
+          config={editQuietHours}
+          onChange={qh => (editQuietHours = qh)}
+          {disabled}
+          idPrefix="stream-qh-{index}"
+        />
+
         <!-- Action Buttons -->
         <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-200)]">
           <button
@@ -426,6 +466,15 @@
               size="sm"
               pulse={status === 'connecting'}
             />
+            {#if stream.quietHours?.enabled}
+              <span
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"
+                title={t('settings.audio.quietHours.enabledBadge')}
+              >
+                <Moon class="size-3" />
+                {t('settings.audio.quietHours.badge')}
+              </span>
+            {/if}
           </div>
 
           <!-- URL and Error Message -->

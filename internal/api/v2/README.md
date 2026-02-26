@@ -174,6 +174,14 @@ routeInitializers := []struct {
 | PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings            |
 | PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section        |
 
+**Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
+
+- `enabled` (bool): Enable/disable quiet hours for this source
+- `mode` (`"fixed"` | `"solar"`): Time window mode
+- `startTime` / `endTime` (string, `"HH:MM"`): Fixed mode start/end times
+- `startEvent` / `endEvent` (`"sunrise"` | `"sunset"`): Solar mode events
+- `startOffset` / `endOffset` (int, -180 to 180): Minutes offset from solar event
+
 ### Filesystem (`filesystem.go`)
 
 | Method | Route                | Handler            | Auth | Description                                              |
@@ -306,6 +314,28 @@ routeInitializers := []struct {
 | GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream      |
 | GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts |
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE                   |
+
+### Quiet Hours Status (`quiet_hours.go`)
+
+| Method | Route                            | Handler               | Auth | Description                                      |
+| ------ | -------------------------------- | --------------------- | ---- | ------------------------------------------------ |
+| GET    | `/streams/quiet-hours/status`    | `GetQuietHoursStatus` | ✅   | Get current quiet hours suppression state for all sources |
+
+**Response Format:**
+
+```json
+{
+  "anyActive": true,
+  "soundCardSuppressed": false,
+  "suppressedStreams": {
+    "rtsp://camera1.local:554/stream": true
+  }
+}
+```
+
+- `anyActive`: true if any source (sound card or stream) is currently suppressed by quiet hours
+- `soundCardSuppressed`: true if the sound card is currently in quiet hours
+- `suppressedStreams`: map of stream URLs to their suppression state (only suppressed streams included)
 
 ### Support (`support.go`)
 

@@ -2406,6 +2406,7 @@
           "connecting": "Verbinden",
           "error": "Fout",
           "idle": "Inactief",
+          "suppressed": "Stille uren",
           "unknown": "Onbekend"
         },
         "emptyState": {
@@ -3258,5 +3259,10 @@
     "collapse": "Invouwen",
     "fullscreen": "Volledig scherm",
     "exitFullscreen": "Volledig scherm verlaten"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Stille uren actief — {count} bron(nen) gepauzeerd"
+    }
   }
 }

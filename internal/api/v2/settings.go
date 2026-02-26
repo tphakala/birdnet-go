@@ -1459,6 +1459,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", "info", toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", "info", toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", "info", toastDurationShort},
+	{"Quiet hours", "reconfigure_quiet_hours", quietHoursSettingsChanged, "Updating quiet hours schedule...", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", "warning", toastDurationExtended},
 }
 

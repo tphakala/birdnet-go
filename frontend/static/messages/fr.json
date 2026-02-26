@@ -2406,6 +2406,7 @@
           "connecting": "Connexion",
           "error": "Erreur",
           "idle": "Inactif",
+          "suppressed": "Heures calmes",
           "unknown": "Inconnu"
         },
         "emptyState": {
@@ -3258,5 +3259,10 @@
     "collapse": "Réduire",
     "fullscreen": "Plein écran",
     "exitFullscreen": "Quitter le plein écran"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Heures calmes actives — {count} source(s) en pause"
+    }
   }
 }

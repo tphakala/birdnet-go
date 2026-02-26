@@ -85,6 +85,32 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	return reconfigActions, nil
 }
 
+// quietHoursSettingsChanged checks if any quiet hours settings have changed
+// across streams or the sound card
+func quietHoursSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check sound card quiet hours
+	if !reflect.DeepEqual(oldSettings.Realtime.Audio.QuietHours, currentSettings.Realtime.Audio.QuietHours) {
+		return true
+	}
+
+	// Check stream quiet hours (compare each stream's QuietHours field)
+	oldStreams := oldSettings.Realtime.RTSP.Streams
+	newStreams := currentSettings.Realtime.RTSP.Streams
+
+	// If stream count changed, the stream reconfigure will handle it
+	if len(oldStreams) != len(newStreams) {
+		return false
+	}
+
+	for i := range oldStreams {
+		if !reflect.DeepEqual(oldStreams[i].QuietHours, newStreams[i].QuietHours) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // getAudioSectionValue returns a pointer to the audio section of settings for in-place updates
 func getAudioSectionValue(settings *conf.Settings) any {
 	return &settings.Realtime.Audio

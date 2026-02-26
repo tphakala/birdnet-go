@@ -2239,6 +2239,7 @@
           "connecting": "Conectando",
           "error": "Erro",
           "idle": "Inativo",
+          "suppressed": "Horas silenciosas",
           "unknown": "Desconhecido"
         },
         "emptyState": {
@@ -3258,5 +3259,10 @@
     "collapse": "Recolher",
     "fullscreen": "Tela cheia",
     "exitFullscreen": "Sair da tela cheia"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Horas silenciosas ativas — {count} fonte(s) pausada(s)"
+    }
   }
 }

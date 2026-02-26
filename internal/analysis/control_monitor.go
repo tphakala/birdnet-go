@@ -48,22 +48,26 @@ type ControlMonitor struct {
 	telemetryQuitChan      chan struct{}
 	telemetryWg            sync.WaitGroup
 	metrics                *observability.Metrics
+
+	// Quiet hours scheduler for stream/soundcard lifecycle management
+	quietHoursScheduler *myaudio.QuietHoursScheduler
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
 	cm := &ControlMonitor{
-		wg:             wg,
-		controlChan:    controlChan,
-		quitChan:       quitChan,
-		restartChan:    restartChan,
-		bufferManager:  bufferManager,
-		audioLevelChan: audioLevelChan,
-		soundLevelChan: soundLevelChan,
-		proc:           proc,
-		bn:             proc.Bn,
-		apiController:  apiController,
-		metrics:        metrics,
+		wg:                  wg,
+		controlChan:         controlChan,
+		quitChan:            quitChan,
+		restartChan:         restartChan,
+		bufferManager:       bufferManager,
+		audioLevelChan:      audioLevelChan,
+		soundLevelChan:      soundLevelChan,
+		proc:                proc,
+		bn:                  proc.Bn,
+		apiController:       apiController,
+		metrics:             metrics,
+		quietHoursScheduler: quietHoursScheduler,
 	}
 
 	// Initialize the sound level manager but don't start it yet
@@ -189,6 +193,12 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureTelemetry()
 	case "reconfigure_species_tracking":
 		cm.handleReconfigureSpeciesTracking()
+	case "reconfigure_quiet_hours":
+		cm.handleReconfigureQuietHours()
+	case "quiet_hours_stop_soundcard":
+		cm.handleQuietHoursStopSoundCard()
+	case "quiet_hours_start_soundcard":
+		cm.handleQuietHoursStartSoundCard()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
@@ -389,6 +399,12 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 	}()
 
 	myaudio.ReconfigureStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
+
+	// Re-evaluate quiet hours after stream reconfiguration to ensure
+	// newly added streams respect their quiet hours settings
+	if cm.quietHoursScheduler != nil {
+		cm.quietHoursScheduler.Evaluate()
+	}
 
 	GetLogger().Info("Audio streams reconfigured successfully")
 	cm.notifySuccess("Audio capture reconfigured successfully")
@@ -662,4 +678,45 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		logger.Int("sync_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
 		logger.String("hemisphere", hemisphere))
 	cm.notifySuccess("Species tracking reconfigured successfully")
+}
+
+// handleReconfigureQuietHours triggers a re-evaluation of quiet hours after settings change.
+func (cm *ControlMonitor) handleReconfigureQuietHours() {
+	GetLogger().Info("Reconfiguring quiet hours")
+
+	if cm.quietHoursScheduler != nil {
+		cm.quietHoursScheduler.Evaluate()
+		GetLogger().Info("Quiet hours re-evaluated successfully")
+		cm.notifySuccess("Quiet hours reconfigured successfully")
+	} else {
+		GetLogger().Warn("Quiet hours scheduler not available")
+	}
+}
+
+// handleQuietHoursStopSoundCard handles the signal to stop sound card capture for quiet hours.
+func (cm *ControlMonitor) handleQuietHoursStopSoundCard() {
+	GetLogger().Info("Quiet hours: stopping sound card capture")
+
+	// Signal the audio capture goroutine to restart - when it restarts,
+	// CaptureAudio will check IsSoundCardInQuietHours() and skip the sound card.
+	select {
+	case cm.restartChan <- struct{}{}:
+		GetLogger().Info("Quiet hours: sound card stop signal sent")
+	default:
+		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card stop")
+	}
+}
+
+// handleQuietHoursStartSoundCard handles the signal to restart sound card capture after quiet hours.
+func (cm *ControlMonitor) handleQuietHoursStartSoundCard() {
+	GetLogger().Info("Quiet hours: restarting sound card capture")
+
+	// Signal the audio capture goroutine to restart - when it restarts,
+	// CaptureAudio will check IsSoundCardInQuietHours() and start the sound card normally.
+	select {
+	case cm.restartChan <- struct{}{}:
+		GetLogger().Info("Quiet hours: sound card restart signal sent")
+	default:
+		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card restart")
+	}
 }
