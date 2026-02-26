@@ -182,11 +182,20 @@
   // Helper: conditions summary
   function conditionsSummary(rule: AlertRule): string {
     if (!rule.conditions || rule.conditions.length === 0) return t('settings.alerts.noConditions');
+
+    const ot = schema?.objectTypes.find(o => o.name === rule.object_type);
+    const trigger =
+      rule.trigger_type === 'event'
+        ? ot?.events?.find(e => e.name === rule.event_name)
+        : ot?.metrics?.find(m => m.name === rule.metric_name);
+    const props = trigger?.properties ?? [];
+
     return rule.conditions
-      .map(
-        c =>
-          `${schemaPropertyLabel(c.property, c.property)} ${schemaOperatorLabel(c.operator, c.operator)} ${c.value}`
-      )
+      .map(c => {
+        const propFallback = props.find(p => p.name === c.property)?.label ?? c.property;
+        const opFallback = schema?.operators.find(o => o.name === c.operator)?.label ?? c.operator;
+        return `${schemaPropertyLabel(c.property, propFallback)} ${schemaOperatorLabel(c.operator, opFallback)} ${c.value}`;
+      })
       .join(', ');
   }
 
