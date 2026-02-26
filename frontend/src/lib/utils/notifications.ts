@@ -359,11 +359,15 @@ export function translateNotification(notification: Notification): {
   // Resolve nested translation keys within title params (e.g. rule_name_key)
   // so the rule name itself is translated before being substituted into the title.
   let titleParams = notification.title_params;
-  if (titleParams?.rule_name_key) {
+  if (
+    titleParams &&
+    typeof titleParams.rule_name_key === 'string' &&
+    typeof titleParams.rule_name === 'string'
+  ) {
     const translatedName = translateField(
-      titleParams.rule_name_key as string,
+      titleParams.rule_name_key,
       undefined,
-      titleParams.rule_name as string
+      titleParams.rule_name
     );
     titleParams = { ...titleParams, rule_name: translatedName };
   }

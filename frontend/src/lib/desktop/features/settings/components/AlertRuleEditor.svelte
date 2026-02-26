@@ -28,6 +28,7 @@
     schemaPropertyLabel,
     schemaOperatorLabel,
   } from '$lib/utils/alertSchema';
+  import { translateField } from '$lib/utils/notifications';
 
   interface Props {
     rule: AlertRule | null;
@@ -70,8 +71,8 @@
   // Initialize form state from rule prop
   $effect(() => {
     if (rule) {
-      name = rule.name;
-      description = rule.description;
+      name = translateField(rule.name_key, undefined, rule.name);
+      description = translateField(rule.description_key, undefined, rule.description);
       enabled = rule.enabled;
       objectType = rule.object_type;
       triggerType = (rule.trigger_type as 'event' | 'metric') || 'event';
@@ -227,9 +228,17 @@
     // Preserve translation keys only when the user has not changed the
     // built-in rule's name/description; clear them otherwise so the
     // custom text takes precedence.
-    const nameKey = rule?.name_key && name.trim() === rule.name ? rule.name_key : '';
+    const translatedOriginalName = rule?.name_key
+      ? translateField(rule.name_key, undefined, rule.name)
+      : rule?.name;
+    const translatedOriginalDesc = rule?.description_key
+      ? translateField(rule.description_key, undefined, rule.description)
+      : rule?.description;
+    const nameKey = rule?.name_key && name.trim() === translatedOriginalName ? rule.name_key : '';
     const descKey =
-      rule?.description_key && description.trim() === rule.description ? rule.description_key : '';
+      rule?.description_key && description.trim() === translatedOriginalDesc
+        ? rule.description_key
+        : '';
 
     onSave({
       id: rule?.id,
