@@ -400,8 +400,6 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       },
       "alert": {
-        "firedTitleEvent": "Hälytys: {rule_name} ({event_name})",
-        "firedTitleMetric": "Hälytys: {rule_name} ({metric_name})",
         "firedTitle": "Hälytys: {rule_name}"
       }
     },

@@ -90,11 +90,11 @@ func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 
 	assert.Empty(t, mock.calls, "default template should use CreateAndBroadcastWithKeys")
 	require.Len(t, mock.keyCalls, 1)
-	assert.Equal(t, MsgAlertFiredTitleMetric, mock.keyCalls[0].titleKey)
+	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "CPU High", mock.keyCalls[0].titleParams["rule_name"])
 	assert.Equal(t, RuleKeyHighCPUName, mock.keyCalls[0].titleParams["rule_name_key"])
-	assert.Equal(t, MetricCPUUsage, mock.keyCalls[0].titleParams["metric_name"])
-	assert.Contains(t, mock.keyCalls[0].title, "CPU High")
+	assert.Equal(t, "Alert: CPU High", mock.keyCalls[0].title)
+	assert.Empty(t, mock.keyCalls[0].message, "default message should be empty, not duplicate the title")
 }
 
 func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
@@ -118,10 +118,11 @@ func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
 	dispatcher.Dispatch(rule, event)
 
 	require.Len(t, mock.keyCalls, 1)
-	assert.Equal(t, MsgAlertFiredTitleEvent, mock.keyCalls[0].titleKey)
+	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "Species Alert", mock.keyCalls[0].titleParams["rule_name"])
 	assert.Equal(t, RuleKeyNewSpeciesName, mock.keyCalls[0].titleParams["rule_name_key"])
-	assert.Equal(t, EventDetectionNewSpecies, mock.keyCalls[0].titleParams["event_name"])
+	assert.Equal(t, "Alert: Species Alert", mock.keyCalls[0].title)
+	assert.Empty(t, mock.keyCalls[0].message, "default message should be empty, not duplicate the title")
 }
 
 func TestDispatcher_DefaultTemplate_FallbackKey(t *testing.T) {
@@ -146,6 +147,7 @@ func TestDispatcher_DefaultTemplate_FallbackKey(t *testing.T) {
 	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "Generic", mock.keyCalls[0].titleParams["rule_name"])
 	assert.NotContains(t, mock.keyCalls[0].titleParams, "rule_name_key", "custom rule without NameKey should not have rule_name_key")
+	assert.Empty(t, mock.keyCalls[0].message, "default message should be empty, not duplicate the title")
 }
 
 func TestDispatcher_MultipleActions(t *testing.T) {

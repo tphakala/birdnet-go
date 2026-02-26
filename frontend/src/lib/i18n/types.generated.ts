@@ -340,8 +340,6 @@ export type TranslationKey =
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
   | 'notifications.content.cleanup.failedMessage' // params: error
-  | 'notifications.content.alert.firedTitleEvent' // params: rule_name, event_name
-  | 'notifications.content.alert.firedTitleMetric' // params: rule_name, metric_name
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.loading'
   | 'search.title'
@@ -916,11 +914,18 @@ export type TranslationKey =
   | 'system.metrics.available'
   | 'system.metrics.min'
   | 'system.metrics.max'
+  | 'system.metrics.limit'
   | 'system.metrics.tempUnavailable'
   | 'system.metrics.online'
   | 'system.metrics.uptime'
   | 'system.metrics.host'
   | 'system.metrics.model'
+  | 'system.metrics.inference'
+  | 'system.metrics.avgTime'
+  | 'system.metrics.noInference'
+  | 'system.metrics.statusOk'
+  | 'system.metrics.statusWarning'
+  | 'system.metrics.statusCritical'
   | 'system.storage.title'
   | 'system.storage.used'
   | 'system.storage.free'
@@ -2564,14 +2569,6 @@ export type TranslationParams = {
   'notifications.content.migration.errorMessage': { error: string | number };
   'notifications.content.cleanup.completeMessage': { space: string | number };
   'notifications.content.cleanup.failedMessage': { error: string | number };
-  'notifications.content.alert.firedTitleEvent': {
-    rule_name: string | number;
-    event_name: string | number;
-  };
-  'notifications.content.alert.firedTitleMetric': {
-    rule_name: string | number;
-    metric_name: string | number;
-  };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };

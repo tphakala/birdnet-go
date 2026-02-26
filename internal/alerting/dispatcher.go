@@ -33,13 +33,13 @@ func NewActionDispatcher(notifCreator NotificationCreator, log logger.Logger) *A
 func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent) {
 	for i := range rule.Actions {
 		action := &rule.Actions[i]
-		title := renderTemplate(action.TemplateTitle, rule, event)
-		message := renderTemplate(action.TemplateMessage, rule, event)
+		title := renderTitle(action.TemplateTitle, rule, event)
+		message := renderMessage(action.TemplateMessage, rule, event)
 
 		switch action.Target {
 		case TargetBell:
 			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
-			d.dispatchBell(title, message, rule, event, hasCustomTemplate)
+			d.dispatchBell(title, message, rule, hasCustomTemplate)
 		default:
 			d.log.Warn("unknown alert action target",
 				logger.String("target", action.Target),
@@ -48,7 +48,7 @@ func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent)
 	}
 }
 
-func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate bool) {
+func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, hasCustomTemplate bool) {
 	if d.notifCreator == nil {
 		return
 	}
@@ -56,7 +56,7 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 	// When no custom template is set, use translation keys so the
 	// frontend can render the notification in the user's locale.
 	if !hasCustomTemplate {
-		titleKey, titleParams := defaultTitleKey(rule, event)
+		titleKey, titleParams := defaultTitleKey(rule)
 		if err := d.notifCreator.CreateAndBroadcastWithKeys(title, message, titleKey, titleParams, "", nil); err != nil {
 			d.log.Error("failed to create bell notification",
 				logger.Uint64("rule_id", uint64(rule.ID)),
@@ -73,50 +73,46 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 }
 
 // defaultTitleKey returns the i18n key and parameters for the default alert
-// notification title based on the event type.
-func defaultTitleKey(rule *entities.AlertRule, event *AlertEvent) (key string, params map[string]any) {
+// notification title.
+func defaultTitleKey(rule *entities.AlertRule) (key string, params map[string]any) {
 	params = map[string]any{
 		"rule_name": rule.Name,
 	}
 	if rule.NameKey != "" {
 		params["rule_name_key"] = rule.NameKey
 	}
-
-	if event.EventName != "" {
-		params["event_name"] = event.EventName
-		return MsgAlertFiredTitleEvent, params
-	}
-	if event.MetricName != "" {
-		params["metric_name"] = event.MetricName
-		return MsgAlertFiredTitleMetric, params
-	}
 	return MsgAlertFiredTitle, params
 }
 
-// renderTemplate substitutes template variables in the title/message strings.
-// Falls back to defaults if the template is empty.
-func renderTemplate(tmpl string, rule *entities.AlertRule, event *AlertEvent) string {
+// renderTitle substitutes template variables in the title string.
+// Falls back to a default title if the template is empty.
+func renderTitle(tmpl string, rule *entities.AlertRule, event *AlertEvent) string {
 	if tmpl == "" {
-		return defaultTemplate(rule, event)
+		return fmt.Sprintf("Alert: %s", rule.Name)
 	}
-	pairs := []string{
+	return renderTemplate(tmpl, rule, event)
+}
+
+// renderMessage substitutes template variables in the message string.
+// Returns an empty string if the template is empty (no default message).
+func renderMessage(tmpl string, rule *entities.AlertRule, event *AlertEvent) string {
+	if tmpl == "" {
+		return ""
+	}
+	return renderTemplate(tmpl, rule, event)
+}
+
+// renderTemplate substitutes template variables in a string.
+func renderTemplate(tmpl string, rule *entities.AlertRule, event *AlertEvent) string {
+	pairs := make([]string, 0, 8+len(event.Properties)*2)
+	pairs = append(pairs,
 		"{{rule_name}}", rule.Name,
 		"{{event_name}}", event.EventName,
 		"{{metric_name}}", event.MetricName,
 		"{{object_type}}", event.ObjectType,
-	}
+	)
 	for k, v := range event.Properties {
 		pairs = append(pairs, fmt.Sprintf("{{%s}}", k), fmt.Sprintf("%v", v))
 	}
 	return strings.NewReplacer(pairs...).Replace(tmpl)
-}
-
-func defaultTemplate(rule *entities.AlertRule, event *AlertEvent) string {
-	if event.EventName != "" {
-		return fmt.Sprintf("Alert: %s (%s)", rule.Name, event.EventName)
-	}
-	if event.MetricName != "" {
-		return fmt.Sprintf("Alert: %s (%s)", rule.Name, event.MetricName)
-	}
-	return fmt.Sprintf("Alert: %s", rule.Name)
 }

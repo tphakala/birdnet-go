@@ -105,7 +105,5 @@ const (
 // These correspond to entries in the frontend i18n files under
 // "notifications.content.alert.*".
 const (
-	MsgAlertFiredTitleEvent  = "notifications.content.alert.firedTitleEvent"
-	MsgAlertFiredTitleMetric = "notifications.content.alert.firedTitleMetric"
-	MsgAlertFiredTitle       = "notifications.content.alert.firedTitle"
+	MsgAlertFiredTitle = "notifications.content.alert.firedTitle"
 )
