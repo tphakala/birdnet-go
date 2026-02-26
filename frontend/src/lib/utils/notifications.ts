@@ -4,6 +4,7 @@
  */
 
 import { getHigherPriority, createNotificationKey, type Priority } from './priority';
+import { t } from '$lib/i18n';
 
 // Constant for toast notification title - must match backend ToastNotificationTitle
 export const TOAST_NOTIFICATION_TITLE = 'Toast Message';
@@ -18,6 +19,10 @@ export interface Notification {
   priority: Priority;
   component?: string;
   status?: string;
+  title_key?: string;
+  title_params?: Record<string, unknown>;
+  message_key?: string;
+  message_params?: Record<string, unknown>;
   metadata?: {
     note_id?: number;
     [key: string]: unknown;
@@ -37,6 +42,10 @@ export interface ApiNotification {
   priority: Priority;
   status: 'unread' | 'read' | 'acknowledged';
   component?: string;
+  title_key?: string;
+  title_params?: Record<string, unknown>;
+  message_key?: string;
+  message_params?: Record<string, unknown>;
   metadata?: {
     note_id?: number;
     [key: string]: unknown;
@@ -61,6 +70,10 @@ type NotificationInput = {
   status?: string;
   read?: boolean;
   component?: string;
+  title_key?: string;
+  title_params?: Record<string, unknown>;
+  message_key?: string;
+  message_params?: Record<string, unknown>;
   metadata?: {
     note_id?: number;
     [key: string]: unknown;
@@ -309,6 +322,48 @@ export function sanitizeNotificationMessage(message: string): string {
     })
     .join('\n')
     .trim();
+}
+
+// ============================================================================
+// Notification Translation Helpers
+// Translates notification fields using i18n keys with English fallback
+// ============================================================================
+
+/**
+ * Safely translate a field: use t(key, params) if the key resolves to
+ * something other than itself; otherwise fall back to the English text.
+ *
+ * t() returns the raw key when translations haven't loaded or key is missing,
+ * so we detect this and use the fallback instead of showing a dot-notation key.
+ */
+export function translateField(
+  key: string | undefined,
+  params: Record<string, unknown> | undefined,
+  fallback: string
+): string {
+  if (!key) return fallback;
+  const translated = t(key, params ?? {});
+  // t() returns the raw key when translations haven't loaded or key is missing
+  return translated === key ? fallback : translated;
+}
+
+/**
+ * Translate a notification's title and message using i18n keys.
+ * Falls back to the English title/message fields when keys are absent
+ * or when translations haven't loaded yet.
+ */
+export function translateNotification(notification: Notification): {
+  title: string;
+  message: string;
+} {
+  return {
+    title: translateField(notification.title_key, notification.title_params, notification.title),
+    message: translateField(
+      notification.message_key,
+      notification.message_params,
+      notification.message
+    ),
+  };
 }
 
 // ============================================================================

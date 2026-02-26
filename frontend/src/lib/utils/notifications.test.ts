@@ -6,6 +6,8 @@ import {
   sanitizeNotificationMessage,
   isValidNotification,
   mapApiNotification,
+  translateField,
+  translateNotification,
   type Notification,
 } from './notifications';
 
@@ -305,5 +307,114 @@ describe('isValidNotification', () => {
     expect(isValidNotification({ id: '1' })).toBe(false);
     expect(isValidNotification({ message: 'Test' })).toBe(false);
     expect(isValidNotification({ title: 'Test', type: 'info' })).toBe(false);
+  });
+});
+
+describe('translateField', () => {
+  it('returns fallback when key is undefined', () => {
+    expect(translateField(undefined, undefined, 'Fallback text')).toBe('Fallback text');
+  });
+
+  it('returns fallback when key is empty string', () => {
+    expect(translateField('', undefined, 'Fallback text')).toBe('Fallback text');
+  });
+
+  it('returns fallback when translation key is not found (t() returns key)', () => {
+    // The mock t() returns the key itself when no translation exists
+    expect(translateField('notifications.content.unknown.key', undefined, 'English fallback')).toBe(
+      'English fallback'
+    );
+  });
+
+  it('returns translated text when key exists in translations', () => {
+    // 'common.ui.loading' is defined in the test setup translations as 'Loading...'
+    expect(translateField('common.ui.loading', undefined, 'Loading fallback')).toBe('Loading...');
+  });
+
+  it('interpolates params into translated text', () => {
+    // 'components.forms.species.suggestionsAvailable' = '{count} species suggestions available'
+    expect(
+      translateField('components.forms.species.suggestionsAvailable', { count: 5 }, 'Fallback')
+    ).toBe('5 species suggestions available');
+  });
+
+  it('returns fallback when key not found even with params', () => {
+    expect(
+      translateField('notifications.content.missing.key', { version: '1.0' }, 'Started v1.0')
+    ).toBe('Started v1.0');
+  });
+});
+
+describe('translateNotification', () => {
+  it('returns original title and message when no keys are present', () => {
+    const notification = createTestNotification({
+      title: 'BirdNET-Go Started',
+      message: 'Application started (v1.0)',
+    });
+
+    const result = translateNotification(notification);
+
+    expect(result.title).toBe('BirdNET-Go Started');
+    expect(result.message).toBe('Application started (v1.0)');
+  });
+
+  it('falls back to original text when translation keys are not found', () => {
+    const notification = createTestNotification({
+      title: 'BirdNET-Go Started',
+      message: 'Application started (v1.0)',
+      title_key: 'notifications.content.startup.title',
+      message_key: 'notifications.content.startup.message',
+      message_params: { version: '1.0' },
+    });
+
+    // These keys aren't in the test setup translations, so t() returns the key itself
+    const result = translateNotification(notification);
+
+    expect(result.title).toBe('BirdNET-Go Started');
+    expect(result.message).toBe('Application started (v1.0)');
+  });
+
+  it('uses translated text when keys exist in translations', () => {
+    const notification = createTestNotification({
+      title: 'Fallback title',
+      message: 'Fallback message',
+      // Use keys that exist in the test setup translations
+      title_key: 'common.ui.loading',
+      message_key: 'common.close',
+    });
+
+    const result = translateNotification(notification);
+
+    expect(result.title).toBe('Loading...');
+    expect(result.message).toBe('Close');
+  });
+
+  it('handles mixed scenario: one key found, one not', () => {
+    const notification = createTestNotification({
+      title: 'Fallback title',
+      message: 'English error message',
+      title_key: 'common.ui.loading', // exists in translations
+      message_key: 'notifications.content.error.unknown', // does not exist
+    });
+
+    const result = translateNotification(notification);
+
+    expect(result.title).toBe('Loading...');
+    expect(result.message).toBe('English error message');
+  });
+
+  it('preserves i18n fields on original notification (does not mutate)', () => {
+    const notification = createTestNotification({
+      title: 'Original',
+      message: 'Original message',
+      title_key: 'some.key',
+      message_params: { foo: 'bar' },
+    });
+
+    translateNotification(notification);
+
+    expect(notification.title_key).toBe('some.key');
+    expect(notification.message_params).toEqual({ foo: 'bar' });
+    expect(notification.title).toBe('Original');
   });
 });

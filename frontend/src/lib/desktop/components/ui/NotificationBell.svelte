@@ -13,6 +13,7 @@
     isExistingNotification,
     shouldShowNotification,
     sanitizeNotificationMessage,
+    translateNotification,
     mapApiNotification,
     mapApiNotifications,
   } from '$lib/utils/notifications';
@@ -67,12 +68,17 @@
 
   // Pre-computed display data for notifications
   const formattedNotifications = $derived(
-    visibleNotifications.map(notification => ({
-      ...notification,
-      timeAgo: formatTimeAgo(notification.timestamp),
-      iconClass: getNotificationIconClass(notification),
-      priorityBadgeClass: getPriorityBadgeClass(notification.priority),
-    }))
+    visibleNotifications.map(notification => {
+      const translated = translateNotification(notification);
+      return {
+        ...notification,
+        title: translated.title,
+        message: translated.message,
+        timeAgo: formatTimeAgo(notification.timestamp),
+        iconClass: getNotificationIconClass(notification),
+        priorityBadgeClass: getPriorityBadgeClass(notification.priority),
+      };
+    })
   );
 
   function formatTimeAgo(timestamp: string): string {
@@ -324,8 +330,9 @@
   // Show browser notification
   function showBrowserNotification(notification: Notification) {
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
-      new globalThis.Notification(sanitizeNotificationMessage(notification.title), {
-        body: sanitizeNotificationMessage(notification.message),
+      const translated = translateNotification(notification);
+      new globalThis.Notification(sanitizeNotificationMessage(translated.title), {
+        body: sanitizeNotificationMessage(translated.message),
         icon: buildAppUrl(NOTIFICATION_ICON_PATH),
         tag: notification.id,
       });

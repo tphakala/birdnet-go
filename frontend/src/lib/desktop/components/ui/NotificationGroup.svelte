@@ -6,7 +6,7 @@
     NotificationGroup as NotificationGroupType,
     Notification,
   } from '$lib/utils/notifications';
-  import { sanitizeNotificationMessage } from '$lib/utils/notifications';
+  import { sanitizeNotificationMessage, translateNotification } from '$lib/utils/notifications';
   import { safeGet } from '$lib/utils/security';
   import {
     ChevronDown,
@@ -168,7 +168,9 @@
       <!-- Title & Meta -->
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <h3 class="font-medium text-sm truncate">{group.title}</h3>
+          <h3 class="font-medium text-sm truncate">
+            {translateNotification(group.notifications[0]).title}
+          </h3>
           {#if hasMultiple}
             <span class="badge badge-sm badge-primary">{count}</span>
           {/if}
@@ -244,7 +246,7 @@
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
               <p class="text-xs text-base-content/80">
-                {sanitizeNotificationMessage(notification.message)}
+                {sanitizeNotificationMessage(translateNotification(notification).message)}
               </p>
               <time
                 class="text-xs text-base-content/50 mt-1 block"

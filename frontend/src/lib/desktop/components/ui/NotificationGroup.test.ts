@@ -53,7 +53,10 @@ describe('NotificationGroup', () => {
   it('renders the group title', () => {
     render(NotificationGroup, {
       props: {
-        group: createMockGroup({ title: 'System Alerts' }),
+        group: createMockGroup({
+          title: 'System Alerts',
+          notifications: [createMockNotification({ title: 'System Alerts' })],
+        }),
       },
     });
 
