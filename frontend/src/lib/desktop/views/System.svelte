@@ -402,9 +402,7 @@
     role="region"
     aria-label={t('system.database.dashboard.title')}
   >
-    <div class="max-w-5xl mx-auto">
-      <DatabaseDashboard />
-    </div>
+    <DatabaseDashboard />
   </div>
 {:else}
   <!-- System Overview Page -->
