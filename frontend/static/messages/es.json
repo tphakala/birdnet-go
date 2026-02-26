@@ -302,7 +302,7 @@
       "delete": "Eliminar",
       "confirmDelete": "Confirmar eliminación",
       "deleteConfirmation": "¿Estás seguro de que quieres eliminar esta notificación?",
-      "viewAll": "View all notifications"
+      "viewAll": "Ver todas las notificaciones"
     },
     "aria": {
       "filterByStatus": "Filtrar por estado",
@@ -317,7 +317,7 @@
       "loadFailed": "Error al cargar las notificaciones. Por favor, inténtalo de nuevo.",
       "deleteFailed": "Error al eliminar la notificación. Por favor, inténtalo de nuevo.",
       "networkError": "Error de red. Por favor, inténtalo de nuevo.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Error al marcar la notificación como leída. Por favor, inténtalo de nuevo."
     },
     "timeAgo": {
       "justNow": "Ahora mismo",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Cargando notificaciones..."
   },
   "search": {
     "title": "Filtros de búsqueda",

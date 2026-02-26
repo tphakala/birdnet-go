@@ -302,7 +302,7 @@
       "delete": "Löschen",
       "confirmDelete": "Löschen bestätigen",
       "deleteConfirmation": "Sind Sie sicher, dass Sie diese Benachrichtigung löschen möchten?",
-      "viewAll": "View all notifications"
+      "viewAll": "Alle Benachrichtigungen anzeigen"
     },
     "aria": {
       "filterByStatus": "Nach Status filtern",
@@ -317,7 +317,7 @@
       "loadFailed": "Fehler beim Laden der Benachrichtigungen. Bitte versuchen Sie es erneut.",
       "deleteFailed": "Fehler beim Löschen der Benachrichtigung. Bitte versuchen Sie es erneut.",
       "networkError": "Netzwerkfehler aufgetreten. Bitte versuchen Sie es erneut.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Benachrichtigung konnte nicht als gelesen markiert werden. Bitte versuchen Sie es erneut."
     },
     "timeAgo": {
       "justNow": "Gerade eben",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Benachrichtigungen werden geladen..."
   },
   "search": {
     "title": "Suchfilter",

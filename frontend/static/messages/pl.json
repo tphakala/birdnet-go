@@ -302,7 +302,7 @@
       "delete": "Usuń",
       "confirmDelete": "Potwierdź Usunięcie",
       "deleteConfirmation": "Czy na pewno chcesz usunąć to powiadomienie?",
-      "viewAll": "View all notifications"
+      "viewAll": "Wyświetl wszystkie powiadomienia"
     },
     "aria": {
       "filterByStatus": "Filtruj według statusu",
@@ -317,7 +317,7 @@
       "loadFailed": "Nie udało się załadować powiadomień. Spróbuj ponownie.",
       "deleteFailed": "Nie udało się usunąć powiadomienia. Spróbuj ponownie.",
       "networkError": "Wystąpił błąd sieci. Spróbuj ponownie.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Nie udało się oznaczyć powiadomienia jako przeczytane. Spróbuj ponownie."
     },
     "timeAgo": {
       "justNow": "Przed chwilą",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Ładowanie powiadomień..."
   },
   "search": {
     "title": "Filtry Wyszukiwania",

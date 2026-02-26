@@ -302,7 +302,7 @@
       "delete": "Wis",
       "confirmDelete": "Bevestig wissen",
       "deleteConfirmation": "Weet je zeker dat je deze melding wilt wissen",
-      "viewAll": "View all notifications"
+      "viewAll": "Bekijk alle meldingen"
     },
     "aria": {
       "filterByStatus": "Filter op status",
@@ -317,7 +317,7 @@
       "loadFailed": "Kan meldingen niet laden. Probeer opnieuw.",
       "deleteFailed": "Kan Meldingen niet wissen. Probeer opnieuw.",
       "networkError": "Er is een netwerk fout opgetreden. Probeer opnieuw.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Melding als gelezen markeren mislukt. Probeer opnieuw."
     },
     "timeAgo": {
       "justNow": "Nu",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Meldingen laden..."
   },
   "search": {
     "title": "Zoek filters",

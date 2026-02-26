@@ -302,7 +302,7 @@
       "delete": "Supprimer",
       "confirmDelete": "Confirmer la suppression",
       "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer cette notification ?",
-      "viewAll": "View all notifications"
+      "viewAll": "Voir toutes les notifications"
     },
     "aria": {
       "filterByStatus": "Filtrer par statut",
@@ -317,7 +317,7 @@
       "loadFailed": "Échec du chargement des notifications. Veuillez réessayer.",
       "deleteFailed": "Échec de la suppression de la notification. Veuillez réessayer.",
       "networkError": "Une erreur réseau est survenue. Veuillez réessayer.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Échec du marquage de la notification comme lue. Veuillez réessayer."
     },
     "timeAgo": {
       "justNow": "À l'instant",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Chargement des notifications..."
   },
   "search": {
     "title": "Filtres de recherche",

@@ -302,7 +302,7 @@
       "delete": "Poista",
       "confirmDelete": "Vahvista poisto",
       "deleteConfirmation": "Haluatko varmasti poistaa tämän ilmoituksen?",
-      "viewAll": "View all notifications"
+      "viewAll": "Näytä kaikki ilmoitukset"
     },
     "aria": {
       "filterByStatus": "Suodata tilan mukaan",
@@ -317,7 +317,7 @@
       "loadFailed": "Ilmoitusten lataus epäonnistui. Yritä uudelleen.",
       "deleteFailed": "Ilmoituksen poisto epäonnistui. Yritä uudelleen.",
       "networkError": "Verkkovirhe. Yritä uudelleen.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Ilmoituksen merkitseminen luetuksi epäonnistui. Yritä uudelleen."
     },
     "timeAgo": {
       "justNow": "Juuri nyt",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Ladataan ilmoituksia..."
   },
   "search": {
     "title": "Hakusuodattimet",

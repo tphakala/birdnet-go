@@ -302,7 +302,7 @@
       "delete": "Odstrániť",
       "confirmDelete": "Potvrdiť odstránenie",
       "deleteConfirmation": "Naozaj chcete odstrániť toto upozornenie?",
-      "viewAll": "View all notifications"
+      "viewAll": "Zobraziť všetky upozornenia"
     },
     "aria": {
       "filterByStatus": "Filtrovať podľa stavu",
@@ -317,7 +317,7 @@
       "loadFailed": "Nepodarilo sa načítať upozornenia. Skúste to znova.",
       "deleteFailed": "Nepodarilo sa odstrániť upozornenie. Skúste to znova.",
       "networkError": "Vyskytla sa sieťová chyba. Skúste to znova.",
-      "markReadFailed": "Failed to mark notification as read. Please try again."
+      "markReadFailed": "Nepodarilo sa označiť upozornenie ako prečítané. Skúste to prosím znova."
     },
     "timeAgo": {
       "justNow": "Práve teraz",
@@ -400,7 +400,7 @@
         "failedMessage": "Failed to remove legacy database: {error}"
       }
     },
-    "loading": "Loading notifications..."
+    "loading": "Načítavam upozornenia..."
   },
   "search": {
     "title": "Filtre vyhľadávania",
