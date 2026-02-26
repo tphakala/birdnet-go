@@ -3244,6 +3244,58 @@
       "import": "Tuo",
       "exporting": "Viedään...",
       "importing": "Tuodaan...",
+      "schema": {
+        "objectTypes": {
+          "stream": "Äänivirta",
+          "detection": "Havainto",
+          "application": "Sovellus",
+          "integration": "Integraatio",
+          "device": "Laite",
+          "system": "Järjestelmä"
+        },
+        "events": {
+          "stream_connected": "Virta yhdistetty",
+          "stream_disconnected": "Virta katkaistu",
+          "stream_error": "Virtavirhe",
+          "detection_new_species": "Uusi laji havaittu",
+          "detection_occurred": "Havainto tehty",
+          "application_started": "Sovellus käynnistetty",
+          "application_stopped": "Sovellus pysäytetty",
+          "integration_birdweather_failed": "BirdWeather-lähetys epäonnistui",
+          "integration_mqtt_connected": "MQTT yhdistetty",
+          "integration_mqtt_disconnected": "MQTT-yhteys katkaistu",
+          "device_started": "Laite käynnistetty",
+          "device_stopped": "Laite pysäytetty",
+          "device_error": "Laitevirhe"
+        },
+        "metrics": {
+          "system_cpu_usage": "Suorittimen käyttö",
+          "system_memory_usage": "Muistin käyttö",
+          "system_disk_usage": "Levytilan käyttö"
+        },
+        "properties": {
+          "value": "Arvo",
+          "species_name": "Lajin nimi",
+          "scientific_name": "Tieteellinen nimi",
+          "confidence": "Luotettavuus",
+          "location": "Sijainti",
+          "stream_name": "Virran nimi",
+          "stream_url": "Virran URL",
+          "device_name": "Laitteen nimi",
+          "error": "Virheilmoitus",
+          "broker": "Välittäjä"
+        },
+        "operators": {
+          "is": "on",
+          "is_not": "ei ole",
+          "contains": "sisältää",
+          "not_contains": "ei sisällä",
+          "greater_than": "suurempi kuin",
+          "less_than": "pienempi kuin",
+          "greater_or_equal": "suurempi tai yhtä suuri",
+          "less_or_equal": "pienempi tai yhtä suuri"
+        }
+      },
       "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Päivitä tietokanta pääasetuksissa ottaaksesi tämän ominaisuuden käyttöön."
     }
   },

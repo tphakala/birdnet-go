@@ -21,6 +21,13 @@
   import { Plus, Trash2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { AlertRule, AlertSchema, ObjectTypeSchema } from '$lib/api/alerts';
+  import {
+    schemaObjectTypeLabel,
+    schemaEventLabel,
+    schemaMetricLabel,
+    schemaPropertyLabel,
+    schemaOperatorLabel,
+  } from '$lib/utils/alertSchema';
 
   interface Props {
     rule: AlertRule | null;
@@ -101,7 +108,10 @@
 
   // Schema-driven options
   let objectTypeOptions = $derived<SelectOption[]>(
-    schema.objectTypes.map(ot => ({ value: ot.name, label: ot.label }))
+    schema.objectTypes.map(ot => ({
+      value: ot.name,
+      label: schemaObjectTypeLabel(ot.name, ot.label),
+    }))
   );
 
   let selectedObjectType = $derived<ObjectTypeSchema | undefined>(
@@ -121,12 +131,17 @@
   });
 
   let eventOptions = $derived<SelectOption[]>(
-    selectedObjectType?.events?.map(e => ({ value: e.name, label: e.label })) ?? []
+    selectedObjectType?.events?.map(e => ({
+      value: e.name,
+      label: schemaEventLabel(e.name, e.label),
+    })) ?? []
   );
 
   let metricOptions = $derived<SelectOption[]>(
-    selectedObjectType?.metrics?.map(m => ({ value: m.name, label: `${m.label} (${m.unit})` })) ??
-      []
+    selectedObjectType?.metrics?.map(m => ({
+      value: m.name,
+      label: `${schemaMetricLabel(m.name, m.label)} (${m.unit})`,
+    })) ?? []
   );
 
   // Get available properties for current trigger
@@ -145,7 +160,7 @@
   );
 
   let propertyOptions = $derived<SelectOption[]>(
-    availableProperties.map(p => ({ value: p.name, label: p.label }))
+    availableProperties.map(p => ({ value: p.name, label: schemaPropertyLabel(p.name, p.label) }))
   );
 
   // Get operators for a given property
@@ -154,7 +169,8 @@
     if (!prop) return [];
     return prop.operators.map(op => {
       const schemaOp = schema.operators.find(o => o.name === op);
-      return { value: op, label: schemaOp?.label ?? op };
+      const fallback = schemaOp?.label ?? op;
+      return { value: op, label: schemaOperatorLabel(op, fallback) };
     });
   }
 

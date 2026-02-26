@@ -61,6 +61,13 @@
   import type { AlertRule, AlertHistory as AlertHistoryType, AlertSchema } from '$lib/api/alerts';
   import AlertRuleEditor from '$lib/desktop/features/settings/components/AlertRuleEditor.svelte';
   import { formatLocalDateTime } from '$lib/utils/date';
+  import {
+    schemaObjectTypeLabel,
+    schemaEventLabel,
+    schemaMetricLabel,
+    schemaPropertyLabel,
+    schemaOperatorLabel,
+  } from '$lib/utils/alertSchema';
 
   const logger = loggers.settings;
 
@@ -106,7 +113,10 @@
   // Schema-based filter options
   let objectTypeOptions = $derived<SelectOption[]>([
     { value: '', label: t('settings.alerts.filters.allTypes') },
-    ...(schema?.objectTypes.map(ot => ({ value: ot.name, label: ot.label })) ?? []),
+    ...(schema?.objectTypes.map(ot => ({
+      value: ot.name,
+      label: schemaObjectTypeLabel(ot.name, ot.label),
+    })) ?? []),
   ]);
 
   let enabledOptions = $derived<SelectOption[]>([
@@ -149,18 +159,22 @@
 
   // Helper: get schema label for object type
   function objectTypeLabel(name: string): string {
-    return schema?.objectTypes.find(ot => ot.name === name)?.label ?? name;
+    const fallback = schema?.objectTypes.find(ot => ot.name === name)?.label ?? name;
+    return schemaObjectTypeLabel(name, fallback);
   }
 
   // Helper: get event/metric label
   function triggerLabel(rule: AlertRule): string {
     if (rule.trigger_type === 'event') {
       const ot = schema?.objectTypes.find(o => o.name === rule.object_type);
-      return ot?.events?.find(e => e.name === rule.event_name)?.label ?? rule.event_name;
+      const fallback = ot?.events?.find(e => e.name === rule.event_name)?.label ?? rule.event_name;
+      return schemaEventLabel(rule.event_name, fallback);
     }
     if (rule.trigger_type === 'metric') {
       const ot = schema?.objectTypes.find(o => o.name === rule.object_type);
-      return ot?.metrics?.find(m => m.name === rule.metric_name)?.label ?? rule.metric_name;
+      const fallback =
+        ot?.metrics?.find(m => m.name === rule.metric_name)?.label ?? rule.metric_name;
+      return schemaMetricLabel(rule.metric_name, fallback);
     }
     return rule.event_name || rule.metric_name;
   }
@@ -168,13 +182,37 @@
   // Helper: conditions summary
   function conditionsSummary(rule: AlertRule): string {
     if (!rule.conditions || rule.conditions.length === 0) return t('settings.alerts.noConditions');
-    return rule.conditions.map(c => `${c.property} ${c.operator} ${c.value}`).join(', ');
+
+    const ot = schema?.objectTypes.find(o => o.name === rule.object_type);
+    const trigger =
+      rule.trigger_type === 'event'
+        ? ot?.events?.find(e => e.name === rule.event_name)
+        : ot?.metrics?.find(m => m.name === rule.metric_name);
+    const props = trigger?.properties ?? [];
+
+    return rule.conditions
+      .map(c => {
+        const propFallback = props.find(p => p.name === c.property)?.label ?? c.property;
+        const opFallback = schema?.operators.find(o => o.name === c.operator)?.label ?? c.operator;
+        return `${schemaPropertyLabel(c.property, propFallback)} ${schemaOperatorLabel(c.operator, opFallback)} ${c.value}`;
+      })
+      .join(', ');
   }
 
   // Helper: actions summary
+  const actionLabelKeys: Record<string, string> = {
+    bell: 'settings.alerts.editor.actionBell',
+    push: 'settings.alerts.editor.actionPush',
+  };
+
   function actionsSummary(rule: AlertRule): string {
     if (!rule.actions || rule.actions.length === 0) return t('settings.alerts.noActions');
-    return rule.actions.map(a => a.target).join(', ');
+    return rule.actions
+      .map(a => {
+        const key = actionLabelKeys[a.target];
+        return key ? t(key) : a.target;
+      })
+      .join(', ');
   }
 
   // Helper: format cooldown
