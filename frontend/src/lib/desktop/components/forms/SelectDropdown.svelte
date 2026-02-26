@@ -442,7 +442,7 @@
       <div
         bind:this={dropdownElement}
         class={cn(
-          'fixed z-[60] bg-base-100 rounded-md shadow-xl border border-base-content/20 overflow-hidden',
+          'fixed z-[60] font-sans bg-base-100 rounded-md shadow-xl border border-base-content/20 overflow-hidden',
           dropdownClassName
         )}
         style:top="{dropdownPosition.top}px"
