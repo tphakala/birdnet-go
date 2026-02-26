@@ -106,6 +106,10 @@
     md: 'text-sm py-2 px-3',
   };
 
+  // Shared focus ring style (theme-aware via color-mix)
+  const focusRingClasses =
+    'focus:outline-none focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_10%,transparent)]';
+
   // Trigger button classes based on variant
   let triggerClasses = $derived(
     variant === 'select'
@@ -115,7 +119,7 @@
           'border border-[var(--border-100)] rounded-[var(--radius-field)]',
           'transition-all',
           'hover:border-[var(--border-200)]',
-          'focus:outline-none focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.1)]',
+          focusRingClasses,
           safeGet(sizeClasses, size, ''),
           disabled && 'opacity-50 cursor-not-allowed bg-[var(--color-base-200)] pointer-events-none'
         )
@@ -367,7 +371,7 @@
 
 <div class={cn('flex flex-col', className)}>
   {#if label}
-    <label class="flex items-center py-2 text-sm" for={fieldId} id="{fieldId}-label">
+    <label class="flex items-center py-2" for={fieldId} id="{fieldId}-label">
       <span class="text-sm font-medium text-[var(--color-base-content)]">
         {label}
         {#if required}
@@ -458,7 +462,10 @@
               bind:value={searchQuery}
               oninput={handleSearch}
               placeholder={t('common.ui.search')}
-              class="block w-full py-2 px-3 text-sm leading-5 bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--color-base-content)] placeholder:opacity-50 hover:border-[var(--border-200)] focus:outline-none focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.1)]"
+              class={cn(
+                'block w-full py-2 px-3 text-sm leading-5 bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--color-base-content)] placeholder:opacity-50 hover:border-[var(--border-200)]',
+                focusRingClasses
+              )}
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
