@@ -529,6 +529,7 @@
     {:else}
       <!-- Flat View with compact styling -->
       {#each notifications as notification (notification.id)}
+        {@const translated = translateNotification(notification)}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={getNotificationCardClass(notification)}
@@ -570,10 +571,10 @@
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
                     <h3 class="font-medium text-sm truncate">
-                      {translateNotification(notification).title}
+                      {translated.title}
                     </h3>
                     <p class="text-xs text-base-content/80 mt-0.5 line-clamp-2">
-                      {sanitizeNotificationMessage(translateNotification(notification).message)}
+                      {sanitizeNotificationMessage(translated.message)}
                     </p>
 
                     <!-- Metadata (compact) -->
