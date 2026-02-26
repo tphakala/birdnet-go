@@ -403,10 +403,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+	unifiedAudioChan := startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 
 	// Initialize quiet hours scheduler for stream and sound card management
-	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, nil, controlChan)
+	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, unifiedAudioChan, controlChan)
 	myaudio.SetGlobalScheduler(quietHoursScheduler)
 	quietHoursScheduler.Start()
 	defer quietHoursScheduler.Stop()
@@ -667,7 +667,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) chan myaudio.UnifiedAudioData {
 	// Stop previous demultiplexing goroutine if it exists
 	audioDemuxManager.Stop()
 
@@ -723,6 +723,8 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 
 	// waitgroup is managed within CaptureAudio
 	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+
+	return unifiedAudioChan
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.

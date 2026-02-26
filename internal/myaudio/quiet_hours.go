@@ -55,6 +55,15 @@ func NewQuietHoursScheduler(sunCalc *suncalc.SunCalc, audioChan chan UnifiedAudi
 	}
 }
 
+// SetAudioChannel updates the audio channel used when restarting streams.
+// Must be called before Start, and again whenever the unified audio channel is recreated
+// (e.g., during stream reconfiguration).
+func (s *QuietHoursScheduler) SetAudioChannel(ch chan UnifiedAudioData) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.audioChan = ch
+}
+
 // Start begins the quiet hours evaluation loop with a 1-minute tick interval.
 func (s *QuietHoursScheduler) Start() {
 	go s.run()

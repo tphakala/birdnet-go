@@ -25,6 +25,7 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
   import { toastActions } from '$lib/stores/toast';
+  import { quietHoursStore } from '$lib/stores/quietHours.svelte';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -98,16 +99,7 @@
   // IMPORTANT: Pass the object directly, not a getter. Never reassign - only mutate properties.
   let streamHealth = $state<Record<string, StreamHealthResponse>>({});
 
-  // Quiet hours suppression state — tracks which streams are currently paused by quiet hours
-  interface QuietHoursStatus {
-    anyActive: boolean;
-    soundCardSuppressed: boolean;
-    suppressedStreams: Record<string, boolean>;
-  }
-  let quietHoursStatus = $state<QuietHoursStatus | null>(null);
-
-  /** Polling interval for quiet hours status in milliseconds */
-  const QUIET_HOURS_POLL_INTERVAL_MS = 30000;
+  // Quiet hours suppression state from shared store
 
   // Provide the state object via context so children can access it reactively
   // Pass the object directly - children will see mutations to its properties
@@ -169,10 +161,11 @@
   // Check if a specific stream is suppressed by quiet hours.
   // The backend returns sanitized URLs (credentials stripped), so we compare using sanitized form.
   function isStreamSuppressed(url: string, stream: StreamConfig): boolean {
-    if (!stream.quietHours?.enabled || !quietHoursStatus?.suppressedStreams) return false;
+    const qhStatus = quietHoursStore.status;
+    if (!stream.quietHours?.enabled || !qhStatus?.suppressedStreams) return false;
     const sanitized = sanitizeUrlForComparison(url);
     // eslint-disable-next-line security/detect-object-injection -- sanitized URL from internal sanitizeUrlForComparison, not user input
-    return quietHoursStatus.suppressedStreams[sanitized] === true;
+    return qhStatus.suppressedStreams[sanitized] === true;
   }
 
   // Convert backend process state to UI status
@@ -249,18 +242,6 @@
       // Health loading failure is non-critical, stream cards will show "unknown" status
     } finally {
       healthLoading = false;
-    }
-  }
-
-  // Fetch quiet hours suppression state from backend
-  async function fetchQuietHoursStatus() {
-    try {
-      quietHoursStatus = await api.get<QuietHoursStatus>('/api/v2/streams/quiet-hours/status');
-    } catch {
-      // Non-critical — suppressed streams will just show as "unknown"
-      logger.debug('Failed to fetch quiet hours status', null, {
-        component: 'StreamManager',
-      });
     }
   }
 
@@ -492,24 +473,17 @@
 
   onMount(() => {
     loadHealthStatus();
-    fetchQuietHoursStatus();
+    quietHoursStore.startPolling();
     if (streams.length > 0) {
       connectSSE();
     }
   });
 
   onDestroy(() => {
+    quietHoursStore.stopPolling();
     if (eventSource) {
       eventSource.close();
       eventSource = null;
-    }
-  });
-
-  // Poll quiet hours status so suppressed streams update without page refresh
-  $effect(() => {
-    if (typeof window !== 'undefined') {
-      const timer = globalThis.setInterval(fetchQuietHoursStatus, QUIET_HOURS_POLL_INTERVAL_MS);
-      return () => globalThis.clearInterval(timer);
     }
   });
 

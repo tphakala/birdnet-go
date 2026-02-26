@@ -403,6 +403,8 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 	// Re-evaluate quiet hours after stream reconfiguration to ensure
 	// newly added streams respect their quiet hours settings
 	if cm.quietHoursScheduler != nil {
+		// Update the audio channel since it was recreated during reconfiguration
+		cm.quietHoursScheduler.SetAudioChannel(cm.unifiedAudioChan)
 		cm.quietHoursScheduler.Evaluate()
 	}
 
