@@ -75,16 +75,20 @@
     update({ endEvent: value as 'sunrise' | 'sunset' });
   }
 
+  function clampOffset(val: number): number {
+    return Math.max(MIN_SOLAR_OFFSET_MINUTES, Math.min(MAX_SOLAR_OFFSET_MINUTES, val));
+  }
+
   function handleStartOffsetChange(event: Event) {
     const target = event.target as HTMLInputElement;
     const val = parseInt(target.value, 10);
-    update({ startOffset: isNaN(val) ? 0 : val });
+    update({ startOffset: isNaN(val) ? 0 : clampOffset(val) });
   }
 
   function handleEndOffsetChange(event: Event) {
     const target = event.target as HTMLInputElement;
     const val = parseInt(target.value, 10);
-    update({ endOffset: isNaN(val) ? 0 : val });
+    update({ endOffset: isNaN(val) ? 0 : clampOffset(val) });
   }
 
   const modeOptions = [

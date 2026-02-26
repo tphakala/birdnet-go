@@ -83,12 +83,17 @@ func (s *QuietHoursScheduler) run() {
 	}
 }
 
+// streamAction represents a deferred stream start/stop to execute outside the mutex.
+type streamAction struct {
+	url       string
+	name      string
+	transport string
+	stop      bool // true = stop, false = start
+}
+
 // Evaluate checks all configured streams and the sound card against their
 // quiet hours settings and stops/starts them as needed.
 func (s *QuietHoursScheduler) Evaluate() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	settings := conf.Setting()
 	now := time.Now()
 	log := getQuietHoursLogger()
@@ -103,20 +108,19 @@ func (s *QuietHoursScheduler) Evaluate() {
 		activeStreams[url] = true
 	}
 
-	// Evaluate each configured stream
+	// Phase 1: Determine actions under lock (no external calls)
+	var actions []streamAction
+	var soundCardSignal string // "" = no action
+
+	s.mu.Lock()
+
 	for _, stream := range settings.Realtime.RTSP.Streams {
 		if !stream.QuietHours.Enabled {
-			// If quiet hours were disabled and stream was suppressed, restart it
 			if s.suppressed[stream.URL] {
-				log.Info("Quiet hours disabled, restarting stream",
-					logger.String("stream", stream.Name),
-					logger.String("url", privacy.SanitizeStreamUrl(stream.URL)))
-				if err := manager.StartStream(stream.URL, stream.Transport, s.audioChan); err != nil {
-					log.Error("Failed to restart stream after quiet hours disabled",
-						logger.String("stream", stream.Name),
-						logger.Error(err))
-				}
-				delete(s.suppressed, stream.URL)
+				actions = append(actions, streamAction{
+					url: stream.URL, name: stream.Name,
+					transport: stream.Transport, stop: false,
+				})
 			}
 			continue
 		}
@@ -124,28 +128,14 @@ func (s *QuietHoursScheduler) Evaluate() {
 		inQuietHours := s.isInQuietHours(stream.QuietHours, now)
 
 		if inQuietHours && activeStreams[stream.URL] && !s.suppressed[stream.URL] {
-			// Stream is running and should be stopped
-			log.Info("Entering quiet hours, stopping stream",
-				logger.String("stream", stream.Name),
-				logger.String("url", privacy.SanitizeStreamUrl(stream.URL)))
-			if err := manager.StopStream(stream.URL); err != nil {
-				log.Error("Failed to stop stream for quiet hours",
-					logger.String("stream", stream.Name),
-					logger.Error(err))
-			} else {
-				s.suppressed[stream.URL] = true
-			}
+			actions = append(actions, streamAction{
+				url: stream.URL, name: stream.Name, stop: true,
+			})
 		} else if !inQuietHours && s.suppressed[stream.URL] {
-			// Stream was suppressed and quiet hours ended, restart it
-			log.Info("Exiting quiet hours, restarting stream",
-				logger.String("stream", stream.Name),
-				logger.String("url", privacy.SanitizeStreamUrl(stream.URL)))
-			if err := manager.StartStream(stream.URL, stream.Transport, s.audioChan); err != nil {
-				log.Error("Failed to restart stream after quiet hours",
-					logger.String("stream", stream.Name),
-					logger.Error(err))
-			}
-			delete(s.suppressed, stream.URL)
+			actions = append(actions, streamAction{
+				url: stream.URL, name: stream.Name,
+				transport: stream.Transport, stop: false,
+			})
 		}
 	}
 
@@ -160,35 +150,62 @@ func (s *QuietHoursScheduler) Evaluate() {
 		}
 	}
 
-	// Evaluate sound card quiet hours
+	// Determine sound card action
 	if settings.Realtime.Audio.Source != "" && settings.Realtime.Audio.QuietHours.Enabled {
 		inQuietHours := s.isInQuietHours(settings.Realtime.Audio.QuietHours, now)
-
 		if inQuietHours && !s.soundCardSuppressed {
-			log.Info("Entering quiet hours for sound card, sending stop signal")
-			s.soundCardSuppressed = true
-			select {
-			case s.controlChan <- "quiet_hours_stop_soundcard":
-			default:
-				log.Warn("Control channel full, could not send sound card stop signal")
-			}
+			soundCardSignal = "quiet_hours_stop_soundcard"
 		} else if !inQuietHours && s.soundCardSuppressed {
-			log.Info("Exiting quiet hours for sound card, sending restart signal")
-			s.soundCardSuppressed = false
-			select {
-			case s.controlChan <- "quiet_hours_start_soundcard":
-			default:
-				log.Warn("Control channel full, could not send sound card restart signal")
-			}
+			soundCardSignal = "quiet_hours_start_soundcard"
 		}
 	} else if s.soundCardSuppressed {
-		// Quiet hours disabled or source removed, restart if suppressed
-		log.Info("Sound card quiet hours disabled, sending restart signal")
-		s.soundCardSuppressed = false
+		soundCardSignal = "quiet_hours_start_soundcard"
+	}
+
+	s.mu.Unlock()
+
+	// Phase 2: Execute actions outside the mutex
+	for _, action := range actions {
+		if action.stop {
+			log.Info("Entering quiet hours, stopping stream",
+				logger.String("stream", action.name),
+				logger.String("url", privacy.SanitizeStreamUrl(action.url)))
+			if err := manager.StopStream(action.url); err != nil {
+				log.Error("Failed to stop stream for quiet hours",
+					logger.String("stream", action.name),
+					logger.Error(err))
+			} else {
+				s.mu.Lock()
+				s.suppressed[action.url] = true
+				s.mu.Unlock()
+			}
+		} else {
+			log.Info("Exiting quiet hours, restarting stream",
+				logger.String("stream", action.name),
+				logger.String("url", privacy.SanitizeStreamUrl(action.url)))
+			if err := manager.StartStream(action.url, action.transport, s.audioChan); err != nil {
+				log.Error("Failed to restart stream after quiet hours",
+					logger.String("stream", action.name),
+					logger.Error(err))
+			} else {
+				s.mu.Lock()
+				delete(s.suppressed, action.url)
+				s.mu.Unlock()
+			}
+		}
+	}
+
+	// Execute sound card signal
+	if soundCardSignal != "" {
+		log.Info("Quiet hours sound card action", logger.String("signal", soundCardSignal))
 		select {
-		case s.controlChan <- "quiet_hours_start_soundcard":
+		case s.controlChan <- soundCardSignal:
+			s.mu.Lock()
+			s.soundCardSuppressed = (soundCardSignal == "quiet_hours_stop_soundcard")
+			s.mu.Unlock()
 		default:
-			log.Warn("Control channel full, could not send sound card restart signal")
+			log.Warn("Control channel full, could not send sound card signal",
+				logger.String("signal", soundCardSignal))
 		}
 	}
 }

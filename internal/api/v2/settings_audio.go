@@ -97,9 +97,10 @@ func quietHoursSettingsChanged(oldSettings, currentSettings *conf.Settings) bool
 	oldStreams := oldSettings.Realtime.RTSP.Streams
 	newStreams := currentSettings.Realtime.RTSP.Streams
 
-	// If stream count changed, the stream reconfigure will handle it
+	// If stream count changed, quiet hours need re-evaluation
+	// (added/removed streams may have quiet hours configured)
 	if len(oldStreams) != len(newStreams) {
-		return false
+		return true
 	}
 
 	for i := range oldStreams {

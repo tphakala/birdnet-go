@@ -166,15 +166,23 @@
     return { healthy, unhealthy, unknown, total: streams.length };
   });
 
+  // Check if a specific stream is suppressed by quiet hours.
+  // The backend returns sanitized URLs (credentials stripped), so we compare using sanitized form.
+  function isStreamSuppressed(url: string, stream: StreamConfig): boolean {
+    if (!stream.quietHours?.enabled || !quietHoursStatus?.suppressedStreams) return false;
+    const sanitized = sanitizeUrlForComparison(url);
+    // eslint-disable-next-line security/detect-object-injection -- sanitized URL from internal sanitizeUrlForComparison, not user input
+    return quietHoursStatus.suppressedStreams[sanitized] === true;
+  }
+
   // Convert backend process state to UI status
   function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = streamHealth[url];
     if (!health) {
       // No health data means the stream was removed from the active map.
-      // If quiet hours is enabled for this stream and any source is suppressed,
-      // show it as suppressed rather than unknown.
-      if (stream.quietHours?.enabled && quietHoursStatus?.anyActive) {
+      // Check per-stream suppression state rather than global anyActive flag.
+      if (isStreamSuppressed(url, stream)) {
         return 'suppressed';
       }
       return 'unknown';
@@ -475,6 +483,9 @@
       showAddForm = false;
       newName = '';
       newUrl = '';
+      newTransport = 'tcp';
+      newStreamType = 'rtsp';
+      newQuietHours = { ...defaultQuietHoursConfig };
       clearErrors();
     }
   }

@@ -162,7 +162,7 @@ func (s *StreamConfig) Validate() error {
 
 // ValidateQuietHours validates a quiet hours configuration
 func ValidateQuietHours(qh *QuietHoursConfig, context string) error {
-	if !qh.Enabled {
+	if qh == nil || !qh.Enabled {
 		return nil
 	}
 

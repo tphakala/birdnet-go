@@ -19,7 +19,7 @@
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
 
-  const logger = loggers.audio;
+  const logger = loggers.ui;
 
   /** Polling interval in milliseconds */
   const POLL_INTERVAL_MS = 30000;
