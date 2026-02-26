@@ -224,3 +224,257 @@ func TestGetSolarEventTime(t *testing.T) {
 		assert.True(t, got.IsZero(), "getSolarEventTime(invalid) should return zero time")
 	})
 }
+
+// mockManager implements streamManager for testing Evaluate().
+type mockManager struct {
+	activeStreams []string
+	stopped      []string
+	started      []struct{ url, transport string }
+	stopErr      error
+	startErr     error
+}
+
+func (m *mockManager) GetActiveStreams() []string {
+	return m.activeStreams
+}
+
+func (m *mockManager) StopStream(url string) error {
+	m.stopped = append(m.stopped, url)
+	return m.stopErr
+}
+
+func (m *mockManager) StartStream(url, transport string, _ chan UnifiedAudioData) error {
+	m.started = append(m.started, struct{ url, transport string }{url, transport})
+	return m.startErr
+}
+
+// setTestManager overrides getManagerFunc for a test and restores it on cleanup.
+func setTestManager(t *testing.T, m streamManager) {
+	t.Helper()
+	orig := getManagerFunc
+	getManagerFunc = func() streamManager { return m }
+	t.Cleanup(func() { getManagerFunc = orig })
+}
+
+// setTestAudioChan sets a test audio channel and restores nil on cleanup.
+func setTestAudioChan(t *testing.T) chan UnifiedAudioData {
+	t.Helper()
+	ch := make(chan UnifiedAudioData, 1)
+	SetCurrentAudioChan(ch)
+	t.Cleanup(func() { SetCurrentAudioChan(nil) })
+	return ch
+}
+
+// setTestSettings sets conf.Settings for a test and restores nil on cleanup.
+func setTestSettings(t *testing.T, s *conf.Settings) {
+	t.Helper()
+	conf.SetTestSettings(s)
+	t.Cleanup(func() { conf.SetTestSettings(conf.GetTestSettings()) })
+}
+
+func TestEvaluate_StopsStreamDuringQuietHours(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+			QuietHours: conf.QuietHoursConfig{
+				Enabled:   true,
+				Mode:      "fixed",
+				StartTime: "00:00",
+				EndTime:   "23:59", // all day = always in quiet hours
+			},
+		},
+	}
+	setTestSettings(t, settings)
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  make(map[string]bool),
+	}
+	scheduler.Evaluate()
+
+	assert.Equal(t, []string{"rtsp://cam1"}, mock.stopped, "should stop stream during quiet hours")
+	assert.Empty(t, mock.started, "should not start any streams")
+	assert.True(t, scheduler.suppressed["rtsp://cam1"], "stream should be marked suppressed")
+}
+
+func TestEvaluate_RestartsStreamAfterQuietHours(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+			QuietHours: conf.QuietHoursConfig{
+				Enabled:   true,
+				Mode:      "fixed",
+				StartTime: "03:00",
+				EndTime:   "03:01", // tiny window that's almost never active
+			},
+		},
+	}
+	setTestSettings(t, settings)
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  map[string]bool{"rtsp://cam1": true}, // previously suppressed
+	}
+	scheduler.Evaluate()
+
+	assert.Empty(t, mock.stopped, "should not stop any streams")
+	assert.Len(t, mock.started, 1, "should restart previously suppressed stream")
+	assert.Equal(t, "rtsp://cam1", mock.started[0].url)
+	assert.Equal(t, "tcp", mock.started[0].transport)
+	assert.False(t, scheduler.suppressed["rtsp://cam1"], "stream should no longer be suppressed")
+}
+
+func TestEvaluate_DisabledQuietHoursRestoresSuppressed(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+			QuietHours: conf.QuietHoursConfig{Enabled: false},
+		},
+	}
+	setTestSettings(t, settings)
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  map[string]bool{"rtsp://cam1": true}, // was suppressed
+	}
+	scheduler.Evaluate()
+
+	assert.Len(t, mock.started, 1, "should restart stream when quiet hours disabled")
+	assert.Equal(t, "rtsp://cam1", mock.started[0].url)
+}
+
+func TestEvaluate_SoundCardQuietHours(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.Audio.Source = "default"
+	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{
+		Enabled:   true,
+		Mode:      "fixed",
+		StartTime: "00:00",
+		EndTime:   "23:59", // always in quiet hours
+	}
+	setTestSettings(t, settings)
+
+	controlChan := make(chan string, 1)
+	scheduler := &QuietHoursScheduler{
+		controlChan: controlChan,
+		suppressed:  make(map[string]bool),
+	}
+	scheduler.Evaluate()
+
+	assert.Len(t, controlChan, 1, "should send sound card signal")
+	signal := <-controlChan
+	assert.Equal(t, SignalQuietHoursStopSoundCard, signal)
+	assert.True(t, scheduler.soundCardSuppressed, "sound card should be marked suppressed")
+}
+
+func TestEvaluate_SoundCardRestoredWhenDisabled(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.Audio.Source = "default"
+	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{Enabled: false}
+	setTestSettings(t, settings)
+
+	controlChan := make(chan string, 1)
+	scheduler := &QuietHoursScheduler{
+		controlChan:         controlChan,
+		suppressed:          make(map[string]bool),
+		soundCardSuppressed: true, // was suppressed
+	}
+	scheduler.Evaluate()
+
+	assert.Len(t, controlChan, 1, "should send sound card start signal")
+	signal := <-controlChan
+	assert.Equal(t, SignalQuietHoursStartSoundCard, signal)
+	assert.False(t, scheduler.soundCardSuppressed, "sound card should no longer be suppressed")
+}
+
+func TestEvaluate_NoActionWhenNotInQuietHours(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+			QuietHours: conf.QuietHoursConfig{
+				Enabled:   true,
+				Mode:      "fixed",
+				StartTime: "03:00",
+				EndTime:   "03:01", // tiny window, almost never active
+			},
+		},
+	}
+	setTestSettings(t, settings)
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  make(map[string]bool),
+	}
+	scheduler.Evaluate()
+
+	assert.Empty(t, mock.stopped, "should not stop streams outside quiet hours")
+	assert.Empty(t, mock.started, "should not start streams that weren't suppressed")
+}
+
+func TestEvaluate_NilManagerReturnsEarly(t *testing.T) {
+	orig := getManagerFunc
+	getManagerFunc = func() streamManager { return nil }
+	t.Cleanup(func() { getManagerFunc = orig })
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  make(map[string]bool),
+	}
+	// Should not panic
+	scheduler.Evaluate()
+}
+
+func TestEvaluate_NilAudioChanReturnsEarly(t *testing.T) {
+	mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+	setTestManager(t, mock)
+	SetCurrentAudioChan(nil)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+			QuietHours: conf.QuietHoursConfig{
+				Enabled: true, Mode: "fixed",
+				StartTime: "00:00", EndTime: "23:59",
+			},
+		},
+	}
+	setTestSettings(t, settings)
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  make(map[string]bool),
+	}
+	scheduler.Evaluate()
+
+	assert.Empty(t, mock.stopped, "should not stop streams when audioChan is nil")
+	assert.Empty(t, mock.started, "should not start streams when audioChan is nil")
+}

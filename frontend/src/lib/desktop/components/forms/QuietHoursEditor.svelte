@@ -91,15 +91,15 @@
     update({ endOffset: isNaN(val) ? 0 : clampOffset(val) });
   }
 
-  const modeOptions = [
+  const modeOptions = $derived([
     { value: 'fixed', label: t('settings.audio.quietHours.modeFixed') },
     { value: 'solar', label: t('settings.audio.quietHours.modeSolar') },
-  ];
+  ]);
 
-  const solarEventOptions = [
+  const solarEventOptions = $derived([
     { value: 'sunset', label: t('settings.audio.quietHours.sunset') },
     { value: 'sunrise', label: t('settings.audio.quietHours.sunrise') },
-  ];
+  ]);
 
   // Toggle styling (matching ToggleField pattern)
   const toggleClasses = `

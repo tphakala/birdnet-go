@@ -404,9 +404,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// start audio capture
 	unifiedAudioChan := startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+	myaudio.SetCurrentAudioChan(unifiedAudioChan)
 
 	// Initialize quiet hours scheduler for stream and sound card management
-	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, unifiedAudioChan, controlChan)
+	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, controlChan)
 	myaudio.SetGlobalScheduler(quietHoursScheduler)
 	quietHoursScheduler.Start()
 	defer quietHoursScheduler.Stop()

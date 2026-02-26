@@ -193,11 +193,11 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureTelemetry()
 	case "reconfigure_species_tracking":
 		cm.handleReconfigureSpeciesTracking()
-	case "reconfigure_quiet_hours":
+	case myaudio.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
-	case "quiet_hours_stop_soundcard":
+	case myaudio.SignalQuietHoursStopSoundCard:
 		cm.handleQuietHoursStopSoundCard()
-	case "quiet_hours_start_soundcard":
+	case myaudio.SignalQuietHoursStartSoundCard:
 		cm.handleQuietHoursStartSoundCard()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
@@ -400,11 +400,12 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 
 	myaudio.ReconfigureStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
 
+	// Update the package-level audio channel since it was recreated during reconfiguration
+	myaudio.SetCurrentAudioChan(cm.unifiedAudioChan)
+
 	// Re-evaluate quiet hours after stream reconfiguration to ensure
 	// newly added streams respect their quiet hours settings
 	if cm.quietHoursScheduler != nil {
-		// Update the audio channel since it was recreated during reconfiguration
-		cm.quietHoursScheduler.SetAudioChannel(cm.unifiedAudioChan)
 		cm.quietHoursScheduler.Evaluate()
 	}
 

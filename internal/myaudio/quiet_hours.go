@@ -19,14 +19,38 @@ import (
 // evaluationInterval is how often the scheduler checks quiet hours state.
 const evaluationInterval = 1 * time.Minute
 
+// Control signal constants for quiet hours.
+const (
+	SignalReconfigureQuietHours    = "reconfigure_quiet_hours"
+	SignalQuietHoursStopSoundCard  = "quiet_hours_stop_soundcard"
+	SignalQuietHoursStartSoundCard = "quiet_hours_start_soundcard"
+)
+
+// streamManager is the interface used by the scheduler to stop/start streams.
+// Implemented by FFmpegManager; can be replaced with a mock in tests.
+type streamManager interface {
+	GetActiveStreams() []string
+	StopStream(url string) error
+	StartStream(url, transport string, audioChan chan UnifiedAudioData) error
+}
+
+// getManagerFunc returns the stream manager used by Evaluate().
+// Defaults to getGlobalManager; overridden in tests.
+var getManagerFunc = func() streamManager {
+	m := getGlobalManager()
+	if m == nil {
+		return nil
+	}
+	return m
+}
+
 // QuietHoursScheduler periodically evaluates quiet hours configurations
 // and stops/starts audio streams accordingly to reduce CPU usage.
 type QuietHoursScheduler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	sunCalc   *suncalc.SunCalc
-	audioChan chan UnifiedAudioData
+	sunCalc *suncalc.SunCalc
 
 	// Control channel for sound card stop/start signals
 	controlChan chan string
@@ -43,25 +67,15 @@ type QuietHoursScheduler struct {
 // NewQuietHoursScheduler creates a new scheduler instance.
 // sunCalc may be nil if solar mode is not needed.
 // controlChan is used to send sound card stop/start signals to the control monitor.
-func NewQuietHoursScheduler(sunCalc *suncalc.SunCalc, audioChan chan UnifiedAudioData, controlChan chan string) *QuietHoursScheduler {
+func NewQuietHoursScheduler(sunCalc *suncalc.SunCalc, controlChan chan string) *QuietHoursScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &QuietHoursScheduler{
 		ctx:         ctx,
 		cancel:      cancel,
 		sunCalc:     sunCalc,
-		audioChan:   audioChan,
 		controlChan: controlChan,
 		suppressed:  make(map[string]bool),
 	}
-}
-
-// SetAudioChannel updates the audio channel used when restarting streams.
-// Must be called before Start, and again whenever the unified audio channel is recreated
-// (e.g., during stream reconfiguration).
-func (s *QuietHoursScheduler) SetAudioChannel(ch chan UnifiedAudioData) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.audioChan = ch
 }
 
 // Start begins the quiet hours evaluation loop with a 1-minute tick interval.
@@ -107,8 +121,15 @@ func (s *QuietHoursScheduler) Evaluate() {
 	now := time.Now()
 	log := getQuietHoursLogger()
 
-	manager := getGlobalManager()
+	manager := getManagerFunc()
 	if manager == nil {
+		return
+	}
+
+	// Read the current audio channel dynamically — it may be recreated during hot-reload.
+	audioChan := GetCurrentAudioChan()
+	if audioChan == nil {
+		log.Warn("No audio channel available, cannot restart streams")
 		return
 	}
 
@@ -163,12 +184,12 @@ func (s *QuietHoursScheduler) Evaluate() {
 	if settings.Realtime.Audio.Source != "" && settings.Realtime.Audio.QuietHours.Enabled {
 		inQuietHours := s.isInQuietHours(settings.Realtime.Audio.QuietHours, now)
 		if inQuietHours && !s.soundCardSuppressed {
-			soundCardSignal = "quiet_hours_stop_soundcard"
+			soundCardSignal = SignalQuietHoursStopSoundCard
 		} else if !inQuietHours && s.soundCardSuppressed {
-			soundCardSignal = "quiet_hours_start_soundcard"
+			soundCardSignal = SignalQuietHoursStartSoundCard
 		}
 	} else if s.soundCardSuppressed {
-		soundCardSignal = "quiet_hours_start_soundcard"
+		soundCardSignal = SignalQuietHoursStartSoundCard
 	}
 
 	s.mu.Unlock()
@@ -192,7 +213,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 			log.Info("Exiting quiet hours, restarting stream",
 				logger.String("stream", action.name),
 				logger.String("url", privacy.SanitizeStreamUrl(action.url)))
-			if err := manager.StartStream(action.url, action.transport, s.audioChan); err != nil {
+			if err := manager.StartStream(action.url, action.transport, audioChan); err != nil {
 				log.Error("Failed to restart stream after quiet hours",
 					logger.String("stream", action.name),
 					logger.Error(err))
@@ -210,7 +231,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 		select {
 		case s.controlChan <- soundCardSignal:
 			s.mu.Lock()
-			s.soundCardSuppressed = (soundCardSignal == "quiet_hours_stop_soundcard")
+			s.soundCardSuppressed = (soundCardSignal == SignalQuietHoursStopSoundCard)
 			s.mu.Unlock()
 		default:
 			log.Warn("Control channel full, could not send sound card signal",
@@ -315,10 +336,16 @@ func (s *QuietHoursScheduler) GetSuppressedStreams() map[string]bool {
 	return result
 }
 
-// package-level scheduler reference for use by CaptureAudio
+// package-level references for use by CaptureAudio and the scheduler.
 var (
 	globalScheduler   *QuietHoursScheduler
 	globalSchedulerMu sync.Mutex
+
+	// currentAudioChan is the active unified audio channel.
+	// Updated by startAudioCapture and handleReconfigureStreams so the
+	// scheduler always reads the latest channel in Evaluate().
+	currentAudioChan   chan UnifiedAudioData
+	currentAudioChanMu sync.RWMutex
 )
 
 // SetGlobalScheduler sets the package-level quiet hours scheduler reference.
@@ -333,6 +360,21 @@ func GetGlobalScheduler() *QuietHoursScheduler {
 	globalSchedulerMu.Lock()
 	defer globalSchedulerMu.Unlock()
 	return globalScheduler
+}
+
+// SetCurrentAudioChan sets the package-level audio channel reference.
+// Called from startAudioCapture and handleReconfigureStreams.
+func SetCurrentAudioChan(ch chan UnifiedAudioData) {
+	currentAudioChanMu.Lock()
+	defer currentAudioChanMu.Unlock()
+	currentAudioChan = ch
+}
+
+// GetCurrentAudioChan returns the current unified audio channel.
+func GetCurrentAudioChan() chan UnifiedAudioData {
+	currentAudioChanMu.RLock()
+	defer currentAudioChanMu.RUnlock()
+	return currentAudioChan
 }
 
 // IsSoundCardInQuietHours returns whether the sound card is currently suppressed
