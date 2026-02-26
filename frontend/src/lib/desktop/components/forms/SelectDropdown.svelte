@@ -91,32 +91,50 @@
   // Position state for fixed dropdown
   let dropdownPosition = $state({ top: 0, left: 0, width: 0 });
 
-  // Size classes for select variant
+  // Size classes for trigger (padding + font size)
   const sizeClasses = {
-    xs: 'select-xs',
-    sm: 'select-sm',
-    md: '',
-    lg: 'select-lg',
+    xs: 'py-1 pl-2 pr-3 text-xs',
+    sm: 'py-1.5 pl-2.5 pr-3 text-[0.8125rem]',
+    md: 'py-2 pl-3 pr-3 text-sm',
+    lg: 'py-3 pl-4 pr-3 text-base',
   };
 
-  // Menu item size classes (font size and padding)
+  // Menu item size classes (font size matches trigger sizeClasses)
   const menuSizeClasses = {
     xs: 'text-xs py-1.5 px-2',
-    sm: 'text-sm py-1.5 px-2.5',
-    md: 'py-2 px-3',
+    sm: 'text-[0.8125rem] py-1.5 px-2.5',
+    md: 'text-sm py-2 px-3',
   };
 
+  // Shared focus ring style (theme-aware via color-mix)
+  const focusRingClasses =
+    'focus:outline-none focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_10%,transparent)]';
+
   // Trigger button classes based on variant
-  // Note: bg-none removes the default chevron background-image since we render our own
-  // pr-3 overrides the extra right padding that was for the background-image chevron
   let triggerClasses = $derived(
     variant === 'select'
       ? cn(
-          'select w-full flex items-center justify-between text-left cursor-pointer bg-none pr-3',
+          'w-full flex items-center justify-between text-left cursor-pointer leading-5',
+          'bg-[var(--color-base-100)] text-[var(--color-base-content)]',
+          'border border-[var(--border-100)] rounded-[var(--radius-field)]',
+          'transition-all',
+          'hover:border-[var(--border-200)]',
+          focusRingClasses,
           safeGet(sizeClasses, size, ''),
-          disabled && 'select-disabled opacity-50 cursor-not-allowed'
+          disabled && 'opacity-50 cursor-not-allowed bg-[var(--color-base-200)] pointer-events-none'
         )
-      : cn('btn btn-block justify-between', isOpen && 'btn-active', disabled && 'btn-disabled')
+      : cn(
+          'inline-flex items-center justify-center gap-2 w-full justify-between',
+          'py-2 px-4 text-sm font-medium leading-5',
+          'bg-[var(--color-base-300)] text-[var(--color-base-content)]',
+          'border border-transparent rounded-[var(--radius-field)]',
+          'cursor-pointer transition-all select-none',
+          'hover:bg-[var(--surface-400)]',
+          'active:scale-[0.98]',
+          'focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2',
+          isOpen && 'bg-[var(--surface-400)]',
+          disabled && 'opacity-50 cursor-not-allowed pointer-events-none'
+        )
   );
 
   // Initialize value based on multiple prop and handle type changes
@@ -351,13 +369,13 @@
   });
 </script>
 
-<div class={cn('select-dropdown form-control', className)}>
+<div class={cn('flex flex-col', className)}>
   {#if label}
-    <label class="label" for={fieldId} id="{fieldId}-label">
-      <span class="label-text">
+    <label class="flex items-center py-2" for={fieldId} id="{fieldId}-label">
+      <span class="text-sm font-medium text-[var(--color-base-content)]">
         {label}
         {#if required}
-          <span class="text-error">*</span>
+          <span class="text-[var(--color-error)]">*</span>
         {/if}
       </span>
     </label>
@@ -400,7 +418,7 @@
           <div
             role="button"
             tabindex="0"
-            class="btn btn-ghost btn-xs btn-circle"
+            class="inline-flex items-center justify-center p-1 rounded-full aspect-square bg-transparent text-[var(--color-base-content)] cursor-pointer transition-all hover:bg-[color-mix(in_srgb,var(--color-base-content)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
             onclick={e => {
               e.stopPropagation();
               clearSelection();
@@ -428,7 +446,7 @@
       <div
         bind:this={dropdownElement}
         class={cn(
-          'fixed z-[60] bg-base-100 rounded-md shadow-xl border border-base-content/20 overflow-hidden',
+          'fixed z-[60] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
           dropdownClassName
         )}
         style:top="{dropdownPosition.top}px"
@@ -437,14 +455,17 @@
         style:max-height="{maxHeight}px"
       >
         {#if searchable}
-          <div class="p-2 border-b border-base-300">
+          <div class="p-2 border-b border-[var(--color-base-300)]">
             <input
               bind:this={inputElement}
               type="text"
               bind:value={searchQuery}
               oninput={handleSearch}
               placeholder={t('common.ui.search')}
-              class="input input-sm w-full"
+              class={cn(
+                'block w-full py-2 px-3 text-sm leading-5 bg-[var(--color-base-100)] text-[var(--color-base-content)] border border-[var(--border-100)] rounded-[var(--radius-field)] transition-all placeholder:text-[var(--color-base-content)] placeholder:opacity-50 hover:border-[var(--border-200)]',
+                focusRingClasses
+              )}
               aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
@@ -461,7 +482,7 @@
           aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
           {#if filteredOptions.length === 0}
-            <div class="p-4 text-center text-base-content opacity-60">
+            <div class="p-4 text-center text-[var(--color-base-content)] opacity-60">
               {t('components.forms.select.noOptions')}
             </div>
           {:else}
@@ -469,7 +490,9 @@
             {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
             {#each Object.entries(groupedOptions) as [group, options] (group)}
               {#if group && groupBy}
-                <div class="px-3 py-2 text-xs font-semibold text-base-content opacity-60 uppercase">
+                <div
+                  class="px-3 py-2 text-xs font-semibold text-[var(--color-base-content)] opacity-60 uppercase"
+                >
                   {group}
                 </div>
               {/if}
@@ -479,11 +502,12 @@
                 <button
                   type="button"
                   class={cn(
-                    'w-full text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden flex items-center gap-2 rounded',
+                    'w-full text-left hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden flex items-center gap-2 rounded',
                     safeGet(menuSizeClasses, menuSize, ''),
-                    isSelected(option) && 'bg-primary/10 text-primary',
+                    isSelected(option) &&
+                      'bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-primary)]',
                     option.disabled && 'opacity-50 cursor-not-allowed',
-                    highlightedIndex === flatIndex && 'bg-base-200'
+                    highlightedIndex === flatIndex && 'bg-[var(--color-base-200)]'
                   )}
                   disabled={option.disabled}
                   onclick={() => selectOption(option)}
@@ -495,7 +519,7 @@
                       type="checkbox"
                       checked={isSelected(option)}
                       disabled={option.disabled}
-                      class="checkbox checkbox-sm"
+                      class="size-4 accent-[var(--color-primary)] cursor-pointer"
                       tabindex="-1"
                     />
                   {/if}
@@ -515,7 +539,9 @@
                     {:else}
                       <div>{option.label}</div>
                       {#if option.description}
-                        <div class="text-xs text-base-content opacity-60">{option.description}</div>
+                        <div class="text-xs text-[var(--color-base-content)] opacity-60">
+                          {option.description}
+                        </div>
                       {/if}
                     {/if}
                   </div>
@@ -526,7 +552,9 @@
         </div>
 
         {#if multiple && maxSelections}
-          <div class="p-2 border-t border-base-300 text-xs text-base-content opacity-60">
+          <div
+            class="p-2 border-t border-[var(--color-base-300)] text-xs text-[var(--color-base-content)] opacity-60"
+          >
             {selectedOptions.length} / {maxSelections} selected
           </div>
         {/if}
@@ -535,8 +563,8 @@
   </div>
 
   {#if helpText}
-    <div class="label" id="{fieldId}-help">
-      <span class="label-text-alt">{helpText}</span>
+    <div class="flex items-center py-2 text-sm" id="{fieldId}-help">
+      <span class="text-xs opacity-70 text-[var(--color-base-content)]">{helpText}</span>
     </div>
   {/if}
 </div>
