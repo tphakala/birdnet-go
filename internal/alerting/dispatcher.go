@@ -75,21 +75,22 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 // defaultTitleKey returns the i18n key and parameters for the default alert
 // notification title based on the event type.
 func defaultTitleKey(rule *entities.AlertRule, event *AlertEvent) (key string, params map[string]any) {
-	if event.EventName != "" {
-		return MsgAlertFiredTitleEvent, map[string]any{
-			"rule_name":  rule.Name,
-			"event_name": event.EventName,
-		}
-	}
-	if event.MetricName != "" {
-		return MsgAlertFiredTitleMetric, map[string]any{
-			"rule_name":   rule.Name,
-			"metric_name": event.MetricName,
-		}
-	}
-	return MsgAlertFiredTitle, map[string]any{
+	params = map[string]any{
 		"rule_name": rule.Name,
 	}
+	if rule.NameKey != "" {
+		params["rule_name_key"] = rule.NameKey
+	}
+
+	if event.EventName != "" {
+		params["event_name"] = event.EventName
+		return MsgAlertFiredTitleEvent, params
+	}
+	if event.MetricName != "" {
+		params["metric_name"] = event.MetricName
+		return MsgAlertFiredTitleMetric, params
+	}
+	return MsgAlertFiredTitle, params
 }
 
 // renderTemplate substitutes template variables in the title/message strings.

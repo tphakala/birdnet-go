@@ -722,7 +722,9 @@
           <div class="py-3">
             <div class="flex items-center justify-between">
               <span class="text-sm font-medium text-[var(--color-base-content)]">
-                {entry.rule?.name ?? `Rule #${entry.rule_id}`}
+                {entry.rule
+                  ? translateField(entry.rule.name_key, undefined, entry.rule.name)
+                  : `Rule #${entry.rule_id}`}
               </span>
               <span class="text-xs text-[var(--color-base-content)] opacity-60">
                 {formatLocalDateTime(new Date(entry.fired_at), false)}

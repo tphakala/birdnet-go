@@ -73,8 +73,9 @@ func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
 
 	rule := &entities.AlertRule{
-		ID:   1,
-		Name: "CPU High",
+		ID:      1,
+		Name:    "CPU High",
+		NameKey: RuleKeyHighCPUName,
 		Actions: []entities.AlertAction{
 			{Target: TargetBell}, // empty templates → defaults with keys
 		},
@@ -91,6 +92,7 @@ func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 	require.Len(t, mock.keyCalls, 1)
 	assert.Equal(t, MsgAlertFiredTitleMetric, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "CPU High", mock.keyCalls[0].titleParams["rule_name"])
+	assert.Equal(t, RuleKeyHighCPUName, mock.keyCalls[0].titleParams["rule_name_key"])
 	assert.Equal(t, MetricCPUUsage, mock.keyCalls[0].titleParams["metric_name"])
 	assert.Contains(t, mock.keyCalls[0].title, "CPU High")
 }
@@ -100,8 +102,9 @@ func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
 	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
 
 	rule := &entities.AlertRule{
-		ID:   1,
-		Name: "Species Alert",
+		ID:      1,
+		Name:    "Species Alert",
+		NameKey: RuleKeyNewSpeciesName,
 		Actions: []entities.AlertAction{
 			{Target: TargetBell},
 		},
@@ -117,6 +120,7 @@ func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
 	require.Len(t, mock.keyCalls, 1)
 	assert.Equal(t, MsgAlertFiredTitleEvent, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "Species Alert", mock.keyCalls[0].titleParams["rule_name"])
+	assert.Equal(t, RuleKeyNewSpeciesName, mock.keyCalls[0].titleParams["rule_name_key"])
 	assert.Equal(t, EventDetectionNewSpecies, mock.keyCalls[0].titleParams["event_name"])
 }
 
@@ -141,6 +145,7 @@ func TestDispatcher_DefaultTemplate_FallbackKey(t *testing.T) {
 	require.Len(t, mock.keyCalls, 1)
 	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "Generic", mock.keyCalls[0].titleParams["rule_name"])
+	assert.NotContains(t, mock.keyCalls[0].titleParams, "rule_name_key", "custom rule without NameKey should not have rule_name_key")
 }
 
 func TestDispatcher_MultipleActions(t *testing.T) {
