@@ -92,6 +92,26 @@ func TestCSRFCookieRefresh_SkipsStaticAssets(t *testing.T) {
 	}
 }
 
+func TestCSRFCookieRefresh_EmptyCookieValue(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/1", http.NoBody)
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: ""})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	handler := CSRFCookieRefresh()(func(c echo.Context) error {
+		return nil
+	})
+
+	err := handler(c)
+	require.NoError(t, err)
+
+	cookies := rec.Result().Cookies()
+	assert.Empty(t, cookies, "should not refresh cookie with empty value")
+}
+
 func TestCSRFCookieRefresh_DoesNotRefreshOnError(t *testing.T) {
 	t.Parallel()
 
