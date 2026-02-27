@@ -108,27 +108,38 @@ func (m *BackupJobManager) Shutdown() {
 var backupLog = logger.Global().Module("backup")
 
 // CleanupOrphanedTempFiles removes any backup temp files that don't have active jobs.
+// It scans the given directories plus os.TempDir() (for files created by older versions).
 // This should be called on server startup.
-func (m *BackupJobManager) CleanupOrphanedTempFiles() {
-	tempDir := os.TempDir()
-	pattern := filepath.Join(tempDir, backupTempFilePrefix+"*.db")
+func (m *BackupJobManager) CleanupOrphanedTempFiles(dirs ...string) {
+	// Always include os.TempDir() so we clean up files from before this change
+	scanDirs := append([]string{os.TempDir()}, dirs...)
 
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		backupLog.Warn("Backup cleanup: failed to glob temp files",
-			logger.String("pattern", pattern),
-			logger.Error(err))
-		return
-	}
+	// Deduplicate directories
+	seen := make(map[string]bool, len(scanDirs))
+	for _, dir := range scanDirs {
+		if dir == "" || seen[dir] {
+			continue
+		}
+		seen[dir] = true
 
-	for _, path := range matches {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			backupLog.Warn("Backup cleanup: failed to remove orphaned file",
-				logger.String("path", path),
+		pattern := filepath.Join(dir, backupTempFilePrefix+"*.db")
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			backupLog.Warn("Backup cleanup: failed to glob temp files",
+				logger.String("pattern", pattern),
 				logger.Error(err))
-		} else {
-			backupLog.Info("Backup cleanup: removed orphaned temp file",
-				logger.String("path", path))
+			continue
+		}
+
+		for _, path := range matches {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				backupLog.Warn("Backup cleanup: failed to remove orphaned file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				backupLog.Info("Backup cleanup: removed orphaned temp file",
+					logger.String("path", path))
+			}
 		}
 	}
 }
@@ -216,8 +227,11 @@ func (m *BackupJobManager) GetActiveJobByType(dbType string) (*BackupJob, bool) 
 	return nil, false
 }
 
-// CreateJob creates a new backup job.
-func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64) (*BackupJob, error) {
+// CreateJob creates a new backup job. The dbPath parameter is the path to the
+// source database file; the backup temp file is placed in the same directory to
+// ensure it resides on the same filesystem/volume (important for Docker where
+// /tmp may be on a small overlay filesystem separate from the data volume).
+func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64, dbPath string) (*BackupJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -231,7 +245,10 @@ func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64) (*BackupJo
 	ctx, cancel := context.WithCancel(m.ctx)
 	jobID := generateJobID(dbType)
 	timestamp := time.Now().Format("20060102-150405")
-	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s%s-%s.db", backupTempFilePrefix, dbType, timestamp))
+	// Place the backup temp file next to the source database so it uses the
+	// same volume/partition, avoiding container root filesystem exhaustion.
+	tempDir := filepath.Dir(dbPath)
+	tempPath := filepath.Join(tempDir, fmt.Sprintf("%s%s-%s.db", backupTempFilePrefix, dbType, timestamp))
 
 	job := &BackupJob{
 		ID:         jobID,
@@ -324,8 +341,17 @@ func (c *Controller) initBackupRoutes() {
 	// Initialize job manager if not already done
 	if backupJobManager == nil {
 		backupJobManager = NewBackupJobManager()
-		// Clean up any orphaned temp files from previous runs
-		backupJobManager.CleanupOrphanedTempFiles()
+		// Clean up any orphaned temp files from previous runs.
+		// Scan database directories where backup files are now written,
+		// plus os.TempDir() for files created by older versions.
+		var dbDirs []string
+		if c.Settings.Output.SQLite.Path != "" {
+			dbDirs = append(dbDirs, filepath.Dir(c.Settings.Output.SQLite.Path))
+		}
+		if c.V2Manager != nil && !c.V2Manager.IsMySQL() {
+			dbDirs = append(dbDirs, filepath.Dir(c.V2Manager.Path()))
+		}
+		backupJobManager.CleanupOrphanedTempFiles(dbDirs...)
 	}
 
 	// Create backup API group under system/database
@@ -379,9 +405,9 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	}
 	dbSize := fileInfo.Size()
 
-	// Check disk space
-	tempDir := os.TempDir()
-	usage, err := disk.Usage(tempDir)
+	// Check disk space on the database's partition (where the backup file will be written)
+	dbDir := filepath.Dir(dbPath)
+	usage, err := disk.Usage(dbDir)
 	if err != nil {
 		return c.HandleErrorWithKey(ctx, err, "Failed to check disk space", http.StatusInternalServerError,
 			notification.MsgErrBackupDiskSpace, nil)
@@ -398,7 +424,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	}
 
 	// Create the job
-	job, err := backupJobManager.CreateJob(dbType, dbSize)
+	job, err := backupJobManager.CreateJob(dbType, dbSize, dbPath)
 	if err != nil {
 		// Job already exists
 		// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
