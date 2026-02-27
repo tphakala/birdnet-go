@@ -167,7 +167,7 @@ func TestTestRangeFilterWithoutProcessor(t *testing.T) {
 	var response ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Contains(t, response.Message, "BirdNET processor not available")
+	assert.Contains(t, response.Message, "BirdNET service not available")
 }
 
 // TestTestRangeFilterValidation tests input validation for the test endpoint
@@ -189,7 +189,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 				Threshold: 0.01,
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Latitude must be between -90 and 90",
+			expectedError:  "Invalid range filter parameters",
 		},
 		{
 			name: "Invalid latitude too high",
@@ -199,7 +199,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 				Threshold: 0.01,
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Latitude must be between -90 and 90",
+			expectedError:  "Invalid range filter parameters",
 		},
 		{
 			name: "Invalid longitude too low",
@@ -209,7 +209,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 				Threshold: 0.01,
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Longitude must be between -180 and 180",
+			expectedError:  "Invalid range filter parameters",
 		},
 		{
 			name: "Invalid longitude too high",
@@ -219,7 +219,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 				Threshold: 0.01,
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Longitude must be between -180 and 180",
+			expectedError:  "Invalid range filter parameters",
 		},
 		{
 			name: "Invalid threshold too low",
@@ -229,7 +229,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 				Threshold: -0.1,
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Threshold must be between 0 and 1",
+			expectedError:  "Invalid range filter parameters",
 		},
 		{
 			name: "Invalid threshold too high",
@@ -239,7 +239,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 				Threshold: 1.1,
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Threshold must be between 0 and 1",
+			expectedError:  "Invalid range filter parameters",
 		},
 		{
 			name: "Invalid date format",
@@ -304,7 +304,7 @@ func TestRebuildRangeFilterWithoutProcessor(t *testing.T) {
 	var response ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Contains(t, response.Message, "BirdNET processor not available")
+	assert.Contains(t, response.Message, "BirdNET service not available")
 }
 
 // TestSwapRangeFilterSettingsBlocksSettingsReads verifies that swapRangeFilterSettings

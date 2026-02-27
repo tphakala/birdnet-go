@@ -406,7 +406,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 		if strings.Contains(err.Error(), "already in progress") {
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
-				"error":           err.Error(),
+				"error":           "Backup already in progress",
 				"existing_job_id": existingJob.ID,
 			})
 		}

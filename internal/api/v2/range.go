@@ -259,7 +259,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 
 	// Validate request parameters
 	if err := validateRangeFilterRequest(&req); err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+		return c.HandleError(ctx, err, "Invalid range filter parameters", http.StatusBadRequest)
 	}
 
 	// Parse date
@@ -271,7 +271,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	// Check if processor and BirdNET are available
 	birdnetInstance, err := c.getBirdNETInstance()
 	if err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
 	// Use mutex to protect against concurrent modifications to global settings
@@ -609,7 +609,7 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 	// Check if BirdNET is available
 	birdnetInstance, err := c.getBirdNETInstance()
 	if err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
 	// Rebuild the range filter
