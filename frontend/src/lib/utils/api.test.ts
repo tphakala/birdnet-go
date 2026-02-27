@@ -142,9 +142,7 @@ describe('API utilities', () => {
         json: () => Promise.resolve({ error: 'Resource not found' }),
       });
 
-      await expect(fetchWithCSRF('/api/test')).rejects.toThrow(
-        'The requested resource was not found.'
-      );
+      await expect(fetchWithCSRF('/api/test')).rejects.toThrow('errors.api.notFound');
     });
 
     it('handles non-JSON error responses', async () => {
@@ -156,9 +154,7 @@ describe('API utilities', () => {
         json: () => Promise.reject(new Error('Invalid JSON')),
       });
 
-      await expect(fetchWithCSRF('/api/test')).rejects.toThrow(
-        'A server error occurred. Please try again later.'
-      );
+      await expect(fetchWithCSRF('/api/test')).rejects.toThrow('errors.api.serverError');
     });
 
     it('returns null for empty responses', async () => {
