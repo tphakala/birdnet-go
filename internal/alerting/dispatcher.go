@@ -150,10 +150,16 @@ func metricMessage(rule *entities.AlertRule, event *AlertEvent) (key string, par
 	}
 	formatted := formatMetricValue(floatVal)
 
-	// Get threshold from first condition (built-in metric rules always have exactly one).
+	// Get threshold from the metric value condition.
 	threshold := ""
-	if len(rule.Conditions) > 0 {
-		threshold = rule.Conditions[0].Value
+	for i := range rule.Conditions {
+		if rule.Conditions[i].Property == PropertyValue {
+			threshold = rule.Conditions[i].Value
+			break
+		}
+	}
+	if threshold == "" {
+		return "", nil, ""
 	}
 
 	params = map[string]any{
@@ -169,10 +175,13 @@ func detectionMessage(event *AlertEvent) (key string, params map[string]any, fal
 	if species == "" {
 		return "", nil, ""
 	}
-	confVal := event.Properties[PropertyConfidence]
+	confVal, ok := event.Properties[PropertyConfidence]
+	if !ok {
+		return "", nil, ""
+	}
 	confFloat, err := toFloat64(confVal)
 	if err != nil {
-		confFloat = 0
+		return "", nil, ""
 	}
 	confStr := fmt.Sprintf("%.0f", confFloat*100)
 
@@ -195,12 +204,13 @@ func errorMessage(event *AlertEvent) (key string, params map[string]any, fallbac
 		"source_name": sourceName,
 		"error":       errMsg,
 	}
-	switch {
-	case sourceName != "" && errMsg != "":
-		fallback = fmt.Sprintf("%s: %s", sourceName, errMsg)
-	case sourceName != "":
-		fallback = sourceName
-	default:
+	if sourceName != "" {
+		if errMsg != "" {
+			fallback = fmt.Sprintf("%s: %s", sourceName, errMsg)
+		} else {
+			fallback = sourceName
+		}
+	} else {
 		fallback = errMsg
 	}
 	return MsgAlertErrorOccurred, params, fallback
