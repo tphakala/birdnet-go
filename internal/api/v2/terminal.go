@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 const (
@@ -66,7 +67,7 @@ func (c *Controller) initTerminalRoutes() {
 func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 	settings := conf.Setting()
 	if settings == nil || !settings.WebServer.EnableTerminal {
-		return c.HandleError(ctx, nil, "Terminal is disabled. Enable it in settings.", http.StatusForbidden)
+		return c.HandleErrorWithKey(ctx, nil, "Terminal is disabled. Enable it in settings.", http.StatusForbidden, notification.MsgErrTerminalDisabled, nil)
 	}
 
 	conn, err := terminalUpgrader.Upgrade(ctx.Response(), ctx.Request(), nil)

@@ -66,7 +66,7 @@ func (c *Controller) initDebugRoutes() {
 func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 	// Double-check debug mode using controller's settings
 	if c.Settings == nil || !c.Settings.Debug {
-		return c.HandleError(ctx, nil, "Debug mode not enabled", http.StatusForbidden)
+		return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
 	}
 
 	var req DebugErrorRequest
@@ -127,7 +127,7 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	// Double-check debug mode using controller's settings
 	if c.Settings == nil || !c.Settings.Debug {
-		return c.HandleError(ctx, nil, "Debug mode not enabled", http.StatusForbidden)
+		return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
 	}
 
 	var req DebugNotificationRequest
@@ -149,7 +149,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	// Get notification service
 	notificationService := notification.GetService()
 	if notificationService == nil {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	// Map string type to notification.Type
@@ -186,7 +186,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
 	// Double-check debug mode using controller's settings
 	if c.Settings == nil || !c.Settings.Debug {
-		return c.HandleError(ctx, nil, "Debug mode not enabled", http.StatusForbidden)
+		return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
 	}
 
 	status := DebugSystemStatus{
