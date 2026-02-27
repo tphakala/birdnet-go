@@ -112,46 +112,62 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 		apiLogger: nil,
 	}
 
-	t.Run("DebugTriggerError", func(t *testing.T) {
-		t.Parallel()
+	// Table-driven tests for all debug endpoints returning 403 when debug mode is disabled
+	endpoints := []struct {
+		name    string
+		method  string
+		path    string
+		handler func(echo.Context) error
+		hasBody bool // whether the request needs a JSON body
+	}{
+		{
+			name:    "DebugTriggerError",
+			method:  http.MethodPost,
+			path:    "/api/v2/debug/trigger-error",
+			handler: c.DebugTriggerError,
+			hasBody: true,
+		},
+		{
+			name:    "DebugTriggerNotification",
+			method:  http.MethodPost,
+			path:    "/api/v2/debug/trigger-notification",
+			handler: c.DebugTriggerNotification,
+			hasBody: true,
+		},
+		{
+			name:    "DebugSystemStatus",
+			method:  http.MethodGet,
+			path:    "/api/v2/debug/status",
+			handler: c.DebugSystemStatus,
+			hasBody: false,
+		},
+	}
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/debug/trigger-error", strings.NewReader(`{}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		ctx := e.NewContext(req, rec)
+	for _, ep := range endpoints {
+		t.Run(ep.name, func(t *testing.T) {
+			t.Parallel()
 
-		err := c.DebugTriggerError(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusForbidden, rec.Code)
+			var req *http.Request
+			if ep.hasBody {
+				req = httptest.NewRequest(ep.method, ep.path, strings.NewReader(`{}`))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			} else {
+				req = httptest.NewRequest(ep.method, ep.path, http.NoBody)
+			}
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
 
-		var resp ErrorResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &resp)
-		require.NoError(t, err)
-		assert.Equal(t, "Debug mode not enabled", resp.Message)
-	})
+			err := ep.handler(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusForbidden, rec.Code)
 
-	t.Run("DebugTriggerNotification", func(t *testing.T) {
-		t.Parallel()
-
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/debug/trigger-notification", strings.NewReader(`{}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		ctx := e.NewContext(req, rec)
-
-		err := c.DebugTriggerNotification(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusForbidden, rec.Code)
-	})
-
-	t.Run("DebugSystemStatus", func(t *testing.T) {
-		t.Parallel()
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/debug/status", http.NoBody)
-		rec := httptest.NewRecorder()
-		ctx := e.NewContext(req, rec)
-
-		err := c.DebugSystemStatus(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusForbidden, rec.Code)
-	})
+			var resp ErrorResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &resp)
+			require.NoError(t, err)
+			assert.Equal(t, "Debug mode not enabled", resp.Message)
+			assert.Equal(t, http.StatusForbidden, resp.Code)
+			assert.NotEmpty(t, resp.CorrelationID)
+			assert.Equal(t, "errors.debug.notEnabled", resp.ErrorKey)
+		})
+	}
 }
