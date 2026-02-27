@@ -130,7 +130,13 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
       if (errorData && typeof errorData === 'object') {
         // Try i18n translation via error_key first
         if (errorData.error_key && typeof errorData.error_key === 'string') {
-          const translated = t(errorData.error_key, errorData.error_params ?? {});
+          const params =
+            errorData.error_params &&
+            typeof errorData.error_params === 'object' &&
+            !Array.isArray(errorData.error_params)
+              ? (errorData.error_params as Record<string, unknown>)
+              : {};
+          const translated = t(errorData.error_key, params);
           if (translated !== errorData.error_key) {
             serverMessage = translated;
           }
