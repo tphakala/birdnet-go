@@ -107,6 +107,23 @@ describe('Color Contrast Tests', () => {
     errorContent: '#020617', // --color-error-content
   };
 
+  // Tailwind amber color used for warning text override in alert-warning
+  const amber = {
+    800: '#92400e',
+  };
+
+  // Tailwind slate palette colors used in system components
+  const slate = {
+    300: '#cbd5e1',
+    400: '#94a3b8',
+    500: '#64748b',
+    600: '#475569',
+    700: '#334155',
+  };
+
+  // Opacity for tinted alert backgrounds (color-mix at 15%)
+  const ALERT_TINT_OPACITY = 0.15;
+
   describe('Light Theme Contrast', () => {
     it('should pass contrast test for normal text on white background', () => {
       const ratio = getContrastRatio(lightTheme.text, lightTheme.background);
@@ -206,7 +223,7 @@ describe('Color Contrast Tests', () => {
 
     it('should test warning alert text contrast (amber-800 override)', () => {
       // Warning alert uses hardcoded #92400e (amber-800) for contrast
-      const tintedBg = applyOpacity(lightTheme.warning, lightTheme.background, 0.15);
+      const tintedBg = applyOpacity(lightTheme.warning, lightTheme.background, ALERT_TINT_OPACITY);
       const ratio = getContrastRatio(amber[800], tintedBg);
       console.log(`Warning alert text-on-tint contrast: ${ratio.toFixed(2)}`);
       expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
@@ -226,20 +243,6 @@ describe('Color Contrast Tests', () => {
       });
     });
   });
-
-  // Tailwind amber color used for warning text override in alert-warning
-  const amber = {
-    800: '#92400e',
-  };
-
-  // Tailwind slate palette colors used in system components
-  const slate = {
-    300: '#cbd5e1',
-    400: '#94a3b8',
-    500: '#64748b',
-    600: '#475569',
-    700: '#334155',
-  };
 
   describe('Tailwind Utility Color Contrast (System Components)', () => {
     describe('Light mode — text on surface-100 (#ffffff)', () => {
