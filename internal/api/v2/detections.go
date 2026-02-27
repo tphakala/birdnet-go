@@ -496,7 +496,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		if errors.As(err, &dateErr) {
 			return c.HandleErrorWithKey(ctx, err, dateErr.Error(), http.StatusBadRequest, notification.MsgErrDetectionInvalidDate, map[string]any{"paramName": dateErr.paramName})
 		}
-		return c.HandleError(ctx, err, "Invalid query parameters", http.StatusBadRequest)
+		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
 	}
 
 	// Log the retrieval attempt
