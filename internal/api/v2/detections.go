@@ -509,7 +509,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+		return c.HandleError(ctx, err, "Failed to retrieve detections", http.StatusInternalServerError)
 	}
 
 	// Convert notes to response format
@@ -1196,7 +1196,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 				logger.Error(err),
 				logger.String("ip", ctx.RealIP()),
 			)
-			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)
+			return c.HandleError(ctx, err, "Failed to update lock status", http.StatusInternalServerError)
 		}
 	}
 
@@ -1236,7 +1236,7 @@ func (c *Controller) LockDetection(ctx echo.Context) error {
 	// Lock/unlock the detection
 	err = c.AddLock(note.ID, req.Locked)
 	if err != nil {
-		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)
+		return c.HandleError(ctx, err, "Failed to update lock status", http.StatusInternalServerError)
 	}
 
 	// Invalidate cache after changing lock status
@@ -1279,7 +1279,7 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 	// Toggle the species in ignored list
 	action, isExcluded, err := c.toggleSpeciesInIgnoredList(req.CommonName)
 	if err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+		return c.HandleError(ctx, err, "Failed to update species filter", http.StatusInternalServerError)
 	}
 
 	// Log the action
