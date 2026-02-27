@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -331,7 +332,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 				logger.String("value", dp.value),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return c.HandleErrorWithKey(ctx, err, err.Error(), http.StatusBadRequest, notification.MsgErrDetectionInvalidDate, map[string]any{"paramName": dp.name})
 		}
 	}
 
