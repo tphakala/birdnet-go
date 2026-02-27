@@ -420,9 +420,8 @@
   });
 
   // Poll during active backup jobs (recursive setTimeout to prevent pile-up)
-  let hasActiveBackup = $derived(
-    backupJobs.some(j => j.status === 'pending' || j.status === 'in_progress')
-  );
+  const ACTIVE_BACKUP_STATUSES = new Set(['pending', 'in_progress']);
+  let hasActiveBackup = $derived(backupJobs.some(j => ACTIVE_BACKUP_STATUSES.has(j.status)));
 
   $effect(() => {
     if (!hasActiveBackup) return;
