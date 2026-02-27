@@ -32,6 +32,9 @@ func NewActionDispatcher(notifCreator NotificationCreator, log logger.Logger) *A
 
 // Dispatch implements ActionFunc — called by the engine when a rule fires.
 func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent) {
+	if event == nil {
+		event = &AlertEvent{}
+	}
 	for i := range rule.Actions {
 		action := &rule.Actions[i]
 		title := renderTitle(action.TemplateTitle, rule, event)
