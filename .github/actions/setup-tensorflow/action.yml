@@ -1,0 +1,50 @@
+name: 'Setup TensorFlow Lite'
+description: 'Cache and install TensorFlow headers and TensorFlow Lite C library'
+
+inputs:
+  tflite-version:
+    description: 'TensorFlow Lite version'
+    required: false
+    default: 'v2.17.1'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache TensorFlow headers
+      uses: actions/cache@v5
+      with:
+        path: ~/src/tensorflow
+        key: ${{ runner.os }}-tensorflow-${{ inputs.tflite-version }}
+
+    - name: Install Task
+      uses: arduino/setup-task@v2
+      with:
+        version: 3.x
+        repo-token: ${{ github.token }}
+
+    - name: Install TensorFlow headers
+      shell: bash
+      run: task check-tensorflow
+
+    - name: Cache TensorFlow Lite library
+      id: cache-tflite
+      uses: actions/cache@v5
+      with:
+        path: /usr/lib/libtensorflowlite_c.so*
+        key: ${{ runner.os }}-tflite-${{ inputs.tflite-version }}
+
+    - name: Download tflite_c
+      if: steps.cache-tflite.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        TFLITE_VERSION=${{ inputs.tflite-version }}
+        wget -q https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -P ./
+        tar -xzf tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -C .
+        sudo mv libtensorflowlite_c.so.$(echo ${TFLITE_VERSION} | sed 's/^v//') /usr/lib/libtensorflowlite_c.so
+        rm -f tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz
+
+    - name: Set CGO environment variables
+      shell: bash
+      run: |
+        echo "CGO_ENABLED=1" >> $GITHUB_ENV
+        echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
