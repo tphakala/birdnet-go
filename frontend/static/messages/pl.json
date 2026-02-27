@@ -3716,7 +3716,9 @@
       "clientError": "Wystąpił błąd klienta. Sprawdź swoje żądanie i spróbuj ponownie.",
       "unknownError": "Wystąpił nieoczekiwany błąd. Spróbuj ponownie.",
       "validationCheck": "Walidacja nie powiodła się. Sprawdź dane wejściowe.",
-      "conflictData": "Ta akcja jest w konflikcie z istniejącymi danymi."
+      "conflictData": "Ta akcja jest w konflikcie z istniejącymi danymi.",
+      "requestTimeout": "Przekroczono limit czasu żądania.",
+      "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
     }
   }
 }

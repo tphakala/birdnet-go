@@ -3716,7 +3716,9 @@
       "clientError": "Clientfout opgetreden. Controleer uw aanvraag en probeer het opnieuw.",
       "unknownError": "Er is een onverwachte fout opgetreden. Probeer het opnieuw.",
       "validationCheck": "Validatie mislukt. Controleer uw invoer.",
-      "conflictData": "Deze actie is in strijd met bestaande gegevens."
+      "conflictData": "Deze actie is in strijd met bestaande gegevens.",
+      "requestTimeout": "Time-out van het verzoek.",
+      "networkError": "Netwerkfout opgetreden. Controleer uw verbinding."
     }
   }
 }

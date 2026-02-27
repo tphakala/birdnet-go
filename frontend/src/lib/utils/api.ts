@@ -377,20 +377,15 @@ export async function fetchWithCSRF<T = unknown>(
     // SECURITY: Handle network and other errors securely
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new ApiError('Request timeout', 408, new Response(), true);
+        throw new ApiError(t('errors.api.requestTimeout'), 408, new Response(), true);
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        throw new ApiError(
-          'Network error occurred. Please check your connection.',
-          0,
-          new Response(),
-          true
-        );
+        throw new ApiError(t('errors.api.networkError'), 0, new Response(), true);
       }
     }
 
     // SECURITY: Generic error for unknown cases
-    throw new ApiError('An unexpected error occurred. Please try again.', 0, new Response());
+    throw new ApiError(t('errors.api.unknownError'), 0, new Response());
   }
 }
 

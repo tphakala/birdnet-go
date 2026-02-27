@@ -3513,7 +3513,9 @@
       "clientError": "Errore del client. Controllare la richiesta e riprovare.",
       "unknownError": "Si è verificato un errore imprevisto. Riprovare.",
       "validationCheck": "Validazione non riuscita. Controllare l'input.",
-      "conflictData": "Questa azione è in conflitto con dati esistenti."
+      "conflictData": "Questa azione è in conflitto con dati esistenti.",
+      "requestTimeout": "Timeout della richiesta.",
+      "networkError": "Errore di rete. Controllare la connessione."
     }
   }
 }

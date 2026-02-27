@@ -3716,7 +3716,9 @@
       "clientError": "Erro do cliente. Verifique o seu pedido e tente novamente.",
       "unknownError": "Ocorreu um erro inesperado. Tente novamente.",
       "validationCheck": "A validação falhou. Verifique os seus dados.",
-      "conflictData": "Esta ação entra em conflito com dados existentes."
+      "conflictData": "Esta ação entra em conflito com dados existentes.",
+      "requestTimeout": "Tempo limite da solicitação esgotado.",
+      "networkError": "Erro de rede. Verifique a sua ligação."
     }
   }
 }

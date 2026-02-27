@@ -3716,7 +3716,9 @@
       "clientError": "Asiakasvirhe. Tarkista pyyntösi ja yritä uudelleen.",
       "unknownError": "Odottamaton virhe. Yritä uudelleen.",
       "validationCheck": "Tarkistus epäonnistui. Tarkista syötteesi.",
-      "conflictData": "Tämä toiminto on ristiriidassa olemassa olevien tietojen kanssa."
+      "conflictData": "Tämä toiminto on ristiriidassa olemassa olevien tietojen kanssa.",
+      "requestTimeout": "Pyyntö aikakatkaistiin.",
+      "networkError": "Verkkovirhe. Tarkista yhteytesi."
     }
   }
 }

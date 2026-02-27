@@ -3716,7 +3716,9 @@
       "clientError": "Erreur client. Veuillez vérifier votre requête et réessayer.",
       "unknownError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
       "validationCheck": "La validation a échoué. Veuillez vérifier votre saisie.",
-      "conflictData": "Cette action est en conflit avec des données existantes."
+      "conflictData": "Cette action est en conflit avec des données existantes.",
+      "requestTimeout": "Délai de la requête dépassé.",
+      "networkError": "Erreur réseau. Veuillez vérifier votre connexion."
     }
   }
 }

@@ -3547,7 +3547,9 @@
       "clientError": "Chyba klienta. Skontrolujte svoju požiadavku a skúste to znova.",
       "unknownError": "Vyskytla sa neočakávaná chyba. Skúste to znova.",
       "validationCheck": "Overenie zlyhalo. Skontrolujte svoje údaje.",
-      "conflictData": "Táto akcia je v rozpore s existujúcimi údajmi."
+      "conflictData": "Táto akcia je v rozpore s existujúcimi údajmi.",
+      "requestTimeout": "Časový limit požiadavky vypršal.",
+      "networkError": "Chyba siete. Skontrolujte pripojenie."
     }
   }
 }

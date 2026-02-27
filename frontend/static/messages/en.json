@@ -3716,7 +3716,9 @@
       "clientError": "Client error occurred. Please check your request and try again.",
       "unknownError": "An unexpected error occurred. Please try again.",
       "validationCheck": "Validation failed. Please check your input.",
-      "conflictData": "This action conflicts with existing data."
+      "conflictData": "This action conflicts with existing data.",
+      "requestTimeout": "Request timeout.",
+      "networkError": "Network error occurred. Please check your connection."
     }
   }
 }
