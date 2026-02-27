@@ -218,8 +218,8 @@ func (c *Controller) GetMigrationStatus(ctx echo.Context) error {
 		}
 		c.logWarnIfEnabled("Migration state manager not available",
 			logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 	}
 
 	// Get migration state
@@ -350,15 +350,15 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	worker := getMigrationWorker()
 
 	if sm == nil {
-		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 	}
 
 	// Run pre-flight checks
 	if err := c.runPreflightChecks(); err != nil {
 		c.logErrorIfEnabled("Pre-flight checks failed",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, err, "Pre-flight checks failed", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, err, "Pre-flight checks failed", http.StatusBadRequest, notification.MsgErrMigrationPreFlight, nil)
 	}
 
 	// Parse request body
@@ -366,7 +366,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	if err := ctx.Bind(&req); err != nil {
 		c.logErrorIfEnabled("Failed to parse start request",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
 
 	// Count records if not provided
@@ -381,7 +381,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 		if err != nil {
 			c.logErrorIfEnabled("Failed to count legacy records",
 				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-			return c.HandleError(ctx, err, "Failed to determine total records", http.StatusInternalServerError)
+			return c.HandleErrorWithKey(ctx, err, "Failed to determine total records", http.StatusInternalServerError, notification.MsgErrMigrationRecordCount, nil)
 		}
 		totalRecords = count
 	}
@@ -390,7 +390,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	if err := sm.StartMigration(totalRecords); err != nil {
 		c.logErrorIfEnabled("Failed to start migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, err, "Failed to start migration", http.StatusConflict)
+		return c.HandleErrorWithKey(ctx, err, "Failed to start migration", http.StatusConflict, notification.MsgErrMigrationStartFailed, nil)
 	}
 
 	// Transition to dual-write
@@ -402,7 +402,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 			c.logWarnIfEnabled("Failed to cancel after transition failure",
 				logger.Error(cancelErr))
 		}
-		return c.HandleError(ctx, err, "Failed to initialize migration", http.StatusInternalServerError)
+		return c.HandleErrorWithKey(ctx, err, "Failed to initialize migration", http.StatusInternalServerError, notification.MsgErrMigrationInitFailed, nil)
 	}
 
 	// Start the migration worker if available
@@ -480,15 +480,15 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 	worker := getMigrationWorker()
 
 	if sm == nil {
-		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 	}
 
 	// Resume the state
 	if err := sm.Resume(); err != nil {
 		c.logErrorIfEnabled("Failed to resume migration",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-		return c.HandleError(ctx, err, "Failed to resume migration", http.StatusConflict)
+		return c.HandleErrorWithKey(ctx, err, "Failed to resume migration", http.StatusConflict, notification.MsgErrMigrationResumeFailed, nil)
 	}
 
 	// Resume the worker if it was paused
@@ -539,8 +539,8 @@ func (c *Controller) RetryValidation(ctx echo.Context) error {
 	worker := getMigrationWorker()
 
 	if sm == nil {
-		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 	}
 
 	// Transition FAILED → VALIDATING
@@ -591,8 +591,8 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 	worker := getMigrationWorker()
 
 	if sm == nil {
-		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 	}
 
 	// Stop the worker first if running
@@ -731,8 +731,8 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 	c.logInfoIfEnabled(params.logStart, logger.String("path", path), logger.String("ip", ip))
 
 	if params.stateManager == nil {
-		return c.HandleError(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 	}
 
 	// Perform worker action if worker is running

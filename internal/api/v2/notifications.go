@@ -103,12 +103,12 @@ type notificationAction struct {
 // check service initialization, validate ID, execute operation, handle errors.
 func (c *Controller) executeNotificationAction(ctx echo.Context, action notificationAction) error {
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	id := ctx.Param("id")
 	if id == "" {
-		return c.HandleError(ctx, nil, "Notification ID is required", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
 	service := notification.GetService()
@@ -146,7 +146,7 @@ func (c *Controller) SetupNotificationRoutes() {
 			return ctx.RealIP(), nil
 		},
 		ErrorHandler: func(context echo.Context, err error) error {
-			return c.HandleError(context, err, "Too many notification stream connection attempts, please wait before trying again", http.StatusTooManyRequests)
+			return c.HandleErrorWithKey(context, err, "Too many notification stream connection attempts, please wait before trying again", http.StatusTooManyRequests, notification.MsgErrNotifRateLimit, nil)
 		},
 	}
 
@@ -196,11 +196,11 @@ type NtfyServerCheckResponse struct {
 func (c *Controller) CheckNtfyServer(ctx echo.Context) error {
 	host := ctx.QueryParam("host")
 	if host == "" {
-		return c.HandleError(ctx, nil, "host parameter is required", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "host parameter is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
 	}
 
 	if !isValidNtfyHost(host) {
-		return c.HandleError(ctx, nil, "invalid host parameter", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "invalid host parameter", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
 	}
 
 	resp := probeNtfyServer(ctx.Request().Context(), host)
@@ -342,7 +342,7 @@ func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Check if notification service is initialized
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	// Track connection start time for metrics
@@ -637,7 +637,7 @@ func (c *Controller) logNotificationSent(clientID string, notif *notification.No
 // GetNotifications returns a list of notifications with optional filtering
 func (c *Controller) GetNotifications(ctx echo.Context) error {
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	service := notification.GetService()
@@ -714,19 +714,19 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 // GetNotification returns a single notification by ID
 func (c *Controller) GetNotification(ctx echo.Context) error {
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	id := ctx.Param("id")
 	if id == "" {
-		return c.HandleError(ctx, nil, "Notification ID is required", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
 	service := notification.GetService()
 	notif, err := service.Get(id)
 	if err != nil {
 		if errors.Is(err, notification.ErrNotificationNotFound) {
-			return c.HandleError(ctx, err, "Notification not found", http.StatusNotFound)
+			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
 		}
 		c.logErrorIfEnabled("failed to get notification",
 			logger.Error(err),
@@ -740,12 +740,12 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 // MarkNotificationRead marks a notification as read
 func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	id := ctx.Param("id")
 	if id == "" {
-		return c.HandleError(ctx, nil, "Notification ID is required", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
 	service := notification.GetService()
@@ -789,7 +789,7 @@ func (c *Controller) DeleteNotification(ctx echo.Context) error {
 // GetUnreadCount returns the count of unread notifications
 func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	service := notification.GetService()
@@ -807,7 +807,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 // CreateTestNewSpeciesNotification creates a test new species detection notification
 func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	if !notification.IsInitialized() {
-		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	if c.Settings == nil {
