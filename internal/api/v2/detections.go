@@ -353,7 +353,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 			logger.String("end_date", endDateStr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		return &dateValidationError{message: "start_date cannot be after end_date", paramName: "date_range"}
+		return errors.NewStd("start_date cannot be after end_date")
 	}
 
 	return nil
