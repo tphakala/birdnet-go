@@ -367,7 +367,7 @@
         "categoryError": "{category}-virhe"
       },
       "settings": {
-        "reloadingBirdnet": "Otetaan uusia analyysi­asetuksia käyttöön...",
+        "reloadingBirdnet": "Otetaan uusia analyysiasetuksia käyttöön...",
         "rebuildingRangeFilter": "Rakennetaan lajien aluesuodatinta uudelleen...",
         "updatingIntervals": "Päivitetään havaintovälejä...",
         "reconfiguringMqtt": "Päivitetään MQTT-yhteyttä...",
