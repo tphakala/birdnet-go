@@ -58,6 +58,23 @@ func (c *Controller) initAlertRoutes() {
 	protected.DELETE("/history", c.ClearAlertHistory)
 }
 
+// bindAndValidateAlertRule binds and validates the alert rule from the request body.
+// On validation failure, it writes the error response and returns nil with the written error.
+// Callers should check: if rule == nil { return err }
+func (c *Controller) bindAndValidateAlertRule(ctx echo.Context) (*entities.AlertRule, error) {
+	var rule entities.AlertRule
+	if err := ctx.Bind(&rule); err != nil {
+		return nil, c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrAlertInvalidBody, nil)
+	}
+	if rule.Name == "" {
+		return nil, c.HandleErrorWithKey(ctx, nil, "Rule name is required", http.StatusBadRequest, notification.MsgErrAlertNameRequired, nil)
+	}
+	if rule.ObjectType == "" || rule.TriggerType == "" {
+		return nil, c.HandleErrorWithKey(ctx, nil, "Object type and trigger type are required", http.StatusBadRequest, notification.MsgErrAlertTypesRequired, nil)
+	}
+	return &rule, nil
+}
+
 // requireV2 checks that the enhanced database is available and returns an error response if not.
 func (c *Controller) requireV2(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, nil,
@@ -131,16 +148,9 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 		return c.requireV2(ctx)
 	}
 
-	var rule entities.AlertRule
-	if err := ctx.Bind(&rule); err != nil {
-		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrAlertInvalidBody, nil)
-	}
-
-	if rule.Name == "" {
-		return c.HandleErrorWithKey(ctx, nil, "Rule name is required", http.StatusBadRequest, notification.MsgErrAlertNameRequired, nil)
-	}
-	if rule.ObjectType == "" || rule.TriggerType == "" {
-		return c.HandleErrorWithKey(ctx, nil, "Object type and trigger type are required", http.StatusBadRequest, notification.MsgErrAlertTypesRequired, nil)
+	rule, err := c.bindAndValidateAlertRule(ctx)
+	if rule == nil {
+		return err
 	}
 
 	// Prevent duplicate names
@@ -153,7 +163,7 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, nil, "A rule with this name already exists", http.StatusConflict, notification.MsgErrAlertDuplicateName, nil)
 	}
 
-	if err := c.alertRuleRepo.CreateRule(ctx.Request().Context(), &rule); err != nil {
+	if err := c.alertRuleRepo.CreateRule(ctx.Request().Context(), rule); err != nil {
 		c.logErrorIfEnabled("failed to create alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to create alert rule", http.StatusInternalServerError)
 	}
@@ -188,22 +198,15 @@ func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
 
-	var rule entities.AlertRule
-	if err := ctx.Bind(&rule); err != nil {
-		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrAlertInvalidBody, nil)
-	}
-
-	if rule.Name == "" {
-		return c.HandleErrorWithKey(ctx, nil, "Rule name is required", http.StatusBadRequest, notification.MsgErrAlertNameRequired, nil)
-	}
-	if rule.ObjectType == "" || rule.TriggerType == "" {
-		return c.HandleErrorWithKey(ctx, nil, "Object type and trigger type are required", http.StatusBadRequest, notification.MsgErrAlertTypesRequired, nil)
+	rule, err := c.bindAndValidateAlertRule(ctx)
+	if rule == nil {
+		return err
 	}
 
 	rule.ID = existing.ID
 	rule.CreatedAt = existing.CreatedAt
 
-	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), &rule); err != nil {
+	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), rule); err != nil {
 		c.logErrorIfEnabled("failed to update alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to update alert rule", http.StatusInternalServerError)
 	}
