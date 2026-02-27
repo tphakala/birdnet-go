@@ -372,7 +372,7 @@
         "updatingIntervals": "Päivitetään havaintovälejä...",
         "reconfiguringMqtt": "Päivitetään MQTT-yhteyttä...",
         "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
-        "reconfiguringStreams": "Päivitetään äänivirtoja...",
+        "reconfiguringStreams": "Päivitetään äänistriimejä...",
         "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
         "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
@@ -2240,14 +2240,14 @@
       "loading": "Ladataan äänilaitteita...",
       "tabs": {
         "soundCard": "Äänikortti",
-        "streams": "Virrat",
+        "streams": "Striimit",
         "processing": "Käsittely",
         "recording": "Tallennus",
         "retention": "Säilytys"
       },
       "audioCapture": {
         "title": "Äänen tallennus",
-        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-virta",
+        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-striimi",
         "soundCardSource": "Äänikorttilähde",
         "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
         "audioSourceHelp": "Valitse äänen syöttölaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
@@ -2255,14 +2255,14 @@
         "rtspSource": "RTSP-lähde",
         "rtspTransportLabel": "RTSP-siirtoprotokolla",
         "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
-        "rtspUrlsLabel": "RTSP-virran URL-osoitteet",
-        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-virran URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/virta. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
+        "rtspUrlsLabel": "RTSP-striimin URL-osoitteet",
+        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-striimin URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/stream. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
         "noDeviceSelected": "Äänilaitetta ei ole valittu",
         "refreshDevices": "Päivitä",
         "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
         "availableDevices": "Saatavilla olevat äänilaitteet",
         "active": "Aktiivinen",
-        "streamsConfigured": "{count} virta(a) määritetty"
+        "streamsConfigured": "{count} striimi(ä) määritetty"
       },
       "audioFilters": {
         "title": "Äänisuodattimet",
@@ -2432,19 +2432,19 @@
           "hintsTitle": "Voit:",
           "hints": {
             "container": "Tämä on normaalia kontti-/päättömissä käyttöönotoissa",
-            "streams": "Määritä verkkovirrat sen sijaan Virrat-välilehdellä",
+            "streams": "Määritä verkkostriimit sen sijaan Striimit-välilehdellä",
             "usb": "Liitä USB-mikrofoni ja päivitä luettelo"
           },
           "refresh": "Päivitä laitteet",
           "retry": "Yritä uudelleen"
         },
         "streams": {
-          "title": "Virtoja ei ole määritetty",
-          "description": "Lisää RTSP- tai verkkoäänivirtoja IP-kameroista, mikrofonpalvelimista tai muista virtauslähteistä.",
+          "title": "Striimejä ei ole määritetty",
+          "description": "Lisää RTSP- tai verkkoäänistriimejä IP-kameroista, mikrofonpalvelimista tai muista striimaavista lähteistä.",
           "hintsTitle": "Aloittaminen:",
           "hints": {
-            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/virta",
-            "multiple": "Voit lisätä useita virtoja eri sijainteja varten",
+            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/stream",
+            "multiple": "Voit lisätä useita striimejä eri sijainteja varten",
             "protocol": "Valitse TCP luotettavuuden vuoksi tai UDP pienemmän viiveen saamiseksi"
           }
         }
@@ -2459,20 +2459,20 @@
           "title": "Äänikortteja ei havaittu",
           "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
           "hintsTitle": "Voit:",
-          "hintStream": "Määritä verkkovirrat Virrat-välilehdellä",
+          "hintStream": "Määritä verkkostriimit Striimit-välilehdellä",
           "hintUsb": "Liitä USB-mikrofoni ja päivitä luettelo",
-          "goToStreams": "Siirry virtoihin",
+          "goToStreams": "Siirry striimeihin",
           "refresh": "Päivitä laitteet"
         }
       },
       "noSources": {
         "warning": "Äänilähteita ei ole määritetty",
-        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Virrat-välilehdellä."
+        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Striimit-välilehdellä."
       },
       "rtspStreams": {
-        "title": "Äänivirtojen Määritys",
-        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
-        "noStreamsConfigured": "Virtoja ei ole määritetty"
+        "title": "Äänistriimien määritys",
+        "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
+        "noStreamsConfigured": "Striimejä ei ole määritetty"
       },
       "streams": {
         "streamLabel": "Striimi",
@@ -3265,7 +3265,7 @@
       "importing": "Tuodaan...",
       "schema": {
         "objectTypes": {
-          "stream": "Äänivirta",
+          "stream": "Äänistriimi",
           "detection": "Havainto",
           "application": "Sovellus",
           "integration": "Integraatio",
@@ -3273,9 +3273,9 @@
           "system": "Järjestelmä"
         },
         "events": {
-          "stream_connected": "Virta yhdistetty",
-          "stream_disconnected": "Virta katkaistu",
-          "stream_error": "Virtavirhe",
+          "stream_connected": "Striimi yhdistetty",
+          "stream_disconnected": "Striimi katkaistu",
+          "stream_error": "Striimivirhe",
           "detection_new_species": "Uusi laji havaittu",
           "detection_occurred": "Havainto tehty",
           "application_started": "Sovellus käynnistetty",
@@ -3298,8 +3298,8 @@
           "scientific_name": "Tieteellinen nimi",
           "confidence": "Luotettavuus",
           "location": "Sijainti",
-          "stream_name": "Virran nimi",
-          "stream_url": "Virran URL",
+          "stream_name": "Striimin nimi",
+          "stream_url": "Striimin URL",
           "device_name": "Laitteen nimi",
           "error": "Virheilmoitus",
           "broker": "Välittäjä"
@@ -3322,12 +3322,12 @@
           "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
         },
         "streamDisconnected": {
-          "name": "Äänivirta katkennut",
-          "description": "Ilmoittaa kun RTSP- tai äänivirran yhteys katkeaa"
+          "name": "Äänistriimi katkennut",
+          "description": "Ilmoittaa kun RTSP- tai äänistriimin yhteys katkeaa"
         },
         "streamError": {
-          "name": "Äänivirran virhe",
-          "description": "Ilmoittaa kun äänivirrassa tapahtuu virhe"
+          "name": "Äänistriimin virhe",
+          "description": "Ilmoittaa kun äänistriimissä tapahtuu virhe"
         },
         "deviceError": {
           "name": "Äänilaitteen virhe",
@@ -3556,10 +3556,10 @@
         "searchPlaceholder": "Hae..."
       },
       "rtsp": {
-        "addNewStream": "Lisää uusi RTSP-virta",
-        "maxStreamsReached": "RTSP-virtojen enimmäismäärä ({max}) saavutettu.",
+        "addNewStream": "Lisää uusi RTSP-striimi",
+        "maxStreamsReached": "RTSP-striimien enimmäismäärä ({max}) saavutettu.",
         "cameraPlaceholder": "Kamera 1",
-        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/virta"
+        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/stream"
       },
       "subnet": {
         "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
@@ -3696,7 +3696,7 @@
       "notFound": "Ilmoitusta ei löytynyt",
       "hostRequired": "Host-parametri on pakollinen",
       "invalidHost": "Virheellinen host-parametri",
-      "rateLimit": "Liian monta yhteysyritystä ilmoitusvirtaan, odota hetki ennen uutta yritystä"
+      "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
     },
     "debug": {
       "notEnabled": "Virheenkorjaustila ei ole käytössä"

@@ -2424,12 +2424,12 @@
         "rtspTransportHelp": "TCP est plus fiable mais peut avoir une latence plus élevée. UDP est plus rapide mais peut subir des pertes de paquets sur les réseaux de mauvaise qualité.",
         "rtspUrlsLabel": "URLs de flux RTSP",
         "rtspUrlsHelp": "Entrez une ou plusieurs URLs de flux RTSP pour les sources audio réseau. Format : rtsp://ip:port/flux. Note : Les identifiants d'authentification doivent être configurés séparément dans les paramètres de votre serveur RTSP pour des raisons de sécurité.",
-        "noDeviceSelected": "No audio device selected",
-        "refreshDevices": "Refresh",
-        "deviceSelected": "Sound card selected and ready for capture",
-        "availableDevices": "Available Audio Devices",
-        "active": "Active",
-        "streamsConfigured": "{count} stream(s) configured"
+        "noDeviceSelected": "Aucun périphérique audio sélectionné",
+        "refreshDevices": "Actualiser",
+        "deviceSelected": "Carte son sélectionnée et prête pour la capture",
+        "availableDevices": "Périphériques audio disponibles",
+        "active": "Actif",
+        "streamsConfigured": "{count} flux configuré(s)"
       },
       "audioFilters": {
         "title": "Filtres audio",
@@ -2596,14 +2596,14 @@
           "title": "Aucune carte son détectée",
           "description": "Aucun périphérique d'entrée audio local n'a été trouvé sur ce système. Ceci est normal pour les déploiements en conteneur ou sur serveur sans interface graphique.",
           "errorTitle": "Erreur lors du chargement des périphériques",
-          "hintsTitle": "You can:",
+          "hintsTitle": "Vous pouvez :",
           "hints": {
-            "container": "This is normal for container/headless deployments",
-            "streams": "Configure network streams in the Streams tab instead",
-            "usb": "Connect a USB microphone and refresh the list"
+            "container": "Ceci est normal pour les déploiements en conteneur ou sans interface",
+            "streams": "Configurer des flux réseau dans l'onglet Flux à la place",
+            "usb": "Connecter un microphone USB et actualiser la liste"
           },
-          "refresh": "Refresh Devices",
-          "retry": "Retry"
+          "refresh": "Actualiser les périphériques",
+          "retry": "Réessayer"
         },
         "streams": {
           "title": "Aucun Flux Configuré",
@@ -2633,8 +2633,8 @@
         }
       },
       "noSources": {
-        "warning": "No Audio Sources Configured",
-        "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
+        "warning": "Aucune source audio configurée",
+        "description": "BirdNET-Go a besoin d'une entrée audio pour détecter les oiseaux. Veuillez configurer au moins une source dans l'onglet Carte Son ou Flux."
       },
       "rtspStreams": {
         "title": "Configuration des Flux Audio",
@@ -3265,54 +3265,54 @@
       "importing": "Importation...",
       "schema": {
         "objectTypes": {
-          "stream": "Audio Stream",
-          "detection": "Detection",
+          "stream": "Flux audio",
+          "detection": "Détection",
           "application": "Application",
-          "integration": "Integration",
-          "device": "Device",
-          "system": "System"
+          "integration": "Intégration",
+          "device": "Appareil",
+          "system": "Système"
         },
         "events": {
-          "stream_connected": "Stream Connected",
-          "stream_disconnected": "Stream Disconnected",
-          "stream_error": "Stream Error",
-          "detection_new_species": "New Species Detected",
-          "detection_occurred": "Detection Occurred",
-          "application_started": "Application Started",
-          "application_stopped": "Application Stopped",
-          "integration_birdweather_failed": "BirdWeather Upload Failed",
-          "integration_mqtt_connected": "MQTT Connected",
-          "integration_mqtt_disconnected": "MQTT Disconnected",
-          "device_started": "Device Started",
-          "device_stopped": "Device Stopped",
-          "device_error": "Device Error"
+          "stream_connected": "Flux connecté",
+          "stream_disconnected": "Flux déconnecté",
+          "stream_error": "Erreur de flux",
+          "detection_new_species": "Nouvelle espèce détectée",
+          "detection_occurred": "Détection effectuée",
+          "application_started": "Application démarrée",
+          "application_stopped": "Application arrêtée",
+          "integration_birdweather_failed": "Envoi BirdWeather échoué",
+          "integration_mqtt_connected": "MQTT connecté",
+          "integration_mqtt_disconnected": "MQTT déconnecté",
+          "device_started": "Appareil démarré",
+          "device_stopped": "Appareil arrêté",
+          "device_error": "Erreur d'appareil"
         },
         "metrics": {
-          "system_cpu_usage": "CPU Usage",
-          "system_memory_usage": "Memory Usage",
-          "system_disk_usage": "Disk Usage"
+          "system_cpu_usage": "Utilisation CPU",
+          "system_memory_usage": "Utilisation mémoire",
+          "system_disk_usage": "Utilisation disque"
         },
         "properties": {
-          "value": "Value",
-          "species_name": "Species Name",
-          "scientific_name": "Scientific Name",
-          "confidence": "Confidence",
-          "location": "Location",
-          "stream_name": "Stream Name",
-          "stream_url": "Stream URL",
-          "device_name": "Device Name",
-          "error": "Error Message",
+          "value": "Valeur",
+          "species_name": "Nom de l'espèce",
+          "scientific_name": "Nom scientifique",
+          "confidence": "Confiance",
+          "location": "Emplacement",
+          "stream_name": "Nom du flux",
+          "stream_url": "URL du flux",
+          "device_name": "Nom de l'appareil",
+          "error": "Message d'erreur",
           "broker": "Broker"
         },
         "operators": {
-          "is": "is",
-          "is_not": "is not",
-          "contains": "contains",
-          "not_contains": "does not contain",
-          "greater_than": "greater than",
-          "less_than": "less than",
-          "greater_or_equal": "greater or equal",
-          "less_or_equal": "less or equal"
+          "is": "est",
+          "is_not": "n'est pas",
+          "contains": "contient",
+          "not_contains": "ne contient pas",
+          "greater_than": "supérieur à",
+          "less_than": "inférieur à",
+          "greater_or_equal": "supérieur ou égal",
+          "less_or_equal": "inférieur ou égal"
         }
       },
       "v2Required": "Le schéma de base de données amélioré est requis pour les règles d'alerte. Veuillez mettre à jour votre base de données dans les paramètres principaux pour activer cette fonctionnalité.",
