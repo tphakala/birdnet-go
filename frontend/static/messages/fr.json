@@ -3703,6 +3703,22 @@
     },
     "terminal": {
       "disabled": "Terminal désactivé. Activez-le dans les paramètres."
+    },
+    "api": {
+      "badRequest": "Requête invalide. Veuillez vérifier votre saisie et réessayer.",
+      "unauthorized": "Authentification requise. Veuillez vous connecter et réessayer.",
+      "forbidden": "Vous n'avez pas la permission d'effectuer cette action.",
+      "notFound": "La ressource demandée est introuvable.",
+      "conflict": "Cette action est en conflit avec l'état actuel. Veuillez actualiser la page et réessayer.",
+      "validationFailed": "Saisie invalide. Veuillez vérifier vos données et réessayer.",
+      "tooManyRequests": "Trop de requêtes. Veuillez patienter avant de réessayer.",
+      "serverError": "Une erreur serveur s'est produite. Veuillez réessayer plus tard.",
+      "clientError": "Erreur client. Veuillez vérifier votre requête et réessayer.",
+      "unknownError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
+      "validationCheck": "La validation a échoué. Veuillez vérifier votre saisie.",
+      "conflictData": "Cette action est en conflit avec des données existantes.",
+      "requestTimeout": "Délai de la requête dépassé.",
+      "networkError": "Erreur réseau. Veuillez vérifier votre connexion."
     }
   }
 }

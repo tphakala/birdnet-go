@@ -3703,6 +3703,22 @@
     },
     "terminal": {
       "disabled": "Terminal ist deaktiviert. Aktivieren Sie es in den Einstellungen."
+    },
+    "api": {
+      "badRequest": "Ungültige Anfrage. Bitte überprüfen Sie Ihre Eingabe und versuchen Sie es erneut.",
+      "unauthorized": "Authentifizierung erforderlich. Bitte melden Sie sich an und versuchen Sie es erneut.",
+      "forbidden": "Sie haben keine Berechtigung, diese Aktion auszuführen.",
+      "notFound": "Die angeforderte Ressource wurde nicht gefunden.",
+      "conflict": "Diese Aktion steht im Konflikt mit dem aktuellen Zustand. Bitte aktualisieren Sie die Seite und versuchen Sie es erneut.",
+      "validationFailed": "Ungültige Eingabe. Bitte überprüfen Sie Ihre Daten und versuchen Sie es erneut.",
+      "tooManyRequests": "Zu viele Anfragen. Bitte warten Sie einen Moment, bevor Sie es erneut versuchen.",
+      "serverError": "Ein Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut.",
+      "clientError": "Client-Fehler aufgetreten. Bitte überprüfen Sie Ihre Anfrage und versuchen Sie es erneut.",
+      "unknownError": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+      "validationCheck": "Validierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingabe.",
+      "conflictData": "Diese Aktion steht im Konflikt mit vorhandenen Daten.",
+      "requestTimeout": "Zeitüberschreitung der Anfrage.",
+      "networkError": "Netzwerkfehler aufgetreten. Bitte überprüfen Sie Ihre Verbindung."
     }
   }
 }

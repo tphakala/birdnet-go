@@ -3703,6 +3703,22 @@
     },
     "terminal": {
       "disabled": "Terminal is uitgeschakeld. Schakel het in bij de instellingen."
+    },
+    "api": {
+      "badRequest": "Ongeldige aanvraag. Controleer uw invoer en probeer het opnieuw.",
+      "unauthorized": "Authenticatie vereist. Log in en probeer het opnieuw.",
+      "forbidden": "U heeft geen toestemming om deze actie uit te voeren.",
+      "notFound": "De gevraagde bron is niet gevonden.",
+      "conflict": "Deze actie is in strijd met de huidige status. Vernieuw de pagina en probeer het opnieuw.",
+      "validationFailed": "Ongeldige invoer. Controleer uw gegevens en probeer het opnieuw.",
+      "tooManyRequests": "Te veel aanvragen. Wacht even voordat u het opnieuw probeert.",
+      "serverError": "Er is een serverfout opgetreden. Probeer het later opnieuw.",
+      "clientError": "Clientfout opgetreden. Controleer uw aanvraag en probeer het opnieuw.",
+      "unknownError": "Er is een onverwachte fout opgetreden. Probeer het opnieuw.",
+      "validationCheck": "Validatie mislukt. Controleer uw invoer.",
+      "conflictData": "Deze actie is in strijd met bestaande gegevens.",
+      "requestTimeout": "Time-out van het verzoek.",
+      "networkError": "Netwerkfout opgetreden. Controleer uw verbinding."
     }
   }
 }

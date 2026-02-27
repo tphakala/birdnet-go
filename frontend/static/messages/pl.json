@@ -3703,6 +3703,22 @@
     },
     "terminal": {
       "disabled": "Terminal jest wyłączony. Włącz go w ustawieniach."
+    },
+    "api": {
+      "badRequest": "Nieprawidłowe żądanie. Sprawdź dane wejściowe i spróbuj ponownie.",
+      "unauthorized": "Wymagane uwierzytelnienie. Zaloguj się i spróbuj ponownie.",
+      "forbidden": "Nie masz uprawnień do wykonania tej akcji.",
+      "notFound": "Żądany zasób nie został znaleziony.",
+      "conflict": "Ta akcja jest w konflikcie z bieżącym stanem. Odśwież stronę i spróbuj ponownie.",
+      "validationFailed": "Nieprawidłowe dane wejściowe. Sprawdź swoje dane i spróbuj ponownie.",
+      "tooManyRequests": "Zbyt wiele żądań. Poczekaj chwilę przed ponowną próbą.",
+      "serverError": "Wystąpił błąd serwera. Spróbuj ponownie później.",
+      "clientError": "Wystąpił błąd klienta. Sprawdź swoje żądanie i spróbuj ponownie.",
+      "unknownError": "Wystąpił nieoczekiwany błąd. Spróbuj ponownie.",
+      "validationCheck": "Walidacja nie powiodła się. Sprawdź dane wejściowe.",
+      "conflictData": "Ta akcja jest w konflikcie z istniejącymi danymi.",
+      "requestTimeout": "Przekroczono limit czasu żądania.",
+      "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
     }
   }
 }

@@ -76,36 +76,36 @@ function getDefaultHeaders(): Headers {
 /**
  * SECURITY: Secure error message mapping to prevent information leakage
  */
-function getSecureErrorMessage(status: number, _serverMessage?: string): string {
+function getSecureErrorMessage(status: number): string {
   // SECURITY: Never expose internal server errors to prevent information leakage
   switch (status) {
     case 400:
-      return 'Invalid request. Please check your input and try again.';
+      return t('errors.api.badRequest');
     case 401:
-      return 'Authentication required. Please log in and try again.';
+      return t('errors.api.unauthorized');
     case 403:
-      return 'You do not have permission to perform this action.';
+      return t('errors.api.forbidden');
     case 404:
-      return 'The requested resource was not found.';
+      return t('errors.api.notFound');
     case 409:
-      return 'This action conflicts with the current state. Please refresh and try again.';
+      return t('errors.api.conflict');
     case 422:
-      return 'Invalid input provided. Please check your data and try again.';
+      return t('errors.api.validationFailed');
     case 429:
-      return 'Too many requests. Please wait before trying again.';
+      return t('errors.api.tooManyRequests');
     case 500:
     case 502:
     case 503:
     case 504:
-      return 'A server error occurred. Please try again later.';
+      return t('errors.api.serverError');
     default:
       // SECURITY: For unknown errors, provide generic message
       if (status >= 400 && status < 500) {
-        return 'Client error occurred. Please check your request and try again.';
+        return t('errors.api.clientError');
       } else if (status >= 500) {
-        return 'Server error occurred. Please try again later.';
+        return t('errors.api.serverError');
       }
-      return 'An unexpected error occurred. Please try again.';
+      return t('errors.api.unknownError');
   }
 }
 
@@ -145,9 +145,9 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
         // Fall back to specific safe cases for 422/409
         if (!serverMessage) {
           if (response.status === 422 && errorData.validationErrors) {
-            serverMessage = 'Validation failed. Please check your input.';
+            serverMessage = t('errors.api.validationCheck');
           } else if (response.status === 409 && errorData.conflict) {
-            serverMessage = 'This action conflicts with existing data.';
+            serverMessage = t('errors.api.conflictData');
           }
         }
       }
@@ -377,20 +377,15 @@ export async function fetchWithCSRF<T = unknown>(
     // SECURITY: Handle network and other errors securely
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new ApiError('Request timeout', 408, new Response(), true);
+        throw new ApiError(t('errors.api.requestTimeout'), 408, new Response(), true);
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        throw new ApiError(
-          'Network error occurred. Please check your connection.',
-          0,
-          new Response(),
-          true
-        );
+        throw new ApiError(t('errors.api.networkError'), 0, new Response(), true);
       }
     }
 
     // SECURITY: Generic error for unknown cases
-    throw new ApiError('An unexpected error occurred. Please try again.', 0, new Response());
+    throw new ApiError(t('errors.api.unknownError'), 0, new Response());
   }
 }
 

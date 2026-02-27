@@ -3534,6 +3534,22 @@
     },
     "terminal": {
       "disabled": "Terminál je zakázaný. Povoľte ho v nastaveniach."
+    },
+    "api": {
+      "badRequest": "Neplatná požiadavka. Skontrolujte svoje údaje a skúste to znova.",
+      "unauthorized": "Vyžaduje sa overenie. Prihláste sa a skúste to znova.",
+      "forbidden": "Na vykonanie tejto akcie nemáte oprávnenie.",
+      "notFound": "Požadovaný zdroj nebol nájdený.",
+      "conflict": "Táto akcia je v rozpore s aktuálnym stavom. Obnovte stránku a skúste to znova.",
+      "validationFailed": "Neplatný vstup. Skontrolujte svoje údaje a skúste to znova.",
+      "tooManyRequests": "Príliš veľa požiadaviek. Počkajte chvíľu a skúste to znova.",
+      "serverError": "Vyskytla sa chyba servera. Skúste to znova neskôr.",
+      "clientError": "Chyba klienta. Skontrolujte svoju požiadavku a skúste to znova.",
+      "unknownError": "Vyskytla sa neočakávaná chyba. Skúste to znova.",
+      "validationCheck": "Overenie zlyhalo. Skontrolujte svoje údaje.",
+      "conflictData": "Táto akcia je v rozpore s existujúcimi údajmi.",
+      "requestTimeout": "Časový limit požiadavky vypršal.",
+      "networkError": "Chyba siete. Skontrolujte pripojenie."
     }
   }
 }
