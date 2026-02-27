@@ -405,7 +405,11 @@
         "failedMessage": "Impossibile rimuovere il vecchio database. Controlla i log per i dettagli."
       },
       "alert": {
-        "firedTitle": "Avviso: {rule_name}"
+        "firedTitle": "Avviso: {rule_name}",
+        "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
+        "detectionOccurred": "{species_name} rilevato con {confidence}% di confidenza",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} disconnesso"
       }
     },
     "loading": "Caricamento notifiche..."

@@ -405,7 +405,11 @@
         "failedMessage": "Alte Datenbank konnte nicht entfernt werden. Überprüfen Sie die Protokolle für Details."
       },
       "alert": {
-        "firedTitle": "Alarm: {rule_name}"
+        "firedTitle": "Alarm: {rule_name}",
+        "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
+        "detectionOccurred": "{species_name} erkannt mit {confidence}% Konfidenz",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} getrennt"
       }
     },
     "loading": "Benachrichtigungen werden geladen..."

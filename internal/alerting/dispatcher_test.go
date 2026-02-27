@@ -240,3 +240,168 @@ func TestRenderTemplate_WithProperties(t *testing.T) {
 	)
 	assert.Equal(t, "Stream Alert: backyard (rtsp://cam.local/feed) - stream.disconnected", result)
 }
+
+func TestDispatcher_DefaultTemplate_MetricMessage(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "High CPU usage",
+		NameKey: RuleKeyHighCPUName,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90", DurationSec: 300},
+		},
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeSystem,
+		MetricName: MetricCPUUsage,
+		Properties: map[string]any{PropertyValue: 95.3},
+		Timestamp:  time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	// Title unchanged
+	assert.Equal(t, MsgAlertFiredTitle, call.titleKey)
+	// Message should now have key and params
+	assert.Equal(t, MsgAlertMetricExceeded, call.messageKey)
+	assert.Equal(t, "95.3", call.messageParams["value"])
+	assert.Equal(t, "90", call.messageParams["threshold"])
+	// English fallback message should be populated
+	assert.Contains(t, call.message, "95.3")
+	assert.Contains(t, call.message, "90")
+}
+
+func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "New species detected",
+		NameKey: RuleKeyNewSpeciesName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionNewSpecies,
+		Properties: map[string]any{
+			PropertySpeciesName:    "Eurasian Blue Tit",
+			PropertyScientificName: "Cyanistes caeruleus",
+			PropertyConfidence:     0.923,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	assert.Equal(t, MsgAlertDetectionOccurred, call.messageKey)
+	assert.Equal(t, "Eurasian Blue Tit", call.messageParams["species_name"])
+	assert.Equal(t, "92", call.messageParams["confidence"])
+	assert.Contains(t, call.message, "Eurasian Blue Tit")
+	assert.Contains(t, call.message, "92")
+}
+
+func TestDispatcher_DefaultTemplate_ErrorMessage(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "Audio stream error",
+		NameKey: RuleKeyStreamErrorName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeStream,
+		EventName:  EventStreamError,
+		Properties: map[string]any{
+			PropertyStreamName: "backyard-cam",
+			PropertyError:      "connection timeout",
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	assert.Equal(t, MsgAlertErrorOccurred, call.messageKey)
+	assert.Equal(t, "backyard-cam", call.messageParams["source_name"])
+	assert.Equal(t, "connection timeout", call.messageParams["error"])
+	assert.Contains(t, call.message, "backyard-cam")
+	assert.Contains(t, call.message, "connection timeout")
+}
+
+func TestDispatcher_DefaultTemplate_DisconnectMessage(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "Audio stream disconnected",
+		NameKey: RuleKeyStreamDiscName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeStream,
+		EventName:  EventStreamDisconnected,
+		Properties: map[string]any{
+			PropertyStreamName: "front-yard",
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	assert.Equal(t, MsgAlertDisconnected, call.messageKey)
+	assert.Equal(t, "front-yard", call.messageParams["source_name"])
+	assert.Contains(t, call.message, "front-yard")
+}
+
+func TestDispatcher_DefaultTemplate_NoProperties_GracefulFallback(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "High CPU usage",
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90"},
+		},
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	// Event with no properties (e.g., TestFireRule path)
+	event := &AlertEvent{
+		ObjectType: ObjectTypeSystem,
+		MetricName: MetricCPUUsage,
+		Properties: map[string]any{"test": true},
+		Timestamp:  time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	// Should still work, just without a message (no value property)
+	assert.Empty(t, call.messageKey, "should not set message key when required properties are missing")
+	assert.Empty(t, call.message)
+}

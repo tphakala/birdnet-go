@@ -405,7 +405,11 @@
         "failedMessage": "Vanhan tietokannan poisto epäonnistui. Tarkista lokit lisätietoja varten."
       },
       "alert": {
-        "firedTitle": "Hälytys: {rule_name}"
+        "firedTitle": "Hälytys: {rule_name}",
+        "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
+        "detectionOccurred": "{species_name} havaittu {confidence}% varmuudella",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} yhteys katkaistu"
       }
     },
     "loading": "Ladataan ilmoituksia..."

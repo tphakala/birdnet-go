@@ -405,7 +405,11 @@
         "failedMessage": "Oude database kon niet worden verwijderd. Controleer de logs voor details."
       },
       "alert": {
-        "firedTitle": "Waarschuwing: {rule_name}"
+        "firedTitle": "Waarschuwing: {rule_name}",
+        "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
+        "detectionOccurred": "{species_name} gedetecteerd met {confidence}% betrouwbaarheid",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} verbroken"
       }
     },
     "loading": "Meldingen laden..."

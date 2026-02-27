@@ -106,4 +106,10 @@ const (
 // "notifications.content.alert.*".
 const (
 	MsgAlertFiredTitle = "notifications.content.alert.firedTitle"
+
+	// Default message keys per alert category (used when no custom template is set).
+	MsgAlertMetricExceeded    = "notifications.content.alert.metricExceeded"
+	MsgAlertDetectionOccurred = "notifications.content.alert.detectionOccurred"
+	MsgAlertErrorOccurred     = "notifications.content.alert.errorOccurred"
+	MsgAlertDisconnected      = "notifications.content.alert.disconnected"
 )

@@ -405,7 +405,11 @@
         "failedMessage": "Não foi possível remover a base de dados antiga. Verifique os registos para mais detalhes."
       },
       "alert": {
-        "firedTitle": "Alerta: {rule_name}"
+        "firedTitle": "Alerta: {rule_name}",
+        "metricExceeded": "Valor atual: {value}% (limite: {threshold}%)",
+        "detectionOccurred": "{species_name} detetado com {confidence}% de confiança",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} desligado"
       }
     },
     "loading": "Carregando notificações..."

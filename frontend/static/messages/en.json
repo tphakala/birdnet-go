@@ -405,7 +405,11 @@
         "failedMessage": "Failed to remove legacy database. Check logs for details."
       },
       "alert": {
-        "firedTitle": "Alert: {rule_name}"
+        "firedTitle": "Alert: {rule_name}",
+        "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
+        "detectionOccurred": "{species_name} detected with {confidence}% confidence",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} disconnected"
       }
     },
     "loading": "Loading notifications..."
