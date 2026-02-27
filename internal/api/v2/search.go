@@ -64,7 +64,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 
 	// Validate and normalize the request
 	if err := c.validateAndNormalizeSearchRequest(ctx, &req); err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+		return c.HandleError(ctx, err, "Invalid search parameters", http.StatusBadRequest)
 	}
 
 	// Log validated request parameters

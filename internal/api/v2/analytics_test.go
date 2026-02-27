@@ -464,7 +464,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			method:         http.MethodGet,
 			path:           "/api/v2/analytics/species/summary?start_date=2023-01-10&end_date=2023-01-01",
 			expectedStatus: http.StatusBadRequest,
-			expectedBody:   "start_date cannot be after end_date",
+			expectedBody:   "Invalid date parameters",
 		},
 		{
 			name:           "GetHourlyAnalytics - Missing Date",

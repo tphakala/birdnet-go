@@ -50,11 +50,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	// Parse JSON request
 	var req GenerateSupportDumpRequest
 	if err := ctx.Bind(&req); err != nil {
-		c.logErrorIfEnabled("Failed to parse support dump request", logger.Error(err))
-		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
-			Error:   "Failed to parse request",
-			Message: err.Error(),
-		})
+		return c.HandleError(ctx, err, "Failed to parse request", http.StatusBadRequest)
 	}
 
 	c.logDebugIfEnabled("Support dump request parsed",
@@ -75,9 +71,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	// Get current settings
 	settings := conf.GetSettings()
 	if settings == nil {
-		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Settings not available",
-		})
+		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}
 
 	// Get config directory path
@@ -113,10 +107,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 			logger.String("system_id", settings.SystemID),
 			logger.Any("opts", opts),
 		)
-		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error:   "Failed to collect support data",
-			Message: err.Error(),
-		})
+		return c.HandleError(ctx, err, "Failed to collect support data", http.StatusInternalServerError)
 	}
 	c.logDebugIfEnabled("Support data collected successfully", logger.String("dump_id", dump.ID))
 
@@ -129,10 +120,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 			logger.String("dump_id", dump.ID),
 			logger.Any("context_err", ctx.Request().Context().Err()),
 		)
-		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error:   "Failed to create support archive",
-			Message: err.Error(),
-		})
+		return c.HandleError(ctx, err, "Failed to create support archive", http.StatusInternalServerError)
 	}
 	c.logDebugIfEnabled("Support archive created successfully",
 		logger.String("dump_id", dump.ID),
@@ -210,16 +198,12 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 	dumpID := ctx.Param("id")
 	if dumpID == "" {
-		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Missing dump ID",
-		})
+		return c.HandleError(ctx, nil, "Missing dump ID", http.StatusBadRequest)
 	}
 
 	// Validate dumpID is a valid UUID to prevent path traversal
 	if _, err := uuid.Parse(dumpID); err != nil {
-		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid dump ID format",
-		})
+		return c.HandleError(ctx, err, "Invalid dump ID format", http.StatusBadRequest)
 	}
 
 	// Construct temp file path
@@ -227,9 +211,7 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 
 	// Check if file exists
 	if _, err := os.Stat(tempFile); os.IsNotExist(err) {
-		return ctx.JSON(http.StatusNotFound, ErrorResponse{
-			Error: "Support dump not found",
-		})
+		return c.HandleError(ctx, err, "Support dump not found", http.StatusNotFound)
 	}
 
 	// Set headers for download
@@ -250,9 +232,7 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 	settings := conf.GetSettings()
 	if settings == nil {
-		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Settings not available",
-		})
+		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}
 
 	status := map[string]any{

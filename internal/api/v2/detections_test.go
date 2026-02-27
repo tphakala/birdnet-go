@@ -277,7 +277,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "numResults must be greater than zero", "Error message mismatch in response body")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -295,7 +295,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid numeric value for offset", "Error message mismatch in response body")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -337,7 +337,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "numResults exceeds maximum allowed value", "Error message mismatch in response body")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -356,7 +356,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -374,7 +374,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "hour parameter is required")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -393,7 +393,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -412,7 +412,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -431,7 +431,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 	}

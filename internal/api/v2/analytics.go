@@ -1220,7 +1220,7 @@ func (c *Controller) validateDateRangeWithResponse(ctx echo.Context, startDate, 
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
 		// Check if it's a known date validation error
 		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
-			_ = c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+			_ = c.HandleError(ctx, err, "Invalid date parameters", http.StatusBadRequest)
 			return ErrResponseHandled
 		}
 

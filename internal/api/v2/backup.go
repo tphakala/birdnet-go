@@ -406,7 +406,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 		if strings.Contains(err.Error(), "already in progress") {
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
-				"error":           err.Error(),
+				"error":           "Backup already in progress",
 				"existing_job_id": existingJob.ID,
 			})
 		}
@@ -571,7 +571,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 		c.logWarnIfEnabled("Backup VACUUM INTO failed",
 			logger.String("job_id", job.ID),
 			logger.Error(lastErr))
-		job.setStatus(BackupStatusFailed, lastErr.Error())
+		job.setStatus(BackupStatusFailed, "Database backup failed")
 		return
 	}
 
