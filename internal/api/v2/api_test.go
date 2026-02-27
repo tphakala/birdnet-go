@@ -161,8 +161,9 @@ func TestHandleError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	// Check response content
-	assert.Equal(t, "code=400, message=Test error", response.Error)
+	// Check response content — in non-debug mode, Error field uses sanitized message
+	// instead of raw err.Error() to prevent leaking internal details
+	assert.Equal(t, "Error message", response.Error)
 	assert.Equal(t, "Error message", response.Message)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }

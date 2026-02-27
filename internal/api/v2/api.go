@@ -652,9 +652,17 @@ func NewErrorResponse(err error, message string, code int) *ErrorResponse {
 
 	var errorStr string
 	if err != nil {
-		errorStr = err.Error()
+		// Only expose raw err.Error() in debug mode — it can contain internal
+		// paths, SQL errors, stack traces, etc. In production, use the
+		// sanitized message parameter instead.
+		settings := conf.GetSettings()
+		if settings != nil && settings.Debug {
+			errorStr = err.Error()
+		} else {
+			errorStr = message
+		}
 	} else {
-		errorStr = message // Use message as error if no error object is provided
+		errorStr = message
 	}
 
 	return &ErrorResponse{

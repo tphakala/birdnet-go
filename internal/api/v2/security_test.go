@@ -388,7 +388,7 @@ func TestInputValidation(t *testing.T) {
 				m.On("IsNoteLocked", "1").Return(false, nil)
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "unexpected EOF",
+			expectedError:  "Invalid request format",
 		},
 		{
 			name:   "Unicode normalization attack",

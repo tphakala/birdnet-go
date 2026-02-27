@@ -304,8 +304,9 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 			err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 			require.NoError(t, err)
 
-			// Check error response content
-			assert.Contains(t, fmt.Sprint(errorResp["error"]), "control channel not initialized")
+			// Check error response content — in non-debug mode, error field uses
+			// sanitized message instead of raw err.Error()
+			assert.Contains(t, fmt.Sprint(errorResp["error"]), "System control interface not available")
 			assert.Contains(t, errorResp["message"], "System control interface not available")
 			assert.Equal(t, http.StatusInternalServerError, int(errorResp["code"].(float64)))
 		})

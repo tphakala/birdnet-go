@@ -1215,8 +1215,8 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	assert.Contains(t, errorResponse, "message")
 	assert.Contains(t, errorResponse, "code")
 
-	// Check the error message
-	assert.Contains(t, errorResponse["error"].(string), "database connection error")
+	// Check the error message — in non-debug mode, Error field uses sanitized message
+	assert.Equal(t, "Failed to get daily species data", errorResponse["error"])
 	assert.Equal(t, "Failed to get daily species data", errorResponse["message"])
 	assert.InDelta(t, http.StatusInternalServerError, errorResponse["code"], 0.01)
 }
@@ -1255,9 +1255,10 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check that the error response contains expected fields
+	// Check that the error response contains expected fields — in non-debug mode,
+	// Error field uses sanitized message instead of raw err.Error()
 	assert.Contains(t, errorResponse, "error")
-	assert.Contains(t, errorResponse["error"].(string), "batch query failed")
+	assert.Contains(t, errorResponse["error"].(string), "Failed to process daily species data")
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)

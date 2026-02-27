@@ -366,7 +366,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	// Get database info
 	dbPath, gormDB, err := c.getBackupDBInfo(dbType)
 	if err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+		return c.HandleError(ctx, err, "Failed to get backup database info", http.StatusBadRequest)
 	}
 
 	// Get source database size
