@@ -545,10 +545,11 @@ func TestGetDetection(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				var response map[string]string
+				var response ErrorResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Equal(t, "Detection not found", response["error"])
+				assert.Equal(t, "Detection not found", response.Message)
+				assert.NotEmpty(t, response.CorrelationID)
 			},
 		},
 	}
@@ -1197,10 +1198,10 @@ func TestIgnoreSpecies(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
-				var response map[string]string
+				var response ErrorResponse
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tc.expectedError)
+				assert.Contains(t, response.Message, tc.expectedError)
 			})
 		}
 	})

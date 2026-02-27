@@ -88,9 +88,7 @@ func (c *Controller) initAuthRoutes() {
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("user_agent", ctx.Request().Header.Get("User-Agent")),
 			)
-			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many login attempts. Please try again in 15 minutes.",
-			})
+			return c.HandleError(ctx, err, "Too many login attempts. Please try again in 15 minutes.", http.StatusTooManyRequests)
 		},
 		DenyHandler: func(ctx echo.Context, identifier string, err error) error {
 			// This is called when the rate limit is exceeded
@@ -99,9 +97,7 @@ func (c *Controller) initAuthRoutes() {
 				logger.String("ip", ctx.RealIP()),
 				logger.String("path", ctx.Request().URL.Path),
 			)
-			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many login attempts. Please try again in 15 minutes.",
-			})
+			return c.HandleError(ctx, err, "Too many login attempts. Please try again in 15 minutes.", http.StatusTooManyRequests)
 		},
 	})
 

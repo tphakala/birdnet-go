@@ -348,11 +348,13 @@ func (c *Controller) initBackupRoutes() {
 func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	dbType := ctx.QueryParam("type")
 	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
-		return c.HandleError(ctx, fmt.Errorf("invalid type"),
+		return c.HandleError(ctx, nil,
 			"Type must be 'legacy' or 'v2'", http.StatusBadRequest)
 	}
 
 	// Check for existing active job
+	// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
+	// to resume polling (see DatabaseStatsCard.svelte).
 	if existingJob, exists := backupJobManager.GetActiveJobByType(dbType); exists {
 		return ctx.JSON(http.StatusConflict, map[string]any{
 			"error":           "Backup already in progress",
@@ -383,7 +385,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 	requiredSpace := uint64(dbSize) + backupDiskBuffer
 	if usage.Free < requiredSpace {
-		return c.HandleError(ctx, fmt.Errorf("insufficient space"),
+		return c.HandleError(ctx, nil,
 			fmt.Sprintf("Not enough disk space. Need %s, have %s",
 				formatBytesUint64(requiredSpace), formatBytesUint64(usage.Free)),
 			http.StatusInsufficientStorage)
@@ -393,6 +395,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	job, err := backupJobManager.CreateJob(dbType, dbSize)
 	if err != nil {
 		// Job already exists
+		// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
+		// to resume polling (see DatabaseStatsCard.svelte).
 		if strings.Contains(err.Error(), "already in progress") {
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
@@ -450,7 +454,7 @@ func (c *Controller) GetBackupJobStatus(ctx echo.Context) error {
 
 	job, exists := backupJobManager.GetJob(jobID)
 	if !exists {
-		return c.HandleError(ctx, fmt.Errorf("job not found"),
+		return c.HandleError(ctx, nil,
 			"Backup job not found or expired", http.StatusNotFound)
 	}
 
@@ -473,15 +477,14 @@ func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
 
 	job, exists := backupJobManager.GetJob(jobID)
 	if !exists {
-		return c.HandleError(ctx, fmt.Errorf("job not found"),
+		return c.HandleError(ctx, nil,
 			"Backup job not found or expired", http.StatusNotFound)
 	}
 
 	if job.Status != BackupStatusCompleted {
-		return ctx.JSON(http.StatusConflict, map[string]any{
-			"error":  "Backup not ready for download",
-			"status": job.Status,
-		})
+		// NOTE: Previously included job.Status in response; removed for consistency.
+		// Frontend does not consume this field from the download endpoint.
+		return c.HandleError(ctx, nil, "Backup not ready for download", http.StatusConflict)
 	}
 
 	// Verify temp file exists
@@ -508,7 +511,7 @@ func (c *Controller) CancelBackupJob(ctx echo.Context) error {
 	jobID := ctx.Param("id")
 
 	if !backupJobManager.DeleteJob(jobID) {
-		return c.HandleError(ctx, fmt.Errorf("job not found"),
+		return c.HandleError(ctx, nil,
 			"Backup job not found", http.StatusNotFound)
 	}
 

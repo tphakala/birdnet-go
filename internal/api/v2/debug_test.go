@@ -124,10 +124,10 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 
-		var resp map[string]string
+		var resp ErrorResponse
 		err = json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		assert.Equal(t, "Debug mode not enabled", resp["error"])
+		assert.Equal(t, "Debug mode not enabled", resp.Message)
 	})
 
 	t.Run("DebugTriggerNotification", func(t *testing.T) {
