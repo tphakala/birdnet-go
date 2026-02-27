@@ -405,7 +405,11 @@
         "failedMessage": "Error al eliminar la base de datos antigua. Revise los registros para más detalles."
       },
       "alert": {
-        "firedTitle": "Alerta: {rule_name}"
+        "firedTitle": "Alerta: {rule_name}",
+        "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",
+        "detectionOccurred": "{species_name} detectado con {confidence}% de confianza",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} desconectado"
       }
     },
     "loading": "Cargando notificaciones..."

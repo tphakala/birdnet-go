@@ -405,7 +405,11 @@
         "failedMessage": "Impossible de supprimer l'ancienne base de données. Consultez les journaux pour plus de détails."
       },
       "alert": {
-        "firedTitle": "Alerte : {rule_name}"
+        "firedTitle": "Alerte : {rule_name}",
+        "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
+        "detectionOccurred": "{species_name} détecté avec {confidence}% de confiance",
+        "errorOccurred": "{source_name} : {error}",
+        "disconnected": "{source_name} déconnecté"
       }
     },
     "loading": "Chargement des notifications..."

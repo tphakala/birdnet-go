@@ -405,7 +405,11 @@
         "failedMessage": "Nie udało się usunąć starej bazy danych. Sprawdź logi, aby uzyskać szczegóły."
       },
       "alert": {
-        "firedTitle": "Alert: {rule_name}"
+        "firedTitle": "Alert: {rule_name}",
+        "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
+        "detectionOccurred": "{species_name} wykryto z {confidence}% pewnością",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} rozłączono"
       }
     },
     "loading": "Ładowanie powiadomień..."
