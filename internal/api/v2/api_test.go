@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -166,4 +167,35 @@ func TestHandleError(t *testing.T) {
 	assert.Equal(t, "Error message", response.Error)
 	assert.Equal(t, "Error message", response.Message)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
+// TestHandleErrorDebugMode verifies that raw err.Error() is exposed in the Error
+// field when debug mode is enabled, for developer diagnostics.
+func TestHandleErrorDebugMode(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+
+	// Enable debug mode via global settings (used by NewErrorResponse)
+	controller.Settings.Debug = true
+	conf.SetTestSettings(controller.Settings)
+	t.Cleanup(func() {
+		controller.Settings.Debug = false
+		conf.SetTestSettings(controller.Settings)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := controller.HandleError(c, echo.NewHTTPError(http.StatusBadRequest, "Test error"),
+		"Error message", http.StatusBadRequest)
+
+	require.NoError(t, err)
+
+	var response ErrorResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// In debug mode, Error field should contain raw err.Error() for diagnostics
+	assert.Equal(t, "code=400, message=Test error", response.Error)
+	assert.Equal(t, "Error message", response.Message)
 }
