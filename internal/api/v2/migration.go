@@ -474,8 +474,8 @@ func (c *Controller) PauseMigration(ctx echo.Context) error {
 		notificationBody:  "Database migration has been paused. You can resume it at any time from the Database settings.",
 		titleKey:          notification.MsgMigrationPausedTitle,
 		messageKey:        notification.MsgMigrationPausedMessage,
-		stateManager:      sm,
-		worker:            worker,
+
+		worker: worker,
 	})
 }
 
@@ -650,7 +650,6 @@ func (c *Controller) RollbackMigration(ctx echo.Context) error {
 		logSuccess:      "Migration rolled back successfully",
 		responseMessage: "Migration rolled back to legacy database",
 		responseState:   entities.MigrationStatusIdle,
-		stateManager:    sm,
 		worker:          worker,
 	})
 }
@@ -713,10 +712,9 @@ type migrationActionParams struct {
 	responseState     entities.MigrationStatus
 	notificationTitle string // Optional: if set, sends a notification
 	notificationBody  string
-	titleKey          string                    // Optional: i18n translation key for title
-	messageKey        string                    // Optional: i18n translation key for message
-	stateManager      *datastoreV2.StateManager // Thread-safe snapshot
-	worker            *migration.Worker         // Thread-safe snapshot
+	titleKey          string            // Optional: i18n translation key for title
+	messageKey        string            // Optional: i18n translation key for message
+	worker            *migration.Worker // Thread-safe snapshot
 }
 
 // executeMigrationAction handles common migration action logic.
