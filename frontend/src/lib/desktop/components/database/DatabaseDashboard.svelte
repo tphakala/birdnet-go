@@ -419,6 +419,29 @@
     };
   });
 
+  // Poll during active backup jobs (recursive setTimeout to prevent pile-up)
+  let hasActiveBackup = $derived(
+    backupJobs.some(j => j.status === 'pending' || j.status === 'in_progress')
+  );
+
+  $effect(() => {
+    if (!hasActiveBackup) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      if (cancelled) return;
+      await fetchBackupJobs();
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    }
+    timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  });
+
   // Fetch legacy status in v2-only mode
   $effect(() => {
     if (isV2OnlyMode && !legacyStatus.data && !legacyStatus.loading && !legacyStatus.error) {

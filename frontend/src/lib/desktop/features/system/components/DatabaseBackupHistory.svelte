@@ -213,30 +213,32 @@
                   )}">{statusLabel(backup.status)}</span
                 >
               </td>
-              <td class="py-2 px-3 text-right">
-                {#if backup.status === 'completed' && backup.download_url}
-                  <a
-                    href={backup.download_url}
-                    class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                    download
-                  >
-                    <Download class="w-3 h-3" />
-                    {t('system.database.backup.history.download')}
-                  </a>
-                {:else if backup.status === 'in_progress'}
-                  <span
-                    class="inline-flex items-center gap-1 text-xs tabular-nums text-blue-600 dark:text-blue-400"
-                  >
-                    <Loader2 class="w-3 h-3 animate-spin" />
-                    {backup.progress}%
-                  </span>
-                {:else if backup.status === 'failed'}
-                  <span class="text-xs text-red-600 dark:text-red-400" title={backup.error ?? ''}>
-                    {t('system.database.backup.history.failed')}
-                  </span>
-                {:else}
-                  <span class="text-xs text-slate-600 dark:text-slate-400">&mdash;</span>
-                {/if}
+              <td class="py-2 px-3">
+                <div class="flex justify-end">
+                  {#if backup.status === 'completed' && backup.download_url}
+                    <a
+                      href={backup.download_url}
+                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      download
+                    >
+                      <Download class="w-3 h-3" />
+                      {t('system.database.backup.history.download')}
+                    </a>
+                  {:else if backup.status === 'in_progress'}
+                    <span
+                      class="inline-flex items-center gap-1 text-xs tabular-nums text-blue-600 dark:text-blue-400"
+                    >
+                      <Loader2 class="w-3 h-3 animate-spin" />
+                      {backup.progress}%
+                    </span>
+                  {:else if backup.status === 'failed'}
+                    <span class="text-xs text-red-600 dark:text-red-400" title={backup.error ?? ''}>
+                      {t('system.database.backup.history.failed')}
+                    </span>
+                  {:else}
+                    <span class="text-xs text-slate-600 dark:text-slate-400">&mdash;</span>
+                  {/if}
+                </div>
               </td>
             </tr>
           {/each}
