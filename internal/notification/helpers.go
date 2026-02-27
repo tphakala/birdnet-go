@@ -94,7 +94,7 @@ func NotifyIntegrationFailure(integration string, err error) {
 	notif := NewNotification(TypeError, PriorityHigh, title, message).
 		WithComponent(integration).
 		WithTitleKey(MsgIntegrationFailedTitle, map[string]any{"integration": integration}).
-		WithMessageKey(MsgIntegrationFailedMessage, map[string]any{"error": errMsg})
+		WithMessageKey(MsgIntegrationFailedMessage, map[string]any{"integration": integration})
 
 	if err := service.CreateWithMetadata(notif); err != nil {
 		GetLogger().Warn("failed to create integration failure notification", logger.Error(err))
