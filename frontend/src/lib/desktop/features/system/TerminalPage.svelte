@@ -73,6 +73,8 @@
   const POPUP_WINDOW_FEATURES = 'width=900,height=600,menubar=no,toolbar=no,location=no,status=no';
   const POPUP_DOM_SETTLE_MS = 50;
   const POPUP_RECONNECT_DELAY_MS = 100;
+  /** Minimum opacity for secondary/muted text elements (WCAG AA compliant) */
+  const MUTED_OPACITY = 0.7;
 
   function loadThemeId(): TerminalThemeId {
     if (typeof window === 'undefined') return 'dark';
@@ -369,7 +371,9 @@
       '.status-text { font-size: 11px; font-weight: 500; font-family: system-ui, sans-serif; }' +
       '.status-text.connected { color: #10b981; }' +
       '.status-text.disconnected { color: #ef4444; }' +
-      '.dimensions { font-size: 10px; font-family: monospace; opacity: 0.7; color: ' +
+      '.dimensions { font-size: 10px; font-family: monospace; opacity: ' +
+      MUTED_OPACITY +
+      '; color: ' +
       theme.foreground +
       '; }' +
       '.theme-swatches { display: flex; gap: 4px; }' +
@@ -394,7 +398,9 @@
       '; }' +
       '.toolbar-btn { background: none; border: none; padding: 6px; border-radius: 6px; cursor: pointer; color: ' +
       theme.foreground +
-      '; opacity: 0.7; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
+      '; opacity: ' +
+      MUTED_OPACITY +
+      '; transition: opacity 0.15s, background 0.15s; display: flex; align-items: center; }' +
       '.toolbar-btn:hover { opacity: 1; background: rgba(128,128,128,0.15); }' +
       '.toolbar-btn.copied { opacity: 1; color: #10b981; }' +
       '#terminal { flex: 1; min-height: 0; overflow: hidden; }' +
@@ -748,7 +754,7 @@
             <span
               class="text-xs font-semibold uppercase tracking-wider"
               style:color="var(--color-base-content)"
-              style:opacity="0.7"
+              style:opacity={MUTED_OPACITY}
             >
               {t('terminal.title')}
             </span>
@@ -776,7 +782,7 @@
             <span
               class="text-[10px] font-mono tabular-nums"
               style:color="var(--color-base-content)"
-              style:opacity="0.7"
+              style:opacity={MUTED_OPACITY}
             >
               {termCols}&times;{termRows}
             </span>
@@ -790,7 +796,7 @@
             <button
               class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
               style:color="var(--color-base-content)"
-              style:opacity={showThemeMenu ? 1 : 0.7}
+              style:opacity={showThemeMenu ? 1 : MUTED_OPACITY}
               onclick={() => (showThemeMenu = !showThemeMenu)}
               title={t('terminal.colorTheme')}
               aria-label={t('terminal.colorTheme')}
@@ -863,7 +869,7 @@
             tabindex="-1"
             class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
-            style:opacity={isCopied ? 1 : 0.7}
+            style:opacity={isCopied ? 1 : MUTED_OPACITY}
             onclick={copyTerminalOutput}
             title={t('terminal.copySelection')}
             aria-label={t('terminal.copySelection')}
@@ -877,7 +883,7 @@
           <button
             class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
-            style:opacity="0.7"
+            style:opacity={MUTED_OPACITY}
             onclick={detachTerminal}
             title={t('terminal.detach')}
             aria-label={t('terminal.detach')}
@@ -888,7 +894,7 @@
             tabindex="-1"
             class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
-            style:opacity="0.7"
+            style:opacity={MUTED_OPACITY}
             onclick={toggleExpanded}
             title={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
             aria-label={isExpanded ? t('terminal.collapse') : t('terminal.expand')}
@@ -903,7 +909,7 @@
             tabindex="-1"
             class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 hover:opacity-80"
             style:color="var(--color-base-content)"
-            style:opacity="0.7"
+            style:opacity={MUTED_OPACITY}
             onclick={toggleFullscreen}
             title={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}
             aria-label={isFullscreen ? t('terminal.exitFullscreen') : t('terminal.fullscreen')}

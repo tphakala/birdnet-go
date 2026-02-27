@@ -15,9 +15,9 @@ const WCAG_AA_LARGE = 3.0; // Large text (18pt+ or 14pt+ bold)
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const cleanHex = hex.replace('#', '');
   return {
-    r: Number.parseInt(cleanHex.substr(0, 2), 16),
-    g: Number.parseInt(cleanHex.substr(2, 2), 16),
-    b: Number.parseInt(cleanHex.substr(4, 2), 16),
+    r: Number.parseInt(cleanHex.substring(0, 2), 16),
+    g: Number.parseInt(cleanHex.substring(2, 4), 16),
+    b: Number.parseInt(cleanHex.substring(4, 6), 16),
   };
 }
 
@@ -207,7 +207,7 @@ describe('Color Contrast Tests', () => {
     it('should test warning alert text contrast (amber-800 override)', () => {
       // Warning alert uses hardcoded #92400e (amber-800) for contrast
       const tintedBg = applyOpacity(lightTheme.warning, lightTheme.background, 0.15);
-      const ratio = getContrastRatio('#92400e', tintedBg);
+      const ratio = getContrastRatio(amber[800], tintedBg);
       console.log(`Warning alert text-on-tint contrast: ${ratio.toFixed(2)}`);
       expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
     });
@@ -216,7 +216,7 @@ describe('Color Contrast Tests', () => {
       // Status colors used as inline text on white backgrounds
       const statusColors = [
         { name: 'Error', color: lightTheme.error },
-        { name: 'Warning (amber-800)', color: '#92400e' },
+        { name: 'Warning (amber-800)', color: amber[800] },
       ];
 
       statusColors.forEach(({ name, color }) => {
@@ -226,6 +226,11 @@ describe('Color Contrast Tests', () => {
       });
     });
   });
+
+  // Tailwind amber color used for warning text override in alert-warning
+  const amber = {
+    800: '#92400e',
+  };
 
   // Tailwind slate palette colors used in system components
   const slate = {

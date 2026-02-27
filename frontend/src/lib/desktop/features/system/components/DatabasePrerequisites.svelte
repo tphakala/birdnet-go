@@ -64,7 +64,7 @@
     failed: 'bg-red-500/10 text-red-600 dark:text-red-400',
     error: 'bg-red-500/10 text-red-600 dark:text-red-400',
     warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    skipped: 'bg-slate-500/10 text-slate-500',
+    skipped: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
   };
 
   function statusLabel(status: string): string {
