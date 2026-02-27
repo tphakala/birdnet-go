@@ -55,7 +55,7 @@
     failed: 'text-red-600 dark:text-red-400',
     error: 'text-red-600 dark:text-red-400',
     warning: 'text-amber-600 dark:text-amber-400',
-    skipped: 'text-slate-500 dark:text-slate-400',
+    skipped: 'text-slate-600 dark:text-slate-400',
   };
 
   /** Status badge color classes */
@@ -64,7 +64,7 @@
     failed: 'bg-red-500/10 text-red-600 dark:text-red-400',
     error: 'bg-red-500/10 text-red-600 dark:text-red-400',
     warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    skipped: 'bg-slate-500/10 text-slate-500',
+    skipped: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
   };
 
   function statusLabel(status: string): string {
@@ -91,7 +91,7 @@
     <!-- Left: label + summary badges -->
     <div class="flex items-center gap-2 flex-wrap">
       <span
-        class="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]"
+        class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
       >
         {t('system.database.migration.prerequisites.title')}
       </span>
@@ -132,7 +132,7 @@
     <div class="flex items-center gap-2">
       <button
         type="button"
-        class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-[var(--color-text-tertiary)] disabled:opacity-50 disabled:cursor-not-allowed"
+        class="relative flex items-center gap-1 text-[10px] px-2 py-1 rounded cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={handleRefresh}
         disabled={isLoading || isRefreshing}
       >
@@ -142,7 +142,7 @@
 
       <button
         type="button"
-        class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-blue-500 text-[var(--color-text-tertiary)]"
+        class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-blue-500 text-slate-600 dark:text-slate-400"
         onclick={() => (showDetails = !showDetails)}
         aria-expanded={showDetails}
         aria-controls="prerequisites-details"
@@ -171,8 +171,8 @@
 
           <div class="flex-1 min-w-0">
             <span class="font-medium">{check.name}</span>
-            <span class="mx-1.5 text-[var(--color-text-tertiary)]">&mdash;</span>
-            <span class="text-[var(--color-text-secondary)]">{check.message}</span>
+            <span class="mx-1.5 text-slate-600 dark:text-slate-400">&mdash;</span>
+            <span class="text-slate-600 dark:text-slate-400">{check.message}</span>
           </div>
 
           {#if check.severity === 'critical' && check.status !== 'passed'}

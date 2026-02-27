@@ -23,7 +23,7 @@
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-400 dark:text-slate-500"
+    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
   >
     {t('system.database.dashboard.detectionRate.title')}
   </h3>
@@ -31,7 +31,7 @@
     <DetectionRateChart {data} color="#f59e0b" width={280} height={80} />
   </div>
   <div
-    class="grid grid-cols-3 text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500"
+    class="grid grid-cols-3 text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
   >
     <span
       >{t('system.database.dashboard.detectionRate.min')}
@@ -51,7 +51,7 @@
     <!-- SQLite: Create Backup button (only shown when handler is provided) -->
     <div class="mt-4 pt-3 border-t border-[var(--border-100)]">
       <button
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer border border-[var(--border-100)] text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer border border-[var(--border-100)] text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5"
         onclick={onBackup}
       >
         <Download class="w-3.5 h-3.5" />
@@ -62,13 +62,13 @@
     <!-- MySQL: Host info + backup note -->
     <div class="mt-4 pt-3 border-t border-[var(--border-100)]">
       <div class="flex items-center gap-2 text-sm">
-        <Database class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-        <span class="text-slate-400 dark:text-slate-500"
+        <Database class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+        <span class="text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.detectionRate.mysqlHost')}</span
         >
         <span class="font-mono text-xs font-medium ml-auto">{mysqlHost ?? ''}</span>
       </div>
-      <p class="mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+      <p class="mt-2 text-[10px] text-slate-600 dark:text-slate-400">
         {t('system.database.dashboard.detectionRate.mysqlBackupNote')}
       </p>
     </div>

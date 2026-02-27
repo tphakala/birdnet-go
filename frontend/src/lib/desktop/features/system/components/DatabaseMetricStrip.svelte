@@ -53,7 +53,7 @@
         <div class="p-1.5 rounded-lg bg-blue-500/10">
           <Zap class="w-4 h-4 text-blue-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.metrics.readLatency')}</span
         >
       </div>
@@ -64,7 +64,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={readLatencyHistory} color="#3b82f6" />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
       <span
         >{t('system.database.dashboard.metrics.avg')}
         {performance.read_latency_avg_ms.toFixed(1)}ms</span
@@ -85,7 +85,7 @@
         <div class="p-1.5 rounded-lg bg-violet-500/10">
           <Timer class="w-4 h-4 text-violet-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.metrics.writeLatency')}</span
         >
       </div>
@@ -96,7 +96,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={writeLatencyHistory} color="#8b5cf6" />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
       <span
         >{t('system.database.dashboard.metrics.avg')}
         {performance.write_latency_avg_ms.toFixed(1)}ms</span
@@ -117,7 +117,7 @@
         <div class="p-1.5 rounded-lg bg-emerald-500/10">
           <Activity class="w-4 h-4 text-emerald-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.metrics.queriesPerSec')}</span
         >
       </div>
@@ -126,7 +126,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={queriesPerSecHistory} color="#22c55e" />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
       <span
         >{t('system.database.dashboard.metrics.lastHour', {
           count: formatNumber(performance.queries_last_hour),
@@ -151,7 +151,7 @@
         >
           <Database class="w-4 h-4 {engine === 'mysql' ? 'text-orange-500' : 'text-emerald-500'}" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.metrics.database')}</span
         >
       </div>
@@ -171,15 +171,15 @@
     </div>
     <div class="space-y-2 text-sm flex-1">
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500">{t('system.database.stats.type')}</span>
+        <span class="text-slate-600 dark:text-slate-400">{t('system.database.stats.type')}</span>
         <span class="font-medium">{engineLabel}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500">{t('system.database.stats.size')}</span>
+        <span class="text-slate-600 dark:text-slate-400">{t('system.database.stats.size')}</span>
         <span class="font-mono tabular-nums font-medium">{formatBytesCompact(sizeBytes)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-400 dark:text-slate-500"
+        <span class="text-slate-600 dark:text-slate-400"
           >{t('system.database.stats.detections')}</span
         >
         <span class="font-mono tabular-nums font-medium">{formatNumber(totalDetections)}</span>

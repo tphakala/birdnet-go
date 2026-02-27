@@ -93,17 +93,17 @@
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
         {t('system.processInfo.title')}
       </h3>
       <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-slate-400 dark:text-slate-500"
+        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-slate-600 dark:text-slate-400"
       >
         {processes.length}
       </span>
     </div>
     <div class="flex items-center gap-2 cursor-pointer">
-      <span class="text-xs text-slate-400 dark:text-slate-500"
+      <span class="text-xs text-slate-600 dark:text-slate-400"
         >{t('system.processInfo.showAll')}</span
       >
       <button
@@ -130,7 +130,7 @@
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
             <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-400 dark:text-slate-500"
+              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-600 dark:text-slate-400"
               role="columnheader"
               tabindex="0"
               aria-sort={sortColumn === col.key
@@ -169,13 +169,13 @@
           >
             <td class="py-2 px-3">
               <div class="flex items-center gap-2">
-                <Terminal class="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                <Terminal class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
                 <div>
                   <div class="font-medium text-sm">
                     {proc.name === 'main' ? processName : proc.name}
                   </div>
                   <div
-                    class="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500"
+                    class="text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
                   >
                     {t('system.processInfo.headers.pid')}
                     {proc.pid}

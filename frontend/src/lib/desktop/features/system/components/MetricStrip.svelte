@@ -71,7 +71,7 @@
         <div class="p-1.5 rounded-lg bg-blue-500/10">
           <Cpu class="w-4 h-4 text-blue-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.metrics.cpu')}</span
         >
       </div>
@@ -80,7 +80,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={cpuHistory} color={sparklineColorCpu} />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
       <span>{cpuCores} {t('system.metrics.cores')}</span>
       <span>{cpuHistory.length} {t('system.metrics.samples')}</span>
     </div>
@@ -95,7 +95,7 @@
         <div class="p-1.5 rounded-lg bg-violet-500/10">
           <MemoryStick class="w-4 h-4 text-violet-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.metrics.memory')}</span
         >
       </div>
@@ -104,7 +104,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={memoryHistory} color={sparklineColorMemory} />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+    <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
       <span>{formatBytesCompact(memoryUsed)} / {formatBytesCompact(memoryTotal)}</span>
       <span>{formatBytesCompact(memoryAvailable)} {t('system.metrics.available')}</span>
     </div>
@@ -119,7 +119,7 @@
         <div class="p-1.5 rounded-lg bg-orange-500/10">
           <Thermometer class="w-4 h-4 text-orange-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.metrics.temperature')}</span
         >
       </div>
@@ -135,13 +135,13 @@
       <div class="flex-1 min-h-[28px]">
         <Sparkline data={temperatureHistory} color={sparklineColorTemperature} />
       </div>
-      <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+      <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
         <span>{t('system.metrics.min')} {tempMin.toFixed(1)}{tempSymbol}</span>
         <span>{t('system.metrics.max')} {tempMax.toFixed(1)}{tempSymbol}</span>
       </div>
     {:else}
       <div class="flex-1 min-h-[28px] flex items-center">
-        <span class="text-xs text-slate-500 dark:text-slate-400"
+        <span class="text-xs text-slate-600 dark:text-slate-400"
           >{t('system.metrics.tempUnavailable')}</span
         >
       </div>
@@ -157,7 +157,7 @@
         <div class="p-1.5 rounded-lg bg-teal-500/10">
           <Brain class="w-4 h-4 text-teal-500" />
         </div>
-        <span class="text-xs font-medium text-slate-500 dark:text-slate-400"
+        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
           >{t('system.metrics.inference')}</span
         >
       </div>
@@ -191,13 +191,13 @@
       <div class="flex-1 min-h-[28px]">
         <Sparkline data={inferenceHistory} color={sparklineColorInference} />
       </div>
-      <div class="flex justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+      <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
         <span>{t('system.metrics.avgTime')} {inferenceAvgMs.toFixed(1)}ms</span>
         <span>{inferenceHistory.length} {t('system.metrics.samples')}</span>
       </div>
     {:else}
       <div class="flex-1 min-h-[28px] flex items-center">
-        <span class="text-xs text-slate-500 dark:text-slate-400"
+        <span class="text-xs text-slate-600 dark:text-slate-400"
           >{t('system.metrics.noInference')}</span
         >
       </div>

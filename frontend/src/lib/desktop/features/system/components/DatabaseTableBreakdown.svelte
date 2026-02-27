@@ -62,16 +62,16 @@
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
         {t('system.database.dashboard.tables.title')}
       </h3>
       <span
-        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-400 dark:text-slate-500"
+        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-600 dark:text-slate-400"
       >
         {tables.length}
       </span>
     </div>
-    <span class="text-xs font-mono tabular-nums text-slate-400 dark:text-slate-500">
+    <span class="text-xs font-mono tabular-nums text-slate-600 dark:text-slate-400">
       {t('system.database.dashboard.tables.total')}: {formatBytesCompact(totalSize)}
     </span>
   </div>
@@ -89,7 +89,7 @@
                   ? 'ascending'
                   : 'descending'
                 : 'none'}
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-400 dark:text-slate-500"
+              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-600 dark:text-slate-400"
               onclick={() => toggleSort(col.key)}
               onkeydown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -114,7 +114,7 @@
           {/each}
           <th
             scope="col"
-            class="text-left py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500"
+            class="text-left py-2 px-3 text-xs font-medium text-slate-600 dark:text-slate-400"
           >
             {t('system.database.dashboard.tables.usage')}
           </th>
@@ -155,7 +155,7 @@
                     style:width="{pct}%"
                   ></div>
                 </div>
-                <span class="font-mono tabular-nums text-[10px] text-slate-400 dark:text-slate-500"
+                <span class="font-mono tabular-nums text-[10px] text-slate-600 dark:text-slate-400"
                   >{pct.toFixed(1)}%</span
                 >
               </div>

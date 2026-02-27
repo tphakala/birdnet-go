@@ -13,7 +13,7 @@
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-400 dark:text-slate-500"
+    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
   >
     {t('system.database.dashboard.locksWal.title')}
   </h3>
@@ -22,8 +22,8 @@
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Zap class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-          <span class="text-slate-400 dark:text-slate-500"
+          <Zap class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+          <span class="text-slate-600 dark:text-slate-400"
             >{t('system.database.dashboard.locksWal.busyTimeouts')}</span
           >
         </div>
@@ -40,7 +40,7 @@
     <!-- WAL stats -->
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
-        <span class="text-slate-400 dark:text-slate-500"
+        <span class="text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.locksWal.walSize')}</span
         >
         <span class="font-mono tabular-nums font-medium"
@@ -48,7 +48,7 @@
         >
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-slate-400 dark:text-slate-500"
+        <span class="text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.locksWal.checkpoints')}</span
         >
         <span class="font-mono tabular-nums font-medium"
@@ -56,13 +56,13 @@
         >
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-slate-400 dark:text-slate-500"
+        <span class="text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.locksWal.freelistPages')}</span
         >
         <span class="font-mono tabular-nums font-medium">{details.freelist_pages}</span>
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-slate-400 dark:text-slate-500"
+        <span class="text-slate-600 dark:text-slate-400"
           >{t('system.database.dashboard.locksWal.cacheSize')}</span
         >
         <span class="font-mono tabular-nums font-medium"
