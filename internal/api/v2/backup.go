@@ -20,6 +20,7 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"gorm.io/gorm"
 )
 
@@ -348,8 +349,9 @@ func (c *Controller) initBackupRoutes() {
 func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	dbType := ctx.QueryParam("type")
 	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
-		return c.HandleError(ctx, nil,
-			"Type must be 'legacy' or 'v2'", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Type must be 'legacy' or 'v2'", http.StatusBadRequest,
+			notification.MsgErrBackupInvalidType, nil)
 	}
 
 	// Check for existing active job
@@ -366,7 +368,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	// Get database info
 	dbPath, gormDB, err := c.getBackupDBInfo(dbType)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get backup database info", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, err, "Failed to get backup database info", http.StatusBadRequest,
+			notification.MsgErrBackupDBInfo, nil)
 	}
 
 	// Get source database size
@@ -380,15 +383,18 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	tempDir := os.TempDir()
 	usage, err := disk.Usage(tempDir)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to check disk space", http.StatusInternalServerError)
+		return c.HandleErrorWithKey(ctx, err, "Failed to check disk space", http.StatusInternalServerError,
+			notification.MsgErrBackupDiskSpace, nil)
 	}
 	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 	requiredSpace := uint64(dbSize) + backupDiskBuffer
 	if usage.Free < requiredSpace {
-		return c.HandleError(ctx, nil,
-			fmt.Sprintf("Not enough disk space. Need %s, have %s",
-				formatBytesUint64(requiredSpace), formatBytesUint64(usage.Free)),
-			http.StatusInsufficientStorage)
+		neededStr := formatBytesUint64(requiredSpace)
+		availableStr := formatBytesUint64(usage.Free)
+		return c.HandleErrorWithKey(ctx, nil,
+			fmt.Sprintf("Not enough disk space. Need %s, have %s", neededStr, availableStr),
+			http.StatusInsufficientStorage,
+			notification.MsgErrBackupInsufficientSpace, map[string]any{"needed": neededStr, "available": availableStr})
 	}
 
 	// Create the job
@@ -404,7 +410,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 				"existing_job_id": existingJob.ID,
 			})
 		}
-		return c.HandleError(ctx, err, "Failed to create backup job", http.StatusInternalServerError)
+		return c.HandleErrorWithKey(ctx, err, "Failed to create backup job", http.StatusInternalServerError,
+			notification.MsgErrBackupCreateFailed, nil)
 	}
 
 	c.logInfoIfEnabled("Backup job started",
@@ -454,8 +461,9 @@ func (c *Controller) GetBackupJobStatus(ctx echo.Context) error {
 
 	job, exists := backupJobManager.GetJob(jobID)
 	if !exists {
-		return c.HandleError(ctx, nil,
-			"Backup job not found or expired", http.StatusNotFound)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Backup job not found or expired", http.StatusNotFound,
+			notification.MsgErrBackupNotFound, nil)
 	}
 
 	// Update progress if still running
@@ -477,20 +485,23 @@ func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
 
 	job, exists := backupJobManager.GetJob(jobID)
 	if !exists {
-		return c.HandleError(ctx, nil,
-			"Backup job not found or expired", http.StatusNotFound)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Backup job not found or expired", http.StatusNotFound,
+			notification.MsgErrBackupNotFound, nil)
 	}
 
 	if job.Status != BackupStatusCompleted {
 		// NOTE: Previously included job.Status in response; removed for consistency.
 		// Frontend does not consume this field from the download endpoint.
-		return c.HandleError(ctx, nil, "Backup not ready for download", http.StatusConflict)
+		return c.HandleErrorWithKey(ctx, nil, "Backup not ready for download", http.StatusConflict,
+			notification.MsgErrBackupNotReady, nil)
 	}
 
 	// Verify temp file exists
 	if _, err := os.Stat(job.tempPath); err != nil {
-		return c.HandleError(ctx, err,
-			"Backup file not found - job may have expired", http.StatusGone)
+		return c.HandleErrorWithKey(ctx, err,
+			"Backup file not found - job may have expired", http.StatusGone,
+			notification.MsgErrBackupFileNotFound, nil)
 	}
 
 	// Set headers and serve file
@@ -511,8 +522,9 @@ func (c *Controller) CancelBackupJob(ctx echo.Context) error {
 	jobID := ctx.Param("id")
 
 	if !backupJobManager.DeleteJob(jobID) {
-		return c.HandleError(ctx, nil,
-			"Backup job not found", http.StatusNotFound)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Backup job not found", http.StatusNotFound,
+			notification.MsgErrBackupNotFound, nil)
 	}
 
 	c.logInfoIfEnabled("Backup job cancelled",
