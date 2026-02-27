@@ -1156,7 +1156,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		// Save comment using the datastore method for adding comments
 		err = c.AddComment(note.ID, req.Comment)
 		if err != nil {
-			return c.HandleError(ctx, err, fmt.Sprintf("Failed to add comment: %v", err), http.StatusInternalServerError)
+			return c.HandleError(ctx, err, "Failed to add comment", http.StatusInternalServerError)
 		}
 	}
 
@@ -1169,12 +1169,12 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	if verification.IsSet {
 		// Save review using the datastore method for reviews
 		if err := c.AddReview(note.ID, verification.Verified); err != nil {
-			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update verification: %v", err), http.StatusInternalServerError)
+			return c.HandleError(ctx, err, "Failed to update verification", http.StatusInternalServerError)
 		}
 
 		// Handle ignored species
 		if err := c.addToIgnoredSpecies(req.Verified, req.IgnoreSpecies); err != nil {
-			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+			return c.HandleError(ctx, err, "Failed to update ignored species", http.StatusInternalServerError)
 		}
 	}
 
