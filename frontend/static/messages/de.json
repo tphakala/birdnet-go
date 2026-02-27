@@ -3619,5 +3619,90 @@
     "detached": "Terminal ist abgetrennt",
     "detachedDescription": "Das Terminal läuft in einem separaten Fenster. Schließen Sie dieses Fenster, um es hierher zurückzuholen.",
     "reattach": "Wieder anhängen"
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "Too many login attempts. Please try again in 15 minutes.",
+      "credentialsRequired": "Username and password are required",
+      "invalidCredentials": "Invalid credentials",
+      "missingCode": "Missing authorization code",
+      "serviceUnavailable": "Authentication service unavailable. Please try again later.",
+      "timeout": "Login timed out. Please try again.",
+      "exchangeFailed": "Unable to complete login at this time. Please try again.",
+      "sessionError": "Session error during login. Please try again."
+    },
+    "alert": {
+      "v2Required": "Alert rules require the enhanced (v2) database",
+      "invalidID": "Invalid rule ID",
+      "notFound": "Alert rule not found",
+      "invalidBody": "Invalid request body",
+      "nameRequired": "Rule name is required",
+      "typesRequired": "Object type and trigger type are required",
+      "duplicateName": "A rule with this name already exists",
+      "invalidJSON": "Invalid JSON"
+    },
+    "detection": {
+      "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"
+    },
+    "backup": {
+      "invalidType": "Type must be 'legacy' or 'v2'",
+      "alreadyRunning": "Backup already in progress",
+      "dbInfoFailed": "Failed to get database info",
+      "diskSpaceCheck": "Failed to check disk space",
+      "insufficientSpace": "Not enough disk space. Need {needed}, have {available}",
+      "createFailed": "Failed to create backup job",
+      "notFound": "Backup job not found or expired",
+      "notReady": "Backup not ready for download",
+      "fileNotFound": "Backup file not found — job may have expired",
+      "sqliteOnly": "Backup only available for SQLite databases",
+      "dbNotConfigured": "Database not configured",
+      "unsupportedType": "Cannot perform backup on this datastore type",
+      "v2NotInitialized": "V2 database not initialized"
+    },
+    "migration": {
+      "notConfigured": "Migration is not configured",
+      "preFlightFailed": "Pre-flight checks failed",
+      "invalidBody": "Invalid request body",
+      "recordCountFailed": "Failed to determine total records",
+      "startFailed": "Failed to start migration",
+      "initFailed": "Failed to initialize migration",
+      "resumeFailed": "Failed to resume migration"
+    },
+    "cleanup": {
+      "noLegacyDB": "No legacy database found",
+      "accessFailed": "Cannot access legacy database",
+      "restartRequired": "Application must be restarted after migration before cleanup is available",
+      "safetyCheck": "Target file appears to be a V2 database — cleanup not allowed for safety",
+      "noLegacyTables": "No legacy tables found",
+      "restartNeeded": "Cannot cleanup: Application must be restarted after migration",
+      "alreadyRunning": "Cleanup already in progress"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT is not enabled in settings",
+      "mqttNotConfigured": "MQTT broker not configured",
+      "mqttMetricsUnavailable": "Metrics instance not available for MQTT test",
+      "mqttClientFailed": "Failed to create MQTT client",
+      "birdweatherDisabled": "BirdWeather integration is not enabled",
+      "birdweatherNotConfigured": "BirdWeather station ID not configured",
+      "birdweatherClientFailed": "Failed to create BirdWeather client",
+      "noWeatherProvider": "No weather provider selected",
+      "openWeatherKeyRequired": "OpenWeather API key is required",
+      "processorUnavailable": "Processor not available",
+      "discoveryFailed": "Failed to trigger Home Assistant discovery"
+    },
+    "notification": {
+      "serviceUnavailable": "Notification service not available",
+      "idRequired": "Notification ID is required",
+      "notFound": "Notification not found",
+      "hostRequired": "Host parameter is required",
+      "invalidHost": "Invalid host parameter",
+      "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+    },
+    "debug": {
+      "notEnabled": "Debug mode not enabled"
+    },
+    "terminal": {
+      "disabled": "Terminal is disabled. Enable it in settings."
+    }
   }
 }

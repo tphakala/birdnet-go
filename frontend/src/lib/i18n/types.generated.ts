@@ -2542,7 +2542,70 @@ export type TranslationKey =
   | 'components.datePicker.status.error'
   | 'detection.actions.back'
   | 'detection.actions.review'
-  | 'detection.actions.download';
+  | 'detection.actions.download'
+  | 'errors.auth.tooManyAttempts'
+  | 'errors.auth.credentialsRequired'
+  | 'errors.auth.invalidCredentials'
+  | 'errors.auth.missingCode'
+  | 'errors.auth.serviceUnavailable'
+  | 'errors.auth.timeout'
+  | 'errors.auth.exchangeFailed'
+  | 'errors.auth.sessionError'
+  | 'errors.alert.v2Required'
+  | 'errors.alert.invalidID'
+  | 'errors.alert.notFound'
+  | 'errors.alert.invalidBody'
+  | 'errors.alert.nameRequired'
+  | 'errors.alert.typesRequired'
+  | 'errors.alert.duplicateName'
+  | 'errors.alert.invalidJSON'
+  | 'errors.detection.invalidDate' // params: paramName
+  | 'errors.backup.invalidType'
+  | 'errors.backup.alreadyRunning'
+  | 'errors.backup.dbInfoFailed'
+  | 'errors.backup.diskSpaceCheck'
+  | 'errors.backup.insufficientSpace' // params: needed, available
+  | 'errors.backup.createFailed'
+  | 'errors.backup.notFound'
+  | 'errors.backup.notReady'
+  | 'errors.backup.fileNotFound'
+  | 'errors.backup.sqliteOnly'
+  | 'errors.backup.dbNotConfigured'
+  | 'errors.backup.unsupportedType'
+  | 'errors.backup.v2NotInitialized'
+  | 'errors.migration.notConfigured'
+  | 'errors.migration.preFlightFailed'
+  | 'errors.migration.invalidBody'
+  | 'errors.migration.recordCountFailed'
+  | 'errors.migration.startFailed'
+  | 'errors.migration.initFailed'
+  | 'errors.migration.resumeFailed'
+  | 'errors.cleanup.noLegacyDB'
+  | 'errors.cleanup.accessFailed'
+  | 'errors.cleanup.restartRequired'
+  | 'errors.cleanup.safetyCheck'
+  | 'errors.cleanup.noLegacyTables'
+  | 'errors.cleanup.restartNeeded'
+  | 'errors.cleanup.alreadyRunning'
+  | 'errors.integration.mqttDisabled'
+  | 'errors.integration.mqttNotConfigured'
+  | 'errors.integration.mqttMetricsUnavailable'
+  | 'errors.integration.mqttClientFailed'
+  | 'errors.integration.birdweatherDisabled'
+  | 'errors.integration.birdweatherNotConfigured'
+  | 'errors.integration.birdweatherClientFailed'
+  | 'errors.integration.noWeatherProvider'
+  | 'errors.integration.openWeatherKeyRequired'
+  | 'errors.integration.processorUnavailable'
+  | 'errors.integration.discoveryFailed'
+  | 'errors.notification.serviceUnavailable'
+  | 'errors.notification.idRequired'
+  | 'errors.notification.notFound'
+  | 'errors.notification.hostRequired'
+  | 'errors.notification.invalidHost'
+  | 'errors.notification.rateLimit'
+  | 'errors.debug.notEnabled'
+  | 'errors.terminal.disabled';
 
 /**
  * Parameter types for translations that require parameters
@@ -2764,6 +2827,8 @@ export type TranslationParams = {
   'components.datePicker.aria.monthChanged': { month: string | number; year: string | number };
   'components.datePicker.aria.dayUnavailable': { day: string | number };
   'components.datePicker.aria.todayButton': { today: string | number };
+  'errors.detection.invalidDate': { paramName: string | number };
+  'errors.backup.insufficientSpace': { needed: string | number; available: string | number };
 };
 
 /**

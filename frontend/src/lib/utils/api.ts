@@ -15,6 +15,7 @@ import {
   refreshCsrfToken,
 } from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
+import { t } from '$lib/i18n';
 
 const logger = loggers.api;
 
@@ -127,23 +128,37 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
 
       // SECURITY: Only extract safe error fields - never expose raw server errors
       if (errorData && typeof errorData === 'object') {
-        // Only use server message for specific safe cases
-        if (response.status === 422 && errorData.validationErrors) {
-          // For validation errors, we can show field-specific messages
-          serverMessage = 'Validation failed. Please check your input.';
-        } else if (response.status === 409 && errorData.conflict) {
-          serverMessage = 'This action conflicts with existing data.';
+        // Try i18n translation via error_key first
+        if (errorData.error_key && typeof errorData.error_key === 'string') {
+          const params =
+            errorData.error_params &&
+            typeof errorData.error_params === 'object' &&
+            !Array.isArray(errorData.error_params)
+              ? (errorData.error_params as Record<string, unknown>)
+              : {};
+          const translated = t(errorData.error_key, params);
+          if (translated !== errorData.error_key) {
+            serverMessage = translated;
+          }
         }
-        // For all other cases, use secure generic messages
+
+        // Fall back to specific safe cases for 422/409
+        if (!serverMessage) {
+          if (response.status === 422 && errorData.validationErrors) {
+            serverMessage = 'Validation failed. Please check your input.';
+          } else if (response.status === 409 && errorData.conflict) {
+            serverMessage = 'This action conflicts with existing data.';
+          }
+        }
       }
     } catch (parseError) {
       // If we can't parse the error response, use generic message
       logger.debug('Could not parse error response:', parseError);
     }
 
-    // SECURITY: Always use secure error messages
-    const secureMessage = getSecureErrorMessage(response.status, serverMessage);
-    throw new ApiError(secureMessage, response.status, response);
+    // Use translated message if available, otherwise fall back to secure generic message
+    const userMessage = serverMessage || getSecureErrorMessage(response.status);
+    throw new ApiError(userMessage, response.status, response);
   }
 
   // Handle empty responses

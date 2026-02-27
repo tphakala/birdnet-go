@@ -69,4 +69,90 @@ const (
 	MsgCleanupCompleteMessage = "notifications.content.cleanup.completeMessage"
 	MsgCleanupFailedTitle     = "notifications.content.cleanup.failedTitle"
 	MsgCleanupFailedMessage   = "notifications.content.cleanup.failedMessage"
+
+	// API error response keys — used in ErrorResponse.ErrorKey for frontend translation.
+	// Namespace: errors.<handler>.<errorType>
+
+	// Auth errors
+	MsgErrAuthTooManyAttempts     = "errors.auth.tooManyAttempts"
+	MsgErrAuthCredentialsRequired = "errors.auth.credentialsRequired"
+	MsgErrAuthInvalidCredentials  = "errors.auth.invalidCredentials"
+	MsgErrAuthMissingCode         = "errors.auth.missingCode"
+	MsgErrAuthServiceUnavailable  = "errors.auth.serviceUnavailable"
+	MsgErrAuthTimeout             = "errors.auth.timeout"
+	MsgErrAuthExchangeFailed      = "errors.auth.exchangeFailed"
+	MsgErrAuthSessionError        = "errors.auth.sessionError"
+
+	// Alert CRUD errors
+	MsgErrAlertV2Required    = "errors.alert.v2Required"
+	MsgErrAlertInvalidID     = "errors.alert.invalidID"
+	MsgErrAlertNotFound      = "errors.alert.notFound"
+	MsgErrAlertInvalidBody   = "errors.alert.invalidBody"
+	MsgErrAlertNameRequired  = "errors.alert.nameRequired"
+	MsgErrAlertTypesRequired = "errors.alert.typesRequired"
+	MsgErrAlertDuplicateName = "errors.alert.duplicateName"
+	MsgErrAlertInvalidJSON   = "errors.alert.invalidJSON"
+
+	// Detection errors
+	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"
+
+	// Backup errors
+	MsgErrBackupInvalidType       = "errors.backup.invalidType"
+	MsgErrBackupAlreadyRunning    = "errors.backup.alreadyRunning"
+	MsgErrBackupDBInfo            = "errors.backup.dbInfoFailed"
+	MsgErrBackupDiskSpace         = "errors.backup.diskSpaceCheck"
+	MsgErrBackupInsufficientSpace = "errors.backup.insufficientSpace"
+	MsgErrBackupCreateFailed      = "errors.backup.createFailed"
+	MsgErrBackupNotFound          = "errors.backup.notFound"
+	MsgErrBackupNotReady          = "errors.backup.notReady"
+	MsgErrBackupFileNotFound      = "errors.backup.fileNotFound"
+	MsgErrBackupSQLiteOnly        = "errors.backup.sqliteOnly"
+	MsgErrBackupDBNotConfigured   = "errors.backup.dbNotConfigured"
+	MsgErrBackupUnsupportedType   = "errors.backup.unsupportedType"
+	MsgErrBackupV2NotInit         = "errors.backup.v2NotInitialized"
+
+	// Migration errors
+	MsgErrMigrationNotConfigured = "errors.migration.notConfigured"
+	MsgErrMigrationPreFlight     = "errors.migration.preFlightFailed"
+	MsgErrMigrationInvalidBody   = "errors.migration.invalidBody"
+	MsgErrMigrationRecordCount   = "errors.migration.recordCountFailed"
+	MsgErrMigrationStartFailed   = "errors.migration.startFailed"
+	MsgErrMigrationInitFailed    = "errors.migration.initFailed"
+	MsgErrMigrationResumeFailed  = "errors.migration.resumeFailed"
+
+	// Legacy cleanup errors
+	MsgErrCleanupNoLegacyDB      = "errors.cleanup.noLegacyDB"
+	MsgErrCleanupAccessFailed    = "errors.cleanup.accessFailed"
+	MsgErrCleanupRestartRequired = "errors.cleanup.restartRequired"
+	MsgErrCleanupSafetyCheck     = "errors.cleanup.safetyCheck"
+	MsgErrCleanupNoLegacyTables  = "errors.cleanup.noLegacyTables"
+	MsgErrCleanupRestartNeeded   = "errors.cleanup.restartNeeded"
+	MsgErrCleanupAlreadyRunning  = "errors.cleanup.alreadyRunning"
+
+	// Integration test errors
+	MsgErrIntegMQTTDisabled      = "errors.integration.mqttDisabled"
+	MsgErrIntegMQTTNotConfigured = "errors.integration.mqttNotConfigured"
+	MsgErrIntegMQTTMetrics       = "errors.integration.mqttMetricsUnavailable"
+	MsgErrIntegMQTTClientFailed  = "errors.integration.mqttClientFailed"
+	MsgErrIntegBWDisabled        = "errors.integration.birdweatherDisabled"
+	MsgErrIntegBWNotConfigured   = "errors.integration.birdweatherNotConfigured"
+	MsgErrIntegBWClientFailed    = "errors.integration.birdweatherClientFailed"
+	MsgErrIntegNoWeatherProvider = "errors.integration.noWeatherProvider"
+	MsgErrIntegOWKeyRequired     = "errors.integration.openWeatherKeyRequired"
+	MsgErrIntegProcessorUnavail  = "errors.integration.processorUnavailable"
+	MsgErrIntegDiscoveryFailed   = "errors.integration.discoveryFailed"
+
+	// Notification errors
+	MsgErrNotifServiceUnavailable = "errors.notification.serviceUnavailable"
+	MsgErrNotifIDRequired         = "errors.notification.idRequired"
+	MsgErrNotifNotFound           = "errors.notification.notFound"
+	MsgErrNotifHostRequired       = "errors.notification.hostRequired"
+	MsgErrNotifInvalidHost        = "errors.notification.invalidHost"
+	MsgErrNotifRateLimit          = "errors.notification.rateLimit"
+
+	// Debug errors
+	MsgErrDebugNotEnabled = "errors.debug.notEnabled"
+
+	// Terminal errors
+	MsgErrTerminalDisabled = "errors.terminal.disabled"
 )
