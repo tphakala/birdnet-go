@@ -3444,7 +3444,6 @@
     },
     "audioPlayer": {
       "errors": {
-        "generationFailed": "Generovanie zlyhalo",
         "generationFailedStatus": "Generovanie zlyhalo so stavom {status}",
         "spectrogramFailed": "Nepodarilo sa vygenerovať spektrogram"
       }

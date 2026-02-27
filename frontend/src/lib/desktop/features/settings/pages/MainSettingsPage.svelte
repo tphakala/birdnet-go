@@ -1380,7 +1380,7 @@
       const decoder = new TextDecoder();
 
       if (!reader) {
-        throw new Error('Failed to read response stream');
+        throw new Error(t('settings.integration.errors.responseStreamFailed'));
       }
 
       while (true) {
@@ -1434,9 +1434,9 @@
       if (weatherTestState.stages.length === 0) {
         weatherTestState.stages.push({
           id: 'error',
-          title: 'Connection Error',
+          title: t('settings.integration.errors.connectionError'),
           status: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          error: error instanceof Error ? error.message : t('common.errors.unknownError'),
         });
       } else {
         // Mark current stage as failed
@@ -1446,7 +1446,7 @@
           const updatedStage = {
             ...lastStage,
             status: 'error' as const,
-            error: error instanceof Error ? error.message : 'Unknown error occurred',
+            error: error instanceof Error ? error.message : t('common.errors.unknownError'),
           };
           weatherTestState.stages.splice(lastIndex, 1, updatedStage);
         }
