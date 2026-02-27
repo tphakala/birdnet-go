@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { t } from '$lib/i18n';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type {
     DetectionsListData,
@@ -138,7 +139,7 @@
         dashboardSettings: data.dashboardSettings,
       };
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to fetch detections';
+      error = err instanceof Error ? err.message : t('detections.errors.fetchFailed');
       logger.error('Error fetching detections:', err);
     } finally {
       loading = false;

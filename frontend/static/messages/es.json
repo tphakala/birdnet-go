@@ -195,6 +195,9 @@
         "lockStatusFailed": "Error al actualizar el estado de bloqueo. Por favor, inténtalo de nuevo.",
         "verificationFailed": "Error al actualizar el estado de verificación. Por favor, inténtalo de nuevo."
       }
+    },
+    "errors": {
+      "unknownError": "Error desconocido"
     }
   },
   "navigation": {
@@ -737,7 +740,8 @@
       "loginRequired": "Inicie sesión para ver esta detección.",
       "serverError": "Error del servidor. Inténtelo de nuevo más tarde o contacte con soporte si el problema persiste.",
       "loadFailed": "Error al cargar la detección (Error {status}). Actualice la página.",
-      "noIdProvided": "No se proporcionó ID de detección."
+      "noIdProvided": "No se proporcionó ID de detección.",
+      "fetchFailed": "Error al obtener las detecciones"
     },
     "viewToggle": {
       "label": "Modo de vista",
@@ -1413,6 +1417,9 @@
         "loadingTrends": "Cargando datos de tendencias",
         "loadingDiversity": "Cargando datos de diversidad"
       }
+    },
+    "errors": {
+      "loadFailed": "Error al cargar los datos de análisis. Por favor, inténtelo de nuevo."
     }
   },
   "settings": {
@@ -1608,6 +1615,12 @@
             "location": "Ubicación",
             "connected": "Conectado",
             "disconnected": "Desconectado"
+          },
+          "errors": {
+            "backupStartFailed": "Error al iniciar la copia de seguridad",
+            "backupStatusFailed": "Error al obtener el estado de la copia de seguridad",
+            "backupFailed": "Copia de seguridad fallida",
+            "backupDownloadFailed": "Error al descargar la copia de seguridad"
           }
         },
         "interface": {
@@ -2709,6 +2722,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Error de conexión",
+        "responseStreamFailed": "Error al leer el flujo de respuesta"
       }
     },
     "species": {
@@ -3354,6 +3371,12 @@
           "description": "Notifica cuando falla una carga a BirdWeather"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Error al cargar la configuración",
+      "saveFailed": "Error al guardar la configuración",
+      "databaseStatsFailed": "Error al cargar las estadísticas de la base de datos",
+      "csvDownloadFailed": "Error al descargar el CSV"
     }
   },
   "auth": {
@@ -3586,6 +3609,17 @@
       "status": {
         "loading": "Cargando calendario...",
         "error": "Error al cargar el calendario"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generación fallida con estado {status}",
+        "spectrogramFailed": "Error al generar el espectrograma"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Error al cargar los datos meteorológicos"
       }
     }
   },

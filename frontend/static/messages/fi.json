@@ -185,6 +185,9 @@
         "lockStatusFailed": "Lukitustilan päivitys epäonnistui. Yritä uudelleen.",
         "verificationFailed": "Todennustilan päivitys epäonnistui. Yritä uudelleen."
       }
+    },
+    "errors": {
+      "unknownError": "Tuntematon virhe"
     }
   },
   "navigation": {
@@ -663,7 +666,8 @@
       "loginRequired": "Kirjaudu sisään tarkastellaksesi tätä havaintoa.",
       "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen tai ota yhteyttä tukeen, jos ongelma jatkuu.",
       "loadFailed": "Havainnon lataaminen epäonnistui (Virhe {status}). Päivitä sivu.",
-      "noIdProvided": "Havainnon tunnistetta ei annettu."
+      "noIdProvided": "Havainnon tunnistetta ei annettu.",
+      "fetchFailed": "Havaintojen hakeminen epäonnistui"
     },
     "weather": {
       "title": "Weather Information",
@@ -1413,6 +1417,9 @@
       "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",
       "noSpeciesFound": "Lajeja ei löytynyt valitulla aikavälillä",
       "detections": "{count} havaintoa"
+    },
+    "errors": {
+      "loadFailed": "Analytiikkatietojen lataaminen epäonnistui. Yritä uudelleen."
     }
   },
   "settings": {
@@ -1608,6 +1615,12 @@
             "location": "Sijainti",
             "connected": "Yhdistetty",
             "disconnected": "Ei yhteyttä"
+          },
+          "errors": {
+            "backupStartFailed": "Varmuuskopioinnin käynnistäminen epäonnistui",
+            "backupStatusFailed": "Varmuuskopioinnin tilan hakeminen epäonnistui",
+            "backupFailed": "Varmuuskopiointi epäonnistui",
+            "backupDownloadFailed": "Varmuuskopion lataaminen epäonnistui"
           }
         },
         "interface": {
@@ -2709,6 +2722,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Yhteysvirhe",
+        "responseStreamFailed": "Vastausvirran lukeminen epäonnistui"
       }
     },
     "species": {
@@ -3354,6 +3371,12 @@
           "description": "Ilmoittaa kun BirdWeather-lähetys epäonnistuu"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Asetusten lataaminen epäonnistui",
+      "saveFailed": "Asetusten tallentaminen epäonnistui",
+      "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
+      "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     }
   },
   "auth": {
@@ -3586,6 +3609,17 @@
       "status": {
         "loading": "Ladataan kalenteria...",
         "error": "Virhe kalenterin lataamisessa"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Luonti epäonnistui tilakoodilla {status}",
+        "spectrogramFailed": "Spektrogrammin luonti epäonnistui"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Säätietojen lataaminen epäonnistui"
       }
     }
   },

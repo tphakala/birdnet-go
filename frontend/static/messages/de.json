@@ -185,6 +185,9 @@
         "lockStatusFailed": "Fehler beim Aktualisieren des Sperrstatus. Bitte versuchen Sie es erneut.",
         "verificationFailed": "Fehler beim Aktualisieren des Verifizierungsstatus. Bitte versuchen Sie es erneut."
       }
+    },
+    "errors": {
+      "unknownError": "Unbekannter Fehler aufgetreten"
     }
   },
   "pageTitle": {
@@ -737,7 +740,8 @@
       "loginRequired": "Bitte melden Sie sich an, um diese Erkennung anzuzeigen.",
       "serverError": "Serverfehler. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support, wenn das Problem weiterhin besteht.",
       "loadFailed": "Fehler beim Laden der Erkennung (Fehler {status}). Bitte aktualisieren Sie die Seite.",
-      "noIdProvided": "Keine Erkennungs-ID angegeben."
+      "noIdProvided": "Keine Erkennungs-ID angegeben.",
+      "fetchFailed": "Erkennungen konnten nicht abgerufen werden"
     },
     "viewToggle": {
       "label": "Ansichtsmodus",
@@ -1413,6 +1417,9 @@
         "loadingTrends": "Trenddaten werden geladen",
         "loadingDiversity": "Diversitätsdaten werden geladen"
       }
+    },
+    "errors": {
+      "loadFailed": "Analysedaten konnten nicht geladen werden. Bitte versuchen Sie es erneut."
     }
   },
   "settings": {
@@ -1608,6 +1615,12 @@
             "location": "Speicherort",
             "connected": "Verbunden",
             "disconnected": "Getrennt"
+          },
+          "errors": {
+            "backupStartFailed": "Sicherung konnte nicht gestartet werden",
+            "backupStatusFailed": "Sicherungsstatus konnte nicht abgerufen werden",
+            "backupFailed": "Sicherung fehlgeschlagen",
+            "backupDownloadFailed": "Sicherung konnte nicht heruntergeladen werden"
           }
         },
         "interface": {
@@ -2401,6 +2414,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Verbindungsfehler",
+        "responseStreamFailed": "Antwort-Stream konnte nicht gelesen werden"
       }
     },
     "audio": {
@@ -3354,6 +3371,12 @@
           "description": "Benachrichtigt, wenn ein BirdWeather-Upload fehlschlägt"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Einstellungen konnten nicht geladen werden",
+      "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+      "databaseStatsFailed": "Datenbankstatistiken konnten nicht geladen werden",
+      "csvDownloadFailed": "CSV-Download fehlgeschlagen"
     }
   },
   "auth": {
@@ -3586,6 +3609,17 @@
       "status": {
         "loading": "Kalender wird geladen...",
         "error": "Fehler beim Laden des Kalenders"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Erzeugung fehlgeschlagen mit Status {status}",
+        "spectrogramFailed": "Spektrogramm konnte nicht erzeugt werden"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Wetterdaten konnten nicht geladen werden"
       }
     }
   },

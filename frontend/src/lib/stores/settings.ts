@@ -963,7 +963,7 @@ export const settingsActions = {
         isLoading: false,
       }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load settings';
+      const errorMessage = error instanceof Error ? error.message : t('settings.errors.loadFailed');
       settingsStore.update(state => ({
         ...state,
         isLoading: false,
@@ -1051,7 +1051,7 @@ export const settingsActions = {
       // Show success toast
       toastActions.success(t('notifications.content.settings.savedSuccessfully'));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to save settings';
+      const errorMessage = error instanceof Error ? error.message : t('settings.errors.saveFailed');
       settingsStore.update(state => ({
         ...state,
         isSaving: false,

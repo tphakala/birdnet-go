@@ -202,7 +202,7 @@
       } else {
         updateStatus(
           t('settings.support.supportReport.statusMessages.generateFailed', {
-            message: data.message || 'Unknown error',
+            message: data.message || t('common.errors.unknownError'),
           }),
           'error',
           0

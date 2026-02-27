@@ -185,6 +185,9 @@
         "lockStatusFailed": "Nepodarilo sa aktualizovať stav uzamknutia. Skúste to znova.",
         "verificationFailed": "Nepodarilo sa aktualizovať stav overenia. Skúste to znova."
       }
+    },
+    "errors": {
+      "unknownError": "Vyskytla sa neznáma chyba"
     }
   },
   "pageTitle": {
@@ -737,7 +740,8 @@
       "loginRequired": "Prihláste sa, aby ste si mohli pozrieť túto detekciu.",
       "serverError": "Chyba servera. Skúste to neskôr alebo kontaktujte podporu, ak problém pretrváva.",
       "loadFailed": "Nepodarilo sa načítať detekciu (Chyba {status}). Skúste obnoviť stránku.",
-      "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie."
+      "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie.",
+      "fetchFailed": "Nepodarilo sa načítať detekcie"
     }
   },
   "species": {
@@ -1244,6 +1248,9 @@
         "loadingAnalytics": "Načítavajú sa analytické dáta",
         "loadingTrends": "Načítavajú sa dáta trendov"
       }
+    },
+    "errors": {
+      "loadFailed": "Nepodarilo sa načítať analytické údaje. Skúste to znova."
     }
   },
   "settings": {
@@ -1451,6 +1458,12 @@
             "location": "Umiestnenie",
             "connected": "Pripojené",
             "disconnected": "Odpojené"
+          },
+          "errors": {
+            "backupStartFailed": "Nepodarilo sa spustiť zálohovanie",
+            "backupStatusFailed": "Nepodarilo sa získať stav zálohovania",
+            "backupFailed": "Zálohovanie zlyhalo",
+            "backupDownloadFailed": "Nepodarilo sa stiahnuť zálohu"
           }
         },
         "interface": {
@@ -2238,6 +2251,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Chyba pripojenia",
+        "responseStreamFailed": "Nepodarilo sa prečítať prúd odpovede"
       }
     },
     "audio": {
@@ -3185,6 +3202,12 @@
           "description": "Upozorní, keď nahrávanie do BirdWeather zlyhá"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Nepodarilo sa načítať nastavenia",
+      "saveFailed": "Nepodarilo sa uložiť nastavenia",
+      "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
+      "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
     }
   },
   "auth": {
@@ -3417,6 +3440,17 @@
       "status": {
         "loading": "Načítava sa kalendár...",
         "error": "Chyba pri načítaní kalendára"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generovanie zlyhalo so stavom {status}",
+        "spectrogramFailed": "Nepodarilo sa vygenerovať spektrogram"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Nepodarilo sa načítať údaje o počasí"
       }
     }
   },

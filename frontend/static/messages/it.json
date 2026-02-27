@@ -185,6 +185,9 @@
         "lockStatusFailed": "Impossibile aggiornare lo stato di blocco. Riprova.",
         "verificationFailed": "Impossibile aggiornare lo stato di verifica. Riprova."
       }
+    },
+    "errors": {
+      "unknownError": "Errore sconosciuto"
     }
   },
   "pageTitle": {
@@ -737,7 +740,8 @@
       "loginRequired": "Effettua il login per visualizzare questo rilevamento.",
       "serverError": "Errore del server. Riprova più tardi o contatta il supporto se il problema persiste.",
       "loadFailed": "Impossibile caricare il rilevamento (Errore {status}). Prova ad aggiornare la pagina.",
-      "noIdProvided": "Nessun ID di rilevamento fornito."
+      "noIdProvided": "Nessun ID di rilevamento fornito.",
+      "fetchFailed": "Recupero dei rilevamenti non riuscito"
     }
   },
   "species": {
@@ -1210,6 +1214,9 @@
         "loadingAnalytics": "Caricamento dati analitici",
         "loadingTrends": "Caricamento dati trend"
       }
+    },
+    "errors": {
+      "loadFailed": "Caricamento dei dati di analisi non riuscito. Riprova."
     }
   },
   "settings": {
@@ -1417,6 +1424,12 @@
             "location": "Posizione",
             "connected": "Connesso",
             "disconnected": "Disconnesso"
+          },
+          "errors": {
+            "backupStartFailed": "Avvio del backup non riuscito",
+            "backupStatusFailed": "Recupero dello stato del backup non riuscito",
+            "backupFailed": "Backup non riuscito",
+            "backupDownloadFailed": "Download del backup non riuscito"
           }
         },
         "interface": {
@@ -2204,6 +2217,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Errore di connessione",
+        "responseStreamFailed": "Lettura del flusso di risposta non riuscita"
       }
     },
     "audio": {
@@ -3151,6 +3168,12 @@
           "description": "Notifica quando un caricamento BirdWeather non riesce"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Caricamento delle impostazioni non riuscito",
+      "saveFailed": "Salvataggio delle impostazioni non riuscito",
+      "databaseStatsFailed": "Caricamento delle statistiche del database non riuscito",
+      "csvDownloadFailed": "Download del CSV non riuscito"
     }
   },
   "auth": {
@@ -3383,6 +3406,17 @@
       "status": {
         "loading": "Caricamento calendario...",
         "error": "Errore caricamento calendario"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generazione non riuscita con stato {status}",
+        "spectrogramFailed": "Generazione dello spettrogramma non riuscita"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Caricamento dei dati meteo non riuscito"
       }
     }
   },

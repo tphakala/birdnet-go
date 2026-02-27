@@ -185,6 +185,9 @@
         "lockStatusFailed": "Échec de la mise à jour du statut de verrouillage. Veuillez réessayer.",
         "verificationFailed": "Échec de la mise à jour du statut de vérification. Veuillez réessayer."
       }
+    },
+    "errors": {
+      "unknownError": "Erreur inconnue"
     }
   },
   "pageTitle": {
@@ -737,7 +740,8 @@
       "loginRequired": "Veuillez vous connecter pour voir cette détection.",
       "serverError": "Erreur serveur. Veuillez réessayer plus tard ou contacter le support si le problème persiste.",
       "loadFailed": "Échec du chargement de la détection (Erreur {status}). Veuillez actualiser la page.",
-      "noIdProvided": "Aucun identifiant de détection fourni."
+      "noIdProvided": "Aucun identifiant de détection fourni.",
+      "fetchFailed": "Échec de la récupération des détections"
     },
     "viewToggle": {
       "label": "Mode d'affichage",
@@ -1413,6 +1417,9 @@
         "loadingTrends": "Chargement des données de tendance",
         "loadingDiversity": "Chargement des données de diversité"
       }
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement des données d'analyse. Veuillez réessayer."
     }
   },
   "settings": {
@@ -1608,6 +1615,12 @@
             "location": "Emplacement",
             "connected": "Connecté",
             "disconnected": "Déconnecté"
+          },
+          "errors": {
+            "backupStartFailed": "Échec du démarrage de la sauvegarde",
+            "backupStatusFailed": "Échec de la récupération de l'état de la sauvegarde",
+            "backupFailed": "Sauvegarde échouée",
+            "backupDownloadFailed": "Échec du téléchargement de la sauvegarde"
           }
         },
         "interface": {
@@ -2401,6 +2414,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Erreur de connexion",
+        "responseStreamFailed": "Échec de la lecture du flux de réponse"
       }
     },
     "audio": {
@@ -3354,6 +3371,12 @@
           "description": "Notifie lorsqu'un envoi BirdWeather échoue"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement des paramètres",
+      "saveFailed": "Échec de l'enregistrement des paramètres",
+      "databaseStatsFailed": "Échec du chargement des statistiques de la base de données",
+      "csvDownloadFailed": "Échec du téléchargement du CSV"
     }
   },
   "auth": {
@@ -3586,6 +3609,17 @@
       "status": {
         "loading": "Chargement du calendrier...",
         "error": "Erreur lors du chargement du calendrier"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Échec de la génération avec le statut {status}",
+        "spectrogramFailed": "Échec de la génération du spectrogramme"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Échec du chargement des données météo"
       }
     }
   },
