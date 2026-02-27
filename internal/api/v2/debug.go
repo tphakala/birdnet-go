@@ -2,7 +2,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -67,16 +66,12 @@ func (c *Controller) initDebugRoutes() {
 func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 	// Double-check debug mode using controller's settings
 	if c.Settings == nil || !c.Settings.Debug {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Debug mode not enabled",
-		})
+		return c.HandleError(ctx, nil, "Debug mode not enabled", http.StatusForbidden)
 	}
 
 	var req DebugErrorRequest
 	if err := ctx.Bind(&req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
 
 	// Default values
@@ -132,16 +127,12 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	// Double-check debug mode using controller's settings
 	if c.Settings == nil || !c.Settings.Debug {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Debug mode not enabled",
-		})
+		return c.HandleError(ctx, nil, "Debug mode not enabled", http.StatusForbidden)
 	}
 
 	var req DebugNotificationRequest
 	if err := ctx.Bind(&req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
 
 	// Default values
@@ -158,9 +149,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	// Get notification service
 	notificationService := notification.GetService()
 	if notificationService == nil {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
+		return c.HandleError(ctx, nil, "Notification service not available", http.StatusServiceUnavailable)
 	}
 
 	// Map string type to notification.Type
@@ -176,9 +165,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	)
 
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to create notification: %v", err),
-		})
+		return c.HandleError(ctx, err, "Failed to create notification", http.StatusInternalServerError)
 	}
 
 	response := DebugResponse{
@@ -199,9 +186,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
 	// Double-check debug mode using controller's settings
 	if c.Settings == nil || !c.Settings.Debug {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Debug mode not enabled",
-		})
+		return c.HandleError(ctx, nil, "Debug mode not enabled", http.StatusForbidden)
 	}
 
 	status := DebugSystemStatus{

@@ -66,9 +66,7 @@ func (c *Controller) initTerminalRoutes() {
 func (c *Controller) HandleTerminalWS(ctx echo.Context) error {
 	settings := conf.Setting()
 	if settings == nil || !settings.WebServer.EnableTerminal {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Terminal is disabled. Enable it in settings.",
-		})
+		return c.HandleError(ctx, nil, "Terminal is disabled. Enable it in settings.", http.StatusForbidden)
 	}
 
 	conn, err := terminalUpgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
