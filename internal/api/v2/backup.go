@@ -353,6 +353,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	}
 
 	// Check for existing active job
+	// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
+	// to resume polling (see DatabaseStatsCard.svelte).
 	if existingJob, exists := backupJobManager.GetActiveJobByType(dbType); exists {
 		return ctx.JSON(http.StatusConflict, map[string]any{
 			"error":           "Backup already in progress",
@@ -393,6 +395,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	job, err := backupJobManager.CreateJob(dbType, dbSize)
 	if err != nil {
 		// Job already exists
+		// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
+		// to resume polling (see DatabaseStatsCard.svelte).
 		if strings.Contains(err.Error(), "already in progress") {
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
@@ -478,10 +482,7 @@ func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
 	}
 
 	if job.Status != BackupStatusCompleted {
-		return ctx.JSON(http.StatusConflict, map[string]any{
-			"error":  "Backup not ready for download",
-			"status": job.Status,
-		})
+		return c.HandleError(ctx, nil, "Backup not ready for download", http.StatusConflict)
 	}
 
 	// Verify temp file exists
