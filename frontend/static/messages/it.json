@@ -352,7 +352,7 @@
       },
       "integration": {
         "failedTitle": "Integrazione {integration} fallita",
-        "failedMessage": "Connessione o invio dati non riuscito: {error}"
+        "failedMessage": "Connessione a {integration} non riuscita. Controlla la configurazione e i log."
       },
       "resource": {
         "highUsage": "Utilizzo elevato di {resource}",
@@ -393,13 +393,13 @@
         "completedTitle": "Migrazione del database completata",
         "completedMessage": "Migrazione completata. Riavvia BirdNET-Go per passare al nuovo database.",
         "errorTitle": "Errore di migrazione del database",
-        "errorMessage": "Migrazione sospesa a causa di errori. Controlla i log e riprova. Errore: {error}"
+        "errorMessage": "Migrazione sospesa a causa di errori. Controlla i log e riprova."
       },
       "cleanup": {
         "completeTitle": "Pulizia del vecchio database completata",
         "completeMessage": "{space} di spazio su disco recuperato.",
         "failedTitle": "Pulizia del vecchio database fallita",
-        "failedMessage": "Impossibile rimuovere il vecchio database: {error}"
+        "failedMessage": "Impossibile rimuovere il vecchio database. Controlla i log per i dettagli."
       },
       "alert": {
         "firedTitle": "Avviso: {rule_name}"
@@ -3419,87 +3419,87 @@
   },
   "errors": {
     "auth": {
-      "tooManyAttempts": "Too many login attempts. Please try again in 15 minutes.",
-      "credentialsRequired": "Username and password are required",
-      "invalidCredentials": "Invalid credentials",
-      "missingCode": "Missing authorization code",
-      "serviceUnavailable": "Authentication service unavailable. Please try again later.",
-      "timeout": "Login timed out. Please try again.",
-      "exchangeFailed": "Unable to complete login at this time. Please try again.",
-      "sessionError": "Session error during login. Please try again."
+      "tooManyAttempts": "Troppi tentativi di accesso. Riprovare tra 15 minuti.",
+      "credentialsRequired": "Nome utente e password sono obbligatori",
+      "invalidCredentials": "Credenziali non valide",
+      "missingCode": "Codice di autorizzazione mancante",
+      "serviceUnavailable": "Servizio di autenticazione non disponibile. Riprovare più tardi.",
+      "timeout": "Accesso scaduto. Riprovare.",
+      "exchangeFailed": "Impossibile completare l'accesso al momento. Riprovare.",
+      "sessionError": "Errore di sessione durante l'accesso. Riprovare."
     },
     "alert": {
-      "v2Required": "Alert rules require the enhanced (v2) database",
-      "invalidID": "Invalid rule ID",
-      "notFound": "Alert rule not found",
-      "invalidBody": "Invalid request body",
-      "nameRequired": "Rule name is required",
-      "typesRequired": "Object type and trigger type are required",
-      "duplicateName": "A rule with this name already exists",
-      "invalidJSON": "Invalid JSON"
+      "v2Required": "Le regole di avviso richiedono il database avanzato (v2)",
+      "invalidID": "ID regola non valido",
+      "notFound": "Regola di avviso non trovata",
+      "invalidBody": "Corpo della richiesta non valido",
+      "nameRequired": "Il nome della regola è obbligatorio",
+      "typesRequired": "Il tipo di oggetto e il tipo di attivazione sono obbligatori",
+      "duplicateName": "Esiste già una regola con questo nome",
+      "invalidJSON": "JSON non valido"
     },
     "detection": {
-      "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"
+      "invalidDate": "Formato {paramName} non valido, usare AAAA-MM-GG"
     },
     "backup": {
-      "invalidType": "Type must be 'legacy' or 'v2'",
-      "alreadyRunning": "Backup already in progress",
-      "dbInfoFailed": "Failed to get database info",
-      "diskSpaceCheck": "Failed to check disk space",
-      "insufficientSpace": "Not enough disk space. Need {needed}, have {available}",
-      "createFailed": "Failed to create backup job",
-      "notFound": "Backup job not found or expired",
-      "notReady": "Backup not ready for download",
-      "fileNotFound": "Backup file not found — job may have expired",
-      "sqliteOnly": "Backup only available for SQLite databases",
-      "dbNotConfigured": "Database not configured",
-      "unsupportedType": "Cannot perform backup on this datastore type",
-      "v2NotInitialized": "V2 database not initialized"
+      "invalidType": "Il tipo deve essere 'legacy' o 'v2'",
+      "alreadyRunning": "Backup già in corso",
+      "dbInfoFailed": "Impossibile ottenere le informazioni del database",
+      "diskSpaceCheck": "Verifica dello spazio su disco non riuscita",
+      "insufficientSpace": "Spazio su disco insufficiente. Necessari {needed}, disponibili {available}",
+      "createFailed": "Impossibile creare il processo di backup",
+      "notFound": "Processo di backup non trovato o scaduto",
+      "notReady": "Il backup non è ancora pronto per il download",
+      "fileNotFound": "File di backup non trovato — il processo potrebbe essere scaduto",
+      "sqliteOnly": "Backup disponibile solo per database SQLite",
+      "dbNotConfigured": "Database non configurato",
+      "unsupportedType": "Impossibile eseguire il backup su questo tipo di archivio dati",
+      "v2NotInitialized": "Database V2 non inizializzato"
     },
     "migration": {
-      "notConfigured": "Migration is not configured",
-      "preFlightFailed": "Pre-flight checks failed",
-      "invalidBody": "Invalid request body",
-      "recordCountFailed": "Failed to determine total records",
-      "startFailed": "Failed to start migration",
-      "initFailed": "Failed to initialize migration",
-      "resumeFailed": "Failed to resume migration"
+      "notConfigured": "La migrazione non è configurata",
+      "preFlightFailed": "Controlli preliminari non superati",
+      "invalidBody": "Corpo della richiesta non valido",
+      "recordCountFailed": "Impossibile determinare il numero totale di record",
+      "startFailed": "Impossibile avviare la migrazione",
+      "initFailed": "Impossibile inizializzare la migrazione",
+      "resumeFailed": "Impossibile riprendere la migrazione"
     },
     "cleanup": {
-      "noLegacyDB": "No legacy database found",
-      "accessFailed": "Cannot access legacy database",
-      "restartRequired": "Application must be restarted after migration before cleanup is available",
-      "safetyCheck": "Target file appears to be a V2 database — cleanup not allowed for safety",
-      "noLegacyTables": "No legacy tables found",
-      "restartNeeded": "Cannot cleanup: Application must be restarted after migration",
-      "alreadyRunning": "Cleanup already in progress"
+      "noLegacyDB": "Nessun database precedente trovato",
+      "accessFailed": "Impossibile accedere al database precedente",
+      "restartRequired": "L'applicazione deve essere riavviata dopo la migrazione prima che la pulizia sia disponibile",
+      "safetyCheck": "Il file di destinazione sembra essere un database V2 — pulizia non consentita per sicurezza",
+      "noLegacyTables": "Nessuna tabella precedente trovata",
+      "restartNeeded": "Pulizia non possibile: l'applicazione deve essere riavviata dopo la migrazione",
+      "alreadyRunning": "Pulizia già in corso"
     },
     "integration": {
-      "mqttDisabled": "MQTT is not enabled in settings",
-      "mqttNotConfigured": "MQTT broker not configured",
-      "mqttMetricsUnavailable": "Metrics instance not available for MQTT test",
-      "mqttClientFailed": "Failed to create MQTT client",
-      "birdweatherDisabled": "BirdWeather integration is not enabled",
-      "birdweatherNotConfigured": "BirdWeather station ID not configured",
-      "birdweatherClientFailed": "Failed to create BirdWeather client",
-      "noWeatherProvider": "No weather provider selected",
-      "openWeatherKeyRequired": "OpenWeather API key is required",
-      "processorUnavailable": "Processor not available",
-      "discoveryFailed": "Failed to trigger Home Assistant discovery"
+      "mqttDisabled": "MQTT non è abilitato nelle impostazioni",
+      "mqttNotConfigured": "Broker MQTT non configurato",
+      "mqttMetricsUnavailable": "Istanza di metriche non disponibile per il test MQTT",
+      "mqttClientFailed": "Impossibile creare il client MQTT",
+      "birdweatherDisabled": "L'integrazione BirdWeather non è abilitata",
+      "birdweatherNotConfigured": "ID stazione BirdWeather non configurato",
+      "birdweatherClientFailed": "Impossibile creare il client BirdWeather",
+      "noWeatherProvider": "Nessun fornitore meteo selezionato",
+      "openWeatherKeyRequired": "La chiave API di OpenWeather è obbligatoria",
+      "processorUnavailable": "Processore non disponibile",
+      "discoveryFailed": "Impossibile avviare il rilevamento di Home Assistant"
     },
     "notification": {
-      "serviceUnavailable": "Notification service not available",
-      "idRequired": "Notification ID is required",
-      "notFound": "Notification not found",
-      "hostRequired": "Host parameter is required",
-      "invalidHost": "Invalid host parameter",
-      "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+      "serviceUnavailable": "Servizio di notifiche non disponibile",
+      "idRequired": "L'ID della notifica è obbligatorio",
+      "notFound": "Notifica non trovata",
+      "hostRequired": "Il parametro host è obbligatorio",
+      "invalidHost": "Parametro host non valido",
+      "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
     },
     "debug": {
-      "notEnabled": "Debug mode not enabled"
+      "notEnabled": "Modalità debug non abilitata"
     },
     "terminal": {
-      "disabled": "Terminal is disabled. Enable it in settings."
+      "disabled": "Terminale disabilitato. Abilitarlo nelle impostazioni."
     }
   }
 }

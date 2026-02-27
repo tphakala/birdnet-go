@@ -557,7 +557,7 @@ func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64,
 		priority = notification.PriorityHigh
 		titleKey = notification.MsgCleanupFailedTitle
 		messageKey = notification.MsgCleanupFailedMessage
-		messageParams = map[string]any{"error": errMsg}
+		messageParams = nil
 	}
 
 	// Build notification fully before broadcast to ensure SSE subscribers see translation keys

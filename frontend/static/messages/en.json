@@ -352,7 +352,7 @@
       },
       "integration": {
         "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedMessage": "Failed to connect to {integration}. Check configuration and logs."
       },
       "resource": {
         "highUsage": "High {resource} usage",
@@ -393,13 +393,13 @@
         "completedTitle": "Database Migration Completed",
         "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
         "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming."
       },
       "cleanup": {
         "completeTitle": "Legacy Database Cleanup Complete",
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "failedMessage": "Failed to remove legacy database. Check logs for details."
       },
       "alert": {
         "firedTitle": "Alert: {rule_name}"

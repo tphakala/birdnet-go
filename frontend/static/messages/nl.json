@@ -352,7 +352,7 @@
       },
       "integration": {
         "failedTitle": "{integration}-integratie mislukt",
-        "failedMessage": "Verbinding of gegevensoverdracht mislukt: {error}"
+        "failedMessage": "Verbinding met {integration} mislukt. Controleer de configuratie en logs."
       },
       "resource": {
         "highUsage": "Hoog {resource}-gebruik",
@@ -393,13 +393,13 @@
         "completedTitle": "Databasemigratie voltooid",
         "completedMessage": "Migratie voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database.",
         "errorTitle": "Databasemigratiefout",
-        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten. Fout: {error}"
+        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten."
       },
       "cleanup": {
         "completeTitle": "Opruiming oude database voltooid",
         "completeMessage": "{space} schijfruimte vrijgemaakt.",
         "failedTitle": "Opruiming oude database mislukt",
-        "failedMessage": "Oude database kon niet worden verwijderd: {error}"
+        "failedMessage": "Oude database kon niet worden verwijderd. Controleer de logs voor details."
       },
       "alert": {
         "firedTitle": "Waarschuwing: {rule_name}"
@@ -3622,87 +3622,87 @@
   },
   "errors": {
     "auth": {
-      "tooManyAttempts": "Too many login attempts. Please try again in 15 minutes.",
-      "credentialsRequired": "Username and password are required",
-      "invalidCredentials": "Invalid credentials",
-      "missingCode": "Missing authorization code",
-      "serviceUnavailable": "Authentication service unavailable. Please try again later.",
-      "timeout": "Login timed out. Please try again.",
-      "exchangeFailed": "Unable to complete login at this time. Please try again.",
-      "sessionError": "Session error during login. Please try again."
+      "tooManyAttempts": "Te veel inlogpogingen. Probeer het over 15 minuten opnieuw.",
+      "credentialsRequired": "Gebruikersnaam en wachtwoord zijn vereist",
+      "invalidCredentials": "Ongeldige inloggegevens",
+      "missingCode": "Autorisatiecode ontbreekt",
+      "serviceUnavailable": "Authenticatieservice niet beschikbaar. Probeer het later opnieuw.",
+      "timeout": "Inloggen verlopen. Probeer het opnieuw.",
+      "exchangeFailed": "Inloggen kon op dit moment niet worden voltooid. Probeer het opnieuw.",
+      "sessionError": "Sessiefout tijdens het inloggen. Probeer het opnieuw."
     },
     "alert": {
-      "v2Required": "Alert rules require the enhanced (v2) database",
-      "invalidID": "Invalid rule ID",
-      "notFound": "Alert rule not found",
-      "invalidBody": "Invalid request body",
-      "nameRequired": "Rule name is required",
-      "typesRequired": "Object type and trigger type are required",
-      "duplicateName": "A rule with this name already exists",
-      "invalidJSON": "Invalid JSON"
+      "v2Required": "Waarschuwingsregels vereisen de uitgebreide (v2) database",
+      "invalidID": "Ongeldig regel-ID",
+      "notFound": "Waarschuwingsregel niet gevonden",
+      "invalidBody": "Ongeldige aanvraagbody",
+      "nameRequired": "Regelnaam is vereist",
+      "typesRequired": "Objecttype en triggertype zijn vereist",
+      "duplicateName": "Er bestaat al een regel met deze naam",
+      "invalidJSON": "Ongeldige JSON"
     },
     "detection": {
-      "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"
+      "invalidDate": "Ongeldig {paramName}-formaat, gebruik JJJJ-MM-DD"
     },
     "backup": {
-      "invalidType": "Type must be 'legacy' or 'v2'",
-      "alreadyRunning": "Backup already in progress",
-      "dbInfoFailed": "Failed to get database info",
-      "diskSpaceCheck": "Failed to check disk space",
-      "insufficientSpace": "Not enough disk space. Need {needed}, have {available}",
-      "createFailed": "Failed to create backup job",
-      "notFound": "Backup job not found or expired",
-      "notReady": "Backup not ready for download",
-      "fileNotFound": "Backup file not found — job may have expired",
-      "sqliteOnly": "Backup only available for SQLite databases",
-      "dbNotConfigured": "Database not configured",
-      "unsupportedType": "Cannot perform backup on this datastore type",
-      "v2NotInitialized": "V2 database not initialized"
+      "invalidType": "Type moet 'legacy' of 'v2' zijn",
+      "alreadyRunning": "Er wordt al een back-up gemaakt",
+      "dbInfoFailed": "Kan database-informatie niet ophalen",
+      "diskSpaceCheck": "Controle van schijfruimte mislukt",
+      "insufficientSpace": "Onvoldoende schijfruimte. Nodig: {needed}, beschikbaar: {available}",
+      "createFailed": "Kan back-uptaak niet aanmaken",
+      "notFound": "Back-uptaak niet gevonden of verlopen",
+      "notReady": "Back-up is nog niet klaar om te downloaden",
+      "fileNotFound": "Back-upbestand niet gevonden — taak is mogelijk verlopen",
+      "sqliteOnly": "Back-up alleen beschikbaar voor SQLite-databases",
+      "dbNotConfigured": "Database niet geconfigureerd",
+      "unsupportedType": "Kan geen back-up maken van dit type gegevensopslag",
+      "v2NotInitialized": "V2-database niet geïnitialiseerd"
     },
     "migration": {
-      "notConfigured": "Migration is not configured",
-      "preFlightFailed": "Pre-flight checks failed",
-      "invalidBody": "Invalid request body",
-      "recordCountFailed": "Failed to determine total records",
-      "startFailed": "Failed to start migration",
-      "initFailed": "Failed to initialize migration",
-      "resumeFailed": "Failed to resume migration"
+      "notConfigured": "Migratie is niet geconfigureerd",
+      "preFlightFailed": "Voorafgaande controles mislukt",
+      "invalidBody": "Ongeldige aanvraagbody",
+      "recordCountFailed": "Kan het totaal aantal records niet bepalen",
+      "startFailed": "Kan migratie niet starten",
+      "initFailed": "Kan migratie niet initialiseren",
+      "resumeFailed": "Kan migratie niet hervatten"
     },
     "cleanup": {
-      "noLegacyDB": "No legacy database found",
-      "accessFailed": "Cannot access legacy database",
-      "restartRequired": "Application must be restarted after migration before cleanup is available",
-      "safetyCheck": "Target file appears to be a V2 database — cleanup not allowed for safety",
-      "noLegacyTables": "No legacy tables found",
-      "restartNeeded": "Cannot cleanup: Application must be restarted after migration",
-      "alreadyRunning": "Cleanup already in progress"
+      "noLegacyDB": "Geen oude database gevonden",
+      "accessFailed": "Kan geen toegang krijgen tot de oude database",
+      "restartRequired": "De applicatie moet opnieuw worden gestart na de migratie voordat opschonen beschikbaar is",
+      "safetyCheck": "Het doelbestand lijkt een V2-database te zijn — opschonen niet toegestaan voor de veiligheid",
+      "noLegacyTables": "Geen oude tabellen gevonden",
+      "restartNeeded": "Kan niet opschonen: applicatie moet opnieuw worden gestart na de migratie",
+      "alreadyRunning": "Opschonen is al bezig"
     },
     "integration": {
-      "mqttDisabled": "MQTT is not enabled in settings",
-      "mqttNotConfigured": "MQTT broker not configured",
-      "mqttMetricsUnavailable": "Metrics instance not available for MQTT test",
-      "mqttClientFailed": "Failed to create MQTT client",
-      "birdweatherDisabled": "BirdWeather integration is not enabled",
-      "birdweatherNotConfigured": "BirdWeather station ID not configured",
-      "birdweatherClientFailed": "Failed to create BirdWeather client",
-      "noWeatherProvider": "No weather provider selected",
-      "openWeatherKeyRequired": "OpenWeather API key is required",
-      "processorUnavailable": "Processor not available",
-      "discoveryFailed": "Failed to trigger Home Assistant discovery"
+      "mqttDisabled": "MQTT is niet ingeschakeld in de instellingen",
+      "mqttNotConfigured": "MQTT-broker niet geconfigureerd",
+      "mqttMetricsUnavailable": "Metriekinstantie niet beschikbaar voor MQTT-test",
+      "mqttClientFailed": "Kan MQTT-client niet aanmaken",
+      "birdweatherDisabled": "BirdWeather-integratie is niet ingeschakeld",
+      "birdweatherNotConfigured": "BirdWeather-station-ID niet geconfigureerd",
+      "birdweatherClientFailed": "Kan BirdWeather-client niet aanmaken",
+      "noWeatherProvider": "Geen weerprovider geselecteerd",
+      "openWeatherKeyRequired": "OpenWeather API-sleutel is vereist",
+      "processorUnavailable": "Processor niet beschikbaar",
+      "discoveryFailed": "Kan Home Assistant-detectie niet activeren"
     },
     "notification": {
-      "serviceUnavailable": "Notification service not available",
-      "idRequired": "Notification ID is required",
-      "notFound": "Notification not found",
-      "hostRequired": "Host parameter is required",
-      "invalidHost": "Invalid host parameter",
-      "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+      "serviceUnavailable": "Meldingsservice niet beschikbaar",
+      "idRequired": "Meldings-ID is vereist",
+      "notFound": "Melding niet gevonden",
+      "hostRequired": "Hostparameter is vereist",
+      "invalidHost": "Ongeldige hostparameter",
+      "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
     },
     "debug": {
-      "notEnabled": "Debug mode not enabled"
+      "notEnabled": "Debugmodus niet ingeschakeld"
     },
     "terminal": {
-      "disabled": "Terminal is disabled. Enable it in settings."
+      "disabled": "Terminal is uitgeschakeld. Schakel het in bij de instellingen."
     }
   }
 }

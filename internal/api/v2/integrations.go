@@ -381,7 +381,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
-			Message: fmt.Sprintf("Failed to create MQTT client: %v", err),
+			Message: formatClientError("Failed to create MQTT client", err, c.Settings),
 		})
 	}
 
@@ -447,7 +447,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
-			"message": fmt.Sprintf("Failed to create BirdWeather client: %v", err),
+			"message": formatClientError("Failed to create BirdWeather client", err, c.Settings),
 			"state":   "failed",
 		})
 	}
@@ -770,6 +770,16 @@ func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
 		"success": true,
 		"message": "Discovery messages sent successfully",
 	})
+}
+
+// formatClientError returns a user-safe error message for client creation failures.
+// Raw error details are only included when WebServer.Debug is enabled,
+// consistent with ErrorResponse.Error gating (PR #2081).
+func formatClientError(prefix string, err error, settings *conf.Settings) string {
+	if settings != nil && settings.WebServer.Debug {
+		return fmt.Sprintf("%s: %v", prefix, err)
+	}
+	return prefix + ". Check configuration and try again."
 }
 
 // writeJSONResponse writes a JSON response to the client

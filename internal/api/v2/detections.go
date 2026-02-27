@@ -16,8 +16,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+// dateValidationError represents a date parameter validation failure.
+// Used to distinguish date errors from other parse errors in parseDetectionQueryParams,
+// enabling i18n translation at the handler level.
+type dateValidationError struct {
+	message   string
+	paramName string
+}
+
+func (e *dateValidationError) Error() string { return e.message }
 
 // Detection constants (file-local)
 const (
@@ -331,7 +342,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 				logger.String("value", dp.value),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return &dateValidationError{message: err.Error(), paramName: dp.name}
 		}
 	}
 
@@ -342,7 +353,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 			logger.String("end_date", endDateStr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		return echo.NewHTTPError(http.StatusBadRequest, "start_date cannot be after end_date")
+		return &dateValidationError{message: "start_date cannot be after end_date", paramName: "date_range"}
 	}
 
 	return nil
@@ -481,7 +492,11 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		var dateErr *dateValidationError
+		if errors.As(err, &dateErr) {
+			return c.HandleErrorWithKey(ctx, err, dateErr.Error(), http.StatusBadRequest, notification.MsgErrDetectionInvalidDate, map[string]any{"paramName": dateErr.paramName})
+		}
+		return c.HandleError(ctx, err, "Invalid query parameters", http.StatusBadRequest)
 	}
 
 	// Log the retrieval attempt
