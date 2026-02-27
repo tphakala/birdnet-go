@@ -656,7 +656,7 @@ func NewErrorResponse(err error, message string, code int) *ErrorResponse {
 		// paths, SQL errors, stack traces, etc. In production, use the
 		// sanitized message parameter instead.
 		settings := conf.GetSettings()
-		if settings != nil && settings.Debug {
+		if settings != nil && settings.WebServer.Debug {
 			errorStr = err.Error()
 		} else {
 			errorStr = message

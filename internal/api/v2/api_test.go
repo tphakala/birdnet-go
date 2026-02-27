@@ -169,33 +169,32 @@ func TestHandleError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
-// TestHandleErrorDebugMode verifies that raw err.Error() is exposed in the Error
-// field when debug mode is enabled, for developer diagnostics.
-func TestHandleErrorDebugMode(t *testing.T) {
-	e, _, controller := setupTestEnvironment(t)
-
-	// Enable debug mode via global settings (used by NewErrorResponse)
-	controller.Settings.Debug = true
-	conf.SetTestSettings(controller.Settings)
+// TestNewErrorResponseDebugMode verifies that raw err.Error() is exposed in the
+// Error field when web server debug mode is enabled, for developer diagnostics.
+func TestNewErrorResponseDebugMode(t *testing.T) {
+	// Save and restore global settings to avoid test interference
+	prevSettings := conf.GetSettings()
 	t.Cleanup(func() {
-		controller.Settings.Debug = false
-		conf.SetTestSettings(controller.Settings)
+		conf.SetTestSettings(prevSettings)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	testErr := echo.NewHTTPError(http.StatusBadRequest, "Test error")
 
-	err := controller.HandleError(c, echo.NewHTTPError(http.StatusBadRequest, "Test error"),
-		"Error message", http.StatusBadRequest)
+	// Test 1: Non-debug mode — Error field should use sanitized message
+	conf.SetTestSettings(&conf.Settings{
+		WebServer: conf.WebServerSettings{Debug: false},
+	})
 
-	require.NoError(t, err)
+	resp := NewErrorResponse(testErr, "Safe message", http.StatusBadRequest)
+	assert.Equal(t, "Safe message", resp.Error, "Non-debug mode should use sanitized message")
+	assert.Equal(t, "Safe message", resp.Message)
 
-	var response ErrorResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
+	// Test 2: Debug mode — Error field should expose raw err.Error()
+	conf.SetTestSettings(&conf.Settings{
+		WebServer: conf.WebServerSettings{Debug: true},
+	})
 
-	// In debug mode, Error field should contain raw err.Error() for diagnostics
-	assert.Equal(t, "code=400, message=Test error", response.Error)
-	assert.Equal(t, "Error message", response.Message)
+	resp = NewErrorResponse(testErr, "Safe message", http.StatusBadRequest)
+	assert.Equal(t, "code=400, message=Test error", resp.Error, "Debug mode should expose raw error")
+	assert.Equal(t, "Safe message", resp.Message)
 }

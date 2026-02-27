@@ -1258,7 +1258,7 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	// Check that the error response contains expected fields — in non-debug mode,
 	// Error field uses sanitized message instead of raw err.Error()
 	assert.Contains(t, errorResponse, "error")
-	assert.Contains(t, errorResponse["error"].(string), "Failed to process daily species data")
+	assert.Equal(t, "Failed to process daily species data", errorResponse["error"])
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)

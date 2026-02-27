@@ -421,7 +421,7 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 	if errorField, exists := response["error"]; exists {
 		errorString, ok := errorField.(string)
 		require.True(t, ok, "Error field should be a string")
-		assert.Contains(t, errorString, "Failed to update realtime settings", "Error should describe the failure")
+		assert.Equal(t, "Failed to update realtime settings", errorString, "Error should be the sanitized message")
 	}
 }
 
