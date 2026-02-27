@@ -650,17 +650,13 @@ func NewErrorResponse(err error, message string, code int) *ErrorResponse {
 	// Generate a random correlation ID (8 characters should be sufficient)
 	correlationID := generateCorrelationID()
 
+	// Only expose raw err.Error() in debug mode — it can contain internal
+	// paths, SQL errors, stack traces, etc. In production, use the
+	// sanitized message parameter instead.
 	var errorStr string
-	if err != nil {
-		// Only expose raw err.Error() in debug mode — it can contain internal
-		// paths, SQL errors, stack traces, etc. In production, use the
-		// sanitized message parameter instead.
-		settings := conf.GetSettings()
-		if settings != nil && settings.WebServer.Debug {
-			errorStr = err.Error()
-		} else {
-			errorStr = message
-		}
+	settings := conf.GetSettings()
+	if err != nil && settings != nil && settings.WebServer.Debug {
+		errorStr = err.Error()
 	} else {
 		errorStr = message
 	}
