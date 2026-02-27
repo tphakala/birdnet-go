@@ -509,7 +509,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 	}
 
 	// Convert notes to response format
@@ -1034,7 +1034,7 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
 	note, err := c.DS.Get(id)
 	if err != nil {
-		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
+		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
 	// For single detection, include weather data by default
@@ -1216,13 +1216,13 @@ func (c *Controller) LockDetection(ctx echo.Context) error {
 	// Parse request first to determine if we're locking or unlocking
 	req := &DetectionRequest{}
 	if err := ctx.Bind(req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
 	// Get the note to verify it exists
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
+		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
 	// Only check lock status when trying to LOCK (not unlock)
@@ -1236,7 +1236,7 @@ func (c *Controller) LockDetection(ctx echo.Context) error {
 	// Lock/unlock the detection
 	err = c.AddLock(note.ID, req.Locked)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("Failed to update lock status: %v", err)})
+		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)
 	}
 
 	// Invalidate cache after changing lock status
@@ -1268,18 +1268,18 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 	// Parse request body
 	req := &IgnoreSpeciesRequest{}
 	if err := ctx.Bind(req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
 	// Validate request
 	if req.CommonName == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Missing species name"})
+		return c.HandleError(ctx, nil, "Missing species name", http.StatusBadRequest)
 	}
 
 	// Toggle the species in ignored list
 	action, isExcluded, err := c.toggleSpeciesInIgnoredList(req.CommonName)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 	}
 
 	// Log the action
