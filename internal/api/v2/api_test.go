@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -161,8 +162,39 @@ func TestHandleError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	// Check response content
-	assert.Equal(t, "code=400, message=Test error", response.Error)
+	// Check response content — in non-debug mode, Error field uses sanitized message
+	// instead of raw err.Error() to prevent leaking internal details
+	assert.Equal(t, "Error message", response.Error)
 	assert.Equal(t, "Error message", response.Message)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
+// TestNewErrorResponseDebugMode verifies that raw err.Error() is exposed in the
+// Error field when web server debug mode is enabled, for developer diagnostics.
+func TestNewErrorResponseDebugMode(t *testing.T) {
+	// Save and restore global settings to avoid test interference
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() {
+		conf.SetTestSettings(prevSettings)
+	})
+
+	testErr := echo.NewHTTPError(http.StatusBadRequest, "Test error")
+
+	// Test 1: Non-debug mode — Error field should use sanitized message
+	conf.SetTestSettings(&conf.Settings{
+		WebServer: conf.WebServerSettings{Debug: false},
+	})
+
+	resp := NewErrorResponse(testErr, "Safe message", http.StatusBadRequest)
+	assert.Equal(t, "Safe message", resp.Error, "Non-debug mode should use sanitized message")
+	assert.Equal(t, "Safe message", resp.Message)
+
+	// Test 2: Debug mode — Error field should expose raw err.Error()
+	conf.SetTestSettings(&conf.Settings{
+		WebServer: conf.WebServerSettings{Debug: true},
+	})
+
+	resp = NewErrorResponse(testErr, "Safe message", http.StatusBadRequest)
+	assert.Equal(t, "code=400, message=Test error", resp.Error, "Debug mode should expose raw error")
+	assert.Equal(t, "Safe message", resp.Message)
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -60,7 +59,7 @@ func (c *Controller) initAlertRoutes() {
 
 // requireV2 checks that the enhanced database is available and returns an error response if not.
 func (c *Controller) requireV2(ctx echo.Context) error {
-	return c.HandleError(ctx, fmt.Errorf("enhanced database not enabled"),
+	return c.HandleError(ctx, nil,
 		"Alert rules require the enhanced (v2) database", http.StatusConflict)
 }
 

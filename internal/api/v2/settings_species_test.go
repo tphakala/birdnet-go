@@ -417,11 +417,11 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 	// Assert the presence/shape of the validation error
 	assert.Contains(t, response, "error", "Response should contain error field for validation failure")
 
-	// Verify error message mentions validation failure
+	// Verify error message mentions the failed settings update
 	if errorField, exists := response["error"]; exists {
 		errorString, ok := errorField.(string)
 		require.True(t, ok, "Error field should be a string")
-		assert.Contains(t, errorString, "validation", "Error should mention validation failure")
+		assert.Equal(t, "Failed to update realtime settings", errorString, "Error should be the sanitized message")
 	}
 }
 

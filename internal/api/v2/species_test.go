@@ -207,7 +207,7 @@ func TestSpeciesAPIValidation(t *testing.T) {
 		// Error handling - nil processor
 		{"GetSpeciesThumbnail nil processor", "/api/v2/species/amro/thumbnail", []string{"code"}, []string{"amro"},
 			func(c *Controller) func(echo.Context) error { return c.GetSpeciesThumbnail },
-			http.StatusServiceUnavailable, "BirdNET processor not available"},
+			http.StatusServiceUnavailable, "BirdNET service unavailable"},
 	}
 
 	for _, tt := range tests {
