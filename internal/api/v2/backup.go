@@ -571,7 +571,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 		c.logWarnIfEnabled("Backup VACUUM INTO failed",
 			logger.String("job_id", job.ID),
 			logger.Error(lastErr))
-		job.setStatus(BackupStatusFailed, lastErr.Error())
+		job.setStatus(BackupStatusFailed, "Database backup failed")
 		return
 	}
 
