@@ -693,7 +693,7 @@
       } else if (error instanceof Error) {
         databaseStats.error = error.message;
       } else {
-        databaseStats.error = 'Failed to load database statistics';
+        databaseStats.error = t('settings.errors.databaseStatsFailed');
       }
       logger.error('Failed to load database stats:', error);
     } finally {
@@ -1487,7 +1487,7 @@
       });
 
       if (!response.ok) {
-        let msg = 'Failed to download CSV';
+        let msg = t('settings.errors.csvDownloadFailed');
         try {
           const data = await response.clone().json();
           if (data?.message) msg = data.message;

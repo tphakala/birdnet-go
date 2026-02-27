@@ -102,7 +102,8 @@
       fetchedWeather = data;
       onLoad?.(data);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load weather data';
+      const errorMessage =
+        err instanceof Error ? err.message : t('components.weatherInfo.errors.loadFailed');
       error = errorMessage;
       // Error fetching weather data
       onError?.(err instanceof Error ? err : new Error(errorMessage));

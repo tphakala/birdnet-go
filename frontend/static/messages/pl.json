@@ -185,6 +185,9 @@
         "lockStatusFailed": "Nie udało się zaktualizować statusu blokady. Spróbuj ponownie.",
         "verificationFailed": "Nie udało się zaktualizować statusu weryfikacji. Spróbuj ponownie."
       }
+    },
+    "errors": {
+      "unknownError": "Wystąpił nieznany błąd"
     }
   },
   "pageTitle": {
@@ -737,7 +740,8 @@
       "loginRequired": "Zaloguj się, aby wyświetlić tę detekcję.",
       "serverError": "Błąd serwera. Spróbuj ponownie później lub skontaktuj się z pomocą techniczną, jeśli problem będzie się powtarzał.",
       "loadFailed": "Nie udało się załadować detekcji (Błąd {status}). Odśwież stronę.",
-      "noIdProvided": "Nie podano identyfikatora detekcji."
+      "noIdProvided": "Nie podano identyfikatora detekcji.",
+      "fetchFailed": "Nie udało się pobrać detekcji"
     },
     "viewToggle": {
       "label": "Tryb widoku",
@@ -1413,6 +1417,9 @@
         "loadingTrends": "Ładowanie danych trendów",
         "loadingDiversity": "Ładowanie danych o różnorodności"
       }
+    },
+    "errors": {
+      "loadFailed": "Nie udało się załadować danych analitycznych. Spróbuj ponownie."
     }
   },
   "settings": {
@@ -1620,6 +1627,12 @@
             "location": "Lokalizacja",
             "connected": "Połączono",
             "disconnected": "Rozłączono"
+          },
+          "errors": {
+            "backupStartFailed": "Nie udało się rozpocząć kopii zapasowej",
+            "backupStatusFailed": "Nie udało się pobrać statusu kopii zapasowej",
+            "backupFailed": "Kopia zapasowa nie powiodła się",
+            "backupDownloadFailed": "Nie udało się pobrać kopii zapasowej"
           }
         },
         "interface": {
@@ -2407,6 +2420,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Błąd połączenia",
+        "responseStreamFailed": "Nie udało się odczytać strumienia odpowiedzi"
       }
     },
     "audio": {
@@ -3354,6 +3371,12 @@
           "description": "Powiadamia, gdy przesyłanie do BirdWeather nie powiedzie się"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Nie udało się załadować ustawień",
+      "saveFailed": "Nie udało się zapisać ustawień",
+      "databaseStatsFailed": "Nie udało się załadować statystyk bazy danych",
+      "csvDownloadFailed": "Nie udało się pobrać pliku CSV"
     }
   },
   "auth": {
@@ -3586,6 +3609,18 @@
       "status": {
         "loading": "Ładowanie kalendarza...",
         "error": "Błąd ładowania kalendarza"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailed": "Generowanie nie powiodło się",
+        "generationFailedStatus": "Generowanie nie powiodło się ze statusem {status}",
+        "spectrogramFailed": "Nie udało się wygenerować spektrogramu"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Nie udało się załadować danych pogodowych"
       }
     }
   },

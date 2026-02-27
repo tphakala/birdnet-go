@@ -195,6 +195,9 @@
         "lockStatusFailed": "Falha ao atualizar status de bloqueio. Por favor, tente novamente.",
         "verificationFailed": "Falha ao atualizar status de verificação. Por favor, tente novamente."
       }
+    },
+    "errors": {
+      "unknownError": "Erro desconhecido"
     }
   },
   "navigation": {
@@ -625,7 +628,8 @@
       "loginRequired": "Faça login para visualizar esta detecção.",
       "serverError": "Erro no servidor. Tente novamente mais tarde ou entre em contato com o suporte se o problema persistir.",
       "loadFailed": "Falha ao carregar detecção (Erro {status}). Atualize a página.",
-      "noIdProvided": "ID da detecção não fornecido."
+      "noIdProvided": "ID da detecção não fornecido.",
+      "fetchFailed": "Falha ao buscar as detecções"
     },
     "titles": {
       "hourly": "Resultados por hora às {hour}:00 em {date}",
@@ -1413,6 +1417,9 @@
         "loadingTrends": "Carregando dados de tendências",
         "loadingDiversity": "Carregando dados de diversidade"
       }
+    },
+    "errors": {
+      "loadFailed": "Falha ao carregar os dados de análise. Tente novamente."
     }
   },
   "settings": {
@@ -1608,6 +1615,12 @@
             "location": "Localização",
             "connected": "Conectado",
             "disconnected": "Desconectado"
+          },
+          "errors": {
+            "backupStartFailed": "Falha ao iniciar o backup",
+            "backupStatusFailed": "Falha ao obter o status do backup",
+            "backupFailed": "Backup falhou",
+            "backupDownloadFailed": "Falha ao baixar o backup"
           }
         },
         "interface": {
@@ -2709,6 +2722,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Erro de conexão",
+        "responseStreamFailed": "Falha ao ler o fluxo de resposta"
       }
     },
     "species": {
@@ -3354,6 +3371,12 @@
           "description": "Notifica quando um envio para BirdWeather falha"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Falha ao carregar as configurações",
+      "saveFailed": "Falha ao salvar as configurações",
+      "databaseStatsFailed": "Falha ao carregar as estatísticas do banco de dados",
+      "csvDownloadFailed": "Falha ao baixar o CSV"
     }
   },
   "auth": {
@@ -3586,6 +3609,18 @@
       "status": {
         "loading": "Carregando calendário...",
         "error": "Erro ao carregar calendário"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailed": "Falha na geração",
+        "generationFailedStatus": "Falha na geração com status {status}",
+        "spectrogramFailed": "Falha ao gerar o espectrograma"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Falha ao carregar os dados meteorológicos"
       }
     }
   },

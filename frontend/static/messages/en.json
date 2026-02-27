@@ -185,6 +185,9 @@
         "lockStatusFailed": "Failed to update lock status. Please try again.",
         "verificationFailed": "Failed to update verification status. Please try again."
       }
+    },
+    "errors": {
+      "unknownError": "Unknown error occurred"
     }
   },
   "pageTitle": {
@@ -742,7 +745,8 @@
       "loginRequired": "Please log in to view this detection.",
       "serverError": "Server error. Please try again later or contact support if the problem persists.",
       "loadFailed": "Failed to load detection (Error {status}). Please try refreshing the page.",
-      "noIdProvided": "No detection ID provided."
+      "noIdProvided": "No detection ID provided.",
+      "fetchFailed": "Failed to fetch detections"
     }
   },
   "species": {
@@ -1437,6 +1441,9 @@
         "loadingTrends": "Loading trend data",
         "loadingDiversity": "Loading diversity data"
       }
+    },
+    "errors": {
+      "loadFailed": "Failed to load analytics data. Please try again."
     }
   },
   "settings": {
@@ -1467,6 +1474,12 @@
       "savingAriaLabel": "Saving changes...",
       "unsavedChanges": "Unsaved changes",
       "toolbar": "Settings actions"
+    },
+    "errors": {
+      "loadFailed": "Failed to load settings",
+      "saveFailed": "Failed to save settings",
+      "databaseStatsFailed": "Failed to load database statistics",
+      "csvDownloadFailed": "Failed to download CSV"
     },
     "card": {
       "changed": "changed",
@@ -1644,6 +1657,12 @@
             "location": "Location",
             "connected": "Connected",
             "disconnected": "Disconnected"
+          },
+          "errors": {
+            "backupStartFailed": "Failed to start backup",
+            "backupStatusFailed": "Failed to get backup status",
+            "backupFailed": "Backup failed",
+            "backupDownloadFailed": "Failed to download backup"
           }
         },
         "interface": {
@@ -2431,6 +2450,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Connection Error",
+        "responseStreamFailed": "Failed to read response stream"
       }
     },
     "audio": {
@@ -3610,6 +3633,18 @@
       "status": {
         "loading": "Loading calendar...",
         "error": "Error loading calendar"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailed": "Generation failed",
+        "generationFailedStatus": "Generation failed with status {status}",
+        "spectrogramFailed": "Failed to generate spectrogram"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Failed to load weather data"
       }
     }
   },

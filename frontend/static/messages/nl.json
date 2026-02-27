@@ -185,6 +185,9 @@
         "lockStatusFailed": "Vergrendeling wijzigen mislukt. Probeer het opnieuw.",
         "verificationFailed": "Melding status wijzigen mislukt. Probeer het opnieuw."
       }
+    },
+    "errors": {
+      "unknownError": "Onbekende fout opgetreden"
     }
   },
   "pageTitle": {
@@ -737,7 +740,8 @@
       "loginRequired": "Log in om deze detectie te bekijken.",
       "serverError": "Serverfout. Probeer het later opnieuw of neem contact op met de ondersteuning als het probleem aanhoudt.",
       "loadFailed": "Kon detectie niet laden (Fout {status}). Ververs de pagina.",
-      "noIdProvided": "Geen detectie-ID opgegeven."
+      "noIdProvided": "Geen detectie-ID opgegeven.",
+      "fetchFailed": "Detecties konden niet worden opgehaald"
     },
     "viewToggle": {
       "label": "Weergavemodus",
@@ -1413,6 +1417,9 @@
         "loadingTrends": "Trendgegevens laden",
         "loadingDiversity": "Diversiteitsgegevens laden"
       }
+    },
+    "errors": {
+      "loadFailed": "Analysegegevens konden niet worden geladen. Probeer het opnieuw."
     }
   },
   "settings": {
@@ -1608,6 +1615,12 @@
             "location": "Locatie",
             "connected": "Verbonden",
             "disconnected": "Niet verbonden"
+          },
+          "errors": {
+            "backupStartFailed": "Back-up starten mislukt",
+            "backupStatusFailed": "Back-upstatus ophalen mislukt",
+            "backupFailed": "Back-up mislukt",
+            "backupDownloadFailed": "Back-up downloaden mislukt"
           }
         },
         "interface": {
@@ -2401,6 +2414,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Verbindingsfout",
+        "responseStreamFailed": "Antwoordstroom kon niet worden gelezen"
       }
     },
     "audio": {
@@ -3354,6 +3371,12 @@
           "description": "Meldt wanneer een BirdWeather-upload mislukt"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Instellingen konden niet worden geladen",
+      "saveFailed": "Instellingen konden niet worden opgeslagen",
+      "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
+      "csvDownloadFailed": "CSV-download mislukt"
     }
   },
   "auth": {
@@ -3586,6 +3609,18 @@
       "status": {
         "loading": "Inladen van de kalender...",
         "error": "Fout bij het inladen van de kalender"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailed": "Generatie mislukt",
+        "generationFailedStatus": "Generatie mislukt met status {status}",
+        "spectrogramFailed": "Spectrogram kon niet worden gegenereerd"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Weergegevens konden niet worden geladen"
       }
     }
   },
