@@ -389,11 +389,12 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 	requiredSpace := uint64(dbSize) + backupDiskBuffer
 	if usage.Free < requiredSpace {
+		neededStr := formatBytesUint64(requiredSpace)
+		availableStr := formatBytesUint64(usage.Free)
 		return c.HandleErrorWithKey(ctx, nil,
-			fmt.Sprintf("Not enough disk space. Need %s, have %s",
-				formatBytesUint64(requiredSpace), formatBytesUint64(usage.Free)),
+			fmt.Sprintf("Not enough disk space. Need %s, have %s", neededStr, availableStr),
 			http.StatusInsufficientStorage,
-			notification.MsgErrBackupInsufficientSpace, map[string]any{"needed": formatBytesUint64(requiredSpace), "available": formatBytesUint64(usage.Free)})
+			notification.MsgErrBackupInsufficientSpace, map[string]any{"needed": neededStr, "available": availableStr})
 	}
 
 	// Create the job
