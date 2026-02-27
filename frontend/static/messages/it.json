@@ -3500,6 +3500,20 @@
     },
     "terminal": {
       "disabled": "Terminale disabilitato. Abilitarlo nelle impostazioni."
+    },
+    "api": {
+      "badRequest": "Richiesta non valida. Controllare l'input e riprovare.",
+      "unauthorized": "Autenticazione richiesta. Effettuare l'accesso e riprovare.",
+      "forbidden": "Non si dispone dell'autorizzazione per eseguire questa azione.",
+      "notFound": "La risorsa richiesta non è stata trovata.",
+      "conflict": "Questa azione è in conflitto con lo stato attuale. Aggiornare la pagina e riprovare.",
+      "validationFailed": "Input non valido. Controllare i dati e riprovare.",
+      "tooManyRequests": "Troppe richieste. Attendere prima di riprovare.",
+      "serverError": "Si è verificato un errore del server. Riprovare più tardi.",
+      "clientError": "Errore del client. Controllare la richiesta e riprovare.",
+      "unknownError": "Si è verificato un errore imprevisto. Riprovare.",
+      "validationCheck": "Validazione non riuscita. Controllare l'input.",
+      "conflictData": "Questa azione è in conflitto con dati esistenti."
     }
   }
 }

@@ -3703,6 +3703,20 @@
     },
     "terminal": {
       "disabled": "Terminal desativado. Ative-o nas definições."
+    },
+    "api": {
+      "badRequest": "Pedido inválido. Verifique os seus dados e tente novamente.",
+      "unauthorized": "Autenticação necessária. Inicie sessão e tente novamente.",
+      "forbidden": "Não tem permissão para realizar esta ação.",
+      "notFound": "O recurso solicitado não foi encontrado.",
+      "conflict": "Esta ação entra em conflito com o estado atual. Atualize a página e tente novamente.",
+      "validationFailed": "Dados inválidos. Verifique as suas informações e tente novamente.",
+      "tooManyRequests": "Demasiados pedidos. Aguarde antes de tentar novamente.",
+      "serverError": "Ocorreu um erro no servidor. Tente novamente mais tarde.",
+      "clientError": "Erro do cliente. Verifique o seu pedido e tente novamente.",
+      "unknownError": "Ocorreu um erro inesperado. Tente novamente.",
+      "validationCheck": "A validação falhou. Verifique os seus dados.",
+      "conflictData": "Esta ação entra em conflito com dados existentes."
     }
   }
 }

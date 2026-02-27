@@ -3703,6 +3703,20 @@
     },
     "terminal": {
       "disabled": "Terminaali on poistettu käytöstä. Ota se käyttöön asetuksista."
+    },
+    "api": {
+      "badRequest": "Virheellinen pyyntö. Tarkista syötteesi ja yritä uudelleen.",
+      "unauthorized": "Tunnistautuminen vaaditaan. Kirjaudu sisään ja yritä uudelleen.",
+      "forbidden": "Sinulla ei ole oikeutta suorittaa tätä toimintoa.",
+      "notFound": "Pyydettyä resurssia ei löytynyt.",
+      "conflict": "Tämä toiminto on ristiriidassa nykyisen tilan kanssa. Päivitä sivu ja yritä uudelleen.",
+      "validationFailed": "Virheellinen syöte. Tarkista tietosi ja yritä uudelleen.",
+      "tooManyRequests": "Liian monta pyyntöä. Odota hetki ennen kuin yrität uudelleen.",
+      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen.",
+      "clientError": "Asiakasvirhe. Tarkista pyyntösi ja yritä uudelleen.",
+      "unknownError": "Odottamaton virhe. Yritä uudelleen.",
+      "validationCheck": "Tarkistus epäonnistui. Tarkista syötteesi.",
+      "conflictData": "Tämä toiminto on ristiriidassa olemassa olevien tietojen kanssa."
     }
   }
 }

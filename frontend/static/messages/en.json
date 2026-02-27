@@ -3703,6 +3703,20 @@
     },
     "terminal": {
       "disabled": "Terminal is disabled. Enable it in settings."
+    },
+    "api": {
+      "badRequest": "Invalid request. Please check your input and try again.",
+      "unauthorized": "Authentication required. Please log in and try again.",
+      "forbidden": "You do not have permission to perform this action.",
+      "notFound": "The requested resource was not found.",
+      "conflict": "This action conflicts with the current state. Please refresh and try again.",
+      "validationFailed": "Invalid input provided. Please check your data and try again.",
+      "tooManyRequests": "Too many requests. Please wait before trying again.",
+      "serverError": "A server error occurred. Please try again later.",
+      "clientError": "Client error occurred. Please check your request and try again.",
+      "unknownError": "An unexpected error occurred. Please try again.",
+      "validationCheck": "Validation failed. Please check your input.",
+      "conflictData": "This action conflicts with existing data."
     }
   }
 }
