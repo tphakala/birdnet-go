@@ -146,6 +146,17 @@ func getIsV2OnlyMode() bool {
 	return isV2OnlyMode
 }
 
+// requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
+func (c *Controller) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		if getStateManager() == nil {
+			return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
+				"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+		}
+		return next(ctx)
+	}
+}
+
 // initMigrationRoutes registers the migration API routes.
 func (c *Controller) initMigrationRoutes() {
 	c.logInfoIfEnabled("Initializing migration routes")
@@ -159,15 +170,18 @@ func (c *Controller) initMigrationRoutes() {
 	// Create auth-protected group
 	protectedGroup := migrationGroup.Group("", authMiddleware)
 
-	// Migration status and control routes
+	// Status and prerequisites have special handling (e.g., v2-only mode) and don't require the state manager
 	protectedGroup.GET("/status", c.GetMigrationStatus)
 	protectedGroup.GET("/prerequisites", c.GetPrerequisites)
-	protectedGroup.POST("/start", c.StartMigration)
-	protectedGroup.POST("/pause", c.PauseMigration)
-	protectedGroup.POST("/resume", c.ResumeMigration)
-	protectedGroup.POST("/retry-validation", c.RetryValidation)
-	protectedGroup.POST("/cancel", c.CancelMigration)
-	protectedGroup.POST("/rollback", c.RollbackMigration)
+
+	// POST operations require the migration state manager to be available
+	smGroup := protectedGroup.Group("", c.requireMigrationStateManager)
+	smGroup.POST("/start", c.StartMigration)
+	smGroup.POST("/pause", c.PauseMigration)
+	smGroup.POST("/resume", c.ResumeMigration)
+	smGroup.POST("/retry-validation", c.RetryValidation)
+	smGroup.POST("/cancel", c.CancelMigration)
+	smGroup.POST("/rollback", c.RollbackMigration)
 
 	c.logInfoIfEnabled("Migration routes initialized successfully")
 }
@@ -349,11 +363,6 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
-	if sm == nil {
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
-	}
-
 	// Run pre-flight checks
 	if err := c.runPreflightChecks(); err != nil {
 		c.logErrorIfEnabled("Pre-flight checks failed",
@@ -479,11 +488,6 @@ func (c *Controller) ResumeMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
-	if sm == nil {
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
-	}
-
 	// Resume the state
 	if err := sm.Resume(); err != nil {
 		c.logErrorIfEnabled("Failed to resume migration",
@@ -538,11 +542,6 @@ func (c *Controller) RetryValidation(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
-	if sm == nil {
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
-	}
-
 	// Transition FAILED → VALIDATING
 	if err := sm.RetryValidation(); err != nil {
 		c.logErrorIfEnabled("Failed to retry validation",
@@ -589,11 +588,6 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
 	worker := getMigrationWorker()
-
-	if sm == nil {
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
-	}
 
 	// Stop the worker first if running
 	if worker != nil && worker.IsRunning() {
@@ -726,14 +720,10 @@ type migrationActionParams struct {
 }
 
 // executeMigrationAction handles common migration action logic.
+// All callers are behind the requireMigrationStateManager middleware.
 func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationActionParams) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled(params.logStart, logger.String("path", path), logger.String("ip", ip))
-
-	if params.stateManager == nil {
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
-	}
 
 	// Perform worker action if worker is running
 	if params.worker != nil && params.worker.IsRunning() {
