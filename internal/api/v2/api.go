@@ -690,44 +690,8 @@ func generateCorrelationID() string {
 	return string(b)
 }
 
-// HandleError constructs and returns an appropriate error response
-func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
-	errorResp := NewErrorResponse(err, message, code)
-
-	// Determine IP to log using the request context
-	ip := ctx.RealIP() // Now uses the custom extractor
-
-	// Get tunnel info from context
-	isTunneled, _ := ctx.Get("is_tunneled").(bool)
-	tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
-
-	// Build error string for logging
-	var errorStr string
-	if err != nil {
-		errorStr = err.Error()
-	} else {
-		errorStr = message
-	}
-
-	// Log the error using structured logger
-	c.logErrorIfEnabled("API Error",
-		logger.String("correlation_id", errorResp.CorrelationID),
-		logger.String("message", message),
-		logger.String("error", errorStr),
-		logger.Int("code", code),
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("method", ctx.Request().Method),
-		logger.String("ip", ip), // Log the extracted IP
-		logger.Bool("tunneled", isTunneled),
-		logger.String("tunnel_provider", tunnelProvider),
-	)
-
-	return ctx.JSON(code, errorResp)
-}
-
-// HandleErrorWithKey constructs and returns an error response with an i18n translation key.
-// The errorKey and errorParams allow the frontend to display translated error messages.
-func (c *Controller) HandleErrorWithKey(ctx echo.Context, err error, message string, code int, errorKey string, errorParams map[string]any) error {
+// handleErrorInternal is the shared implementation for HandleError and HandleErrorWithKey.
+func (c *Controller) handleErrorInternal(ctx echo.Context, err error, message string, code int, errorKey string, errorParams map[string]any) error {
 	errorResp := NewErrorResponse(err, message, code)
 	errorResp.ErrorKey = errorKey
 	errorResp.ErrorParams = errorParams
@@ -747,21 +711,36 @@ func (c *Controller) HandleErrorWithKey(ctx echo.Context, err error, message str
 		errorStr = message
 	}
 
-	// Log the error using structured logger
-	c.logErrorIfEnabled("API Error",
+	// Build log fields
+	fields := []logger.Field{
 		logger.String("correlation_id", errorResp.CorrelationID),
 		logger.String("message", message),
 		logger.String("error", errorStr),
 		logger.Int("code", code),
-		logger.String("error_key", errorKey),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("method", ctx.Request().Method),
 		logger.String("ip", ip),
 		logger.Bool("tunneled", isTunneled),
 		logger.String("tunnel_provider", tunnelProvider),
-	)
+	}
+	if errorKey != "" {
+		fields = append(fields, logger.String("error_key", errorKey))
+	}
+
+	c.logErrorIfEnabled("API Error", fields...)
 
 	return ctx.JSON(code, errorResp)
+}
+
+// HandleError constructs and returns an appropriate error response
+func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
+	return c.handleErrorInternal(ctx, err, message, code, "", nil)
+}
+
+// HandleErrorWithKey constructs and returns an error response with an i18n translation key.
+// The errorKey and errorParams allow the frontend to display translated error messages.
+func (c *Controller) HandleErrorWithKey(ctx echo.Context, err error, message string, code int, errorKey string, errorParams map[string]any) error {
+	return c.handleErrorInternal(ctx, err, message, code, errorKey, errorParams)
 }
 
 // HandleErrorForTest constructs and returns an echo.HTTPError for testing purposes
