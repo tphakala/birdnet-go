@@ -407,6 +407,38 @@ func TestReadFile_DateFilterRespectsLocation(t *testing.T) {
 	assert.Empty(t, entries, "nil Location should default to UTC for backward compat")
 }
 
+func TestReadFile_DateFilterRespectsNegativeOffset(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Simulate a UTC-5 timezone (e.g., US Eastern)
+	loc := time.FixedZone("UTC-5", -5*60*60)
+
+	// Entry at UTC 2025-03-01 03:00:00 = Feb 28 22:00 in UTC-5
+	entryTime := time.Date(2025, 3, 1, 3, 0, 0, 0, time.UTC)
+	path := writeJSONLFile(t, dir, "tz-neg-test.log", []string{
+		sampleLine(entryTime, "INFO", "early morning UTC entry", "test", "test_op", ""),
+	})
+
+	// In UTC-5, this entry is on Feb 28. Query for Mar 1 in UTC-5 should NOT find it.
+	mar1InLoc := time.Date(2025, 3, 1, 0, 0, 0, 0, loc)
+	entries, err := ReadFile(path, &ReadOptions{Date: mar1InLoc, Location: loc})
+	require.NoError(t, err)
+	assert.Empty(t, entries, "entry is Feb 28 in UTC-5, should not match Mar 1 query")
+
+	// Query for Feb 28 in UTC-5 should find it.
+	feb28InLoc := time.Date(2025, 2, 28, 0, 0, 0, 0, loc)
+	entries, err = ReadFile(path, &ReadOptions{Date: feb28InLoc, Location: loc})
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "entry is Feb 28 in UTC-5, should match Feb 28 query")
+
+	// In UTC, this entry is Mar 1. Query for Mar 1 in UTC should find it.
+	mar1UTC := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
+	entries, err = ReadFile(path, &ReadOptions{Date: mar1UTC, Location: time.UTC})
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "entry is Mar 1 in UTC, should match Mar 1 UTC query")
+}
+
 func TestReadFiles_EmptyPaths(t *testing.T) {
 	t.Parallel()
 

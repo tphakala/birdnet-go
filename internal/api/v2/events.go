@@ -128,7 +128,7 @@ type DetectionSpeciesSummary struct {
 	Discarded int    `json:"discarded"`
 }
 
-// SystemEventsResponse is the top-level response for GET /events/system.
+// SystemEventsResponse is the top-level response for GET /system/events/operational.
 type SystemEventsResponse struct {
 	Events  []SystemEvent `json:"events"`
 	Metrics SystemMetrics `json:"metrics"`
@@ -174,7 +174,7 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 		return err
 	}
 
-	targetDate, _ := time.Parse(time.DateOnly, date)
+	targetDate, _ := time.ParseInLocation(time.DateOnly, date, time.Local)
 
 	// Get actions.log path from logger config
 	actionsLogPath := logger.Global().GetOutputPath("analysis.processor")
@@ -224,7 +224,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 
 	level := ctx.QueryParam("level")
 	if level == "" {
-		level = "INFO"
+		level = reader.LevelInfo
 	}
 	level = strings.ToUpper(level)
 
@@ -232,7 +232,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Invalid level. Use DEBUG, INFO, WARN, or ERROR", http.StatusBadRequest)
 	}
 
-	targetDate, _ := time.Parse(time.DateOnly, date)
+	targetDate, _ := time.ParseInLocation(time.DateOnly, date, time.Local)
 
 	// Collect entries from both application.log and audio.log
 	var allEntries []reader.LogEntry
