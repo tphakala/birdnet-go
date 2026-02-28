@@ -1,6 +1,7 @@
 <script>
   import ErrorAlert from './ErrorAlert.svelte';
 
+  /** @type {{ type?: 'error' | 'warning' | 'info' | 'success' | 'check', dismissible?: boolean, onDismiss?: () => void, showChildren?: boolean, [key: string]: any }} */
   let {
     type = 'error',
     dismissible = false,
