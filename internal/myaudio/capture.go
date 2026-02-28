@@ -310,7 +310,8 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 
 	// Initialize RTSP sources - the FFmpegManager will handle buffer initialization
 	if len(settings.Realtime.RTSP.Streams) > 0 {
-		for _, stream := range settings.Realtime.RTSP.Streams {
+		for i := range settings.Realtime.RTSP.Streams {
+			stream := &settings.Realtime.RTSP.Streams[i]
 			// CaptureAudioRTSP delegates to FFmpegManager which handles everything
 			go CaptureAudioRTSP(stream.URL, stream.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 		}

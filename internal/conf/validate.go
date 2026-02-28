@@ -238,7 +238,8 @@ func (r *RTSPSettings) ValidateStreams() error {
 	names := make(map[string]bool)
 	urls := make(map[string]bool)
 
-	for i, stream := range r.Streams {
+	for i := range r.Streams {
+		stream := &r.Streams[i]
 		// Validate individual stream
 		if err := stream.Validate(); err != nil {
 			return fmt.Errorf("stream %d: %w", i+1, err)

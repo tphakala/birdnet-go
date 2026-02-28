@@ -81,14 +81,16 @@
 
   function handleStartOffsetChange(event: Event) {
     const target = event.target as HTMLInputElement;
+    if (target.value === '' || target.value === '-') return;
     const val = parseInt(target.value, 10);
-    update({ startOffset: isNaN(val) ? 0 : clampOffset(val) });
+    if (!isNaN(val)) update({ startOffset: clampOffset(val) });
   }
 
   function handleEndOffsetChange(event: Event) {
     const target = event.target as HTMLInputElement;
+    if (target.value === '' || target.value === '-') return;
     const val = parseInt(target.value, 10);
-    update({ endOffset: isNaN(val) ? 0 : clampOffset(val) });
+    if (!isNaN(val)) update({ endOffset: clampOffset(val) });
   }
 
   const modeOptions = $derived([

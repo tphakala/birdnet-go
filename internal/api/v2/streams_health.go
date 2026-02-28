@@ -160,7 +160,8 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 		return streamInfo{}
 	}
 
-	for _, stream := range settings.Realtime.RTSP.Streams {
+	for i := range settings.Realtime.RTSP.Streams {
+		stream := &settings.Realtime.RTSP.Streams[i]
 		if stream.URL == rawURL {
 			return streamInfo{Name: stream.Name, Type: stream.Type}
 		}

@@ -117,19 +117,15 @@ type streamAction struct {
 // Evaluate checks all configured streams and the sound card against their
 // quiet hours settings and stops/starts them as needed.
 func (s *QuietHoursScheduler) Evaluate() {
-	settings := conf.Setting()
+	settings := conf.GetSettings()
+	if settings == nil {
+		return
+	}
 	now := time.Now()
 	log := getQuietHoursLogger()
 
 	manager := getManagerFunc()
 	if manager == nil {
-		return
-	}
-
-	// Read the current audio channel dynamically — it may be recreated during hot-reload.
-	audioChan := GetCurrentAudioChan()
-	if audioChan == nil {
-		log.Warn("No audio channel available, cannot restart streams")
 		return
 	}
 
@@ -144,7 +140,8 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 	s.mu.Lock()
 
-	for _, stream := range settings.Realtime.RTSP.Streams {
+	for i := range settings.Realtime.RTSP.Streams {
+		stream := &settings.Realtime.RTSP.Streams[i]
 		if !stream.QuietHours.Enabled {
 			if s.suppressed[stream.URL] {
 				actions = append(actions, streamAction{
@@ -155,7 +152,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 			continue
 		}
 
-		inQuietHours := s.isInQuietHours(stream.QuietHours, now)
+		inQuietHours := s.isInQuietHours(&stream.QuietHours, now)
 
 		if inQuietHours && activeStreams[stream.URL] && !s.suppressed[stream.URL] {
 			actions = append(actions, streamAction{
@@ -171,8 +168,8 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 	// Clean up suppressed entries for streams no longer in config
 	configuredURLs := make(map[string]bool)
-	for _, stream := range settings.Realtime.RTSP.Streams {
-		configuredURLs[stream.URL] = true
+	for i := range settings.Realtime.RTSP.Streams {
+		configuredURLs[settings.Realtime.RTSP.Streams[i].URL] = true
 	}
 	for url := range s.suppressed {
 		if !configuredURLs[url] {
@@ -182,7 +179,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 	// Determine sound card action
 	if settings.Realtime.Audio.Source != "" && settings.Realtime.Audio.QuietHours.Enabled {
-		inQuietHours := s.isInQuietHours(settings.Realtime.Audio.QuietHours, now)
+		inQuietHours := s.isInQuietHours(&settings.Realtime.Audio.QuietHours, now)
 		if inQuietHours && !s.soundCardSuppressed {
 			soundCardSignal = SignalQuietHoursStopSoundCard
 		} else if !inQuietHours && s.soundCardSuppressed {
@@ -194,7 +191,11 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 	s.mu.Unlock()
 
-	// Phase 2: Execute actions outside the mutex
+	// Phase 2: Execute actions outside the mutex.
+	// Read the audio channel dynamically — it may be recreated during hot-reload.
+	// Only needed for restarting streams, not for stopping them.
+	audioChan := GetCurrentAudioChan()
+
 	for _, action := range actions {
 		if action.stop {
 			log.Info("Entering quiet hours, stopping stream",
@@ -210,6 +211,11 @@ func (s *QuietHoursScheduler) Evaluate() {
 				s.mu.Unlock()
 			}
 		} else {
+			if audioChan == nil {
+				log.Warn("No audio channel available, cannot restart stream",
+					logger.String("stream", action.name))
+				continue
+			}
 			log.Info("Exiting quiet hours, restarting stream",
 				logger.String("stream", action.name),
 				logger.String("url", privacy.SanitizeStreamUrl(action.url)))
@@ -241,7 +247,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 }
 
 // isInQuietHours determines whether the given time falls within the quiet hours window.
-func (s *QuietHoursScheduler) isInQuietHours(qh conf.QuietHoursConfig, now time.Time) bool {
+func (s *QuietHoursScheduler) isInQuietHours(qh *conf.QuietHoursConfig, now time.Time) bool {
 	if !qh.Enabled {
 		return false
 	}
@@ -264,8 +270,8 @@ func (s *QuietHoursScheduler) isInQuietHours(qh conf.QuietHoursConfig, now time.
 				logger.Error(err))
 			return false
 		}
-		startTime = getSolarEventTime(sunTimes, qh.StartEvent).Add(time.Duration(qh.StartOffset) * time.Minute)
-		endTime = getSolarEventTime(sunTimes, qh.EndEvent).Add(time.Duration(qh.EndOffset) * time.Minute)
+		startTime = getSolarEventTime(&sunTimes, qh.StartEvent).Add(time.Duration(qh.StartOffset) * time.Minute)
+		endTime = getSolarEventTime(&sunTimes, qh.EndEvent).Add(time.Duration(qh.EndOffset) * time.Minute)
 
 	default:
 		return false
@@ -288,7 +294,7 @@ func parseHHMM(hhmm string, reference time.Time) time.Time {
 }
 
 // getSolarEventTime returns the appropriate time from SunEventTimes based on event name.
-func getSolarEventTime(sunTimes suncalc.SunEventTimes, event string) time.Time {
+func getSolarEventTime(sunTimes *suncalc.SunEventTimes, event string) time.Time {
 	switch event {
 	case conf.SolarEventSunrise:
 		return sunTimes.Sunrise
