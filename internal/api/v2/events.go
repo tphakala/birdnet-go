@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"net/http"
@@ -180,6 +181,10 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 		// Return empty response if no log path configured
 		return ctx.JSON(http.StatusOK, DetectionEventsResponse{
 			Buckets: []DetectionBucket{},
+			Metrics: DetectionMetrics{
+				TopDiscarded:    []SpeciesCount{},
+				ApprovedPerHour: "0.0",
+			},
 			Species: []DetectionSpeciesSummary{},
 		})
 	}
@@ -234,7 +239,11 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 	appLogPath := logger.Global().GetDefaultOutputPath()
 	if appLogPath != "" {
 		if entries, err := readLogSource(appLogPath, targetDate, level); err != nil {
-			c.Debug("Failed to read application log: %v", err)
+			c.logWarnIfEnabled("Failed to read application log",
+				logger.Error(err),
+				logger.String("path", appLogPath),
+				logger.String("date", date),
+			)
 		} else {
 			allEntries = append(allEntries, entries...)
 		}
@@ -244,7 +253,11 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 	audioLogPath := logger.Global().GetOutputPath("audio")
 	if audioLogPath != "" {
 		if entries, err := readLogSource(audioLogPath, targetDate, level); err != nil {
-			c.Debug("Failed to read audio log: %v", err)
+			c.logWarnIfEnabled("Failed to read audio log",
+				logger.Error(err),
+				logger.String("path", audioLogPath),
+				logger.String("date", date),
+			)
 		} else {
 			allEntries = append(allEntries, entries...)
 		}
@@ -346,5 +359,10 @@ func generateEventID(entry *reader.LogEntry) string {
 	_ = binary.Write(h, binary.LittleEndian, entry.Time.UnixNano())
 	h.Write([]byte(entry.Msg))
 	h.Write([]byte(entry.Operation))
+	if len(entry.Fields) > 0 {
+		if fieldBytes, err := json.Marshal(entry.Fields); err == nil {
+			h.Write(fieldBytes)
+		}
+	}
 	return fmt.Sprintf("evt_%x", h.Sum64())
 }
