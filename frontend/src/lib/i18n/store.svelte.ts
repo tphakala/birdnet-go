@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 import { DEFAULT_LOCALE, type Locale, isValidLocale } from './config.js';
 import { detectBrowserLocale } from './utils.js';
 import { parsePlural } from './pluralParser.js';
@@ -61,7 +60,6 @@ const CACHE_KEY_PREFIX = 'birdnet-messages';
 function cacheKey(locale: string): string {
   return `${CACHE_KEY_PREFIX}-${locale}-${I18N_CACHE_VERSION}`;
 }
-/* eslint-enable no-undef */
 
 // Promise that resolves when translations are first loaded
 let initialLoadResolver: (() => void) | null = null;

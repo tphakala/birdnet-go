@@ -4,19 +4,7 @@
     "at-rule-no-unknown": [
       true,
       {
-        "ignoreAtRules": [
-          "tailwind",
-          "apply",
-          "variants",
-          "responsive",
-          "screen",
-          "layer",
-          "plugin",
-          "theme",
-          "property",
-          "utility",
-          "config"
-        ]
+        "ignoreAtRules": ["apply", "layer", "theme", "property", "utility"]
       }
     ],
     "at-rule-empty-line-before": [
@@ -24,7 +12,7 @@
       {
         "except": ["blockless-after-same-name-blockless", "first-nested"],
         "ignore": ["after-comment"],
-        "ignoreAtRules": ["import", "plugin", "theme"]
+        "ignoreAtRules": ["import", "theme"]
       }
     ],
     "import-notation": null,

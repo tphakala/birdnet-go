@@ -73,17 +73,11 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   const config = { ...DEFAULT_CONFIG, ...userConfig };
 
   // Reactive state (Svelte 5 runes)
-  // eslint-disable-next-line no-undef -- Svelte 5 runes are globally available in .svelte.ts files
   let state = $state<SpectrogramLoadState>('idle');
-  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let spectrogramUrl = $state('');
-  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let showSpinner = $state(false);
-  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let hasError = $state(false);
-  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let currentDetectionId = $state<number | undefined>(undefined);
-  // eslint-disable-next-line no-undef -- Svelte 5 rune
   let serverStatus = $state<SpectrogramStatus | undefined>(undefined);
 
   // Internal state (not reactive)
