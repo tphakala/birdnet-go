@@ -153,11 +153,12 @@ type SystemMetrics struct {
 
 // --- Route registration ---
 
-// initEventsRoutes registers the /events group endpoints.
-func (c *Controller) initEventsRoutes() {
-	eventsGroup := c.Group.Group("/events")
+// registerEventsRoutes registers the /events sub-routes on the given parent group.
+// Called from initSystemRoutes so events are under /system/events/* with auth middleware.
+func (c *Controller) registerEventsRoutes(parent *echo.Group) {
+	eventsGroup := parent.Group("/events")
 	eventsGroup.GET("/detections", c.GetDetectionEvents)
-	eventsGroup.GET("/system", c.GetSystemEvents)
+	eventsGroup.GET("/operational", c.GetOperationalEvents)
 }
 
 // --- Handlers ---
@@ -209,14 +210,14 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, result)
 }
 
-// GetSystemEvents returns system log events for the requested date and minimum level.
+// GetOperationalEvents returns operational log events for the requested date and minimum level.
 // Defaults to today and INFO level.
-func (c *Controller) GetSystemEvents(ctx echo.Context) error {
+func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 	date := ctx.QueryParam("date")
 	if date == "" {
 		date = time.Now().Format(time.DateOnly)
 	}
-	if err := c.validateDateFormatWithResponse(ctx, date, "date", "GetSystemEvents"); err != nil {
+	if err := c.validateDateFormatWithResponse(ctx, date, "date", "GetOperationalEvents"); err != nil {
 		return err
 	}
 

@@ -359,6 +359,20 @@ routeInitializers := []struct {
 | GET    | `/system/audio/active`           | `GetActiveAudioDevice`    | ✅   | Active audio device                  |
 | GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration |
 
+### Events (`events.go`, `events_aggregation.go`)
+
+Registered under the system route group. All endpoints require authentication.
+
+| Method | Route                        | Handler                | Auth | Description                                               |
+| ------ | ---------------------------- | ---------------------- | ---- | --------------------------------------------------------- |
+| GET    | `/system/events/detections`  | `GetDetectionEvents`   | ✅   | Detection lifecycle events aggregated into hourly buckets |
+| GET    | `/system/events/operational` | `GetOperationalEvents` | ✅   | Operational log events (from application and audio logs)  |
+
+**Query Parameters:**
+
+- `GET /system/events/detections`: `date` (YYYY-MM-DD, defaults to today)
+- `GET /system/events/operational`: `date` (YYYY-MM-DD, defaults to today), `level` (DEBUG/INFO/WARN/ERROR, defaults to INFO)
+
 ### Weather (`weather.go`)
 
 | Method | Route                         | Handler                   | Auth | Description                         |
