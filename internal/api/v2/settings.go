@@ -1589,11 +1589,12 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	}
 
 	// Check for changes in individual streams (name, URL, type, or transport)
-	for i, oldStream := range oldRTSP.Streams {
+	for i := range oldRTSP.Streams {
 		if i >= len(newRTSP.Streams) {
 			return true
 		}
-		newStream := newRTSP.Streams[i]
+		oldStream := &oldRTSP.Streams[i]
+		newStream := &newRTSP.Streams[i]
 		if oldStream.Name != newStream.Name ||
 			oldStream.URL != newStream.URL ||
 			oldStream.Type != newStream.Type ||

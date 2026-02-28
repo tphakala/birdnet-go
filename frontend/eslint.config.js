@@ -61,6 +61,33 @@ const browserGlobals = {
   TextEncoder: 'readonly',
 };
 
+// Svelte 5 rune globals for .svelte.ts files (tsParser doesn't recognize runes;
+// .svelte files get rune support from svelte-eslint-parser automatically)
+const svelteRuneGlobals = {
+  $state: 'readonly',
+  $derived: 'readonly',
+  $effect: 'readonly',
+  $props: 'readonly',
+  $bindable: 'readonly',
+  $inspect: 'readonly',
+  $host: 'readonly',
+};
+
+// Shared TypeScript rules used by .svelte.ts, .ts, and Playwright configs
+const sharedTypeScriptRules = {
+  '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+  'no-unused-vars': 'off',
+  'no-console': 'warn',
+  'prefer-const': 'error',
+  'no-var': 'error',
+  '@typescript-eslint/no-explicit-any': 'error',
+  '@typescript-eslint/prefer-nullish-coalescing': 'error',
+  '@typescript-eslint/prefer-optional-chain': 'error',
+  '@typescript-eslint/no-unnecessary-condition': 'error',
+  '@typescript-eslint/prefer-readonly': 'error',
+  '@typescript-eslint/switch-exhaustiveness-check': 'error',
+};
+
 export default [
   // Base JavaScript config
   js.configs.recommended,
@@ -100,9 +127,37 @@ export default [
     },
   },
   
-  // TypeScript files
+  // Svelte module files (.svelte.ts) — need Svelte rune globals
+  {
+    files: ['**/*.svelte.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.json',
+      },
+      globals: {
+        ...browserGlobals,
+        ...svelteRuneGlobals,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      security,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      ...tsPlugin.configs.strict.rules,
+      ...security.configs.recommended.rules,
+      ...sharedTypeScriptRules,
+    },
+  },
+
+  // TypeScript files (excluding .svelte.ts which is handled above)
   {
     files: ['**/*.ts'],
+    ignores: ['**/*.svelte.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -119,22 +174,11 @@ export default [
     rules: {
       ...tsPlugin.configs.recommended.rules,
       ...tsPlugin.configs.strict.rules,
-      // Security rules
       ...security.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': 'off', // Use TypeScript version instead
-      'no-console': 'warn',
-      'prefer-const': 'error',
-      'no-var': 'error',
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/prefer-nullish-coalescing': 'error',
-      '@typescript-eslint/prefer-optional-chain': 'error',
-      '@typescript-eslint/no-unnecessary-condition': 'error',
-      '@typescript-eslint/prefer-readonly': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      ...sharedTypeScriptRules,
     },
   },
-  
+
   // Playwright E2E test files
   {
     files: ['tests/**/*.ts', 'playwright.config.ts'],
@@ -170,18 +214,8 @@ export default [
       'playwright/no-conditional-in-test': 'off', // E2E tests need conditionals for optional UI elements
       'playwright/no-conditional-expect': 'off', // E2E tests need conditional expects for dynamic states
       'playwright/no-wait-for-timeout': 'off', // Sometimes necessary for timing-sensitive E2E scenarios
-      
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': 'off',
-      'no-console': 'warn',
-      'prefer-const': 'error',
-      'no-var': 'error',
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/prefer-nullish-coalescing': 'error',
-      '@typescript-eslint/prefer-optional-chain': 'error',
-      '@typescript-eslint/no-unnecessary-condition': 'error',
-      '@typescript-eslint/prefer-readonly': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+
+      ...sharedTypeScriptRules,
     },
   },
 
@@ -217,18 +251,8 @@ export default [
       'playwright/no-conditional-in-test': 'off', // E2E setup needs conditionals
       'playwright/no-conditional-expect': 'off', // E2E setup needs conditional expects
       'playwright/no-wait-for-timeout': 'off', // Sometimes necessary in setup
-      
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'no-unused-vars': 'off',
-      'no-console': 'warn',
-      'prefer-const': 'error',
-      'no-var': 'error',
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/prefer-nullish-coalescing': 'error',
-      '@typescript-eslint/prefer-optional-chain': 'error',
-      '@typescript-eslint/no-unnecessary-condition': 'error',
-      '@typescript-eslint/prefer-readonly': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+
+      ...sharedTypeScriptRules,
     },
   },
   

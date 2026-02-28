@@ -654,7 +654,8 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 	// Register for each configured RTSP source, but prioritize actually running streams
 	configuredURLs := make(map[string]bool)
-	for _, stream := range settings.Realtime.RTSP.Streams {
+	for i := range settings.Realtime.RTSP.Streams {
+		stream := &settings.Realtime.RTSP.Streams[i]
 		configuredURLs[stream.URL] = true
 		totalSources++
 
@@ -740,7 +741,8 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 	}
 
 	// Unregister all stream sources
-	for _, stream := range settings.Realtime.RTSP.Streams {
+	for i := range settings.Realtime.RTSP.Streams {
+		stream := &settings.Realtime.RTSP.Streams[i]
 		// Get the source from registry to retrieve its ID
 		registry := myaudio.GetRegistry()
 		if registry != nil {

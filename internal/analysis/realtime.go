@@ -1601,7 +1601,8 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			}
 
 			var failedSources []string
-			for _, stream := range settings.Realtime.RTSP.Streams {
+			for i := range settings.Realtime.RTSP.Streams {
+				stream := &settings.Realtime.RTSP.Streams[i]
 				if stream.URL == "" {
 					log.Warn("skipping stream with empty URL",
 						logger.String("stream_name", stream.Name))

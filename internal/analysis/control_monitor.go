@@ -304,7 +304,8 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 	if len(settings.Realtime.RTSP.Streams) > 0 {
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			for _, stream := range settings.Realtime.RTSP.Streams {
+			for i := range settings.Realtime.RTSP.Streams {
+				stream := &settings.Realtime.RTSP.Streams[i]
 				if streamSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type)); streamSource != nil {
 					sources = append(sources, streamSource.ID)
 				} else {

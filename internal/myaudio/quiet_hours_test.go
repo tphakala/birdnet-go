@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,6 +9,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+// inactiveQuietWindow returns a 1-minute fixed quiet hours window guaranteed
+// to not contain the current time. This avoids flaky tests that break when CI
+// happens to run during the hardcoded window.
+func inactiveQuietWindow() (start, end string) {
+	h := (time.Now().Hour() + 12) % 24 // 12 hours away from now
+	return fmt.Sprintf("%02d:00", h), fmt.Sprintf("%02d:01", h)
+}
 
 func TestIsTimeInWindow(t *testing.T) {
 	t.Parallel()
@@ -96,7 +105,7 @@ func TestIsInQuietHours_Disabled(t *testing.T) {
 		Enabled: false,
 	}
 
-	assert.False(t, s.isInQuietHours(qh, time.Now()), "disabled quiet hours should return false")
+	assert.False(t, s.isInQuietHours(&qh, time.Now()), "disabled quiet hours should return false")
 }
 
 func TestIsInQuietHours_FixedMode(t *testing.T) {
@@ -115,15 +124,15 @@ func TestIsInQuietHours_FixedMode(t *testing.T) {
 
 	// 23:00 should be in quiet hours (overnight window)
 	at2300 := time.Date(2025, 6, 15, 23, 0, 0, 0, time.Local)
-	assert.True(t, s.isInQuietHours(qh, at2300), "23:00 should be in quiet hours (22:00-06:00)")
+	assert.True(t, s.isInQuietHours(&qh, at2300), "23:00 should be in quiet hours (22:00-06:00)")
 
 	// 12:00 should NOT be in quiet hours
 	at1200 := time.Date(2025, 6, 15, 12, 0, 0, 0, time.Local)
-	assert.False(t, s.isInQuietHours(qh, at1200), "12:00 should NOT be in quiet hours (22:00-06:00)")
+	assert.False(t, s.isInQuietHours(&qh, at1200), "12:00 should NOT be in quiet hours (22:00-06:00)")
 
 	// 03:00 should be in quiet hours (early morning in overnight window)
 	at0300 := time.Date(2025, 6, 15, 3, 0, 0, 0, time.Local)
-	assert.True(t, s.isInQuietHours(qh, at0300), "03:00 should be in quiet hours (22:00-06:00)")
+	assert.True(t, s.isInQuietHours(&qh, at0300), "03:00 should be in quiet hours (22:00-06:00)")
 }
 
 func TestIsInQuietHours_SolarMode(t *testing.T) {
@@ -146,15 +155,30 @@ func TestIsInQuietHours_SolarMode(t *testing.T) {
 		EndOffset:   -30, // 30 minutes before sunrise
 	}
 
-	// Test at midnight (should be in quiet hours - between sunset+30 and sunrise-30)
-	midnight := time.Date(2025, 6, 15, 0, 0, 0, 0, time.Local)
-	assert.True(t, s.isInQuietHours(qh, midnight),
-		"midnight should be in quiet hours (after sunset, before sunrise)")
+	// SunCalc returns times in the system's local timezone (via
+	// conf.ConvertUTCToLocal). isTimeInWindow compares raw hour:minute,
+	// so test times must also be in time.Local for the comparison to work.
+	// We compute the actual quiet window from the SunCalc to pick test
+	// times that are valid regardless of the system timezone.
+	refDate := time.Date(2025, 6, 15, 12, 0, 0, 0, time.Local)
+	sunTimes, err := sc.GetSunEventTimes(refDate)
+	if err != nil {
+		t.Fatalf("failed to get sun event times: %v", err)
+	}
 
-	// Test at noon (should NOT be in quiet hours)
-	noon := time.Date(2025, 6, 15, 12, 0, 0, 0, time.Local)
-	assert.False(t, s.isInQuietHours(qh, noon),
-		"noon should NOT be in quiet hours")
+	// Quiet window: sunset + 30min to sunrise - 30min (overnight)
+	windowStart := sunTimes.Sunset.Add(time.Duration(qh.StartOffset) * time.Minute)
+	windowEnd := sunTimes.Sunrise.Add(time.Duration(qh.EndOffset) * time.Minute)
+
+	// Pick a time 1 hour after the window start (should be in quiet hours)
+	inWindow := windowStart.Add(1 * time.Hour)
+	assert.True(t, s.isInQuietHours(&qh, inWindow),
+		"1 hour after quiet window start should be in quiet hours")
+
+	// Pick a time 1 hour after the window end (should NOT be in quiet hours)
+	outsideWindow := windowEnd.Add(1 * time.Hour)
+	assert.False(t, s.isInQuietHours(&qh, outsideWindow),
+		"1 hour after quiet window end should NOT be in quiet hours")
 }
 
 func TestIsInQuietHours_SolarMode_NoSunCalc(t *testing.T) {
@@ -174,7 +198,7 @@ func TestIsInQuietHours_SolarMode_NoSunCalc(t *testing.T) {
 		EndOffset:   0,
 	}
 
-	assert.False(t, s.isInQuietHours(qh, time.Now()),
+	assert.False(t, s.isInQuietHours(&qh, time.Now()),
 		"should return false when sunCalc is nil")
 }
 
@@ -190,7 +214,7 @@ func TestIsInQuietHours_InvalidMode(t *testing.T) {
 		Mode:    "invalid",
 	}
 
-	assert.False(t, s.isInQuietHours(qh, time.Now()),
+	assert.False(t, s.isInQuietHours(&qh, time.Now()),
 		"should return false for invalid mode")
 }
 
@@ -206,21 +230,21 @@ func TestGetSolarEventTime(t *testing.T) {
 
 	t.Run("sunrise", func(t *testing.T) {
 		t.Parallel()
-		got := getSolarEventTime(sunTimes, "sunrise")
+		got := getSolarEventTime(&sunTimes, "sunrise")
 		assert.True(t, got.Equal(sunTimes.Sunrise),
 			"getSolarEventTime(sunrise) = %v, want %v", got, sunTimes.Sunrise)
 	})
 
 	t.Run("sunset", func(t *testing.T) {
 		t.Parallel()
-		got := getSolarEventTime(sunTimes, "sunset")
+		got := getSolarEventTime(&sunTimes, "sunset")
 		assert.True(t, got.Equal(sunTimes.Sunset),
 			"getSolarEventTime(sunset) = %v, want %v", got, sunTimes.Sunset)
 	})
 
 	t.Run("invalid event returns zero time", func(t *testing.T) {
 		t.Parallel()
-		got := getSolarEventTime(sunTimes, "invalid")
+		got := getSolarEventTime(&sunTimes, "invalid")
 		assert.True(t, got.IsZero(), "getSolarEventTime(invalid) should return zero time")
 	})
 }
@@ -228,10 +252,10 @@ func TestGetSolarEventTime(t *testing.T) {
 // mockManager implements streamManager for testing Evaluate().
 type mockManager struct {
 	activeStreams []string
-	stopped      []string
-	started      []struct{ url, transport string }
-	stopErr      error
-	startErr     error
+	stopped       []string
+	started       []struct{ url, transport string }
+	stopErr       error
+	startErr      error
 }
 
 func (m *mockManager) GetActiveStreams() []string {
@@ -307,6 +331,7 @@ func TestEvaluate_RestartsStreamAfterQuietHours(t *testing.T) {
 	setTestManager(t, mock)
 	setTestAudioChan(t)
 
+	qhStart, qhEnd := inactiveQuietWindow()
 	settings := conf.GetTestSettings()
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
@@ -314,8 +339,8 @@ func TestEvaluate_RestartsStreamAfterQuietHours(t *testing.T) {
 			QuietHours: conf.QuietHoursConfig{
 				Enabled:   true,
 				Mode:      "fixed",
-				StartTime: "03:00",
-				EndTime:   "03:01", // tiny window that's almost never active
+				StartTime: qhStart,
+				EndTime:   qhEnd,
 			},
 		},
 	}
@@ -364,7 +389,7 @@ func TestEvaluate_SoundCardQuietHours(t *testing.T) {
 	setTestAudioChan(t)
 
 	settings := conf.GetTestSettings()
-	settings.Realtime.Audio.Source = "default"
+	settings.Realtime.Audio.Source = deviceDefault
 	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{
 		Enabled:   true,
 		Mode:      "fixed",
@@ -392,7 +417,7 @@ func TestEvaluate_SoundCardRestoredWhenDisabled(t *testing.T) {
 	setTestAudioChan(t)
 
 	settings := conf.GetTestSettings()
-	settings.Realtime.Audio.Source = "default"
+	settings.Realtime.Audio.Source = deviceDefault
 	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{Enabled: false}
 	setTestSettings(t, settings)
 
@@ -415,6 +440,7 @@ func TestEvaluate_NoActionWhenNotInQuietHours(t *testing.T) {
 	setTestManager(t, mock)
 	setTestAudioChan(t)
 
+	qhStart, qhEnd := inactiveQuietWindow()
 	settings := conf.GetTestSettings()
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
@@ -422,8 +448,8 @@ func TestEvaluate_NoActionWhenNotInQuietHours(t *testing.T) {
 			QuietHours: conf.QuietHoursConfig{
 				Enabled:   true,
 				Mode:      "fixed",
-				StartTime: "03:00",
-				EndTime:   "03:01", // tiny window, almost never active
+				StartTime: qhStart,
+				EndTime:   qhEnd,
 			},
 		},
 	}
@@ -452,7 +478,9 @@ func TestEvaluate_NilManagerReturnsEarly(t *testing.T) {
 	scheduler.Evaluate()
 }
 
-func TestEvaluate_NilAudioChanReturnsEarly(t *testing.T) {
+func TestEvaluate_NilAudioChanAllowsStopButBlocksRestart(t *testing.T) {
+	// With nil audioChan, streams can still be stopped during quiet hours
+	// but cannot be restarted (audioChan is only needed for StartStream).
 	mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
 	setTestManager(t, mock)
 	SetCurrentAudioChan(nil)
@@ -475,6 +503,38 @@ func TestEvaluate_NilAudioChanReturnsEarly(t *testing.T) {
 	}
 	scheduler.Evaluate()
 
-	assert.Empty(t, mock.stopped, "should not stop streams when audioChan is nil")
+	assert.Equal(t, []string{"rtsp://cam1"}, mock.stopped, "should stop streams even when audioChan is nil")
 	assert.Empty(t, mock.started, "should not start streams when audioChan is nil")
+	assert.True(t, scheduler.suppressed["rtsp://cam1"], "stream should be marked suppressed")
+}
+
+func TestEvaluate_NilAudioChanSkipsRestart(t *testing.T) {
+	// When a stream is suppressed and quiet hours end, but audioChan is nil,
+	// the stream should NOT be restarted.
+	mock := &mockManager{activeStreams: []string{}}
+	setTestManager(t, mock)
+	SetCurrentAudioChan(nil)
+
+	qhStart, qhEnd := inactiveQuietWindow()
+	settings := conf.GetTestSettings()
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+			QuietHours: conf.QuietHoursConfig{
+				Enabled: true, Mode: "fixed",
+				StartTime: qhStart, EndTime: qhEnd,
+			},
+		},
+	}
+	setTestSettings(t, settings)
+
+	scheduler := &QuietHoursScheduler{
+		controlChan: make(chan string, 1),
+		suppressed:  map[string]bool{"rtsp://cam1": true}, // previously suppressed
+	}
+	scheduler.Evaluate()
+
+	assert.Empty(t, mock.stopped, "should not stop any streams")
+	assert.Empty(t, mock.started, "should not restart stream when audioChan is nil")
+	assert.True(t, scheduler.suppressed["rtsp://cam1"], "stream should remain suppressed when restart fails")
 }
