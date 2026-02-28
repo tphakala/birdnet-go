@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import tailwindcss from '@tailwindcss/vite'
 import { svelteTesting } from '@testing-library/svelte/vite'
 import { copyFileSync, mkdirSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -12,6 +13,7 @@ export default defineConfig({
     __I18N_CACHE_VERSION__: JSON.stringify(Date.now().toString(36)),
   },
   plugins: [
+    tailwindcss(),
     svelte({
       compilerOptions: {
         // HMR is integrated in Svelte 5 core, disabled in production builds
