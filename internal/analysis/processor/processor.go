@@ -1143,7 +1143,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			continue
 		}
 
-		GetLogger().Debug("Flushing detection",
+		GetLogger().Info("Flushing detection",
 			logger.String("species", species),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
 			logger.Bool("deadline_reached", true),
