@@ -403,7 +403,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+	unifiedAudioChan := startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+	myaudio.SetCurrentAudioChan(unifiedAudioChan)
+
+	// Initialize quiet hours scheduler for stream and sound card management
+	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, controlChan)
+	myaudio.SetGlobalScheduler(quietHoursScheduler)
+	quietHoursScheduler.Start()
+	defer quietHoursScheduler.Stop()
 
 	// Publish application started alert event
 	alerting.TryPublish(&alerting.AlertEvent{
@@ -438,7 +445,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// restarting the application. The control monitor will start the endpoint if enabled.
 
 	// start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics)
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics, quietHoursScheduler)
 
 	// start shutdown signal monitor
 	monitorShutdownSignals(quitChan)
@@ -655,13 +662,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			// Handle the restart signal.
 			GetLogger().Info("restarting audio capture",
 				logger.String("operation", "restart_audio_capture"))
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+			unifiedAudioChan = startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+			myaudio.SetCurrentAudioChan(unifiedAudioChan)
 		}
 	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) chan myaudio.UnifiedAudioData {
 	// Stop previous demultiplexing goroutine if it exists
 	audioDemuxManager.Stop()
 
@@ -717,6 +725,8 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 
 	// waitgroup is managed within CaptureAudio
 	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+
+	return unifiedAudioChan
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
@@ -1302,8 +1312,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics) *ControlMonitor {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics)
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics, quietHoursScheduler)
 	ctrlMonitor.Start()
 	return ctrlMonitor
 }

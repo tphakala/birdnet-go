@@ -2686,6 +2686,7 @@
           "connecting": "Verbinden",
           "error": "Fout",
           "idle": "Inactief",
+          "suppressed": "Stille uren",
           "unknown": "Onbekend"
         },
         "emptyState": {
@@ -3657,6 +3658,11 @@
     "detached": "Terminal is losgekoppeld",
     "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen.",
     "reattach": "Opnieuw koppelen"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Stille uren actief — {count} bron(nen) gepauzeerd"
+    }
   },
   "errors": {
     "auth": {

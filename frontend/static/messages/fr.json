@@ -2686,6 +2686,7 @@
           "connecting": "Connexion",
           "error": "Erreur",
           "idle": "Inactif",
+          "suppressed": "Heures calmes",
           "unknown": "Inconnu"
         },
         "emptyState": {
@@ -3657,6 +3658,11 @@
     "detached": "Terminal détaché",
     "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici.",
     "reattach": "Rattacher"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Heures calmes actives — {count} source(s) en pause"
+    }
   },
   "errors": {
     "auth": {

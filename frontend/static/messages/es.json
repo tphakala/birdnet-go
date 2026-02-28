@@ -2515,6 +2515,7 @@
           "connecting": "Conectando",
           "error": "Error",
           "idle": "Inactivo",
+          "suppressed": "Horas de silencio",
           "unknown": "Desconocido"
         },
         "emptyState": {
@@ -3657,6 +3658,11 @@
     "detached": "Terminal separada",
     "detachedDescription": "La terminal se está ejecutando en una ventana separada. Cierre esa ventana para devolverla aquí.",
     "reattach": "Reconectar"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Horas de silencio activas — {count} fuente(s) en pausa"
+    }
   },
   "errors": {
     "auth": {

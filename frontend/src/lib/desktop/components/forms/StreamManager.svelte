@@ -25,11 +25,14 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
   import { toastActions } from '$lib/stores/toast';
+  import { quietHoursStore } from '$lib/stores/quietHours.svelte';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
-  import type { StreamConfig, StreamType } from '$lib/stores/settings';
+  import QuietHoursEditor from './QuietHoursEditor.svelte';
+  import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
+  import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
   const logger = loggers.audio;
 
@@ -96,6 +99,8 @@
   // IMPORTANT: Pass the object directly, not a getter. Never reassign - only mutate properties.
   let streamHealth = $state<Record<string, StreamHealthResponse>>({});
 
+  // Quiet hours suppression state from shared store
+
   // Provide the state object via context so children can access it reactively
   // Pass the object directly - children will see mutations to its properties
   setContext('streamHealth', streamHealth);
@@ -108,6 +113,7 @@
   let newUrl = $state('');
   let newTransport = $state<'tcp' | 'udp'>('tcp');
   let newStreamType = $state<StreamType>('rtsp');
+  let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
 
@@ -152,11 +158,28 @@
     return { healthy, unhealthy, unknown, total: streams.length };
   });
 
+  // Check if a specific stream is suppressed by quiet hours.
+  // The backend returns sanitized URLs (credentials stripped), so we compare using sanitized form.
+  function isStreamSuppressed(url: string, stream: StreamConfig): boolean {
+    const qhStatus = quietHoursStore.status;
+    if (!stream.quietHours?.enabled || !qhStatus?.suppressedStreams) return false;
+    const sanitized = sanitizeUrlForComparison(url);
+    // eslint-disable-next-line security/detect-object-injection -- sanitized URL from internal sanitizeUrlForComparison, not user input
+    return qhStatus.suppressedStreams[sanitized] === true;
+  }
+
   // Convert backend process state to UI status
-  function getStreamStatus(url: string): StreamStatus {
+  function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = streamHealth[url];
-    if (!health) return 'unknown';
+    if (!health) {
+      // No health data means the stream was removed from the active map.
+      // Check per-stream suppression state rather than global anyActive flag.
+      if (isStreamSuppressed(url, stream)) {
+        return 'suppressed';
+      }
+      return 'unknown';
+    }
 
     const state = health.process_state.toLowerCase();
 
@@ -357,6 +380,7 @@
       url: trimmedUrl,
       type: newStreamType,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
+      quietHours: newQuietHours,
     } as StreamConfig;
 
     // Add the new stream
@@ -368,6 +392,7 @@
     newUrl = '';
     newTransport = 'tcp';
     newStreamType = 'rtsp';
+    newQuietHours = { ...defaultQuietHoursConfig };
     clearErrors();
     showAddForm = false;
 
@@ -439,18 +464,23 @@
       showAddForm = false;
       newName = '';
       newUrl = '';
+      newTransport = 'tcp';
+      newStreamType = 'rtsp';
+      newQuietHours = { ...defaultQuietHoursConfig };
       clearErrors();
     }
   }
 
   onMount(() => {
     loadHealthStatus();
+    quietHoursStore.startPolling();
     if (streams.length > 0) {
       connectSSE();
     }
   });
 
   onDestroy(() => {
+    quietHoursStore.stopPolling();
     if (eventSource) {
       eventSource.close();
       eventSource = null;
@@ -543,7 +573,7 @@
         <StreamCard
           {stream}
           {index}
-          status={getStreamStatus(stream.url)}
+          status={getStreamStatus(stream.url, stream)}
           {disabled}
           onUpdate={updatedStream => updateStream(index, updatedStream)}
           onDelete={() => deleteStream(index)}
@@ -643,6 +673,14 @@
             {/if}
           </div>
 
+          <!-- Quiet Hours -->
+          <QuietHoursEditor
+            config={newQuietHours}
+            onChange={qh => (newQuietHours = qh)}
+            {disabled}
+            idPrefix="new-stream-qh"
+          />
+
           <!-- Action Buttons -->
           <div class="flex justify-end gap-2 pt-2">
             <button
@@ -652,6 +690,7 @@
                 showAddForm = false;
                 newName = '';
                 newUrl = '';
+                newQuietHours = { ...defaultQuietHoursConfig };
                 clearErrors();
               }}
             >

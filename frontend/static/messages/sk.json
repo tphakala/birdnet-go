@@ -2363,6 +2363,7 @@
           "connecting": "Pripája sa",
           "error": "Chyba",
           "idle": "Nečinné",
+          "suppressed": "Tiché hodiny",
           "unknown": "Neznáme"
         },
         "emptyState": {
@@ -3488,6 +3489,11 @@
     "detached": "Terminál je odpojený",
     "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
     "reattach": "Pripojiť späť"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Tiché hodiny aktívne — {count} zdroj(e) pozastavený(é)"
+    }
   },
   "errors": {
     "auth": {

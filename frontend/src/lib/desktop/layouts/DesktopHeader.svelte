@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import SearchBox from '$lib/desktop/components/ui/SearchBox.svelte';
+  import QuietHoursIndicator from '$lib/desktop/components/ui/QuietHoursIndicator.svelte';
   import AudioLevelIndicator from '$lib/desktop/components/ui/AudioLevelIndicator.svelte';
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
   import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
@@ -109,6 +110,8 @@
 
   <!-- Right section: Action items -->
   <div class="flex items-center gap-2">
+    <QuietHoursIndicator />
+
     {#if showAudioLevel}
       <AudioLevelIndicator {securityEnabled} {accessAllowed} />
     {/if}

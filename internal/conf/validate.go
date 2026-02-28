@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -38,6 +39,36 @@ const (
 const (
 	MaxStreamNameLength = 64
 )
+
+// Quiet hours validation constants
+const (
+	MaxQuietHoursOffset = 180  // Maximum offset in minutes from sun event
+	MinQuietHoursOffset = -180 // Minimum offset in minutes from sun event
+)
+
+// Quiet hours mode constants
+const (
+	QuietHoursModeFixed = "fixed" // Fixed clock-based quiet hours
+	QuietHoursModeSolar = "solar" // Solar event-based quiet hours
+)
+
+// Solar event constants
+const (
+	SolarEventSunrise = "sunrise" // Sunrise solar event
+	SolarEventSunset  = "sunset"  // Sunset solar event
+)
+
+// ValidQuietHoursModes contains valid quiet hours mode values
+var ValidQuietHoursModes = map[string]bool{
+	QuietHoursModeFixed: true,
+	QuietHoursModeSolar: true,
+}
+
+// ValidSolarEvents contains valid solar event names
+var ValidSolarEvents = map[string]bool{
+	SolarEventSunrise: true,
+	SolarEventSunset:  true,
+}
 
 // ValidStreamTypes contains all supported stream types
 var ValidStreamTypes = map[string]bool{
@@ -117,7 +148,59 @@ func (s *StreamConfig) Validate() error {
 	}
 
 	// Validate URL scheme matches type
-	return s.validateURLScheme()
+	if err := s.validateURLScheme(); err != nil {
+		return err
+	}
+
+	// Validate quiet hours if enabled
+	if err := ValidateQuietHours(&s.QuietHours, fmt.Sprintf("stream '%s'", s.Name)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateQuietHours validates a quiet hours configuration
+func ValidateQuietHours(qh *QuietHoursConfig, context string) error {
+	if qh == nil || !qh.Enabled {
+		return nil
+	}
+
+	// Validate mode
+	if !ValidQuietHoursModes[qh.Mode] {
+		return fmt.Errorf("%s: quiet hours mode must be 'fixed' or 'solar', got '%s'", context, qh.Mode)
+	}
+
+	switch qh.Mode {
+	case QuietHoursModeFixed:
+		// Validate start time format
+		if _, err := time.Parse("15:04", qh.StartTime); err != nil {
+			return fmt.Errorf("%s: quiet hours start time must be in HH:MM format, got '%s'", context, qh.StartTime)
+		}
+		// Validate end time format
+		if _, err := time.Parse("15:04", qh.EndTime); err != nil {
+			return fmt.Errorf("%s: quiet hours end time must be in HH:MM format, got '%s'", context, qh.EndTime)
+		}
+
+	case QuietHoursModeSolar:
+		// Validate start event
+		if !ValidSolarEvents[qh.StartEvent] {
+			return fmt.Errorf("%s: quiet hours start event must be 'sunrise' or 'sunset', got '%s'", context, qh.StartEvent)
+		}
+		// Validate end event
+		if !ValidSolarEvents[qh.EndEvent] {
+			return fmt.Errorf("%s: quiet hours end event must be 'sunrise' or 'sunset', got '%s'", context, qh.EndEvent)
+		}
+		// Validate offsets
+		if qh.StartOffset < MinQuietHoursOffset || qh.StartOffset > MaxQuietHoursOffset {
+			return fmt.Errorf("%s: quiet hours start offset must be between %d and %d minutes, got %d", context, MinQuietHoursOffset, MaxQuietHoursOffset, qh.StartOffset)
+		}
+		if qh.EndOffset < MinQuietHoursOffset || qh.EndOffset > MaxQuietHoursOffset {
+			return fmt.Errorf("%s: quiet hours end offset must be between %d and %d minutes, got %d", context, MinQuietHoursOffset, MaxQuietHoursOffset, qh.EndOffset)
+		}
+	}
+
+	return nil
 }
 
 // validateURLScheme checks URL scheme matches declared stream type
@@ -769,6 +852,14 @@ func validateAudioSettings(settings *AudioSettings) error {
 		// Get supported formats if SoX is found
 		_, formats := IsSoxAvailable() // We already know it's available from LookPath
 		settings.SoxAudioTypes = formats
+	}
+
+	// Validate quiet hours for sound card
+	if err := ValidateQuietHours(&settings.QuietHours, "sound card"); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-quiet-hours").
+			Build()
 	}
 
 	// Validate audio export settings

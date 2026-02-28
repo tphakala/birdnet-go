@@ -32,12 +32,15 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
+  import QuietHoursEditor from '$lib/desktop/components/forms/QuietHoursEditor.svelte';
   import {
     settingsStore,
     settingsActions,
     audioSettings,
     rtspSettings,
+    defaultQuietHoursConfig,
     type EqualizerFilterType,
+    type QuietHoursConfig,
     type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -184,8 +187,14 @@
   // Sound Card tab changes
   let soundCardTabHasChanges = $derived(
     hasSettingsChanged(
-      { source: store.originalData.realtime?.audio?.source },
-      { source: store.formData.realtime?.audio?.source }
+      {
+        source: store.originalData.realtime?.audio?.source,
+        quietHours: store.originalData.realtime?.audio?.quietHours,
+      },
+      {
+        source: store.formData.realtime?.audio?.source,
+        quietHours: store.formData.realtime?.audio?.quietHours,
+      }
     )
   );
 
@@ -327,6 +336,12 @@
   function updateAudioSource(source: string) {
     settingsActions.updateSection('realtime', {
       audio: { ...$audioSettings!, source },
+    });
+  }
+
+  function updateSoundCardQuietHours(quietHours: QuietHoursConfig) {
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings!, quietHours },
     });
   }
 
@@ -592,6 +607,23 @@
           </div>
         </div>
       </SettingsSection>
+
+      <!-- Sound Card Quiet Hours -->
+      {#if hasSelectedSoundCard}
+        <SettingsSection
+          title={t('settings.audio.quietHours.sectionTitle')}
+          description={t('settings.audio.quietHours.sectionDescription')}
+          originalData={store.originalData.realtime?.audio?.quietHours}
+          currentData={store.formData.realtime?.audio?.quietHours}
+        >
+          <QuietHoursEditor
+            config={settings.audio.quietHours ?? defaultQuietHoursConfig}
+            onChange={updateSoundCardQuietHours}
+            disabled={store.isLoading || store.isSaving}
+            idPrefix="soundcard-qh"
+          />
+        </SettingsSection>
+      {/if}
     {/if}
   </div>
 {/snippet}

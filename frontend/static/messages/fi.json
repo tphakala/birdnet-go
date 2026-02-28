@@ -2515,6 +2515,7 @@
           "connecting": "Yhdistetään",
           "error": "Virhe",
           "idle": "Odottaa",
+          "suppressed": "Hiljaiset tunnit",
           "unknown": "Tuntematon"
         },
         "emptyState": {
@@ -3657,6 +3658,11 @@
     "detached": "Terminaali on irrotettu",
     "detachedDescription": "Terminaali toimii erillisessä ikkunassa. Sulje se palauttaaksesi sen tänne.",
     "reattach": "Liitä takaisin"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Hiljaiset tunnit aktiiviset — {count} lähde tauolla"
+    }
   },
   "errors": {
     "auth": {

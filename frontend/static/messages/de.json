@@ -2686,6 +2686,7 @@
           "connecting": "Verbindung wird hergestellt",
           "error": "Fehler",
           "idle": "Inaktiv",
+          "suppressed": "Ruhezeit",
           "unknown": "Unbekannt"
         },
         "emptyState": {
@@ -3657,6 +3658,11 @@
     "detached": "Terminal ist abgetrennt",
     "detachedDescription": "Das Terminal läuft in einem separaten Fenster. Schließen Sie dieses Fenster, um es hierher zurückzuholen.",
     "reattach": "Wieder anhängen"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Ruhemodus aktiv — {count} Quelle(n) pausiert"
+    }
   },
   "errors": {
     "auth": {

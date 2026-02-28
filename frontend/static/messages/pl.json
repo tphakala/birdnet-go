@@ -2692,6 +2692,7 @@
           "connecting": "Łączenie",
           "error": "Błąd",
           "idle": "Bezczynny",
+          "suppressed": "Cisza nocna",
           "unknown": "Nieznany"
         },
         "emptyState": {
@@ -3657,6 +3658,11 @@
     "detached": "Terminal jest odłączony",
     "detachedDescription": "Terminal działa w osobnym oknie. Zamknij to okno, aby przywrócić go tutaj.",
     "reattach": "Podłącz ponownie"
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Cisza nocna aktywna — {count} źródło(a) wstrzymane"
+    }
   },
   "errors": {
     "auth": {

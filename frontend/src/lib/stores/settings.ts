@@ -119,6 +119,7 @@ export interface AudioSettings {
   soundLevel: SoundLevelSettings;
   useAudioCore?: boolean;
   equalizer: EqualizerSettings;
+  quietHours?: QuietHoursConfig;
 }
 
 export interface SoundLevelSettings {
@@ -137,12 +138,37 @@ export const StreamTypes = {
 
 export type StreamType = (typeof StreamTypes)[keyof typeof StreamTypes];
 
+// QuietHoursConfig represents quiet hours configuration for a stream or sound card
+export interface QuietHoursConfig {
+  enabled: boolean;
+  mode: 'fixed' | 'solar';
+  startTime: string; // HH:MM format for fixed mode
+  endTime: string; // HH:MM format for fixed mode
+  startEvent: 'sunrise' | 'sunset'; // solar event for solar mode
+  startOffset: number; // minutes offset from start event
+  endEvent: 'sunrise' | 'sunset'; // solar event for solar mode
+  endOffset: number; // minutes offset from end event
+}
+
+// Default quiet hours configuration
+export const defaultQuietHoursConfig: QuietHoursConfig = {
+  enabled: false,
+  mode: 'fixed',
+  startTime: '22:00',
+  endTime: '06:00',
+  startEvent: 'sunset',
+  startOffset: 0,
+  endEvent: 'sunrise',
+  endOffset: 0,
+};
+
 // StreamConfig represents a single audio stream source
 export interface StreamConfig {
   name: string; // Required: descriptive name like "Front Yard"
   url: string; // Required: stream URL
   type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
   transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
+  quietHours?: QuietHoursConfig; // Quiet hours configuration
 }
 
 // RTSPHealthSettings matches backend RTSPHealthSettings
