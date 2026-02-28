@@ -46,10 +46,11 @@ type LogEntry struct {
 
 // ReadOptions controls filtering during log file scanning.
 type ReadOptions struct {
-	Date       time.Time // Optional: only return entries for this date (compared as UTC date). If zero, no date filtering is applied.
-	Operations []string  // Optional: filter to these operation values.
-	Level      string    // Optional: minimum level (DEBUG, INFO, WARN, ERROR).
-	Module     string    // Optional: filter to this module prefix.
+	Date       time.Time      // Optional: only return entries for this date. If zero, no date filtering is applied.
+	Location   *time.Location // Optional: timezone for date comparison. If nil, defaults to UTC.
+	Operations []string       // Optional: filter to these operation values.
+	Level      string         // Optional: minimum level (DEBUG, INFO, WARN, ERROR).
+	Module     string         // Optional: filter to this module prefix.
 }
 
 // ReadFile reads a JSONL log file and returns entries matching the options.
@@ -228,12 +229,15 @@ func parseLine(line []byte) (LogEntry, bool) {
 
 // preparedOptions holds precomputed filter values to avoid repeated work per entry.
 type preparedOptions struct {
-	targetDate time.Time // UTC date truncated to midnight
-	hasDate    bool
-	minRank    int
-	hasLevel   bool
-	operations []string
-	module     string
+	targetYear  int
+	targetMonth time.Month
+	targetDay   int
+	location    *time.Location
+	hasDate     bool
+	minRank     int
+	hasLevel    bool
+	operations  []string
+	module      string
 }
 
 // prepareOptions precomputes filter values from ReadOptions.
@@ -244,7 +248,12 @@ func prepareOptions(opts *ReadOptions) preparedOptions {
 	}
 	if !opts.Date.IsZero() {
 		p.hasDate = true
-		p.targetDate = opts.Date.UTC().Truncate(24 * time.Hour)
+		loc := opts.Location
+		if loc == nil {
+			loc = time.UTC
+		}
+		p.location = loc
+		p.targetYear, p.targetMonth, p.targetDay = opts.Date.In(loc).Date()
 	}
 	if opts.Level != "" {
 		if rank, ok := levelRank[strings.ToUpper(opts.Level)]; ok {
@@ -257,10 +266,10 @@ func prepareOptions(opts *ReadOptions) preparedOptions {
 
 // matchesOptions checks whether a log entry passes all the precomputed filters.
 func matchesOptions(entry *LogEntry, prep *preparedOptions) bool {
-	// Date filter: compare UTC dates.
+	// Date filter: compare dates in the configured timezone.
 	if prep.hasDate {
-		entryDate := entry.Time.UTC().Truncate(24 * time.Hour)
-		if !entryDate.Equal(prep.targetDate) {
+		y, m, d := entry.Time.In(prep.location).Date()
+		if y != prep.targetYear || m != prep.targetMonth || d != prep.targetDay {
 			return false
 		}
 	}

@@ -128,7 +128,7 @@ type DetectionSpeciesSummary struct {
 	Discarded int    `json:"discarded"`
 }
 
-// SystemEventsResponse is the top-level response for GET /events/system.
+// SystemEventsResponse is the top-level response for GET /system/events/operational.
 type SystemEventsResponse struct {
 	Events  []SystemEvent `json:"events"`
 	Metrics SystemMetrics `json:"metrics"`
@@ -153,11 +153,12 @@ type SystemMetrics struct {
 
 // --- Route registration ---
 
-// initEventsRoutes registers the /events group endpoints.
-func (c *Controller) initEventsRoutes() {
-	eventsGroup := c.Group.Group("/events")
+// registerEventsRoutes registers the /events sub-routes on the given parent group.
+// Called from initSystemRoutes so events are under /system/events/* with auth middleware.
+func (c *Controller) registerEventsRoutes(parent *echo.Group) {
+	eventsGroup := parent.Group("/events")
 	eventsGroup.GET("/detections", c.GetDetectionEvents)
-	eventsGroup.GET("/system", c.GetSystemEvents)
+	eventsGroup.GET("/operational", c.GetOperationalEvents)
 }
 
 // --- Handlers ---
@@ -173,7 +174,7 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 		return err
 	}
 
-	targetDate, _ := time.Parse(time.DateOnly, date)
+	targetDate, _ := time.ParseInLocation(time.DateOnly, date, time.Local)
 
 	// Get actions.log path from logger config
 	actionsLogPath := logger.Global().GetOutputPath("analysis.processor")
@@ -198,6 +199,7 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 	// Read and filter entries
 	entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
 		Date:       targetDate,
+		Location:   time.Local,
 		Operations: detectionOperations,
 	})
 	if err != nil {
@@ -209,20 +211,20 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, result)
 }
 
-// GetSystemEvents returns system log events for the requested date and minimum level.
+// GetOperationalEvents returns operational log events for the requested date and minimum level.
 // Defaults to today and INFO level.
-func (c *Controller) GetSystemEvents(ctx echo.Context) error {
+func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 	date := ctx.QueryParam("date")
 	if date == "" {
 		date = time.Now().Format(time.DateOnly)
 	}
-	if err := c.validateDateFormatWithResponse(ctx, date, "date", "GetSystemEvents"); err != nil {
+	if err := c.validateDateFormatWithResponse(ctx, date, "date", "GetOperationalEvents"); err != nil {
 		return err
 	}
 
 	level := ctx.QueryParam("level")
 	if level == "" {
-		level = "INFO"
+		level = reader.LevelInfo
 	}
 	level = strings.ToUpper(level)
 
@@ -230,7 +232,7 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Invalid level. Use DEBUG, INFO, WARN, or ERROR", http.StatusBadRequest)
 	}
 
-	targetDate, _ := time.Parse(time.DateOnly, date)
+	targetDate, _ := time.ParseInLocation(time.DateOnly, date, time.Local)
 
 	// Collect entries from both application.log and audio.log
 	var allEntries []reader.LogEntry
@@ -238,7 +240,7 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 	// Read application.log
 	appLogPath := logger.Global().GetDefaultOutputPath()
 	if appLogPath != "" {
-		if entries, err := readLogSource(appLogPath, targetDate, level); err != nil {
+		if entries, err := readLogSource(appLogPath, targetDate, level, time.Local); err != nil {
 			c.logWarnIfEnabled("Failed to read application log",
 				logger.Error(err),
 				logger.String("path", appLogPath),
@@ -252,7 +254,7 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 	// Read audio.log
 	audioLogPath := logger.Global().GetOutputPath("audio")
 	if audioLogPath != "" {
-		if entries, err := readLogSource(audioLogPath, targetDate, level); err != nil {
+		if entries, err := readLogSource(audioLogPath, targetDate, level, time.Local); err != nil {
 			c.logWarnIfEnabled("Failed to read audio log",
 				logger.Error(err),
 				logger.String("path", audioLogPath),
@@ -278,15 +280,16 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 }
 
 // readLogSource finds and reads log entries from a base log path, filtering by date and level.
-func readLogSource(basePath string, date time.Time, level string) ([]reader.LogEntry, error) {
+func readLogSource(basePath string, date time.Time, level string, loc *time.Location) ([]reader.LogEntry, error) {
 	logFiles, err := reader.FindLogFiles(basePath)
 	if err != nil {
 		return nil, fmt.Errorf("finding log files for %s: %w", basePath, err)
 	}
 
 	entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
-		Date:  date,
-		Level: level,
+		Date:     date,
+		Location: loc,
+		Level:    level,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reading log files for %s: %w", basePath, err)
