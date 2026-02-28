@@ -61,6 +61,17 @@ const browserGlobals = {
   TextEncoder: 'readonly',
 };
 
+// Svelte 5 rune globals for .svelte and .svelte.ts files
+const svelteRuneGlobals = {
+  $state: 'readonly',
+  $derived: 'readonly',
+  $effect: 'readonly',
+  $props: 'readonly',
+  $bindable: 'readonly',
+  $inspect: 'readonly',
+  $host: 'readonly',
+};
+
 export default [
   // Base JavaScript config
   js.configs.recommended,
@@ -112,13 +123,7 @@ export default [
       },
       globals: {
         ...browserGlobals,
-        $state: 'readonly',
-        $derived: 'readonly',
-        $effect: 'readonly',
-        $props: 'readonly',
-        $bindable: 'readonly',
-        $inspect: 'readonly',
-        $host: 'readonly',
+        ...svelteRuneGlobals,
       },
     },
     plugins: {

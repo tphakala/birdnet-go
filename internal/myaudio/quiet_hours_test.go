@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,6 +9,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+// inactiveQuietWindow returns a 1-minute fixed quiet hours window guaranteed
+// to not contain the current time. This avoids flaky tests that break when CI
+// happens to run during the hardcoded window.
+func inactiveQuietWindow() (start, end string) {
+	h := (time.Now().Hour() + 12) % 24 // 12 hours away from now
+	return fmt.Sprintf("%02d:00", h), fmt.Sprintf("%02d:01", h)
+}
 
 func TestIsTimeInWindow(t *testing.T) {
 	t.Parallel()
@@ -322,6 +331,7 @@ func TestEvaluate_RestartsStreamAfterQuietHours(t *testing.T) {
 	setTestManager(t, mock)
 	setTestAudioChan(t)
 
+	qhStart, qhEnd := inactiveQuietWindow()
 	settings := conf.GetTestSettings()
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
@@ -329,8 +339,8 @@ func TestEvaluate_RestartsStreamAfterQuietHours(t *testing.T) {
 			QuietHours: conf.QuietHoursConfig{
 				Enabled:   true,
 				Mode:      "fixed",
-				StartTime: "03:00",
-				EndTime:   "03:01", // tiny window that's almost never active
+				StartTime: qhStart,
+				EndTime:   qhEnd,
 			},
 		},
 	}
@@ -430,6 +440,7 @@ func TestEvaluate_NoActionWhenNotInQuietHours(t *testing.T) {
 	setTestManager(t, mock)
 	setTestAudioChan(t)
 
+	qhStart, qhEnd := inactiveQuietWindow()
 	settings := conf.GetTestSettings()
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
@@ -437,8 +448,8 @@ func TestEvaluate_NoActionWhenNotInQuietHours(t *testing.T) {
 			QuietHours: conf.QuietHoursConfig{
 				Enabled:   true,
 				Mode:      "fixed",
-				StartTime: "03:00",
-				EndTime:   "03:01", // tiny window, almost never active
+				StartTime: qhStart,
+				EndTime:   qhEnd,
 			},
 		},
 	}
@@ -504,13 +515,14 @@ func TestEvaluate_NilAudioChanSkipsRestart(t *testing.T) {
 	setTestManager(t, mock)
 	SetCurrentAudioChan(nil)
 
+	qhStart, qhEnd := inactiveQuietWindow()
 	settings := conf.GetTestSettings()
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
 			Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
 			QuietHours: conf.QuietHoursConfig{
 				Enabled: true, Mode: "fixed",
-				StartTime: "03:00", EndTime: "03:01", // tiny window, almost never active
+				StartTime: qhStart, EndTime: qhEnd,
 			},
 		},
 	}
