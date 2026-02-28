@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 /**
  * useDetectionActions.svelte.ts
  *
