@@ -185,6 +185,9 @@
         "lockStatusFailed": "Lukitustilan päivitys epäonnistui. Yritä uudelleen.",
         "verificationFailed": "Todennustilan päivitys epäonnistui. Yritä uudelleen."
       }
+    },
+    "errors": {
+      "unknownError": "Tuntematon virhe"
     }
   },
   "navigation": {
@@ -339,70 +342,74 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go käynnistetty",
+        "message": "Sovellus käynnistyi onnistuneesti (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go sammutetaan",
+        "message": "Sovellus sammutetaan hallitusti"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Havaittu: {species}",
+        "message": "Luottamus: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "{integration}-integraatio epäonnistui",
+        "failedMessage": "Yhteyden muodostaminen kohteeseen {integration} epäonnistui. Tarkista asetukset ja lokit."
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Korkea {resource}-käyttö",
+        "criticalUsage": "Kriittinen {resource}-käyttö",
+        "recovered": "{resource}-käyttö palautunut",
+        "currentUsage": "Tällä hetkellä {current}{unit} (raja: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kriittinen järjestelmävirhe",
+        "application": "Sovellusvirhe",
+        "imageProvider": "Kuvantarjoajan ilmoitus",
+        "categoryError": "{category}-virhe"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Otetaan uusia analyysiasetuksia käyttöön...",
+        "rebuildingRangeFilter": "Rakennetaan lajien aluesuodatinta uudelleen...",
+        "updatingIntervals": "Päivitetään havaintovälejä...",
+        "reconfiguringMqtt": "Päivitetään MQTT-yhteyttä...",
+        "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
+        "reconfiguringStreams": "Päivitetään äänistriimejä...",
+        "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
+        "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
+        "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
+        "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
+        "audioDeviceRestartRequired": "Äänilaite vaihdettu. Uudelleenkäynnistys vaaditaan.",
+        "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
+        "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
+        "savedSuccessfully": "Asetukset tallennettu onnistuneesti",
+        "saveFailed": "Asetusten tallennus epäonnistui"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Tietokannan siirto aloitettu",
+        "startedMessage": "Siirto on aloitettu. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen.",
+        "pausedTitle": "Tietokannan siirto keskeytetty",
+        "pausedMessage": "Tietokannan siirto on keskeytetty. Voit jatkaa sitä milloin tahansa Tietokanta-asetuksista.",
+        "cancelledTitle": "Tietokannan siirto peruutettu",
+        "cancelledMessage": "Tietokannan siirto on peruutettu. Voit aloittaa uuden siirron milloin tahansa Tietokanta-asetuksista.",
+        "completedTitle": "Tietokannan siirto valmis",
+        "completedMessage": "Siirto valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan.",
+        "errorTitle": "Tietokannan siirtovirhe",
+        "errorMessage": "Siirto keskeytetty virheiden vuoksi. Tarkista lokit ja yritä jatkaa."
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Vanhan tietokannan siivous valmis",
+        "completeMessage": "{space} levytilaa vapautettu.",
+        "failedTitle": "Vanhan tietokannan siivous epäonnistui",
+        "failedMessage": "Vanhan tietokannan poisto epäonnistui. Tarkista lokit lisätietoja varten."
       },
       "alert": {
-        "firedTitleEvent": "Hälytys: {rule_name} ({event_name})",
-        "firedTitleMetric": "Hälytys: {rule_name} ({metric_name})",
-        "firedTitle": "Hälytys: {rule_name}"
+        "firedTitle": "Hälytys: {rule_name}",
+        "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
+        "detectionOccurred": "{species_name} havaittu {confidence}% varmuudella",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} yhteys katkaistu"
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -663,7 +670,8 @@
       "loginRequired": "Kirjaudu sisään tarkastellaksesi tätä havaintoa.",
       "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen tai ota yhteyttä tukeen, jos ongelma jatkuu.",
       "loadFailed": "Havainnon lataaminen epäonnistui (Virhe {status}). Päivitä sivu.",
-      "noIdProvided": "Havainnon tunnistetta ei annettu."
+      "noIdProvided": "Havainnon tunnistetta ei annettu.",
+      "fetchFailed": "Havaintojen hakeminen epäonnistui"
     },
     "weather": {
       "title": "Weather Information",
@@ -1219,11 +1227,18 @@
       "available": "saatav.",
       "min": "Min",
       "max": "Max",
+      "limit": "Raja",
       "tempUnavailable": "Ei saatavilla",
       "online": "Verkossa",
       "uptime": "Käyntiaika",
       "host": "Palvelin",
-      "model": "Malli"
+      "model": "Malli",
+      "inference": "Päättely",
+      "avgTime": "Ka",
+      "noInference": "Ei dataa vielä",
+      "statusOk": "OK",
+      "statusWarning": "Varoitus",
+      "statusCritical": "Kriittinen"
     },
     "storage": {
       "title": "Tallennustila",
@@ -1406,6 +1421,9 @@
       "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",
       "noSpeciesFound": "Lajeja ei löytynyt valitulla aikavälillä",
       "detections": "{count} havaintoa"
+    },
+    "errors": {
+      "loadFailed": "Analytiikkatietojen lataaminen epäonnistui. Yritä uudelleen."
     }
   },
   "settings": {
@@ -1601,6 +1619,12 @@
             "location": "Sijainti",
             "connected": "Yhdistetty",
             "disconnected": "Ei yhteyttä"
+          },
+          "errors": {
+            "backupStartFailed": "Varmuuskopioinnin käynnistäminen epäonnistui",
+            "backupStatusFailed": "Varmuuskopioinnin tilan hakeminen epäonnistui",
+            "backupFailed": "Varmuuskopiointi epäonnistui",
+            "backupDownloadFailed": "Varmuuskopion lataaminen epäonnistui"
           }
         },
         "interface": {
@@ -1764,7 +1788,10 @@
         "providersLoadFailed": "Kuvatoimittajia ei voitu ladata. Käytetään oletusarvoja.",
         "rangeFilterTestFailed": "Aluesuodatinasetusten testaus epäonnistui",
         "rangeFilterLoadFailed": "Lajiluettelon lataus epäonnistui",
-        "rangeFilterCountFailed": "Lajimäärän lataus epäonnistui"
+        "rangeFilterCountFailed": "Lajimäärän lataus epäonnistui",
+        "mapLibraryLoadFailed": "Karttakirjaston lataus epäonnistui. Päivitä sivu.",
+        "mapLoadFailed": "Kartan lataus epäonnistui. Kokeile päivittää sivu.",
+        "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen."
       },
       "tabs": {
         "general": "Yleiset",
@@ -2230,14 +2257,14 @@
       "loading": "Ladataan äänilaitteita...",
       "tabs": {
         "soundCard": "Äänikortti",
-        "streams": "Virrat",
+        "streams": "Striimit",
         "processing": "Käsittely",
         "recording": "Tallennus",
         "retention": "Säilytys"
       },
       "audioCapture": {
         "title": "Äänen tallennus",
-        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-virta",
+        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-striimi",
         "soundCardSource": "Äänikorttilähde",
         "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
         "audioSourceHelp": "Valitse äänen syöttölaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
@@ -2245,14 +2272,14 @@
         "rtspSource": "RTSP-lähde",
         "rtspTransportLabel": "RTSP-siirtoprotokolla",
         "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
-        "rtspUrlsLabel": "RTSP-virran URL-osoitteet",
-        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-virran URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/virta. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
+        "rtspUrlsLabel": "RTSP-striimin URL-osoitteet",
+        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-striimin URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/stream. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
         "noDeviceSelected": "Äänilaitetta ei ole valittu",
         "refreshDevices": "Päivitä",
         "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
         "availableDevices": "Saatavilla olevat äänilaitteet",
         "active": "Aktiivinen",
-        "streamsConfigured": "{count} virta(a) määritetty"
+        "streamsConfigured": "{count} striimi(ä) määritetty"
       },
       "audioFilters": {
         "title": "Äänisuodattimet",
@@ -2422,19 +2449,19 @@
           "hintsTitle": "Voit:",
           "hints": {
             "container": "Tämä on normaalia kontti-/päättömissä käyttöönotoissa",
-            "streams": "Määritä verkkovirrat sen sijaan Virrat-välilehdellä",
+            "streams": "Määritä verkkostriimit sen sijaan Striimit-välilehdellä",
             "usb": "Liitä USB-mikrofoni ja päivitä luettelo"
           },
           "refresh": "Päivitä laitteet",
           "retry": "Yritä uudelleen"
         },
         "streams": {
-          "title": "Virtoja ei ole määritetty",
-          "description": "Lisää RTSP- tai verkkoäänivirtoja IP-kameroista, mikrofonpalvelimista tai muista virtauslähteistä.",
+          "title": "Striimejä ei ole määritetty",
+          "description": "Lisää RTSP- tai verkkoäänistriimejä IP-kameroista, mikrofonpalvelimista tai muista striimaavista lähteistä.",
           "hintsTitle": "Aloittaminen:",
           "hints": {
-            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/virta",
-            "multiple": "Voit lisätä useita virtoja eri sijainteja varten",
+            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/stream",
+            "multiple": "Voit lisätä useita striimejä eri sijainteja varten",
             "protocol": "Valitse TCP luotettavuuden vuoksi tai UDP pienemmän viiveen saamiseksi"
           }
         }
@@ -2449,20 +2476,20 @@
           "title": "Äänikortteja ei havaittu",
           "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
           "hintsTitle": "Voit:",
-          "hintStream": "Määritä verkkovirrat Virrat-välilehdellä",
+          "hintStream": "Määritä verkkostriimit Striimit-välilehdellä",
           "hintUsb": "Liitä USB-mikrofoni ja päivitä luettelo",
-          "goToStreams": "Siirry virtoihin",
+          "goToStreams": "Siirry striimeihin",
           "refresh": "Päivitä laitteet"
         }
       },
       "noSources": {
         "warning": "Äänilähteita ei ole määritetty",
-        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Virrat-välilehdellä."
+        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Striimit-välilehdellä."
       },
       "rtspStreams": {
-        "title": "Äänivirtojen Määritys",
-        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
-        "noStreamsConfigured": "Virtoja ei ole määritetty"
+        "title": "Äänistriimien määritys",
+        "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
+        "noStreamsConfigured": "Striimejä ei ole määritetty"
       },
       "streams": {
         "streamLabel": "Striimi",
@@ -2700,9 +2727,17 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Yhteysvirhe",
+        "responseStreamFailed": "Vastausvirran lukeminen epäonnistui"
       }
     },
     "species": {
+      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
+      "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
+      "configAdded": "Lajin \"{species}\" asetukset lisätty",
+      "duplicateConfigError": "Lajilla \"{species}\" on jo asetukset. Valitse toinen nimi.",
       "activeSpecies": {
         "title": "Aktiiviset lajit",
         "tabLabel": "Aktiivis.",
@@ -3252,7 +3287,7 @@
       "importing": "Tuodaan...",
       "schema": {
         "objectTypes": {
-          "stream": "Äänivirta",
+          "stream": "Äänistriimi",
           "detection": "Havainto",
           "application": "Sovellus",
           "integration": "Integraatio",
@@ -3260,9 +3295,9 @@
           "system": "Järjestelmä"
         },
         "events": {
-          "stream_connected": "Virta yhdistetty",
-          "stream_disconnected": "Virta katkaistu",
-          "stream_error": "Virtavirhe",
+          "stream_connected": "Striimi yhdistetty",
+          "stream_disconnected": "Striimi katkaistu",
+          "stream_error": "Striimivirhe",
           "detection_new_species": "Uusi laji havaittu",
           "detection_occurred": "Havainto tehty",
           "application_started": "Sovellus käynnistetty",
@@ -3285,8 +3320,8 @@
           "scientific_name": "Tieteellinen nimi",
           "confidence": "Luotettavuus",
           "location": "Sijainti",
-          "stream_name": "Virran nimi",
-          "stream_url": "Virran URL",
+          "stream_name": "Striimin nimi",
+          "stream_url": "Striimin URL",
           "device_name": "Laitteen nimi",
           "error": "Virheilmoitus",
           "broker": "Välittäjä"
@@ -3309,12 +3344,12 @@
           "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
         },
         "streamDisconnected": {
-          "name": "Äänivirta katkennut",
-          "description": "Ilmoittaa kun RTSP- tai äänivirran yhteys katkeaa"
+          "name": "Äänistriimi katkennut",
+          "description": "Ilmoittaa kun RTSP- tai äänistriimin yhteys katkeaa"
         },
         "streamError": {
-          "name": "Äänivirran virhe",
-          "description": "Ilmoittaa kun äänivirrassa tapahtuu virhe"
+          "name": "Äänistriimin virhe",
+          "description": "Ilmoittaa kun äänistriimissä tapahtuu virhe"
         },
         "deviceError": {
           "name": "Äänilaitteen virhe",
@@ -3341,6 +3376,12 @@
           "description": "Ilmoittaa kun BirdWeather-lähetys epäonnistuu"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Asetusten lataaminen epäonnistui",
+      "saveFailed": "Asetusten tallentaminen epäonnistui",
+      "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
+      "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     }
   },
   "auth": {
@@ -3543,10 +3584,10 @@
         "searchPlaceholder": "Hae..."
       },
       "rtsp": {
-        "addNewStream": "Lisää uusi RTSP-virta",
-        "maxStreamsReached": "RTSP-virtojen enimmäismäärä ({max}) saavutettu.",
+        "addNewStream": "Lisää uusi RTSP-striimi",
+        "maxStreamsReached": "RTSP-striimien enimmäismäärä ({max}) saavutettu.",
         "cameraPlaceholder": "Kamera 1",
-        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/virta"
+        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/stream"
       },
       "subnet": {
         "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
@@ -3573,6 +3614,17 @@
       "status": {
         "loading": "Ladataan kalenteria...",
         "error": "Virhe kalenterin lataamisessa"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Luonti epäonnistui tilakoodilla {status}",
+        "spectrogramFailed": "Spektrogrammin luonti epäonnistui"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Säätietojen lataaminen epäonnistui"
       }
     }
   },
@@ -3610,6 +3662,107 @@
   "quietHours": {
     "indicator": {
       "tooltip": "Hiljaiset tunnit aktiiviset — {count} lähde tauolla"
+    }
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "Liian monta kirjautumisyritystä. Yritä uudelleen 15 minuutin kuluttua.",
+      "credentialsRequired": "Käyttäjätunnus ja salasana ovat pakollisia",
+      "invalidCredentials": "Virheelliset tunnistetiedot",
+      "missingCode": "Valtuutuskoodi puuttuu",
+      "serviceUnavailable": "Todennuspalvelu ei ole käytettävissä. Yritä myöhemmin uudelleen.",
+      "timeout": "Kirjautuminen aikakatkaistiin. Yritä uudelleen.",
+      "exchangeFailed": "Kirjautumista ei voitu suorittaa loppuun tällä hetkellä. Yritä uudelleen.",
+      "sessionError": "Istuntovirhe kirjautumisen aikana. Yritä uudelleen."
+    },
+    "alert": {
+      "v2Required": "Hälytyssäännöt vaativat laajennetun (v2) tietokannan",
+      "invalidID": "Virheellinen säännön tunniste",
+      "notFound": "Hälytyssääntöä ei löytynyt",
+      "invalidBody": "Virheellinen pyyntösisältö",
+      "nameRequired": "Säännön nimi on pakollinen",
+      "typesRequired": "Kohdetyyppi ja laukaisutyyppi ovat pakollisia",
+      "duplicateName": "Tämänniminen sääntö on jo olemassa",
+      "invalidJSON": "Virheellinen JSON"
+    },
+    "detection": {
+      "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"
+    },
+    "backup": {
+      "invalidType": "Tyypin on oltava 'legacy' tai 'v2'",
+      "alreadyRunning": "Varmuuskopiointi on jo käynnissä",
+      "dbInfoFailed": "Tietokantatietojen hakeminen epäonnistui",
+      "diskSpaceCheck": "Levytilan tarkistus epäonnistui",
+      "insufficientSpace": "Levytila ei riitä. Tarvitaan {needed}, käytettävissä {available}",
+      "createFailed": "Varmuuskopiointitehtävän luominen epäonnistui",
+      "notFound": "Varmuuskopiointitehtävää ei löytynyt tai se on vanhentunut",
+      "notReady": "Varmuuskopio ei ole vielä ladattavissa",
+      "fileNotFound": "Varmuuskopiotiedostoa ei löytynyt — tehtävä on saattanut vanhentua",
+      "sqliteOnly": "Varmuuskopiointi on käytettävissä vain SQLite-tietokannoille",
+      "dbNotConfigured": "Tietokantaa ei ole määritetty",
+      "unsupportedType": "Varmuuskopiointia ei voi suorittaa tälle tietovarastotyypille",
+      "v2NotInitialized": "V2-tietokantaa ei ole alustettu"
+    },
+    "migration": {
+      "notConfigured": "Siirtoa ei ole määritetty",
+      "preFlightFailed": "Esitarkistukset epäonnistuivat",
+      "invalidBody": "Virheellinen pyyntösisältö",
+      "recordCountFailed": "Tietueiden kokonaismäärää ei voitu määrittää",
+      "startFailed": "Siirron käynnistäminen epäonnistui",
+      "initFailed": "Siirron alustaminen epäonnistui",
+      "resumeFailed": "Siirron jatkaminen epäonnistui"
+    },
+    "cleanup": {
+      "noLegacyDB": "Vanhaa tietokantaa ei löytynyt",
+      "accessFailed": "Vanhaan tietokantaan ei voida yhdistää",
+      "restartRequired": "Sovellus on käynnistettävä uudelleen siirron jälkeen ennen kuin siivoaminen on käytettävissä",
+      "safetyCheck": "Kohdetiedosto vaikuttaa olevan V2-tietokanta — siivoaminen ei sallittu turvallisuussyistä",
+      "noLegacyTables": "Vanhoja tauluja ei löytynyt",
+      "restartNeeded": "Siivoaminen ei onnistu: sovellus on käynnistettävä uudelleen siirron jälkeen",
+      "alreadyRunning": "Siivoaminen on jo käynnissä"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT ei ole käytössä asetuksissa",
+      "mqttNotConfigured": "MQTT-välittäjää ei ole määritetty",
+      "mqttMetricsUnavailable": "Mittaripalvelu ei ole käytettävissä MQTT-testiin",
+      "mqttClientFailed": "MQTT-asiakasohjelman luominen epäonnistui",
+      "birdweatherDisabled": "BirdWeather-integraatio ei ole käytössä",
+      "birdweatherNotConfigured": "BirdWeather-aseman tunnistetta ei ole määritetty",
+      "birdweatherClientFailed": "BirdWeather-asiakasohjelman luominen epäonnistui",
+      "noWeatherProvider": "Sääpalvelua ei ole valittu",
+      "openWeatherKeyRequired": "OpenWeather API-avain on pakollinen",
+      "processorUnavailable": "Prosessori ei ole käytettävissä",
+      "discoveryFailed": "Home Assistant -laitteen löytäminen epäonnistui"
+    },
+    "notification": {
+      "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä",
+      "idRequired": "Ilmoituksen tunniste on pakollinen",
+      "notFound": "Ilmoitusta ei löytynyt",
+      "hostRequired": "Host-parametri on pakollinen",
+      "invalidHost": "Virheellinen host-parametri",
+      "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
+    },
+    "debug": {
+      "notEnabled": "Virheenkorjaustila ei ole käytössä"
+    },
+    "terminal": {
+      "disabled": "Terminaali on poistettu käytöstä. Ota se käyttöön asetuksista."
+    },
+    "api": {
+      "badRequest": "Virheellinen pyyntö. Tarkista syötteesi ja yritä uudelleen.",
+      "unauthorized": "Tunnistautuminen vaaditaan. Kirjaudu sisään ja yritä uudelleen.",
+      "forbidden": "Sinulla ei ole oikeutta suorittaa tätä toimintoa.",
+      "notFound": "Pyydettyä resurssia ei löytynyt.",
+      "conflict": "Tämä toiminto on ristiriidassa nykyisen tilan kanssa. Päivitä sivu ja yritä uudelleen.",
+      "validationFailed": "Virheellinen syöte. Tarkista tietosi ja yritä uudelleen.",
+      "tooManyRequests": "Liian monta pyyntöä. Odota hetki ennen kuin yrität uudelleen.",
+      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen.",
+      "clientError": "Asiakasvirhe. Tarkista pyyntösi ja yritä uudelleen.",
+      "unknownError": "Odottamaton virhe. Yritä uudelleen.",
+      "validationCheck": "Tarkistus epäonnistui. Tarkista syötteesi.",
+      "conflictData": "Tämä toiminto on ristiriidassa olemassa olevien tietojen kanssa.",
+      "requestTimeout": "Pyyntö aikakatkaistiin.",
+      "networkError": "Verkkovirhe. Tarkista yhteytesi."
     }
   }
 }

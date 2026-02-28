@@ -35,46 +35,13 @@ jobs:
           cache: true
       - run: go version
 
-      - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cache TensorFlow headers
-        uses: actions/cache@v5
-        with:
-          path: ~/src/tensorflow
-          key: ${{ runner.os }}-tensorflow-v2.17.1
-
-      - name: Install dependencies
-        run: task check-tensorflow
+      - name: Setup TensorFlow Lite
+        uses: ./.github/actions/setup-tensorflow
 
       - name: Install FFmpeg and test dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg procps
-
-      - name: Cache TensorFlow Lite library
-        id: cache-tflite
-        uses: actions/cache@v5
-        with:
-          path: /usr/lib/libtensorflowlite_c.so*
-          key: ${{ runner.os }}-tflite-v2.17.1
-
-      - name: Download tflite_c
-        if: steps.cache-tflite.outputs.cache-hit != 'true'
-        run: |
-          TFLITE_VERSION=v2.17.1
-          wget -q https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -P ./
-          tar -xzf tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -C .
-          sudo mv libtensorflowlite_c.so.2.17.1 /usr/lib/libtensorflowlite_c.so
-          rm -f tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz
-
-      - name: Set environment variables for CGO
-        run: |
-          echo "CGO_ENABLED=1" >> $GITHUB_ENV
-          echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
 
       - name: Cache Go tools
         uses: actions/cache@v5
@@ -205,46 +172,13 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cache TensorFlow headers
-        uses: actions/cache@v5
-        with:
-          path: ~/src/tensorflow
-          key: ${{ runner.os }}-tensorflow-v2.17.1
-
-      - name: Install dependencies
-        run: task check-tensorflow
-
-      - name: Cache TensorFlow Lite library
-        id: cache-tflite-tc
-        uses: actions/cache@v5
-        with:
-          path: /usr/lib/libtensorflowlite_c.so*
-          key: ${{ runner.os }}-tflite-v2.17.1
-
-      - name: Download tflite_c
-        if: steps.cache-tflite-tc.outputs.cache-hit != 'true'
-        run: |
-          TFLITE_VERSION=v2.17.1
-          wget -q https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -P ./
-          tar -xzf tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -C .
-          sudo mv libtensorflowlite_c.so.2.17.1 /usr/lib/libtensorflowlite_c.so
-          rm -f tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz
+      - name: Setup TensorFlow Lite
+        uses: ./.github/actions/setup-tensorflow
 
       - name: Install FFmpeg and Sox for integration tests
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg sox
-
-      - name: Set environment variables for CGO
-        run: |
-          echo "CGO_ENABLED=1" >> $GITHUB_ENV
-          echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
 
       - name: Run testcontainer integration tests
         run: |

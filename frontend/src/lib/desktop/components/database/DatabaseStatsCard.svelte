@@ -146,7 +146,11 @@
           return;
         }
 
-        throw new Error(errorData.message || errorData.error || 'Failed to start backup');
+        throw new Error(
+          errorData.message ||
+            errorData.error ||
+            t('settings.main.sections.database.errors.backupStartFailed')
+        );
       }
 
       const data = await response.json();
@@ -154,7 +158,10 @@
       startPolling();
     } catch (e) {
       backupStatus = 'failed';
-      backupError = e instanceof Error ? e.message : 'Failed to start backup';
+      backupError =
+        e instanceof Error
+          ? e.message
+          : t('settings.main.sections.database.errors.backupStartFailed');
     }
   }
 
@@ -199,7 +206,7 @@
           resetBackupState();
           return;
         }
-        throw new Error('Failed to get backup status');
+        throw new Error(t('settings.main.sections.database.errors.backupStatusFailed'));
       }
 
       const job: BackupJob = await response.json();
@@ -212,7 +219,7 @@
         await triggerDownload();
       } else if (job.status === 'failed') {
         stopPolling();
-        backupError = job.error || 'Backup failed';
+        backupError = job.error || t('settings.main.sections.database.errors.backupFailed');
       }
     } catch {
       // Don't stop polling on transient errors - silently retry
@@ -245,7 +252,7 @@
       );
 
       if (!response.ok) {
-        throw new Error('Failed to download backup');
+        throw new Error(t('settings.main.sections.database.errors.backupDownloadFailed'));
       }
 
       // Get filename from Content-Disposition header or generate one
@@ -270,7 +277,10 @@
       // Reset state after successful download
       resetBackupState();
     } catch (e) {
-      backupError = e instanceof Error ? e.message : 'Failed to download backup';
+      backupError =
+        e instanceof Error
+          ? e.message
+          : t('settings.main.sections.database.errors.backupDownloadFailed');
       backupStatus = 'failed';
     }
   }

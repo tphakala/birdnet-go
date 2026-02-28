@@ -20,6 +20,7 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"gorm.io/gorm"
 )
 
@@ -107,27 +108,38 @@ func (m *BackupJobManager) Shutdown() {
 var backupLog = logger.Global().Module("backup")
 
 // CleanupOrphanedTempFiles removes any backup temp files that don't have active jobs.
+// It scans the given directories plus os.TempDir() (for files created by older versions).
 // This should be called on server startup.
-func (m *BackupJobManager) CleanupOrphanedTempFiles() {
-	tempDir := os.TempDir()
-	pattern := filepath.Join(tempDir, backupTempFilePrefix+"*.db")
+func (m *BackupJobManager) CleanupOrphanedTempFiles(dirs ...string) {
+	// Always include os.TempDir() so we clean up files from before this change
+	scanDirs := append([]string{os.TempDir()}, dirs...)
 
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		backupLog.Warn("Backup cleanup: failed to glob temp files",
-			logger.String("pattern", pattern),
-			logger.Error(err))
-		return
-	}
+	// Deduplicate directories
+	seen := make(map[string]bool, len(scanDirs))
+	for _, dir := range scanDirs {
+		if dir == "" || seen[dir] {
+			continue
+		}
+		seen[dir] = true
 
-	for _, path := range matches {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			backupLog.Warn("Backup cleanup: failed to remove orphaned file",
-				logger.String("path", path),
+		pattern := filepath.Join(dir, backupTempFilePrefix+"*.db")
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			backupLog.Warn("Backup cleanup: failed to glob temp files",
+				logger.String("pattern", pattern),
 				logger.Error(err))
-		} else {
-			backupLog.Info("Backup cleanup: removed orphaned temp file",
-				logger.String("path", path))
+			continue
+		}
+
+		for _, path := range matches {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				backupLog.Warn("Backup cleanup: failed to remove orphaned file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				backupLog.Info("Backup cleanup: removed orphaned temp file",
+					logger.String("path", path))
+			}
 		}
 	}
 }
@@ -215,8 +227,11 @@ func (m *BackupJobManager) GetActiveJobByType(dbType string) (*BackupJob, bool) 
 	return nil, false
 }
 
-// CreateJob creates a new backup job.
-func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64) (*BackupJob, error) {
+// CreateJob creates a new backup job. The dbPath parameter is the path to the
+// source database file; the backup temp file is placed in the same directory to
+// ensure it resides on the same filesystem/volume (important for Docker where
+// /tmp may be on a small overlay filesystem separate from the data volume).
+func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64, dbPath string) (*BackupJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -230,7 +245,10 @@ func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64) (*BackupJo
 	ctx, cancel := context.WithCancel(m.ctx)
 	jobID := generateJobID(dbType)
 	timestamp := time.Now().Format("20060102-150405")
-	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s%s-%s.db", backupTempFilePrefix, dbType, timestamp))
+	// Place the backup temp file next to the source database so it uses the
+	// same volume/partition, avoiding container root filesystem exhaustion.
+	tempDir := filepath.Dir(dbPath)
+	tempPath := filepath.Join(tempDir, fmt.Sprintf("%s%s-%s.db", backupTempFilePrefix, dbType, timestamp))
 
 	job := &BackupJob{
 		ID:         jobID,
@@ -323,8 +341,17 @@ func (c *Controller) initBackupRoutes() {
 	// Initialize job manager if not already done
 	if backupJobManager == nil {
 		backupJobManager = NewBackupJobManager()
-		// Clean up any orphaned temp files from previous runs
-		backupJobManager.CleanupOrphanedTempFiles()
+		// Clean up any orphaned temp files from previous runs.
+		// Scan database directories where backup files are now written,
+		// plus os.TempDir() for files created by older versions.
+		var dbDirs []string
+		if c.Settings.Output.SQLite.Path != "" {
+			dbDirs = append(dbDirs, filepath.Dir(c.Settings.Output.SQLite.Path))
+		}
+		if c.V2Manager != nil && !c.V2Manager.IsMySQL() {
+			dbDirs = append(dbDirs, filepath.Dir(c.V2Manager.Path()))
+		}
+		backupJobManager.CleanupOrphanedTempFiles(dbDirs...)
 	}
 
 	// Create backup API group under system/database
@@ -348,11 +375,14 @@ func (c *Controller) initBackupRoutes() {
 func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	dbType := ctx.QueryParam("type")
 	if dbType != dbTypeLegacy && dbType != dbTypeV2 {
-		return c.HandleError(ctx, fmt.Errorf("invalid type"),
-			"Type must be 'legacy' or 'v2'", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Type must be 'legacy' or 'v2'", http.StatusBadRequest,
+			notification.MsgErrBackupInvalidType, nil)
 	}
 
 	// Check for existing active job
+	// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
+	// to resume polling (see DatabaseStatsCard.svelte).
 	if existingJob, exists := backupJobManager.GetActiveJobByType(dbType); exists {
 		return ctx.JSON(http.StatusConflict, map[string]any{
 			"error":           "Backup already in progress",
@@ -364,7 +394,8 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	// Get database info
 	dbPath, gormDB, err := c.getBackupDBInfo(dbType)
 	if err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, err, "Failed to get backup database info", http.StatusBadRequest,
+			notification.MsgErrBackupDBInfo, nil)
 	}
 
 	// Get source database size
@@ -374,33 +405,39 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 	}
 	dbSize := fileInfo.Size()
 
-	// Check disk space
-	tempDir := os.TempDir()
-	usage, err := disk.Usage(tempDir)
+	// Check disk space on the database's partition (where the backup file will be written)
+	dbDir := filepath.Dir(dbPath)
+	usage, err := disk.Usage(dbDir)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to check disk space", http.StatusInternalServerError)
+		return c.HandleErrorWithKey(ctx, err, "Failed to check disk space", http.StatusInternalServerError,
+			notification.MsgErrBackupDiskSpace, nil)
 	}
 	// #nosec G115 -- dbSize from os.FileInfo.Size() is always non-negative
 	requiredSpace := uint64(dbSize) + backupDiskBuffer
 	if usage.Free < requiredSpace {
-		return c.HandleError(ctx, fmt.Errorf("insufficient space"),
-			fmt.Sprintf("Not enough disk space. Need %s, have %s",
-				formatBytesUint64(requiredSpace), formatBytesUint64(usage.Free)),
-			http.StatusInsufficientStorage)
+		neededStr := formatBytesUint64(requiredSpace)
+		availableStr := formatBytesUint64(usage.Free)
+		return c.HandleErrorWithKey(ctx, nil,
+			fmt.Sprintf("Not enough disk space. Need %s, have %s", neededStr, availableStr),
+			http.StatusInsufficientStorage,
+			notification.MsgErrBackupInsufficientSpace, map[string]any{"needed": neededStr, "available": availableStr})
 	}
 
 	// Create the job
-	job, err := backupJobManager.CreateJob(dbType, dbSize)
+	job, err := backupJobManager.CreateJob(dbType, dbSize, dbPath)
 	if err != nil {
 		// Job already exists
+		// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
+		// to resume polling (see DatabaseStatsCard.svelte).
 		if strings.Contains(err.Error(), "already in progress") {
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
-				"error":           err.Error(),
+				"error":           "Backup already in progress",
 				"existing_job_id": existingJob.ID,
 			})
 		}
-		return c.HandleError(ctx, err, "Failed to create backup job", http.StatusInternalServerError)
+		return c.HandleErrorWithKey(ctx, err, "Failed to create backup job", http.StatusInternalServerError,
+			notification.MsgErrBackupCreateFailed, nil)
 	}
 
 	c.logInfoIfEnabled("Backup job started",
@@ -450,8 +487,9 @@ func (c *Controller) GetBackupJobStatus(ctx echo.Context) error {
 
 	job, exists := backupJobManager.GetJob(jobID)
 	if !exists {
-		return c.HandleError(ctx, fmt.Errorf("job not found"),
-			"Backup job not found or expired", http.StatusNotFound)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Backup job not found or expired", http.StatusNotFound,
+			notification.MsgErrBackupNotFound, nil)
 	}
 
 	// Update progress if still running
@@ -473,21 +511,23 @@ func (c *Controller) DownloadBackupFile(ctx echo.Context) error {
 
 	job, exists := backupJobManager.GetJob(jobID)
 	if !exists {
-		return c.HandleError(ctx, fmt.Errorf("job not found"),
-			"Backup job not found or expired", http.StatusNotFound)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Backup job not found or expired", http.StatusNotFound,
+			notification.MsgErrBackupNotFound, nil)
 	}
 
 	if job.Status != BackupStatusCompleted {
-		return ctx.JSON(http.StatusConflict, map[string]any{
-			"error":  "Backup not ready for download",
-			"status": job.Status,
-		})
+		// NOTE: Previously included job.Status in response; removed for consistency.
+		// Frontend does not consume this field from the download endpoint.
+		return c.HandleErrorWithKey(ctx, nil, "Backup not ready for download", http.StatusConflict,
+			notification.MsgErrBackupNotReady, nil)
 	}
 
 	// Verify temp file exists
 	if _, err := os.Stat(job.tempPath); err != nil {
-		return c.HandleError(ctx, err,
-			"Backup file not found - job may have expired", http.StatusGone)
+		return c.HandleErrorWithKey(ctx, err,
+			"Backup file not found - job may have expired", http.StatusGone,
+			notification.MsgErrBackupFileNotFound, nil)
 	}
 
 	// Set headers and serve file
@@ -508,8 +548,9 @@ func (c *Controller) CancelBackupJob(ctx echo.Context) error {
 	jobID := ctx.Param("id")
 
 	if !backupJobManager.DeleteJob(jobID) {
-		return c.HandleError(ctx, fmt.Errorf("job not found"),
-			"Backup job not found", http.StatusNotFound)
+		return c.HandleErrorWithKey(ctx, nil,
+			"Backup job not found", http.StatusNotFound,
+			notification.MsgErrBackupNotFound, nil)
 	}
 
 	c.logInfoIfEnabled("Backup job cancelled",
@@ -556,7 +597,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 		c.logWarnIfEnabled("Backup VACUUM INTO failed",
 			logger.String("job_id", job.ID),
 			logger.Error(lastErr))
-		job.setStatus(BackupStatusFailed, lastErr.Error())
+		job.setStatus(BackupStatusFailed, "Database backup failed")
 		return
 	}
 

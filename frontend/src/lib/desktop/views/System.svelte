@@ -110,6 +110,7 @@
   let cpuHistory = $state<number[]>([]);
   let memoryHistory = $state<number[]>([]);
   let temperatureHistory = $state<number[]>([]);
+  let inferenceHistory = $state<number[]>([]);
 
   // Toggle for showing all processes
   let showAllProcesses = $state(false);
@@ -145,6 +146,20 @@
     temperatureHistory.map(c => convertTemperature(c, temperatureUnit))
   );
 
+  // Inference sparkline derived values
+  let inferenceAvgMs = $derived(
+    inferenceHistory.length > 0 ? inferenceHistory[inferenceHistory.length - 1] : 0
+  );
+  let hasInferenceData = $derived(inferenceHistory.length > 0);
+
+  // BirdNET overlap setting — used to compute the inference threshold
+  // Threshold = (3.0 - overlap) * 1000 ms: inference must stay below this to keep up with real-time
+  const BIRDNET_CHUNK_SECONDS = 3.0;
+  let birdnetOverlap = $state<number | null>(null);
+  let inferenceThresholdMs = $derived(
+    birdnetOverlap != null ? (BIRDNET_CHUNK_SECONDS - birdnetOverlap) * 1000 : undefined
+  );
+
   // Append a value to a history array, keeping it capped at MAX_HISTORY_POINTS
   function appendHistory(arr: number[], value: number): number[] {
     const next = [...arr, value];
@@ -157,7 +172,7 @@
   async function loadMetricsHistory(active: { current: boolean }): Promise<void> {
     try {
       const data = await api.get<MetricsHistoryResponse>(
-        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=cpu.total,memory.used_percent,cpu.temperature`
+        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=cpu.total,memory.used_percent,cpu.temperature,birdnet.invoke_avg_ms`
       );
 
       if (!active.current) return;
@@ -170,6 +185,9 @@
       }
       if (data.metrics['cpu.temperature']) {
         temperatureHistory = data.metrics['cpu.temperature'].map((p: MetricPoint) => p.value);
+      }
+      if (data.metrics['birdnet.invoke_avg_ms']) {
+        inferenceHistory = data.metrics['birdnet.invoke_avg_ms'].map((p: MetricPoint) => p.value);
       }
 
       // Only connect SSE if the history endpoint succeeded and component is still mounted
@@ -245,7 +263,7 @@
   // Connect to metrics SSE stream for live updates
   function connectMetricsStream(): void {
     metricsSSE = new ReconnectingEventSource(
-      '/api/v2/system/metrics/stream?metrics=cpu.total,memory.used_percent,cpu.temperature',
+      '/api/v2/system/metrics/stream?metrics=cpu.total,memory.used_percent,cpu.temperature,birdnet.invoke_avg_ms',
       { max_retry_time: 30000 }
     );
 
@@ -263,6 +281,12 @@
         }
         if (metrics['cpu.temperature']) {
           temperatureHistory = appendHistory(temperatureHistory, metrics['cpu.temperature'].value);
+        }
+        if (metrics['birdnet.invoke_avg_ms']) {
+          inferenceHistory = appendHistory(
+            inferenceHistory,
+            metrics['birdnet.invoke_avg_ms'].value
+          );
         }
       } catch {
         logger.debug('Failed to parse metrics SSE event');
@@ -354,6 +378,18 @@
     }
   }
 
+  // Load BirdNET overlap setting for inference threshold calculation
+  async function loadBirdnetOverlap(): Promise<void> {
+    try {
+      const data = await api.get<{ overlap?: number }>('/api/v2/settings/birdnet');
+      if (data.overlap != null) {
+        birdnetOverlap = data.overlap;
+      }
+    } catch {
+      // Settings may require auth or not be available — threshold just won't render
+    }
+  }
+
   // Load all data
   async function loadAllData(): Promise<void> {
     isLoading = true;
@@ -363,6 +399,7 @@
       loadMemoryUsage(),
       loadSystemTemperature(),
       loadProcesses(),
+      loadBirdnetOverlap(),
     ]);
     isLoading = false;
   }
@@ -402,9 +439,7 @@
     role="region"
     aria-label={t('system.database.dashboard.title')}
   >
-    <div class="max-w-5xl mx-auto">
-      <DatabaseDashboard />
-    </div>
+    <DatabaseDashboard />
   </div>
 {:else}
   <!-- System Overview Page -->
@@ -423,9 +458,10 @@
       temperatureValue={temperatureDisplay}
       temperatureHistory={temperatureHistoryConverted}
       {tempSymbol}
-      uptimeSeconds={systemInfo.uptime_seconds ?? 0}
-      hostname={systemInfo.hostname ?? ''}
-      systemModel={systemInfo.system_model}
+      {inferenceAvgMs}
+      {inferenceHistory}
+      {hasInferenceData}
+      {inferenceThresholdMs}
     />
 
     <!-- System Details + Storage -->
@@ -433,6 +469,7 @@
       <SystemDetailsCard
         osDisplay={systemInfo.os_display ?? ''}
         systemModel={systemInfo.system_model}
+        hostname={systemInfo.hostname ?? ''}
         uptimeSeconds={systemInfo.uptime_seconds ?? 0}
         timeZone={systemInfo.time_zone}
         cpuCores={systemInfo.num_cpu ?? 0}

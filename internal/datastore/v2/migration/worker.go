@@ -1057,7 +1057,7 @@ func (w *Worker) handleError(err error, msg string) bool {
 				fmt.Sprintf("Migration paused due to errors. Check logs and try resuming. Error: %v", err),
 			).WithComponent("database").
 				WithTitleKey(notification.MsgMigrationErrorTitle, nil).
-				WithMessageKey(notification.MsgMigrationErrorMessage, map[string]any{"error": err.Error()})
+				WithMessageKey(notification.MsgMigrationErrorMessage, nil)
 
 			if notifErr := notifService.CreateWithMetadata(notif); notifErr != nil {
 				w.logger.Warn("failed to send migration error notification", logger.Error(notifErr))

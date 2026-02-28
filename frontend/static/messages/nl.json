@@ -185,6 +185,9 @@
         "lockStatusFailed": "Vergrendeling wijzigen mislukt. Probeer het opnieuw.",
         "verificationFailed": "Melding status wijzigen mislukt. Probeer het opnieuw."
       }
+    },
+    "errors": {
+      "unknownError": "Onbekende fout opgetreden"
     }
   },
   "pageTitle": {
@@ -339,70 +342,74 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go gestart",
+        "message": "Applicatie succesvol gestart (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go wordt afgesloten",
+        "message": "Applicatie wordt netjes afgesloten"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Gedetecteerd: {species}",
+        "message": "Betrouwbaarheid: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "{integration}-integratie mislukt",
+        "failedMessage": "Verbinding met {integration} mislukt. Controleer de configuratie en logs."
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Hoog {resource}-gebruik",
+        "criticalUsage": "Kritiek {resource}-gebruik",
+        "recovered": "{resource}-gebruik hersteld",
+        "currentUsage": "Momenteel op {current}{unit} (drempel: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kritieke systeemfout",
+        "application": "Applicatiefout",
+        "imageProvider": "Melding afbeeldingprovider",
+        "categoryError": "{category}-fout"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Nieuwe analyse-instellingen worden toegepast...",
+        "rebuildingRangeFilter": "Soortenverspreidingsfilter wordt opnieuw opgebouwd...",
+        "updatingIntervals": "Detectie-intervallen worden bijgewerkt...",
+        "reconfiguringMqtt": "MQTT-verbinding wordt bijgewerkt...",
+        "reconfiguringBirdweather": "BirdWeather-integratie wordt bijgewerkt...",
+        "reconfiguringStreams": "Audiostreams worden bijgewerkt...",
+        "reconfiguringTelemetry": "Telemetrie-instellingen worden bijgewerkt...",
+        "reconfiguringSpeciesTracking": "Soortentracering wordt bijgewerkt...",
+        "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
+        "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
+        "audioDeviceRestartRequired": "Audioapparaat gewijzigd. Herstart vereist.",
+        "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
+        "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
+        "savedSuccessfully": "Instellingen succesvol opgeslagen",
+        "saveFailed": "Opslaan van instellingen mislukt"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Databasemigratie gestart",
+        "startedMessage": "De migratie is gestart. Dit kan enige tijd duren afhankelijk van het aantal detecties.",
+        "pausedTitle": "Databasemigratie gepauzeerd",
+        "pausedMessage": "De databasemigratie is gepauzeerd. U kunt deze op elk moment hervatten vanuit de database-instellingen.",
+        "cancelledTitle": "Databasemigratie geannuleerd",
+        "cancelledMessage": "De databasemigratie is geannuleerd. U kunt op elk moment een nieuwe migratie starten vanuit de database-instellingen.",
+        "completedTitle": "Databasemigratie voltooid",
+        "completedMessage": "Migratie voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database.",
+        "errorTitle": "Databasemigratiefout",
+        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten."
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Opruiming oude database voltooid",
+        "completeMessage": "{space} schijfruimte vrijgemaakt.",
+        "failedTitle": "Opruiming oude database mislukt",
+        "failedMessage": "Oude database kon niet worden verwijderd. Controleer de logs voor details."
       },
       "alert": {
-        "firedTitleEvent": "Waarschuwing: {rule_name} ({event_name})",
-        "firedTitleMetric": "Waarschuwing: {rule_name} ({metric_name})",
-        "firedTitle": "Waarschuwing: {rule_name}"
+        "firedTitle": "Waarschuwing: {rule_name}",
+        "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
+        "detectionOccurred": "{species_name} gedetecteerd met {confidence}% betrouwbaarheid",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} verbroken"
       }
     },
     "loading": "Meldingen laden..."
@@ -737,7 +744,8 @@
       "loginRequired": "Log in om deze detectie te bekijken.",
       "serverError": "Serverfout. Probeer het later opnieuw of neem contact op met de ondersteuning als het probleem aanhoudt.",
       "loadFailed": "Kon detectie niet laden (Fout {status}). Ververs de pagina.",
-      "noIdProvided": "Geen detectie-ID opgegeven."
+      "noIdProvided": "Geen detectie-ID opgegeven.",
+      "fetchFailed": "Detecties konden niet worden opgehaald"
     },
     "viewToggle": {
       "label": "Weergavemodus",
@@ -1219,11 +1227,18 @@
       "available": "beschikb.",
       "min": "Min",
       "max": "Max",
+      "limit": "Limiet",
       "tempUnavailable": "Niet beschikbaar",
       "online": "Online",
       "uptime": "Uptime",
       "host": "Host",
-      "model": "Model"
+      "model": "Model",
+      "inference": "Inferentie",
+      "avgTime": "Gem",
+      "noInference": "Nog geen gegevens",
+      "statusOk": "OK",
+      "statusWarning": "Waarschuwing",
+      "statusCritical": "Kritiek"
     },
     "storage": {
       "title": "Opslag",
@@ -1406,6 +1421,9 @@
         "loadingTrends": "Trendgegevens laden",
         "loadingDiversity": "Diversiteitsgegevens laden"
       }
+    },
+    "errors": {
+      "loadFailed": "Analysegegevens konden niet worden geladen. Probeer het opnieuw."
     }
   },
   "settings": {
@@ -1601,6 +1619,12 @@
             "location": "Locatie",
             "connected": "Verbonden",
             "disconnected": "Niet verbonden"
+          },
+          "errors": {
+            "backupStartFailed": "Back-up starten mislukt",
+            "backupStatusFailed": "Back-upstatus ophalen mislukt",
+            "backupFailed": "Back-up mislukt",
+            "backupDownloadFailed": "Back-up downloaden mislukt"
           }
         },
         "interface": {
@@ -1764,7 +1788,10 @@
         "providersLoadFailed": "Kan afbeeldings leveranciers niet laden. Gebruik standaardwaarden.",
         "rangeFilterTestFailed": "Testen van bereik filter instellingen mislukt",
         "rangeFilterLoadFailed": "Laden van soorten lijst mislukt",
-        "rangeFilterCountFailed": "Laden van soorten aantal mislukt"
+        "rangeFilterCountFailed": "Laden van soorten aantal mislukt",
+        "mapLibraryLoadFailed": "Laden van kaartbibliotheek mislukt. Vernieuw de pagina.",
+        "mapLoadFailed": "Laden van kaart mislukt. Probeer de pagina te vernieuwen.",
+        "modalMapLoadFailed": "Laden van modale kaart mislukt. Sluit het venster en open het opnieuw."
       },
       "tabs": {
         "general": "Algemeen",
@@ -2391,6 +2418,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Verbindingsfout",
+        "responseStreamFailed": "Antwoordstroom kon niet worden gelezen"
       }
     },
     "audio": {
@@ -2842,6 +2873,10 @@
       }
     },
     "species": {
+      "saveError": "Opslaan van configuratie voor \"{species}\" mislukt. Probeer het opnieuw.",
+      "configUpdated": "Configuratie voor \"{species}\" bijgewerkt",
+      "configAdded": "Configuratie voor \"{species}\" toegevoegd",
+      "duplicateConfigError": "Soort \"{species}\" heeft al een configuratie. Kies een andere naam.",
       "activeSpecies": {
         "title": "Actieve Soorten",
         "tabLabel": "Actief",
@@ -3252,54 +3287,54 @@
       "importing": "Importeren...",
       "schema": {
         "objectTypes": {
-          "stream": "Audio Stream",
-          "detection": "Detection",
-          "application": "Application",
-          "integration": "Integration",
-          "device": "Device",
-          "system": "System"
+          "stream": "Audiostream",
+          "detection": "Detectie",
+          "application": "Applicatie",
+          "integration": "Integratie",
+          "device": "Apparaat",
+          "system": "Systeem"
         },
         "events": {
-          "stream_connected": "Stream Connected",
-          "stream_disconnected": "Stream Disconnected",
-          "stream_error": "Stream Error",
-          "detection_new_species": "New Species Detected",
-          "detection_occurred": "Detection Occurred",
-          "application_started": "Application Started",
-          "application_stopped": "Application Stopped",
-          "integration_birdweather_failed": "BirdWeather Upload Failed",
-          "integration_mqtt_connected": "MQTT Connected",
-          "integration_mqtt_disconnected": "MQTT Disconnected",
-          "device_started": "Device Started",
-          "device_stopped": "Device Stopped",
-          "device_error": "Device Error"
+          "stream_connected": "Stream verbonden",
+          "stream_disconnected": "Stream verbroken",
+          "stream_error": "Stream-fout",
+          "detection_new_species": "Nieuwe soort gedetecteerd",
+          "detection_occurred": "Detectie uitgevoerd",
+          "application_started": "Applicatie gestart",
+          "application_stopped": "Applicatie gestopt",
+          "integration_birdweather_failed": "BirdWeather-upload mislukt",
+          "integration_mqtt_connected": "MQTT verbonden",
+          "integration_mqtt_disconnected": "MQTT verbroken",
+          "device_started": "Apparaat gestart",
+          "device_stopped": "Apparaat gestopt",
+          "device_error": "Apparaatfout"
         },
         "metrics": {
-          "system_cpu_usage": "CPU Usage",
-          "system_memory_usage": "Memory Usage",
-          "system_disk_usage": "Disk Usage"
+          "system_cpu_usage": "CPU-gebruik",
+          "system_memory_usage": "Geheugengebruik",
+          "system_disk_usage": "Schijfgebruik"
         },
         "properties": {
-          "value": "Value",
-          "species_name": "Species Name",
-          "scientific_name": "Scientific Name",
-          "confidence": "Confidence",
-          "location": "Location",
-          "stream_name": "Stream Name",
-          "stream_url": "Stream URL",
-          "device_name": "Device Name",
-          "error": "Error Message",
+          "value": "Waarde",
+          "species_name": "Soortnaam",
+          "scientific_name": "Wetenschappelijke naam",
+          "confidence": "Betrouwbaarheid",
+          "location": "Locatie",
+          "stream_name": "Streamnaam",
+          "stream_url": "Stream-URL",
+          "device_name": "Apparaatnaam",
+          "error": "Foutmelding",
           "broker": "Broker"
         },
         "operators": {
           "is": "is",
-          "is_not": "is not",
-          "contains": "contains",
-          "not_contains": "does not contain",
-          "greater_than": "greater than",
-          "less_than": "less than",
-          "greater_or_equal": "greater or equal",
-          "less_or_equal": "less or equal"
+          "is_not": "is niet",
+          "contains": "bevat",
+          "not_contains": "bevat niet",
+          "greater_than": "groter dan",
+          "less_than": "kleiner dan",
+          "greater_or_equal": "groter of gelijk",
+          "less_or_equal": "kleiner of gelijk"
         }
       },
       "v2Required": "Het uitgebreide databaseschema is vereist voor waarschuwingsregels. Werk uw database bij in de hoofdinstellingen om deze functie in te schakelen.",
@@ -3341,6 +3376,12 @@
           "description": "Meldt wanneer een BirdWeather-upload mislukt"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Instellingen konden niet worden geladen",
+      "saveFailed": "Instellingen konden niet worden opgeslagen",
+      "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
+      "csvDownloadFailed": "CSV-download mislukt"
     }
   },
   "auth": {
@@ -3574,6 +3615,17 @@
         "loading": "Inladen van de kalender...",
         "error": "Fout bij het inladen van de kalender"
       }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generatie mislukt met status {status}",
+        "spectrogramFailed": "Spectrogram kon niet worden gegenereerd"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Weergegevens konden niet worden geladen"
+      }
     }
   },
   "detection": {
@@ -3610,6 +3662,107 @@
   "quietHours": {
     "indicator": {
       "tooltip": "Stille uren actief — {count} bron(nen) gepauzeerd"
+    }
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "Te veel inlogpogingen. Probeer het over 15 minuten opnieuw.",
+      "credentialsRequired": "Gebruikersnaam en wachtwoord zijn vereist",
+      "invalidCredentials": "Ongeldige inloggegevens",
+      "missingCode": "Autorisatiecode ontbreekt",
+      "serviceUnavailable": "Authenticatieservice niet beschikbaar. Probeer het later opnieuw.",
+      "timeout": "Inloggen verlopen. Probeer het opnieuw.",
+      "exchangeFailed": "Inloggen kon op dit moment niet worden voltooid. Probeer het opnieuw.",
+      "sessionError": "Sessiefout tijdens het inloggen. Probeer het opnieuw."
+    },
+    "alert": {
+      "v2Required": "Waarschuwingsregels vereisen de uitgebreide (v2) database",
+      "invalidID": "Ongeldig regel-ID",
+      "notFound": "Waarschuwingsregel niet gevonden",
+      "invalidBody": "Ongeldige aanvraagbody",
+      "nameRequired": "Regelnaam is vereist",
+      "typesRequired": "Objecttype en triggertype zijn vereist",
+      "duplicateName": "Er bestaat al een regel met deze naam",
+      "invalidJSON": "Ongeldige JSON"
+    },
+    "detection": {
+      "invalidDate": "Ongeldig {paramName}-formaat, gebruik JJJJ-MM-DD"
+    },
+    "backup": {
+      "invalidType": "Type moet 'legacy' of 'v2' zijn",
+      "alreadyRunning": "Er wordt al een back-up gemaakt",
+      "dbInfoFailed": "Kan database-informatie niet ophalen",
+      "diskSpaceCheck": "Controle van schijfruimte mislukt",
+      "insufficientSpace": "Onvoldoende schijfruimte. Nodig: {needed}, beschikbaar: {available}",
+      "createFailed": "Kan back-uptaak niet aanmaken",
+      "notFound": "Back-uptaak niet gevonden of verlopen",
+      "notReady": "Back-up is nog niet klaar om te downloaden",
+      "fileNotFound": "Back-upbestand niet gevonden — taak is mogelijk verlopen",
+      "sqliteOnly": "Back-up alleen beschikbaar voor SQLite-databases",
+      "dbNotConfigured": "Database niet geconfigureerd",
+      "unsupportedType": "Kan geen back-up maken van dit type gegevensopslag",
+      "v2NotInitialized": "V2-database niet geïnitialiseerd"
+    },
+    "migration": {
+      "notConfigured": "Migratie is niet geconfigureerd",
+      "preFlightFailed": "Voorafgaande controles mislukt",
+      "invalidBody": "Ongeldige aanvraagbody",
+      "recordCountFailed": "Kan het totaal aantal records niet bepalen",
+      "startFailed": "Kan migratie niet starten",
+      "initFailed": "Kan migratie niet initialiseren",
+      "resumeFailed": "Kan migratie niet hervatten"
+    },
+    "cleanup": {
+      "noLegacyDB": "Geen oude database gevonden",
+      "accessFailed": "Kan geen toegang krijgen tot de oude database",
+      "restartRequired": "De applicatie moet opnieuw worden gestart na de migratie voordat opschonen beschikbaar is",
+      "safetyCheck": "Het doelbestand lijkt een V2-database te zijn — opschonen niet toegestaan voor de veiligheid",
+      "noLegacyTables": "Geen oude tabellen gevonden",
+      "restartNeeded": "Kan niet opschonen: applicatie moet opnieuw worden gestart na de migratie",
+      "alreadyRunning": "Opschonen is al bezig"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT is niet ingeschakeld in de instellingen",
+      "mqttNotConfigured": "MQTT-broker niet geconfigureerd",
+      "mqttMetricsUnavailable": "Metriekinstantie niet beschikbaar voor MQTT-test",
+      "mqttClientFailed": "Kan MQTT-client niet aanmaken",
+      "birdweatherDisabled": "BirdWeather-integratie is niet ingeschakeld",
+      "birdweatherNotConfigured": "BirdWeather-station-ID niet geconfigureerd",
+      "birdweatherClientFailed": "Kan BirdWeather-client niet aanmaken",
+      "noWeatherProvider": "Geen weerprovider geselecteerd",
+      "openWeatherKeyRequired": "OpenWeather API-sleutel is vereist",
+      "processorUnavailable": "Processor niet beschikbaar",
+      "discoveryFailed": "Kan Home Assistant-detectie niet activeren"
+    },
+    "notification": {
+      "serviceUnavailable": "Meldingsservice niet beschikbaar",
+      "idRequired": "Meldings-ID is vereist",
+      "notFound": "Melding niet gevonden",
+      "hostRequired": "Hostparameter is vereist",
+      "invalidHost": "Ongeldige hostparameter",
+      "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
+    },
+    "debug": {
+      "notEnabled": "Debugmodus niet ingeschakeld"
+    },
+    "terminal": {
+      "disabled": "Terminal is uitgeschakeld. Schakel het in bij de instellingen."
+    },
+    "api": {
+      "badRequest": "Ongeldige aanvraag. Controleer uw invoer en probeer het opnieuw.",
+      "unauthorized": "Authenticatie vereist. Log in en probeer het opnieuw.",
+      "forbidden": "U heeft geen toestemming om deze actie uit te voeren.",
+      "notFound": "De gevraagde bron is niet gevonden.",
+      "conflict": "Deze actie is in strijd met de huidige status. Vernieuw de pagina en probeer het opnieuw.",
+      "validationFailed": "Ongeldige invoer. Controleer uw gegevens en probeer het opnieuw.",
+      "tooManyRequests": "Te veel aanvragen. Wacht even voordat u het opnieuw probeert.",
+      "serverError": "Er is een serverfout opgetreden. Probeer het later opnieuw.",
+      "clientError": "Clientfout opgetreden. Controleer uw aanvraag en probeer het opnieuw.",
+      "unknownError": "Er is een onverwachte fout opgetreden. Probeer het opnieuw.",
+      "validationCheck": "Validatie mislukt. Controleer uw invoer.",
+      "conflictData": "Deze actie is in strijd met bestaande gegevens.",
+      "requestTimeout": "Time-out van het verzoek.",
+      "networkError": "Netwerkfout opgetreden. Controleer uw verbinding."
     }
   }
 }

@@ -120,7 +120,7 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return c.HandleError(ctx, err, err.Error(), status)
+		return c.HandleError(ctx, err, "Unable to access path", status)
 	}
 
 	// Read directory contents using SecureFS

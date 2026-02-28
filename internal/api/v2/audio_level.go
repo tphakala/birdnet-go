@@ -193,9 +193,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Early nil check for audio level channel
 	if c.audioLevelChan == nil {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Audio level stream unavailable - channel not configured")
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Audio level stream is not available",
-		})
+		return c.HandleError(ctx, nil, "Audio level stream is not available", http.StatusServiceUnavailable)
 	}
 
 	// Use RemoteAddr for connection tracking to prevent IP spoofing
@@ -215,9 +213,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 			logger.String("reason", "max_connections_per_ip"),
 			logger.Int("current_count", int(count)),
 			logger.Int("max_allowed", audioLevelMaxConnectionsPerIP))
-		return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-			"error": fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerIP),
-		})
+		return c.HandleError(ctx, nil, fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerIP), http.StatusTooManyRequests)
 	}
 	// Increment connection count
 	if !loaded {

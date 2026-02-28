@@ -200,9 +200,9 @@ func TestGetDailyWeatherDatabaseError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check error message
+	// Check error message — in non-debug mode, Error field uses sanitized message
 	assert.Equal(t, "Failed to get daily weather data", errorResponse.Message)
-	assert.Contains(t, errorResponse.Error, "database error")
+	assert.Equal(t, "Failed to get daily weather data", errorResponse.Error)
 
 	// Verify mock expectations
 }
@@ -379,9 +379,9 @@ func TestGetHourlyWeatherForDayDatabaseError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check error message
+	// Check error message — in non-debug mode, Error field uses sanitized message
 	assert.Equal(t, "Failed to get hourly weather data", errorResponse.Message)
-	assert.Contains(t, errorResponse.Error, "database error")
+	assert.Equal(t, "Failed to get hourly weather data", errorResponse.Error)
 
 	// Verify mock expectations
 }

@@ -185,6 +185,9 @@
         "lockStatusFailed": "Nepodarilo sa aktualizovať stav uzamknutia. Skúste to znova.",
         "verificationFailed": "Nepodarilo sa aktualizovať stav overenia. Skúste to znova."
       }
+    },
+    "errors": {
+      "unknownError": "Vyskytla sa neznáma chyba"
     }
   },
   "pageTitle": {
@@ -339,70 +342,74 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go spustený",
+        "message": "Aplikácia úspešne spustená (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go sa vypína",
+        "message": "Aplikácia sa riadne vypína"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Zistený: {species}",
+        "message": "Spoľahlivosť: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "Integrácia {integration} zlyhala",
+        "failedMessage": "Pripojenie k {integration} zlyhalo. Skontrolujte konfiguráciu a záznamy."
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Vysoké využitie {resource}",
+        "criticalUsage": "Kritické využitie {resource}",
+        "recovered": "Využitie {resource} obnovené",
+        "currentUsage": "Aktuálne na {current}{unit} (prah: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kritická systémová chyba",
+        "application": "Chyba aplikácie",
+        "imageProvider": "Oznámenie poskytovateľa obrázkov",
+        "categoryError": "Chyba {category}"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Aplikovanie nových nastavení analýzy...",
+        "rebuildingRangeFilter": "Prestavba filtra rozšírenia druhov...",
+        "updatingIntervals": "Aktualizácia intervalov detekcie...",
+        "reconfiguringMqtt": "Aktualizácia MQTT pripojenia...",
+        "reconfiguringBirdweather": "Aktualizácia integrácie BirdWeather...",
+        "reconfiguringStreams": "Aktualizácia audio streamov...",
+        "reconfiguringTelemetry": "Aktualizácia nastavení telemetrie...",
+        "reconfiguringSpeciesTracking": "Aktualizácia sledovania druhov...",
+        "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
+        "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
+        "audioDeviceRestartRequired": "Audio zariadenie zmenené. Vyžaduje sa reštart.",
+        "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",
+        "equalizerUpdated": "Nastavenia audio ekvalizéra aktualizované",
+        "savedSuccessfully": "Nastavenia úspešne uložené",
+        "saveFailed": "Uloženie nastavení zlyhalo"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Migrácia databázy spustená",
+        "startedMessage": "Migrácia bola spustená. Môže to chvíľu trvať v závislosti od počtu detekcií.",
+        "pausedTitle": "Migrácia databázy pozastavená",
+        "pausedMessage": "Migrácia databázy bola pozastavená. Môžete ju kedykoľvek obnoviť v nastaveniach databázy.",
+        "cancelledTitle": "Migrácia databázy zrušená",
+        "cancelledMessage": "Migrácia databázy bola zrušená. Novú migráciu môžete kedykoľvek spustiť v nastaveniach databázy.",
+        "completedTitle": "Migrácia databázy dokončená",
+        "completedMessage": "Migrácia dokončená. Reštartujte BirdNET-Go pre prepnutie na novú databázu.",
+        "errorTitle": "Chyba migrácie databázy",
+        "errorMessage": "Migrácia pozastavená kvôli chybám. Skontrolujte záznamy a skúste pokračovať."
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Vyčistenie starej databázy dokončené",
+        "completeMessage": "Uvoľnených {space} miesta na disku.",
+        "failedTitle": "Vyčistenie starej databázy zlyhalo",
+        "failedMessage": "Nepodarilo sa odstrániť starú databázu. Skontrolujte záznamy pre podrobnosti."
       },
       "alert": {
-        "firedTitleEvent": "Upozornenie: {rule_name} ({event_name})",
-        "firedTitleMetric": "Upozornenie: {rule_name} ({metric_name})",
-        "firedTitle": "Upozornenie: {rule_name}"
+        "firedTitle": "Upozornenie: {rule_name}",
+        "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
+        "detectionOccurred": "{species_name} detegovaný s {confidence}% istotou",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} odpojený"
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -737,7 +744,8 @@
       "loginRequired": "Prihláste sa, aby ste si mohli pozrieť túto detekciu.",
       "serverError": "Chyba servera. Skúste to neskôr alebo kontaktujte podporu, ak problém pretrváva.",
       "loadFailed": "Nepodarilo sa načítať detekciu (Chyba {status}). Skúste obnoviť stránku.",
-      "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie."
+      "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie.",
+      "fetchFailed": "Nepodarilo sa načítať detekcie"
     }
   },
   "species": {
@@ -1055,7 +1063,14 @@
       "online": "Online",
       "uptime": "Doba behu",
       "host": "Host",
-      "model": "Model"
+      "model": "Model",
+      "limit": "Limit",
+      "inference": "Inferencia",
+      "avgTime": "Priemer",
+      "noInference": "Žiadne dáta",
+      "statusOk": "OK",
+      "statusWarning": "Varovanie",
+      "statusCritical": "Kritický"
     },
     "storage": {
       "title": "Úložisko",
@@ -1237,6 +1252,9 @@
         "loadingAnalytics": "Načítavajú sa analytické dáta",
         "loadingTrends": "Načítavajú sa dáta trendov"
       }
+    },
+    "errors": {
+      "loadFailed": "Nepodarilo sa načítať analytické údaje. Skúste to znova."
     }
   },
   "settings": {
@@ -1444,6 +1462,12 @@
             "location": "Umiestnenie",
             "connected": "Pripojené",
             "disconnected": "Odpojené"
+          },
+          "errors": {
+            "backupStartFailed": "Nepodarilo sa spustiť zálohovanie",
+            "backupStatusFailed": "Nepodarilo sa získať stav zálohovania",
+            "backupFailed": "Zálohovanie zlyhalo",
+            "backupDownloadFailed": "Nepodarilo sa stiahnuť zálohu"
           }
         },
         "interface": {
@@ -1607,7 +1631,10 @@
         "providersLoadFailed": "Nepodarilo sa načítať poskytovateľov obrázkov. Používajú sa predvolené nastavenia.",
         "rangeFilterTestFailed": "Nepodarilo sa otestovať nastavenia filtra rozsahu",
         "rangeFilterLoadFailed": "Nepodarilo sa načítať zoznam druhov",
-        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov"
+        "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov",
+        "mapLibraryLoadFailed": "Nepodarilo sa načítať knižnicu máp. Obnovte stránku.",
+        "mapLoadFailed": "Nepodarilo sa načítať mapu. Skúste obnoviť stránku.",
+        "modalMapLoadFailed": "Nepodarilo sa načítať modálnu mapu. Zatvorte a znova otvorte okno."
       }
     },
     "support": {
@@ -2228,6 +2255,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Chyba pripojenia",
+        "responseStreamFailed": "Nepodarilo sa prečítať prúd odpovede"
       }
     },
     "audio": {
@@ -2679,6 +2710,10 @@
       }
     },
     "species": {
+      "saveError": "Uloženie konfigurácie pre \"{species}\" zlyhalo. Skúste to znova.",
+      "configUpdated": "Konfigurácia pre \"{species}\" aktualizovaná",
+      "configAdded": "Konfigurácia pre \"{species}\" pridaná",
+      "duplicateConfigError": "Druh \"{species}\" už má konfiguráciu. Vyberte iný názov.",
       "activeSpecies": {
         "title": "Aktívne druhy",
         "tabLabel": "Aktívne",
@@ -3083,54 +3118,54 @@
       "importing": "Importovanie...",
       "schema": {
         "objectTypes": {
-          "stream": "Audio Stream",
-          "detection": "Detection",
-          "application": "Application",
-          "integration": "Integration",
-          "device": "Device",
-          "system": "System"
+          "stream": "Audio stream",
+          "detection": "Detekcia",
+          "application": "Aplikácia",
+          "integration": "Integrácia",
+          "device": "Zariadenie",
+          "system": "Systém"
         },
         "events": {
-          "stream_connected": "Stream Connected",
-          "stream_disconnected": "Stream Disconnected",
-          "stream_error": "Stream Error",
-          "detection_new_species": "New Species Detected",
-          "detection_occurred": "Detection Occurred",
-          "application_started": "Application Started",
-          "application_stopped": "Application Stopped",
-          "integration_birdweather_failed": "BirdWeather Upload Failed",
-          "integration_mqtt_connected": "MQTT Connected",
-          "integration_mqtt_disconnected": "MQTT Disconnected",
-          "device_started": "Device Started",
-          "device_stopped": "Device Stopped",
-          "device_error": "Device Error"
+          "stream_connected": "Stream pripojený",
+          "stream_disconnected": "Stream odpojený",
+          "stream_error": "Chyba streamu",
+          "detection_new_species": "Nový druh detegovaný",
+          "detection_occurred": "Detekcia vykonaná",
+          "application_started": "Aplikácia spustená",
+          "application_stopped": "Aplikácia zastavená",
+          "integration_birdweather_failed": "Odoslanie do BirdWeather zlyhalo",
+          "integration_mqtt_connected": "MQTT pripojený",
+          "integration_mqtt_disconnected": "MQTT odpojený",
+          "device_started": "Zariadenie spustené",
+          "device_stopped": "Zariadenie zastavené",
+          "device_error": "Chyba zariadenia"
         },
         "metrics": {
-          "system_cpu_usage": "CPU Usage",
-          "system_memory_usage": "Memory Usage",
-          "system_disk_usage": "Disk Usage"
+          "system_cpu_usage": "Využitie CPU",
+          "system_memory_usage": "Využitie pamäte",
+          "system_disk_usage": "Využitie disku"
         },
         "properties": {
-          "value": "Value",
-          "species_name": "Species Name",
-          "scientific_name": "Scientific Name",
-          "confidence": "Confidence",
-          "location": "Location",
-          "stream_name": "Stream Name",
-          "stream_url": "Stream URL",
-          "device_name": "Device Name",
-          "error": "Error Message",
+          "value": "Hodnota",
+          "species_name": "Názov druhu",
+          "scientific_name": "Vedecký názov",
+          "confidence": "Spoľahlivosť",
+          "location": "Poloha",
+          "stream_name": "Názov streamu",
+          "stream_url": "URL streamu",
+          "device_name": "Názov zariadenia",
+          "error": "Chybová správa",
           "broker": "Broker"
         },
         "operators": {
-          "is": "is",
-          "is_not": "is not",
-          "contains": "contains",
-          "not_contains": "does not contain",
-          "greater_than": "greater than",
-          "less_than": "less than",
-          "greater_or_equal": "greater or equal",
-          "less_or_equal": "less or equal"
+          "is": "je",
+          "is_not": "nie je",
+          "contains": "obsahuje",
+          "not_contains": "neobsahuje",
+          "greater_than": "väčšie ako",
+          "less_than": "menšie ako",
+          "greater_or_equal": "väčšie alebo rovné",
+          "less_or_equal": "menšie alebo rovné"
         }
       },
       "v2Required": "Pre pravidlá upozornení je potrebná rozšírená schéma databázy. Aktualizujte databázu v hlavných nastaveniach, aby ste túto funkciu povolili.",
@@ -3172,6 +3207,12 @@
           "description": "Upozorní, keď nahrávanie do BirdWeather zlyhá"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Nepodarilo sa načítať nastavenia",
+      "saveFailed": "Nepodarilo sa uložiť nastavenia",
+      "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
+      "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
     }
   },
   "auth": {
@@ -3405,6 +3446,17 @@
         "loading": "Načítava sa kalendár...",
         "error": "Chyba pri načítaní kalendára"
       }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generovanie zlyhalo so stavom {status}",
+        "spectrogramFailed": "Nepodarilo sa vygenerovať spektrogram"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Nepodarilo sa načítať údaje o počasí"
+      }
     }
   },
   "detection": {
@@ -3441,6 +3493,107 @@
   "quietHours": {
     "indicator": {
       "tooltip": "Tiché hodiny aktívne — {count} zdroj(e) pozastavený(é)"
+    }
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "Príliš veľa pokusov o prihlásenie. Skúste to znova o 15 minút.",
+      "credentialsRequired": "Meno používateľa a heslo sú povinné",
+      "invalidCredentials": "Neplatné prihlasovacie údaje",
+      "missingCode": "Chýba autorizačný kód",
+      "serviceUnavailable": "Overovacia služba nie je k dispozícii. Skúste to neskôr.",
+      "timeout": "Prihlásenie vypršalo. Skúste to znova.",
+      "exchangeFailed": "Prihlásenie sa momentálne nepodarilo dokončiť. Skúste to znova.",
+      "sessionError": "Chyba relácie počas prihlasovania. Skúste to znova."
+    },
+    "alert": {
+      "v2Required": "Pravidlá výstrah vyžadujú rozšírenú databázu (v2)",
+      "invalidID": "Neplatné ID pravidla",
+      "notFound": "Pravidlo výstrahy sa nenašlo",
+      "invalidBody": "Neplatné telo požiadavky",
+      "nameRequired": "Názov pravidla je povinný",
+      "typesRequired": "Typ objektu a typ spúšťača sú povinné",
+      "duplicateName": "Pravidlo s týmto názvom už existuje",
+      "invalidJSON": "Neplatný JSON"
+    },
+    "detection": {
+      "invalidDate": "Neplatný formát {paramName}, použite RRRR-MM-DD"
+    },
+    "backup": {
+      "invalidType": "Typ musí byť 'legacy' alebo 'v2'",
+      "alreadyRunning": "Zálohovanie už prebieha",
+      "dbInfoFailed": "Nepodarilo sa získať informácie o databáze",
+      "diskSpaceCheck": "Kontrola miesta na disku zlyhala",
+      "insufficientSpace": "Nedostatok miesta na disku. Potrebné: {needed}, dostupné: {available}",
+      "createFailed": "Nepodarilo sa vytvoriť úlohu zálohovania",
+      "notFound": "Úloha zálohovania sa nenašla alebo vypršala",
+      "notReady": "Záloha ešte nie je pripravená na stiahnutie",
+      "fileNotFound": "Súbor zálohy sa nenašiel — úloha mohla vypršať",
+      "sqliteOnly": "Zálohovanie je dostupné iba pre databázy SQLite",
+      "dbNotConfigured": "Databáza nie je nakonfigurovaná",
+      "unsupportedType": "Pre tento typ úložiska nie je možné vytvoriť zálohu",
+      "v2NotInitialized": "Databáza V2 nie je inicializovaná"
+    },
+    "migration": {
+      "notConfigured": "Migrácia nie je nakonfigurovaná",
+      "preFlightFailed": "Predbežné kontroly zlyhali",
+      "invalidBody": "Neplatné telo požiadavky",
+      "recordCountFailed": "Nepodarilo sa zistiť celkový počet záznamov",
+      "startFailed": "Nepodarilo sa spustiť migráciu",
+      "initFailed": "Nepodarilo sa inicializovať migráciu",
+      "resumeFailed": "Nepodarilo sa obnoviť migráciu"
+    },
+    "cleanup": {
+      "noLegacyDB": "Stará databáza sa nenašla",
+      "accessFailed": "Nie je možné pristúpiť k starej databáze",
+      "restartRequired": "Aplikácia musí byť po migrácii reštartovaná, aby bolo čistenie dostupné",
+      "safetyCheck": "Cieľový súbor sa javí ako databáza V2 — čistenie nie je z bezpečnostných dôvodov povolené",
+      "noLegacyTables": "Nenašli sa žiadne staré tabuľky",
+      "restartNeeded": "Čistenie nie je možné: aplikácia musí byť po migrácii reštartovaná",
+      "alreadyRunning": "Čistenie už prebieha"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT nie je povolené v nastaveniach",
+      "mqttNotConfigured": "MQTT broker nie je nakonfigurovaný",
+      "mqttMetricsUnavailable": "Inštancia metrík nie je k dispozícii pre test MQTT",
+      "mqttClientFailed": "Nepodarilo sa vytvoriť klienta MQTT",
+      "birdweatherDisabled": "Integrácia BirdWeather nie je povolená",
+      "birdweatherNotConfigured": "ID stanice BirdWeather nie je nakonfigurované",
+      "birdweatherClientFailed": "Nepodarilo sa vytvoriť klienta BirdWeather",
+      "noWeatherProvider": "Nie je vybraný poskytovateľ počasia",
+      "openWeatherKeyRequired": "API kľúč OpenWeather je povinný",
+      "processorUnavailable": "Procesor nie je k dispozícii",
+      "discoveryFailed": "Nepodarilo sa spustiť objavovanie zariadení Home Assistant"
+    },
+    "notification": {
+      "serviceUnavailable": "Služba oznámení nie je k dispozícii",
+      "idRequired": "ID oznámenia je povinné",
+      "notFound": "Oznámenie sa nenašlo",
+      "hostRequired": "Parameter hostiteľa je povinný",
+      "invalidHost": "Neplatný parameter hostiteľa",
+      "rateLimit": "Príliš veľa pokusov o pripojenie k prúdu oznámení, počkajte chvíľu pred ďalším pokusom"
+    },
+    "debug": {
+      "notEnabled": "Režim ladenia nie je povolený"
+    },
+    "terminal": {
+      "disabled": "Terminál je zakázaný. Povoľte ho v nastaveniach."
+    },
+    "api": {
+      "badRequest": "Neplatná požiadavka. Skontrolujte svoje údaje a skúste to znova.",
+      "unauthorized": "Vyžaduje sa overenie. Prihláste sa a skúste to znova.",
+      "forbidden": "Na vykonanie tejto akcie nemáte oprávnenie.",
+      "notFound": "Požadovaný zdroj nebol nájdený.",
+      "conflict": "Táto akcia je v rozpore s aktuálnym stavom. Obnovte stránku a skúste to znova.",
+      "validationFailed": "Neplatný vstup. Skontrolujte svoje údaje a skúste to znova.",
+      "tooManyRequests": "Príliš veľa požiadaviek. Počkajte chvíľu a skúste to znova.",
+      "serverError": "Vyskytla sa chyba servera. Skúste to znova neskôr.",
+      "clientError": "Chyba klienta. Skontrolujte svoju požiadavku a skúste to znova.",
+      "unknownError": "Vyskytla sa neočakávaná chyba. Skúste to znova.",
+      "validationCheck": "Overenie zlyhalo. Skontrolujte svoje údaje.",
+      "conflictData": "Táto akcia je v rozpore s existujúcimi údajmi.",
+      "requestTimeout": "Časový limit požiadavky vypršal.",
+      "networkError": "Chyba siete. Skontrolujte pripojenie."
     }
   }
 }

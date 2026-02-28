@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -49,6 +50,7 @@ type AuthResponse struct {
 	Username    string    `json:"username,omitempty"`
 	Timestamp   time.Time `json:"timestamp"`
 	RedirectURL string    `json:"redirectUrl,omitempty"` // For OAuth callback redirect
+	ErrorKey    string    `json:"error_key,omitempty"`   // i18n translation key for error messages
 	// In a real token-based auth system, we would return tokens here
 	// Token     string    `json:"token,omitempty"`
 	// ExpiresAt time.Time `json:"expires_at,omitempty"`
@@ -88,9 +90,7 @@ func (c *Controller) initAuthRoutes() {
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("user_agent", ctx.Request().Header.Get("User-Agent")),
 			)
-			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many login attempts. Please try again in 15 minutes.",
-			})
+			return c.HandleErrorWithKey(ctx, err, "Too many login attempts. Please try again in 15 minutes.", http.StatusTooManyRequests, notification.MsgErrAuthTooManyAttempts, nil)
 		},
 		DenyHandler: func(ctx echo.Context, identifier string, err error) error {
 			// This is called when the rate limit is exceeded
@@ -99,9 +99,7 @@ func (c *Controller) initAuthRoutes() {
 				logger.String("ip", ctx.RealIP()),
 				logger.String("path", ctx.Request().URL.Path),
 			)
-			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many login attempts. Please try again in 15 minutes.",
-			})
+			return c.HandleErrorWithKey(ctx, err, "Too many login attempts. Please try again in 15 minutes.", http.StatusTooManyRequests, notification.MsgErrAuthTooManyAttempts, nil)
 		},
 	})
 
@@ -140,8 +138,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 		)
 		// Return a generic error, perhaps indicating auth isn't enabled
-		return c.HandleError(ctx, errors.New("authentication not configured"),
-			"Authentication service unavailable", http.StatusInternalServerError)
+		return c.HandleErrorWithKey(ctx, errors.New("authentication not configured"),
+			"Authentication service unavailable", http.StatusInternalServerError, notification.MsgErrAuthServiceUnavailable, nil)
 	}
 
 	// If authentication is not required, act as if the login was successful
@@ -174,6 +172,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 		return ctx.JSON(http.StatusBadRequest, AuthResponse{
 			Success:   false,
 			Message:   "Username and password are required",
+			ErrorKey:  notification.MsgErrAuthCredentialsRequired,
 			Timestamp: time.Now(),
 		})
 	}
@@ -201,6 +200,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 		return ctx.JSON(http.StatusUnauthorized, AuthResponse{
 			Success:   false,
 			Message:   message,
+			ErrorKey:  notification.MsgErrAuthInvalidCredentials,
 			Timestamp: time.Now(),
 		})
 	}
@@ -523,7 +523,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
-		return ctx.String(http.StatusBadRequest, "Missing authorization code")
+		return c.HandleErrorWithKey(ctx, nil, "Missing authorization code", http.StatusBadRequest, notification.MsgErrAuthMissingCode, nil)
 	}
 
 	// 2. Defensive check: ensure AuthService is available
@@ -532,7 +532,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
-		return ctx.String(http.StatusServiceUnavailable, "Authentication service unavailable. Please try again later.")
+		return c.HandleErrorWithKey(ctx, nil, "Authentication service unavailable. Please try again later.", http.StatusServiceUnavailable, notification.MsgErrAuthServiceUnavailable, nil)
 	}
 
 	// 3. Exchange auth code for access token (with 15s timeout)
@@ -546,13 +546,13 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 				logger.Error(err),
 				logger.String("ip", ctx.RealIP()),
 			)
-			return ctx.String(http.StatusGatewayTimeout, "Login timed out. Please try again.")
+			return c.HandleErrorWithKey(ctx, nil, "Login timed out. Please try again.", http.StatusGatewayTimeout, notification.MsgErrAuthTimeout, nil)
 		}
 		c.logWarnIfEnabled("Failed to exchange authorization code",
 			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return ctx.String(http.StatusUnauthorized, "Unable to complete login at this time. Please try again.")
+		return c.HandleErrorWithKey(ctx, nil, "Unable to complete login at this time. Please try again.", http.StatusUnauthorized, notification.MsgErrAuthExchangeFailed, nil)
 	}
 
 	c.logInfoIfEnabled("Successfully exchanged authorization code for access token",
@@ -565,7 +565,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return ctx.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+		return c.HandleErrorWithKey(ctx, nil, "Session error during login. Please try again.", http.StatusInternalServerError, notification.MsgErrAuthSessionError, nil)
 	}
 
 	// 5. Validate redirect path (prevent open redirects)

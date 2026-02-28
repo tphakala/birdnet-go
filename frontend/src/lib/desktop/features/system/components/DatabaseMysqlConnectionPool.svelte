@@ -17,7 +17,7 @@
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-400 dark:text-slate-500"
+    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
   >
     {t('system.database.dashboard.connectionPool.title')}
   </h3>
@@ -30,7 +30,7 @@
         >
         <span class="font-mono tabular-nums text-sm">
           <span class="font-semibold">{details.active_connections}</span>
-          <span class="text-slate-400 dark:text-slate-500"> / {details.max_connections}</span>
+          <span class="text-slate-600 dark:text-slate-400"> / {details.max_connections}</span>
         </span>
       </div>
       <div
@@ -47,7 +47,7 @@
         ></div>
       </div>
       <div
-        class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500"
+        class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
       >
         <span
           >{details.active_connections}
@@ -63,8 +63,8 @@
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Users class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-          <span class="text-slate-400 dark:text-slate-500"
+          <Users class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+          <span class="text-slate-600 dark:text-slate-400"
             >{t('system.database.dashboard.connectionPool.totalCreated')}</span
           >
         </div>
@@ -73,8 +73,8 @@
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <AlertTriangle class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-          <span class="text-slate-400 dark:text-slate-500"
+          <AlertTriangle class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+          <span class="text-slate-600 dark:text-slate-400"
             >{t('system.database.dashboard.connectionPool.connErrors')}</span
           >
         </div>
@@ -86,8 +86,8 @@
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Network class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-          <span class="text-slate-400 dark:text-slate-500"
+          <Network class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+          <span class="text-slate-600 dark:text-slate-400"
             >{t('system.database.dashboard.connectionPool.threads')}</span
           >
         </div>

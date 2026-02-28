@@ -467,7 +467,7 @@
         return;
       }
       logger.error('Error fetching analytics data:', err);
-      error = 'Failed to load analytics data. Please try again.';
+      error = t('analytics.errors.loadFailed');
     } finally {
       isLoading = false;
     }

@@ -419,6 +419,28 @@
     };
   });
 
+  // Poll during active backup jobs (recursive setTimeout to prevent pile-up)
+  const ACTIVE_BACKUP_STATUSES = new Set(['pending', 'in_progress']);
+  let hasActiveBackup = $derived(backupJobs.some(j => ACTIVE_BACKUP_STATUSES.has(j.status)));
+
+  $effect(() => {
+    if (!hasActiveBackup) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      if (cancelled) return;
+      await fetchBackupJobs();
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    }
+    timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  });
+
   // Fetch legacy status in v2-only mode
   $effect(() => {
     if (isV2OnlyMode && !legacyStatus.data && !legacyStatus.loading && !legacyStatus.error) {
@@ -449,7 +471,7 @@
 {#if migrationStatus.loading}
   <!-- Loading state (waiting for migration status to determine view) -->
   <div class="flex items-center justify-center py-16" role="status">
-    <div class="text-sm text-slate-400 dark:text-slate-500">
+    <div class="text-sm text-slate-600 dark:text-slate-400">
       {t('system.database.dashboard.loading')}
     </div>
   </div>
@@ -457,7 +479,7 @@
   <!-- OPERATIONAL DASHBOARD VIEW -->
   {#if overviewLoading}
     <div class="flex items-center justify-center py-16" role="status">
-      <div class="text-sm text-slate-400 dark:text-slate-500">
+      <div class="text-sm text-slate-600 dark:text-slate-400">
         {t('system.database.dashboard.loading')}
       </div>
     </div>

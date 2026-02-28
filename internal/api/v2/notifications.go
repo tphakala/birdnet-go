@@ -99,20 +99,23 @@ type notificationAction struct {
 	successRespMsg string
 }
 
-// executeNotificationAction handles the common pattern for notification operations:
-// check service initialization, validate ID, execute operation, handle errors.
-func (c *Controller) executeNotificationAction(ctx echo.Context, action notificationAction) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
+// requireNotificationService is middleware that returns 503 if the notification service is not initialized.
+func (c *Controller) requireNotificationService(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		if !notification.IsInitialized() {
+			return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
+		}
+		return next(ctx)
 	}
+}
 
+// executeNotificationAction handles the common pattern for notification operations:
+// validate ID, execute operation, handle errors.
+// All callers are behind the requireNotificationService middleware.
+func (c *Controller) executeNotificationAction(ctx echo.Context, action notificationAction) error {
 	id := ctx.Param("id")
 	if id == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Notification ID is required",
-		})
+		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
 	service := notification.GetService()
@@ -120,9 +123,7 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 		c.logErrorIfEnabled(action.errorLogMsg,
 			logger.Error(err),
 			logger.String("id", id))
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": action.errorRespMsg,
-		})
+		return c.HandleError(ctx, err, action.errorRespMsg, http.StatusInternalServerError)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{
@@ -152,28 +153,28 @@ func (c *Controller) SetupNotificationRoutes() {
 			return ctx.RealIP(), nil
 		},
 		ErrorHandler: func(context echo.Context, err error) error {
-			return context.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many notification stream connection attempts, please wait before trying again",
-			})
+			return c.HandleErrorWithKey(context, err, "Too many notification stream connection attempts, please wait before trying again", http.StatusTooManyRequests, notification.MsgErrNotifRateLimit, nil)
 		},
 	}
 
-	// SSE endpoint for notification stream (authenticated - includes both notifications and toasts)
-	c.Group.GET("/notifications/stream", c.StreamNotifications, c.authMiddleware, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	// SSE endpoint for notification stream (authenticated, requires notification service)
+	c.Group.GET("/notifications/stream", c.StreamNotifications, c.authMiddleware, c.requireNotificationService, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// REST endpoints for notification management (authenticated)
 	// All notification endpoints require authentication when security is enabled
 	notificationsGroup := c.Group.Group("/notifications", c.authMiddleware)
-	notificationsGroup.GET("", c.GetNotifications)
-	notificationsGroup.GET("/:id", c.GetNotification)
-	notificationsGroup.PUT("/:id/read", c.MarkNotificationRead)
-	notificationsGroup.PUT("/:id/acknowledge", c.MarkNotificationAcknowledged)
-	notificationsGroup.DELETE("/:id", c.DeleteNotification)
-	notificationsGroup.GET("/unread/count", c.GetUnreadCount)
 
-	// Test endpoints for notification system (authenticated)
-	notificationsGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
+	// Endpoints that require the notification service to be initialized
+	notifServiceGroup := notificationsGroup.Group("", c.requireNotificationService)
+	notifServiceGroup.GET("", c.GetNotifications)
+	notifServiceGroup.GET("/:id", c.GetNotification)
+	notifServiceGroup.PUT("/:id/read", c.MarkNotificationRead)
+	notifServiceGroup.PUT("/:id/acknowledge", c.MarkNotificationAcknowledged)
+	notifServiceGroup.DELETE("/:id", c.DeleteNotification)
+	notifServiceGroup.GET("/unread/count", c.GetUnreadCount)
+	notifServiceGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
 
+	// Endpoints that do NOT require the notification service
 	// NTFY server connectivity probe (authenticated)
 	notificationsGroup.GET("/check-ntfy-server", c.CheckNtfyServer)
 }
@@ -204,15 +205,11 @@ type NtfyServerCheckResponse struct {
 func (c *Controller) CheckNtfyServer(ctx echo.Context) error {
 	host := ctx.QueryParam("host")
 	if host == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "host parameter is required",
-		})
+		return c.HandleErrorWithKey(ctx, nil, "host parameter is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
 	}
 
 	if !isValidNtfyHost(host) {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "invalid host parameter",
-		})
+		return c.HandleErrorWithKey(ctx, nil, "invalid host parameter", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
 	}
 
 	resp := probeNtfyServer(ctx.Request().Context(), host)
@@ -352,13 +349,6 @@ func probeNtfyServer(ctx context.Context, host string) NtfyServerCheckResponse {
 
 // StreamNotifications handles the SSE connection for real-time notification streaming
 func (c *Controller) StreamNotifications(ctx echo.Context) error {
-	// Check if notification service is initialized
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
 	// Track connection start time for metrics
 	connectionStartTime := time.Now()
 
@@ -650,12 +640,6 @@ func (c *Controller) logNotificationSent(clientID string, notif *notification.No
 
 // GetNotifications returns a list of notifications with optional filtering
 func (c *Controller) GetNotifications(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
 	service := notification.GetService()
 
 	// Build filter options from query parameters
@@ -705,9 +689,7 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	notifications, err := service.List(filter)
 	if err != nil {
 		c.logErrorIfEnabled("failed to list notifications", logger.Error(err))
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to retrieve notifications",
-		})
+		return c.HandleError(ctx, err, "Failed to retrieve notifications", http.StatusInternalServerError)
 	}
 
 	if c.Settings != nil && c.Settings.WebServer.Debug {
@@ -731,33 +713,21 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 
 // GetNotification returns a single notification by ID
 func (c *Controller) GetNotification(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
 	id := ctx.Param("id")
 	if id == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Notification ID is required",
-		})
+		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
 	service := notification.GetService()
 	notif, err := service.Get(id)
 	if err != nil {
 		if errors.Is(err, notification.ErrNotificationNotFound) {
-			return ctx.JSON(http.StatusNotFound, map[string]string{
-				"error": "Notification not found",
-			})
+			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
 		}
 		c.logErrorIfEnabled("failed to get notification",
 			logger.Error(err),
 			logger.String("id", id))
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to retrieve notification",
-		})
+		return c.HandleError(ctx, err, "Failed to retrieve notification", http.StatusInternalServerError)
 	}
 
 	return ctx.JSON(http.StatusOK, notif)
@@ -765,17 +735,9 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 
 // MarkNotificationRead marks a notification as read
 func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
 	id := ctx.Param("id")
 	if id == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Notification ID is required",
-		})
+		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
 	service := notification.GetService()
@@ -784,9 +746,7 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 		c.logErrorIfEnabled("failed to mark notification as read",
 			logger.Error(err),
 			logger.String("id", id))
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to mark notification as read",
-		})
+		return c.HandleError(ctx, err, "Failed to mark notification as read", http.StatusInternalServerError)
 	}
 
 	if c.Settings != nil && c.Settings.WebServer.Debug {
@@ -820,19 +780,11 @@ func (c *Controller) DeleteNotification(ctx echo.Context) error {
 
 // GetUnreadCount returns the count of unread notifications
 func (c *Controller) GetUnreadCount(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
 	service := notification.GetService()
 	count, err := service.GetUnreadCount()
 	if err != nil {
 		c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to get unread count",
-		})
+		return c.HandleError(ctx, err, "Failed to get unread count", http.StatusInternalServerError)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -842,16 +794,8 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 
 // CreateTestNewSpeciesNotification creates a test new species detection notification
 func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
 	if c.Settings == nil {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Settings not initialized",
-		})
+		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
 	}
 
 	service := notification.GetService()
@@ -916,9 +860,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	// Use CreateWithMetadata to persist and broadcast
 	if err := service.CreateWithMetadata(testNotification); err != nil {
 		c.logErrorIfEnabled("failed to create test notification", logger.Error(err))
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to create test notification",
-		})
+		return c.HandleError(ctx, err, "Failed to create test notification", http.StatusInternalServerError)
 	}
 
 	if c.Settings != nil && c.Settings.WebServer.Debug {

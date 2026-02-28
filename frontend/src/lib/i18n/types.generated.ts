@@ -170,6 +170,7 @@ export type TranslationKey =
   | 'common.review.errors.commentFailed'
   | 'common.review.errors.lockStatusFailed'
   | 'common.review.errors.verificationFailed'
+  | 'common.errors.unknownError'
   | 'pageTitle.settings'
   | 'pageTitle.pageNotFound'
   | 'pageTitle.serverError'
@@ -304,7 +305,7 @@ export type TranslationKey =
   | 'notifications.content.detection.title' // params: species
   | 'notifications.content.detection.message' // params: confidence
   | 'notifications.content.integration.failedTitle' // params: integration
-  | 'notifications.content.integration.failedMessage' // params: error
+  | 'notifications.content.integration.failedMessage' // params: integration
   | 'notifications.content.resource.highUsage' // params: resource
   | 'notifications.content.resource.criticalUsage' // params: resource
   | 'notifications.content.resource.recovered' // params: resource
@@ -326,6 +327,8 @@ export type TranslationKey =
   | 'notifications.content.settings.audioDeviceRestartRequired'
   | 'notifications.content.settings.equalizerUpdateFailed'
   | 'notifications.content.settings.equalizerUpdated'
+  | 'notifications.content.settings.savedSuccessfully'
+  | 'notifications.content.settings.saveFailed'
   | 'notifications.content.migration.startedTitle'
   | 'notifications.content.migration.startedMessage'
   | 'notifications.content.migration.pausedTitle'
@@ -335,14 +338,16 @@ export type TranslationKey =
   | 'notifications.content.migration.completedTitle'
   | 'notifications.content.migration.completedMessage'
   | 'notifications.content.migration.errorTitle'
-  | 'notifications.content.migration.errorMessage' // params: error
+  | 'notifications.content.migration.errorMessage'
   | 'notifications.content.cleanup.completeTitle'
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
-  | 'notifications.content.cleanup.failedMessage' // params: error
-  | 'notifications.content.alert.firedTitleEvent' // params: rule_name, event_name
-  | 'notifications.content.alert.firedTitleMetric' // params: rule_name, metric_name
+  | 'notifications.content.cleanup.failedMessage'
   | 'notifications.content.alert.firedTitle' // params: rule_name
+  | 'notifications.content.alert.metricExceeded' // params: value, threshold
+  | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
+  | 'notifications.content.alert.errorOccurred' // params: source_name, error
+  | 'notifications.content.alert.disconnected' // params: source_name
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -574,6 +579,7 @@ export type TranslationKey =
   | 'detections.errors.serverError'
   | 'detections.errors.loadFailed' // params: status
   | 'detections.errors.noIdProvided'
+  | 'detections.errors.fetchFailed'
   | 'species.rarity.title'
   | 'species.rarity.score'
   | 'species.rarity.basedOnLocation' // params: latitude, longitude
@@ -916,11 +922,18 @@ export type TranslationKey =
   | 'system.metrics.available'
   | 'system.metrics.min'
   | 'system.metrics.max'
+  | 'system.metrics.limit'
   | 'system.metrics.tempUnavailable'
   | 'system.metrics.online'
   | 'system.metrics.uptime'
   | 'system.metrics.host'
   | 'system.metrics.model'
+  | 'system.metrics.inference'
+  | 'system.metrics.avgTime'
+  | 'system.metrics.noInference'
+  | 'system.metrics.statusOk'
+  | 'system.metrics.statusWarning'
+  | 'system.metrics.statusCritical'
   | 'system.storage.title'
   | 'system.storage.used'
   | 'system.storage.free'
@@ -1077,6 +1090,7 @@ export type TranslationKey =
   | 'analytics.advanced.aria.loadingAnalytics'
   | 'analytics.advanced.aria.loadingTrends'
   | 'analytics.advanced.aria.loadingDiversity'
+  | 'analytics.errors.loadFailed'
   | 'settings.title'
   | 'settings.loading'
   | 'settings.sections.node'
@@ -1099,6 +1113,10 @@ export type TranslationKey =
   | 'settings.actions.savingAriaLabel'
   | 'settings.actions.unsavedChanges'
   | 'settings.actions.toolbar'
+  | 'settings.errors.loadFailed'
+  | 'settings.errors.saveFailed'
+  | 'settings.errors.databaseStatsFailed'
+  | 'settings.errors.csvDownloadFailed'
   | 'settings.card.changed'
   | 'settings.card.changedAriaLabel'
   | 'settings.tabs.navigation'
@@ -1205,6 +1223,10 @@ export type TranslationKey =
   | 'settings.main.sections.database.stats.location'
   | 'settings.main.sections.database.stats.connected'
   | 'settings.main.sections.database.stats.disconnected'
+  | 'settings.main.sections.database.errors.backupStartFailed'
+  | 'settings.main.sections.database.errors.backupStatusFailed'
+  | 'settings.main.sections.database.errors.backupFailed'
+  | 'settings.main.sections.database.errors.backupDownloadFailed'
   | 'settings.main.sections.interface.title'
   | 'settings.main.sections.interface.description'
   | 'settings.main.sections.visualContent.title'
@@ -1289,6 +1311,9 @@ export type TranslationKey =
   | 'settings.main.errors.rangeFilterTestFailed'
   | 'settings.main.errors.rangeFilterLoadFailed'
   | 'settings.main.errors.rangeFilterCountFailed'
+  | 'settings.main.errors.mapLibraryLoadFailed'
+  | 'settings.main.errors.mapLoadFailed'
+  | 'settings.main.errors.modalMapLoadFailed'
   | 'settings.support.sections.telemetry.title'
   | 'settings.support.sections.telemetry.description'
   | 'settings.support.sections.diagnostics.title'
@@ -1671,6 +1696,8 @@ export type TranslationKey =
   | 'settings.integration.weather.temperatureUnit.helpText'
   | 'settings.integration.weather.temperatureUnit.options.celsius'
   | 'settings.integration.weather.temperatureUnit.options.fahrenheit'
+  | 'settings.integration.errors.connectionError'
+  | 'settings.integration.errors.responseStreamFailed'
   | 'settings.audio.loading'
   | 'settings.audio.tabs.soundCard'
   | 'settings.audio.tabs.streams'
@@ -2020,6 +2047,10 @@ export type TranslationKey =
   | 'settings.security.terminal.enableHelpText'
   | 'settings.security.terminal.securityWarning'
   | 'settings.security.terminal.confirmEnable'
+  | 'settings.species.saveError' // params: species
+  | 'settings.species.configUpdated' // params: species
+  | 'settings.species.configAdded' // params: species
+  | 'settings.species.duplicateConfigError' // params: species
   | 'settings.species.activeSpecies.title'
   | 'settings.species.activeSpecies.tabLabel'
   | 'settings.species.activeSpecies.description'
@@ -2526,9 +2557,89 @@ export type TranslationKey =
   | 'components.datePicker.aria.todayButton' // params: today
   | 'components.datePicker.status.loading'
   | 'components.datePicker.status.error'
+  | 'components.audioPlayer.errors.generationFailedStatus' // params: status
+  | 'components.audioPlayer.errors.spectrogramFailed'
+  | 'components.weatherInfo.errors.loadFailed'
   | 'detection.actions.back'
   | 'detection.actions.review'
-  | 'detection.actions.download';
+  | 'detection.actions.download'
+  | 'errors.auth.tooManyAttempts'
+  | 'errors.auth.credentialsRequired'
+  | 'errors.auth.invalidCredentials'
+  | 'errors.auth.missingCode'
+  | 'errors.auth.serviceUnavailable'
+  | 'errors.auth.timeout'
+  | 'errors.auth.exchangeFailed'
+  | 'errors.auth.sessionError'
+  | 'errors.alert.v2Required'
+  | 'errors.alert.invalidID'
+  | 'errors.alert.notFound'
+  | 'errors.alert.invalidBody'
+  | 'errors.alert.nameRequired'
+  | 'errors.alert.typesRequired'
+  | 'errors.alert.duplicateName'
+  | 'errors.alert.invalidJSON'
+  | 'errors.detection.invalidDate' // params: paramName
+  | 'errors.backup.invalidType'
+  | 'errors.backup.alreadyRunning'
+  | 'errors.backup.dbInfoFailed'
+  | 'errors.backup.diskSpaceCheck'
+  | 'errors.backup.insufficientSpace' // params: needed, available
+  | 'errors.backup.createFailed'
+  | 'errors.backup.notFound'
+  | 'errors.backup.notReady'
+  | 'errors.backup.fileNotFound'
+  | 'errors.backup.sqliteOnly'
+  | 'errors.backup.dbNotConfigured'
+  | 'errors.backup.unsupportedType'
+  | 'errors.backup.v2NotInitialized'
+  | 'errors.migration.notConfigured'
+  | 'errors.migration.preFlightFailed'
+  | 'errors.migration.invalidBody'
+  | 'errors.migration.recordCountFailed'
+  | 'errors.migration.startFailed'
+  | 'errors.migration.initFailed'
+  | 'errors.migration.resumeFailed'
+  | 'errors.cleanup.noLegacyDB'
+  | 'errors.cleanup.accessFailed'
+  | 'errors.cleanup.restartRequired'
+  | 'errors.cleanup.safetyCheck'
+  | 'errors.cleanup.noLegacyTables'
+  | 'errors.cleanup.restartNeeded'
+  | 'errors.cleanup.alreadyRunning'
+  | 'errors.integration.mqttDisabled'
+  | 'errors.integration.mqttNotConfigured'
+  | 'errors.integration.mqttMetricsUnavailable'
+  | 'errors.integration.mqttClientFailed'
+  | 'errors.integration.birdweatherDisabled'
+  | 'errors.integration.birdweatherNotConfigured'
+  | 'errors.integration.birdweatherClientFailed'
+  | 'errors.integration.noWeatherProvider'
+  | 'errors.integration.openWeatherKeyRequired'
+  | 'errors.integration.processorUnavailable'
+  | 'errors.integration.discoveryFailed'
+  | 'errors.notification.serviceUnavailable'
+  | 'errors.notification.idRequired'
+  | 'errors.notification.notFound'
+  | 'errors.notification.hostRequired'
+  | 'errors.notification.invalidHost'
+  | 'errors.notification.rateLimit'
+  | 'errors.debug.notEnabled'
+  | 'errors.terminal.disabled'
+  | 'errors.api.badRequest'
+  | 'errors.api.unauthorized'
+  | 'errors.api.forbidden'
+  | 'errors.api.notFound'
+  | 'errors.api.conflict'
+  | 'errors.api.validationFailed'
+  | 'errors.api.tooManyRequests'
+  | 'errors.api.serverError'
+  | 'errors.api.clientError'
+  | 'errors.api.unknownError'
+  | 'errors.api.validationCheck'
+  | 'errors.api.conflictData'
+  | 'errors.api.requestTimeout'
+  | 'errors.api.networkError';
 
 /**
  * Parameter types for translations that require parameters
@@ -2551,7 +2662,7 @@ export type TranslationParams = {
   'notifications.content.detection.title': { species: string | number };
   'notifications.content.detection.message': { confidence: string | number };
   'notifications.content.integration.failedTitle': { integration: string | number };
-  'notifications.content.integration.failedMessage': { error: string | number };
+  'notifications.content.integration.failedMessage': { integration: string | number };
   'notifications.content.resource.highUsage': { resource: string | number };
   'notifications.content.resource.criticalUsage': { resource: string | number };
   'notifications.content.resource.recovered': { resource: string | number };
@@ -2561,18 +2672,21 @@ export type TranslationParams = {
     threshold: string | number;
   };
   'notifications.content.error.categoryError': { category: string | number };
-  'notifications.content.migration.errorMessage': { error: string | number };
   'notifications.content.cleanup.completeMessage': { space: string | number };
-  'notifications.content.cleanup.failedMessage': { error: string | number };
-  'notifications.content.alert.firedTitleEvent': {
-    rule_name: string | number;
-    event_name: string | number;
-  };
-  'notifications.content.alert.firedTitleMetric': {
-    rule_name: string | number;
-    metric_name: string | number;
-  };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
+  'notifications.content.alert.metricExceeded': {
+    value: string | number;
+    threshold: string | number;
+  };
+  'notifications.content.alert.detectionOccurred': {
+    species_name: string | number;
+    confidence: string | number;
+  };
+  'notifications.content.alert.errorOccurred': {
+    source_name: string | number;
+    error: string | number;
+  };
+  'notifications.content.alert.disconnected': { source_name: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };
   'search.detailsPanel.collapseDetails': { species: string | number };
@@ -2710,6 +2824,10 @@ export type TranslationParams = {
   'settings.audio.fileSettings.bitrateHelp': { min: string | number; max: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
+  'settings.species.saveError': { species: string | number };
+  'settings.species.configUpdated': { species: string | number };
+  'settings.species.configAdded': { species: string | number };
+  'settings.species.duplicateConfigError': { species: string | number };
   'settings.species.activeSpecies.stats.minutesAgo': { count: string | number };
   'settings.species.activeSpecies.stats.hoursAgo': { count: string | number };
   'settings.species.customConfiguration.badges.threshold': { value: string | number };
@@ -2754,6 +2872,9 @@ export type TranslationParams = {
   'components.datePicker.aria.monthChanged': { month: string | number; year: string | number };
   'components.datePicker.aria.dayUnavailable': { day: string | number };
   'components.datePicker.aria.todayButton': { today: string | number };
+  'components.audioPlayer.errors.generationFailedStatus': { status: string | number };
+  'errors.detection.invalidDate': { paramName: string | number };
+  'errors.backup.insufficientSpace': { needed: string | number; available: string | number };
 };
 
 /**

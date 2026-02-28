@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/birdnet/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -33,6 +34,15 @@ var (
 	metricsOnce      sync.Once
 	activeOperations int64
 )
+
+// globalInferenceCounters is always initialized and safe to use.
+// Tracks inference timing via lock-free atomics for the ring buffer metrics pipeline.
+var globalInferenceCounters = &inferencestats.Counters{}
+
+// GetInferenceCounters returns the shared inference counters for collector wiring.
+func GetInferenceCounters() *inferencestats.Counters {
+	return globalInferenceCounters
+}
 
 // SetMetrics sets the global metrics instance for tracing.
 // This function is thread-safe and ensures metrics are only set once per process lifetime.

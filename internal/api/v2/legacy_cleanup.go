@@ -22,6 +22,7 @@ type LegacyStatusResponse struct {
 	Exists       bool              `json:"exists"`
 	CanCleanup   bool              `json:"can_cleanup"`
 	Reason       string            `json:"reason,omitempty"`
+	ErrorKey     string            `json:"error_key,omitempty"`
 	SizeBytes    int64             `json:"size_bytes"`
 	TotalRecords int64             `json:"total_records"`
 	LastModified *time.Time        `json:"last_modified,omitempty"`
@@ -38,8 +39,9 @@ type LegacyTableInfo struct {
 
 // CleanupActionResponse represents the response for cleanup actions.
 type CleanupActionResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message"`
+	ErrorKey string `json:"error_key,omitempty"`
 }
 
 // Cleanup state constants.
@@ -187,12 +189,14 @@ func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacySta
 		response.Exists = false
 		response.CanCleanup = false
 		response.Reason = "No legacy database found"
+		response.ErrorKey = notification.MsgErrCleanupNoLegacyDB
 		return ctx.JSON(http.StatusOK, response)
 	}
 	if err != nil {
 		response.Exists = false
 		response.CanCleanup = false
 		response.Reason = fmt.Sprintf("Cannot access legacy database: %v", err)
+		response.ErrorKey = notification.MsgErrCleanupAccessFailed
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -213,6 +217,7 @@ func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacySta
 	if !isV2OnlyMode {
 		response.CanCleanup = false
 		response.Reason = "Application must be restarted after migration before cleanup is available"
+		response.ErrorKey = notification.MsgErrCleanupRestartRequired
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -220,6 +225,7 @@ func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacySta
 	if datastoreV2.CheckSQLiteHasV2Schema(legacyPath) {
 		response.CanCleanup = false
 		response.Reason = "Target file appears to be a V2 database - cleanup not allowed for safety"
+		response.ErrorKey = notification.MsgErrCleanupSafetyCheck
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -250,6 +256,7 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		response.Exists = true // Assume exists for MySQL
 		response.CanCleanup = false
 		response.Reason = "Application must be restarted after migration before cleanup is available"
+		response.ErrorKey = notification.MsgErrCleanupRestartRequired
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -304,6 +311,7 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		response.Exists = false
 		response.CanCleanup = false
 		response.Reason = "No legacy tables found"
+		response.ErrorKey = notification.MsgErrCleanupNoLegacyTables
 		return ctx.JSON(http.StatusOK, response)
 	}
 
@@ -325,16 +333,18 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	// Check if we're in v2-only mode (check before trying to start)
 	if !isV2OnlyMode {
 		return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
-			Success: false,
-			Message: "Cannot cleanup: Application must be restarted after migration",
+			Success:  false,
+			Message:  "Cannot cleanup: Application must be restarted after migration",
+			ErrorKey: notification.MsgErrCleanupRestartNeeded,
 		})
 	}
 
 	// Atomically check and set cleanup state to prevent race conditions
 	if !c.cleanupStatus.TryStart() {
 		return ctx.JSON(http.StatusConflict, CleanupActionResponse{
-			Success: false,
-			Message: "Cleanup already in progress",
+			Success:  false,
+			Message:  "Cleanup already in progress",
+			ErrorKey: notification.MsgErrCleanupAlreadyRunning,
 		})
 	}
 
@@ -547,7 +557,7 @@ func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64,
 		priority = notification.PriorityHigh
 		titleKey = notification.MsgCleanupFailedTitle
 		messageKey = notification.MsgCleanupFailedMessage
-		messageParams = map[string]any{"error": errMsg}
+		messageParams = nil
 	}
 
 	// Build notification fully before broadcast to ensure SSE subscribers see translation keys

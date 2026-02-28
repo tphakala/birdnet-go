@@ -26,10 +26,9 @@ permissions:
   pull-requests: read
 
 jobs:
-  quality:
-    name: Frontend Quality Checks
+  lint:
+    name: Lint & Type Check
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -40,7 +39,41 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
-      
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type checking
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Format check
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Linting (JavaScript/TypeScript)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Linting (CSS/Styles)
+        working-directory: frontend
+        run: npm run lint:css
+
+  test:
+    name: Unit Tests & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
@@ -53,22 +86,6 @@ jobs:
           restore-keys: |
             vitest-${{ runner.os }}-
 
-      - name: Type checking
-        working-directory: frontend
-        run: npm run typecheck
-      
-      - name: Format check
-        working-directory: frontend
-        run: npm run format:check
-      
-      - name: Linting (JavaScript/TypeScript)
-        working-directory: frontend
-        run: npm run lint
-      
-      - name: Linting (CSS/Styles)
-        working-directory: frontend
-        run: npm run lint:css
-      
       - name: Run tests
         working-directory: frontend
         run: npm run test:ci
@@ -77,19 +94,37 @@ jobs:
         working-directory: frontend
         run: npm audit --audit-level=high
         continue-on-error: true
-      
+
+  build:
+    name: Build & Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
       - name: Check for circular dependencies
         working-directory: frontend
         run: npm run analyze:circular
-      
+
       - name: Build for production
         working-directory: frontend
         run: npm run build
-      
+
       - name: Bundle size check
         working-directory: frontend
         run: npm run analyze:bundle:size
-      
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v6
         if: always()
@@ -97,3 +132,19 @@ jobs:
           name: frontend-build
           path: frontend/dist/
           retention-days: 7
+
+  quality-gate:
+    name: Frontend Quality Gate
+    needs: [lint, test, build]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.build.result }}" != "success" ]; then
+            echo "One or more quality checks failed"
+            exit 1
+          fi
+          echo "All quality checks passed"

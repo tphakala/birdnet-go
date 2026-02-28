@@ -105,7 +105,11 @@ const (
 // These correspond to entries in the frontend i18n files under
 // "notifications.content.alert.*".
 const (
-	MsgAlertFiredTitleEvent  = "notifications.content.alert.firedTitleEvent"
-	MsgAlertFiredTitleMetric = "notifications.content.alert.firedTitleMetric"
-	MsgAlertFiredTitle       = "notifications.content.alert.firedTitle"
+	MsgAlertFiredTitle = "notifications.content.alert.firedTitle"
+
+	// Default message keys per alert category (used when no custom template is set).
+	MsgAlertMetricExceeded    = "notifications.content.alert.metricExceeded"
+	MsgAlertDetectionOccurred = "notifications.content.alert.detectionOccurred"
+	MsgAlertErrorOccurred     = "notifications.content.alert.errorOccurred"
+	MsgAlertDisconnected      = "notifications.content.alert.disconnected"
 )

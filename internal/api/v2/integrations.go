@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
@@ -380,7 +381,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
-			Message: fmt.Sprintf("Failed to create MQTT client: %v", err),
+			Message: formatClientError("Failed to create MQTT client", err, c.Settings),
 		})
 	}
 
@@ -446,7 +447,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
-			"message": fmt.Sprintf("Failed to create BirdWeather client: %v", err),
+			"message": formatClientError("Failed to create BirdWeather client", err, c.Settings),
 			"state":   "failed",
 		})
 	}
@@ -499,12 +500,12 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 
 	// Validate provider
 	if request.Provider == "" || request.Provider == "none" {
-		return c.HandleError(ctx, nil, "No weather provider selected", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "No weather provider selected", http.StatusBadRequest, notification.MsgErrIntegNoWeatherProvider, nil)
 	}
 
 	// Validate OpenWeather specific requirements
 	if request.Provider == WeatherProviderOpenWeather && request.OpenWeather.APIKey == "" {
-		return c.HandleError(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest, notification.MsgErrIntegOWKeyRequired, nil)
 	}
 
 	// Set up streaming response
@@ -753,12 +754,12 @@ func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
 
 	// Check if processor is available
 	if c.Processor == nil {
-		return c.HandleError(ctx, nil, "Processor not available", http.StatusServiceUnavailable)
+		return c.HandleErrorWithKey(ctx, nil, "Processor not available", http.StatusServiceUnavailable, notification.MsgErrIntegProcessorUnavail, nil)
 	}
 
 	// Trigger discovery
 	if err := c.Processor.TriggerHomeAssistantDiscovery(ctx.Request().Context()); err != nil {
-		return c.HandleError(ctx, err, "Failed to trigger Home Assistant discovery", http.StatusBadRequest)
+		return c.HandleErrorWithKey(ctx, err, "Failed to trigger Home Assistant discovery", http.StatusBadRequest, notification.MsgErrIntegDiscoveryFailed, nil)
 	}
 
 	c.logInfoIfEnabled("Home Assistant discovery triggered successfully",
@@ -769,6 +770,16 @@ func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
 		"success": true,
 		"message": "Discovery messages sent successfully",
 	})
+}
+
+// formatClientError returns a user-safe error message for client creation failures.
+// Raw error details are only included when WebServer.Debug is enabled,
+// consistent with ErrorResponse.Error gating (PR #2081).
+func formatClientError(prefix string, err error, settings *conf.Settings) string {
+	if settings != nil && settings.WebServer.Debug {
+		return fmt.Sprintf("%s: %v", prefix, err)
+	}
+	return prefix + ". Check configuration and try again."
 }
 
 // writeJSONResponse writes a JSON response to the client

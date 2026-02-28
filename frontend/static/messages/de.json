@@ -185,6 +185,9 @@
         "lockStatusFailed": "Fehler beim Aktualisieren des Sperrstatus. Bitte versuchen Sie es erneut.",
         "verificationFailed": "Fehler beim Aktualisieren des Verifizierungsstatus. Bitte versuchen Sie es erneut."
       }
+    },
+    "errors": {
+      "unknownError": "Unbekannter Fehler aufgetreten"
     }
   },
   "pageTitle": {
@@ -339,70 +342,74 @@
     },
     "content": {
       "startup": {
-        "title": "BirdNET-Go Started",
-        "message": "Application started successfully (v{version})"
+        "title": "BirdNET-Go gestartet",
+        "message": "Anwendung erfolgreich gestartet (v{version})"
       },
       "shutdown": {
-        "title": "BirdNET-Go Shutting Down",
-        "message": "Application is shutting down gracefully"
+        "title": "BirdNET-Go wird heruntergefahren",
+        "message": "Anwendung wird ordnungsgemäß heruntergefahren"
       },
       "detection": {
-        "title": "Detected: {species}",
-        "message": "Confidence: {confidence}%"
+        "title": "Erkannt: {species}",
+        "message": "Konfidenz: {confidence} %"
       },
       "integration": {
-        "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedTitle": "{integration}-Integration fehlgeschlagen",
+        "failedMessage": "Verbindung zu {integration} fehlgeschlagen. Überprüfen Sie die Konfiguration und Protokolle."
       },
       "resource": {
-        "highUsage": "High {resource} usage",
-        "criticalUsage": "Critical {resource} usage",
-        "recovered": "{resource} usage recovered",
-        "currentUsage": "Currently at {current}{unit} (threshold: {threshold}{unit})"
+        "highUsage": "Hohe {resource}-Auslastung",
+        "criticalUsage": "Kritische {resource}-Auslastung",
+        "recovered": "{resource}-Auslastung normalisiert",
+        "currentUsage": "Aktuell bei {current}{unit} (Schwellenwert: {threshold}{unit})"
       },
       "error": {
-        "criticalSystem": "Critical System Error",
-        "application": "Application Error",
-        "imageProvider": "Image Provider Notice",
-        "categoryError": "{category} Error"
+        "criticalSystem": "Kritischer Systemfehler",
+        "application": "Anwendungsfehler",
+        "imageProvider": "Bildanbieter-Hinweis",
+        "categoryError": "{category}-Fehler"
       },
       "settings": {
-        "reloadingBirdnet": "Applying new analysis settings...",
-        "rebuildingRangeFilter": "Rebuilding species range filter...",
-        "updatingIntervals": "Updating detection intervals...",
-        "reconfiguringMqtt": "Updating MQTT connection...",
-        "reconfiguringBirdweather": "Updating BirdWeather integration...",
-        "reconfiguringStreams": "Updating audio streams...",
-        "reconfiguringTelemetry": "Updating telemetry settings...",
-        "reconfiguringSpeciesTracking": "Updating species tracking...",
-        "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "reconfiguringSoundLevel": "Updating sound level monitoring...",
-        "audioDeviceRestartRequired": "Audio device changed. Restart required.",
-        "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "reloadingBirdnet": "Neue Analyseeinstellungen werden angewendet...",
+        "rebuildingRangeFilter": "Artenbereichsfilter wird neu aufgebaut...",
+        "updatingIntervals": "Erkennungsintervalle werden aktualisiert...",
+        "reconfiguringMqtt": "MQTT-Verbindung wird aktualisiert...",
+        "reconfiguringBirdweather": "BirdWeather-Integration wird aktualisiert...",
+        "reconfiguringStreams": "Audiostreams werden aktualisiert...",
+        "reconfiguringTelemetry": "Telemetrieeinstellungen werden aktualisiert...",
+        "reconfiguringSpeciesTracking": "Artenverfolgung wird aktualisiert...",
+        "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
+        "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
+        "audioDeviceRestartRequired": "Audiogerät geändert. Neustart erforderlich.",
+        "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",
+        "equalizerUpdated": "Audio-Equalizer-Einstellungen aktualisiert",
+        "savedSuccessfully": "Einstellungen erfolgreich gespeichert",
+        "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       },
       "migration": {
-        "startedTitle": "Database Migration Started",
-        "startedMessage": "Migration has started. This may take a while depending on the number of detections.",
-        "pausedTitle": "Database Migration Paused",
-        "pausedMessage": "Database migration has been paused. You can resume it at any time from the Database settings.",
-        "cancelledTitle": "Database Migration Cancelled",
-        "cancelledMessage": "Database migration has been cancelled. You can start a new migration at any time from the Database settings.",
-        "completedTitle": "Database Migration Completed",
-        "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
-        "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "startedTitle": "Datenbankmigration gestartet",
+        "startedMessage": "Migration wurde gestartet. Dies kann je nach Anzahl der Erkennungen eine Weile dauern.",
+        "pausedTitle": "Datenbankmigration pausiert",
+        "pausedMessage": "Datenbankmigration wurde pausiert. Sie können sie jederzeit in den Datenbankeinstellungen fortsetzen.",
+        "cancelledTitle": "Datenbankmigration abgebrochen",
+        "cancelledMessage": "Datenbankmigration wurde abgebrochen. Sie können jederzeit eine neue Migration in den Datenbankeinstellungen starten.",
+        "completedTitle": "Datenbankmigration abgeschlossen",
+        "completedMessage": "Migration abgeschlossen. Bitte starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln.",
+        "errorTitle": "Datenbankmigrationsfehler",
+        "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut."
       },
       "cleanup": {
-        "completeTitle": "Legacy Database Cleanup Complete",
-        "completeMessage": "{space} disk space reclaimed.",
-        "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "completeTitle": "Bereinigung der alten Datenbank abgeschlossen",
+        "completeMessage": "{space} Speicherplatz freigegeben.",
+        "failedTitle": "Bereinigung der alten Datenbank fehlgeschlagen",
+        "failedMessage": "Alte Datenbank konnte nicht entfernt werden. Überprüfen Sie die Protokolle für Details."
       },
       "alert": {
-        "firedTitleEvent": "Alarm: {rule_name} ({event_name})",
-        "firedTitleMetric": "Alarm: {rule_name} ({metric_name})",
-        "firedTitle": "Alarm: {rule_name}"
+        "firedTitle": "Alarm: {rule_name}",
+        "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
+        "detectionOccurred": "{species_name} erkannt mit {confidence}% Konfidenz",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} getrennt"
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -737,7 +744,8 @@
       "loginRequired": "Bitte melden Sie sich an, um diese Erkennung anzuzeigen.",
       "serverError": "Serverfehler. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support, wenn das Problem weiterhin besteht.",
       "loadFailed": "Fehler beim Laden der Erkennung (Fehler {status}). Bitte aktualisieren Sie die Seite.",
-      "noIdProvided": "Keine Erkennungs-ID angegeben."
+      "noIdProvided": "Keine Erkennungs-ID angegeben.",
+      "fetchFailed": "Erkennungen konnten nicht abgerufen werden"
     },
     "viewToggle": {
       "label": "Ansichtsmodus",
@@ -1219,11 +1227,18 @@
       "available": "verf.",
       "min": "Min",
       "max": "Max",
+      "limit": "Limit",
       "tempUnavailable": "Nicht verfügbar",
       "online": "Online",
       "uptime": "Betriebszeit",
       "host": "Host",
-      "model": "Modell"
+      "model": "Modell",
+      "inference": "Inferenz",
+      "avgTime": "Durchschn.",
+      "noInference": "Noch keine Daten",
+      "statusOk": "OK",
+      "statusWarning": "Warnung",
+      "statusCritical": "Kritisch"
     },
     "storage": {
       "title": "Speicher",
@@ -1406,6 +1421,9 @@
         "loadingTrends": "Trenddaten werden geladen",
         "loadingDiversity": "Diversitätsdaten werden geladen"
       }
+    },
+    "errors": {
+      "loadFailed": "Analysedaten konnten nicht geladen werden. Bitte versuchen Sie es erneut."
     }
   },
   "settings": {
@@ -1601,6 +1619,12 @@
             "location": "Speicherort",
             "connected": "Verbunden",
             "disconnected": "Getrennt"
+          },
+          "errors": {
+            "backupStartFailed": "Sicherung konnte nicht gestartet werden",
+            "backupStatusFailed": "Sicherungsstatus konnte nicht abgerufen werden",
+            "backupFailed": "Sicherung fehlgeschlagen",
+            "backupDownloadFailed": "Sicherung konnte nicht heruntergeladen werden"
           }
         },
         "interface": {
@@ -1764,7 +1788,10 @@
         "providersLoadFailed": "Bildanbieter konnten nicht geladen werden. Verwende Standardwerte.",
         "rangeFilterTestFailed": "Fehler beim Testen der Reichweitenfilter-Einstellungen",
         "rangeFilterLoadFailed": "Fehler beim Laden der Artenliste",
-        "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl"
+        "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl",
+        "mapLibraryLoadFailed": "Kartenbibliothek konnte nicht geladen werden. Bitte aktualisieren Sie die Seite.",
+        "mapLoadFailed": "Karte konnte nicht geladen werden. Bitte versuchen Sie, die Seite zu aktualisieren.",
+        "modalMapLoadFailed": "Modalkarte konnte nicht geladen werden. Bitte schließen und öffnen Sie das Modal erneut."
       },
       "tabs": {
         "general": "Allgemein",
@@ -2391,6 +2418,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Verbindungsfehler",
+        "responseStreamFailed": "Antwort-Stream konnte nicht gelesen werden"
       }
     },
     "audio": {
@@ -2703,6 +2734,10 @@
       }
     },
     "species": {
+      "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+      "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
+      "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
+      "duplicateConfigError": "Art \"{species}\" hat bereits eine Konfiguration. Bitte wählen Sie einen anderen Namen.",
       "activeSpecies": {
         "title": "Aktive Arten",
         "tabLabel": "Aktiv",
@@ -3252,54 +3287,54 @@
       "importing": "Importieren...",
       "schema": {
         "objectTypes": {
-          "stream": "Audio Stream",
-          "detection": "Detection",
-          "application": "Application",
+          "stream": "Audiostream",
+          "detection": "Erkennung",
+          "application": "Anwendung",
           "integration": "Integration",
-          "device": "Device",
+          "device": "Gerät",
           "system": "System"
         },
         "events": {
-          "stream_connected": "Stream Connected",
-          "stream_disconnected": "Stream Disconnected",
-          "stream_error": "Stream Error",
-          "detection_new_species": "New Species Detected",
-          "detection_occurred": "Detection Occurred",
-          "application_started": "Application Started",
-          "application_stopped": "Application Stopped",
-          "integration_birdweather_failed": "BirdWeather Upload Failed",
-          "integration_mqtt_connected": "MQTT Connected",
-          "integration_mqtt_disconnected": "MQTT Disconnected",
-          "device_started": "Device Started",
-          "device_stopped": "Device Stopped",
-          "device_error": "Device Error"
+          "stream_connected": "Stream verbunden",
+          "stream_disconnected": "Stream getrennt",
+          "stream_error": "Stream-Fehler",
+          "detection_new_species": "Neue Art erkannt",
+          "detection_occurred": "Erkennung erfolgt",
+          "application_started": "Anwendung gestartet",
+          "application_stopped": "Anwendung gestoppt",
+          "integration_birdweather_failed": "BirdWeather-Upload fehlgeschlagen",
+          "integration_mqtt_connected": "MQTT verbunden",
+          "integration_mqtt_disconnected": "MQTT getrennt",
+          "device_started": "Gerät gestartet",
+          "device_stopped": "Gerät gestoppt",
+          "device_error": "Gerätefehler"
         },
         "metrics": {
-          "system_cpu_usage": "CPU Usage",
-          "system_memory_usage": "Memory Usage",
-          "system_disk_usage": "Disk Usage"
+          "system_cpu_usage": "CPU-Auslastung",
+          "system_memory_usage": "Speicherauslastung",
+          "system_disk_usage": "Speicherplatznutzung"
         },
         "properties": {
-          "value": "Value",
-          "species_name": "Species Name",
-          "scientific_name": "Scientific Name",
-          "confidence": "Confidence",
-          "location": "Location",
-          "stream_name": "Stream Name",
-          "stream_url": "Stream URL",
-          "device_name": "Device Name",
-          "error": "Error Message",
+          "value": "Wert",
+          "species_name": "Artname",
+          "scientific_name": "Wissenschaftlicher Name",
+          "confidence": "Konfidenz",
+          "location": "Standort",
+          "stream_name": "Stream-Name",
+          "stream_url": "Stream-URL",
+          "device_name": "Gerätename",
+          "error": "Fehlermeldung",
           "broker": "Broker"
         },
         "operators": {
-          "is": "is",
-          "is_not": "is not",
-          "contains": "contains",
-          "not_contains": "does not contain",
-          "greater_than": "greater than",
-          "less_than": "less than",
-          "greater_or_equal": "greater or equal",
-          "less_or_equal": "less or equal"
+          "is": "ist",
+          "is_not": "ist nicht",
+          "contains": "enthält",
+          "not_contains": "enthält nicht",
+          "greater_than": "größer als",
+          "less_than": "kleiner als",
+          "greater_or_equal": "größer oder gleich",
+          "less_or_equal": "kleiner oder gleich"
         }
       },
       "v2Required": "Für Alarmregeln ist das erweiterte Datenbankschema erforderlich. Bitte aktualisieren Sie Ihre Datenbank in den Haupteinstellungen, um diese Funktion zu aktivieren.",
@@ -3341,6 +3376,12 @@
           "description": "Benachrichtigt, wenn ein BirdWeather-Upload fehlschlägt"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Einstellungen konnten nicht geladen werden",
+      "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+      "databaseStatsFailed": "Datenbankstatistiken konnten nicht geladen werden",
+      "csvDownloadFailed": "CSV-Download fehlgeschlagen"
     }
   },
   "auth": {
@@ -3574,6 +3615,17 @@
         "loading": "Kalender wird geladen...",
         "error": "Fehler beim Laden des Kalenders"
       }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Erzeugung fehlgeschlagen mit Status {status}",
+        "spectrogramFailed": "Spektrogramm konnte nicht erzeugt werden"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Wetterdaten konnten nicht geladen werden"
+      }
     }
   },
   "detection": {
@@ -3610,6 +3662,107 @@
   "quietHours": {
     "indicator": {
       "tooltip": "Ruhemodus aktiv — {count} Quelle(n) pausiert"
+    }
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "Zu viele Anmeldeversuche. Bitte versuchen Sie es in 15 Minuten erneut.",
+      "credentialsRequired": "Benutzername und Passwort sind erforderlich",
+      "invalidCredentials": "Ungültige Anmeldedaten",
+      "missingCode": "Autorisierungscode fehlt",
+      "serviceUnavailable": "Authentifizierungsdienst nicht verfügbar. Bitte versuchen Sie es später erneut.",
+      "timeout": "Anmeldung abgelaufen. Bitte versuchen Sie es erneut.",
+      "exchangeFailed": "Anmeldung konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+      "sessionError": "Sitzungsfehler bei der Anmeldung. Bitte versuchen Sie es erneut."
+    },
+    "alert": {
+      "v2Required": "Alarmregeln erfordern die erweiterte (v2) Datenbank",
+      "invalidID": "Ungültige Regel-ID",
+      "notFound": "Alarmregel nicht gefunden",
+      "invalidBody": "Ungültiger Anfragekörper",
+      "nameRequired": "Regelname ist erforderlich",
+      "typesRequired": "Objekttyp und Auslösertyp sind erforderlich",
+      "duplicateName": "Eine Regel mit diesem Namen existiert bereits",
+      "invalidJSON": "Ungültiges JSON"
+    },
+    "detection": {
+      "invalidDate": "Ungültiges {paramName}-Format, verwenden Sie JJJJ-MM-TT"
+    },
+    "backup": {
+      "invalidType": "Typ muss 'legacy' oder 'v2' sein",
+      "alreadyRunning": "Sicherung wird bereits durchgeführt",
+      "dbInfoFailed": "Datenbankinformationen konnten nicht abgerufen werden",
+      "diskSpaceCheck": "Speicherplatzprüfung fehlgeschlagen",
+      "insufficientSpace": "Nicht genügend Speicherplatz. Benötigt: {needed}, verfügbar: {available}",
+      "createFailed": "Sicherungsauftrag konnte nicht erstellt werden",
+      "notFound": "Sicherungsauftrag nicht gefunden oder abgelaufen",
+      "notReady": "Sicherung noch nicht zum Download bereit",
+      "fileNotFound": "Sicherungsdatei nicht gefunden — Auftrag ist möglicherweise abgelaufen",
+      "sqliteOnly": "Sicherung nur für SQLite-Datenbanken verfügbar",
+      "dbNotConfigured": "Datenbank nicht konfiguriert",
+      "unsupportedType": "Sicherung für diesen Datenspeichertyp nicht möglich",
+      "v2NotInitialized": "V2-Datenbank nicht initialisiert"
+    },
+    "migration": {
+      "notConfigured": "Migration ist nicht konfiguriert",
+      "preFlightFailed": "Vorabprüfungen fehlgeschlagen",
+      "invalidBody": "Ungültiger Anfragekörper",
+      "recordCountFailed": "Gesamtanzahl der Datensätze konnte nicht ermittelt werden",
+      "startFailed": "Migration konnte nicht gestartet werden",
+      "initFailed": "Migration konnte nicht initialisiert werden",
+      "resumeFailed": "Migration konnte nicht fortgesetzt werden"
+    },
+    "cleanup": {
+      "noLegacyDB": "Keine alte Datenbank gefunden",
+      "accessFailed": "Zugriff auf alte Datenbank nicht möglich",
+      "restartRequired": "Die Anwendung muss nach der Migration neu gestartet werden, bevor die Bereinigung verfügbar ist",
+      "safetyCheck": "Die Zieldatei scheint eine V2-Datenbank zu sein — Bereinigung aus Sicherheitsgründen nicht erlaubt",
+      "noLegacyTables": "Keine alten Tabellen gefunden",
+      "restartNeeded": "Bereinigung nicht möglich: Anwendung muss nach der Migration neu gestartet werden",
+      "alreadyRunning": "Bereinigung wird bereits durchgeführt"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT ist in den Einstellungen nicht aktiviert",
+      "mqttNotConfigured": "MQTT-Broker nicht konfiguriert",
+      "mqttMetricsUnavailable": "Metrik-Instanz für MQTT-Test nicht verfügbar",
+      "mqttClientFailed": "MQTT-Client konnte nicht erstellt werden",
+      "birdweatherDisabled": "BirdWeather-Integration ist nicht aktiviert",
+      "birdweatherNotConfigured": "BirdWeather-Stations-ID nicht konfiguriert",
+      "birdweatherClientFailed": "BirdWeather-Client konnte nicht erstellt werden",
+      "noWeatherProvider": "Kein Wetteranbieter ausgewählt",
+      "openWeatherKeyRequired": "OpenWeather-API-Schlüssel ist erforderlich",
+      "processorUnavailable": "Prozessor nicht verfügbar",
+      "discoveryFailed": "Home Assistant-Erkennung konnte nicht ausgelöst werden"
+    },
+    "notification": {
+      "serviceUnavailable": "Benachrichtigungsdienst nicht verfügbar",
+      "idRequired": "Benachrichtigungs-ID ist erforderlich",
+      "notFound": "Benachrichtigung nicht gefunden",
+      "hostRequired": "Host-Parameter ist erforderlich",
+      "invalidHost": "Ungültiger Host-Parameter",
+      "rateLimit": "Zu viele Verbindungsversuche zum Benachrichtigungsstream, bitte warten Sie einen Moment"
+    },
+    "debug": {
+      "notEnabled": "Debug-Modus nicht aktiviert"
+    },
+    "terminal": {
+      "disabled": "Terminal ist deaktiviert. Aktivieren Sie es in den Einstellungen."
+    },
+    "api": {
+      "badRequest": "Ungültige Anfrage. Bitte überprüfen Sie Ihre Eingabe und versuchen Sie es erneut.",
+      "unauthorized": "Authentifizierung erforderlich. Bitte melden Sie sich an und versuchen Sie es erneut.",
+      "forbidden": "Sie haben keine Berechtigung, diese Aktion auszuführen.",
+      "notFound": "Die angeforderte Ressource wurde nicht gefunden.",
+      "conflict": "Diese Aktion steht im Konflikt mit dem aktuellen Zustand. Bitte aktualisieren Sie die Seite und versuchen Sie es erneut.",
+      "validationFailed": "Ungültige Eingabe. Bitte überprüfen Sie Ihre Daten und versuchen Sie es erneut.",
+      "tooManyRequests": "Zu viele Anfragen. Bitte warten Sie einen Moment, bevor Sie es erneut versuchen.",
+      "serverError": "Ein Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut.",
+      "clientError": "Client-Fehler aufgetreten. Bitte überprüfen Sie Ihre Anfrage und versuchen Sie es erneut.",
+      "unknownError": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+      "validationCheck": "Validierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingabe.",
+      "conflictData": "Diese Aktion steht im Konflikt mit vorhandenen Daten.",
+      "requestTimeout": "Zeitüberschreitung der Anfrage.",
+      "networkError": "Netzwerkfehler aufgetreten. Bitte überprüfen Sie Ihre Verbindung."
     }
   }
 }

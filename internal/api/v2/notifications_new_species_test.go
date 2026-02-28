@@ -31,9 +31,13 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{}
+	controller := &Controller{
+		Settings: &conf.Settings{},
+	}
 
-	err := controller.CreateTestNewSpeciesNotification(c)
+	// Call through middleware to test the guard
+	handler := controller.requireNotificationService(controller.CreateTestNewSpeciesNotification)
+	err := handler(c)
 	require.NoError(t, err)
 
 	// Verify we get the expected service unavailable error

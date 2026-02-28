@@ -274,10 +274,10 @@ func TestGetDetections(t *testing.T) {
 				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
 
 				// Check the response body for the error message
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "numResults must be greater than zero", "Error message mismatch in response body")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -292,10 +292,10 @@ func TestGetDetections(t *testing.T) {
 				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
 
 				// Check the response body for the error message
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid numeric value for offset", "Error message mismatch in response body")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -334,10 +334,10 @@ func TestGetDetections(t *testing.T) {
 				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
 
 				// Check the response body for the error message
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "numResults exceeds maximum allowed value", "Error message mismatch in response body")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -353,10 +353,10 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -371,10 +371,10 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "hour parameter is required")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -390,10 +390,10 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -409,10 +409,10 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 		{
@@ -428,10 +428,10 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]string
+				var errResp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "invalid hour parameter")
+				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
 	}
@@ -545,10 +545,12 @@ func TestGetDetection(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				var response map[string]string
+				var response ErrorResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Equal(t, "Detection not found", response["error"])
+				assert.Equal(t, "Detection not found", response.Message)
+				assert.NotEmpty(t, response.CorrelationID)
+				assert.Equal(t, http.StatusNotFound, response.Code)
 			},
 		},
 	}
@@ -1197,10 +1199,12 @@ func TestIgnoreSpecies(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
-				var response map[string]string
+				var response ErrorResponse
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tc.expectedError)
+				assert.Contains(t, response.Message, tc.expectedError)
+				assert.Equal(t, tc.expectedStatus, response.Code)
+				assert.NotEmpty(t, response.CorrelationID)
 			})
 		}
 	})

@@ -294,8 +294,8 @@ func TestInputValidation(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				// No mock calls expected as validation should fail early
 			},
-			expectedStatus: http.StatusBadRequest,                             // Expect 400 now
-			expectedError:  "numResults exceeds maximum allowed value (1000)", // Expect the limit exceeded error
+			expectedStatus: http.StatusBadRequest,                // Expect 400 now
+			expectedError:  "Invalid detection query parameters", // Generic safe error message
 		},
 		{
 			name:   "JSON injection in review body",
@@ -388,7 +388,7 @@ func TestInputValidation(t *testing.T) {
 				m.On("IsNoteLocked", "1").Return(false, nil)
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "unexpected EOF",
+			expectedError:  "Invalid request format",
 		},
 		{
 			name:   "Unicode normalization attack",
@@ -423,7 +423,7 @@ func TestInputValidation(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			// The specific error message depends on which validation fails first
 			// Based on the code, numResults validation comes first
-			expectedError: "numResults must be greater than zero",
+			expectedError: "Invalid detection query parameters",
 		},
 		// Advanced XSS test cases
 		{

@@ -25,25 +25,8 @@ jobs:
           cache: true
       - run: go version
 
-      - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cache TensorFlow headers
-        uses: actions/cache@v5
-        with:
-          path: ~/src/tensorflow
-          key: ${{ runner.os }}-tensorflow-v2.17.1
-
-      - name: Install dependencies
-        run: task check-tensorflow
-
-      - name: Set environment variables for CGO
-        run: |
-          echo "CGO_ENABLED=1" >> $GITHUB_ENV
-          echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
+      - name: Setup TensorFlow Lite
+        uses: ./.github/actions/setup-tensorflow
 
       - name: golangci-lint
         id: golangci-lint

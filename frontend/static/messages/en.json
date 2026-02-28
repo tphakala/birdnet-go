@@ -185,6 +185,9 @@
         "lockStatusFailed": "Failed to update lock status. Please try again.",
         "verificationFailed": "Failed to update verification status. Please try again."
       }
+    },
+    "errors": {
+      "unknownError": "Unknown error occurred"
     }
   },
   "pageTitle": {
@@ -352,7 +355,7 @@
       },
       "integration": {
         "failedTitle": "{integration} Integration Failed",
-        "failedMessage": "Failed to connect or send data: {error}"
+        "failedMessage": "Failed to connect to {integration}. Check configuration and logs."
       },
       "resource": {
         "highUsage": "High {resource} usage",
@@ -379,7 +382,9 @@
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "audioDeviceRestartRequired": "Audio device changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
-        "equalizerUpdated": "Audio equalizer settings updated"
+        "equalizerUpdated": "Audio equalizer settings updated",
+        "savedSuccessfully": "Settings saved successfully",
+        "saveFailed": "Failed to save settings"
       },
       "migration": {
         "startedTitle": "Database Migration Started",
@@ -391,18 +396,20 @@
         "completedTitle": "Database Migration Completed",
         "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
         "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming. Error: {error}"
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming."
       },
       "cleanup": {
         "completeTitle": "Legacy Database Cleanup Complete",
         "completeMessage": "{space} disk space reclaimed.",
         "failedTitle": "Legacy Database Cleanup Failed",
-        "failedMessage": "Failed to remove legacy database: {error}"
+        "failedMessage": "Failed to remove legacy database. Check logs for details."
       },
       "alert": {
-        "firedTitleEvent": "Alert: {rule_name} ({event_name})",
-        "firedTitleMetric": "Alert: {rule_name} ({metric_name})",
-        "firedTitle": "Alert: {rule_name}"
+        "firedTitle": "Alert: {rule_name}",
+        "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
+        "detectionOccurred": "{species_name} detected with {confidence}% confidence",
+        "errorOccurred": "{source_name}: {error}",
+        "disconnected": "{source_name} disconnected"
       }
     },
     "loading": "Loading notifications..."
@@ -742,7 +749,8 @@
       "loginRequired": "Please log in to view this detection.",
       "serverError": "Server error. Please try again later or contact support if the problem persists.",
       "loadFailed": "Failed to load detection (Error {status}). Please try refreshing the page.",
-      "noIdProvided": "No detection ID provided."
+      "noIdProvided": "No detection ID provided.",
+      "fetchFailed": "Failed to fetch detections"
     }
   },
   "species": {
@@ -1219,11 +1227,18 @@
       "available": "avail",
       "min": "Min",
       "max": "Max",
+      "limit": "Limit",
       "tempUnavailable": "Not available",
       "online": "Online",
       "uptime": "Uptime",
       "host": "Host",
-      "model": "Model"
+      "model": "Model",
+      "inference": "Inference",
+      "avgTime": "Avg",
+      "noInference": "No data yet",
+      "statusOk": "OK",
+      "statusWarning": "Warning",
+      "statusCritical": "Critical"
     },
     "storage": {
       "title": "Storage",
@@ -1430,6 +1445,9 @@
         "loadingTrends": "Loading trend data",
         "loadingDiversity": "Loading diversity data"
       }
+    },
+    "errors": {
+      "loadFailed": "Failed to load analytics data. Please try again."
     }
   },
   "settings": {
@@ -1460,6 +1478,12 @@
       "savingAriaLabel": "Saving changes...",
       "unsavedChanges": "Unsaved changes",
       "toolbar": "Settings actions"
+    },
+    "errors": {
+      "loadFailed": "Failed to load settings",
+      "saveFailed": "Failed to save settings",
+      "databaseStatsFailed": "Failed to load database statistics",
+      "csvDownloadFailed": "Failed to download CSV"
     },
     "card": {
       "changed": "changed",
@@ -1637,6 +1661,12 @@
             "location": "Location",
             "connected": "Connected",
             "disconnected": "Disconnected"
+          },
+          "errors": {
+            "backupStartFailed": "Failed to start backup",
+            "backupStatusFailed": "Failed to get backup status",
+            "backupFailed": "Backup failed",
+            "backupDownloadFailed": "Failed to download backup"
           }
         },
         "interface": {
@@ -1800,7 +1830,10 @@
         "providersLoadFailed": "Unable to load image providers. Using defaults.",
         "rangeFilterTestFailed": "Failed to test range filter settings",
         "rangeFilterLoadFailed": "Failed to load species list",
-        "rangeFilterCountFailed": "Failed to load species count"
+        "rangeFilterCountFailed": "Failed to load species count",
+        "mapLibraryLoadFailed": "Failed to load map library. Please refresh the page.",
+        "mapLoadFailed": "Failed to load map. Please try refreshing the page.",
+        "modalMapLoadFailed": "Failed to load modal map. Please try closing and reopening the modal."
       }
     },
     "support": {
@@ -2421,6 +2454,10 @@
             "fahrenheit": "Fahrenheit (°F)"
           }
         }
+      },
+      "errors": {
+        "connectionError": "Connection Error",
+        "responseStreamFailed": "Failed to read response stream"
       }
     },
     "audio": {
@@ -2891,6 +2928,10 @@
       }
     },
     "species": {
+      "saveError": "Failed to save configuration for \"{species}\". Please try again.",
+      "configUpdated": "Updated configuration for \"{species}\"",
+      "configAdded": "Added configuration for \"{species}\"",
+      "duplicateConfigError": "Species \"{species}\" already has a configuration. Please choose a different name.",
       "activeSpecies": {
         "title": "Active Species",
         "tabLabel": "Active",
@@ -3617,6 +3658,17 @@
         "loading": "Loading calendar...",
         "error": "Error loading calendar"
       }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generation failed with status {status}",
+        "spectrogramFailed": "Failed to generate spectrogram"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Failed to load weather data"
+      }
     }
   },
   "detection": {
@@ -3629,6 +3681,107 @@
   "quietHours": {
     "indicator": {
       "tooltip": "Quiet hours active — {count} source(s) paused"
+    }
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "Too many login attempts. Please try again in 15 minutes.",
+      "credentialsRequired": "Username and password are required",
+      "invalidCredentials": "Invalid credentials",
+      "missingCode": "Missing authorization code",
+      "serviceUnavailable": "Authentication service unavailable. Please try again later.",
+      "timeout": "Login timed out. Please try again.",
+      "exchangeFailed": "Unable to complete login at this time. Please try again.",
+      "sessionError": "Session error during login. Please try again."
+    },
+    "alert": {
+      "v2Required": "Alert rules require the enhanced (v2) database",
+      "invalidID": "Invalid rule ID",
+      "notFound": "Alert rule not found",
+      "invalidBody": "Invalid request body",
+      "nameRequired": "Rule name is required",
+      "typesRequired": "Object type and trigger type are required",
+      "duplicateName": "A rule with this name already exists",
+      "invalidJSON": "Invalid JSON"
+    },
+    "detection": {
+      "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"
+    },
+    "backup": {
+      "invalidType": "Type must be 'legacy' or 'v2'",
+      "alreadyRunning": "Backup already in progress",
+      "dbInfoFailed": "Failed to get database info",
+      "diskSpaceCheck": "Failed to check disk space",
+      "insufficientSpace": "Not enough disk space. Need {needed}, have {available}",
+      "createFailed": "Failed to create backup job",
+      "notFound": "Backup job not found or expired",
+      "notReady": "Backup not ready for download",
+      "fileNotFound": "Backup file not found — job may have expired",
+      "sqliteOnly": "Backup only available for SQLite databases",
+      "dbNotConfigured": "Database not configured",
+      "unsupportedType": "Cannot perform backup on this datastore type",
+      "v2NotInitialized": "V2 database not initialized"
+    },
+    "migration": {
+      "notConfigured": "Migration is not configured",
+      "preFlightFailed": "Pre-flight checks failed",
+      "invalidBody": "Invalid request body",
+      "recordCountFailed": "Failed to determine total records",
+      "startFailed": "Failed to start migration",
+      "initFailed": "Failed to initialize migration",
+      "resumeFailed": "Failed to resume migration"
+    },
+    "cleanup": {
+      "noLegacyDB": "No legacy database found",
+      "accessFailed": "Cannot access legacy database",
+      "restartRequired": "Application must be restarted after migration before cleanup is available",
+      "safetyCheck": "Target file appears to be a V2 database — cleanup not allowed for safety",
+      "noLegacyTables": "No legacy tables found",
+      "restartNeeded": "Cannot cleanup: Application must be restarted after migration",
+      "alreadyRunning": "Cleanup already in progress"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT is not enabled in settings",
+      "mqttNotConfigured": "MQTT broker not configured",
+      "mqttMetricsUnavailable": "Metrics instance not available for MQTT test",
+      "mqttClientFailed": "Failed to create MQTT client",
+      "birdweatherDisabled": "BirdWeather integration is not enabled",
+      "birdweatherNotConfigured": "BirdWeather station ID not configured",
+      "birdweatherClientFailed": "Failed to create BirdWeather client",
+      "noWeatherProvider": "No weather provider selected",
+      "openWeatherKeyRequired": "OpenWeather API key is required",
+      "processorUnavailable": "Processor not available",
+      "discoveryFailed": "Failed to trigger Home Assistant discovery"
+    },
+    "notification": {
+      "serviceUnavailable": "Notification service not available",
+      "idRequired": "Notification ID is required",
+      "notFound": "Notification not found",
+      "hostRequired": "Host parameter is required",
+      "invalidHost": "Invalid host parameter",
+      "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+    },
+    "debug": {
+      "notEnabled": "Debug mode not enabled"
+    },
+    "terminal": {
+      "disabled": "Terminal is disabled. Enable it in settings."
+    },
+    "api": {
+      "badRequest": "Invalid request. Please check your input and try again.",
+      "unauthorized": "Authentication required. Please log in and try again.",
+      "forbidden": "You do not have permission to perform this action.",
+      "notFound": "The requested resource was not found.",
+      "conflict": "This action conflicts with the current state. Please refresh and try again.",
+      "validationFailed": "Invalid input provided. Please check your data and try again.",
+      "tooManyRequests": "Too many requests. Please wait before trying again.",
+      "serverError": "A server error occurred. Please try again later.",
+      "clientError": "Client error occurred. Please check your request and try again.",
+      "unknownError": "An unexpected error occurred. Please try again.",
+      "validationCheck": "Validation failed. Please check your input.",
+      "conflictData": "This action conflicts with existing data.",
+      "requestTimeout": "Request timeout.",
+      "networkError": "Network error occurred. Please check your connection."
     }
   }
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 const maxHistoryLimit = 200
@@ -58,10 +58,27 @@ func (c *Controller) initAlertRoutes() {
 	protected.DELETE("/history", c.ClearAlertHistory)
 }
 
+// bindAndValidateAlertRule binds and validates the alert rule from the request body.
+// On validation failure, it writes the error response and returns nil with the written error.
+// Callers should check: if rule == nil { return err }
+func (c *Controller) bindAndValidateAlertRule(ctx echo.Context) (*entities.AlertRule, error) {
+	var rule entities.AlertRule
+	if err := ctx.Bind(&rule); err != nil {
+		return nil, c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrAlertInvalidBody, nil)
+	}
+	if rule.Name == "" {
+		return nil, c.HandleErrorWithKey(ctx, nil, "Rule name is required", http.StatusBadRequest, notification.MsgErrAlertNameRequired, nil)
+	}
+	if rule.ObjectType == "" || rule.TriggerType == "" {
+		return nil, c.HandleErrorWithKey(ctx, nil, "Object type and trigger type are required", http.StatusBadRequest, notification.MsgErrAlertTypesRequired, nil)
+	}
+	return &rule, nil
+}
+
 // requireV2 checks that the enhanced database is available and returns an error response if not.
 func (c *Controller) requireV2(ctx echo.Context) error {
-	return c.HandleError(ctx, fmt.Errorf("enhanced database not enabled"),
-		"Alert rules require the enhanced (v2) database", http.StatusConflict)
+	return c.HandleErrorWithKey(ctx, nil,
+		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
 }
 
 // GetAlertSchema returns the alerting schema for the UI.
@@ -110,13 +127,13 @@ func (c *Controller) GetAlertRule(ctx echo.Context) error {
 
 	id, err := parseUintParam(ctx, "id")
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid rule ID"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid rule ID", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
 	}
 
 	rule, err := c.alertRuleRepo.GetRule(ctx.Request().Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
-			return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Alert rule not found"})
+			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
 		c.logErrorIfEnabled("failed to get alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
@@ -131,16 +148,9 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 		return c.requireV2(ctx)
 	}
 
-	var rule entities.AlertRule
-	if err := ctx.Bind(&rule); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
-	}
-
-	if rule.Name == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Rule name is required"})
-	}
-	if rule.ObjectType == "" || rule.TriggerType == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Object type and trigger type are required"})
+	rule, err := c.bindAndValidateAlertRule(ctx)
+	if rule == nil {
+		return err
 	}
 
 	// Prevent duplicate names
@@ -150,10 +160,10 @@ func (c *Controller) CreateAlertRule(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to create alert rule", http.StatusInternalServerError)
 	}
 	if count > 0 {
-		return ctx.JSON(http.StatusConflict, map[string]string{"error": "A rule with this name already exists"})
+		return c.HandleErrorWithKey(ctx, nil, "A rule with this name already exists", http.StatusConflict, notification.MsgErrAlertDuplicateName, nil)
 	}
 
-	if err := c.alertRuleRepo.CreateRule(ctx.Request().Context(), &rule); err != nil {
+	if err := c.alertRuleRepo.CreateRule(ctx.Request().Context(), rule); err != nil {
 		c.logErrorIfEnabled("failed to create alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to create alert rule", http.StatusInternalServerError)
 	}
@@ -176,34 +186,27 @@ func (c *Controller) UpdateAlertRule(ctx echo.Context) error {
 
 	id, err := parseUintParam(ctx, "id")
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid rule ID"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid rule ID", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
 	}
 
 	// Verify rule exists
 	existing, err := c.alertRuleRepo.GetRule(ctx.Request().Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
-			return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Alert rule not found"})
+			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
 
-	var rule entities.AlertRule
-	if err := ctx.Bind(&rule); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
-	}
-
-	if rule.Name == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Rule name is required"})
-	}
-	if rule.ObjectType == "" || rule.TriggerType == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Object type and trigger type are required"})
+	rule, err := c.bindAndValidateAlertRule(ctx)
+	if rule == nil {
+		return err
 	}
 
 	rule.ID = existing.ID
 	rule.CreatedAt = existing.CreatedAt
 
-	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), &rule); err != nil {
+	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), rule); err != nil {
 		c.logErrorIfEnabled("failed to update alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to update alert rule", http.StatusInternalServerError)
 	}
@@ -221,19 +224,19 @@ func (c *Controller) ToggleAlertRule(ctx echo.Context) error {
 
 	id, err := parseUintParam(ctx, "id")
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid rule ID"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid rule ID", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
 	}
 
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
 	if err := ctx.Bind(&body); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrAlertInvalidBody, nil)
 	}
 
 	if err := c.alertRuleRepo.ToggleRule(ctx.Request().Context(), id, body.Enabled); err != nil {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
-			return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Alert rule not found"})
+			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
 		c.logErrorIfEnabled("failed to toggle alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to toggle alert rule", http.StatusInternalServerError)
@@ -252,12 +255,12 @@ func (c *Controller) DeleteAlertRule(ctx echo.Context) error {
 
 	id, err := parseUintParam(ctx, "id")
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid rule ID"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid rule ID", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
 	}
 
 	if err := c.alertRuleRepo.DeleteRule(ctx.Request().Context(), id); err != nil {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
-			return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Alert rule not found"})
+			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
 		c.logErrorIfEnabled("failed to delete alert rule", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to delete alert rule", http.StatusInternalServerError)
@@ -276,13 +279,13 @@ func (c *Controller) TestAlertRule(ctx echo.Context) error {
 
 	id, err := parseUintParam(ctx, "id")
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid rule ID"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid rule ID", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
 	}
 
 	rule, err := c.alertRuleRepo.GetRule(ctx.Request().Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrAlertRuleNotFound) {
-			return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Alert rule not found"})
+			return c.HandleErrorWithKey(ctx, err, "Alert rule not found", http.StatusNotFound, notification.MsgErrAlertNotFound, nil)
 		}
 		return c.HandleError(ctx, err, "Failed to get alert rule", http.StatusInternalServerError)
 	}
@@ -334,7 +337,7 @@ func (c *Controller) ListAlertHistory(ctx echo.Context) error {
 	if ruleIDParam := ctx.QueryParam("rule_id"); ruleIDParam != "" {
 		v, err := strconv.ParseUint(ruleIDParam, 10, 64)
 		if err != nil {
-			return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid rule_id"})
+			return c.HandleErrorWithKey(ctx, err, "Invalid rule_id", http.StatusBadRequest, notification.MsgErrAlertInvalidID, nil)
 		}
 		filter.RuleID = uint(v)
 	}
@@ -415,7 +418,7 @@ func (c *Controller) ImportAlertRules(ctx echo.Context) error {
 		Version int                  `json:"version"`
 	}
 	if err := json.NewDecoder(ctx.Request().Body).Decode(&payload); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid JSON"})
+		return c.HandleErrorWithKey(ctx, err, "Invalid JSON", http.StatusBadRequest, notification.MsgErrAlertInvalidJSON, nil)
 	}
 
 	reqCtx := ctx.Request().Context()

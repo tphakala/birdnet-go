@@ -108,11 +108,11 @@
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
         {t('system.database.backup.history.title')}
       </h3>
       <span
-        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-400 dark:text-slate-500"
+        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-600 dark:text-slate-400"
       >
         {safeBackups.length}
       </span>
@@ -135,7 +135,7 @@
   </div>
 
   {#if safeBackups.length === 0}
-    <div class="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+    <div class="py-8 text-center text-sm text-slate-600 dark:text-slate-400">
       {t('system.database.backup.history.noBackups')}
     </div>
   {:else}
@@ -145,7 +145,7 @@
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
               <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-400 dark:text-slate-500"
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-600 dark:text-slate-400"
                 scope="col"
                 tabindex="0"
                 aria-sort={sortColumn === col.key
@@ -177,7 +177,7 @@
             {/each}
             <th
               scope="col"
-              class="text-right py-2 px-3 text-xs font-medium text-slate-400 dark:text-slate-500"
+              class="text-right py-2 px-3 text-xs font-medium text-slate-600 dark:text-slate-400"
             >
               {t('system.database.backup.history.columns.actions')}
             </th>
@@ -190,7 +190,7 @@
             >
               <td class="py-2 px-3">
                 <div class="flex items-center gap-2">
-                  <Clock class="w-3.5 h-3.5 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+                  <Clock class="w-3.5 h-3.5 flex-shrink-0 text-slate-600 dark:text-slate-400" />
                   <span class="text-sm tabular-nums">{formatDateTime(backup.started_at)}</span>
                 </div>
               </td>
@@ -213,30 +213,32 @@
                   )}">{statusLabel(backup.status)}</span
                 >
               </td>
-              <td class="py-2 px-3 text-right">
-                {#if backup.status === 'completed' && backup.download_url}
-                  <a
-                    href={backup.download_url}
-                    class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                    download
-                  >
-                    <Download class="w-3 h-3" />
-                    {t('system.database.backup.history.download')}
-                  </a>
-                {:else if backup.status === 'in_progress'}
-                  <span
-                    class="inline-flex items-center gap-1 text-xs tabular-nums text-blue-600 dark:text-blue-400"
-                  >
-                    <Loader2 class="w-3 h-3 animate-spin" />
-                    {backup.progress}%
-                  </span>
-                {:else if backup.status === 'failed'}
-                  <span class="text-xs text-red-600 dark:text-red-400" title={backup.error ?? ''}>
-                    {t('system.database.backup.history.failed')}
-                  </span>
-                {:else}
-                  <span class="text-xs text-slate-400 dark:text-slate-500">&mdash;</span>
-                {/if}
+              <td class="py-2 px-3">
+                <div class="flex justify-end">
+                  {#if backup.status === 'completed' && backup.download_url}
+                    <a
+                      href={backup.download_url}
+                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      download
+                    >
+                      <Download class="w-3 h-3" />
+                      {t('system.database.backup.history.download')}
+                    </a>
+                  {:else if backup.status === 'in_progress'}
+                    <span
+                      class="inline-flex items-center gap-1 text-xs tabular-nums text-blue-600 dark:text-blue-400"
+                    >
+                      <Loader2 class="w-3 h-3 animate-spin" />
+                      {backup.progress}%
+                    </span>
+                  {:else if backup.status === 'failed'}
+                    <span class="text-xs text-red-600 dark:text-red-400" title={backup.error ?? ''}>
+                      {t('system.database.backup.history.failed')}
+                    </span>
+                  {:else}
+                    <span class="text-xs text-slate-600 dark:text-slate-400">&mdash;</span>
+                  {/if}
+                </div>
               </td>
             </tr>
           {/each}

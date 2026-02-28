@@ -915,9 +915,7 @@
       // Check if new species name already exists
       if (species in updatedConfig) {
         // Prevent overwriting existing configuration
-        toastActions.error(
-          `Species "${species}" already has a configuration. Please choose a different name.`
-        );
+        toastActions.error(t('settings.species.duplicateConfigError', { species }));
         return;
       }
       // Rename: delete old entry and create new
@@ -949,15 +947,15 @@
       // Show success feedback
       toastActions.success(
         editingSpecies
-          ? `Updated configuration for "${species}"`
-          : `Added configuration for "${species}"`
+          ? t('settings.species.configUpdated', { species })
+          : t('settings.species.configAdded', { species })
       );
 
       // Reset form only after successful save
       cancelEdit();
     } catch (error) {
       logger.error('Failed to save species configuration:', error);
-      toastActions.error(`Failed to save configuration for "${species}". Please try again.`);
+      toastActions.error(t('settings.species.saveError', { species }));
       // Don't reset the form on error so user can retry
     }
   }
@@ -1185,7 +1183,7 @@
                 class:max-h-[32rem]={!isListExpanded}
                 class:max-h-[80vh]={isListExpanded}
               >
-                {#each filteredActiveSpecies as species (species.scientificName)}
+                {#each filteredActiveSpecies as species (`${species.scientificName}_${species.commonName}`)}
                   <div
                     class="flex items-center justify-between p-3 hover:bg-[var(--color-base-200)]/50 transition-colors"
                   >

@@ -693,7 +693,7 @@
       } else if (error instanceof Error) {
         databaseStats.error = error.message;
       } else {
-        databaseStats.error = 'Failed to load database statistics';
+        databaseStats.error = t('settings.errors.databaseStatsFailed');
       }
       logger.error('Failed to load database stats:', error);
     } finally {
@@ -731,7 +731,7 @@
         } catch (importError) {
           mapLibraryLoading = false;
           logger.error('Failed to load MapLibre GL JS:', importError);
-          toastActions.error('Failed to load map library. Please refresh the page.');
+          toastActions.error(t('settings.main.errors.mapLibraryLoadFailed'));
           mapInitialized = false;
           return;
         }
@@ -796,7 +796,7 @@
       }
     } catch (error) {
       logger.error('Failed to initialize map:', error);
-      toastActions.error('Failed to load map. Please try refreshing the page.');
+      toastActions.error(t('settings.main.errors.mapLoadFailed'));
       mapInitialized = false;
     }
   }
@@ -981,7 +981,7 @@
       }
     } catch (error) {
       logger.error('Failed to initialize modal map:', error);
-      toastActions.error('Failed to load modal map. Please try closing and reopening the modal.');
+      toastActions.error(t('settings.main.errors.modalMapLoadFailed'));
       mapModalOpen = false;
       return () => {};
     }
@@ -1380,7 +1380,7 @@
       const decoder = new TextDecoder();
 
       if (!reader) {
-        throw new Error('Failed to read response stream');
+        throw new Error(t('settings.integration.errors.responseStreamFailed'));
       }
 
       while (true) {
@@ -1434,9 +1434,9 @@
       if (weatherTestState.stages.length === 0) {
         weatherTestState.stages.push({
           id: 'error',
-          title: 'Connection Error',
+          title: t('settings.integration.errors.connectionError'),
           status: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          error: error instanceof Error ? error.message : t('common.errors.unknownError'),
         });
       } else {
         // Mark current stage as failed
@@ -1446,7 +1446,7 @@
           const updatedStage = {
             ...lastStage,
             status: 'error' as const,
-            error: error instanceof Error ? error.message : 'Unknown error occurred',
+            error: error instanceof Error ? error.message : t('common.errors.unknownError'),
           };
           weatherTestState.stages.splice(lastIndex, 1, updatedStage);
         }
@@ -1487,7 +1487,7 @@
       });
 
       if (!response.ok) {
-        let msg = 'Failed to download CSV';
+        let msg = t('settings.errors.csvDownloadFailed');
         try {
           const data = await response.clone().json();
           if (data?.message) msg = data.message;
@@ -2974,7 +2974,7 @@
           </div>
         {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {#each rangeFilterState.species as species (species.scientificName)}
+            {#each rangeFilterState.species as species (species.label || `${species.scientificName}_${species.commonName}`)}
               <div class="p-3 rounded-lg hover:bg-[var(--color-base-200)]/50 transition-colors">
                 <div class="font-medium">{species.commonName}</div>
                 <div class="text-sm text-[var(--color-base-content)] opacity-60 italic">

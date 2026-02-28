@@ -693,7 +693,9 @@
         debugLog('handleGenerateSpectrogram: cache key updated', { cacheKey: spectrogramCacheKey });
       } else {
         // Error response
-        let errorMessage = `Generation failed with status ${response.status}`;
+        let errorMessage = t('components.audioPlayer.errors.generationFailedStatus', {
+          status: response.status,
+        });
         try {
           const errorData = await response.json();
           errorMessage = errorData.message ?? errorMessage;
@@ -704,7 +706,8 @@
         throw new Error(errorMessage);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to generate spectrogram';
+      const errorMessage =
+        err instanceof Error ? err.message : t('components.audioPlayer.errors.spectrogramFailed');
       generationError = errorMessage;
       logger.error('Spectrogram generation failed', {
         detectionId,

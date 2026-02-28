@@ -548,7 +548,7 @@ func (c *Controller) parseRequiredCommaSeparatedDates(ctx echo.Context, paramNam
 	// Parse dates
 	dates, err := c.parseCommaSeparatedDates(ctx, paramName)
 	if err != nil {
-		_ = c.HandleError(ctx, nil, err.Error(), http.StatusBadRequest)
+		_ = c.HandleError(ctx, nil, "Invalid date format", http.StatusBadRequest)
 		return nil, ErrResponseHandled
 	}
 

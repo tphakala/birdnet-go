@@ -2,7 +2,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -45,6 +44,17 @@ type DebugSystemStatus struct {
 	Notifications map[string]any `json:"notifications,omitempty"`
 }
 
+// requireDebugMode is middleware that returns 403 if debug mode is not enabled.
+// This is defense-in-depth — debug routes are already conditionally registered.
+func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		if c.Settings == nil || !c.Settings.Debug {
+			return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
+		}
+		return next(ctx)
+	}
+}
+
 // initDebugRoutes registers debug-related routes
 func (c *Controller) initDebugRoutes() {
 	// Only register debug routes if debug mode is enabled
@@ -53,8 +63,8 @@ func (c *Controller) initDebugRoutes() {
 		return
 	}
 
-	// Debug endpoints require authentication
-	debugGroup := c.Group.Group("/debug", c.authMiddleware)
+	// Debug endpoints require authentication and debug mode (defense-in-depth)
+	debugGroup := c.Group.Group("/debug", c.authMiddleware, c.requireDebugMode)
 
 	debugGroup.POST("/trigger-error", c.DebugTriggerError)
 	debugGroup.POST("/trigger-notification", c.DebugTriggerNotification)
@@ -65,18 +75,9 @@ func (c *Controller) initDebugRoutes() {
 
 // DebugTriggerError triggers a test error for telemetry testing
 func (c *Controller) DebugTriggerError(ctx echo.Context) error {
-	// Double-check debug mode using controller's settings
-	if c.Settings == nil || !c.Settings.Debug {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Debug mode not enabled",
-		})
-	}
-
 	var req DebugErrorRequest
 	if err := ctx.Bind(&req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
 
 	// Default values
@@ -130,18 +131,9 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 
 // DebugTriggerNotification triggers a test notification
 func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
-	// Double-check debug mode using controller's settings
-	if c.Settings == nil || !c.Settings.Debug {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Debug mode not enabled",
-		})
-	}
-
 	var req DebugNotificationRequest
 	if err := ctx.Bind(&req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
 
 	// Default values
@@ -158,9 +150,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	// Get notification service
 	notificationService := notification.GetService()
 	if notificationService == nil {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
+		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
 
 	// Map string type to notification.Type
@@ -176,9 +166,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	)
 
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to create notification: %v", err),
-		})
+		return c.HandleError(ctx, err, "Failed to create notification", http.StatusInternalServerError)
 	}
 
 	response := DebugResponse{
@@ -197,13 +185,6 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 
 // DebugSystemStatus returns current system status for debugging
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
-	// Double-check debug mode using controller's settings
-	if c.Settings == nil || !c.Settings.Debug {
-		return ctx.JSON(http.StatusForbidden, map[string]string{
-			"error": "Debug mode not enabled",
-		})
-	}
-
 	status := DebugSystemStatus{
 		Timestamp: time.Now().Format(time.RFC3339),
 		Debug:     c.Settings.Debug,

@@ -85,11 +85,11 @@
       // Provide more specific error messages based on the error
       if (error instanceof Error) {
         if (error.message.includes('lock status')) {
-          errorMessage = 'Failed to update lock status. Please try again.';
+          errorMessage = t('common.review.errors.lockStatusFailed');
         } else if (error.message.includes('verification')) {
-          errorMessage = 'Failed to update verification status. Please try again.';
+          errorMessage = t('common.review.errors.verificationFailed');
         } else if (error.message.includes('comment')) {
-          errorMessage = 'Failed to save comment. Please try again.';
+          errorMessage = t('common.review.errors.commentFailed');
         } else {
           errorMessage = error.message;
         }
