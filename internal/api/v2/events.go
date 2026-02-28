@@ -2,8 +2,9 @@
 package api
 
 import (
-	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"slices"
 	"strings"
@@ -232,30 +233,20 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 	// Read application.log
 	appLogPath := logger.Global().GetDefaultOutputPath()
 	if appLogPath != "" {
-		logFiles, err := reader.FindLogFiles(appLogPath)
-		if err == nil {
-			entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
-				Date:  targetDate,
-				Level: level,
-			})
-			if err == nil {
-				allEntries = append(allEntries, entries...)
-			}
+		if entries, err := readLogSource(appLogPath, targetDate, level); err != nil {
+			c.Debug("Failed to read application log: %v", err)
+		} else {
+			allEntries = append(allEntries, entries...)
 		}
 	}
 
 	// Read audio.log
 	audioLogPath := logger.Global().GetOutputPath("audio")
 	if audioLogPath != "" {
-		logFiles, err := reader.FindLogFiles(audioLogPath)
-		if err == nil {
-			entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
-				Date:  targetDate,
-				Level: level,
-			})
-			if err == nil {
-				allEntries = append(allEntries, entries...)
-			}
+		if entries, err := readLogSource(audioLogPath, targetDate, level); err != nil {
+			c.Debug("Failed to read audio log: %v", err)
+		} else {
+			allEntries = append(allEntries, entries...)
 		}
 	}
 
@@ -271,6 +262,24 @@ func (c *Controller) GetSystemEvents(ctx echo.Context) error {
 		Events:  events,
 		Metrics: metrics,
 	})
+}
+
+// readLogSource finds and reads log entries from a base log path, filtering by date and level.
+func readLogSource(basePath string, date time.Time, level string) ([]reader.LogEntry, error) {
+	logFiles, err := reader.FindLogFiles(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("finding log files for %s: %w", basePath, err)
+	}
+
+	entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
+		Date:  date,
+		Level: level,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading log files for %s: %w", basePath, err)
+	}
+
+	return entries, nil
 }
 
 // buildSystemEvents converts raw log entries into SystemEvent responses,
@@ -330,12 +339,12 @@ func isNoiseEntry(entry *reader.LogEntry) bool {
 }
 
 // generateEventID produces a stable, deterministic ID for a log entry
-// based on its timestamp and message content.
+// based on its timestamp and message content. Uses FNV-1a for speed
+// since this is not a security-sensitive hash.
 func generateEventID(entry *reader.LogEntry) string {
-	h := sha256.New()
-	h.Write([]byte(entry.Time.Format(time.RFC3339Nano)))
+	h := fnv.New64a()
+	_ = binary.Write(h, binary.LittleEndian, entry.Time.UnixNano())
 	h.Write([]byte(entry.Msg))
 	h.Write([]byte(entry.Operation))
-	sum := h.Sum(nil)
-	return fmt.Sprintf("evt_%x", sum[:8])
+	return fmt.Sprintf("evt_%x", h.Sum64())
 }

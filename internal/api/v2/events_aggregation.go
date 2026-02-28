@@ -20,8 +20,7 @@ const bucketLabelFormat = "15:00"
 
 // speciesIndex tracks species entries within a bucket for O(1) lookup during construction.
 type speciesIndex struct {
-	byName  map[string]int // name → index in bucket.Species
-	entries []SpeciesEntry
+	byName map[string]int // name → index in bucket.Species
 }
 
 // aggregateDetectionEvents processes raw log entries into hourly bucketed detection data.
@@ -172,8 +171,7 @@ func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]
 	}
 	bucketMap[key] = b
 	idxMap[key] = &speciesIndex{
-		byName:  make(map[string]int),
-		entries: nil, // will be set via bucket.Species
+		byName: make(map[string]int),
 	}
 	return b
 }
@@ -366,7 +364,7 @@ func getStringField(fields map[string]any, key string) string {
 }
 
 // getFloat64Field safely extracts a float64 value from a fields map.
-// Handles both float64 and json.Number (which decodes as float64 from encoding/json).
+// JSON numbers decode as float64 via encoding/json; int is handled as a fallback.
 func getFloat64Field(fields map[string]any, key string) float64 {
 	if fields == nil {
 		return 0
@@ -381,7 +379,7 @@ func getFloat64Field(fields map[string]any, key string) float64 {
 }
 
 // getIntField safely extracts an integer value from a fields map.
-// JSON numbers decode as float64, so this handles the conversion.
+// JSON numbers decode as float64 via encoding/json, so this converts accordingly.
 func getIntField(fields map[string]any, key string) int {
 	if fields == nil {
 		return 0
