@@ -501,6 +501,7 @@ func (c *Controller) initRoutes() {
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
+		{"events routes", c.initEventsRoutes},
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", c.initSpeciesRoutes},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
