@@ -65,7 +65,11 @@ type ReadOptions struct {
 // ReadFile reads a JSONL log file and returns entries matching the options.
 // Malformed lines are silently skipped. The returned entries are not sorted;
 // use ReadFiles for merged, sorted, deduplicated results across multiple files.
+// If opts is nil, all entries are returned without filtering.
 func ReadFile(path string, opts *ReadOptions) ([]LogEntry, error) {
+	if opts == nil {
+		opts = &ReadOptions{}
+	}
 	f, err := os.Open(path) //nolint:gosec // path comes from caller / FindLogFiles
 	if err != nil {
 		return nil, fmt.Errorf("opening log file %s: %w", path, err)
