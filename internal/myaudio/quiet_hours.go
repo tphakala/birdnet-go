@@ -169,7 +169,8 @@ func (s *QuietHoursScheduler) Evaluate() {
 	// Clean up suppressed entries for streams no longer in config
 	configuredURLs := make(map[string]bool)
 	for i := range settings.Realtime.RTSP.Streams {
-		configuredURLs[settings.Realtime.RTSP.Streams[i].URL] = true
+		stream := &settings.Realtime.RTSP.Streams[i]
+		configuredURLs[stream.URL] = true
 	}
 	for url := range s.suppressed {
 		if !configuredURLs[url] {
