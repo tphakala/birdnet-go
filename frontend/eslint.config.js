@@ -61,7 +61,8 @@ const browserGlobals = {
   TextEncoder: 'readonly',
 };
 
-// Svelte 5 rune globals for .svelte and .svelte.ts files
+// Svelte 5 rune globals for .svelte.ts files (tsParser doesn't recognize runes;
+// .svelte files get rune support from svelte-eslint-parser automatically)
 const svelteRuneGlobals = {
   $state: 'readonly',
   $derived: 'readonly',
