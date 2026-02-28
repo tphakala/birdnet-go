@@ -199,6 +199,7 @@ func (c *Controller) GetDetectionEvents(ctx echo.Context) error {
 	// Read and filter entries
 	entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
 		Date:       targetDate,
+		Location:   time.Local,
 		Operations: detectionOperations,
 	})
 	if err != nil {
@@ -239,7 +240,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 	// Read application.log
 	appLogPath := logger.Global().GetDefaultOutputPath()
 	if appLogPath != "" {
-		if entries, err := readLogSource(appLogPath, targetDate, level); err != nil {
+		if entries, err := readLogSource(appLogPath, targetDate, level, time.Local); err != nil {
 			c.logWarnIfEnabled("Failed to read application log",
 				logger.Error(err),
 				logger.String("path", appLogPath),
@@ -253,7 +254,7 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 	// Read audio.log
 	audioLogPath := logger.Global().GetOutputPath("audio")
 	if audioLogPath != "" {
-		if entries, err := readLogSource(audioLogPath, targetDate, level); err != nil {
+		if entries, err := readLogSource(audioLogPath, targetDate, level, time.Local); err != nil {
 			c.logWarnIfEnabled("Failed to read audio log",
 				logger.Error(err),
 				logger.String("path", audioLogPath),
@@ -279,15 +280,16 @@ func (c *Controller) GetOperationalEvents(ctx echo.Context) error {
 }
 
 // readLogSource finds and reads log entries from a base log path, filtering by date and level.
-func readLogSource(basePath string, date time.Time, level string) ([]reader.LogEntry, error) {
+func readLogSource(basePath string, date time.Time, level string, loc *time.Location) ([]reader.LogEntry, error) {
 	logFiles, err := reader.FindLogFiles(basePath)
 	if err != nil {
 		return nil, fmt.Errorf("finding log files for %s: %w", basePath, err)
 	}
 
 	entries, err := reader.ReadFiles(logFiles, &reader.ReadOptions{
-		Date:  date,
-		Level: level,
+		Date:     date,
+		Location: loc,
+		Level:    level,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reading log files for %s: %w", basePath, err)
