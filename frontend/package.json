@@ -113,7 +113,7 @@
     "prettier-plugin-svelte": "^3.5.0",
     "stylelint": "^17.3.0",
     "stylelint-config-standard": "^40.0.0",
-    "svelte": "^5.53.3",
+    "svelte": "^5.53.5",
     "svelte-check": "^4.4.3",
     "svelte-eslint-parser": "^1.2.0",
     "tailwindcss": "^4.2",
@@ -138,5 +138,8 @@
     "maplibre-gl": "^5.19.0",
     "reconnecting-eventsource": "^1.6.4",
     "svelte-portal": "^2.2.1"
-  }
+  },
+  "bundleDependencies": [
+    "svelte"
+  ]
 }
