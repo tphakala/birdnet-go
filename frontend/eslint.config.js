@@ -100,9 +100,53 @@ export default [
     },
   },
   
-  // TypeScript files
+  // Svelte module files (.svelte.ts) — need Svelte rune globals
+  {
+    files: ['**/*.svelte.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.json',
+      },
+      globals: {
+        ...browserGlobals,
+        $state: 'readonly',
+        $derived: 'readonly',
+        $effect: 'readonly',
+        $props: 'readonly',
+        $bindable: 'readonly',
+        $inspect: 'readonly',
+        $host: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      security,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      ...tsPlugin.configs.strict.rules,
+      ...security.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      'no-var': 'error',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-optional-chain': 'error',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/prefer-readonly': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    },
+  },
+
+  // TypeScript files (excluding .svelte.ts which is handled above)
   {
     files: ['**/*.ts'],
+    ignores: ['**/*.svelte.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
