@@ -75,6 +75,7 @@ func ReadFile(path string, opts *ReadOptions) ([]LogEntry, error) {
 	}()
 
 	var entries []LogEntry
+	prep := prepareOptions(opts)
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, scannerBufferSize), scannerBufferSize)
@@ -90,7 +91,7 @@ func ReadFile(path string, opts *ReadOptions) ([]LogEntry, error) {
 			continue
 		}
 
-		if matchesOptions(&entry, opts) {
+		if matchesOptions(&entry, &prep) {
 			entries = append(entries, entry)
 		}
 	}
@@ -119,7 +120,7 @@ func ReadFiles(paths []string, opts *ReadOptions) ([]LogEntry, error) {
 	}
 
 	// Deduplicate by composite key: timestamp (UnixNano) + msg + operation.
-	seen := make(map[string]struct{}, len(allEntries))
+	seen := make(map[dedupKey]struct{}, len(allEntries))
 	deduplicated := make([]LogEntry, 0, len(allEntries))
 
 	for i := range allEntries {
@@ -216,7 +217,7 @@ func parseLine(line []byte) (LogEntry, bool) {
 	}
 
 	// Collect remaining fields.
-	extra := make(map[string]any, len(raw)-len(knownFields))
+	extra := make(map[string]any, max(len(raw)-len(knownFields), 0))
 	for k, v := range raw {
 		if !knownFields[k] {
 			extra[k] = v
@@ -229,36 +230,64 @@ func parseLine(line []byte) (LogEntry, bool) {
 	return entry, true
 }
 
-// matchesOptions checks whether a log entry passes all the filters in opts.
-func matchesOptions(entry *LogEntry, opts *ReadOptions) bool {
-	// Date filter (required): compare UTC dates.
+// preparedOptions holds precomputed filter values to avoid repeated work per entry.
+type preparedOptions struct {
+	targetDate time.Time // UTC date truncated to midnight
+	hasDate    bool
+	minRank    int
+	hasLevel   bool
+	operations []string
+	module     string
+}
+
+// prepareOptions precomputes filter values from ReadOptions.
+func prepareOptions(opts *ReadOptions) preparedOptions {
+	p := preparedOptions{
+		operations: opts.Operations,
+		module:     opts.Module,
+	}
 	if !opts.Date.IsZero() {
+		p.hasDate = true
+		p.targetDate = opts.Date.UTC().Truncate(24 * time.Hour)
+	}
+	if opts.Level != "" {
+		if rank, ok := levelRank[strings.ToUpper(opts.Level)]; ok {
+			p.hasLevel = true
+			p.minRank = rank
+		}
+	}
+	return p
+}
+
+// matchesOptions checks whether a log entry passes all the precomputed filters.
+func matchesOptions(entry *LogEntry, prep *preparedOptions) bool {
+	// Date filter: compare UTC dates.
+	if prep.hasDate {
 		entryDate := entry.Time.UTC().Truncate(24 * time.Hour)
-		targetDate := opts.Date.UTC().Truncate(24 * time.Hour)
-		if !entryDate.Equal(targetDate) {
+		if !entryDate.Equal(prep.targetDate) {
 			return false
 		}
 	}
 
 	// Level filter: entry must be at or above the minimum level.
-	if opts.Level != "" {
-		minRank, minOK := levelRank[strings.ToUpper(opts.Level)]
+	// Entries with unknown levels are excluded when a level filter is active.
+	if prep.hasLevel {
 		entryRank, entryOK := levelRank[strings.ToUpper(entry.Level)]
-		if minOK && entryOK && entryRank < minRank {
+		if !entryOK || entryRank < prep.minRank {
 			return false
 		}
 	}
 
 	// Operation filter: entry operation must be in the allowed set.
-	if len(opts.Operations) > 0 {
-		if !slices.Contains(opts.Operations, entry.Operation) {
+	if len(prep.operations) > 0 {
+		if !slices.Contains(prep.operations, entry.Operation) {
 			return false
 		}
 	}
 
 	// Module filter: entry module must have the specified prefix.
-	if opts.Module != "" {
-		if !strings.HasPrefix(entry.Module, opts.Module) {
+	if prep.module != "" {
+		if !strings.HasPrefix(entry.Module, prep.module) {
 			return false
 		}
 	}
@@ -266,8 +295,18 @@ func matchesOptions(entry *LogEntry, opts *ReadOptions) bool {
 	return true
 }
 
+// dedupKey is a composite key for deduplication, avoiding string allocation.
+type dedupKey struct {
+	timeNano  int64
+	msg       string
+	operation string
+}
+
 // deduplicationKey creates a composite key from a LogEntry for deduplication.
-// Uses nanosecond timestamp + message + operation to identify unique entries.
-func deduplicationKey(entry *LogEntry) string {
-	return fmt.Sprintf("%d|%s|%s", entry.Time.UnixNano(), entry.Msg, entry.Operation)
+func deduplicationKey(entry *LogEntry) dedupKey {
+	return dedupKey{
+		timeNano:  entry.Time.UnixNano(),
+		msg:       entry.Msg,
+		operation: entry.Operation,
+	}
 }

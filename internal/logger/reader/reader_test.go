@@ -348,7 +348,8 @@ func TestLevelParsing(t *testing.T) {
 				Date:  testDate,
 				Level: tt.minLevel,
 			}
-			result := matchesOptions(&entry, &opts)
+			prep := prepareOptions(&opts)
+			result := matchesOptions(&entry, &prep)
 			assert.Equal(t, tt.shouldPass, result)
 		})
 	}
