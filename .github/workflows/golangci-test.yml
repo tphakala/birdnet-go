@@ -20,7 +20,6 @@ jobs:
     uses: ./.github/workflows/golangci-lint.yml
 
   unit-tests:
-    needs: golangci
     runs-on: ubuntu-24.04
     services:
       mosquitto:
@@ -163,7 +162,6 @@ jobs:
           if-no-files-found: error
 
   testcontainer-tests:
-    needs: golangci
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -194,7 +192,6 @@ jobs:
         timeout-minutes: 10
 
   integration-tests:
-    needs: [unit-tests, testcontainer-tests]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
