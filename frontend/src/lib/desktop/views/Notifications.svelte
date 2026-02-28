@@ -48,13 +48,16 @@
     }
   });
 
+  /** @type {import('$lib/utils/notifications').Notification[]} */
   let notifications = $state([]);
   let loading = $state(false);
   let currentPage = $state(1);
   let totalPages = $state(1);
   let pageSize = 20;
   let hasUnread = $state(false);
+  /** @type {string | null} */
   let pendingDeleteId = $state(null);
+  /** @type {string[] | null} */
   let pendingBulkDeleteIds = $state(null);
   // Element bindings should NOT use $state - causes showModal() to fail
   /** @type {HTMLDialogElement | null} */
@@ -117,7 +120,10 @@
       if (filters.type) params.append('type', filters.type);
       if (filters.priority) params.append('priority', filters.priority);
 
-      const data = await api.get(`/api/v2/notifications?${params}`);
+      const data =
+        /** @type {{ notifications?: import('$lib/utils/notifications').ApiNotification[], total?: number }} */ (
+          await api.get(`/api/v2/notifications?${params}`)
+        );
       // Map API notifications to frontend format (status -> read)
       // then apply deduplication to remove duplicate notifications
       const rawNotifications = data.notifications || [];
@@ -150,6 +156,7 @@
   }
 
   // Mark notification as read
+  /** @param {string} id @param {Event} [event] */
   async function markAsRead(id, event) {
     if (event) {
       event.stopPropagation();
@@ -168,6 +175,7 @@
   }
 
   // Handle notification click
+  /** @param {import('$lib/utils/notifications').Notification} notification */
   async function handleNotificationClick(notification) {
     // For detection notifications with note_id, navigate to detection detail page
     if (notification.type === 'detection' && notification.metadata?.note_id) {
@@ -191,11 +199,13 @@
   }
 
   // Mark multiple notifications as read (for group actions)
+  /** @param {string[]} ids */
   async function handleMarkGroupAsRead(ids) {
     await Promise.all(ids.map(id => markAsRead(id)));
   }
 
   // Dismiss/delete multiple notifications (for group actions)
+  /** @param {string[]} ids */
   function handleDismissGroup(ids) {
     pendingBulkDeleteIds = ids;
     bulkDeleteModal?.showModal();
@@ -251,6 +261,7 @@
   }
 
   // Acknowledge notification
+  /** @param {string} id @param {Event} [event] */
   async function acknowledge(id, event) {
     if (event) {
       event.stopPropagation();
@@ -267,6 +278,7 @@
   }
 
   // Delete notification
+  /** @param {string} id @param {Event} [event] */
   async function deleteNotification(id, event) {
     if (event) {
       event.stopPropagation();
@@ -330,6 +342,7 @@
   }
 
   // Get notification icon class (compact for flat view)
+  /** @param {import('$lib/utils/notifications').Notification} notification */
   function getNotificationIconClass(notification) {
     const baseClass = 'w-8 h-8 rounded-full flex items-center justify-center';
     const typeClasses = {
@@ -343,6 +356,7 @@
   }
 
   // Get notification card class
+  /** @param {import('$lib/utils/notifications').Notification} notification */
   function getNotificationCardClass(notification) {
     let classes =
       'card bg-base-100 shadow-2xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
@@ -360,11 +374,13 @@
   }
 
   // Check if notification is clickable
+  /** @param {import('$lib/utils/notifications').Notification} notification */
   function isClickable(notification) {
     return notification.type === 'detection' && notification.metadata?.note_id;
   }
 
   // Get priority badge class
+  /** @param {string} priority */
   function getPriorityBadgeClass(priority) {
     const classes = {
       critical: 'badge-error',
@@ -376,6 +392,7 @@
   }
 
   // Format timestamp
+  /** @param {string} timestamp */
   function formatTime(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();

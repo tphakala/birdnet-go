@@ -1,6 +1,7 @@
 <script>
   import EmptyState from './EmptyState.svelte';
 
+  /** @type {{ showCustomIcon?: boolean, showChildren?: boolean, title?: string, description?: string, action?: { label: string, onClick: () => void }, [key: string]: any }} */
   let {
     showCustomIcon = false,
     showChildren = false,

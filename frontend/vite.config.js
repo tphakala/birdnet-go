@@ -47,14 +47,14 @@ export default defineConfig({
               try {
                 copyFileSync(join(sourceDir, file), join(messagesDir, file));
                 copiedCount++;
-              } catch (err) {
+              } catch (/** @type {any} */ err) {
                 console.error(`[copy-messages] Failed to copy ${file}:`, err.message);
               }
             }
           });
           
           console.log(`[copy-messages] Copied ${copiedCount} message files to dist/messages`);
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
           console.error('[copy-messages] Error during message file copying:', err.message);
           // Don't fail the build, just log the error
         }
@@ -117,8 +117,7 @@ export default defineConfig({
     exclude: ['node_modules', 'dist', 'build', '.svelte-kit', 'coverage', '**/*.integration.{test,spec}.{js,ts}', '**/*.reverse-proxy.{test,spec}.{js,ts}', '**/*.browser.{test,spec}.{js,ts}'],
     // Performance optimizations - Vitest 4.x removed poolOptions, use top-level options
     pool: 'threads', // Faster than default 'forks' for many small tests
-    minWorkers: 2, // Keep minimum threads warm (renamed from poolOptions.threads.minThreads)
-    maxWorkers: 8, // Limit max threads to avoid overhead (renamed from poolOptions.threads.maxThreads)
+    maxWorkers: 8, // Limit max threads to avoid overhead
     // Increase concurrent test limit
     maxConcurrency: 20,
     // Optimize dependency handling
