@@ -30,16 +30,6 @@ var levelRank = map[string]int{
 	LevelError: 3,
 }
 
-// knownFields lists the JSON keys that are parsed into typed LogEntry fields.
-// All other keys are collected into the Fields map.
-var knownFields = map[string]bool{
-	"time":      true,
-	"level":     true,
-	"msg":       true,
-	"module":    true,
-	"operation": true,
-}
-
 // scannerBufferSize is the maximum buffer size for bufio.Scanner (1 MB).
 // Log lines can be long when they contain embedded data.
 const scannerBufferSize = 1024 * 1024
@@ -56,7 +46,7 @@ type LogEntry struct {
 
 // ReadOptions controls filtering during log file scanning.
 type ReadOptions struct {
-	Date       time.Time // Required: only return entries for this date (compared as UTC date).
+	Date       time.Time // Optional: only return entries for this date (compared as UTC date). If zero, no date filtering is applied.
 	Operations []string  // Optional: filter to these operation values.
 	Level      string    // Optional: minimum level (DEBUG, INFO, WARN, ERROR).
 	Module     string    // Optional: filter to this module prefix.
@@ -123,18 +113,18 @@ func ReadFiles(paths []string, opts *ReadOptions) ([]LogEntry, error) {
 		allEntries = append(allEntries, entries...)
 	}
 
-	// Deduplicate by composite key: timestamp (UnixNano) + msg + operation.
+	// Deduplicate in-place by composite key: timestamp (UnixNano) + msg + operation.
 	seen := make(map[dedupKey]struct{}, len(allEntries))
-	deduplicated := make([]LogEntry, 0, len(allEntries))
-
+	n := 0
 	for i := range allEntries {
 		key := deduplicationKey(&allEntries[i])
-		if _, exists := seen[key]; exists {
-			continue
+		if _, exists := seen[key]; !exists {
+			seen[key] = struct{}{}
+			allEntries[n] = allEntries[i]
+			n++
 		}
-		seen[key] = struct{}{}
-		deduplicated = append(deduplicated, allEntries[i])
 	}
+	deduplicated := allEntries[:n]
 
 	// Sort by timestamp ascending.
 	slices.SortFunc(deduplicated, func(a, b LogEntry) int {
@@ -205,30 +195,32 @@ func parseLine(line []byte) (LogEntry, bool) {
 	entry := LogEntry{
 		Time: t,
 	}
+	delete(raw, "time")
 
-	// Extract typed fields.
+	// Extract typed fields, removing them from the map.
 	if v, ok := raw["level"].(string); ok {
 		entry.Level = v
 	}
+	delete(raw, "level")
+
 	if v, ok := raw["msg"].(string); ok {
 		entry.Msg = v
 	}
+	delete(raw, "msg")
+
 	if v, ok := raw["module"].(string); ok {
 		entry.Module = v
 	}
+	delete(raw, "module")
+
 	if v, ok := raw["operation"].(string); ok {
 		entry.Operation = v
 	}
+	delete(raw, "operation")
 
-	// Collect remaining fields.
-	extra := make(map[string]any, max(len(raw)-len(knownFields), 0))
-	for k, v := range raw {
-		if !knownFields[k] {
-			extra[k] = v
-		}
-	}
-	if len(extra) > 0 {
-		entry.Fields = extra
+	// Remaining keys are extra fields.
+	if len(raw) > 0 {
+		entry.Fields = raw
 	}
 
 	return entry, true
