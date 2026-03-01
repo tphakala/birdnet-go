@@ -130,7 +130,7 @@
   <!-- Species List -->
   {#if species.length > 0}
     <div class="space-y-2 mb-4">
-      {#each species as entry, index (entry)}
+      {#each species as entry, index (`${entry}-${index}`)}
         <div class="flex items-center gap-2 p-3 bg-[var(--color-base-200)] rounded-lg">
           {#if editIndex === index}
             <input
