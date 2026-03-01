@@ -394,6 +394,28 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			logger.String("operation", "config_validation"))
 	}
 
+	// Validate that audio export length fits within the capture buffer.
+	// The capture buffer is a ring buffer that holds recent audio; requesting more
+	// audio than the buffer can hold results in silent truncation.
+	captureBufferSeconds := conf.DefaultCaptureBufferSeconds
+	if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+		captureBufferSeconds = settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+	}
+	if settings.Realtime.Audio.Export.Length > captureBufferSeconds {
+		GetLogger().Error("Audio export length exceeds capture buffer size, audio will be truncated",
+			logger.Int("export_length_seconds", settings.Realtime.Audio.Export.Length),
+			logger.Int("capture_buffer_seconds", captureBufferSeconds),
+			logger.String("recommendation", fmt.Sprintf("Reduce audio.export.length to %d or less, or increase the capture buffer", captureBufferSeconds)),
+			logger.String("operation", "config_validation"))
+
+		notification.NotifyWarning(
+			"analysis",
+			"Audio Export Length Exceeds Buffer",
+			fmt.Sprintf("Audio export length (%ds) exceeds the capture buffer (%ds). Exported audio clips will be truncated. Reduce export length to %d seconds or less.",
+				settings.Realtime.Audio.Export.Length, captureBufferSeconds, captureBufferSeconds),
+		)
+	}
+
 	// Validate and log false positive filter configuration
 	validateAndLogFilterConfig(settings)
 
@@ -545,6 +567,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
+				LastUpdated:   item.StartTime,
 				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
 				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
 				FlushDeadline: now.Add(detectionWindow),
@@ -926,45 +949,32 @@ func (p *Processor) getBaseConfidenceThreshold(commonName, scientificName string
 
 // generateClipName generates a clip name for the given scientific name and confidence.
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
-	// Replace whitespaces with underscores and convert to lowercase
-	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
-
-	// Normalize the confidence value to a percentage and append 'p'
-	normalizedConfidence := confidence * 100
-	formattedConfidence := fmt.Sprintf("%.0fp", normalizedConfidence)
-
-	// Get the current time
-	currentTime := time.Now()
-
-	// Format the timestamp in ISO 8601 format
-	timestamp := currentTime.Format("20060102T150405Z")
-
-	// Extract the year and month for directory structure
-	year := currentTime.Format("2006")
-	month := currentTime.Format("01")
-
-	// Get the file extension from the export settings
-	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
-
-	// Construct the clip name with the new pattern, including year and month subdirectories
-	// Use filepath.ToSlash to convert the path to a forward slash for web URLs
-	clipName := filepath.ToSlash(filepath.Join(year, month, fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)))
-
-	return clipName
+	return p.buildClipPath(scientificName, confidence, 0, time.Now())
 }
 
 // generateClipNameWithDuration creates a clip filename with duration suffix.
 // Format: year/month/scientific_name_CONFp_TIMESTAMP_DURs.ext
 // detectionTime should be the original detection timestamp (not flush time).
 func (p *Processor) generateClipNameWithDuration(scientificName string, confidence float32, durationSeconds int, detectionTime time.Time) string {
+	return p.buildClipPath(scientificName, confidence, durationSeconds, detectionTime)
+}
+
+// buildClipPath constructs a clip file path with optional duration suffix.
+// When durationSeconds is 0, the duration suffix is omitted.
+func (p *Processor) buildClipPath(scientificName string, confidence float32, durationSeconds int, t time.Time) string {
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
 	formattedConfidence := fmt.Sprintf("%.0fp", confidence*100)
-	timestamp := detectionTime.Format("20060102T150405Z")
-	year := detectionTime.Format("2006")
-	month := detectionTime.Format("01")
+	timestamp := t.Format("20060102T150405Z")
+	year := t.Format("2006")
+	month := t.Format("01")
 	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
 
-	filename := fmt.Sprintf("%s_%s_%s_%ds.%s", formattedName, formattedConfidence, timestamp, durationSeconds, fileType)
+	var filename string
+	if durationSeconds > 0 {
+		filename = fmt.Sprintf("%s_%s_%s_%ds.%s", formattedName, formattedConfidence, timestamp, durationSeconds, fileType)
+	} else {
+		filename = fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)
+	}
 	return filepath.ToSlash(filepath.Join(year, month, filename))
 }
 
@@ -1046,14 +1056,12 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Note: speciesName is already lowercase (lowered in flushPendingDetections)
 	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
-	item.Detection.Result.BeginTime = item.FirstDetected
 	if item.ExtendedCapture {
-		// For extended captures, EndTime reflects the last detection + normal detection window.
-		// Use FirstDetected as fallback when LastUpdated is zero (single-detection session).
+		// For extended captures, BeginTime is the first detection time and
+		// EndTime reflects the last detection + normal detection window.
+		// LastUpdated is always initialized (set on creation and every re-detection).
+		item.Detection.Result.BeginTime = item.FirstDetected
 		lastDetection := item.LastUpdated
-		if lastDetection.IsZero() {
-			lastDetection = item.FirstDetected
-		}
 		captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 		preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 		normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)

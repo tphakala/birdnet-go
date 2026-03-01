@@ -282,7 +282,7 @@ func initializeBuffersForSource(sourceID string) error {
 	// Pass the ORIGINAL sourceID since AllocateCaptureBufferIfNeeded does its own migration
 	if !cbExists {
 		// Determine capture buffer duration from settings
-		captureBufferDuration := 60 // Default: 60 seconds
+		captureBufferDuration := conf.DefaultCaptureBufferSeconds
 		if conf.Setting().Realtime.ExtendedCapture.Enabled && conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
 			captureBufferDuration = conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds
 		}

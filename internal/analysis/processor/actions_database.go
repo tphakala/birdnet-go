@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -158,16 +159,20 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 					logger.String("operation", "extended_capture_audio_export"))
 			}
 		}
-		// Cap at capture buffer size to prevent reading beyond buffer bounds
-		if a.Settings.Realtime.ExtendedCapture.Enabled && a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-			if captureLength > a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds {
-				GetLogger().Warn("Capping capture length at buffer size",
-					logger.String("detection_id", a.CorrelationID),
-					logger.Int("requested_seconds", captureLength),
-					logger.Int("buffer_seconds", a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds),
-					logger.String("operation", "extended_capture_buffer_cap"))
-				captureLength = a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
-			}
+		// Cap at capture buffer size to prevent reading beyond buffer bounds.
+		// Determine actual buffer size: use extended capture buffer if configured,
+		// otherwise fall back to the default capture buffer.
+		bufferCap := conf.DefaultCaptureBufferSeconds
+		if a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+			bufferCap = a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+		}
+		if captureLength > bufferCap {
+			GetLogger().Warn("Capping capture length at buffer size",
+				logger.String("detection_id", a.CorrelationID),
+				logger.Int("requested_seconds", captureLength),
+				logger.Int("buffer_seconds", bufferCap),
+				logger.String("operation", "capture_buffer_cap"))
+			captureLength = bufferCap
 		}
 
 		// debug log note begin, end and capture length
