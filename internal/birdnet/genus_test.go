@@ -481,6 +481,30 @@ func TestStats(t *testing.T) {
 		genusCount, familyCount, speciesCount)
 }
 
+// TestGetAllSpeciesInOrder tests retrieving all species in a taxonomic order
+func TestGetAllSpeciesInOrder(t *testing.T) {
+	t.Parallel()
+
+	db, err := LoadTaxonomyDatabase()
+	require.NoError(t, err)
+
+	species, err := db.GetAllSpeciesInOrder("Strigiformes")
+	require.NoError(t, err)
+	assert.NotEmpty(t, species)
+	assert.Greater(t, len(species), 10, "Strigiformes should have many species")
+}
+
+// TestGetAllSpeciesInOrder_NotFound tests error for nonexistent order
+func TestGetAllSpeciesInOrder_NotFound(t *testing.T) {
+	t.Parallel()
+
+	db, err := LoadTaxonomyDatabase()
+	require.NoError(t, err)
+
+	_, err = db.GetAllSpeciesInOrder("NonExistentOrder")
+	assert.Error(t, err)
+}
+
 // BenchmarkLoadTaxonomyDatabase benchmarks database loading
 func BenchmarkLoadTaxonomyDatabase(b *testing.B) {
 	b.ReportAllocs()

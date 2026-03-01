@@ -238,6 +238,41 @@ func (db *TaxonomyDatabase) GetAllSpeciesInFamily(familyName string) ([]string, 
 	return allSpecies, nil
 }
 
+// GetAllSpeciesInOrder returns all species belonging to a taxonomic order.
+// This iterates over all families to find those matching the order.
+func (db *TaxonomyDatabase) GetAllSpeciesInOrder(orderName string) ([]string, error) {
+	if db == nil || db.Families == nil || db.Genera == nil {
+		return nil, errors.Newf("taxonomy database not initialized").
+			Category(errors.CategorySystem).
+			Component("birdnet-genus").
+			Build()
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(orderName))
+	var allSpecies []string
+	found := false
+
+	for familyName, familyMeta := range db.Families {
+		if strings.EqualFold(familyMeta.Order, normalized) {
+			found = true
+			species, err := db.GetAllSpeciesInFamily(familyName)
+			if err == nil {
+				allSpecies = append(allSpecies, species...)
+			}
+		}
+	}
+
+	if !found {
+		return nil, errors.Newf("order '%s' not found in taxonomy database", orderName).
+			Category(errors.CategoryNotFound).
+			Context("order", orderName).
+			Component("birdnet-genus").
+			Build()
+	}
+
+	return allSpecies, nil
+}
+
 // GetSpeciesTree builds a complete taxonomic tree for a species
 // This returns the same structure as eBird API for compatibility
 func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeResult, error) {

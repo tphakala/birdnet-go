@@ -7,6 +7,59 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestResolveExtendedCaptureFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		configSpecies []string
+		labels        []string
+		expectAll     bool
+		expectSpecies []string
+	}{
+		{
+			name:          "empty list means all species",
+			configSpecies: []string{},
+			labels:        []string{},
+			expectAll:     true,
+		},
+		{
+			name:          "nil list means all species",
+			configSpecies: nil,
+			labels:        []string{},
+			expectAll:     true,
+		},
+		{
+			name:          "common name resolved via labels",
+			configSpecies: []string{"Eurasian Eagle-Owl"},
+			labels:        []string{"Bubo bubo_Eurasian Eagle-Owl", "Strix aluco_Tawny Owl"},
+			expectAll:     false,
+			expectSpecies: []string{"bubo bubo"},
+		},
+		{
+			name:          "scientific name resolved directly",
+			configSpecies: []string{"Bubo bubo"},
+			labels:        []string{"Bubo bubo_Eurasian Eagle-Owl"},
+			expectAll:     false,
+			expectSpecies: []string{"bubo bubo"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			isAll, resolved := resolveSpeciesFilter(tt.configSpecies, tt.labels, nil)
+			assert.Equal(t, tt.expectAll, isAll)
+			if !tt.expectAll {
+				for _, expected := range tt.expectSpecies {
+					assert.True(t, resolved[expected],
+						"expected %q in resolved set", expected)
+				}
+			}
+		})
+	}
+}
+
 func TestCalculateExtendedFlushDeadline(t *testing.T) {
 	t.Parallel()
 

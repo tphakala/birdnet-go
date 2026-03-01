@@ -1,6 +1,11 @@
 package processor
 
-import "time"
+import (
+	"strings"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/birdnet"
+)
 
 // Extended capture timeout thresholds.
 const (
@@ -10,6 +15,68 @@ const (
 	extendedCaptureLongThreshold   = 2 * time.Minute
 	extendedCaptureLongWait        = 60 * time.Second
 )
+
+// resolveSpeciesFilter resolves the config species list into a set of scientific names.
+// Returns (isAll, resolvedSet) where isAll=true means all species qualify.
+// taxonomyDB may be nil if taxonomy is unavailable.
+func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.TaxonomyDatabase) (isAll bool, resolvedSet map[string]bool) {
+	if len(configSpecies) == 0 {
+		return true, nil
+	}
+
+	resolved := make(map[string]bool)
+
+	// Build common name -> scientific name lookup from BirdNET labels
+	commonToScientific := make(map[string]string)
+	scientificNames := make(map[string]bool)
+	for _, label := range labels {
+		if sci, common, found := strings.Cut(label, "_"); found {
+			sciLower := strings.ToLower(sci)
+			commonLower := strings.ToLower(common)
+			commonToScientific[commonLower] = sciLower
+			scientificNames[sciLower] = true
+		}
+	}
+
+	for _, entry := range configSpecies {
+		entryLower := strings.ToLower(strings.TrimSpace(entry))
+
+		// Try taxonomy lookups if database is available
+		if taxonomyDB != nil {
+			// Try as family name
+			if familySpecies, err := taxonomyDB.GetAllSpeciesInFamily(entry); err == nil {
+				for _, sp := range familySpecies {
+					resolved[strings.ToLower(sp)] = true
+				}
+				continue
+			}
+
+			// Try as order name
+			if orderSpecies, err := taxonomyDB.GetAllSpeciesInOrder(entry); err == nil {
+				for _, sp := range orderSpecies {
+					resolved[strings.ToLower(sp)] = true
+				}
+				continue
+			}
+		}
+
+		// Try as scientific name
+		if scientificNames[entryLower] {
+			resolved[entryLower] = true
+			continue
+		}
+
+		// Try as common name
+		if sci, ok := commonToScientific[entryLower]; ok {
+			resolved[sci] = true
+			continue
+		}
+
+		// Unknown entry - skip silently (logging will be added when wired into processor)
+	}
+
+	return false, resolved
+}
 
 // calculateExtendedFlushDeadline computes the next flush deadline for an extended capture
 // detection using the scaled timeout algorithm. The deadline scales with session duration:
