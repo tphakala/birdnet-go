@@ -422,6 +422,38 @@ func TestInitDaylightFilterUnconfiguredLocation(t *testing.T) {
 		"all-species flag should be false with unconfigured location")
 }
 
+func TestInitDaylightFilterEmptySpeciesList(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{
+		Settings: &conf.Settings{
+			BirdNET: conf.BirdNETConfig{
+				Latitude:  60.1699,
+				Longitude: 24.9384,
+			},
+			Realtime: conf.RealtimeSettings{
+				DaylightFilter: conf.DaylightFilterSettings{
+					Enabled: true,
+					Species: []string{}, // empty list
+				},
+			},
+		},
+		sunCalc: newTestSunCalc(),
+		// Pre-populate to verify they get cleared
+		daylightFilterAll:     true,
+		daylightFilterSpecies: map[string]bool{"strix aluco": true},
+	}
+
+	p.initDaylightFilter()
+
+	p.daylightFilterMu.RLock()
+	defer p.daylightFilterMu.RUnlock()
+	assert.False(t, p.daylightFilterAll,
+		"empty species list should NOT enable filter-all for an exclusionary filter")
+	assert.Nil(t, p.daylightFilterSpecies,
+		"species should be nil with empty species list")
+}
+
 func TestInitDaylightFilterDisabled(t *testing.T) {
 	t.Parallel()
 

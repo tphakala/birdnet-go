@@ -68,10 +68,10 @@
       };
 
       const daylightBase = $daylightFilterSettings || {
-        enabled: true,
+        enabled: false,
         debug: false,
         offset: 0,
-        species: ['Strigiformes'],
+        species: [],
       };
 
       // Ensure species is always an array even if dogBarkFilterSettings exists but has undefined/null species
@@ -309,7 +309,12 @@
     if (!species.trim()) return;
 
     const trimmedSpecies = species.trim();
-    if (settings.daylight.species.includes(trimmedSpecies)) return;
+    if (
+      settings.daylight.species.some(
+        (s: string) => s.toLowerCase() === trimmedSpecies.toLowerCase()
+      )
+    )
+      return;
 
     const updatedSpecies = [...settings.daylight.species, trimmedSpecies];
     settingsActions.updateSection('realtime', {
