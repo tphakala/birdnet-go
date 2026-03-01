@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
@@ -99,6 +100,12 @@ type Processor struct {
 	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
 	extendedCaptureAll     bool            // True when all species qualify (empty species list)
 	extendedCaptureMu      sync.RWMutex    // Protects extendedCaptureSpecies and extendedCaptureAll
+
+	// Daylight filter fields
+	daylightFilterSpecies map[string]bool  // Resolved set of scientific names to filter during daylight
+	daylightFilterAll     bool             // True if all species should be filtered (empty list)
+	daylightFilterMu      sync.RWMutex     // Protects daylightFilterSpecies and daylightFilterAll
+	sunCalc               *suncalc.SunCalc // Injected sun calculator for daylight determination
 }
 
 type Detections struct {
