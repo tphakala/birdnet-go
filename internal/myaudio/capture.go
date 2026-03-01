@@ -281,7 +281,13 @@ func initializeBuffersForSource(sourceID string) error {
 	// Initialize capture buffer if needed
 	// Pass the ORIGINAL sourceID since AllocateCaptureBufferIfNeeded does its own migration
 	if !cbExists {
-		if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
+		// Determine capture buffer duration from settings
+		captureBufferDuration := 60 // Default: 60 seconds
+		if conf.Setting().Realtime.ExtendedCapture.Enabled && conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+			captureBufferDuration = conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds
+		}
+
+		if err := AllocateCaptureBufferIfNeeded(captureBufferDuration, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
 			// Clean up the analysis buffer if we just created it and capture buffer init fails
 			if !abExists {
 				if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
