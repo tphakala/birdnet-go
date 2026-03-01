@@ -185,7 +185,7 @@ func TestExtendedCapture_FlushDeadlineExtension(t *testing.T) {
 	}
 
 	// Apply extended capture logic
-	applyExtendedCapture(p, mapKey, now, 9*time.Second)
+	p.applyExtendedCapture(mapKey, now, 9*time.Second)
 	item := p.pendingDetections[mapKey]
 
 	assert.True(t, item.ExtendedCapture)
@@ -199,7 +199,7 @@ func TestExtendedCapture_FlushDeadlineExtension(t *testing.T) {
 	item.LastUpdated = later
 	p.pendingDetections[mapKey] = item
 
-	applyExtendedCapture(p, mapKey, later, 9*time.Second)
+	p.applyExtendedCapture(mapKey, later, 9*time.Second)
 	item = p.pendingDetections[mapKey]
 
 	// Should now wait 30s (medium phase)
@@ -284,7 +284,7 @@ func TestExtendedCapture_EndToEnd_ContinuousSession(t *testing.T) {
 			p.pendingDetections[mapKey] = item
 		}
 
-		applyExtendedCapture(p, mapKey, now, detectionWindow)
+		p.applyExtendedCapture(mapKey, now, detectionWindow)
 	}
 
 	item := p.pendingDetections[mapKey]
@@ -329,7 +329,7 @@ func TestExtendedCapture_MultiSource_Independence(t *testing.T) {
 		Source: "mic_a", FirstDetected: now, Count: 1,
 		FlushDeadline: now.Add(9 * time.Second),
 	}
-	applyExtendedCapture(p, keyA, now, 9*time.Second)
+	p.applyExtendedCapture(keyA, now, 9*time.Second)
 
 	// Source B detection 5 seconds later
 	keyB := pendingDetectionKey("mic_b", species)
@@ -337,7 +337,7 @@ func TestExtendedCapture_MultiSource_Independence(t *testing.T) {
 		Source: "mic_b", FirstDetected: now.Add(5 * time.Second), Count: 1,
 		FlushDeadline: now.Add(14 * time.Second),
 	}
-	applyExtendedCapture(p, keyB, now.Add(5*time.Second), 9*time.Second)
+	p.applyExtendedCapture(keyB, now.Add(5*time.Second), 9*time.Second)
 
 	// Verify independence
 	require.Len(t, p.pendingDetections, 2)

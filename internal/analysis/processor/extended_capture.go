@@ -145,7 +145,10 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 			continue
 		}
 
-		// Unknown entry - skip silently (logging will be added when wired into processor)
+		// Unknown entry — log warning so users can spot config typos
+		GetLogger().Warn("Extended capture species entry not resolved",
+			logger.String("entry", entry),
+			logger.String("operation", "extended_capture_species_filter"))
 	}
 
 	return false, resolved
@@ -154,7 +157,8 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 // applyExtendedCapture applies extended capture logic to a pending detection.
 // It sets the ExtendedCapture flag, MaxDeadline, and calculates the scaled flush deadline.
 // This is called from processDetections after the pending detection is created/updated.
-func applyExtendedCapture(p *Processor, mapKey string, now time.Time, normalDetectionWindow time.Duration) {
+// Must be called while pendingMutex is held.
+func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDetectionWindow time.Duration) {
 	item := p.pendingDetections[mapKey]
 	maxDuration := time.Duration(p.Settings.Realtime.ExtendedCapture.MaxDuration) * time.Second
 
