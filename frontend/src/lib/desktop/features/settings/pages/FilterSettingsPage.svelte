@@ -68,7 +68,7 @@
       };
 
       const daylightBase = $daylightFilterSettings || {
-        enabled: false,
+        enabled: true,
         debug: false,
         offset: 0,
         species: ['Strigiformes'],
