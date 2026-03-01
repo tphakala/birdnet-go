@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Extended capture timeout thresholds.
@@ -15,6 +16,50 @@ const (
 	extendedCaptureLongThreshold   = 2 * time.Minute
 	extendedCaptureLongWait        = 60 * time.Second
 )
+
+// initExtendedCapture resolves the extended capture species filter at startup.
+// Called from Processor.New() and on settings/range-filter refresh.
+func (p *Processor) initExtendedCapture() {
+	if !p.Settings.Realtime.ExtendedCapture.Enabled {
+		p.extendedCaptureMu.Lock()
+		p.extendedCaptureAll = false
+		p.extendedCaptureSpecies = nil
+		p.extendedCaptureMu.Unlock()
+		return
+	}
+
+	// Get BirdNET labels for common name resolution
+	var labels []string
+	if p.Bn != nil && p.Bn.Settings != nil {
+		labels = p.Bn.Settings.BirdNET.Labels
+	}
+
+	// Load taxonomy database for family/order resolution
+	var taxonomyDB *birdnet.TaxonomyDatabase
+	if db, err := birdnet.LoadTaxonomyDatabase(); err == nil {
+		taxonomyDB = db
+	}
+
+	isAll, resolved := resolveSpeciesFilter(
+		p.Settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB,
+	)
+
+	p.extendedCaptureMu.Lock()
+	p.extendedCaptureAll = isAll
+	p.extendedCaptureSpecies = resolved
+	p.extendedCaptureMu.Unlock()
+
+	if isAll {
+		GetLogger().Info("Extended capture enabled for all species",
+			logger.Int("max_duration_seconds", p.Settings.Realtime.ExtendedCapture.MaxDuration),
+			logger.String("operation", "extended_capture_init"))
+	} else {
+		GetLogger().Info("Extended capture enabled for filtered species",
+			logger.Int("species_count", len(resolved)),
+			logger.Int("max_duration_seconds", p.Settings.Realtime.ExtendedCapture.MaxDuration),
+			logger.String("operation", "extended_capture_init"))
+	}
+}
 
 // isExtendedCaptureSpecies checks if a species qualifies for extended capture.
 func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {

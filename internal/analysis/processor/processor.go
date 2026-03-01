@@ -424,6 +424,30 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Initialize dynamic thresholds if enabled
 	p.initDynamicThresholds(settings)
 
+	// Validate extended capture configuration
+	if settings.Realtime.ExtendedCapture.Enabled {
+		preCapture := settings.Realtime.Audio.Export.PreCapture
+		if err := settings.Realtime.ExtendedCapture.Validate(preCapture); err != nil {
+			GetLogger().Error("Invalid extended capture configuration, disabling",
+				logger.Any("error", err),
+				logger.String("operation", "extended_capture_validation"))
+			settings.Realtime.ExtendedCapture.Enabled = false
+		}
+
+		// Warn about memory usage for large buffers
+		if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.MaxDuration > 120 {
+			bytesPerSecond := conf.SampleRate * (conf.BitDepth / 8) * conf.NumChannels
+			bufferMB := settings.Realtime.ExtendedCapture.CaptureBufferSeconds * bytesPerSecond / (1024 * 1024)
+			GetLogger().Warn("Extended capture with large buffer configured",
+				logger.Int("buffer_mb_per_source", bufferMB),
+				logger.Int("max_duration_seconds", settings.Realtime.ExtendedCapture.MaxDuration),
+				logger.String("operation", "extended_capture_memory_check"))
+		}
+	}
+
+	// Initialize extended capture species filter if enabled
+	p.initExtendedCapture()
+
 	// Initialize spectrogram pre-renderer if mode is "prerender"
 	if settings.Realtime.Dashboard.Spectrogram.IsPreRenderEnabled() {
 		p.initPreRenderer()

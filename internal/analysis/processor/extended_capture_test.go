@@ -192,6 +192,147 @@ func TestExtendedCapture_FlushDeadlineExtension(t *testing.T) {
 	assert.GreaterOrEqual(t, item.FlushDeadline.Sub(later), 30*time.Second)
 }
 
+func TestProcessorInitExtendedCapture(t *testing.T) {
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				ExtendedCapture: conf.ExtendedCaptureSettings{
+					Enabled: true,
+					Species: []string{},
+				},
+			},
+		},
+	}
+
+	p.initExtendedCapture()
+
+	assert.True(t, p.extendedCaptureAll)
+	assert.Nil(t, p.extendedCaptureSpecies)
+}
+
+func TestProcessorInitExtendedCapture_Disabled(t *testing.T) {
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				ExtendedCapture: conf.ExtendedCaptureSettings{Enabled: false},
+			},
+		},
+	}
+
+	p.initExtendedCapture()
+
+	assert.False(t, p.extendedCaptureAll)
+	assert.Nil(t, p.extendedCaptureSpecies)
+}
+
+func TestExtendedCapture_EndToEnd_ContinuousSession(t *testing.T) {
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				ExtendedCapture: conf.ExtendedCaptureSettings{
+					Enabled:     true,
+					MaxDuration: 300, // 5 minutes
+				},
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{Length: 15, PreCapture: 6},
+				},
+			},
+		},
+		pendingDetections:  make(map[string]PendingDetection),
+		extendedCaptureAll: true,
+	}
+
+	species := "strix uralensis"
+	sourceID := "test_mic"
+	mapKey := pendingDetectionKey(sourceID, species)
+	detectionWindow := 9 * time.Second // 15 - 6
+
+	// Simulate 20 detections over 2 minutes
+	startTime := time.Now()
+	for i := range 20 {
+		now := startTime.Add(time.Duration(i) * 6 * time.Second) // Every 6 seconds
+
+		if _, exists := p.pendingDetections[mapKey]; !exists {
+			p.pendingDetections[mapKey] = PendingDetection{
+				Confidence:    0.85,
+				Source:        sourceID,
+				FirstDetected: now,
+				FlushDeadline: now.Add(detectionWindow),
+				Count:         1,
+			}
+		} else {
+			item := p.pendingDetections[mapKey]
+			item.Count++
+			item.LastUpdated = now
+			if item.Confidence < 0.92 {
+				item.Confidence = 0.92
+			}
+			p.pendingDetections[mapKey] = item
+		}
+
+		applyExtendedCapture(p, mapKey, now, detectionWindow)
+	}
+
+	item := p.pendingDetections[mapKey]
+
+	assert.True(t, item.ExtendedCapture)
+	assert.Equal(t, 20, item.Count)
+	assert.InDelta(t, 0.92, item.Confidence, 1e-9)
+
+	// Flush deadline should be well after the last detection
+	lastDetectionTime := startTime.Add(19 * 6 * time.Second)
+	assert.True(t, item.FlushDeadline.After(lastDetectionTime),
+		"FlushDeadline %v should be after last detection %v", item.FlushDeadline, lastDetectionTime)
+
+	// MaxDeadline should be FirstDetected + maxDuration
+	expectedMaxDeadline := item.FirstDetected.Add(300 * time.Second)
+	assert.Equal(t, expectedMaxDeadline, item.MaxDeadline)
+}
+
+func TestExtendedCapture_MultiSource_Independence(t *testing.T) {
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				ExtendedCapture: conf.ExtendedCaptureSettings{
+					Enabled:     true,
+					MaxDuration: 120,
+				},
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{Length: 15, PreCapture: 6},
+				},
+			},
+		},
+		pendingDetections:  make(map[string]PendingDetection),
+		extendedCaptureAll: true,
+	}
+
+	species := "strix aluco"
+	now := time.Now()
+
+	// Source A detection
+	keyA := pendingDetectionKey("mic_a", species)
+	p.pendingDetections[keyA] = PendingDetection{
+		Source: "mic_a", FirstDetected: now, Count: 1,
+		FlushDeadline: now.Add(9 * time.Second),
+	}
+	applyExtendedCapture(p, keyA, now, 9*time.Second)
+
+	// Source B detection 5 seconds later
+	keyB := pendingDetectionKey("mic_b", species)
+	p.pendingDetections[keyB] = PendingDetection{
+		Source: "mic_b", FirstDetected: now.Add(5 * time.Second), Count: 1,
+		FlushDeadline: now.Add(14 * time.Second),
+	}
+	applyExtendedCapture(p, keyB, now.Add(5*time.Second), 9*time.Second)
+
+	// Verify independence
+	require.Len(t, p.pendingDetections, 2)
+	assert.Equal(t, "mic_a", p.pendingDetections[keyA].Source)
+	assert.Equal(t, "mic_b", p.pendingDetections[keyB].Source)
+	assert.NotEqual(t, p.pendingDetections[keyA].FirstDetected,
+		p.pendingDetections[keyB].FirstDetected)
+}
+
 func TestCalculateExtendedFlushDeadline(t *testing.T) {
 	t.Parallel()
 

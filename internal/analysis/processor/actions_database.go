@@ -158,6 +158,17 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 					logger.String("operation", "extended_capture_audio_export"))
 			}
 		}
+		// Cap at capture buffer size to prevent reading beyond buffer bounds
+		if a.Settings.Realtime.ExtendedCapture.Enabled && a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+			if captureLength > a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds {
+				GetLogger().Warn("Capping capture length at buffer size",
+					logger.String("detection_id", a.CorrelationID),
+					logger.Int("requested_seconds", captureLength),
+					logger.Int("buffer_seconds", a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds),
+					logger.String("operation", "extended_capture_buffer_cap"))
+				captureLength = a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+			}
+		}
 
 		// debug log note begin, end and capture length
 		GetLogger().Debug("Saving detection audio clip",
