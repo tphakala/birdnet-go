@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
@@ -99,6 +100,12 @@ type Processor struct {
 	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
 	extendedCaptureAll     bool            // True when all species qualify (empty species list)
 	extendedCaptureMu      sync.RWMutex    // Protects extendedCaptureSpecies and extendedCaptureAll
+
+	// Daylight filter fields
+	daylightFilterSpecies map[string]bool  // Resolved set of scientific names to filter during daylight
+	daylightFilterAll     bool             // Currently unused; empty species list resolves to filter-nothing
+	daylightFilterMu      sync.RWMutex     // Protects daylightFilterSpecies and daylightFilterAll
+	sunCalc               *suncalc.SunCalc // Injected sun calculator for daylight determination
 }
 
 type Detections struct {
@@ -1036,6 +1043,29 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("operation", "dog_bark_filter"))
 			return true, "recent dog bark"
+		}
+	}
+
+	// Check daylight filter
+	if p.Settings.Realtime.DaylightFilter.Enabled {
+		if p.Settings.Realtime.DaylightFilter.Debug {
+			GetLogger().Debug("Daylight filter check",
+				logger.String("species", item.Detection.Result.Species.CommonName),
+				logger.String("scientific_name", item.Detection.Result.Species.ScientificName),
+				logger.Time("detection_time", item.FirstDetected),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("operation", "daylight_filter_debug"))
+		}
+		if p.checkDaylightFilter(
+			item.Detection.Result.Species.ScientificName,
+			item.FirstDetected,
+		) {
+			GetLogger().Debug("Detection discarded by daylight filter",
+				logger.String("species", item.Detection.Result.Species.CommonName),
+				logger.Time("detection_time", item.FirstDetected),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("operation", "daylight_filter"))
+			return true, "daylight filter"
 		}
 	}
 

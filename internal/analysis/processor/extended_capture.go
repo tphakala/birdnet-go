@@ -45,7 +45,7 @@ func (p *Processor) initExtendedCapture() {
 	}
 
 	isAll, resolved := resolveSpeciesFilter(
-		p.Settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB,
+		p.Settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, "extended_capture",
 	)
 
 	p.extendedCaptureMu.Lock()
@@ -84,7 +84,7 @@ func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
 // resolveSpeciesFilter resolves the config species list into a set of scientific names.
 // Returns (isAll, resolvedSet) where isAll=true means all species qualify.
 // taxonomyDB may be nil if taxonomy is unavailable.
-func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.TaxonomyDatabase) (isAll bool, resolvedSet map[string]bool) {
+func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.TaxonomyDatabase, operationName string) (isAll bool, resolvedSet map[string]bool) {
 	if len(configSpecies) == 0 {
 		return true, nil
 	}
@@ -146,9 +146,9 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 		}
 
 		// Unknown entry — log warning so users can spot config typos
-		GetLogger().Warn("Extended capture species entry not resolved",
+		GetLogger().Warn("Species filter entry not resolved",
 			logger.String("entry", entry),
-			logger.String("operation", "extended_capture_species_filter"))
+			logger.String("operation", operationName+"_species_filter"))
 	}
 
 	return false, resolved

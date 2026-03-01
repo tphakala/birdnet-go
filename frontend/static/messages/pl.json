@@ -2254,6 +2254,17 @@
       "speciesNamePlaceholder": "Nazwa gatunku",
       "typeSpeciesName": "Wpisz nazwę gatunku...",
       "dogBarkSpeciesList": "Lista Gatunków Szczekania Psa",
+      "daylightFilter": {
+        "title": "Filtr światła dziennego",
+        "description": "Odfiltruj wykrycia gatunków nocnych w godzinach dziennych. Używa granic świtu/zmierzchu cywilnego z skonfigurowanej lokalizacji.",
+        "enable": "Włącz filtr światła dziennego",
+        "disabled": "Filtr światła dziennego jest wyłączony",
+        "offsetLabel": "Przesunięcie okna światła dziennego (Godziny)",
+        "offsetHelp": "Dostosuj okno światła dziennego. Wartości dodatnie zmniejszają je (bardziej liberalne, np. +1 = zaczyna się 1h po świcie). Wartości ujemne rozszerzają je (bardziej rygorystyczne, np. -1 = zaczyna się 1h przed świtem).",
+        "speciesListLabel": "Lista gatunków nocnych",
+        "addSpeciesLabel": "Dodaj gatunek nocny",
+        "addSpeciesHelp": "Wyszukaj i dodaj gatunki, rodzaje, rodziny lub rzędy do filtrowania w ciągu dnia. Domyślnie: Strigiformes (wszystkie sowy). Uwaga: pusta lista nie filtruje żadnych gatunków w ciągu dnia."
+      },
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
       },

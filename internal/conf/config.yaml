@@ -298,6 +298,12 @@ realtime:
     confidence: 0.1       # confidence threshold for dog bark detection
     remember: 5           # number of minutes to remember dog barks
 
+  daylightfilter:
+    enabled: true
+    offset: 0             # hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict)
+    species:              # species, families, orders, or genera to filter during daylight
+      - Strigiformes      # all owls (Strigidae + Tytonidae)
+
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on

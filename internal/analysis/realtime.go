@@ -358,6 +358,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	GetLogger().Info("starting HTTP server")
 	oauth2Server := security.NewOAuth2Server()
 	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+	proc.SetSunCalc(sunCalc)
 	apiServer, err := api.New(
 		settings,
 		api.WithDataStore(dataStore),

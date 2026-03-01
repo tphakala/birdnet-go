@@ -2248,6 +2248,17 @@
       "speciesNamePlaceholder": "Artname",
       "typeSpeciesName": "Artname eingeben...",
       "dogBarkSpeciesList": "Hundebell-Artenliste",
+      "daylightFilter": {
+        "title": "Tageslichtfilter",
+        "description": "Erkennungen nachtaktiver Arten während der Tageslichtstunden herausfiltern. Verwendet die bürgerliche Dämmerungsgrenzen Ihres konfigurierten Standorts.",
+        "enable": "Tageslichtfilter aktivieren",
+        "disabled": "Tageslichtfilter ist deaktiviert",
+        "offsetLabel": "Tageslichtfenster-Versatz (Stunden)",
+        "offsetHelp": "Tageslichtfenster anpassen. Positive Werte verkleinern es (toleranter, z.B. +1 = beginnt 1h nach Morgendämmerung). Negative Werte erweitern es (strenger, z.B. -1 = beginnt 1h vor Morgendämmerung).",
+        "speciesListLabel": "Liste nachtaktiver Arten",
+        "addSpeciesLabel": "Nachtaktive Art hinzufügen",
+        "addSpeciesHelp": "Suchen und Hinzufügen von Arten, Gattungen, Familien oder Ordnungen zum Filtern bei Tageslicht. Standard: Strigiformes (alle Eulen). Hinweis: Eine leere Liste filtert KEINE Arten bei Tageslicht."
+      },
       "errors": {
         "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."
       },

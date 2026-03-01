@@ -417,6 +417,15 @@ type DogBarkFilterSettings struct {
 	Species    []string `json:"species"`    // species list for filtering
 }
 
+// DaylightFilterSettings contains settings for the daylight species filter.
+// It discards detections of configured species (default: nocturnal birds) during daylight hours.
+type DaylightFilterSettings struct {
+	Debug   bool     `json:"debug"`   // true to enable debug logging
+	Enabled bool     `json:"enabled"` // true to enable daylight filter
+	Offset  int      `json:"offset"`  // hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict)
+	Species []string `json:"species"` // species, families, orders, or genera to filter during daylight
+}
+
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.
 type RTSPHealthSettings struct {
 	HealthyDataThreshold int `json:"healthyDataThreshold"` // seconds before stream considered unhealthy (default: 60)
@@ -615,6 +624,7 @@ type RealtimeSettings struct {
 	OpenWeather      OpenWeatherSettings      `yaml:"-" json:"-"`       // OpenWeather integration settings
 	PrivacyFilter    PrivacyFilterSettings    `json:"privacyFilter"`    // Privacy filter settings
 	DogBarkFilter    DogBarkFilterSettings    `json:"dogBarkFilter"`    // Dog bark filter settings
+	DaylightFilter   DaylightFilterSettings   `json:"daylightFilter"`   // Daylight filter settings
 	RTSP             RTSPSettings             `json:"rtsp"`             // RTSP settings
 	MQTT             MQTTSettings             `json:"mqtt"`             // MQTT settings
 	Telemetry        TelemetrySettings        `json:"telemetry"`        // Telemetry settings
