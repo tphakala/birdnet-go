@@ -1048,15 +1048,18 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 
 	item.Detection.Result.BeginTime = item.FirstDetected
 	if item.ExtendedCapture {
-		// For extended captures, EndTime reflects the last detection + normal detection window
+		// For extended captures, EndTime reflects the last detection + normal detection window.
+		// Use FirstDetected as fallback when LastUpdated is zero (single-detection session).
+		lastDetection := item.LastUpdated
+		if lastDetection.IsZero() {
+			lastDetection = item.FirstDetected
+		}
 		captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 		preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 		normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
-		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
-	}
+		item.Detection.Result.EndTime = lastDetection.Add(normalDetectionWindow)
 
-	// Regenerate clip name with duration suffix only for extended captures
-	if item.ExtendedCapture {
+		// Regenerate clip name with actual duration (unknown at createDetection time)
 		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
 		durationSeconds := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
 		item.Detection.Result.ClipName = p.generateClipNameWithDuration(
@@ -1215,7 +1218,8 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 
 		// Get species name from the detection data (not the map key,
 		// since source IDs like RTSP URLs may contain colons).
-		speciesName := item.Detection.Result.Species.CommonName
+		// Lowercase to match the convention used in processDetections and dynamic thresholds.
+		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
 
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
 			GetLogger().Info("discarding detection",
