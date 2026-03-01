@@ -68,10 +68,6 @@
     });
   }
 
-  function handleInput(value: string) {
-    newSpecies = value;
-  }
-
   function addEntry(value: string) {
     if (disabled) return;
     if (!value.trim()) return;
@@ -97,10 +93,13 @@
     const trimmed = editSpecies.trim();
     if (isDuplicate(trimmed, editIndex)) return;
 
-    const updated = [...species];
-    if (editIndex >= 0 && editIndex < updated.length) {
-      updated.splice(editIndex, 1, trimmed);
+    if (editIndex < 0 || editIndex >= species.length) {
+      cancelEdit();
+      return;
     }
+
+    const updated = [...species];
+    updated.splice(editIndex, 1, trimmed);
     onSpeciesChange(updated);
     cancelEdit();
   }
@@ -208,7 +207,6 @@
     size="sm"
     buttonText={addButtonText}
     buttonIcon={true}
-    onInput={handleInput}
     onAdd={addEntry}
   />
 
