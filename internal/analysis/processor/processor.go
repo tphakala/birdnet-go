@@ -94,6 +94,11 @@ type Processor struct {
 
 	// Log deduplication (extracted to separate type for SRP)
 	logDedup *LogDeduplicator // Handles log deduplication logic
+
+	// Extended capture fields
+	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
+	extendedCaptureAll     bool            // True when all species qualify (empty species list)
+	extendedCaptureMu      sync.RWMutex    // Protects extendedCaptureSpecies and extendedCaptureAll
 }
 
 type Detections struct {
@@ -106,13 +111,22 @@ type Detections struct {
 // PendingDetection struct represents a single detection held in memory,
 // including its last updated timestamp and a deadline for flushing it to the worker queue.
 type PendingDetection struct {
-	Detection     Detections // The detection data
-	Confidence    float64    // Confidence level of the detection
-	Source        string     // Audio source of the detection, RTSP URL or audio card name
-	FirstDetected time.Time  // Time the detection was first detected
-	LastUpdated   time.Time  // Last time this detection was updated
-	FlushDeadline time.Time  // Deadline by which the detection must be processed
-	Count         int        // Number of times this detection has been updated
+	Detection       Detections // The detection data
+	Confidence      float64    // Confidence level of the detection
+	Source          string     // Audio source of the detection, RTSP URL or audio card name
+	FirstDetected   time.Time  // Time the detection was first detected
+	LastUpdated     time.Time  // Last time this detection was updated
+	FlushDeadline   time.Time  // Deadline by which the detection must be processed
+	Count           int        // Number of times this detection has been updated
+	ExtendedCapture bool       // Whether this detection uses extended capture
+	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration)
+}
+
+// pendingDetectionKey creates a composite key for the pendingDetections map
+// that includes the source ID to prevent cross-source data corruption when
+// multiple audio sources detect the same species concurrently.
+func pendingDetectionKey(sourceID, speciesName string) string {
+	return sourceID + ":" + speciesName
 }
 
 // suggestLevelForDisabledFilter provides smart recommendations for filter levels
@@ -380,6 +394,28 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			logger.String("operation", "config_validation"))
 	}
 
+	// Validate that audio export length fits within the capture buffer.
+	// The capture buffer is a ring buffer that holds recent audio; requesting more
+	// audio than the buffer can hold results in silent truncation.
+	captureBufferSeconds := conf.DefaultCaptureBufferSeconds
+	if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+		captureBufferSeconds = settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+	}
+	if settings.Realtime.Audio.Export.Length > captureBufferSeconds {
+		GetLogger().Error("Audio export length exceeds capture buffer size, audio will be truncated",
+			logger.Int("export_length_seconds", settings.Realtime.Audio.Export.Length),
+			logger.Int("capture_buffer_seconds", captureBufferSeconds),
+			logger.String("recommendation", fmt.Sprintf("Reduce audio.export.length to %d or less, or increase the capture buffer", captureBufferSeconds)),
+			logger.String("operation", "config_validation"))
+
+		notification.NotifyWarning(
+			"analysis",
+			"Audio Export Length Exceeds Buffer",
+			fmt.Sprintf("Audio export length (%ds) exceeds the capture buffer (%ds). Exported audio clips will be truncated. Reduce export length to %d seconds or less.",
+				settings.Realtime.Audio.Export.Length, captureBufferSeconds, captureBufferSeconds),
+		)
+	}
+
 	// Validate and log false positive filter configuration
 	validateAndLogFilterConfig(settings)
 
@@ -409,6 +445,35 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Initialize dynamic thresholds if enabled
 	p.initDynamicThresholds(settings)
+
+	// Validate extended capture configuration
+	if settings.Realtime.ExtendedCapture.Enabled {
+		preCapture := settings.Realtime.Audio.Export.PreCapture
+		if err := settings.Realtime.ExtendedCapture.Validate(preCapture); err != nil {
+			GetLogger().Error("Invalid extended capture configuration, disabling",
+				logger.Any("error", err),
+				logger.String("operation", "extended_capture_validation"))
+			settings.Realtime.ExtendedCapture.Enabled = false
+		}
+
+		// Warn about memory usage for large buffers
+		if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.MaxDuration > conf.DefaultExtendedCaptureMaxDuration {
+			bytesPerSecond := conf.SampleRate * (conf.BitDepth / 8) * conf.NumChannels
+			effectiveBufferSeconds := settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+			if effectiveBufferSeconds <= 0 {
+				effectiveBufferSeconds = conf.DefaultCaptureBufferSeconds
+			}
+			bufferMB := effectiveBufferSeconds * bytesPerSecond / (1024 * 1024)
+			GetLogger().Warn("Extended capture with large buffer configured",
+				logger.Int("buffer_mb_per_source", bufferMB),
+				logger.Int("capture_buffer_seconds", effectiveBufferSeconds),
+				logger.Int("max_duration_seconds", settings.Realtime.ExtendedCapture.MaxDuration),
+				logger.String("operation", "extended_capture_memory_check"))
+		}
+	}
+
+	// Initialize extended capture species filter if enabled
+	p.initExtendedCapture()
 
 	// Initialize spectrogram pre-renderer if mode is "prerender"
 	if settings.Realtime.Dashboard.Spectrogram.IsPreRenderEnabled() {
@@ -472,14 +537,17 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		// Lock the mutex to ensure thread-safe access to shared resources
 		p.pendingMutex.Lock()
 
-		if existing, exists := p.pendingDetections[commonName]; exists {
+		now := time.Now()
+		mapKey := pendingDetectionKey(item.Source.ID, commonName)
+
+		if existing, exists := p.pendingDetections[mapKey]; exists {
 			// Update the existing detection if it's already in pendingDetections map
 			oldConfidence := existing.Confidence
+			existing.LastUpdated = now
 			if confidence > existing.Confidence {
 				existing.Detection = det
 				existing.Confidence = confidence
 				existing.Source = item.Source.ID
-				existing.LastUpdated = time.Now()
 				// Add structured logging for confidence update
 				GetLogger().Debug("Updated pending detection with higher confidence",
 					logger.String("species", commonName),
@@ -489,7 +557,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 					logger.String("operation", "update_pending_detection"))
 			}
 			existing.Count++
-			p.pendingDetections[commonName] = existing
+			p.pendingDetections[mapKey] = existing
 		} else {
 			// Create a new pending detection if it doesn't exist
 			// Add structured logging for new pending detection
@@ -497,18 +565,24 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				logger.String("species", commonName),
 				logger.Float64("confidence", confidence),
 				logger.String("source", item.Source.DisplayName),
-				logger.Time("flush_deadline", time.Now().Add(detectionWindow)),
+				logger.Time("flush_deadline", now.Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
-			p.pendingDetections[commonName] = PendingDetection{
+			p.pendingDetections[mapKey] = PendingDetection{
 				Detection:     det,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
+				LastUpdated:   item.StartTime,
 				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
 				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
-				FlushDeadline: time.Now().Add(detectionWindow),
+				FlushDeadline: now.Add(detectionWindow),
 				Count:         1,
 			}
+		}
+
+		// Apply extended capture if species qualifies
+		if p.isExtendedCaptureSpecies(det.Result.Species.ScientificName) {
+			p.applyExtendedCapture(mapKey, now, detectionWindow)
 		}
 
 		// Update the dynamic threshold for this species if enabled
@@ -880,31 +954,33 @@ func (p *Processor) getBaseConfidenceThreshold(commonName, scientificName string
 
 // generateClipName generates a clip name for the given scientific name and confidence.
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
-	// Replace whitespaces with underscores and convert to lowercase
+	return p.buildClipPath(scientificName, confidence, 0, time.Now())
+}
+
+// generateClipNameWithDuration creates a clip filename with duration suffix.
+// Format: year/month/scientific_name_CONFp_TIMESTAMP_DURs.ext
+// detectionTime should be the original detection timestamp (not flush time).
+func (p *Processor) generateClipNameWithDuration(scientificName string, confidence float32, durationSeconds int, detectionTime time.Time) string {
+	return p.buildClipPath(scientificName, confidence, durationSeconds, detectionTime)
+}
+
+// buildClipPath constructs a clip file path with optional duration suffix.
+// When durationSeconds is 0, the duration suffix is omitted.
+func (p *Processor) buildClipPath(scientificName string, confidence float32, durationSeconds int, t time.Time) string {
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
-
-	// Normalize the confidence value to a percentage and append 'p'
-	normalizedConfidence := confidence * 100
-	formattedConfidence := fmt.Sprintf("%.0fp", normalizedConfidence)
-
-	// Get the current time
-	currentTime := time.Now()
-
-	// Format the timestamp in ISO 8601 format
-	timestamp := currentTime.Format("20060102T150405Z")
-
-	// Extract the year and month for directory structure
-	year := currentTime.Format("2006")
-	month := currentTime.Format("01")
-
-	// Get the file extension from the export settings
+	formattedConfidence := fmt.Sprintf("%.0fp", confidence*100)
+	timestamp := t.Format("20060102T150405Z")
+	year := t.Format("2006")
+	month := t.Format("01")
 	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
 
-	// Construct the clip name with the new pattern, including year and month subdirectories
-	// Use filepath.ToSlash to convert the path to a forward slash for web URLs
-	clipName := filepath.ToSlash(filepath.Join(year, month, fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)))
-
-	return clipName
+	var filename string
+	if durationSeconds > 0 {
+		filename = fmt.Sprintf("%s_%s_%s_%ds.%s", formattedName, formattedConfidence, timestamp, durationSeconds, fileType)
+	} else {
+		filename = fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)
+	}
+	return filepath.ToSlash(filepath.Join(year, month, filename))
 }
 
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria
@@ -982,10 +1058,33 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Learn from this approved high-confidence detection for dynamic threshold adjustment.
 	// This is the correct place for learning - only approved detections should affect thresholds,
 	// not pending detections that may later be discarded as false positives.
-	// Note: speciesName is already lowercase (from pendingDetections map key)
+	// Note: speciesName is already lowercase (lowered in flushPendingDetections)
 	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
+	// Set BeginTime to the first detection time for all approved detections.
+	// This ensures the audio clip starts from the beginning of the event.
 	item.Detection.Result.BeginTime = item.FirstDetected
+
+	if item.ExtendedCapture {
+		// For extended captures, EndTime reflects the last detection + normal detection window.
+		// LastUpdated is always initialized (set on creation and every re-detection).
+		lastDetection := item.LastUpdated
+		captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+		preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+		normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+		item.Detection.Result.EndTime = lastDetection.Add(normalDetectionWindow)
+
+		// Regenerate clip name with actual duration (unknown at createDetection time)
+		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+		durationSeconds := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
+		item.Detection.Result.ClipName = p.generateClipNameWithDuration(
+			item.Detection.Result.Species.ScientificName,
+			float32(item.Confidence),
+			durationSeconds,
+			item.Detection.Result.Timestamp,
+		)
+	}
+
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
@@ -1126,33 +1225,38 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 
 	pendingCount = len(p.pendingDetections)
 
-	for species := range p.pendingDetections {
-		item := p.pendingDetections[species]
+	for mapKey := range p.pendingDetections {
+		item := p.pendingDetections[mapKey]
 		if !now.After(item.FlushDeadline) {
 			continue
 		}
 
+		// Get species name from the detection data (not the map key,
+		// since source IDs like RTSP URLs may contain colons).
+		// Lowercase to match the convention used in processDetections and dynamic thresholds.
+		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
+
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
 			GetLogger().Info("discarding detection",
-				logger.String("species", species),
+				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("reason", reason),
 				logger.Int("count", item.Count),
 				logger.String("operation", "discard_detection"))
-			delete(p.pendingDetections, species)
+			delete(p.pendingDetections, mapKey)
 			continue
 		}
 
 		GetLogger().Info("Flushing detection",
-			logger.String("species", species),
+			logger.String("species", speciesName),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
 			logger.Bool("deadline_reached", true),
 			logger.Int("count", item.Count),
 			logger.Int("required", minDetections),
 			logger.String("operation", "flush_detection"))
 
-		p.processApprovedDetection(&item, species)
-		delete(p.pendingDetections, species)
+		p.processApprovedDetection(&item, speciesName)
+		delete(p.pendingDetections, mapKey)
 		flushedCount++
 	}
 
