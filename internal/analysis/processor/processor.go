@@ -459,9 +459,14 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		// Warn about memory usage for large buffers
 		if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.MaxDuration > conf.DefaultExtendedCaptureMaxDuration {
 			bytesPerSecond := conf.SampleRate * (conf.BitDepth / 8) * conf.NumChannels
-			bufferMB := settings.Realtime.ExtendedCapture.CaptureBufferSeconds * bytesPerSecond / (1024 * 1024)
+			effectiveBufferSeconds := settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+			if effectiveBufferSeconds <= 0 {
+				effectiveBufferSeconds = conf.DefaultCaptureBufferSeconds
+			}
+			bufferMB := effectiveBufferSeconds * bytesPerSecond / (1024 * 1024)
 			GetLogger().Warn("Extended capture with large buffer configured",
 				logger.Int("buffer_mb_per_source", bufferMB),
+				logger.Int("capture_buffer_seconds", effectiveBufferSeconds),
 				logger.Int("max_duration_seconds", settings.Realtime.ExtendedCapture.MaxDuration),
 				logger.String("operation", "extended_capture_memory_check"))
 		}
@@ -1056,11 +1061,13 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Note: speciesName is already lowercase (lowered in flushPendingDetections)
 	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
+	// Set BeginTime to the first detection time for all approved detections.
+	// This ensures the audio clip starts from the beginning of the event.
+	item.Detection.Result.BeginTime = item.FirstDetected
+
 	if item.ExtendedCapture {
-		// For extended captures, BeginTime is the first detection time and
-		// EndTime reflects the last detection + normal detection window.
+		// For extended captures, EndTime reflects the last detection + normal detection window.
 		// LastUpdated is always initialized (set on creation and every re-detection).
-		item.Detection.Result.BeginTime = item.FirstDetected
 		lastDetection := item.LastUpdated
 		captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 		preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second

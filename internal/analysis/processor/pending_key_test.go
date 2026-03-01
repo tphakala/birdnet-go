@@ -12,6 +12,7 @@ import (
 )
 
 func TestPendingDetectionKey_MultiSource(t *testing.T) {
+	t.Parallel()
 	p := &Processor{
 		Settings:          &conf.Settings{},
 		pendingDetections: make(map[string]PendingDetection),

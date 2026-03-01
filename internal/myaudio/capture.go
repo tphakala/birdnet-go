@@ -283,8 +283,9 @@ func initializeBuffersForSource(sourceID string) error {
 	if !cbExists {
 		// Determine capture buffer duration from settings
 		captureBufferDuration := conf.DefaultCaptureBufferSeconds
-		if conf.Setting().Realtime.ExtendedCapture.Enabled && conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-			captureBufferDuration = conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds
+		extended := conf.Setting().Realtime.ExtendedCapture
+		if extended.Enabled && extended.CaptureBufferSeconds > 0 {
+			captureBufferDuration = extended.CaptureBufferSeconds
 		}
 
 		if err := AllocateCaptureBufferIfNeeded(captureBufferDuration, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {

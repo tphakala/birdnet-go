@@ -163,7 +163,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		// Determine actual buffer size: use extended capture buffer if configured,
 		// otherwise fall back to the default capture buffer.
 		bufferCap := conf.DefaultCaptureBufferSeconds
-		if a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+		if a.Settings.Realtime.ExtendedCapture.Enabled && a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
 			bufferCap = a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
 		}
 		if captureLength > bufferCap {
