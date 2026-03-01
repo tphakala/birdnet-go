@@ -145,6 +145,19 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// Home Assistant want the detection event regardless of audio export status.
 	if a.Settings.Realtime.Audio.Export.Enabled {
 		captureLength := a.Settings.Realtime.Audio.Export.Length
+		if !a.Result.EndTime.IsZero() && !a.Result.BeginTime.IsZero() {
+			// Duration = EndTime - BeginTime + PreCapture (audio starts PreCapture seconds before BeginTime)
+			preCapture := a.Settings.Realtime.Audio.Export.PreCapture
+			derivedLength := int(a.Result.EndTime.Sub(a.Result.BeginTime).Seconds()) + preCapture
+			if derivedLength > captureLength {
+				captureLength = derivedLength
+				GetLogger().Info("Using extended capture duration for audio export",
+					logger.String("detection_id", a.CorrelationID),
+					logger.String("species", a.Result.Species.CommonName),
+					logger.Int("duration_seconds", captureLength),
+					logger.String("operation", "extended_capture_audio_export"))
+			}
+		}
 
 		// debug log note begin, end and capture length
 		GetLogger().Debug("Saving detection audio clip",
