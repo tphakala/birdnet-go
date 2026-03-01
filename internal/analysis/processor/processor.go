@@ -106,6 +106,10 @@ type Processor struct {
 	daylightFilterAll     bool             // Currently unused; empty species list resolves to filter-nothing
 	daylightFilterMu      sync.RWMutex     // Protects daylightFilterSpecies and daylightFilterAll
 	sunCalc               *suncalc.SunCalc // Injected sun calculator for daylight determination
+
+	// Cached taxonomy database (lazy-loaded, shared across init functions)
+	taxonomyDB     *birdnet.TaxonomyDatabase
+	taxonomyDBOnce sync.Once
 }
 
 type Detections struct {

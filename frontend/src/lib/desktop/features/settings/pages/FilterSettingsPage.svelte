@@ -24,7 +24,7 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
-  import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
+  import SpeciesListEditor from '$lib/desktop/components/forms/SpeciesListEditor.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -39,16 +39,20 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
-  import { safeArrayAccess } from '$lib/utils/security';
 
   // API response interfaces
   interface SpeciesListResponse {
     species?: Array<{ label: string }>;
   }
-  import { X, Check, SquarePen, Trash2, Info, Filter } from '@lucide/svelte';
+  import { Filter } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.settings;
+
+  // Daylight filter offset slider bounds (hours)
+  const DAYLIGHT_OFFSET_MIN = -12;
+  const DAYLIGHT_OFFSET_MAX = 12;
+  const DAYLIGHT_OFFSET_STEP = 1;
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -141,16 +145,6 @@
     data: [],
   });
 
-  // Species management state (Dog Bark)
-  let newSpecies = $state('');
-  let editIndex = $state<number | null>(null);
-  let editSpecies = $state('');
-
-  // Species management state (Daylight)
-  let daylightNewSpecies = $state('');
-  let daylightEditIndex = $state<number | null>(null);
-  let daylightEditSpecies = $state('');
-
   // PERFORMANCE OPTIMIZATION: Load species list with proper state management
   $effect(() => {
     loadSpeciesList();
@@ -223,66 +217,12 @@
     });
   }
 
-  // Species management functions
-  function handleSpeciesInput(value: string) {
-    newSpecies = value;
-  }
-
-  function addSpecies(species: string) {
-    if (!species.trim()) return;
-
-    const trimmedSpecies = species.trim();
-    if (settings.dogBark.species.includes(trimmedSpecies)) return; // Already exists
-
-    const updatedSpecies = [...settings.dogBark.species, trimmedSpecies];
+  // Species change handlers
+  function handleDogBarkSpeciesChange(updatedSpecies: string[]) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
       dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
     });
-  }
-
-  function removeSpecies(index: number) {
-    const updatedSpecies = settings.dogBark.species.filter((_: string, i: number) => i !== index);
-    settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
-      dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
-    });
-  }
-
-  function startEdit(index: number) {
-    editIndex = index;
-    editSpecies = safeArrayAccess(settings.dogBark.species, index) || '';
-  }
-
-  function saveEdit() {
-    if (editIndex === null || !editSpecies.trim()) return;
-
-    const updatedSpecies = [...settings.dogBark.species];
-    if (editIndex >= 0 && editIndex < updatedSpecies.length) {
-      updatedSpecies.splice(editIndex, 1, editSpecies.trim());
-    }
-
-    settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
-      dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
-    });
-
-    cancelEdit();
-  }
-
-  function cancelEdit() {
-    editIndex = null;
-    editSpecies = '';
-  }
-
-  function handleEditKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveEdit();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelEdit();
-    }
   }
 
   // Daylight filter update handlers
@@ -300,78 +240,11 @@
     });
   }
 
-  // Daylight species management functions
-  function handleDaylightSpeciesInput(value: string) {
-    daylightNewSpecies = value;
-  }
-
-  function addDaylightSpecies(species: string) {
-    if (!species.trim()) return;
-
-    const trimmedSpecies = species.trim();
-    if (
-      settings.daylight.species.some(
-        (s: string) => s.toLowerCase() === trimmedSpecies.toLowerCase()
-      )
-    )
-      return;
-
-    const updatedSpecies = [...settings.daylight.species, trimmedSpecies];
+  function handleDaylightSpeciesChange(updatedSpecies: string[]) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
       daylightFilter: { ...settings.daylight, species: updatedSpecies },
     });
-  }
-
-  function removeDaylightSpecies(index: number) {
-    const updatedSpecies = settings.daylight.species.filter((_: string, i: number) => i !== index);
-    settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
-      daylightFilter: { ...settings.daylight, species: updatedSpecies },
-    });
-  }
-
-  function startDaylightEdit(index: number) {
-    daylightEditIndex = index;
-    daylightEditSpecies = safeArrayAccess(settings.daylight.species, index) || '';
-  }
-
-  function saveDaylightEdit() {
-    if (daylightEditIndex === null || !daylightEditSpecies.trim()) return;
-
-    const trimmedSpecies = daylightEditSpecies.trim();
-    const isDuplicate = settings.daylight.species.some(
-      (s: string, i: number) =>
-        i !== daylightEditIndex && s.toLowerCase() === trimmedSpecies.toLowerCase()
-    );
-    if (isDuplicate) return;
-
-    const updatedSpecies = [...settings.daylight.species];
-    if (daylightEditIndex >= 0 && daylightEditIndex < updatedSpecies.length) {
-      updatedSpecies.splice(daylightEditIndex, 1, trimmedSpecies);
-    }
-
-    settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
-      daylightFilter: { ...settings.daylight, species: updatedSpecies },
-    });
-
-    cancelDaylightEdit();
-  }
-
-  function cancelDaylightEdit() {
-    daylightEditIndex = null;
-    daylightEditSpecies = '';
-  }
-
-  function handleDaylightEditKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveDaylightEdit();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelDaylightEdit();
-    }
   }
 </script>
 
@@ -480,94 +353,20 @@
             </div>
 
             <!-- Dog Bark Species List -->
-            <div class="mt-6">
-              <div class="flex justify-start mb-1">
-                <span class="text-sm text-[var(--color-base-content)]"
-                  >{t('settings.filters.dogBarkSpeciesList')}</span
-                >
-              </div>
-
-              <!-- Species List -->
-              {#if settings.dogBark.species.length > 0}
-                <div class="space-y-2 mb-4">
-                  {#each settings.dogBark.species as species, index (species)}
-                    <div class="flex items-center gap-2 p-3 bg-[var(--color-base-200)] rounded-lg">
-                      {#if editIndex === index}
-                        <input
-                          type="text"
-                          bind:value={editSpecies}
-                          class="flex-1 h-8 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-                          onkeydown={handleEditKeydown}
-                          placeholder={t('settings.filters.speciesNamePlaceholder')}
-                        />
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-success)] text-[var(--color-success-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-success)] focus-visible:ring-offset-2 transition-colors"
-                          onclick={saveEdit}
-                          aria-label={t('common.aria.saveChanges')}
-                        >
-                          <Check class="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
-                          onclick={cancelEdit}
-                          aria-label={t('common.aria.cancelEdit')}
-                        >
-                          <X class="size-4" />
-                        </button>
-                      {:else}
-                        <span class="flex-1 text-sm">{species}</span>
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          onclick={() => startEdit(index)}
-                          disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
-                          aria-label={t('common.aria.editSpecies')}
-                        >
-                          <SquarePen class="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-error)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          onclick={() => removeSpecies(index)}
-                          disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
-                          aria-label={t('common.aria.removeSpecies')}
-                        >
-                          <Trash2 class="size-4" />
-                        </button>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-
-              <!-- Add New Species -->
-              <SpeciesInput
-                bind:value={newSpecies}
-                label={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
-                placeholder={t('settings.filters.typeSpeciesName')}
-                helpText={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesHelp')}
-                disabled={!settings.dogBark.enabled ||
-                  store.isLoading ||
-                  store.isSaving ||
-                  speciesListState.loading}
-                predictions={speciesListState.data}
-                size="sm"
-                buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
-                buttonIcon={true}
-                onInput={handleSpeciesInput}
-                onAdd={addSpecies}
-              />
-
-              <!-- Unsaved Changes Indicator -->
-              {#if dogBarkFilterHasChanges}
-                <div class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
-                  <Info class="size-4" />
-                  <span>{t('settings.actions.unsavedChanges')}</span>
-                </div>
-              {/if}
-            </div>
+            <SpeciesListEditor
+              species={settings.dogBark.species}
+              disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
+              predictions={speciesListState.data}
+              predictionsLoading={speciesListState.loading}
+              listLabel={t('settings.filters.dogBarkSpeciesList')}
+              addLabel={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
+              addPlaceholder={t('settings.filters.typeSpeciesName')}
+              addHelpText={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesHelp')}
+              addButtonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
+              hasChanges={dogBarkFilterHasChanges}
+              caseInsensitive={false}
+              onSpeciesChange={handleDogBarkSpeciesChange}
+            />
           </div>
         </fieldset>
       </div>
@@ -610,103 +409,28 @@
                 label={t('settings.filters.daylightFilter.offsetLabel')}
                 value={settings.daylight.offset}
                 onUpdate={updateDaylightOffset}
-                min={-12}
-                max={12}
-                step={1}
+                min={DAYLIGHT_OFFSET_MIN}
+                max={DAYLIGHT_OFFSET_MAX}
+                step={DAYLIGHT_OFFSET_STEP}
                 disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
                 helpText={t('settings.filters.daylightFilter.offsetHelp')}
               />
             </div>
 
             <!-- Nocturnal Species List -->
-            <div class="mt-6">
-              <div class="flex justify-start mb-1">
-                <span class="text-sm text-[var(--color-base-content)]"
-                  >{t('settings.filters.daylightFilter.speciesListLabel')}</span
-                >
-              </div>
-
-              <!-- Species List -->
-              {#if settings.daylight.species.length > 0}
-                <div class="space-y-2 mb-4">
-                  {#each settings.daylight.species as species, index (species)}
-                    <div class="flex items-center gap-2 p-3 bg-[var(--color-base-200)] rounded-lg">
-                      {#if daylightEditIndex === index}
-                        <input
-                          type="text"
-                          bind:value={daylightEditSpecies}
-                          class="flex-1 h-8 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-                          onkeydown={handleDaylightEditKeydown}
-                          placeholder={t('settings.filters.speciesNamePlaceholder')}
-                        />
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-success)] text-[var(--color-success-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-success)] focus-visible:ring-offset-2 transition-colors"
-                          onclick={saveDaylightEdit}
-                          aria-label={t('common.aria.saveChanges')}
-                        >
-                          <Check class="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
-                          onclick={cancelDaylightEdit}
-                          aria-label={t('common.aria.cancelEdit')}
-                        >
-                          <X class="size-4" />
-                        </button>
-                      {:else}
-                        <span class="flex-1 text-sm">{species}</span>
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          onclick={() => startDaylightEdit(index)}
-                          disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
-                          aria-label={t('common.aria.editSpecies')}
-                        >
-                          <SquarePen class="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-error)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          onclick={() => removeDaylightSpecies(index)}
-                          disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
-                          aria-label={t('common.aria.removeSpecies')}
-                        >
-                          <Trash2 class="size-4" />
-                        </button>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-
-              <!-- Add New Species -->
-              <SpeciesInput
-                bind:value={daylightNewSpecies}
-                label={t('settings.filters.daylightFilter.addSpeciesLabel')}
-                placeholder={t('settings.filters.typeSpeciesName')}
-                helpText={t('settings.filters.daylightFilter.addSpeciesHelp')}
-                disabled={!settings.daylight.enabled ||
-                  store.isLoading ||
-                  store.isSaving ||
-                  speciesListState.loading}
-                predictions={speciesListState.data}
-                size="sm"
-                buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
-                buttonIcon={true}
-                onInput={handleDaylightSpeciesInput}
-                onAdd={addDaylightSpecies}
-              />
-
-              <!-- Unsaved Changes Indicator -->
-              {#if daylightFilterHasChanges}
-                <div class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
-                  <Info class="size-4" />
-                  <span>{t('settings.actions.unsavedChanges')}</span>
-                </div>
-              {/if}
-            </div>
+            <SpeciesListEditor
+              species={settings.daylight.species}
+              disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
+              predictions={speciesListState.data}
+              predictionsLoading={speciesListState.loading}
+              listLabel={t('settings.filters.daylightFilter.speciesListLabel')}
+              addLabel={t('settings.filters.daylightFilter.addSpeciesLabel')}
+              addPlaceholder={t('settings.filters.typeSpeciesName')}
+              addHelpText={t('settings.filters.daylightFilter.addSpeciesHelp')}
+              addButtonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
+              hasChanges={daylightFilterHasChanges}
+              onSpeciesChange={handleDaylightSpeciesChange}
+            />
           </div>
         </fieldset>
       </div>
