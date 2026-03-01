@@ -17,6 +17,22 @@ const (
 	extendedCaptureLongWait        = 60 * time.Second
 )
 
+// getTaxonomyDB returns the cached taxonomy database, loading it on first call.
+// Returns nil if the database cannot be loaded (with a warning logged).
+func (p *Processor) getTaxonomyDB() *birdnet.TaxonomyDatabase {
+	p.taxonomyDBOnce.Do(func() {
+		db, err := birdnet.LoadTaxonomyDatabase()
+		if err != nil {
+			GetLogger().Warn("Failed to load taxonomy database, genus/family/order filtering unavailable",
+				logger.Any("error", err),
+				logger.String("operation", "taxonomy_db_load"))
+			return
+		}
+		p.taxonomyDB = db
+	})
+	return p.taxonomyDB
+}
+
 // initExtendedCapture resolves the extended capture species filter at startup.
 // Called from Processor.New(). Safe to re-call on settings refresh.
 func (p *Processor) initExtendedCapture() {
@@ -34,15 +50,8 @@ func (p *Processor) initExtendedCapture() {
 		labels = p.Bn.Settings.BirdNET.Labels
 	}
 
-	// Load taxonomy database for genus/family/order resolution
-	var taxonomyDB *birdnet.TaxonomyDatabase
-	if db, err := birdnet.LoadTaxonomyDatabase(); err == nil {
-		taxonomyDB = db
-	} else {
-		GetLogger().Warn("Failed to load taxonomy database, genus/family/order filtering unavailable",
-			logger.Any("error", err),
-			logger.String("operation", "extended_capture_init"))
-	}
+	// Get cached taxonomy database for genus/family/order resolution
+	taxonomyDB := p.getTaxonomyDB()
 
 	isAll, resolved := resolveSpeciesFilter(
 		p.Settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, "extended_capture",

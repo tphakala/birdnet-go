@@ -15,6 +15,10 @@ import (
 const (
 	helsinkiLatitude  = 60.1699
 	helsinkiLongitude = 24.9384
+
+	// minStrigiformesSpecies is the minimum expected species count when resolving the
+	// Strigiformes order via the taxonomy database. Used as a sanity threshold in tests.
+	minStrigiformesSpecies = 100
 )
 
 // referenceDate returns March 1, 2026 at noon in UTC for test consistency.
@@ -378,8 +382,8 @@ func TestInitDaylightFilterWithTaxonomy(t *testing.T) {
 	// "Strigiformes" is the order containing all owls.
 	isAll, resolved := resolveSpeciesFilter([]string{"Strigiformes"}, nil, db, "daylight_filter")
 	assert.False(t, isAll, "Strigiformes should not resolve to all species")
-	assert.Greater(t, len(resolved), 100,
-		"Strigiformes should resolve to >100 species, got %d", len(resolved))
+	assert.Greater(t, len(resolved), minStrigiformesSpecies,
+		"Strigiformes should resolve to >%d species, got %d", minStrigiformesSpecies, len(resolved))
 
 	// Check specific owl species are included.
 	assert.True(t, resolved["strix aluco"],
@@ -478,4 +482,55 @@ func TestInitDaylightFilterDisabled(t *testing.T) {
 		"species should be cleared when filter is disabled")
 	assert.False(t, p.daylightFilterAll,
 		"all-species flag should be cleared when filter is disabled")
+}
+
+func TestInitDaylightFilterReInitialization(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{
+		Settings: &conf.Settings{
+			BirdNET: conf.BirdNETConfig{
+				Latitude:  helsinkiLatitude,
+				Longitude: helsinkiLongitude,
+			},
+			Realtime: conf.RealtimeSettings{
+				DaylightFilter: conf.DaylightFilterSettings{
+					Enabled: true,
+					Species: []string{"Strigiformes"},
+				},
+			},
+		},
+		sunCalc: newTestSunCalc(),
+	}
+
+	// First init with Strigiformes (order — resolves to many species).
+	p.initDaylightFilter()
+
+	p.daylightFilterMu.RLock()
+	firstCount := len(p.daylightFilterSpecies)
+	hasStrixAluco := p.daylightFilterSpecies["strix aluco"]
+	hasBuboBubo := p.daylightFilterSpecies["bubo bubo"]
+	p.daylightFilterMu.RUnlock()
+
+	require.Greater(t, firstCount, minStrigiformesSpecies,
+		"Strigiformes should resolve to >%d species", minStrigiformesSpecies)
+	assert.True(t, hasStrixAluco, "first init should include Strix aluco")
+	assert.True(t, hasBuboBubo, "first init should include Bubo bubo")
+
+	// Re-init with a single genus (Strix — fewer species than entire order).
+	p.Settings.Realtime.DaylightFilter.Species = []string{"Strix"}
+	p.initDaylightFilter()
+
+	p.daylightFilterMu.RLock()
+	secondCount := len(p.daylightFilterSpecies)
+	hasStrixAluco2 := p.daylightFilterSpecies["strix aluco"]
+	hasBuboBubo2 := p.daylightFilterSpecies["bubo bubo"]
+	p.daylightFilterMu.RUnlock()
+
+	assert.Less(t, secondCount, firstCount,
+		"genus Strix should have fewer species than order Strigiformes")
+	assert.True(t, hasStrixAluco2,
+		"re-init should still include Strix aluco (in genus Strix)")
+	assert.False(t, hasBuboBubo2,
+		"re-init should NOT include Bubo bubo (not in genus Strix)")
 }

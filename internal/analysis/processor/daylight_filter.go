@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -46,15 +45,8 @@ func (p *Processor) initDaylightFilter() {
 		labels = p.Bn.Settings.BirdNET.Labels
 	}
 
-	// Load taxonomy database for genus/family/order resolution
-	var taxonomyDB *birdnet.TaxonomyDatabase
-	if db, err := birdnet.LoadTaxonomyDatabase(); err == nil {
-		taxonomyDB = db
-	} else {
-		GetLogger().Warn("Failed to load taxonomy database, genus/family/order filtering unavailable",
-			logger.Any("error", err),
-			logger.String("operation", "daylight_filter_init"))
-	}
+	// Get cached taxonomy database for genus/family/order resolution
+	taxonomyDB := p.getTaxonomyDB()
 
 	isAll, resolved := resolveSpeciesFilter(
 		p.Settings.Realtime.DaylightFilter.Species, labels, taxonomyDB, "daylight_filter",

@@ -2250,7 +2250,7 @@
       "dogBarkSpeciesList": "Hundebell-Artenliste",
       "daylightFilter": {
         "title": "Tageslichtfilter",
-        "description": "Erkennungen nachtaktiver Arten während der Tageslichtstunden herausfiltern. Verwendet die bürgerliche Dämmerungsgrenzen Ihres konfigurierten Standorts.",
+        "description": "Erkennungen nachtaktiver Arten während der Tageslichtstunden herausfiltern. Verwendet die bürgerlichen Dämmerungsgrenzen Ihres konfigurierten Standorts.",
         "enable": "Tageslichtfilter aktivieren",
         "disabled": "Tageslichtfilter ist deaktiviert",
         "offsetLabel": "Tageslichtfenster-Versatz (Stunden)",
