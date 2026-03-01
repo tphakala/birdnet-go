@@ -106,6 +106,11 @@
     editSpecies = '';
   }
 
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
   function handleEditKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -129,6 +134,7 @@
         <div class="flex items-center gap-2 p-3 bg-[var(--color-base-200)] rounded-lg">
           {#if editIndex === index}
             <input
+              use:focusAndSelect
               type="text"
               bind:value={editSpecies}
               aria-label={t('settings.filters.speciesNamePlaceholder')}
