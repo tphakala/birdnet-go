@@ -73,6 +73,7 @@
   }
 
   function addEntry(value: string) {
+    if (disabled) return;
     if (!value.trim()) return;
     const trimmed = value.trim();
     if (isDuplicate(trimmed)) return;
@@ -80,15 +81,18 @@
   }
 
   function removeEntry(index: number) {
+    if (disabled) return;
     onSpeciesChange(species.filter((_: string, i: number) => i !== index));
   }
 
   function startEdit(index: number) {
+    if (disabled || editIndex !== null) return;
     editIndex = index;
     editSpecies = safeArrayAccess(species, index) || '';
   }
 
   function saveEdit() {
+    if (disabled) return;
     if (editIndex === null || !editSpecies.trim()) return;
     const trimmed = editSpecies.trim();
     if (isDuplicate(trimmed, editIndex)) return;
@@ -110,6 +114,13 @@
     node.focus();
     node.select();
   }
+
+  // Cancel in-flight edit if the component becomes disabled mid-edit
+  $effect(() => {
+    if (disabled && editIndex !== null) {
+      cancelEdit();
+    }
+  });
 
   function handleEditKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
@@ -137,15 +148,17 @@
               use:focusAndSelect
               type="text"
               bind:value={editSpecies}
+              {disabled}
               aria-label={t('settings.filters.speciesNamePlaceholder')}
-              class="flex-1 h-8 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
+              class="flex-1 h-8 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors disabled:opacity-50"
               onkeydown={handleEditKeydown}
               placeholder={t('settings.filters.speciesNamePlaceholder')}
             />
             <button
               type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-success)] text-[var(--color-success-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-success)] focus-visible:ring-offset-2 transition-colors"
+              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-success)] text-[var(--color-success-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-success)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={saveEdit}
+              {disabled}
               aria-label={t('common.aria.saveChanges')}
             >
               <Check class="size-4" />
@@ -201,7 +214,11 @@
 
   <!-- Unsaved Changes Indicator -->
   {#if hasChanges}
-    <div class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
+    <div
+      role="status"
+      aria-live="polite"
+      class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1"
+    >
       <Info class="size-4" />
       <span>{t('settings.actions.unsavedChanges')}</span>
     </div>
