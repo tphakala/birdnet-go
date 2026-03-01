@@ -137,6 +137,61 @@ func TestResolveExtendedCaptureFilter_WithTaxonomy(t *testing.T) {
 		"Strigidae should resolve to multiple owl species, got %d", len(resolved))
 }
 
+func TestExtendedCapture_FlushDeadlineExtension(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				ExtendedCapture: conf.ExtendedCaptureSettings{
+					Enabled:     true,
+					MaxDuration: 600, // 10 minutes
+				},
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{Length: 15, PreCapture: 6},
+				},
+			},
+		},
+		pendingDetections:  make(map[string]PendingDetection),
+		extendedCaptureAll: true,
+	}
+
+	species := "tawny owl"
+	sourceID := "test_source"
+	mapKey := pendingDetectionKey(sourceID, species)
+	now := time.Now()
+
+	// First detection: should get minimum 15s deadline
+	p.pendingDetections[mapKey] = PendingDetection{
+		Confidence:    0.85,
+		Source:        sourceID,
+		FirstDetected: now,
+		FlushDeadline: now.Add(9 * time.Second), // Normal detection window
+		Count:         1,
+	}
+
+	// Apply extended capture logic
+	applyExtendedCapture(p, mapKey, now, 9*time.Second)
+	item := p.pendingDetections[mapKey]
+
+	assert.True(t, item.ExtendedCapture)
+	assert.False(t, item.MaxDeadline.IsZero())
+	// Initial deadline should be at least 15s from now
+	assert.GreaterOrEqual(t, item.FlushDeadline.Sub(now), 15*time.Second)
+
+	// Simulate detection 45 seconds later (medium session phase)
+	later := now.Add(45 * time.Second)
+	item.Count = 5
+	item.LastUpdated = later
+	p.pendingDetections[mapKey] = item
+
+	applyExtendedCapture(p, mapKey, later, 9*time.Second)
+	item = p.pendingDetections[mapKey]
+
+	// Should now wait 30s (medium phase)
+	assert.GreaterOrEqual(t, item.FlushDeadline.Sub(later), 30*time.Second)
+}
+
 func TestCalculateExtendedFlushDeadline(t *testing.T) {
 	t.Parallel()
 

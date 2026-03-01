@@ -527,6 +527,11 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			}
 		}
 
+		// Apply extended capture if species qualifies
+		if p.isExtendedCaptureSpecies(det.Result.Species.ScientificName) {
+			applyExtendedCapture(p, mapKey, time.Now(), detectionWindow)
+		}
+
 		// Update the dynamic threshold for this species if enabled
 		p.updateDynamicThreshold(commonName, confidence)
 
@@ -1002,6 +1007,13 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
 	item.Detection.Result.BeginTime = item.FirstDetected
+	if item.ExtendedCapture {
+		// For extended captures, EndTime reflects the last detection + normal detection window
+		captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+		preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+		normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
+	}
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}

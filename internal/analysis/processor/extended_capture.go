@@ -94,6 +94,26 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 	return false, resolved
 }
 
+// applyExtendedCapture applies extended capture logic to a pending detection.
+// It sets the ExtendedCapture flag, MaxDeadline, and calculates the scaled flush deadline.
+// This is called from processDetections after the pending detection is created/updated.
+func applyExtendedCapture(p *Processor, mapKey string, now time.Time, normalDetectionWindow time.Duration) {
+	item := p.pendingDetections[mapKey]
+	maxDuration := time.Duration(p.Settings.Realtime.ExtendedCapture.MaxDuration) * time.Second
+
+	if !item.ExtendedCapture {
+		// First time: set extended capture flag and absolute deadline
+		item.ExtendedCapture = true
+		item.MaxDeadline = item.FirstDetected.Add(maxDuration)
+	}
+
+	item.FlushDeadline = calculateExtendedFlushDeadline(
+		now, item.FirstDetected, item.MaxDeadline, normalDetectionWindow,
+	)
+
+	p.pendingDetections[mapKey] = item
+}
+
 // calculateExtendedFlushDeadline computes the next flush deadline for an extended capture
 // detection using the scaled timeout algorithm. The deadline scales with session duration:
 //   - Short (<30s): max(15s, normalDetectionWindow)
